@@ -1,3 +1,4 @@
+import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -53,6 +54,28 @@ export type AccessRealmRoleReader = ((client: AccessClient, input: {
     member: boolean;
     valid: string;
 }[] | null>) & {
+    work?: AccessWorkProducer<{
+        realmId: string;
+        accountId: string;
+        at: string;
+    }, readonly {
+        role: 'owner' | 'member';
+        member: boolean;
+        valid: string;
+    }[] | null>;
+    batchWork?: AccessWorkProducer<{
+        pairs: readonly {
+            realmId: string;
+            accountId: string;
+        }[];
+        at: string;
+    }, readonly {
+        realmId: string;
+        accountId: string;
+        role: 'owner' | 'member';
+        member: boolean;
+        valid: string;
+    }[] | null>;
     /** One trusted statement for all admitted Realm/member anchors. */
     batch?: (client: AccessClient, input: {
         pairs: readonly {
@@ -75,6 +98,8 @@ export type AccessConfig = {
     realmRoleReader?: AccessRealmRoleReader;
     /** Trusted Commerce current native reader; never supplied by HTTP input. */
     contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
+    /** Commerce owns the finite footprint and actual receipt of its callback. */
+    contentEditionBuyerFactWork?: AccessWorkProducer<Parameters<ContentEditionBuyerFactReader>[0], Awaited<ReturnType<ContentEditionBuyerFactReader>>>;
     /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
     clock?: () => Date;
 };
@@ -84,6 +109,8 @@ export type AccessContext = {
     pool: Pool;
     deadline: number;
     time?: AuthoritativeTime;
+    /** Trusted accounting only; never permission, identity or an extra allowance. */
+    work?: AccessWorkAccounting;
 };
 export type AccessClient = Pick<PoolClient, 'query'>;
 /** Ordinary permission plus the same formula with public floor and grant roles disabled. */
@@ -94,7 +121,13 @@ export type AccessDecision = Readonly<{
 export type AccessExplicitCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<AccessDecision>;
 /** Trusted owner callback, evaluated at the formula's snapshot instant. UUIDs have no
  * resource-kind tag: the owner supplies the homogeneous resourceType and ids. */
-export type ReadDecisionEligibility = (client: AccessClient, ids: readonly string[], at: string) => Promise<Readonly<Record<string, boolean>>>;
+export type ReadDecisionEligibility = ((client: AccessClient, ids: readonly string[], at: string) => Promise<Readonly<Record<string, boolean>>>) & {
+    work?: AccessWorkProducer<Readonly<{
+        client: AccessClient;
+        ids: readonly string[];
+        at: string;
+    }>, Readonly<Record<string, boolean>>>;
+};
 export type ReadDecisionInput = Readonly<{
     action: string;
     resourceType: string;

@@ -142,6 +142,11 @@ export declare const PROBLEMS: {
         readonly title: 'Conflict';
         readonly retryable: false;
     };
+    readonly realm_last_owner: {
+        readonly status: 409;
+        readonly title: 'Realm Ownership Transfer Required';
+        readonly retryable: false;
+    };
     readonly library_label_restore_stale: {
         readonly status: 409;
         readonly title: 'Stale Library Label Restore';
@@ -335,10 +340,10 @@ declare function schemaFor(codes: readonly ProblemCode[], status: number): impor
     status: import("typebox").TLiteral<number>;
     code: TSchema;
     retryable: TSchema;
-    effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
     request_id: import("typebox").TString;
-    detail: import("typebox").TOptional<import("typebox").TString>;
-    errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+    detail?: import("typebox").TOptional<import("typebox").TString>;
+    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
         code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
     }>>>;
@@ -349,10 +354,10 @@ declare function extendedSchema<Extensions extends Record<string, TSchema>>(code
     status: import("typebox").TLiteral<number>;
     code: TSchema;
     retryable: TSchema;
-    effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
     request_id: import("typebox").TString;
-    detail: import("typebox").TOptional<import("typebox").TString>;
-    errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+    detail?: import("typebox").TOptional<import("typebox").TString>;
+    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
         code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
     }>>>;
@@ -364,8 +369,8 @@ declare function erasedResultSchema(): import("typebox").TObject<{
     code: TSchema;
     retryable: TSchema;
     request_id: import("typebox").TString;
-    detail: import("typebox").TOptional<import("typebox").TString>;
-    errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+    detail?: import("typebox").TOptional<import("typebox").TString>;
+    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
         code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
     }>>>;

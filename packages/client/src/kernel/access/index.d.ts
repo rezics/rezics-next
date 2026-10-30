@@ -1,3 +1,4 @@
+export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult, } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, resolveRetention, recordLateErasureItem, resolveLateErasureItem, ERASURE_LOCATOR_EFFECTS, type RetentionException, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';
 export { readPublicViews, type PublicViews } from './public-views.ts';
@@ -45,7 +46,7 @@ export { resourceAuthorization, resourceAuthorizationPage, type AuthorizationAnc
 export { creationDeclares, parentCreationAuthorization, type ParentAnchor, type ParentCreationContext, type ResourceCreationPort, } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
 export { resourceRoleHeld } from './resource-role-held.ts';
-export { readRealmOwnershipRoles, assertRealmOwnerMayLeave, createRealmOwnershipCommands, readAppliedRealmErasureSuccession, type AppliedRealmErasureSuccession, type RealmErasureSuccessionInput, type RealmErasureSuccessionSource, type PreparedRealmErasureSuccession, type RealmErasureSuccessionResult, type RealmErasureSuccessionAuthorization, } from './realm-ownership.ts';
+export { readRealmOwnershipRoles, assertRealmOwnerMayLeave, RealmLastOwnerError, createRealmOwnershipCommands, readAppliedRealmErasureSuccession, type AppliedRealmErasureSuccession, type RealmErasureSuccessionInput, type RealmErasureSuccessionSource, type PreparedRealmErasureSuccession, type RealmErasureSuccessionResult, type RealmErasureSuccessionAuthorization, } from './realm-ownership.ts';
 export { approveRealmClaim, type ApproveRealmClaimInput, type ApproveRealmClaimContext, type RealmClaimApproval, } from './realm-claim.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';

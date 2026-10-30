@@ -137,11 +137,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     401: {
                         type: unknown;
@@ -151,11 +148,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     403: {
                         type: unknown;
@@ -165,11 +159,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     422: Response | {
                         type: unknown;
@@ -179,11 +170,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     503: {
                         type: unknown;
@@ -193,11 +181,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                 };
                 error: never;
@@ -231,11 +216,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         401: {
                             type: unknown;
@@ -245,11 +227,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         403: {
                             type: unknown;
@@ -259,11 +238,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         404: {
                             type: unknown;
@@ -273,11 +249,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         409: {
                             type: unknown;
@@ -287,11 +260,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: unknown;
@@ -301,11 +271,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         503: {
                             type: unknown;
@@ -315,11 +282,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -501,11 +465,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         404: {
                             type: unknown;
@@ -515,11 +476,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: 'validation';
@@ -540,11 +498,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -582,11 +537,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -596,11 +548,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -610,11 +559,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -624,11 +570,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -638,11 +581,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -652,11 +592,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -666,11 +603,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -713,11 +647,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -727,11 +658,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -741,11 +669,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -755,11 +680,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -769,11 +691,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -783,11 +702,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -797,11 +713,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -840,11 +753,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -854,11 +764,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -868,11 +775,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -882,11 +786,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -896,11 +797,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -910,11 +808,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -924,11 +819,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -970,11 +862,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -984,11 +873,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -998,11 +884,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -1012,11 +895,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -1026,11 +906,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -1040,11 +917,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -1091,11 +965,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     401: {
                                         type: unknown;
@@ -1105,11 +976,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     403: {
                                         type: unknown;
@@ -1119,11 +987,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     404: {
                                         type: unknown;
@@ -1133,11 +998,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     409: {
                                         type: unknown;
@@ -1147,11 +1009,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1161,11 +1020,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     503: {
                                         type: unknown;
@@ -1175,11 +1031,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1228,11 +1081,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     401: {
                                         type: unknown;
@@ -1242,11 +1092,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     403: {
                                         type: unknown;
@@ -1256,11 +1103,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     404: {
                                         type: unknown;
@@ -1270,11 +1114,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     409: {
                                         type: unknown;
@@ -1284,11 +1125,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1298,11 +1136,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     503: {
                                         type: unknown;
@@ -1312,11 +1147,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1361,11 +1193,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     401: {
                                         type: unknown;
@@ -1375,11 +1204,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     403: {
                                         type: unknown;
@@ -1389,11 +1215,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     404: {
                                         type: unknown;
@@ -1403,11 +1226,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     409: {
                                         type: unknown;
@@ -1417,11 +1237,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1431,11 +1248,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     503: {
                                         type: unknown;
@@ -1445,11 +1259,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1498,11 +1309,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     401: {
                                         type: unknown;
@@ -1512,11 +1320,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     403: {
                                         type: unknown;
@@ -1526,11 +1331,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     404: {
                                         type: unknown;
@@ -1540,11 +1342,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     409: {
                                         type: unknown;
@@ -1554,11 +1353,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1568,11 +1364,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     503: {
                                         type: unknown;
@@ -1582,11 +1375,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1631,11 +1421,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     401: {
                                         type: unknown;
@@ -1645,11 +1432,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     403: {
                                         type: unknown;
@@ -1659,11 +1443,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     404: {
                                         type: unknown;
@@ -1673,11 +1454,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     409: {
                                         type: unknown;
@@ -1687,11 +1465,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1701,11 +1476,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     503: {
                                         type: unknown;
@@ -1715,11 +1487,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1778,11 +1547,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -1792,11 +1558,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -1806,11 +1569,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -1820,11 +1580,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -1834,11 +1591,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -1848,11 +1602,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -1862,11 +1613,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2015,11 +1763,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2029,11 +1774,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2043,11 +1785,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2068,11 +1807,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2124,11 +1860,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2138,11 +1871,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2152,11 +1882,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2177,11 +1904,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2208,11 +1932,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -2308,11 +2029,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2322,11 +2040,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2336,11 +2051,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2361,11 +2073,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2402,11 +2111,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2416,11 +2122,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2430,11 +2133,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -2444,11 +2144,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2634,11 +2331,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2648,11 +2342,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2662,11 +2353,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2687,11 +2375,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2876,11 +2561,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2890,11 +2572,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -2904,11 +2583,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2929,11 +2605,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2969,11 +2642,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -2983,11 +2653,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -2997,11 +2664,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -3011,11 +2675,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -3025,11 +2686,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -3039,11 +2697,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -3053,11 +2708,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -3093,11 +2745,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -3107,11 +2756,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             403: {
                                 type: unknown;
@@ -3121,11 +2767,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -3135,11 +2778,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             409: {
                                 type: unknown;
@@ -3149,11 +2789,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -3163,11 +2800,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -3177,11 +2811,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -3227,11 +2858,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             401: {
                                 type: unknown;
@@ -3241,11 +2869,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             404: {
                                 type: unknown;
@@ -3255,11 +2880,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             503: {
                                 type: unknown;
@@ -3269,11 +2891,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -3327,10 +2946,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3341,10 +2960,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3355,10 +2974,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3369,10 +2988,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3418,11 +3037,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         401: {
             type: unknown;
@@ -3432,11 +3048,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         403: {
             type: unknown;
@@ -3446,11 +3059,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3460,11 +3070,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -3488,11 +3095,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         401: {
             type: unknown;
@@ -3502,11 +3106,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         403: {
             type: unknown;
@@ -3516,11 +3117,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3530,11 +3128,8 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -3561,10 +3156,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3575,10 +3170,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3589,10 +3184,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3603,10 +3198,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3694,10 +3289,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3708,10 +3303,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3722,10 +3317,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3736,10 +3331,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;

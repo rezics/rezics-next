@@ -52,14 +52,7 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
                 afterSubjectId: string | null;
                 allowance: WorkAllowance;
             }): Promise<{
-                basis: Readonly<{
-                    release: string;
-                    query: string;
-                    profile: string;
-                    canonical: string;
-                    generation: number;
-                    index: string;
-                }>;
+                basis: import("../search/scope-source.ts").ScopeBasis;
                 work: WorkReceipt;
                 kind: 'canonical_subject_prefix';
                 candidates: readonly import("./collection-source.ts").CanonicalCollectionCandidate[];

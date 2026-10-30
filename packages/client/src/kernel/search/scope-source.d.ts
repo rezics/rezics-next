@@ -1,7 +1,8 @@
 import { type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
+import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { type SearchScopeOrder, type SearchScopeOrdinalPrefix } from './service-scope-order.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
@@ -28,9 +29,18 @@ export type ScopeBasis = Readonly<{
     query: string;
     profile: string;
     canonical: string;
+}> & (Readonly<{
     generation: number;
     index: string;
-}>;
+    nativeOwner?: never;
+}> | Readonly<{
+    nativeOwner: Readonly<{
+        source: NativeSourceIdentity;
+        observation: CollectionSourceObservation;
+    }>;
+    generation?: never;
+    index?: never;
+}>);
 /** Additive preparation controls; future metadata-budget fields belong on this same options object. */
 export type ScopePrepareOptions = Readonly<{
     releaseDigest?: string;
@@ -97,20 +107,13 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
         afterSubjectId: string | null;
         allowance: WorkAllowance;
     }): Promise<{
-        basis: Readonly<{
-            release: string;
-            query: string;
-            profile: string;
-            canonical: string;
-            generation: number;
-            index: string;
-        }>;
+        basis: ScopeBasis;
         work: WorkReceipt;
         kind: 'canonical_subject_prefix';
         candidates: readonly import("../library/collection-source.ts").CanonicalCollectionCandidate[];
         coveredThrough: string | null;
         exhausted: boolean;
-        observation: import("../library/collection-source.ts").CollectionSourceObservation;
+        observation: CollectionSourceObservation;
     }>;
     /** Raw native ordinal input, CURRENT canonical membership and native fact evidence are
      * consumed in order. This direct preview never truncates raw rows then post-sorts them.

@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { type AuthoritativeTime, type CommandAttempt, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccessClient, Resource } from '../request/access.ts';
+export { RealmLastOwnerError } from './resource-access-errors.ts';
 export declare const REALM_OWNER_ROLE = "community.realm.owner";
 type Input = {
     resource: Resource;
@@ -95,4 +96,3 @@ export declare function createRealmOwnershipCommands(config: {
     applyErasureSuccession: (tx: CommandTransaction, proof?: PreparedRealmErasureSuccession) => Promise<RealmErasureSuccessionResult>;
     erasureSuccessionAuthorization: (input: RealmErasureSuccessionInput) => RealmErasureSuccessionAuthorization;
 };
-export {};

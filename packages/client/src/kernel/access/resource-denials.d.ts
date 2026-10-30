@@ -1,8 +1,6 @@
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import type { Resource } from '../request/access.ts';
-export declare class ResourceAccessWriteDeniedError extends Error {
-    constructor();
-}
+export { ResourceAccessWriteDeniedError } from './resource-access-errors.ts';
 export type ResourceDenialWrite = {
     resource: Resource;
     subjectId: string;

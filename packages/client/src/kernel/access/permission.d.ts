@@ -1,3 +1,4 @@
+import { type AccessWorkProducer } from './work.ts';
 import { type ContentEditionBuyerFactReader } from './authenticated-benefit.ts';
 import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
@@ -25,6 +26,7 @@ export type PermissionConfig = {
      */
     realmRoleReader?: RealmRoleReader;
     contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
+    contentEditionBuyerFactWork?: AccessWorkProducer<Parameters<ContentEditionBuyerFactReader>[0], Awaited<ReturnType<ContentEditionBuyerFactReader>>>;
     /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
     clock?: () => Date;
 };

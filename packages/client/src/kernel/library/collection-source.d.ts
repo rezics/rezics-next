@@ -6,6 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
+import { type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
     readonly candidateKeys: number;
@@ -33,13 +34,17 @@ export interface WorkReceipt {
     readonly reservationId: string;
     readonly used: WorkDimensions;
 }
-export interface CollectionSourceContext {
-    readonly actor: Actor;
-    /** Core-minted opaque T for this native read; never a request Date or a cast string. */
-    readonly at: AuthoritativeTime;
-    /** Existing absolute execution deadline, never renewed by an owner refill. */
-    readonly deadline: number;
-}
+export type CollectionSourceContext = Readonly<{
+    deadline: number;
+}> & (Readonly<{
+    actor: Actor;
+    at: AuthoritativeTime;
+    work?: never;
+}> | Readonly<{
+    actor?: never;
+    at?: never;
+    work: MembersPreparationWorkContext;
+}>);
 /** Exact structural reference assignable from Semantic's IdentityBasis; no second brand or identity authority. */
 export type NativeIdentityBasis = Readonly<{
     digest: string;
@@ -151,16 +156,16 @@ export type CollectionSubjectMembership = MembershipResultBase & ({
     /** Non-null only after real raw keyset progress; null requires owner repair/readiness, not an empty loop. */
     readonly progress: CollectionAliasProgress | null;
 });
-export interface PrepareCollectionSource extends CollectionSourceContext {
+export type PrepareCollectionSource = CollectionSourceContext & {
     readonly collectionId: string;
     /** Preparation metadata/Access work also consumes admitted dimensions; no candidates before authorization. */
     readonly allowance: WorkAllowance;
-}
-export interface CollectionSourceCall extends CollectionSourceContext {
+};
+export type CollectionSourceCall = CollectionSourceContext & {
     readonly source: PreparedCollectionSource;
     readonly allowance: WorkAllowance;
-}
-export interface ContainsCollectionSubject extends CollectionSourceCall {
+};
+export type ContainsCollectionSubject = CollectionSourceCall & {
     readonly subjectId: string;
     /** Same group/source basis only. Current source, original and terminal authorization is always repeated. */
     readonly progress?: CollectionAliasProgress;
@@ -170,7 +175,7 @@ export interface ContainsCollectionSubject extends CollectionSourceCall {
      * reread at `at`.
      */
     readonly positiveEvidence?: CollectionSourceEvidence;
-}
+};
 export interface CollectionSource {
     prepare(input: PrepareCollectionSource): Promise<{
         source: PreparedCollectionSource;

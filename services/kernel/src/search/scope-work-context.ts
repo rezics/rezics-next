@@ -26,9 +26,10 @@ export async function readMembersPreparationWorkDefinition(
   work: MembersPreparationWorkContext,
   options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
 ): Promise<MembersPreparationWorkDefinition> {
-  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(work.tx))
+  const { tx } = work;
+  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx))
     throw new ProblemError('semantic_not_ready');
-  const resources = currentOperationalResources(work.tx);
+  const resources = currentOperationalResources(tx);
   const locator = Object.freeze({ ...work.locator });
   const route = routeOf(locator.collectionId);
   if (
@@ -44,7 +45,7 @@ export async function readMembersPreparationWorkDefinition(
     Date.now() >= Math.min(options.deadline, resources.deadline)
   )
     throw new ProblemError('semantic_not_ready');
-  const time = commandTime(work.tx);
+  const time = commandTime(tx);
   if (!time) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
   const preparation = createMembersPreparation({
@@ -54,9 +55,9 @@ export async function readMembersPreparationWorkDefinition(
   });
   // Library alone locks the current namespace/owner/episode and immutable definition.
   // Its unavailable native producer must propagate; no local permission or fabricated episode substitutes.
-  if ((await preparation.admitStep(work.tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
-  const native = await preparation.readWorkDefinition(work.tx, locator);
-  if (!hasLiveOperationalTransaction(work.tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
+  if ((await preparation.admitStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
+  const native = await preparation.readWorkDefinition(tx, locator);
+  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
     throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
   if (!native) throw new ProblemError('semantic_not_ready');
@@ -82,8 +83,9 @@ export async function admitMembersPreparationWork(
   work: MembersPreparationWorkContext,
   options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
 ): Promise<AuthoritativeTime> {
-  await readMembersPreparationWorkDefinition(work, options);
-  const time = commandTime(work.tx);
+  const { tx, kind, locator } = work;
+  await readMembersPreparationWorkDefinition({ tx, kind, locator }, options);
+  const time = commandTime(tx);
   if (!time) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
   return time;

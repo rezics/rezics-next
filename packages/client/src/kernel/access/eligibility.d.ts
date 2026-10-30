@@ -1,3 +1,4 @@
+import { type AccessWorkProducer } from './work.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 declare const resourceEligibility: unique symbol;
 /** Server capability only; serialized input and structural copies carry no authority. */
@@ -23,6 +24,11 @@ export type ResourceEligibilityVerifyContext<E> = Readonly<{
     deadline: number;
 }>;
 export type ResourceEligibilityOptions<E> = Readonly<{
+    /** Native owner declarations for these SAME callbacks, not an alternate evaluator. */
+    work?: Readonly<{
+        prepare: AccessWorkProducer<ResourceEligibilityPrepareContext, E>;
+        verify: AccessWorkProducer<ResourceEligibilityVerifyContext<E>, boolean>;
+    }>;
     resource: Resource;
     action: string;
     /** Trusted owning-module code; runs before resource checkout. Gather bounded,

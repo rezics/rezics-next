@@ -40,6 +40,8 @@ export type IdentityBindingData = Readonly<{
 export declare function identityBindingData(proof: IdentityReceiptBinding): IdentityBindingData;
 export declare function identityReceiptPartition(receipt: IdentityAdmissionInput['receipt']): number;
 export declare function identityBindingDigest(input: IdentityAdmissionInput): string;
+/** Only native source reads at the released binding home can attach Accounts custody. */
+export declare function assertIdentityBindingSource(binding: IdentityReceiptBinding, receipt: IdentityAdmissionInput['receipt']): void;
 export declare function readIdentityBinding(tx: CommandTransaction, input: IdentityAdmissionInput): Promise<Readonly<{
     partition: number;
     generation: string;
@@ -71,3 +73,23 @@ export declare function claimIdentityBinding(pool: Pool, authority: IdentityAdmi
 }>>;
 /** The first group reservation is independently durable before this immutable accepted pointer. */
 export declare function acceptIdentityBinding(pool: Pool, authority: IdentityAdmissionAuthority, input: IdentityAdmissionInput, binding: IdentityReceiptBinding): Promise<void>;
+/** Read-only original undo custody. This cannot mint a new binding or a source admission proof. */
+export declare function readAccountIdentityUndo(pool: Pool, receipt: Extract<IdentityAdmissionInput['receipt'], {
+    kind: 'account-agent.verify';
+}>): Promise<{
+    source: Readonly<{
+        input: IdentityAdmissionInput;
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        digest: string;
+        workflowId: string;
+        roles: readonly import("./erasure-producer.ts").SemanticCopyRole[];
+    }>;
+    job: {
+        jobId: string;
+        epoch: bigint;
+    };
+}>;
+export declare function identityBindingAccountRoles(binding: IdentityReceiptBinding): readonly import("./erasure-producer.ts").SemanticCopyRole[];

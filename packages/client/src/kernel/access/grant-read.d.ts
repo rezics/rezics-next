@@ -1,3 +1,4 @@
+import { type createGrantCommands } from './grant-commands.ts';
 import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -35,7 +36,7 @@ export type GrantReadPage = {
     grants: ManagedGrant[];
     identities: PublicIdentity[];
     next: string | null;
-    /** Content has not yet supplied the native Realm ownership transition guard. */
+    /** Realm mutation requires the genuine native command composition. */
     mutationState: 'ready' | 'realm_guard_unavailable';
 };
 /** Exact-resource management read. No caller-supplied type, authority or policy is accepted. */
@@ -45,6 +46,7 @@ export declare function readResourceGrants(deps: {
     tokens: KeyRing;
     resources: ViewerActionResources;
     clock: () => Date;
+    commands?: ReturnType<typeof createGrantCommands>;
 }, actor: Actor, input: {
     resourceId: string;
     cursor?: string;
