@@ -13,7 +13,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { routeOf, newId } from '../../src/route/route.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
-import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { openGrowthDatabase } from '../support/growth.ts';
 import { registerTestClient, testKernel, testRouteKey, type TestKernel } from '../support/test-kernel.ts';
 
 const protocolScopes = ['openid', 'offline_access'];
@@ -296,7 +296,7 @@ export async function mediaRealmDownloadFixture() {
         contextId: GLOBAL_CONTEXT,
       })
     ).realm;
-    const changed = await checked('PUT', `/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, 200, {
+    await checked('PUT', `/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, 200, {
       headers: { 'if-match': JSON.stringify(realm.headRevisionId) },
     });
     const board = (
