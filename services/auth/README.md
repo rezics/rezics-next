@@ -962,7 +962,6 @@ linear bounds.
   expiry, disappearance and foreign key-reuse outcomes are in that same suite;
   `test/pages-consent-sessions.test.ts` retains the existing pages outcomes.
 
-
 The scheduled consent bound is O(d×c) (often written O(B×C), B≤100 owners), with
 no per-owner client cap. It bounds owner admission rather than consent changes;
 the native due-tick series measures both retained-history and client-fanout axes.

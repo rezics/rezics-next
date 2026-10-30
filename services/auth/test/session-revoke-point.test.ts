@@ -31,7 +31,10 @@ async function nativeAuth(pool: Pool, admin = pool) {
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
-  const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'point' };
+  const key = {
+    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+    kid: 'point',
+  };
   const auth = await createAuthService({
     database,
     issuer,
@@ -68,7 +71,10 @@ async function nativeAuth(pool: Pool, admin = pool) {
       scope: ['read'],
     });
     expect(response.status).toBe(200);
-    const cookie = response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
+    const cookie = response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
     const listed = await request('/sessions', cookie);
     expect(listed.status).toBe(200);
     const { sessions } = await listed.json();
@@ -80,7 +86,9 @@ async function nativeAuth(pool: Pool, admin = pool) {
     signin,
     request,
     revoke: (id: string, cookie: string) => request('/sessions/revoke', cookie, { session_id: id }),
-    changeAfterOwnerRead(change: () => Promise<void>) { afterTargetRead = change; },
+    changeAfterOwnerRead(change: () => Promise<void>) {
+      afterTargetRead = change;
+    },
     snapshot: async () => (await admin.query('SELECT * FROM session ORDER BY id')).rows,
   };
 }
@@ -189,9 +197,13 @@ test('native owner mismatch and concurrent state changes never turn a bounded po
       f.changeAfterOwnerRead(async () => {
         changed = true;
         if (change === 'immutable') {
-          for (const [column, value] of [['"userId"', foreign.id], ['id', randomUUID()]] as const)
-            await expect(database.query(`UPDATE session SET ${column}=$2 WHERE id=$1`, [target.id, value]))
-              .rejects.toMatchObject({ code: '55000', message: 'Session identity is immutable' });
+          for (const [column, value] of [
+            ['"userId"', foreign.id],
+            ['id', randomUUID()],
+          ] as const)
+            await expect(
+              database.query(`UPDATE session SET ${column}=$2 WHERE id=$1`, [target.id, value]),
+            ).rejects.toMatchObject({ code: '55000', message: 'Session identity is immutable' });
         } else if (change === 'expiry') {
           await database.query('UPDATE session SET "expiresAt"=now()-interval \'1 second\' WHERE id=$1', [target.id]);
         } else {
@@ -203,7 +215,8 @@ test('native owner mismatch and concurrent state changes never turn a bounded po
             await database.query(
               `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
                SELECT $1,$1,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods"
-               FROM session WHERE id=$2`, [target.id, foreign.id],
+               FROM session WHERE id=$2`,
+              [target.id, foreign.id],
             );
           }
         }
@@ -250,7 +263,8 @@ test('native session revoke examines a fixed exact session neighborhood as the s
           `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
            SELECT $1||'-history-'||i,$1||'-history-'||i,$1,'point-web',
              CASE WHEN i<=62 THEN '2099-01-01'::timestamptz ELSE '2000-01-01'::timestamptz END,
-             now(),'read',1,1,'pwd' FROM generate_series(1,$2::int+62) i`, [owner, scale * 1000],
+             now(),'read',1,1,'pwd' FROM generate_series(1,$2::int+62) i`,
+          [owner, scale * 1000],
         );
         await connection.query('ALTER TABLE session ENABLE TRIGGER session_capacity');
         await connection.query('COMMIT');
@@ -295,12 +309,14 @@ test('native session revoke examines a fixed exact session neighborhood as the s
         // changing planner options. Actual measured layouts govern path checks.
         await db.admin.query(
           `INSERT INTO "user" (id,name,"emailVerified") SELECT 'unrelated-'||i,'',false
-           FROM generate_series($1::int,$2::int) i`, [previous * 1000 + 1, scale * 1000],
+           FROM generate_series($1::int,$2::int) i`,
+          [previous * 1000 + 1, scale * 1000],
         );
         await db.admin.query(
           `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
            SELECT 'unrelated-'||i,'unrelated-'||i,'unrelated-'||i,'point-web','2099-01-01',now(),'read',1,1,'pwd'
-           FROM generate_series($1::int,$2::int) i`, [previous * 1000 + 1, scale * 1000],
+           FROM generate_series($1::int,$2::int) i`,
+          [previous * 1000 + 1, scale * 1000],
         );
       },
       prepare: (_, scale) => prepare(scale),
@@ -315,8 +331,12 @@ test('native session revoke examines a fixed exact session neighborhood as the s
       },
     });
     assertGrowthAccessPaths(report.name, report.samples, [
-      'public.session', 'public.user', 'public.auth_client', 'public.auth_client_coverage',
-      'public.auth_client_reduction', 'public.auth_consent',
+      'public.session',
+      'public.user',
+      'public.auth_client',
+      'public.auth_client_coverage',
+      'public.auth_client_reduction',
+      'public.auth_consent',
     ]);
     const plans = [];
     for (const sample of report.samples) {
