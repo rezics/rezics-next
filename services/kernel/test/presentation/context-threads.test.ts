@@ -141,26 +141,36 @@ beforeAll(async () => {
       post = newId(0x1234),
       revision = newId(0x1234);
     const body = Buffer.from(JSON.stringify(fromPlainText(`Opening ${index}`)));
-    await pool.query(
+    const client = await pool.connect();
+    try {
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id)
       VALUES ($1,$2,$3,$4,$5,'published',1,$2,$6)`,
       [routeOf(id), id, editor.accountId, board, `Current discussion ${index}`, post],
     );
-    await pool.query(
+    await client.query(
       `INSERT INTO content.post(route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
       VALUES ($1,$2,$3,$4,$5,'published',1,$3)`,
       [routeOf(id), id, post, editor.accountId, revision],
     );
-    await pool.query(
+    await client.query(
       `INSERT INTO content.revision(route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
       VALUES ($1,$2,$3,$4,$5,sha256($5),'Opening','MIT',$6,$7,'available',$4)`,
       [routeOf(id), id, post, revision, body, [subject], board],
     );
-    await pool.query(
+    await client.query(
       `INSERT INTO content.subject_thread(route,subject_id,thread_route,thread_id,place_id,kind,last_activity_at,source_epoch,source_position)
       VALUES ($1,$2,$3,$4,$5,'discussion',$6,1,1)`,
       [routeOf(subject), subject, routeOf(id), id, realm, new Date(Date.now() - index * 1000).toISOString()],
     );
+    await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   const active = await call(editor, 'GET', '/v1/presentation/active');
   const published = await write('/v1/presentation/profiles', {

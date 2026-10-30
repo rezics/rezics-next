@@ -1,5 +1,5 @@
 import { isView, type View } from '@rezics/composition';
-import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouter, useLocation } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectPageType } from '../../features/pages/subject';
@@ -82,6 +82,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   staticData: { publicCache: false },
+  errorComponent: SubjectViewError,
   // Validate the cursor in the loader so invalid input answers the not-found document.
   validateSearch: (search: Record<string, unknown>) => ({
     cursor: search.cursor,
@@ -230,4 +231,17 @@ function SubjectViewRoute() {
       renderJsonLd={false}
     />
   );
+}
+
+/** A refused cursor or changed selection is recoverable through a new, authorized first page. */
+function SubjectViewError({ error, reset }: { error: Error; reset: () => void }) {
+  const location = useLocation();
+  const search = new URLSearchParams(location.searchStr);
+  search.delete('cursor');
+  const query = search.toString();
+  return <div className="space-y-4 p-6">
+    <p>{error.message === 'dependency_unavailable' ? 'This page changed. Try again.' : 'This page is unavailable.'}</p>
+    <button type="button" onClick={reset}>Try again</button>
+    <a href={`${location.pathname}${query ? `?${query}` : ''}`}>Start again</a>
+  </div>;
 }
