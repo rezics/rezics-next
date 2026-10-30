@@ -1527,6 +1527,10 @@ remains pending, including after native work and the original consent cutoff:
 - A stalled registration on a surviving subject can still require its native
   release consumer's stage witness. That lifecycle must supply a terminal proof
   before the witness can be removed; history deletion is not such a proof.
+- A staged or committed credential-effect witness for a surviving subject also
+  remains pending when its acting human, operator or client is erased. Auth has
+  no actual terminal-consumer proof for that native opening/floor association;
+  removing the witness could strand the surviving subject's release.
 - External delivery-provider diagnostics/logs and backup restore deletion replay
   are not composed native custody sinks.
 

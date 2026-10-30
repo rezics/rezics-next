@@ -228,6 +228,18 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       );
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
     }
+    if (store.table === 'auth_effect_receipt') {
+      // A different, surviving subject can still need this immutable staged or
+      // committed witness to finish its native opening/floor release. No actual
+      // terminal-consumer proof port exists for that association yet.
+      const held = await connection.query(
+        `SELECT 1 FROM auth_effect_receipt r WHERE receipt_id=$1
+         AND (stage_version IS NOT NULL OR committed_at IS NOT NULL)
+         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)`,
+        [key],
+      );
+      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+    }
     // A surviving subject's live recovery release still owns its witness. Expiry
     // makes this native verifier unusable; no shared-history completion is inferred.
     if (store.table === 'auth_recovery_establishment') {
