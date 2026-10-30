@@ -266,7 +266,9 @@ export class ManagerSessions {
               throw new Error(
                 `Resident supermanager ${id} is already registered to another session; explicit session replacement is unsupported`,
               );
-            throw new Error(`Manager ${id} already has a persisted session; refusing to replace it with a resident session`);
+            throw new Error(
+              `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
+            );
           }
 
           registered = {
@@ -569,8 +571,7 @@ export class ManagerSessions {
       this.validateSpec(spec);
       // A start that failed before its session existed leaves a paused record without a thread; it may start again.
       const existing = this.list().find((state) => state.id === spec.id);
-      if (existing && isResidentSupermanager(existing))
-        throw new Error(`Manager already exists: ${spec.id}`);
+      if (existing && isResidentSupermanager(existing)) throw new Error(`Manager already exists: ${spec.id}`);
       if (existing && !(existing.status === 'paused' && !existing.threadId))
         throw new Error(`Manager already exists: ${spec.id}`);
       return this.startSession(spec, existing && isManagedManager(existing) ? existing.history : undefined);
@@ -980,9 +981,9 @@ export class ManagerSessions {
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(onProgress?: () => void): Promise<void> {
-    const states = this.list().filter(isManagedManager).filter(
-      (state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal,
-    );
+    const states = this.list()
+      .filter(isManagedManager)
+      .filter((state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal);
     let progressReported = false;
     const reportProgress = () => {
       if (progressReported) return;

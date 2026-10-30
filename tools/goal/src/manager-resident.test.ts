@@ -158,9 +158,9 @@ test('public resident registration persists, authenticates, grants priority and 
     );
     expect(registered.code).toBe(0);
     expect(registered.stderr).toBe('');
-    const persisted = h.store.db
-      .query('SELECT state FROM manager_sessions WHERE id = ?')
-      .get('supermanager') as { state: string };
+    const persisted = h.store.db.query('SELECT state FROM manager_sessions WHERE id = ?').get('supermanager') as {
+      state: string;
+    };
     const resident = JSON.parse(persisted.state);
     expect(JSON.parse(registered.stdout)).toEqual(resident);
     expect(resident).toMatchObject({
@@ -175,9 +175,10 @@ test('public resident registration persists, authenticates, grants priority and 
     expect(resident).not.toHaveProperty('goal');
     expect(resident).not.toHaveProperty('budget');
     expect(resident).not.toHaveProperty('limits');
-    expect(
-      authenticatedManager(h.store.db, { CLAUDE_CODE_SESSION_ID: sessionId }),
-    ).toEqual({ id: 'supermanager', sessionId });
+    expect(authenticatedManager(h.store.db, { CLAUDE_CODE_SESSION_ID: sessionId })).toEqual({
+      id: 'supermanager',
+      sessionId,
+    });
 
     const task = h.tasks.dispatch(h.briefFile);
     const owner: ManagerSpec = {
@@ -224,9 +225,13 @@ test('public resident registration persists, authenticates, grants priority and 
     });
     expect(updated.priorityGrants?.[0]?.consumedAt).toBeTruthy();
     expect(
-      (h.store.db.query('SELECT count(*) AS count FROM manager_turn_decisions WHERE manager = ?').get('supermanager') as {
-        count: number;
-      }).count,
+      (
+        h.store.db
+          .query('SELECT count(*) AS count FROM manager_turn_decisions WHERE manager = ?')
+          .get('supermanager') as {
+          count: number;
+        }
+      ).count,
     ).toBe(0);
   } finally {
     await ownerManagers.close();

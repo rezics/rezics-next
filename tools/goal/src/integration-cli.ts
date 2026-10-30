@@ -882,9 +882,7 @@ function callingManager(runtime: IntegrationRuntime): string | undefined {
 }
 
 function isResidentSupermanagerRecord(runtime: IntegrationRuntime, id: string): boolean {
-  if (
-    !runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()
-  )
+  if (!runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
     return false;
   const row = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
   if (!row) return false;
