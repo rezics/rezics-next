@@ -3,9 +3,10 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
 import { dependencyUnavailable } from '../media/kernel';
 import type { OfferPageData } from './offer';
-import { formatMinorAmount } from './money';
+import { formatOfferPrice } from './price';
 import { benefitCreatorName, capturedBenefit } from './benefit';
 import { subjectCover } from './subject-cover';
+import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 
 const reads = new WeakMap<Request, Map<string, Promise<OfferPageData>>>();
 
@@ -27,8 +28,8 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     offer.revision < 1
   )
     throw dependencyUnavailable(503);
-  const price = formatMinorAmount(locale, offer.currency, offer.unitAmountMinor);
-  if (price === null || offer.unitAmountMinor <= 0) throw dependencyUnavailable(503);
+  if (!Number.isSafeInteger(offer.unitAmountMinor) || offer.unitAmountMinor <= 0) throw dependencyUnavailable(503);
+  const moneyUnit = recordedMoneyUnit(offer);
   const benefit = capturedBenefit(offer.contentEdition, offer.targetSubjectId);
   return {
     id: offer.id,
@@ -37,7 +38,9 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     currency: offer.currency,
     unitAmountMinor: offer.unitAmountMinor,
     state: offer.state,
-    price,
+    price: formatOfferPrice(locale, offer.currency, offer.unitAmountMinor, moneyUnit),
+    moneyUnit,
+    taxBehavior: recordedTaxBehavior(offer),
     benefit,
     creatorName: await benefitCreatorName(kernelClient(locale), benefit),
     idempotencyKey: crypto.randomUUID(),

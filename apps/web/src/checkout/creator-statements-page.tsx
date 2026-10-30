@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatement, CreatorStatementsData, StatementFailure } from './creator-statements';
 import { formatMinorAmount } from './money';
+import { recordedMoneyUnit } from './money-schema';
 
 export function statementsHref(locale: string, cursor?: string): string {
   return `/${locale}/creator/statements${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
@@ -14,10 +15,20 @@ export function statementHref(locale: string, id: string, cursor?: string, from?
   return `/${locale}/creator/statements/${id}${query.size ? `?${query}` : ''}`;
 }
 
-export function StatementAmount({ value, currency, locale }: { value: number; currency: string; locale: string }) {
+export function StatementAmount({
+  value,
+  currency,
+  locale,
+  moneyUnit,
+}: {
+  value: number;
+  currency: string;
+  locale: string;
+  moneyUnit?: unknown;
+}) {
   return (
     <span className="tabular-nums">
-      {formatMinorAmount(locale, currency, value) ?? m.statements_amount_unavailable()}
+      {formatMinorAmount(locale, currency, value, moneyUnit) ?? m.statements_amount_unavailable()}
     </span>
   );
 }
@@ -163,6 +174,7 @@ export function CreatorStatementsPage({
                       <p className="font-semibold">
                         <StatementAmount
                           value={statement.creatorShareMinor}
+                          moneyUnit={recordedMoneyUnit(statement)}
                           currency={statement.currency}
                           locale={locale}
                         />

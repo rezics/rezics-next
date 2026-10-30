@@ -323,6 +323,21 @@ anonymous `offer:read` route label, without a second Access evaluator or new sco
 It contains only static/trusted money configuration, no provider identity, credentials, approval or permissions;
 it cannot authorize a sale.
 
+### Creator input and recorded display
+
+The Web editor consumes this generated schema and actual published Content metadata. Its pure
+`parseCreatorPrice(text, ConfiguredSaleCurrencyRule)` accepts at most 32 ASCII characters: a canonical whole
+(`0` or a nonzero digit followed by digits), optionally a dot and one through the recorded exponent's fraction
+digits. Whitespace, signs, exponent notation, grouping, localized digits and excess precision (even zeroes) fail.
+BigInt scaling, quantum and range validation precede safe Number conversion; the server still validates raw integers.
+Changing currency clears the amount and requires new intent. The localized preview names the currency and says
+before tax. Current native create/manage, gates, consent and Content sale rights remain authoritative.
+
+Display uses each recorded unit's exponent with exact signed quotient/remainder and Intl placement/digits;
+absent metadata is localized unknown, never an inferred `/100` amount. Integration price, actual customer
+presentment and actual settlement stay separate currency/unit tuples; this convention adopts no UI FX or money math.
+Repricing captures a new revision for future purchases without rewriting accepted purchases or immutable attempts.
+
 New immutable physical creation intents capture the complete request, money tuple and separate API baseline
 `2026-09-30.endive`. New inline `price_data` explicitly sends `tax_behavior:'exclusive'`. A retained first physical
 attempt retries its original request/key/URLs/expiry/mode, including historical omission of tax and unit metadata.
@@ -566,6 +581,9 @@ or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees
 Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
 release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
 attestation with actual date/method/amount/currency/reference. These are the provider
+Further commercial/shared adoption is required for provider allocation versus reserves, release conditions,
+same-currency negative carry and positive evidence-complete payable
+rules; and richer external attestation with actual date/method/amount/currency/reference. These are the provider
 report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.

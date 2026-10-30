@@ -7,13 +7,14 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { UUID } from './price';
+import type { StripeMoneyUnit } from './money-schema';
 
 export const STATEMENT_PAGE_SIZE = 20;
 type NativePage = NonNullable<Awaited<ReturnType<KernelClient['payoutStatements']['get']>>['data']>;
 type StatementApi = ReturnType<KernelClient['payoutStatements']>;
 type NativeLines = NonNullable<Awaited<ReturnType<StatementApi['lines']['get']>>['data']>;
-export type CreatorStatement = NativePage['payoutStatements'][number];
-export type CreatorStatementLine = NativeLines['lines'][number];
+export type CreatorStatement = NativePage['payoutStatements'][number] & { moneyUnit?: StripeMoneyUnit | null };
+export type CreatorStatementLine = NativeLines['lines'][number] & { moneyUnit?: StripeMoneyUnit | null };
 export type StatementFailure = { kind: 'denied' | 'unavailable' | 'error' | 'stale' };
 export type CreatorStatementsData = ({ kind: 'ready' } & NativePage) | StatementFailure;
 export type CreatorLinesData = ({ kind: 'ready' } & NativeLines) | StatementFailure;

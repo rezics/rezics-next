@@ -10,6 +10,7 @@ import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { BenefitDetails } from './benefit-details';
 import { getLocale } from '../paraglide/runtime.js';
+import { isMoneyUnit } from './money-schema';
 
 type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed';
 
@@ -19,9 +20,11 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
   const { state: session, csrfToken: csrf } = useSession();
   const admitted = useOperation('order.create');
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
+  const termsKnown =
+    isMoneyUnit(offer.moneyUnit) && offer.taxBehavior === 'exclusive' && offer.benefit?.kind === 'mapped';
 
   async function start() {
-    if (phase !== 'ready' && phase !== 'retry') return;
+    if (!termsKnown || (phase !== 'ready' && phase !== 'retry')) return;
     if (!csrf) {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
@@ -88,8 +91,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           : phase === 'closed'
             ? m.offer_start_closed()
             : null;
-  const buyDisabled =
-    !admitted || phase !== 'ready' || session === 'unknown' || (offer.benefit && offer.benefit.kind !== 'mapped');
+  const buyDisabled = !admitted || !termsKnown || phase !== 'ready' || session === 'unknown';
 
   return (
     <article className="max-w-3xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
@@ -104,6 +106,10 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           <p className="space-y-1">
             <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
             <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>
+            <span className="block text-sm text-muted-foreground">
+              {offer.currency.toUpperCase()} ·{' '}
+              {offer.taxBehavior === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+            </span>
           </p>
           <p className="text-sm text-muted-foreground">
             {m.offer_terms_revision({ revision: String(offer.revision) })}
@@ -128,7 +134,7 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
             variant="outline"
             size="lg"
             className="w-full disabled:opacity-100 sm:w-auto"
-            disabled={!admitted || session === 'unknown'}
+            disabled={!admitted || !termsKnown || session === 'unknown'}
             onClick={() => void start()}
           >
             {m.offer_retry()}

@@ -17,8 +17,8 @@ The adopted [ownership/benefits](commerce-ownership-entitlements-benefits.md) an
 [payment evidence/settlement](commerce-payment-evidence-settlement.md) reports remain design evidence.
 Known-ID `/offers/$id` now presents the actual sanitized `contentEdition` capture: one fixed version, quantity one,
 one-time account binding, native creator identity when its public name is available, and the captured licence.
-Its current price consumes the existing minor-unit renderer. The current offer wire has no explicit tax convention,
-so the page does not label the amount before tax. Existing CSRF, observed offer revision and creation-intent retry
+Its price uses the recorded unit exponent, with explicit before-tax wording only for captured exclusive tax terms;
+absent historical money/tax metadata stays unknown. Existing CSRF, observed offer revision and creation-intent retry
 remain the sole checkout path; unmapped or malformed terms cannot start a new purchase.
 
 Hosted Checkout returns to private `/orders/$id`; the captured edition terms remain separate from settlement and
@@ -54,6 +54,29 @@ the existing reader adapter, preserves refusal/unavailability and covers unknown
 curated-members preparation guard and the creator-publication translations alongside these benefit translations. The new
 `bun test apps/web/tests/mapped-entitlement.test.ts` passes three tests with 198 assertions. Browser, Storybook,
 native, remote and integration proof/publication remain pending. No protected-use, privacy, runtime or main approval is claimed.
+
+**Creator offers and exact money.** The [native money policy](../../services/kernel/src/commerce/README.md#native-money-policy-and-captured-prices)
+owns closed USD/EUR sale configuration, recorded units and nullable historical tax facts. The served
+`/creator/offers/new?editionId=<published edition ID>` consumes Content's actual published metadata through the
+existing client and uses the generated `GET /v1/commerceMoney`; the real native owned `GET /v1/offers` remains the
+sole listing. Inline repricing/delist use existing BFF/CSRF/idempotency writes and retain the original request on
+uncertain retry. A new explicit price captures a revision; unknown old units never prefill a guessed major amount.
+Content owns `/editions/new` and the guarded buyer reader. Edition IDs identify a target, never current selling rights.
+
+The editor explains ASCII-dot input, shows a localized currency/before-tax preview and clears the amount when
+currency changes. Offer, order-list and statement displays use recorded exponents, BigInt quotient/remainder and
+Intl placement/digits; signed cents and safe-integer precision survive without currency summing or UI FX.
+Existing recordings without actual metadata stay unknown. Focused parser/display, write, search and generated-adapter
+cases are source, not native proof. Shared localization keys retain the newer base translations; only missing
+Commerce keys are added in all eight locales. Native configuration does not establish provider qualification.
+
+Web/Content handoff: actual routes `/creator/offers/new` and `/creator/offers`, publisher next link `editionId`,
+and exact 390/1280 stories `pages-commerce-creator-offer-editor--{price-intent,actual-route}-{390,1280}`.
+Price stories supply explicit adopted example rules, not native permission or publication. Actual route stories keep
+unavailable outcomes when their data source is unavailable. Current visual, native combined-journey and promoted-main
+proof remain pending; this retry runs only local Web typing. Earlier buyer fixture proof above predates this adoption:
+the existing mapped-entitlement fixture still expects `$12.99` without unit metadata, while the adopted policy requires
+unknown. That fixture is preserved for its owner's reconciliation; no historical unit is invented to satisfy it.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,

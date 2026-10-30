@@ -1,45 +1,106 @@
-import { notFound } from '@tanstack/react-router';
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { notFound } from '@tanstack/react-router';
 import { env } from 'cloudflare:workers';
-import type { KernelClient } from '@rezics/client';
+import {
+  createNativeEditionApi,
+  parseEditionMetadata,
+  type EditionApi,
+  type EditionMetadata,
+} from '../content-editions/edition-api';
+import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { readSessionIdentity } from '../session/state';
+import {
+  createNativeMoneySchemaApi,
+  parseMoneySchema,
+  recordedMoneyUnit,
+  recordedTaxBehavior,
+  type CommerceMoneySchema,
+  type MoneySchemaApi,
+} from './money-schema';
 import { UUID } from './price';
 
-type EditionTerms = NonNullable<Awaited<ReturnType<KernelClient['offers']['post']>>['data']>['offer']['contentEdition'];
-/** Exact offer.list seller DTO. Replace this adapter with the generated offers.get when emitted. */
-export type CreatorOffer = {
-  id: string;
-  targetSubjectId: string;
-  title: string;
-  currency: string;
-  unitAmountMinor: number;
-  taxCode: string;
-  royaltyBasisPoints: number;
-  state: 'active' | 'delisted';
-  revision: number;
-  contentEdition: EditionTerms;
-};
+type NativeCreatorOffer = NonNullable<Awaited<ReturnType<KernelClient['offers']['get']>>['data']>['offers'][number];
+/** Current native seller DTO, also accepting absence of nullable metadata in historical recordings. */
+export type CreatorOffer = Omit<NativeCreatorOffer, 'moneyUnit' | 'taxBehavior'> &
+  Partial<Pick<NativeCreatorOffer, 'moneyUnit' | 'taxBehavior'>>;
 export const CREATOR_OFFERS_PAGE_SIZE = 20;
 export type CreatorOffersSearch = { cursor?: string };
 export type CreatorOffersData =
   | { kind: 'ready'; offers: CreatorOffer[]; next: string | null }
-  | { kind: 'denied' | 'unavailable' | 'error' | 'stale' | 'preparing' };
-/** Temporary exact caller seam while the controller owns native client generation. */
+  | { kind: 'denied' | 'unavailable' | 'error' | 'stale' | 'preparing' | 'closed' | 'rejected' };
+/** One native owned-list caller; no public catalogue or receipt-derived substitute. */
 export type CreatorOffersCaller = {
   get(input: {
     query: { limit: number; cursor?: string };
     headers: { authorization: string };
   }): Promise<{ status: number; data: { offers: CreatorOffer[]; next: string | null } | null }>;
 };
-// Never substitute public offer reads, receipts or a fabricated empty page for the absent binding.
-export const unavailableCreatorOffersCaller: CreatorOffersCaller = {
-  async get() {
-    return { status: 503, data: null };
+export function createNativeCreatorOffersCaller(client?: Pick<KernelClient, 'offers'>): CreatorOffersCaller {
+  return {
+    async get(input) {
+      if (!client) return { status: 503, data: null };
+      const result = await client.offers.get({ ...input, fetch: { cache: 'no-store', redirect: 'manual' } });
+      return { status: result.status, data: result.error ? null : result.data };
+    },
+  };
+}
+export const unavailableCreatorOffersCaller = createNativeCreatorOffersCaller();
+
+export type CreatorFailure = { kind: 'denied' | 'closed' | 'unavailable' | 'rejected' };
+export type OwnedOffersData = CreatorOffersData;
+export interface OwnedOffersApi {
+  /** Compatibility port for the single native listing; no alternate catalogue. */
+  list(authorization: string, input: { limit: 20; cursor?: string }): Promise<OwnedOffersData>;
+}
+export const nativeOwnedOffersApi: OwnedOffersApi = {
+  async list() {
+    return { kind: 'unavailable' };
   },
 };
+export type CreatorEditorData =
+  | {
+      kind: 'ready';
+      edition: EditionMetadata;
+      schema: CommerceMoneySchema;
+    }
+  | CreatorFailure
+  | { kind: 'choose-edition' };
+export type CreatorEditorPageData = {
+  editor: CreatorEditorData;
+  csrfToken: string;
+  createKey: string;
+  selling: boolean;
+};
+export type CreatorOffersPageData = {
+  page: OwnedOffersData;
+  schema: CommerceMoneySchema | null;
+  csrfToken: string;
+  selling: boolean;
+  keys: Record<string, { reprice: string; delist: string }>;
+};
+export type CreatorOfferMutation =
+  | {
+      operation: 'create';
+      idempotencyKey: string;
+      contentEditionId: string;
+      title: string;
+      currency: 'usd' | 'eur';
+      unitAmountMinor: number;
+      taxCode: string;
+    }
+  | { operation: 'reprice'; idempotencyKey: string; offerId: string; unitAmountMinor: number }
+  | { operation: 'delist'; idempotencyKey: string; offerId: string };
+export type CreatorOfferResult = { kind: 'saved'; id: string } | CreatorFailure | { kind: 'retry' };
 
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid creator offer input');
+  return value as Record<string, unknown>;
+}
 export function creatorOffersSearch(value: Record<string, unknown>): CreatorOffersSearch {
   if (value.cursor === undefined || value.cursor === '') return {};
   if (typeof value.cursor !== 'string' || value.cursor.length > 4096) throw notFound();
@@ -124,6 +185,8 @@ export async function loadCreatorOffers(
         state,
         revision,
         contentEdition,
+        moneyUnit,
+        taxBehavior,
       }) => ({
         id,
         targetSubjectId,
@@ -134,6 +197,8 @@ export async function loadCreatorOffers(
         royaltyBasisPoints,
         state,
         revision,
+        ...(moneyUnit === undefined ? {} : { moneyUnit: recordedMoneyUnit({ moneyUnit }) }),
+        ...(taxBehavior === undefined ? {} : { taxBehavior: recordedTaxBehavior({ taxBehavior }) }),
         contentEdition:
           contentEdition === null
             ? null
@@ -164,10 +229,221 @@ export async function loadCreatorOffers(
   }
 }
 
+export function creatorEditionSearch(search: Record<string, unknown>): { contentEditionId?: string } {
+  // Content's published next link names editionId; the offer write body names contentEditionId.
+  let selected: string | undefined;
+  for (const id of [search.editionId, search.contentEditionId]) {
+    if (id === undefined || id === '') continue;
+    if (typeof id !== 'string' || !UUID.test(id) || (selected !== undefined && selected !== id)) throw notFound();
+    selected = id;
+  }
+  return selected === undefined ? {} : { contentEditionId: selected };
+}
+export function validateCreatorOfferMutation(value: unknown): CreatorOfferMutation {
+  const input = object(value);
+  const { operation, idempotencyKey } = input;
+  if (typeof idempotencyKey !== 'string' || !UUID.test(idempotencyKey)) throw new Error('Invalid offer key');
+  const raw = input.unitAmountMinor;
+  const validAmount = typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 50 && raw <= 99999999;
+  if (operation === 'create') {
+    if (
+      Object.keys(input).some(
+        (key) =>
+          ![
+            'operation',
+            'idempotencyKey',
+            'contentEditionId',
+            'title',
+            'currency',
+            'unitAmountMinor',
+            'taxCode',
+          ].includes(key),
+      ) ||
+      typeof input.contentEditionId !== 'string' ||
+      !UUID.test(input.contentEditionId) ||
+      typeof input.title !== 'string' ||
+      !input.title.trim() ||
+      input.title.length > 1024 ||
+      (input.currency !== 'usd' && input.currency !== 'eur') ||
+      !validAmount ||
+      typeof input.taxCode !== 'string' ||
+      !input.taxCode.trim() ||
+      input.taxCode.length > 256
+    )
+      throw new Error('Invalid offer terms');
+    return {
+      operation,
+      idempotencyKey,
+      contentEditionId: input.contentEditionId,
+      title: input.title,
+      currency: input.currency,
+      unitAmountMinor: raw,
+      taxCode: input.taxCode,
+    };
+  }
+  if (
+    (operation !== 'reprice' && operation !== 'delist') ||
+    typeof input.offerId !== 'string' ||
+    !UUID.test(input.offerId) ||
+    Object.keys(input).some(
+      (key) =>
+        !['operation', 'idempotencyKey', 'offerId', ...(operation === 'reprice' ? ['unitAmountMinor'] : [])].includes(
+          key,
+        ),
+    ) ||
+    (operation === 'reprice' && !validAmount)
+  )
+    throw new Error('Invalid offer change');
+  return operation === 'delist'
+    ? { operation, idempotencyKey, offerId: input.offerId }
+    : { operation, idempotencyKey, offerId: input.offerId, unitAmountMinor: raw as number };
+}
+
+/** Only exact Content metadata; ID shape, author labels and public posts cannot establish sale rights. */
+export async function loadCreatorEditor(
+  editionApi: EditionApi,
+  moneyApi: MoneySchemaApi,
+  authorization: string,
+  contentEditionId?: string,
+): Promise<CreatorEditorData> {
+  if (!contentEditionId) return { kind: 'choose-edition' };
+  try {
+    const metadata = await editionApi.readMetadata(contentEditionId, authorization);
+    if (metadata.state === 'refused') return { kind: 'denied' };
+    if (metadata.state !== 'available') return { kind: 'unavailable' };
+    const edition = parseEditionMetadata(metadata.value);
+    if (!edition || edition.editionId !== contentEditionId) return { kind: 'unavailable' };
+    if (edition.state !== 'published') return { kind: 'rejected' };
+    const money = await moneyApi.read(authorization);
+    if (money.kind !== 'ready') return { kind: 'unavailable' };
+    const schema = parseMoneySchema(money.schema);
+    return schema ? { kind: 'ready', edition, schema } : { kind: 'unavailable' };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+/** Existing native writes own current rights, consent, revision, receipts and immutable captured benefit terms. */
+export async function submitCreatorOffer(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  value: CreatorOfferMutation,
+): Promise<CreatorOfferResult> {
+  let input: CreatorOfferMutation;
+  try {
+    input = validateCreatorOfferMutation(value);
+  } catch {
+    return { kind: 'rejected' };
+  }
+  try {
+    const stale = await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    if (stale || !authorization) return { kind: 'denied' };
+    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
+    const result =
+      input.operation === 'create'
+        ? await client.offers.post(
+            {
+              contentEditionId: input.contentEditionId,
+              title: input.title,
+              currency: input.currency,
+              unitAmountMinor: input.unitAmountMinor,
+              taxCode: input.taxCode,
+            },
+            { headers },
+          )
+        : input.operation === 'reprice'
+          ? await client
+              .offers({ offerId: input.offerId })
+              .patch({ unitAmountMinor: input.unitAmountMinor }, { headers })
+          : await client.offers({ offerId: input.offerId }).$delist.post(undefined, { headers });
+    if (result.error) {
+      if (isPlatformClosedProblem(result.status, result.error.value)) return { kind: 'closed' };
+      if ([401, 403, 404].includes(result.status)) return { kind: 'denied' };
+      if ([400, 409, 422].includes(result.status)) return { kind: 'rejected' };
+      return { kind: 'retry' };
+    }
+    const id = result.data?.offer.id;
+    if (!id || !UUID.test(id) || (input.operation !== 'create' && id !== input.offerId)) return { kind: 'retry' };
+    return { kind: 'saved', id };
+  } catch (error) {
+    return { kind: isPlatformClosedError(error) ? 'closed' : 'retry' };
+  }
+}
+
+function privatePage() {
+  setResponseHeader('cache-control', 'private, no-store');
+  setResponseHeader('x-robots-tag', 'noindex, nofollow');
+}
+async function viewer() {
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  const authorization = viewerCredential(request);
+  const identity = await readSessionIdentity(request, env as Partial<SessionEnv>);
+  const result = authorization ? await kernelClient().platform.exposure.get({ headers: { authorization } }) : null;
+  if (result && (result.error || !result.data)) throw new Error('Platform exposure unavailable');
+  return { authorization, csrfToken: identity.csrfToken ?? '', selling: !!result?.data?.admitted.includes('selling') };
+}
+
+export const readCreatorOfferEditor = createServerFn({ method: 'GET' })
+  .validator((value: unknown) => creatorEditionSearch(object(value)))
+  .handler(async ({ data }): Promise<CreatorEditorPageData> => {
+    privatePage();
+    const empty = { csrfToken: '', createKey: crypto.randomUUID(), selling: false };
+    try {
+      const current = await viewer();
+      if (!current.authorization) return { ...empty, editor: { kind: 'denied' } };
+      const editor = !current.selling
+        ? { kind: 'closed' as const }
+        : await loadCreatorEditor(
+            createNativeEditionApi(kernelClient()),
+            createNativeMoneySchemaApi(kernelClient()),
+            current.authorization,
+            data.contentEditionId,
+          );
+      return { ...empty, csrfToken: current.csrfToken, selling: current.selling, editor };
+    } catch {
+      return { ...empty, editor: { kind: 'unavailable' } };
+    }
+  });
+
 export const readCreatorOffers = createServerFn({ method: 'GET' })
   .validator(input)
-  .handler(async ({ data }): Promise<CreatorOffersData> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    setResponseHeader('x-robots-tag', 'noindex, nofollow');
-    return loadCreatorOffers(unavailableCreatorOffersCaller, getRequest(), env as Partial<SessionEnv>, data);
+  .handler(async ({ data }): Promise<CreatorOffersPageData> => {
+    privatePage();
+    const empty = { schema: null, csrfToken: '', selling: false, keys: {} };
+    try {
+      const current = await viewer();
+      if (!current.authorization) return { ...empty, page: { kind: 'denied' } };
+      const page = await loadCreatorOffers(
+        createNativeCreatorOffersCaller(kernelClient()),
+        getRequest(),
+        env as Partial<SessionEnv>,
+        data,
+      );
+      const money = await createNativeMoneySchemaApi(kernelClient()).read(current.authorization);
+      const schema = money.kind === 'ready' ? parseMoneySchema(money.schema) : null;
+      return {
+        csrfToken: current.csrfToken,
+        selling: current.selling,
+        schema,
+        page,
+        keys:
+          page.kind === 'ready'
+            ? Object.fromEntries(
+                page.offers.map((offer) => [offer.id, { reprice: crypto.randomUUID(), delist: crypto.randomUUID() }]),
+              )
+            : {},
+      };
+    } catch {
+      return { ...empty, page: { kind: 'unavailable' } };
+    }
+  });
+
+export const manageCreatorOffer = createServerFn({ method: 'POST' })
+  .validator(validateCreatorOfferMutation)
+  .handler(({ data }) => {
+    privatePage();
+    return submitCreatorOffer(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

@@ -1,5 +1,25 @@
 import type { CreatorOffer, CreatorOffersData } from '../../checkout/creator-offers';
+import type { CommerceMoneySchema, ConfiguredSaleCurrencyRule, StripeMoneyUnit } from '../../checkout/money-schema';
 import type { FakeRoute } from '../fake-modules';
+
+/** Explicit adopted unit/configuration input for price-field examples, never account or selling authority. */
+export const recordedStripeUnit: StripeMoneyUnit = Object.freeze({
+  system: 'stripe-api',
+  exponent: 2,
+  factsVersion: 'stripe-money-v1',
+});
+export const configuredUsdRule: ConfiguredSaleCurrencyRule = Object.freeze({
+  currency: 'usd',
+  unit: recordedStripeUnit,
+  minAmountMinor: 50,
+  maxAmountMinor: 99999999,
+  chargeMultiple: 1,
+});
+export const configuredPriceExample: CommerceMoneySchema = Object.freeze({
+  factsVersion: 'stripe-money-v1',
+  taxBehavior: 'exclusive',
+  configuredSaleCurrencies: Object.freeze([configuredUsdRule, { ...configuredUsdRule, currency: 'eur' as const }]),
+});
 
 const id = (n: number) => `019a2100-0000-7000-8000-2200${String(n).padStart(8, '0')}`;
 export const creatorOfferFixture: CreatorOffer = {
@@ -8,6 +28,8 @@ export const creatorOfferFixture: CreatorOffer = {
   title: 'A field guide to quiet places',
   currency: 'usd',
   unitAmountMinor: 1200,
+  moneyUnit: recordedStripeUnit,
+  taxBehavior: 'exclusive',
   taxCode: 'txcd_10302000',
   royaltyBasisPoints: 9000,
   state: 'active',
@@ -35,6 +57,8 @@ export const delistedCreatorOfferFixture: CreatorOffer = {
   title: 'Earlier edition — archived offer',
   currency: 'jpy',
   unitAmountMinor: 800,
+  moneyUnit: { system: 'stripe-api', exponent: 0, factsVersion: 'stripe-money-v1' },
+  taxBehavior: null,
   contentEdition: null,
   state: 'delisted',
   revision: 3,
@@ -86,8 +110,14 @@ export function creatorOffersStoryPage(state: CreatorOffersStory): CreatorOffers
     next: state === 'empty' || state === 'second-page' ? null : 'story-signed-cursor-placeholder',
   };
 }
-// Contract-shaped responses for later full-page binding; no native permission claim.
+// Story transport has no deployment sale configuration. Keep it unavailable rather than invent qualification.
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: '/v1/commerceMoney',
+    story: () => ({ status: 503, code: 'dependency_unavailable' }),
+    fixture: () => ({ status: 503, code: 'dependency_unavailable' }),
+  },
   {
     method: 'GET',
     path: '/v1/offers',

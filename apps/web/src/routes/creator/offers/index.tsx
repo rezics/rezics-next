@@ -23,7 +23,7 @@ export const Route = createFileRoute('/creator/offers/')({
     const { cursor } = Route.useSearch();
     return (
       <CreatorOffersPage
-        page={Route.useLoaderData()}
+        data={Route.useLoaderData()}
         locale={getLocale()}
         offerPageAvailable={offerPageAvailable}
         {...(cursor ? { cursor } : {})}

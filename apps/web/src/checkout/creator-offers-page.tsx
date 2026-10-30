@@ -1,25 +1,148 @@
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
+import { useRef, useState } from 'react';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import type { CreatorOffersData } from './creator-offers';
+import {
+  manageCreatorOffer,
+  type CreatorOffer,
+  type CreatorOfferMutation,
+  type CreatorOfferResult,
+  type CreatorOffersData,
+  type CreatorOffersPageData,
+} from './creator-offers';
+import { CreatorPriceField, creatorNotice, parsedPrice } from './creator-offer-editor';
+import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 import { formatMinorAmount } from './money';
+
+function OwnedOfferControls({
+  offer,
+  data,
+  locale,
+}: {
+  offer: CreatorOffer;
+  data: CreatorOffersPageData;
+  locale: string;
+}) {
+  // Keep the observed row and original command stable while a write's outcome is uncertain.
+  const [observed] = useState(offer);
+  const [text, setText] = useState('');
+  const [result, setResult] = useState<CreatorOfferResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef<CreatorOfferMutation | null>(null);
+  const locked = useRef(false);
+  const keys = useRef(data.keys[observed.id]);
+  const rule = data.schema?.configuredSaleCurrencies.find((row) => row.currency === observed.currency);
+  const uncertain = result?.kind === 'retry';
+  const frozen = busy || uncertain || result?.kind === 'saved';
+  const editable = observed.state === 'active' && data.selling && !!data.csrfToken && !!keys.current;
+  async function change(operation: 'reprice' | 'delist') {
+    if (locked.current || !editable || result?.kind === 'saved') return;
+    if (!pending.current) {
+      const key = keys.current?.[operation];
+      if (!key) return;
+      const amount = parsedPrice(text, rule);
+      if (operation === 'reprice' && amount === null) return;
+      pending.current =
+        operation === 'delist'
+          ? { operation, offerId: observed.id, idempotencyKey: key }
+          : { operation, offerId: observed.id, idempotencyKey: key, unitAmountMinor: amount! };
+    }
+    locked.current = true;
+    setBusy(true);
+    try {
+      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': data.csrfToken } });
+      setResult(next);
+      if (next.kind !== 'retry' && next.kind !== 'saved') {
+        pending.current = null;
+        keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
+      }
+    } catch {
+      setResult({ kind: 'retry' });
+    } finally {
+      locked.current = false;
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-4">
+      {observed.state === 'active' && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void change('reprice');
+          }}
+          className="space-y-4"
+        >
+          <CreatorPriceField
+            rule={rule}
+            text={text}
+            onChange={setText}
+            locale={locale}
+            disabled={!editable || frozen}
+          />
+          <p className="text-sm leading-relaxed text-muted-foreground">{m.creator_revision_meaning()}</p>
+          {!rule && (
+            <p className="text-sm" role="status">
+              {m.creator_price_unavailable()}
+            </p>
+          )}
+          {uncertain ? (
+            <Button
+              type="button"
+              onClick={() => {
+                if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
+              }}
+              disabled={busy}
+              className="min-h-11"
+            >
+              {m.creator_retry()}
+            </Button>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="submit"
+                disabled={!editable || frozen || parsedPrice(text, rule) === null}
+                className="min-h-11"
+              >
+                {m.creator_reprice()}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!editable || frozen}
+                className="min-h-11"
+                onClick={() => void change('delist')}
+              >
+                {m.creator_delist()}
+              </Button>
+            </div>
+          )}
+        </form>
+      )}
+      {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+    </div>
+  );
+}
 
 export function creatorOffersHref(locale: string, cursor?: string): string {
   return `/${locale}/creator/offers${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
 }
 
 export function CreatorOffersPage({
-  page,
+  page: suppliedPage,
+  data,
   locale,
   cursor,
   offerPageAvailable = true,
 }: {
-  page: CreatorOffersData;
+  page?: CreatorOffersData;
+  data?: CreatorOffersPageData;
   locale: string;
   cursor?: string;
   offerPageAvailable?: boolean;
 }) {
+  const page = data?.page ?? suppliedPage ?? { kind: 'unavailable' as const };
   const href = creatorOffersHref(locale, cursor);
   const notice =
     page.kind === 'denied'
@@ -30,7 +153,9 @@ export function CreatorOffersPage({
           ? m.creator_offers_error()
           : page.kind === 'preparing'
             ? m.creator_offers_preparing()
-            : m.creator_offers_unavailable();
+            : page.kind === 'closed' || page.kind === 'rejected'
+              ? creatorNotice(page.kind)
+              : m.creator_offers_unavailable();
   const restart = page.kind === 'stale' || page.kind === 'error';
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="creator-offers-heading">
@@ -42,6 +167,16 @@ export function CreatorOffersPage({
           </Button>
         )}
       </div>
+      {data && (
+        <Button
+          variant="outline"
+          className="min-h-11"
+          nativeButton={false}
+          render={<a href={`/${locale}/creator/offers/new`} />}
+        >
+          {m.creator_new_offer()}
+        </Button>
+      )}
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.creator_offers_intro()}</p>
       {page.kind !== 'ready' ? (
         <div
@@ -77,17 +212,25 @@ export function CreatorOffersPage({
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
                     <h2 className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">{offer.title}</h2>
                     <p className="shrink-0 font-serif text-lg tabular-nums">
-                      {formatMinorAmount(locale, offer.currency, offer.unitAmountMinor) ??
+                      {formatMinorAmount(locale, offer.currency, offer.unitAmountMinor, recordedMoneyUnit(offer)) ??
                         m.creator_offers_amount_unavailable()}{' '}
                       <span className="text-sm">{offer.currency.toUpperCase()}</span>
                     </p>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    {recordedTaxBehavior(offer) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+                  </p>
                   <p className="text-sm font-medium">
                     {offer.state === 'active' ? m.creator_offers_active() : m.creator_offers_delisted()}
                   </p>
                   <p className="text-sm leading-relaxed text-muted-foreground">
                     {offer.contentEdition === null ? m.creator_offers_unknown() : m.creator_offers_captured()}
                   </p>
+                  {data && (
+                    <ListRowControl>
+                      <OwnedOfferControls offer={offer} data={data} locale={locale} />
+                    </ListRowControl>
+                  )}
                 </ListRow>
               ))}
             </ul>

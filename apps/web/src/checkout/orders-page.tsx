@@ -1,11 +1,14 @@
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerOrder, BuyerOrderPage } from './orders';
+import { formatMinorAmount } from './money';
+import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 
 function price(order: BuyerOrder, locale: string): string {
-  const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency: order.currency.toUpperCase() });
-  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-  return formatter.format(order.unitAmountMinor / 10 ** digits);
+  return (
+    formatMinorAmount(locale, order.currency, order.unitAmountMinor, recordedMoneyUnit(order)) ??
+    m.statements_amount_unavailable()
+  );
 }
 
 function settlementLabel(settlement: BuyerOrder['settlement']): string {
@@ -58,7 +61,13 @@ export function OrdersPage({ page, locale }: { page: BuyerOrderPage; locale: str
                 >
                   {order.title}
                 </a>
-                <p className="shrink-0 font-serif text-lg tabular-nums">{price(order, locale)}</p>
+                <p className="shrink-0 font-serif text-lg tabular-nums">
+                  {price(order, locale)}
+                  <span className="block font-sans text-sm text-muted-foreground">
+                    {order.currency.toUpperCase()} ·{' '}
+                    {recordedTaxBehavior(order) === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
+                  </span>
+                </p>
               </div>
               <dl className="mt-3 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
                 <dt className="text-muted-foreground">{m.orders_status_label()}</dt>

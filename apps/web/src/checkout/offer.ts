@@ -14,6 +14,8 @@ export type OfferPageData = {
   unitAmountMinor: number;
   state: 'active' | 'delisted';
   price: string;
+  taxBehavior?: 'exclusive' | null;
+  moneyUnit?: import('./money-schema').StripeMoneyUnit | null;
   idempotencyKey: string;
   subject: SubjectCoverData;
   benefit?: CapturedBenefit;

@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatementData, CreatorStatementLine } from './creator-statements';
+import { recordedMoneyUnit } from './money-schema';
 import {
   StatementAmount,
   StatementNotice,
@@ -106,7 +107,12 @@ export function CreatorStatementPage({
                 <div key={label} className="flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1">
                   <dt className="text-sm text-muted-foreground">{label}</dt>
                   <dd>
-                    <StatementAmount value={value} currency={page.statement.currency} locale={locale} />
+                    <StatementAmount
+                      value={value}
+                      currency={page.statement.currency}
+                      moneyUnit={recordedMoneyUnit(page.statement)}
+                      locale={locale}
+                    />
                   </dd>
                 </div>
               ))}
@@ -141,7 +147,12 @@ export function CreatorStatementPage({
                       >
                         <div className="flex flex-wrap justify-between gap-2">
                           <h3 className="font-semibold">{lineKind(line.kind)}</h3>
-                          <StatementAmount value={line.netReceiptsMinor} currency={line.currency} locale={locale} />
+                          <StatementAmount
+                            moneyUnit={recordedMoneyUnit(line)}
+                            value={line.netReceiptsMinor}
+                            currency={line.currency}
+                            locale={locale}
+                          />
                         </div>
                         <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                           {[
@@ -183,7 +194,12 @@ export function CreatorStatementPage({
                             <div key={label}>
                               <dt className="text-muted-foreground">{label}</dt>
                               <dd>
-                                <StatementAmount value={value} currency={line.currency} locale={locale} />
+                                <StatementAmount
+                                  moneyUnit={recordedMoneyUnit(line)}
+                                  value={value}
+                                  currency={line.currency}
+                                  locale={locale}
+                                />
                               </dd>
                             </div>
                           ))}
