@@ -23,16 +23,22 @@ export function profileSources(scenario: ProfileReleaseScenario) {
     scenario === 'profile-inheritance-conflict' ? libraryProfile('fixture.game', 'episode') : undefined;
   const input = fixture(game, child);
   const schema = JSON.parse(input.schemas['fixture.yaml']!);
-  if (scenario === 'profile-absent') { delete schema.classes.Root.annotations.library; delete schema.classes.Parent.annotations.library; }
 
   schema.version = scenario;
   schema.classes.Recipe = { class_uri: 'ex:Recipe', annotations: { library: recipe } };
   schema.classes.Record = { class_uri: 'ex:Record', annotations: { library: record } };
   schema.classes.Concept = { class_uri: 'ex:Concept' };
+  const absentProfiles = ['fixture.root', game.id, recipe.id, record.id];
+  if (scenario === 'profile-absent') {
+    for (const name of ['Root', 'Parent', 'Recipe', 'Record']) delete schema.classes[name].annotations.library;
+  }
   for (const locale of LIBRARY_LOCALES) {
     const labels = JSON.parse(input.presentation[`fixture/${locale}`]!);
     Object.assign(labels.types, { 'ex:Recipe': 'recipe', 'ex:Record': 'record', 'ex:Concept': 'concept' });
     Object.assign(labels.libraryProfiles, { [recipe.id]: libraryLabels(recipe, locale), [record.id]: libraryLabels(record, locale) });
+    if (scenario === 'profile-absent') {
+      for (const id of absentProfiles) delete labels.libraryProfiles[id];
+    }
     input.presentation[`fixture/${locale}`] = JSON.stringify(labels);
   }
   // Keep real bundled Book/edition/anime and presentation types available in the SAME compiled release.

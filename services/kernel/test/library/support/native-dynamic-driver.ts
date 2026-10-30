@@ -53,9 +53,19 @@ export async function createDynamicCollectionsDriver(): Promise<DynamicCollectio
       async retireProfile(name) {
         const schema = JSON.parse(input.schemas['fixture.yaml']!);
         const className = name === 'game' ? 'Parent' : name === 'recipe' ? 'Recipe' : 'Record';
+        const removed = [schema.classes[className].annotations.library.id];
         delete schema.classes[className].annotations.library;
         // Parent must not inherit Root's otherwise applicable profile after retirement.
-        if (name === 'game') delete schema.classes.Root.annotations.library;
+        if (name === 'game') {
+          removed.push(schema.classes.Root.annotations.library.id);
+          delete schema.classes.Root.annotations.library;
+        }
+        for (const [key, source] of Object.entries(input.presentation)) {
+          if (!key.startsWith('fixture/')) continue;
+          const presentation = JSON.parse(source);
+          for (const id of removed) delete presentation.libraryProfiles[id];
+          input.presentation[key] = JSON.stringify(presentation);
+        }
         input.schemas['fixture.yaml'] = JSON.stringify(schema);
         release = await compileCatalogue(input);
         digest = await publish(world, release);
