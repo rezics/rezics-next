@@ -97,9 +97,7 @@ async function createBoard(driver: CommunityDriver, fixture: Fixture, realmId: s
       type: 'skos:Concept',
       labels: { en: 'Erasure board' },
       statements: {
-        'skos:inScheme': [
-          { property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } },
-        ],
+        'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
       },
     },
     undefined,
@@ -265,13 +263,9 @@ test.serial(
       [routeOf(account.id), account.id],
     );
     expect(noticeResult.rows.length).toBeGreaterThan(0);
-    await native(
-      driver,
-      account,
-      'POST',
-      `/v1/accounts/${account.id}/notifications:markSeen`,
-      { through: noticeResult.rows.at(-1)!.notice_id },
-    );
+    await native(driver, account, 'POST', `/v1/accounts/${account.id}/notifications:markSeen`, {
+      through: noticeResult.rows.at(-1)!.notice_id,
+    });
 
     await drain(driver, system.database.pool, [
       editedRealm.realmId,
@@ -286,15 +280,16 @@ test.serial(
       [account.id],
     );
     expect(memberRows.rows.length).toBeGreaterThanOrEqual(2);
-    expect((await system.database.pool.query('SELECT 1 FROM rating.vote WHERE voter_id=$1', [account.id])).rowCount).toBe(
-      targetIds.size,
-    );
+    expect(
+      (await system.database.pool.query('SELECT 1 FROM rating.vote WHERE voter_id=$1', [account.id])).rowCount,
+    ).toBe(targetIds.size);
     expect(
       (await system.database.pool.query('SELECT 1 FROM rating.voter_realm WHERE voter_id=$1', [account.id])).rowCount,
     ).toBeGreaterThanOrEqual(2);
-    expect((await system.database.pool.query('SELECT 1 FROM content.notice_seen WHERE account_id=$1', [account.id])).rowCount).toBe(
-      1,
-    );
+    expect(
+      (await system.database.pool.query('SELECT 1 FROM content.notice_seen WHERE account_id=$1', [account.id]))
+        .rowCount,
+    ).toBe(1);
 
     await erase(state, [
       editedRealm.realmId,
@@ -316,11 +311,13 @@ test.serial(
         )
       ).rowCount,
     ).toBe(0);
-    expect((await system.database.pool.query('SELECT 1 FROM community.member_locator WHERE account_id=$1', [account.id])).rowCount).toBe(
-      0,
-    );
     expect(
-      (await system.database.pool.query('SELECT 1 FROM community.revision_locator WHERE account_id=$1', [account.id])).rowCount,
+      (await system.database.pool.query('SELECT 1 FROM community.member_locator WHERE account_id=$1', [account.id]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (await system.database.pool.query('SELECT 1 FROM community.revision_locator WHERE account_id=$1', [account.id]))
+        .rowCount,
     ).toBe(0);
     const revisions = await system.database.pool.query<{
       revision_id: string;
@@ -335,7 +332,13 @@ test.serial(
     const archived = revisions.rows.filter((revision) => revision.revision_id !== head);
     expect(archived.length).toBeGreaterThan(0);
     expect(archived.every((revision) => revision.title === '' && revision.summary === '')).toBe(true);
-    const current = await system.database.pool.query<{ creator: string; revision_id: string; title: string; summary: string; author: string }>(
+    const current = await system.database.pool.query<{
+      creator: string;
+      revision_id: string;
+      title: string;
+      summary: string;
+      author: string;
+    }>(
       `SELECT realm.creator::text, revision.revision_id::text, revision.title, revision.summary, revision.author::text
        FROM community.realm JOIN community.realm_revision revision
          ON revision.route=realm.route AND revision.realm_id=realm.realm_id AND revision.revision_id=realm.head_revision_id
@@ -421,10 +424,10 @@ test.serial('a replayed tombstone event neither repeats work nor acknowledges tw
   }
   expect(
     (
-      await pool.query('SELECT step::text,phase FROM community.account_erasure_progress WHERE route=$1 AND account_id=$2', [
-      routeOf(state.persona.accountId),
-      state.persona.accountId,
-      ])
+      await pool.query(
+        'SELECT step::text,phase FROM community.account_erasure_progress WHERE route=$1 AND account_id=$2',
+        [routeOf(state.persona.accountId), state.persona.accountId],
+      )
     ).rows,
   ).toEqual(progress.rows);
   expect(
@@ -518,11 +521,10 @@ test.serial(
 
     let after: import('../../src/community/account-erasure-records.ts').CommunityRecordsCursor | null = null;
     do {
-      const page = await purgeAccountBanReasonsPage(
-        { pool: system.database.pool },
-        account.id,
-        { asOf: secondDue, after },
-      );
+      const page = await purgeAccountBanReasonsPage({ pool: system.database.pool }, account.id, {
+        asOf: secondDue,
+        after,
+      });
       after = page.next;
     } while (after !== null);
     await resolveRetention(

@@ -16,10 +16,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMUNITY_PLATFORM_BASIS } from './party-locator.ts';
 import { closeErasureFence } from './erasure-fence.ts';
-import {
-  eraseAccountMembershipsPage,
-  type MembershipErasureCursor,
-} from './account-erasure-memberships.ts';
+import { eraseAccountMembershipsPage, type MembershipErasureCursor } from './account-erasure-memberships.ts';
 import { eraseAccountRevisionsPage } from './account-erasure-revisions.ts';
 import {
   eraseAccountCommunityRecordsPage,
@@ -70,7 +67,16 @@ function workflowId(accountId: string, phase: Phase, step: number): string {
   return `community-account-erasure:${accountId}:${phase}:${step}`;
 }
 
-const phases: readonly string[] = ['close', 'memberships', 'revisions', 'records', 'notices', 'rating', 'proof', 'complete'];
+const phases: readonly string[] = [
+  'close',
+  'memberships',
+  'revisions',
+  'records',
+  'notices',
+  'rating',
+  'proof',
+  'complete',
+];
 const recordKinds: readonly string[] = ['ban_actor', 'ban_target', 'membership_operation', 'verdict'];
 
 function isRecordKind(value: string): value is CommunityRecordsCursor['kind'] {
@@ -228,20 +234,15 @@ async function persist(
 
 async function phasePage(pool: Pool, accountId: string, progress: Progress): Promise<Page> {
   if (progress.phase === 'memberships') {
-    return eraseAccountMembershipsPage(
-      { pool },
-      accountId,
-      stringCursor(progress.cursor, 'membership'),
-    );
+    return eraseAccountMembershipsPage({ pool }, accountId, stringCursor(progress.cursor, 'membership'));
   }
   if (progress.phase === 'revisions')
     return eraseAccountRevisionsPage({ pool }, accountId, stringCursor(progress.cursor, 'revision'));
   if (progress.phase === 'records') {
-    const result = await eraseAccountCommunityRecordsPage(
-      { pool },
-      accountId,
-      { erasedAt: progress.erased_at.toISOString(), after: recordsCursor(progress.cursor) },
-    );
+    const result = await eraseAccountCommunityRecordsPage({ pool }, accountId, {
+      erasedAt: progress.erased_at.toISOString(),
+      after: recordsCursor(progress.cursor),
+    });
     return {
       next: result.next,
       found: result.found,
@@ -250,11 +251,7 @@ async function phasePage(pool: Pool, accountId: string, progress: Progress): Pro
     };
   }
   if (progress.phase === 'notices')
-    return eraseAccountNoticesPage(
-      { pool },
-      accountId,
-      stringCursor(progress.cursor, 'notice'),
-    );
+    return eraseAccountNoticesPage({ pool }, accountId, stringCursor(progress.cursor, 'notice'));
   throw new Error(`Community account-erasure phase ${progress.phase} is not a page phase`);
 }
 
@@ -334,7 +331,12 @@ async function step(pool: Pool, accountId: string, expectedStep: number, clock: 
   let retentionAt: string | null = null;
 
   try {
-    if (progress.phase === 'memberships' || progress.phase === 'revisions' || progress.phase === 'records' || progress.phase === 'notices') {
+    if (
+      progress.phase === 'memberships' ||
+      progress.phase === 'revisions' ||
+      progress.phase === 'records' ||
+      progress.phase === 'notices'
+    ) {
       const page = await phasePage(pool, accountId, progress);
       found = page.found > 0;
       const seenPending = progress.phase_pending || page.pending > 0;
@@ -349,13 +351,14 @@ async function step(pool: Pool, accountId: string, expectedStep: number, clock: 
       } else {
         nextCursor = null;
         pending = false;
-        nextPhase = progress.phase === 'memberships'
-          ? 'revisions'
-          : progress.phase === 'revisions'
-            ? 'records'
-            : progress.phase === 'records'
-              ? 'notices'
-              : 'rating';
+        nextPhase =
+          progress.phase === 'memberships'
+            ? 'revisions'
+            : progress.phase === 'revisions'
+              ? 'records'
+              : progress.phase === 'records'
+                ? 'notices'
+                : 'rating';
       }
     } else if (progress.phase === 'rating' || progress.phase === 'proof') {
       const rating = validateRatingStatus(await readRatingErasureDone({ pool }, accountId));
@@ -391,9 +394,8 @@ async function step(pool: Pool, accountId: string, expectedStep: number, clock: 
           if (progress.reasons_kept_until === null && result.next_due_at !== null)
             throw new Error('Community ban reason locator has no retention exception');
 
-          const outcome: ErasureOutcome = progress.community_found || progress.rating_had_votes || rating.hadVotes
-            ? 'erased'
-            : 'none';
+          const outcome: ErasureOutcome =
+            progress.community_found || progress.rating_had_votes || rating.hadVotes ? 'erased' : 'none';
           const retained: readonly RetentionException[] = progress.reasons_kept_until
             ? [
                 {
@@ -549,5 +551,4 @@ export function registerCommunityAccountErasureWork(context: WorkContext): void 
     },
     { name: retentionWorkflow },
   );
-
 }

@@ -285,16 +285,16 @@ membership operations and curator verdicts. The recent ban reason above is the o
 
 ### Community account-erasure phases and cost
 
-| Phase | Touches and bound |
-| --- | --- |
-| Fence close | One locked account-key read and one fence update in the account's partition. Each locator effect adds one locked account-key read, or one first-account insert. |
-| Memberships | The membership producer's bounded page plus one account-partition progress-row read and update. Total work is linear in this account's Realm membership data. |
-| Archived revisions | At most 50 account-partition revision locator keys per page, owner-partition archive clears, and one account-partition locator cleanup and progress update. Total work is linear in the account's archived revisions. |
-| Community records | At most 50 account-partition party locator keys per page and one source point update or delete per key; membership operations add one operation-key read and one DBOS status read. Growth stays independent of unrelated Realms' records. |
-| Notices | The notice producer's bounded inbox page plus one account-partition progress-row read and update. Total work is linear in this account's notices and seen state. |
-| Rating wait | The rating completion read uses constant indexed probes; no rating rows are copied or purged by Community. |
-| Locator proof and acknowledgement | Constant locator existence probes, one account-partition progress update and one Access acknowledgement command. |
-| Ban-reason expiry | At most 50 due `ban_actor` locator keys per page, one owner-partition reason clear per key, then locator removal and one earliest-expiry indexed seek. Total work is linear in this account's retained reasons. |
+| Phase                             | Touches and bound                                                                                                                                                                                                                         |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fence close                       | One locked account-key read and one fence update in the account's partition. Each locator effect adds one locked account-key read, or one first-account insert.                                                                           |
+| Memberships                       | The membership producer's bounded page plus one account-partition progress-row read and update. Total work is linear in this account's Realm membership data.                                                                             |
+| Archived revisions                | At most 50 account-partition revision locator keys per page, owner-partition archive clears, and one account-partition locator cleanup and progress update. Total work is linear in the account's archived revisions.                     |
+| Community records                 | At most 50 account-partition party locator keys per page and one source point update or delete per key; membership operations add one operation-key read and one DBOS status read. Growth stays independent of unrelated Realms' records. |
+| Notices                           | The notice producer's bounded inbox page plus one account-partition progress-row read and update. Total work is linear in this account's notices and seen state.                                                                          |
+| Rating wait                       | The rating completion read uses constant indexed probes; no rating rows are copied or purged by Community.                                                                                                                                |
+| Locator proof and acknowledgement | Constant locator existence probes, one account-partition progress update and one Access acknowledgement command.                                                                                                                          |
+| Ban-reason expiry                 | At most 50 due `ban_actor` locator keys per page, one owner-partition reason clear per key, then locator removal and one earliest-expiry indexed seek. Total work is linear in this account's retained reasons.                           |
 
 Each workflow step commits one bounded command per partition and releases its connection before crossing partitions or
 waiting. Progress is keyed by the account in its home partition. Total work is linear in that account's own
