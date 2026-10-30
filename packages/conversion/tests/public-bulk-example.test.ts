@@ -41,7 +41,13 @@ const feeds = [
     input: {
       external_id: work.key,
       record_revision: String(work.revision),
-      record: { type: work.type, key: work.key, revision: work.revision, title: work.title },
+      record: {
+        type: work.type,
+        key: work.key,
+        revision: work.revision,
+        last_modified: work.last_modified,
+        title: work.title,
+      },
     },
   },
   {
