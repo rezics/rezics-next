@@ -204,7 +204,8 @@ export const searchSpaceSetupContexts = createServerFn({ method: 'GET' })
   .handler(async ({ data }) =>
     // Bind the original generated contexts directory here when its GET declaration is delivered.
     readSetupContextDirectory(unavailableNativeContextDirectory, await setupCredential(), {
-      ...data,
+      query: data.query,
+      ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
       signal: getRequest().signal,
     }),
   );

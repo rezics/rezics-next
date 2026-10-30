@@ -255,6 +255,7 @@ test('Bind delivered Context picker to exact declared native active directory', 
     deletedAt: null,
     purgeAfter: null,
   };
+  const restoredId = '01a1a000-0000-7000-8000-000000000008';
   const pages: Parameters<NativeContextDirectory['get']>[0][] = [];
   const directory: NativeContextDirectory = {
     async get(options) {
@@ -268,6 +269,13 @@ test('Bind delivered Context picker to exact declared native active directory', 
                 contexts: [
                   entry,
                   { ...entry, id: otherId, kind: 'global', labels: { de: 'Canonical fallback', fr: 'Later fallback' } },
+                  {
+                    ...entry,
+                    id: restoredId,
+                    labels: {},
+                    deletedAt: '2026-10-01T00:00:00Z',
+                    purgeAfter: '2026-10-31T00:00:00Z',
+                  },
                   { ...entry, state: 'deleted', deletedAt: '2026-10-01T00:00:00Z', purgeAfter: '2026-11-01T00:00:00Z' },
                 ],
                 next: 'second',
@@ -304,6 +312,7 @@ test('Bind delivered Context picker to exact declared native active directory', 
     expect(picker.getSnapshot().page.contexts).toEqual([
       { id: contextId, label: 'Reading in Japanese' },
       { id: otherId, label: 'Canonical fallback' },
+      { id: restoredId, label: restoredId },
     ]);
     expect(exactReads).toHaveLength(0);
     picker.next();

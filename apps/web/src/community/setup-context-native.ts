@@ -84,7 +84,7 @@ export function nativeContextChoiceSource(
       if ('kind' in result) throw new ContextChoiceError(result.kind);
       return {
         contexts: result.contexts
-          .filter((entry) => entry.state === 'active' && entry.deletedAt === null && entry.purgeAfter === null)
+          .filter((entry) => entry.state === 'active')
           .map((entry) => ({ id: entry.id, label: pickText(entry.labels, locale).text || entry.id })),
         next: result.next,
       };

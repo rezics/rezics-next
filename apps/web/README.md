@@ -2177,9 +2177,9 @@ The production transport uses `changeSpaceSetup`, `readSpaceSetup`, `resolveSpac
 Each entry has exactly `id`, `kind` (`global` or `community`), `labels`, `state` (`active` or `deleted`),
 `deletedAt` and `purgeAfter`. The adapter requests 20 entries with `deleted=false` and the current session credential,
 omitting an empty query and preserving the opaque cursor, including an empty cursor. Each query, Next or retry
-makes one directory request; it never resolves result rows or fills a filtered page. Only active entries without
-deletion timestamps become choices. The native directory owns current readability; its display page grants no
-authority to save a Realm.
+makes one directory request; it never resolves result rows or fills a filtered page. Only active entries become
+choices, including restored entries retaining their completed deletion window. The native directory owns current
+readability; its display page grants no authority to save a Realm.
 
 The installed generated `semantic/http/contexts.d.ts` has no directory GET or lifecycle GET declaration yet.
 `NativeContextDirectory` therefore isolates that exact declared GET shape, with a typed unavailable transport at
