@@ -43,6 +43,7 @@ export function SecurityPage({
   const [accountId, setAccountId] = useState('');
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
   const [loadMessage, setLoadMessage] = useState('');
+  const [consentReduced, setConsentReduced] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState('');
@@ -179,6 +180,7 @@ export function SecurityPage({
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
           <p>{m.auth_security_sign_in_required()}</p>
+          {consentReduced ? <p role="status">{m.auth_inventory_reduced()}</p> : null}
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
       </AuthPage>
@@ -403,7 +405,17 @@ export function SecurityPage({
               </ItemGroup>
             </section>
 
-            <SecurityInventory {...(inventorySource ? { source: inventorySource } : {})} />
+            <SecurityInventory
+              {...(inventorySource ? { source: inventorySource } : {})}
+              onSessionEnded={(reduced) => {
+                setConsentReduced(reduced);
+                setAccountId('');
+                setSessions([]);
+                setPasskeys([]);
+                setPassword('');
+                setLoadState('signed-out');
+              }}
+            />
 
             <section aria-labelledby="security-organizations-heading">
               <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>

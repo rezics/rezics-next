@@ -26,10 +26,12 @@ function InventoryList<V extends InventoryView>({
   view,
   source,
   preflight,
+  onSessionEnded,
 }: {
   view: V;
   source: InventorySource;
   preflight: boolean;
+  onSessionEnded?: (reduced: boolean) => void;
 }) {
   const [page, setPage] = useState<InventoryPage<V> | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
@@ -89,6 +91,7 @@ function InventoryList<V extends InventoryView>({
       // a current inventory snapshot and cannot be patched into the old list.
       setNotice(m.auth_inventory_reduced());
       setPage({ kind: 'signed-out' });
+      onSessionEnded?.(true);
     } else {
       setError(
         result.kind === 'unknown'
@@ -99,7 +102,10 @@ function InventoryList<V extends InventoryView>({
               ? m.auth_account_operation_sign_in_required()
               : m.auth_inventory_unavailable(),
       );
-      if (result.kind === 'signed-out') setPage({ kind: 'signed-out' });
+      setPage({
+        kind: result.kind === 'signed-out' ? 'signed-out' : result.kind === 'denied' ? 'denied' : 'unavailable',
+      });
+      if (result.kind === 'signed-out') onSessionEnded?.(false);
     }
   }
 
@@ -238,14 +244,16 @@ function InventoryList<V extends InventoryView>({
 export function SecurityInventory({
   source = loadInventory,
   preflight = false,
+  onSessionEnded,
 }: {
   source?: InventorySource;
   preflight?: boolean;
+  onSessionEnded?: (reduced: boolean) => void;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <InventoryList view="clients" source={source} preflight={preflight} />
-      <InventoryList view="consents" source={source} preflight={preflight} />
+      <InventoryList view="consents" source={source} preflight={preflight} onSessionEnded={onSessionEnded} />
     </div>
   );
 }
