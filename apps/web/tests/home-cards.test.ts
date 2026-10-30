@@ -416,9 +416,10 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
     redirect: 'manual',
     headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
   });
-  const body = (await answer.clone().json().catch(() => undefined)) as
-    | { status?: unknown; code?: unknown; title?: unknown }
-    | undefined;
+  const body = (await answer
+    .clone()
+    .json()
+    .catch(() => undefined)) as { status?: unknown; code?: unknown; title?: unknown } | undefined;
   const safeProblem = body
     ? {
         status: typeof body.status === 'number' ? body.status : undefined,
