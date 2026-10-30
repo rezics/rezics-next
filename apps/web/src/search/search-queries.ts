@@ -6,7 +6,9 @@ import type { SearchLoaderDeps } from './search-params';
 export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['search', 'discovery-v1', locale, params],
+    staleTime: 0,
+    gcTime: 0,
+    queryKey: ['search', 'discovery-v1', 'anonymous', 'public-global', locale, params],
     queryFn: ({ signal }) =>
       readSearch({
         locale,
@@ -15,6 +17,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
           query: params.query,
           ...(params.type ? { type: params.type } : {}),
           facetValues: params.facets,
+          ...(params.ranges ? { ranges: params.ranges } : {}),
+          ...(params.condition ? { condition: params.condition } : {}),
           ...(params.cursor ? { cursor: params.cursor } : {}),
           ...(params.sort ? { sort: params.sort } : {}),
         },

@@ -1,18 +1,13 @@
-import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import { facetProperties, FILTER_LIMITS, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
-import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { Label } from '@rezics/ui/shadcn/label';
-import { Separator } from '@rezics/ui/shadcn/separator';
+import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SlidersHorizontalIcon } from 'lucide-react';
 import { cn } from '@rezics/ui/utils';
-import { Link } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -20,10 +15,13 @@ import { kernelClient } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
-import { fieldLabel } from '../features/pages/shared';
 import { localizedLabel, ResultList, type Fact, type ResultHit } from './results.tsx';
 import { SearchSort } from './sort.tsx';
 import { readSearchPage } from './search-request.ts';
+import { compileRefinement, refinementHref, refinementProperties } from './refinement/model';
+import { facetRequest, readFacetPage, refinementKey, type FacetState } from './refinement/request';
+import { Refinement, type RefinementData } from './refinement/refinement';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readDiscovery, type DiscoveryState } from './discovery';
 import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
@@ -39,14 +37,6 @@ type SearchResult = Omit<SearchData, 'subjects'> & {
     facts?: Record<string, Fact[]>;
   } & Pick<ResultHit, 'summary' | 'figure' | 'storyOverlay'>)[];
 };
-type FacetBody = Parameters<KernelClient['subjects']['$facets']['post']>[0] & { languages?: string[] };
-type FacetResult = {
-  facets: {
-    property: string;
-    values: { value: string; labels: Record<string, string> }[];
-  }[];
-  as_of: string;
-};
 type SearchParams = {
   query: string;
   locale: string;
@@ -54,8 +44,13 @@ type SearchParams = {
   sort?: 'rating';
   type?: string;
   facetValues: Record<string, string[]>;
+  ranges?: Record<string, FilterRange>;
+  condition?: FilterDocument;
 };
 type SearchPageData = {
+  refinement?: RefinementData;
+  ranges?: Record<string, FilterRange>;
+  condition?: FilterDocument;
   result?: SearchResult;
   discovery?: DiscoveryState;
   type?: string;
@@ -90,23 +85,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function problemCode(error: unknown): string | undefined {
-  if (!isRecord(error)) return undefined;
-  if (typeof error.code === 'string') return error.code;
-  return isRecord(error.value) && typeof error.value.code === 'string' ? error.value.code : undefined;
-}
-
 function allowedType(release: Release, type: unknown): type is string {
   return typeof type === 'string' && Object.hasOwn(release.types, type) && isRecord(release.types[type]);
-}
-
-function parentTypeLabels(release: Release, type: string): Record<string, string> | undefined {
-  if (!allowedType(release, type)) return;
-  const bases = release.types[type]?.bases;
-  if (!Array.isArray(bases)) return;
-  for (const base of bases) {
-    if (allowedType(release, base)) return release.types[base]?.labels ?? {};
-  }
 }
 
 /** Properties whose values a result row can show: items, years, quantities and codes with a declared pattern. */
@@ -138,45 +118,6 @@ function yearProperties(release: Release, type?: string): string[] {
   return [...found];
 }
 
-function selectedFilters(
-  release: Release,
-  type: string,
-  requested: Record<string, string[]>,
-): { selected: Record<string, string[]>; filter: FilterDocument } {
-  const allowedProperties = facetProperties(release, [type]);
-  const selected: Record<string, string[]> = {};
-  const clauses: FilterDocument[] = [{ type: { in: [type] } }];
-
-  for (const property of allowedProperties) {
-    if (clauses.length >= FILTER_LIMITS.leaves) break;
-    if (!Object.hasOwn(requested, property) || !Object.hasOwn(release.properties, property)) continue;
-    const values = requested[property];
-    if (!Array.isArray(values)) continue;
-    const accepted: string[] = [];
-    for (const value of values.slice(0, FILTER_LIMITS.in)) {
-      if (typeof value !== 'string' || accepted.includes(value)) continue;
-      try {
-        admitFilter(
-          {
-            and: [{ type: { in: [type] } }, { statement: { property, in: [value] } }],
-          },
-          release,
-          { saved: false },
-        );
-        accepted.push(value);
-      } catch {
-        // Only values accepted by the definitions release can enter the kernel filter.
-      }
-    }
-    if (accepted.length === 0) continue;
-    selected[property] = accepted;
-    clauses.push({ statement: { property, in: accepted } });
-  }
-
-  const filter: FilterDocument = { and: clauses };
-  return { selected, filter: admitFilter(filter, release, { saved: false }) };
-}
-
 const readSearchWithLocale = createServerFn({ method: 'GET' })
   .validator((input: unknown): SearchParams => {
     if (!isRecord(input) || typeof input.query !== 'string' || input.query.length > 256)
@@ -188,12 +129,14 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     if (input.type !== undefined && typeof input.type !== 'string') throw new Error('Invalid type');
     const facetValues: Record<string, string[]> = Object.create(null);
     if (isRecord(input.facetValues)) {
-      for (const [property, values] of Object.entries(input.facetValues).slice(0, FILTER_LIMITS.leaves)) {
-        if (typeof values === 'string') facetValues[property] = [values];
-        else if (Array.isArray(values))
-          facetValues[property] = values
-            .slice(0, FILTER_LIMITS.in)
-            .filter((value): value is string => typeof value === 'string');
+      for (const [property, values] of Object.entries(input.facetValues)) {
+        if (
+          !Array.isArray(values) ||
+          values.length > FILTER_LIMITS.in ||
+          values.some((value) => typeof value !== 'string')
+        )
+          throw new Error('Invalid facet values');
+        facetValues[property] = values;
       }
     }
     return {
@@ -203,6 +146,18 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ...(input.sort === 'rating' ? { sort: 'rating' as const } : {}),
       ...(typeof input.type === 'string' ? { type: input.type } : {}),
       facetValues,
+      ...(isRecord(input.ranges)
+        ? {
+            ranges: Object.fromEntries(
+              Object.entries(input.ranges).map(([property, range]) => {
+                const parsed = parseFilter({ statement: { property, range } });
+                if (!('statement' in parsed) || !('range' in parsed.statement)) throw new Error('Invalid range');
+                return [property, parsed.statement.range];
+              }),
+            ),
+          }
+        : {}),
+      ...(input.condition ? { condition: parseFilter(input.condition) } : {}),
     };
   })
   .handler(async ({ data }): Promise<SearchPageData> => {
@@ -215,9 +170,11 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     }
 
     const type = release && allowedType(release, data.type) ? data.type : undefined;
-    const selected = release && type ? selectedFilters(release, type, data.facetValues) : undefined;
-    const filter = selected?.filter;
-    const hasSearch = data.query.length > 0 || type !== undefined;
+    if (data.type && !type) throw new Error('Unsupported search type');
+    const filter = release ? compileRefinement(release, { ...data, type }) : undefined;
+    if (!release && (data.condition || Object.keys(data.facetValues).length || Object.keys(data.ranges ?? {}).length))
+      throw new Error('Definitions unavailable');
+    const hasSearch = data.query.length > 0 || type !== undefined || filter !== undefined;
     const languages = requestLanguages(data.locale);
     const years = release ? yearProperties(release, type) : [];
     const properties = release ? [...new Set([...(type ? factProperties(release, type) : []), ...years])] : [];
@@ -250,27 +207,25 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         })()
       : Promise.resolve({});
 
-    const facetPropertiesForType = release && type ? facetProperties(release, [type]).slice(0, 8) : [];
-    const facetBody: FacetBody = {
-      ...(data.query ? { text: data.query } : {}),
-      ...(filter ? { filter } : {}),
-      languages,
-      facets: facetPropertiesForType.map((property) => ({ property, size: 10 })),
-    };
-    let facetIndexNotReady = false;
-    const facetsPromise: Promise<FacetResult | null | undefined> =
-      release && type && facetPropertiesForType.length > 0
-        ? kernelClient(data.locale)
-            .subjects.$facets.post(facetBody, { fetch: { signal } })
-            .then((response) => {
-              if (response.error) {
-                facetIndexNotReady = problemCode(response.error) === 'index_not_ready';
-                return null;
-              }
-              return response.data as FacetResult;
-            })
-            .catch(() => null)
-        : Promise.resolve(undefined);
+    const roster = release ? refinementProperties(release, type) : [];
+    const requestedFacets = roster
+      .slice(0, 8)
+      .filter((entry) => entry.mode === 'values' || entry.mode === 'types')
+      .map(({ property }) => ({ property, size: 10 }));
+    const facetsPromise: Promise<FacetState | undefined> = requestedFacets.length
+      ? readFacetPage(
+          facetRequest(
+            { ...(data.query ? { text: data.query } : {}), ...(filter ? { filter } : {}), languages },
+            requestedFacets,
+          ),
+          (body) => kernelClient(data.locale).subjects.$facets.post(body, { fetch: { signal } }),
+        ).catch((error): FacetState => {
+          if (signal.aborted) throw error;
+          if (isPlatformClosedError(error))
+            return { status: 'refused', code: 'platform_closed', httpStatus: error.status, problem: error.problem };
+          return { status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' };
+        })
+      : Promise.resolve(undefined);
 
     const [{ result, discovery }, facetResult] = await Promise.all([searchPromise, facetsPromise]);
     // Mixed kind metadata belongs to the single result response. Do not probe global Subject counts.
@@ -279,23 +234,6 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ? discovery.page.kinds.values
             .filter((kind) => allowedType(release, kind.id))
             .map((kind) => ({ id: kind.id, labels: kind.labels }))
-        : [];
-    const facetsAvailable = !release || !type || facetResult !== null;
-    const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
-    const groups =
-      release && type && facetResult
-        ? facetPropertiesForType.map((property) => ({
-            property,
-            labels: release!.properties[property]?.labels ?? {},
-            values: (valuesByProperty.get(property) ?? []).map((entry) => {
-              const parentLabels = parentTypeLabels(release!, entry.value);
-              return {
-                value: entry.value,
-                labels: entry.labels,
-                ...(parentLabels ? { parentTypeLabels: parentLabels } : {}),
-              };
-            }),
-          }))
         : [];
     const hitTypes: Record<string, Record<string, string>> = {};
     if (release)
@@ -309,17 +247,32 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       hitTypes,
       yearProperties: years,
       typeChoices,
-      groups,
-      selectedFacets: selected?.selected ?? {},
+      groups: [],
+      ...(release
+        ? {
+            refinement: {
+              key: refinementKey({
+                principal: 'anonymous',
+                languages,
+                release: release.digest!,
+                source: 'public-global',
+                text: data.query,
+                ...(filter ? { filter } : {}),
+              }),
+              properties: roster,
+              ...(facetResult ? { initial: facetResult } : {}),
+            },
+          }
+        : {}),
+      ...(data.ranges ? { ranges: data.ranges } : {}),
+      ...(data.condition ? { condition: data.condition } : {}),
+      selectedFacets: data.facetValues,
       selectedFacetLabels: Object.fromEntries(
-        Object.keys(selected?.selected ?? {}).map((property) => [
-          property,
-          release?.properties[property]?.labels ?? {},
-        ]),
+        Object.keys(data.facetValues).map((property) => [property, release?.properties[property]?.labels ?? {}]),
       ),
-      facetsAvailable: release !== undefined && facetsAvailable,
-      facetRetry: facetResult === null,
-      facetIndexNotReady,
+      facetsAvailable: release !== undefined,
+      facetRetry: false,
+      facetIndexNotReady: facetResult?.status === 'preparing',
       staleCursorRestarted,
       sort: data.sort ?? 'relevance',
     };
@@ -332,16 +285,21 @@ function searchHref(
   facets: Record<string, string[]>,
   cursor?: string,
   sort?: 'rating',
+  ranges?: Record<string, FilterRange>,
+  condition?: FilterDocument,
 ): string {
-  const params = new URLSearchParams();
-  if (query) params.set('q', query);
-  if (type) params.set('type', type);
-  if (sort) params.set('sort', sort);
-  for (const [property, values] of Object.entries(facets))
-    for (const value of values) params.append(`f.${property}`, value);
-  if (cursor) params.set('cursor', cursor);
-  const search = params.toString();
-  return `/${locale}/search${search ? `?${search}` : ''}`;
+  return refinementHref(
+    locale,
+    query,
+    {
+      ...(type ? { type } : {}),
+      facetValues: facets,
+      ...(ranges ? { ranges } : {}),
+      ...(condition ? { condition } : {}),
+    },
+    sort,
+    cursor,
+  );
 }
 
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
@@ -369,7 +327,10 @@ export function SearchPage({
   const selectedFacets = data?.selectedFacets ?? {};
   const number = new Intl.NumberFormat(locale);
   const activeFilterCount =
-    (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
+    (type ? 1 : 0) +
+    Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0) +
+    Object.keys(data?.ranges ?? {}).length +
+    (data?.condition ? 1 : 0);
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
   const openFilters = useCallback(() => {
@@ -389,12 +350,7 @@ export function SearchPage({
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
-  const hasFilterPanel = Boolean(
-    query &&
-    (result?.subjects.length || (discovery?.status === 'ready' && discovery.page.hits.length)) &&
-    data?.facetsAvailable &&
-    (data.typeChoices.length || type),
-  );
+  const hasFilterPanel = Boolean(data?.refinement?.properties.length || data?.typeChoices.length || type);
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
     [activeFilterCount, openFilters],
@@ -407,127 +363,74 @@ export function SearchPage({
       <input type="hidden" name="q" value={query} />
       {type && <input type="hidden" name="type" value={type} />}
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
-      {type ? (
+      {type && (
         <section className="space-y-3">
           <h2 className="font-medium">
             {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
           </h2>
           <a
             className={linkClass}
-            href={searchHref(locale, query, undefined, {}, undefined, data?.sort === 'rating' ? 'rating' : undefined)}
+            href={refinementHref(
+              locale,
+              query,
+              {
+                facetValues: selectedFacets,
+                ...(data?.ranges ? { ranges: data.ranges } : {}),
+                ...(data?.condition ? { condition: data.condition } : {}),
+              },
+              data?.sort === 'rating' ? 'rating' : undefined,
+            )}
           >
             {m.search_clear_type()}
           </a>
-          {Object.entries(selectedFacets).length > 0 && (
-            <>
-              <Separator />
-              <ul className="space-y-2">
-                {Object.entries(selectedFacets).map(([property, values]) => {
-                  const label = fieldLabel(localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale), locale);
-                  return (
-                    <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
-                      <span lang={label.lang}>{label.text || property}</span>
-                      <a
-                        className={linkClass}
-                        href={searchHref(
-                          locale,
-                          query,
-                          type,
-                          Object.fromEntries(Object.entries(selectedFacets).filter(([key]) => key !== property)),
-                          undefined,
-                          data?.sort === 'rating' ? 'rating' : undefined,
-                        )}
-                      >
-                        {m.search_clear_facet()}
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-          {data?.groups.map((group) => {
-            const propertyLabel = fieldLabel(localizedLabel(group.labels, locale), locale);
-            const selected = selectedFacets[group.property] ?? [];
-            const unique = [...new Map(group.values.map((entry) => [entry.value, entry])).values()];
-            const labelCounts = new Map<string, number>();
-            for (const entry of unique) {
-              const label = localizedLabel(entry.labels, locale).text || entry.value;
-              labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-            }
-            if (unique.length === 0) return null;
-            return (
-              <div key={group.property} className="space-y-3">
-                <Separator />
-                <FieldSet className="gap-2">
-                  <FieldLegend variant="label" className="mb-0" lang={propertyLabel.lang}>
-                    {propertyLabel.text || group.property}
-                  </FieldLegend>
-                  <ul className="space-y-2">
-                    {unique.map((entry) => {
-                      const valueLabel = localizedLabel(entry.labels, locale);
-                      const text = valueLabel.text || entry.value;
-                      const parentLabel = localizedLabel(entry.parentTypeLabels ?? {}, locale);
-                      const disambiguator = parentLabel.text ? parentLabel : typeLabel;
-                      const id = `facet-${surface}-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
-                      return (
-                        <li key={entry.value}>
-                          <Label className="items-start gap-2 text-sm font-normal" htmlFor={id} lang={valueLabel.lang}>
-                            <NativeCheckbox
-                              id={id}
-                              form={`${surface}-filter-form`}
-                              name={`f.${group.property}`}
-                              value={entry.value}
-                              defaultChecked={selected.includes(entry.value)}
-                              className="mt-0.5 size-4 shrink-0 accent-primary"
-                              onChange={(event) => {
-                                if (hydrated) event.currentTarget.form?.requestSubmit();
-                              }}
-                            />
-                            <span>
-                              {text}
-                              {labelCounts.get(text)! > 1 && (
-                                <span lang={disambiguator?.lang}> ({disambiguator?.text || type})</span>
-                              )}
-                            </span>
-                          </Label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </FieldSet>
-              </div>
-            );
-          })}
         </section>
-      ) : (
+      )}
+      {!type && data?.typeChoices.length ? (
         <section className="space-y-3">
           <h2 className="font-medium">{m.search_types()}</h2>
           <ul className="space-y-2">
-            {data?.typeChoices.map((choice) => {
-              const label = localizedLabel(choice.labels, locale);
-              return (
-                <li key={choice.id}>
-                  <a
-                    className={linkClass}
-                    href={searchHref(
-                      locale,
-                      query,
-                      choice.id,
-                      {},
-                      undefined,
-                      data?.sort === 'rating' ? 'rating' : undefined,
-                    )}
-                    lang={label.lang}
-                  >
-                    {label.text || choice.id}
-                  </a>
-                </li>
-              );
-            })}
+            {data.typeChoices.map((choice) => (
+              <li key={choice.id}>
+                <a
+                  className={linkClass}
+                  href={refinementHref(
+                    locale,
+                    query,
+                    {
+                      type: choice.id,
+                      facetValues: selectedFacets,
+                      ...(data.ranges ? { ranges: data.ranges } : {}),
+                      ...(data.condition ? { condition: data.condition } : {}),
+                    },
+                    data.sort === 'rating' ? 'rating' : undefined,
+                  )}
+                >
+                  {localizedLabel(choice.labels, locale).text || choice.id}
+                </a>
+              </li>
+            ))}
           </ul>
         </section>
+      ) : null}
+      {data?.refinement && (
+        <Refinement
+          key={`${surface}-${data.refinement.key}`}
+          data={data.refinement}
+          conditions={{
+            ...(type ? { type } : {}),
+            facetValues: selectedFacets,
+            ...(data.ranges ? { ranges: data.ranges } : {}),
+            ...(data.condition ? { condition: data.condition } : {}),
+          }}
+          query={query}
+          locale={locale}
+          {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
+        />
       )}
+      {data?.condition && <input type="hidden" name="condition" value={JSON.stringify(data.condition)} />}
+      {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
+        <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
+      ))}
       <Button type="submit" variant="outline" hidden={hydrated}>
         {m.search_apply()}
       </Button>
@@ -663,7 +566,16 @@ function renderResults(
       )}
       {next && (
         <a
-          href={searchHref(locale, query, type, selectedFacets, next, data?.sort === 'rating' ? 'rating' : undefined)}
+          href={searchHref(
+            locale,
+            query,
+            type,
+            selectedFacets,
+            next,
+            data?.sort === 'rating' ? 'rating' : undefined,
+            data?.ranges,
+            data?.condition,
+          )}
           className={buttonVariants({ variant: 'outline' })}
         >
           {m.search_more()}

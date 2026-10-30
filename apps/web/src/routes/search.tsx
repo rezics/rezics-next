@@ -24,13 +24,20 @@ export const Route = createFileRoute('/search')({
   loaderDeps: ({ search }) => searchLoaderDeps(search),
   loader: ({ deps, context }) => {
     const params = {
+      ...deps,
       query: deps.query,
       type: deps.type,
       facets: deps.facets,
       cursor: deps.cursor,
       sort: deps.sort,
     };
-    if (params.query || params.type)
+    if (
+      params.query ||
+      params.type ||
+      params.condition ||
+      Object.keys(params.facets).length ||
+      Object.keys(params.ranges ?? {}).length
+    )
       return context.queryClient
         .ensureQueryData(searchQueryOptions(getLocale(), params))
         .then(() => ({ query: params.query }));
@@ -65,7 +72,14 @@ function SearchFailed() {
 function SearchRoute() {
   const search = Route.useSearch();
   const deps = searchLoaderDeps(search);
-  if (!deps.query && !deps.type) return <SearchPage query={deps.query} />;
+  if (
+    !deps.query &&
+    !deps.type &&
+    !deps.condition &&
+    !Object.keys(deps.facets).length &&
+    !Object.keys(deps.ranges ?? {}).length
+  )
+    return <SearchPage query={deps.query} />;
   return <SearchResults deps={deps} />;
 }
 

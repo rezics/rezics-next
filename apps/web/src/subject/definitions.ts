@@ -7,6 +7,7 @@ import { requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
 
 export type Release = FilterRelease & {
+  digest?: string;
   libraryProfiles?: Record<string, LibraryProfile>;
   types: Record<
     string,
@@ -132,7 +133,7 @@ export async function readRelease(): Promise<Release> {
           return [type, { ...definition, labels }];
         }),
       );
-      return { ...value, types } as unknown as Release;
+      return { ...value, digest: active.digest, types } as unknown as Release;
     })();
     displayReleaseMemory.set(active.digest, pending);
   }
