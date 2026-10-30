@@ -30,7 +30,8 @@ Acquire precedes external engine work; release belongs in the producer's finally
 request deadline (at most five minutes) so process loss cannot permanently pin a PIT. Callers must enforce that
 same deadline on external work. Close installs a durable admission barrier, drains existing leases and releases
 only that observation's engine reference. Renewal probes the existing PIT and CASes its revision and tuple;
-retirement and physical replacement never inherit retained coverage. No transaction spans engine I/O.
+confirmed native PIT loss closes admission only for that exact tuple and revision.
+Retirement and physical replacement never inherit retained coverage. No transaction spans engine I/O.
 Factory disposal drains local calls; committed state survives recovery and supplied resources remain open.
 
 The keyed joined read uses one SQL statement. Returned costs include SQL submissions, returned/affected rows,

@@ -258,6 +258,7 @@ async function read(
     execution ?? null,
   ]);
   const row = result.rows[0];
+  check(context);
   if (!row) throw new Failure('observation_lost');
   if (row.failure) throw new Failure(row.failure);
   const definition = decode<{ digest: string; data: CustodyDefinition }>(row.definition);
@@ -298,7 +299,9 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       try {
         check(context);
         if (closed && !allowClosed) throw new Failure('owner_unavailable');
-        return await work(meter);
+        const value = await work(meter);
+        check(context);
+        return value;
       } catch (error) {
         return failure(error, meter);
       }
@@ -330,8 +333,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       [value.partition, value.id],
     );
     if (!result.rows[0]) throw new Failure('definition_missing');
-    const consumer = decode<PublicFilterConsumer>(result.rows[0].consumer);
-    return consumer;
+    return decode<PublicFilterConsumer>(result.rows[0].consumer);
   }
   async function retain(
     value: CustodyRegistration,
@@ -597,8 +599,16 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
               query: { match_none: {} },
               pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` },
             },
-          );
-          if (response.timed_out || response._shards.failed) throw new Failure('observation_lost');
+          ).catch(async (error: unknown) => {
+            if (error instanceof OpenSearchError && error.status === 404)
+              await sql(
+                pool,
+                meter,
+                "UPDATE search.public_filter_observation SET state='closing' WHERE (partition_no,observation)=($1,$2) AND queried=$3 AND revision=$4 AND state='open'",
+                [partition(input.snapshot.observation), input.snapshot.observation, encode(input), old.rows[0].revision],
+              );
+            throw error;
+          });
           const successor: PublicFilterQueriedObservation = {
             consumer: input.consumer,
             snapshot: { ...input.snapshot, pit: response.pit_id ?? input.snapshot.pit },
@@ -614,6 +624,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
               successor.snapshot.kind === 'pit' ? successor.snapshot.pit : '',
             ],
           );
+          if (response.timed_out || response._shards.failed) throw new Failure('observation_lost');
           const updated = await sql(
             pool,
             meter,
@@ -670,7 +681,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           const owned = await sql(
             pool,
             meter,
-            "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 64",
+            "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 32",
             values,
           );
           if (!owned.rowCount) break;

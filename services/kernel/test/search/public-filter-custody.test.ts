@@ -97,6 +97,7 @@ test('real migrated durable custody preserves immutable definition observation c
   const n = await setup();
   const a = await append(n.queried);
   const b = await append(n.queried, [{ original: 'other-original', terminal: 'other-terminal' }]);
+  const c = await append(n.queried, []);
   (n.input.definition.capture.after as (string | null)[])[1] = 'mutated';
   Object.assign(n.input.definition.source, { configuration: 'mutated' });
   const modulePath = new URL('../../src/search/public-filter-custody.ts', import.meta.url).pathname;
@@ -121,7 +122,7 @@ test('real migrated durable custody preserves immutable definition observation c
   expect(await child.exited).toBe(0);
   expect(recoveredResult.execution).toEqual(a);
   const recovered = createPublicFilterCustody(pool);
-  for (const execution of [a, b]) {
+  for (const execution of [a, b, c]) {
     const joined = await readPublicFilterConsumerCustody(
       pool,
       { queried: n.queried, execution: execution.id },
@@ -169,6 +170,7 @@ test('real migrated durable custody preserves immutable definition observation c
   await recovered.closeObservation(n.queried, search, context());
   await recovered.closeObservation(n.queried, search, context());
   expect((await recovered.read({ queried: n.queried }, context())).status).toBe('unready');
+  await append(other.queried);
   expect(live.status === 'retained' && (await recovered.read({ queried: live.queried }, context())).status).toBe(
     'found',
   );
@@ -187,6 +189,10 @@ test('real migrated durable custody preserves immutable definition observation c
     'unready',
   );
   if (short.status === 'retained') await recovered.closeObservation(short.queried, search, context());
+  if (other.queried.snapshot.kind !== 'pit') throw new Error('Expected native PIT');
+  await search.request('DELETE', '/_search/point_in_time', { pit_id: [other.queried.snapshot.pit] });
+  expect((await registry.renewPit(other.queried, 60000, search, context())).status).toBe('unready');
+  expect((await recovered.read({ queried: other.queried }, context())).status).toBe('unready');
   await registry.closeObservation(other.queried, search, context());
   const old = await setup();
   await search.request('DELETE', `/${old.physical.index}`);
@@ -213,6 +219,7 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
     start: cut(),
     ownRows: [{ original: 'redirected', terminal: 'winner' }],
   };
+  expect((await registry.appendExecution({ use: acquired.use, execution }, context())).status).toBe('appended');
   expect((await registry.appendExecution({ use: acquired.use, execution }, context())).status).toBe('appended');
   expect(
     (await registry.appendExecution({ use: acquired.use, execution: { ...execution, ownRows: [] } }, context())).status,
@@ -483,4 +490,4 @@ test('full expanded negative AST text keyset and configuration are copied before
   ).toBe('unready');
   expect((await registry.read({ queried: opened.queried }, context())).status).toBe('found');
   await registry.closeObservation(opened.queried, search, context());
-});
+}, 120_000);
