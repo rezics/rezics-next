@@ -69,16 +69,14 @@ test('public meta_tags normalization is bounded and descriptor safe; ignored typ
   expect(() => convertBangumi(input(record), context)).toThrow();
   expect(reads).toBe(0);
   for (const type of [3, 6]) {
-    expect(
-      convertBangumi(
-        input({
-          ...record,
-          type,
-          get meta_tags() {
-            throw new Error('ignored');
-          },
-        }),
-      ).proposals,
-    ).toEqual([]);
+    const ignored = { ...pinned, type };
+    Object.defineProperty(ignored, 'meta_tags', {
+      get() {
+        reads++;
+        throw new Error('ignored');
+      },
+    });
+    expect(convertBangumi(input(ignored)).proposals).toEqual([]);
   }
+  expect(reads).toBe(0);
 });
