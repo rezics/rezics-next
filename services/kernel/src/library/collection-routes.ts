@@ -250,6 +250,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       current.revision === value.revision && current.coverMediaId === value.coverMediaId ? current.cover : null;
     return { ...collectionView(value), ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId };
   }
+  async function writtenCurated(value: Collection, actor: Actor) {
+    const view = await written(value, actor);
+    if (!('memberCount' in view)) throw new ProblemError('dynamic_membership_immutable');
+    return view;
+  }
   const sitemapQuery = strict(SitemapQuerySchema);
   return app
     .get(
@@ -527,7 +532,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => write().batchRemoveMembers(actor, params.collectionId, body, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { collection: await written(result.value.collection, actor), removed: result.value.removed };
+        return { collection: await writtenCurated(result.value.collection, actor), removed: result.value.removed };
       },
     )
     .post(
@@ -558,8 +563,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         return {
-          source: await written(result.value.source, actor),
-          destination: await written(result.value.destination, actor),
+          source: await writtenCurated(result.value.source, actor),
+          destination: await writtenCurated(result.value.destination, actor),
           members: result.value.members.map(memberView),
         };
       },

@@ -184,7 +184,7 @@ export async function updateSavedCollectionRule(
   rule: AdmittedCollectionRule,
   command: { transactionId: string; time: string },
 ): Promise<void> {
-  const rows = await update.run(tx, {
+  const row = await update.run(tx, {
     route,
     collection_id: collectionId,
     revision,
@@ -194,5 +194,5 @@ export async function updateSavedCollectionRule(
     transaction_id: command.transactionId,
     time: command.time,
   });
-  if (rows.length !== 1) throw new ProblemError('conflict');
+  if (!row) throw new ProblemError('conflict');
 }
