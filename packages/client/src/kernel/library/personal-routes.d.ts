@@ -5130,12 +5130,30 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copyId: string;
                     };
                     query: {
+                        presentation?: "FULL";
                         view?: "BASIC" | "FULL";
                     };
                     headers: unknown;
                     response: {
                         200: {
                             copy: {
+                                presentation?: {
+                                    meaning: "known" | "unknown" | "unavailable";
+                                    kindLabel?: string;
+                                    kindLabelLanguage?: string;
+                                    statusLabel?: string;
+                                    statusLabelLanguage?: string;
+                                    statusEditing: {
+                                        state: "supported";
+                                        statuses: {
+                                            id: string;
+                                            label: string;
+                                            labelLanguage: string;
+                                        }[];
+                                    } | {
+                                        state: "unsupported" | "unavailable";
+                                    };
+                                };
                                 subject?: {
                                     id: string;
                                     type: string;

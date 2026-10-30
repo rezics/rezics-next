@@ -83,6 +83,50 @@ IDs stay readable as stored raw values with their historic provenance; they are 
 must be supported by the active profile at its acceptance point. It cannot add an unknown ID, supply a legacy pin, or
 submit an old pin to bypass a missing capability. API request bodies do not accept pin metadata.
 
+### Owner Copy detail and current status advice
+
+`GET /v1/copies/{copyId}?presentation=FULL` adds only
+`copy.presentation = {meaning, kindLabel?, kindLabelLanguage?, statusLabel?, statusLabelLanguage?,
+statusEditing: {state, statuses?: readonly {id, label, labelLanguage}[]}}`. The exported readonly native DTO is
+`CopyPresentation` in `copy-model.ts`. This is a bounded, opt-in detail of one actual owner holding, independent of
+`view=FULL` current subject summaries. Default BASIC/FULL, Copy lists, Continue, events and published logs retain
+their existing fields. Responses are private, no-store. No accepting identity, release digest, profile ID or pin
+is serialized. Lists retain their raw fallback and historical notice; editing or inspecting opens this one detail
+instead of issuing a release read for every row. Generic visual fixtures without actual accepted metadata remain
+unknown; no subject Type, location or source implies a physical/digital holding.
+
+Meaning is `known` only when the exact stored private pin resolves its immutable release and declares the stored
+kind/status pair. Unknown IDs, unpinned facts and `legacy-unspecified` retain their raw provenance with `unknown`
+meaning and no fabricated labels. A missing required release or mismatched reference is `unavailable`; no current
+head or legacy fallback supplies historical meaning. `Accept-Language` uses the existing request language-range
+and label-selection helpers. Every displayed label reports its genuine selected or fallback language.
+
+`statusEditing` is qualified advice from the current native explicit-status validator, never permission or an
+allow token. A readable current profile offers statuses for the exact stored kind; it does not infer or change
+the historic kind. The current status choices may differ from the accepted status and use current labels. A
+readable retired profile or absent kind proves `unsupported`. Hidden, missing or failed source/dependency evidence
+is `unavailable`, without an inferred retirement. Missing original meaning cannot establish support. Unsupported
+or unavailable advice has no fabricated empty choices. Explicit status writes independently authorize and validate
+the submitted value at native command time. Metadata-only edits, delete, receipts and the exact 720-hour Undo
+remain under their native contracts; the detail read creates no write, migration, activation or preparation.
+
+The reader captures one actual copy and pin under current owner scope, principal, account and denial checks,
+releases the owner snapshot, resolves the exact release and current source, then rechecks source identity/version,
+account authorization, owner partition epoch and exact copy/pin after optional summary rendering. Each foreign
+home is released before another is visited. Current subject disclosure is independent of historical labels and
+of the current profile's availability. Changes at the final fence fail closed.
+
+There is an unresolved native update inconsistency: `copies.ts` currently replaces the entire pin with the
+current source pin on a successful update, including metadata-only updates. The existing acceptance case
+`fresh status updates store the observed pin while retired kind status facts survive activation and rollback unchanged`
+in `profile-copy-command.test.ts` explicitly requires a transition from original `licensed` to current-only
+`archived` and the replacement release pin. That contradicts immutable accepted-kind meaning when the current
+release renames the same kind. One pin cannot simultaneously preserve original kind labels and declare a
+current-only status. This detail seam resolves the actual stored pin honestly; it cannot recover an overwritten
+original pin. The existing command acceptance is retained, and no conversion, second profile store or silent
+repinning repair is introduced. Original-kind preservation across that write requires reconciliation of that
+acceptance with the immutable-pin rule before it can be claimed complete.
+
 ### Owner session display and current recording
 
 `GET /v1/progressSessions/{sessionId}?presentation=FULL` adds only

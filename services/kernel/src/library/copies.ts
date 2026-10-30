@@ -1,13 +1,19 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  type AuthoritativeTime,
+  type CommandTransaction,
+} from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -28,6 +34,10 @@ import { decodeLibraryProfilePin } from './profile-pin.ts';
 import retentionRead from './copy-retention-read.sql';
 import retentionRestore from './copy-retention-restore.sql';
 import { readLibraryProfileSource } from './profile-source.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
+import type { CopyPresentation } from './copy-model.ts';
+import { prepareCopyPresentation } from './copy-presentation.ts';
+import copyDetailRead from './copy-store-read.sql';
 
 const UPDATED_EVENT = 'com.rezics.library.copy.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.copy.deleted.v1';
@@ -479,6 +489,81 @@ export function createCopyCommands(config: Dependencies) {
     });
   }
 
+  function readPresentedCopy(
+    actor: Actor,
+    copyId: string,
+    languages?: readonly string[],
+  ): Promise<Copy & { presentation: CopyPresentation }>;
+  function readPresentedCopy<T>(
+    actor: Actor,
+    copyId: string,
+    languages: readonly string[],
+    render: (copy: Copy, presentation: CopyPresentation, disclosure: { subject: boolean }) => Promise<T>,
+  ): Promise<T>;
+  /** Render between released observations so summaries cannot escape the final owner/source fence. */
+  async function readPresentedCopy<T>(
+    actor: Actor,
+    copyId: string,
+    languages: readonly string[] = [],
+    render?: (copy: Copy, presentation: CopyPresentation, disclosure: { subject: boolean }) => Promise<T>,
+  ): Promise<T | (Copy & { presentation: CopyPresentation })> {
+    const owner = requireActor(actor, 'copy:read');
+    const route = sameAccountRoute(owner.accountId, copyId);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(deadline, () =>
+      within(deadline, async () => {
+        const time = () => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
+        async function observed(at: AuthoritativeTime) {
+          const check = await accessCheck(
+            access,
+            owner,
+            'copy:read',
+            { route, id: owner.accountId },
+            { pool, deadline, time: at },
+          );
+          return readOnly(owner, async (client) => {
+            const bounded = deadlineClient(client, deadline);
+            if (!(await check(bounded, at))) throw new GrantDeniedError();
+            const partition = await readPartition(bounded, partitionOf(route));
+            const row = await copyDetailRead.run(bounded, { route, copy_id: copyId, account_id: owner.accountId });
+            if (!partition || !row) throw new LibraryNotFoundError();
+            const { libraryProfilePin, ...value } = row;
+            const copy: Copy = {
+              ...value,
+              createdAt: new Date(value.createdAt).toISOString(),
+              updatedAt: new Date(value.updatedAt).toISOString(),
+            };
+            return { fact: { copy, pin: decodeLibraryProfilePin(libraryProfilePin) }, epoch: partition.epoch };
+          });
+        }
+        const at = await time();
+        try {
+          const before = await observed(at);
+          const prepared = await prepareCopyPresentation(
+            { pool, access, actor: owner, at, deadline },
+            before.fact,
+            languages,
+          );
+          const result = render
+            ? await render(before.fact.copy, prepared.presentation, prepared.disclosure)
+            : { ...before.fact.copy, presentation: prepared.presentation };
+          const finalTime = await time();
+          try {
+            await prepared.verify(finalTime);
+            const after = await observed(finalTime);
+            if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
+              throw new CopyConflictError();
+          } finally {
+            releaseOperationalTime(finalTime);
+          }
+          return result;
+        } finally {
+          releaseOperationalTime(at);
+        }
+      }),
+    );
+  }
+
   async function listCopies(actor: Actor, options: PageOptions = {}) {
     const owner = requireActor(actor, 'copy:list');
     const filterSubjectId = options.subjectId === undefined ? null : subjectId(options.subjectId);
@@ -545,5 +630,5 @@ export function createCopyCommands(config: Dependencies) {
     });
   }
 
-  return { createCopy, updateCopy, deleteCopy, restoreCopy, readCopy, listCopies };
+  return { createCopy, updateCopy, deleteCopy, restoreCopy, readCopy, readPresentedCopy, listCopies };
 }

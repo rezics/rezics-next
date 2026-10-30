@@ -59795,6 +59795,15 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "presentation",
+            "required": false,
+            "schema": {
+              "const": "FULL",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -59839,6 +59848,94 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "presentation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kindLabel": {
+                              "type": "string"
+                            },
+                            "kindLabelLanguage": {
+                              "type": "string"
+                            },
+                            "meaning": {
+                              "enum": [
+                                "known",
+                                "unknown",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "statusEditing": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "const": "supported",
+                                      "type": "string"
+                                    },
+                                    "statuses": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "label": {
+                                            "type": "string"
+                                          },
+                                          "labelLanguage": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "label",
+                                          "labelLanguage"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "minItems": 1,
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "statuses"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "enum": [
+                                        "unsupported",
+                                        "unavailable"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "statusLabel": {
+                              "type": "string"
+                            },
+                            "statusLabelLanguage": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "meaning",
+                            "statusEditing"
+                          ],
+                          "type": "object"
                         },
                         "revision": {
                           "maximum": 2147483646,
@@ -60640,6 +60737,8 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
+                        "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
                         "transaction_retry_exhausted",

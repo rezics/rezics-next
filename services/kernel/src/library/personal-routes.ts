@@ -13,6 +13,7 @@ import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { languageRanges } from '../semantic/language.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { LibraryNotFoundError } from './command-support.ts';
@@ -93,6 +94,28 @@ const copySchema = t.Object(
     acquiredOn: nullable,
     disposedOn: nullable,
     note: nullable,
+  },
+  closed,
+);
+const copyPresentationSchema = t.Object(
+  {
+    meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
+    kindLabel: t.Optional(t.String()),
+    kindLabelLanguage: t.Optional(t.String()),
+    statusLabel: t.Optional(t.String()),
+    statusLabelLanguage: t.Optional(t.String()),
+    statusEditing: t.Union([
+      t.Object(
+        {
+          state: t.Literal('supported'),
+          statuses: t.Array(t.Object({ id: t.String(), label: t.String(), labelLanguage: t.String() }, closed), {
+            minItems: 1,
+          }),
+        },
+        closed,
+      ),
+      t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
+    ]),
   },
   closed,
 );
@@ -507,13 +530,58 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .get(
       '/v1/copies/:copyId',
       {
-        query: t.Object(viewQuery, closed),
+        query: t.Object({ ...viewQuery, presentation: t.Optional(t.Literal('FULL')) }, closed),
         params: t.Object({ copyId: id }),
-        response: { 200: t.Object({ copy: embedded(copySchema, subjectFields) }, closed), ...failures },
+        response: {
+          200: t.Object(
+            { copy: embedded(copySchema, { ...subjectFields, presentation: t.Optional(copyPresentationSchema) }) },
+            closed,
+          ),
+          ...failures,
+          503: problemSchema(
+            'semantic_not_ready',
+            'dependency_unavailable',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
         detail: detail('copy.get', 'copy:read'),
       },
-      async ({ actor, params, query, admission, job }) => {
+      async ({ actor, params, query, admission, job, request, set }) => {
         point(actor, params.copyId, 'copy:read');
+        set.headers['cache-control'] = 'private, no-store';
+        if (query.presentation === 'FULL') {
+          return admission.run('normal', job, () =>
+            command(
+              () =>
+                copies().readPresentedCopy(
+                  actor,
+                  params.copyId,
+                  languageRanges(request.headers.get('accept-language')),
+                  async (copy, presentation, disclosure) => {
+                    const editing = presentation.statusEditing;
+                    const value = {
+                      ...copyView(copy),
+                      presentation: {
+                        ...presentation,
+                        statusEditing:
+                          editing.state === 'supported' ? { ...editing, statuses: [...editing.statuses] } : editing,
+                      },
+                    };
+                    if (query.view !== 'FULL') return { copy: value };
+                    const subject = disclosure.subject
+                      ? ((await fullView(config(), actor, 'FULL', { reference: { subjectId: copy.subjectId } }))
+                          .reference.subject ?? null)
+                      : null;
+                    return { copy: { ...value, subject } };
+                  },
+                ),
+              'not_found',
+            ),
+          );
+        }
         return fullView(config(), actor, query.view, {
           copy: copyView(
             await admission.run('normal', job, () =>

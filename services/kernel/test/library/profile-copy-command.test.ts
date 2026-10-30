@@ -516,3 +516,109 @@ test('profile retirement allows own delete and exact replay while denying all fr
     privateFree(row.data);
   }
 });
+
+// Additive owner-detail coverage; existing BASIC and command acceptance assertions stay unchanged.
+test('owner detail resolves the actual stored pin, keeps accepted labels through rename and retirement, and has no read effects', async () => {
+  const subjectId = await native.createSubject('game');
+  const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+  const saved = await fact(created.value.id);
+  const currentProfile = { id: 'fixture.game-holdings', copies: { kinds: [
+    { id: 'installation', statuses: [{ id: 'licensed' }] },
+  ] } };
+  const data = fixture(currentProfile);
+  for (const [key, text] of Object.entries(data.presentation)) {
+    const labels = JSON.parse(text);
+    labels.libraryProfiles[currentProfile.id].copyKinds.installation = 'Current installation';
+    labels.libraryProfiles[currentProfile.id].copyStatuses.installation.licensed = 'Current licence';
+    data.presentation[key] = JSON.stringify(labels);
+  }
+  const renamed = await native.publish(await compileCatalogue(data));
+  await native.activate(renamed);
+  const before = await inspect();
+  const response = await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const body = await json(response, 200);
+  expect(body.copy).toEqual({
+    id: created.value.id, subjectId, kind: 'installation', status: 'licensed', revision: 1,
+    location: null, source: null, acquiredOn: null, disposedOn: null, note: 'Private licence',
+    presentation: {
+      meaning: 'known', kindLabel: 'installation', kindLabelLanguage: 'en',
+      statusLabel: 'licensed', statusLabelLanguage: 'en',
+      statusEditing: { state: 'supported', statuses: [{ id: 'licensed', label: 'Current licence', labelLanguage: 'en' }] },
+    },
+  });
+  const direct = await commands.readPresentedCopy(owner.actor, created.value.id, ['de']);
+  expect(direct.presentation).toMatchObject({ meaning: 'known', kindLabelLanguage: 'de', statusLabelLanguage: 'de' });
+  privateFree(direct);
+  const full = await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`), 200);
+  expect(full.copy.presentation).toEqual(body.copy.presentation);
+  expect(full.copy.subject?.id).toBe(subjectId);
+  for (const suffix of ['', '?view=FULL']) {
+    const ordinary = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}${suffix}`), 200)).copy;
+    expect(ordinary).not.toHaveProperty('presentation');
+  }
+  expect(await fact(created.value.id)).toEqual(saved);
+  expect(await inspect()).toEqual(before);
+  await native.activate(replacementDigest);
+  const retired = await commands.readPresentedCopy(owner.actor, created.value.id);
+  expect(retired.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusLabel: 'licensed' });
+  expect(retired.presentation.statusEditing).toEqual({ state: 'supported', statuses: [{ id: 'archived', label: 'archived', labelLanguage: 'en' }] });
+  // Advisory follows the native explicit-status validator; it is never a permission or historical conversion.
+  expect(await fact(created.value.id)).toEqual(saved);
+});
+
+test('owner detail distinguishes retired profile from hidden current source without relabelling the private accepted holding', async () => {
+  const subjectId = await native.createSubject('record');
+  const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+  await native.activate(replacementDigest);
+  const before = await inspect();
+  const retired = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200)).copy;
+  expect(retired.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unsupported' } });
+  expect(await inspect()).toEqual(before);
+  expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'private-detail-test' })).status).toBe(200);
+  const hiddenBefore = await inspect();
+  const hidden = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`), 200)).copy;
+  expect(hidden.subject).toBeNull();
+  expect(hidden.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unavailable' } });
+  expect(await inspect()).toEqual(hiddenBefore);
+});
+
+test('same-route foreign owner, missing scope and revoked principal cannot expose opt-in detail or cause read effects', async () => {
+  const subjectId = await native.createSubject('game');
+  const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+  const sameRoute = await native.identity(scopes, undefined, routeOf(owner.actor.accountId)!);
+  expect(routeOf(sameRoute.actor.accountId)).toBe(routeOf(created.value.id));
+  const noScope = await accountToken({ accountId: owner.actor.accountId, clientId: owner.actor.clientId, scopes: ['subject:read'] });
+  const before = await inspect();
+  await expect(commands.readPresentedCopy(sameRoute.actor, created.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  for (const bearer of [sameRoute.bearer, noScope, 'anonymous']) {
+    const response = await native.send(bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`);
+    expect([401, 404]).toContain(response.status);
+    const raw = await response.text();
+    for (const secret of ['Private licence', 'installation', 'licensed', originalDigest, 'presentation', '"copy":']) expect(raw).not.toContain(secret);
+  }
+  expect(await inspect()).toEqual(before);
+  const own = await native.identity(scopes);
+  const ownCopy = await commands.createCopy(own.actor, input(subjectId), entryKey());
+  await native.revokeIdentity(own.actor.accountId);
+  const revokedBefore = await native.inspect(own.actor.accountId);
+  await expect(commands.readPresentedCopy(own.actor, ownCopy.value.id)).rejects.toBeInstanceOf(GrantDeniedError);
+  expect(await native.inspect(own.actor.accountId)).toEqual(revokedBefore);
+});
+
+test('detail final fence refuses a changed copy, a changed source or a revoked owner before returning rendered data', async () => {
+  for (const change of ['copy', 'source', 'owner'] as const) {
+    const who = await native.identity(scopes);
+    const subjectId = await native.createSubject('game');
+    const created = await commands.createCopy(who.actor, input(subjectId), entryKey());
+    const read = commands.readPresentedCopy(who.actor, created.value.id, [], async () => {
+      if (change === 'copy') await commands.updateCopy(who.actor, created.value.id, { revision: 1, note: 'Changed' }, entryKey());
+      if (change === 'source') expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'detail-final-fence' })).status).toBe(200);
+      if (change === 'owner') await native.revokeIdentity(who.actor.accountId);
+      return 'must not escape';
+    });
+    if (change === 'copy') await expect(read).rejects.toBeInstanceOf(CopyConflictError);
+    if (change === 'source') await expect(read).rejects.toMatchObject({ code: 'semantic_not_ready' });
+    if (change === 'owner') await expect(read).rejects.toBeInstanceOf(GrantDeniedError);
+  }
+});

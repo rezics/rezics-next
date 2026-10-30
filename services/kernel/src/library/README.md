@@ -1655,6 +1655,24 @@ remain deferred. `test/library/progress-presentation.test.ts` and additional nat
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit and begin and commit.
 - Growth check: `test/library/growth-personal-reads.test.ts`: `Copy read has constant rows and statements as copies grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's copies, other accounts' copies in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
+Owner detail alone additionally accepts `presentation=FULL`, independent of summary `view=FULL`.
+[Profile consumers](../../../../docs/library-profile-consumers.md#owner-copy-detail-and-current-status-advice)
+owns the exact DTO, qualified current status advice and unresolved original-kind/update-pin inconsistency.
+`copy-presentation.ts` resolves the actual stored accepted release by digest; no current source labels enter
+historic display. `copy-store-read.sql` selects one live row and its private pin by full copy key and actual owner.
+`readPresentedCopy` has a typed default caller and a rendering callback held inside its before/final owner,
+principal/denial, partition, copy/pin and source-version checks. Snapshots are released between owner and foreign
+homes. Unknown raw and legacy-unspecified kinds stay unknown. Current release failures do not decide retirement
+or prevent independently readable subject summaries. No read writes or returns accepting metadata.
+
+The detail adds two exact owner copy reads plus fixed account/Access/partition observations, one accepted release
+lookup, one current profile lookup and bounded current source/final probes. Work is constant in unrelated facts
+and historical releases; it never walks history or adds per-row release reads to lists. Existing default wire
+assertions remain unchanged. Focused pure presentation and additive actual native fixture cases cover accepted
+labels versus current rename/retirement, unknown versus unavailable, disclosure and final fences. Native and
+promoted-main proof remain pending; local typing is not that proof. Metadata update/delete/Undo contracts and the
+720-hour restoration window remain unchanged.
+
 ### Copy page
 
 - Touches: A snapshot, an admit, a partition-epoch read, and one keyset on `copy_account_created` `(route, account_id, created_at, copy_id)`. The first fetch is `min(100, s + 1)`. When `s` is 100 and that fetch does not already show a further row, a second limit-1 probe runs. The cursor is bound to the account.

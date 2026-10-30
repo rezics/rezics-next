@@ -179,13 +179,24 @@ export async function createProfileEntryFixture(
         typeof proof === 'object' && proof !== null ? (proofs.get(proof) ?? null) : null,
       recoveryEvidence: async () => null,
     });
-    async function identity(scopes: readonly string[], partition?: number) {
+    async function identity(scopes: readonly string[], partition?: number, exactRoute?: number) {
       if (partition !== undefined && (!Number.isInteger(partition) || partition < 0 || partition >= 4096))
         throw new RangeError('Identity partition must be between 0 and 4095');
+      if (
+        exactRoute !== undefined &&
+        (!Number.isInteger(exactRoute) ||
+          exactRoute < 0 ||
+          exactRoute >= 65536 ||
+          (partition !== undefined && partitionOf(exactRoute) !== partition))
+      )
+        throw new RangeError('Identity route must be between 0 and 65535 and in the requested partition');
       // Select the registration request key, never forge or rewrite the producer's account ID.
       let key = entryKey();
       let accountId = lifecycle.registrationTarget(key);
-      while (partition !== undefined && partitionOf(routeOf(accountId)!) !== partition) {
+      while (
+        (partition !== undefined && partitionOf(routeOf(accountId)!) !== partition) ||
+        (exactRoute !== undefined && routeOf(accountId) !== exactRoute)
+      ) {
         key = entryKey();
         accountId = lifecycle.registrationTarget(key);
       }
