@@ -6,7 +6,6 @@ import {
   identityBindingDigest,
   identityBindingJob,
   acceptIdentityBinding,
-  identityReceiptPartition,
   type IdentityReceiptBinding,
   type IdentityAdmissionSource,
 } from './identity-epoch-binding.ts';
@@ -33,7 +32,6 @@ import finishClose from './identity-epoch-admission-finish-close.sql';
 import validBases from './identity-epoch-admission-valid-bases.sql';
 import selectControl from './identity-epoch-store-select-control-2.sql';
 import selectGroups from './identity-epoch-store-select-group.sql';
-import priorJob from './identity-epoch-store-select-job-3.sql';
 import bootstrapHome from './identity-epoch-store-select-bootstrap-home.sql';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
@@ -47,7 +45,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
-import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
 import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
@@ -60,7 +58,7 @@ import {
   serializeIdentityValue as json,
   recordIdentityEpochNativeCommit,
 } from './identity-epoch-store.ts';
-import type { IdentityIntent, IdentityReceipt, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
+import type { IdentityIntent, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
