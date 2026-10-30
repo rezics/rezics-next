@@ -19,6 +19,7 @@ import upsert from './subject-offers-upsert.sql';
 import remove from './subject-offers-remove.sql';
 import advance from './subject-offers-advance.sql';
 import movePage from './subject-offers-move-page.sql';
+import reference from './subject-offers-reference.sql';
 
 const basis = { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-commerce-discovery', requestedBy: null };
 async function available(client: CommandTransaction, home: number) {
@@ -26,6 +27,15 @@ async function available(client: CommandTransaction, home: number) {
   if (!owner || owner.writeState !== 'active')
     throw new CommandUnavailableError(owner?.writeState === 'moved' ? 'moved' : 'fenced', home, owner?.movedTo);
   return owner;
+}
+
+async function referenceVersion(pool: Pool, key: { route: number; subject: string; offer: string }, deadline: number) {
+  return withConnection(pool, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    const owner = await available(client, partitionOf(key.route));
+    const row = await reference.run(client, key);
+    return { version: row?.version ?? '0', ownerEpoch: owner.epoch };
+  });
 }
 
 /** Replayed effects read current native source, not their historical event revision or payload. */
@@ -42,20 +52,40 @@ export function projectSubjectOffer(pool: Pool, offerId: string, deadline: numbe
       route: routeOf(mapping.terminal)!, subject: mapping.terminal, offer: offerId,
       original: source.targetSubjectId, revision: source.revision, epoch: mapping.epoch.toString(), listed: source.state === 'active',
     };
-    await runCommand(pool, { partition: partitionOf(key.route), basis, deadline }, async (tx) => {
-      await upsert.run(tx, key);
-      return noEffect(null);
+    const observed = await referenceVersion(pool, key, deadline);
+    const old = previousTerminal && previousTerminal !== mapping.terminal
+      ? { ...key, route: routeOf(previousTerminal)!, subject: previousTerminal } : null;
+    const previous = old ? await referenceVersion(pool, old, deadline) : null;
+    // Semantic epochs are local to their native control homes, not globally ordered.
+    // Observe the live directory version before refreshing proof; an older writer
+    // cannot borrow a later directory version and overwrite a completed move.
+    const current = await readSubjectOfferSource(pool, offerId, deadline);
+    const [currentIdentity] = await readIdentityMappings(pool, [source.targetSubjectId]);
+    if (!current || current.revision !== source.revision || currentIdentity?.state !== 'mapped' ||
+        currentIdentity.terminal !== mapping.terminal || currentIdentity.epoch !== mapping.epoch)
+      throw new CommandUnavailableError('fenced', partitionOf(key.route));
+    const written = await runCommand(pool, { partition: partitionOf(key.route), basis, deadline }, async (tx) => {
+      if ((await available(tx, partitionOf(key.route))).epoch !== observed.ownerEpoch)
+        throw new CommandUnavailableError('fenced', partitionOf(key.route));
+      return noEffect(await upsert.run(tx, { ...key, version: observed.version }));
     });
+    if (!written.value) throw new CommandUnavailableError('fenced', partitionOf(key.route));
     // No directory client is held across either native source or identity collection.
     const final = await readSubjectOfferSource(pool, offerId, deadline);
     const [identity] = await readIdentityMappings(pool, [source.targetSubjectId]);
     if (!final || final.revision !== source.revision || identity?.state !== 'mapped' ||
-        identity.terminal !== mapping.terminal || identity.epoch !== mapping.epoch)
+        identity.terminal !== mapping.terminal || identity.epoch !== mapping.epoch) {
+      await runCommand(pool, { partition: partitionOf(key.route), basis, deadline }, async (tx) => {
+        await remove.run(tx, { ...key, version: written.value.version });
+        return noEffect(null);
+      });
       throw new CommandUnavailableError('fenced', partitionOf(key.route));
-    if (previousTerminal && previousTerminal !== mapping.terminal) {
-      const old = { ...key, route: routeOf(previousTerminal)!, subject: previousTerminal };
+    }
+    if (old && previous && previous.version !== '0') {
       await runCommand(pool, { partition: partitionOf(old.route), basis, deadline }, async (tx) => {
-        await remove.run(tx, old);
+        if ((await available(tx, partitionOf(old.route))).epoch !== previous.ownerEpoch)
+          throw new CommandUnavailableError('fenced', partitionOf(old.route));
+        await remove.run(tx, { ...old, version: previous.version });
         return noEffect(null);
       });
     }

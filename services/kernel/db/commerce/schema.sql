@@ -817,6 +817,7 @@ CREATE TABLE commerce.subject_offer_reference (
   source_revision integer NOT NULL CHECK (source_revision > 0),
   identity_epoch bigint NOT NULL CHECK (identity_epoch > 0),
   listed boolean NOT NULL,
+  version bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (route, subject_id, offer_id),
   CHECK (route = get_byte(uuid_send(subject_id), 10) * 256 + get_byte(uuid_send(subject_id), 11))
 );

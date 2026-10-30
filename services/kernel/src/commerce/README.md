@@ -121,7 +121,7 @@ A full raw page can return an empty `offers` array with `next`; there is no post
 There is no total/count, private ownership query or buyer scan.
 
 Commerce owns one subject-home `subject_offer_reference` directory of offer IDs, original Subject IDs, source
-revisions, Semantic identity epochs and listing tombstones. It stores no prices, Content payload, permission,
+revisions, Semantic identity epochs, live CAS versions and listing tombstones. It stores no prices, Content payload, permission,
 private Actor, credential or eligibility criteria. Creator-home offer rows remain truth. Each positive point reads
 its current active creator and unfenced native source, exact active offer/revision/immutable association, current
 `offer:read` through native Access and the existing active public terms floor, current Subject disclosure and
@@ -132,7 +132,9 @@ These are sequential bounded observations after independently releasing each hom
 
 The default [projection worker](subject-offer-work.ts) consumes the SAME native offer created/revised/delisted
 outbox events, even with Stripe unconfigured. Duplicate/out-of-order events reread current creator-home source;
-revision and identity-epoch comparisons reject older writes. Delisting leaves a minimal revision tombstone.
+source revision and live reference-version CAS reject older writes. Semantic epochs are compared for exact current
+proof, never ordered across independent control homes. Delisting and indexed moves retain minimal CAS tombstones;
+an older writer cannot overwrite a completed move, and failed final proof retires only its own written version.
 The default bounded recovery service pages at most 100 raw offer keys on one actual source home through
 `offer_discovery_source`. One scalar `home/offerId` frontier and version CAS checkpoint independently of released
 source and destination homes; a changed source/identity or owner epoch cannot advance a successful step. Empty
