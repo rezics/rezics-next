@@ -99,7 +99,9 @@ redacted sample, hash of contact values, original JSON, email, handle or ciphert
 
 Historical scrub is a bounded deployment operation over independent raw primary keys in each actual store; it is
 not account discovery. It sets `contacts`, arbitrary `metadata`, unproven free labels/claims/statements to null
-(or removes a row whose entire purpose is private), preserving only proven mechanical configuration. If a
+(or removes a row whose entire purpose is private), preserving only proven mechanical configuration.
+`oauthResource.name` is NOT NULL: replace an unproven label with the inert empty string, or with the actual
+producer's proven service constant; never delete a shared resource to evade that constraint. If a
 consumer still uses a value, block that consumer and retire or replace it through its owning typed command before
 scrub; do not silently mutate authorization inputs. No age or security-retention exception applies. A deployment
 checkpoint records store/version/raw-key boundary only. Final full coverage additionally requires old writers
