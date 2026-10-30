@@ -19,11 +19,12 @@ export type Person = { accountId: string; cookie: string; email: string; bearer:
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture() {
   const fixture = testDatabase();
-  migrateKernel(fixture.url);
-  const kernel = new Pool({ connectionString: fixture.url });
+  const kernelFixture = testDatabase();
+  migrateKernel(kernelFixture.url);
+  const kernel = new Pool({ connectionString: kernelFixture.url });
   const pool = new Pool({ connectionString: fixture.url });
   const previous = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = fixture.url;
+  process.env.DATABASE_URL = kernelFixture.url;
   let modules;
   try {
     await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
@@ -158,6 +159,7 @@ export async function nativeFixture() {
     async close() {
       await host.stop();
       await kernel.end();
+      kernelFixture.close();
       fixture.close();
     },
   };
