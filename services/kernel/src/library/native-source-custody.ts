@@ -103,6 +103,8 @@ export interface NativeLibrarySourceCustody {
       holdId: string;
     },
   ): Promise<Unavailable | { status: 'held'; custody: NativeSourceCustody; work: WorkReceipt }>;
+  /** Existing committed custody only; never a fresh read or a new hold. Same live command client and T. */
+  revalidateHold: NativeLibrarySourceCustody['readAndHold'];
   releaseHold(
     input: NativeSourceCaptureWork & {
       client: CommandTransaction;

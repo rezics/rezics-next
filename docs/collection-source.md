@@ -53,6 +53,9 @@ Library seam. `createNativeLibrarySourceCustody({pool, clock?})` exports these e
 - `readAndHold({client, at, identity, captureId, holdId, allowance, deadline})` returns `held` with opaque
   `NativeSourceCustody` and work, or `unavailable`. `client` is the actual Core `CommandTransaction` query
   capability, including its private live attempt registration; `at` is that command's `AuthoritativeTime`.
+- `revalidateHold({client, at, identity, captureId, holdId, allowance, deadline})` has exactly the
+  `readAndHold` input and result types. It verifies only already committed retained custody for that exact
+  binding; later Source generations or writer counters do not grant a fresh read or invalidate that custody.
 - `releaseHold({client, at, identity, captureId, holdId, allowance, deadline})` returns `released` with
   work, or `unavailable`. Releasing the same real hold again is idempotent under its exact owner fences.
 
