@@ -72,9 +72,9 @@ child stopped at the first supported cardinality, two titles; its four/eight-tit
 and above-cap iterations were not reached. The independent 32/128/512 population
 case passed.
 
-The cause is isolated to the frozen SQLite evidence producer's temporary prepared
-plan statement. `sqliteEvidence.prove` calls `db.prepare(...).all(...)` without
-finalizing that statement. An empty INSERT plan leaves a statement in progress
+The historical cause was isolated to the SQLite evidence producer's temporary
+prepared plan statement. `sqliteEvidence.prove` then called
+`db.prepare(...).all(...)` without finalizing that statement. An empty INSERT plan left a statement in progress
 in the tested Bun SQLite toolchain (local Bun 1.4.3 and managed Bun
 1.4.4-canary.1, build `a0cc096ce`, including the managed retry). This bounded
 independent witness reproduces the failure:
@@ -126,7 +126,7 @@ growth or imports promotion.
 
 ## Evidence producer ownership cleanup
 
-The assigned base `d4d6ae8fea` already contains the manager-frozen producer repair:
+The manager-frozen producer supplied for this correction already contains the repair:
 `prove` prepares the same bound `EXPLAIN QUERY PLAN`, reads its raw plan with
 `all(...parameters)`, and releases only that temporary statement in `finally`.
 The producer and the four existing local cases remain byte-identical in this
@@ -153,7 +153,7 @@ passed with no type errors in 149 files. Their logs are
 `.temp/vndb-plan-cleanup/format.log` and `.temp/vndb-plan-cleanup/compiler.log`.
 No root typecheck or regression gate is inferred from these local results.
 
-The original managed native materialization wrapper is the remaining acceptance:
+The original managed native materialization wrapper is the scoped acceptance:
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-materialization-native.test.ts
@@ -166,6 +166,31 @@ contains no test output or reached assertion, so it establishes no native pass o
 product failure. The check record is
 `.temp/goal/checks/results/e08a5a0f-a9e0-4ac2-abfc-5be483038053.json`.
 The log is `.temp/goal/checks/worker-check-2026-10-30T09-38-44.417Z-7d857156.log`.
-The retry requires a terminal success report; the same original acceptance command
-will be submitted again now that the earlier check has finished. Historical
-failures above remain scoped to their recorded revisions.
+The retry required a terminal success report, so the same original acceptance
+command was submitted again after the earlier check had finished.
+
+### Terminal retry receipt
+
+At `aed80e02a3`, check `18d6527f-f5e1-46f8-8d9a-199d7df84bd7` finished with
+exit status 0. Both original native parent cases passed, with zero failures and
+19 assertions. The unchanged portable-suite parent enforces exactly fourteen
+passing children, zero failures and no skips/todos. The ordinary account-key CLI
+publication/reopen/late-invalid case also passed. There were zero load reruns.
+The check waited 1,477.174 seconds for a shared slot before execution; this was
+queued time, not a product failure.
+
+The durable receipt is
+`.temp/goal/checks/results/18d6527f-f5e1-46f8-8d9a-199d7df84bd7.json`, with raw
+output in `.temp/goal/checks/worker-check-2026-10-30T09-39-53.359Z-dd38124e.log`.
+The native run observed converter `vndb@7`, catalogue version `1.0.0`, bundle
+digest `sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`,
+source revisions 7 and 19, completed source generation `1` with two records, and
+`v123` digest `be85d221eb60f71db38c70670a8614bad6f93adf7b2f12891255108a50a21a72`.
+The raw log retains exact native receipt anchors: ten bulk receipts and one
+statistic receipt, with zero native vote rows. Reopen and invalid replacement
+preserved the original receipts and completed baseline.
+
+The producer, four local cases, original native test and portable outcome file
+were left byte-identical to their supplied frozen versions. This scoped success
+adds no native API growth series, root/main gate or imports promotion claim.
+Historical failures above remain scoped to their recorded revisions.
