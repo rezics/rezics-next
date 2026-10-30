@@ -100,6 +100,10 @@ async function deadlineFailure(): Promise<void> {
       if (browserNetworkNamespace === readlinkSync('/proc/self/ns/net'))
         throw new Error('Native browser did not enter its private network namespace');
       const page = await privateBrowser.browser.newPage();
+      const browserDiagnostics: string[] = [];
+      page.on('requestfailed', (request) => {
+        browserDiagnostics.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'failed'}`);
+      });
       lifecycle.register({
         label: 'owned lifecycle browser page',
         close: async () => {
@@ -107,8 +111,22 @@ async function deadlineFailure(): Promise<void> {
         },
         force: () => page.close().catch(() => {}),
       });
-      await page.goto(`http://127.0.0.1:${devServerPort}/`, { waitUntil: 'domcontentloaded' });
-      pageVisited = (await page.getByRole('main').innerText()) === 'owned native lifecycle page';
+      const response = await page.goto(`http://127.0.0.1:${devServerPort}/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 4_000,
+      });
+      if (!response?.ok())
+        throw new Error(`Native lifecycle browser page returned ${response?.status() ?? 'no response'}`);
+      try {
+        pageVisited = (await page.getByRole('main').innerText({ timeout: 2_000 })) === 'owned native lifecycle page';
+      } catch (error) {
+        throw new Error(
+          `Native lifecycle browser page did not render its main landmark: ${browserDiagnostics.join('; ')}`,
+          {
+            cause: error,
+          },
+        );
+      }
       report('NATIVE_TIMEOUT_READY', {
         listenerPort: server.port,
         devServerPort,
