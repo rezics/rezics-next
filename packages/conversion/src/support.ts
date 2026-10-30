@@ -349,3 +349,14 @@ function buildTextDocument(text: string): DocumentSnapshot {
     throw new RangeError('Text snapshot exceeds 32 KiB');
   return snapshot;
 }
+
+/** Exact source-context tuple syntax; this carries no native authority. */
+export function reviewedReferenceKey(schemeURI: string, literal: string): string {
+  if (!schemeURI.isWellFormed() || !literal.isWellFormed()) throw new TypeError('Invalid reviewed reference');
+  const key = `v1:${JSON.stringify([schemeURI, literal])}`;
+  if (key.length > 255 || Buffer.byteLength(key, 'utf8') > 255)
+    throw new TypeError('Reviewed reference exceeds its bound');
+  return key;
+}
+
+export const bangumiPublicTagScheme = 'https://rezics.com/schemes/bangumi/public-tags';

@@ -8,6 +8,7 @@ properties:
   foaf:focus: '가리키는 대상'
   schema:keywords: '태그'
   schema:genre: '장르'
+  skos:closeMatch: '유사 개념'
 inverseProperties:
   wdt:P7937: '이 형식의 작품'
   skos:inScheme: '이 체계의 개념'
@@ -15,3 +16,4 @@ inverseProperties:
   foaf:focus: '이 대상을 나타내는 개념'
   schema:genre: '이 장르의 작품'
   schema:keywords: '이 태그의 대상'
+  skos:closeMatch: '유사한 개념'

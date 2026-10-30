@@ -23,6 +23,7 @@ classes:
       - inScheme
       - broader
       - focus
+      - closeMatch
     annotations:
       schema_org_type: https://schema.org/DefinedTerm
   ConceptScheme:
@@ -97,4 +98,14 @@ slots:
       qualifiers: spoilerLevel
       relation_group: classification
       inverse: rezics:taggedSubject
+      relation_order: name
+  closeMatch:
+    slot_uri: skos:closeMatch
+    description: A distinct concept with a closely corresponding meaning; never equivalence or filter expansion.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:closeMatchedBy
       relation_order: name

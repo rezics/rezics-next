@@ -33,6 +33,13 @@ import {
   type ImportSourceStatisticClearValue,
 } from './import-contract.ts';
 
+type SubjectAPI = ReturnType<KernelClient['subjects']>;
+export type ReviewedSubjectRead = NonNullable<Awaited<ReturnType<SubjectAPI['get']>>['data']>;
+export type ReviewedCandidatePage = NonNullable<Awaited<ReturnType<SubjectAPI['candidates']['get']>>['data']>;
+type CandidateAPI = ReturnType<SubjectAPI['candidates']>;
+export type ReviewedAcceptance = NonNullable<Awaited<ReturnType<CandidateAPI['$accept']['post']>>['data']>;
+export type ReviewedAdoption = NonNullable<Awaited<ReturnType<SubjectAPI['$adopt']['post']>>['data']>;
+
 export interface FenceTuple {
   source: string;
   externalId: string;
@@ -556,7 +563,48 @@ export function createImportTransport(options: ImportTransportOptions) {
     if ((await fence(tuple, signal)).fenced) return { outcome: 'fenced' };
     return media(body, key, signal);
   }
+  // These use the same verified credentials, bounded fetch, session and native errors as imports.
+  async function readReviewedSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead> {
+    mediaId(id);
+    const reply = await response(() => client.subjects({ id }).get(fetchOptions(signal)), 200, signal);
+    return reply.body as ReviewedSubjectRead;
+  }
+  async function reviewedCandidates(
+    id: string,
+    query: { property: string; target?: string; sameAs?: string; context: string; limit: number },
+    signal?: AbortSignal,
+  ): Promise<ReviewedCandidatePage> {
+    mediaId(id);
+    const safe = snapshot(query, BODY_BYTES) as typeof query;
+    const reply = await response(() => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }), 200, signal);
+    return reply.body as ReviewedCandidatePage;
+  }
+  async function acceptReviewedCandidate(
+    id: string, candidate: string,
+    body: Parameters<CandidateAPI['$accept']['post']>[0], key: string, signal?: AbortSignal,
+  ): Promise<ReviewedAcceptance> {
+    mediaId(id); mediaId(candidate);
+    const safe = snapshot(body, BODY_BYTES) as typeof body;
+    const reply = await response(() => client.subjects({ id }).candidates({ candidate }).$accept.post(safe, {
+      headers: { 'idempotency-key': idempotencyKey(key) }, ...fetchOptions(signal),
+    }), 200, signal);
+    return reply.body as ReviewedAcceptance;
+  }
+  async function adoptReviewedCandidates(
+    id: string, body: Parameters<SubjectAPI['$adopt']['post']>[0], key: string, signal?: AbortSignal,
+  ): Promise<ReviewedAdoption> {
+    mediaId(id);
+    const safe = snapshot(body, BODY_BYTES) as typeof body;
+    const reply = await response(() => client.subjects({ id }).$adopt.post(safe, {
+      headers: { 'idempotency-key': idempotencyKey(key) }, ...fetchOptions(signal),
+    }), 200, signal);
+    return reply.body as ReviewedAdoption;
+  }
   return {
+    readReviewedSubject,
+    reviewedCandidates,
+    acceptReviewedCandidate,
+    adoptReviewedCandidates,
     setSourceRecordMetadata,
     batch,
     batches,

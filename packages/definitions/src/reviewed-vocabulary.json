@@ -1,0 +1,119 @@
+[
+  {
+    "key": "source-scheme",
+    "schemeURI": "https://rezics.com/schemes/bangumi/public-tags",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Bangumi public editor tags"
+    },
+    "metadata": {
+      "name": "REZICS reviewed Bangumi public-tag scheme",
+      "url": "https://rezics.com/schemes/bangumi/public-tags"
+    },
+    "facts": [
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/public-tags",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "canonical-scheme",
+    "schemeURI": "https://rezics.com/schemes/media-genres",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Media genres"
+    },
+    "metadata": {
+      "name": "REZICS reviewed media genre scheme",
+      "url": "https://rezics.com/schemes/media-genres"
+    },
+    "facts": [
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/media-genres",
+        "citations": [
+          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "canonical-harem",
+    "schemeURI": "https://rezics.com/schemes/media-genres",
+    "literalMember": "Q690342",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Harem (media genre)"
+    },
+    "metadata": {
+      "name": "Reviewed Wikidata media-harem meaning",
+      "url": "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445",
+      "licence": {
+        "id": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "attribution": "Wikidata contributors; structured Q690342 meaning only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "canonical-scheme",
+        "citations": [
+          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "http://www.wikidata.org/entity/Q690342",
+        "citations": [
+          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "source-harem",
+    "schemeURI": "https://rezics.com/schemes/bangumi/public-tags",
+    "literalMember": "后宫",
+    "type": "skos:Concept",
+    "labels": {
+      "zh": "后宫",
+      "en": "Harem (Bangumi public tag)"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi public editor tag 后宫",
+      "url": "https://bgm.tv/subject/498",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected public meta_tags and authored correspondence; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "source-scheme",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"
+        ]
+      },
+      {
+        "property": "skos:closeMatch",
+        "target": "canonical-harem",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip",
+          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
+        ]
+      }
+    ]
+  }
+]

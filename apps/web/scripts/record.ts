@@ -20,6 +20,11 @@ const root = resolve(app, '../..');
 const accountId = Bun.randomUUIDv7();
 const kernelRouteKey = randomBytes(32).toString('base64url');
 const sessionKey = randomBytes(32).toString('base64url');
+// Immutable definition snapshots are generated from the same bundled release without a runtime.
+if (import.meta.main && only.length === 2 && only.includes('definitions-active') && only.includes('definitions-release')) {
+  await recordDefinitions();
+  process.exit(0);
+}
 const issuer = `http://127.0.0.1:${await freePort()}`;
 const audience = 'https://api.rezics.test';
 const signing = await generateKeyPair('ES256', { extractable: true });
@@ -1862,6 +1867,22 @@ async function executeRecord(): Promise<number> {
     }
     if (failures.length) throw failures[0];
   }
+}
+
+async function recordDefinitions(): Promise<void> {
+  const { bundledDigest, bundledRelease } = await import('@rezics/definitions/bundled');
+  const snapshots = {
+    'definitions-active': { digest: bundledDigest, head: 1, status: 200 },
+    'definitions-release': { digest: bundledDigest, release: bundledRelease, status: 200 },
+  };
+  const files: string[] = [];
+  for (const [name, value] of Object.entries(snapshots)) {
+    const file = join(app, 'src/kernel/recorded', `${name}.json`);
+    await writeFile(file, JSON.stringify(recordingSnapshot(name, value, undefined)));
+    files.push(file);
+  }
+  const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', ...files], { cwd: root });
+  if (formatted.exitCode !== 0) throw new Error('Formatting generated definition recordings failed');
 }
 
 /** Hands the recording to a check host and copies the recorded pages back, including when the recording fails. */

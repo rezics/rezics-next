@@ -8,6 +8,7 @@ properties:
   foaf:focus: 'Bezugssubjekt'
   schema:keywords: 'Schlagwörter'
   schema:genre: 'Genre'
+  skos:closeMatch: 'ähnlicher Begriff'
 inverseProperties:
   wdt:P7937: 'Werke dieser Form'
   skos:inScheme: 'Begriffe dieses Schemas'
@@ -15,3 +16,4 @@ inverseProperties:
   foaf:focus: 'Begriffe für dieses Subjekt'
   schema:genre: 'Werke dieses Genres'
   schema:keywords: 'Subjekte mit diesem Schlagwort'
+  skos:closeMatch: 'Ähnliche Begriffe'

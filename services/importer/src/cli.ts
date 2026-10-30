@@ -4,6 +4,7 @@ import { open, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
+import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import {
@@ -708,6 +709,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     // The resolver is wired after session construction so it uses the exact
     // production RecordBindings handle owned by this coordinator.
     importerOptions.mediaResolver = mediaAdapter;
+    if (config.source === 'bangumi')
+      importerOptions.identifierLookup = createReviewedCatalogueLookup(importer.session.bindings, importTransport);
 
     const decoderModule =
       config.source === 'vndb' ? import.meta.resolve('./vndb-tables.ts') : import.meta.resolve('./dumps.ts');

@@ -8,6 +8,7 @@ properties:
   foaf:focus: 'focus'
   schema:keywords: 'keywords'
   schema:genre: 'genre'
+  skos:closeMatch: 'close match'
 inverseProperties:
   wdt:P7937: 'Works in this form'
   skos:inScheme: 'Concepts in this scheme'
@@ -15,3 +16,4 @@ inverseProperties:
   foaf:focus: 'Concepts for this subject'
   schema:genre: 'Works in this genre'
   schema:keywords: 'Tagged subjects'
+  skos:closeMatch: 'Closely matching concepts'

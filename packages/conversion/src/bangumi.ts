@@ -10,6 +10,8 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import {
   checkCoverIntent,
+  bangumiPublicTagScheme,
+  reviewedReferenceKey,
   commandKey,
   safeSourceUrl,
   sourceDigest,
@@ -18,12 +20,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@3';
+export const converter_revision = 'bangumi@4';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Eleven projected top-level fields; at most five commands, one cover intent,
+// Twelve projected top-level fields; at most six commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 const types: Readonly<Record<number, string>> = {
   1: 'schema:Book',
@@ -39,6 +41,7 @@ type NormalizedRecord = {
   summary?: string;
   images?: { large: string };
   tags?: { name: string }[];
+  meta_tags?: string[];
   platform?: string;
   infobox?: string;
   nsfw?: boolean;
@@ -120,6 +123,17 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
       const tag = object(own(tags, String(i), `/tags/${i}`), `/tags/${i}`);
       record.tags.push({ name: string(own(tag, 'name', `/tags/${i}/name`), `/tags/${i}/name`, 200) });
     }
+  }
+  const metaTags = get('meta_tags');
+  if (metaTags !== undefined) {
+    if (utilTypes.isProxy(metaTags) || !Array.isArray(metaTags) || Object.getPrototypeOf(metaTags) !== Array.prototype)
+      invalid('/meta_tags');
+    const length: unknown = Object.getOwnPropertyDescriptor(metaTags, 'length')?.value;
+    if (typeof length !== 'number' || !Number.isSafeInteger(length) || length > 64)
+      invalid('/meta_tags', 'invalid_record_tag_limit');
+    record.meta_tags = [];
+    for (let i = 0; i < length; i++)
+      record.meta_tags.push(string(own(metaTags, String(i), `/meta_tags/${i}`), `/meta_tags/${i}`, 200));
   }
   for (const key of ['platform', 'infobox', 'date'] as const) {
     const value = get(key);
@@ -208,6 +222,21 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   const titles = [fact('schema:name', { language: 'und', text: record.name })];
   if (record.name_cn?.trim()) titles.push(fact('schema:name', { language: 'zh', text: record.name_cn }));
   const facts = [fact('wdt:P5732', input.external_id), ...titles];
+  if (record.meta_tags?.includes('后宫')) {
+    const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
+    const dictionary = context.resolvedReferences;
+    if (dictionary && (typeof dictionary !== 'object' || utilTypes.isProxy(dictionary))) invalid('', 'invalid_reference_context');
+    const descriptor = dictionary ? Object.getOwnPropertyDescriptor(dictionary, reference) : undefined;
+    if (descriptor && (!('value' in descriptor) || !descriptor.enumerable)) invalid('', 'invalid_reference_context');
+    const concept: unknown = descriptor?.value;
+    if (concept !== undefined) {
+      if (typeof concept !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(concept))
+        invalid('', 'invalid_reference_context');
+      facts.push({ ...fact('schema:keywords', concept), qualifiers: [
+        { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
+      ] });
+    }
+  }
   let document;
   if (record.summary) {
     try {
