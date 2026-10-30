@@ -551,6 +551,11 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
       {failure ? (
         <p role="alert">{failure === 'unsupported' ? m.library_copy_unsupported() : m.library_copy_failure()}</p>
       ) : null}
+      {page.subjectId && !page.profile?.kinds.length ? (
+        <p role="status" className="text-muted-foreground">
+          {m.library_copy_unsupported()}
+        </p>
+      ) : null}
       <noscript>
         <CopiesFallback page={page} csrfToken={page.csrfToken} />
       </noscript>

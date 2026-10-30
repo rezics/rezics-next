@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { setCopiesStoryMode, type CopiesStoryMode } from '../kernel/fake/copies-page-stories';
 import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
 import recording from '../kernel/recorded/library-copies.json';
+import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths } from './page';
 
@@ -66,5 +67,18 @@ export const NoLongerOffered: Story = {
     await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
     await userEvent.click(canvas.getByRole('button', { name: m.library_copy_delete() }));
     await within(document.body).findByText(m.library_copy_no_longer_offered());
+  },
+};
+
+export const UnsupportedProfile: Story = {
+  name: 'No add option for an unprofiled subject',
+  render: () => (
+    <PageStory visitor="Signed In" path={`/library/copies?subjectId=${encodeURIComponent(unprofiledSubjectId)}`} />
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
+    await canvas.findByRole('status', { name: m.library_copy_unsupported() });
+    expect(canvas.queryByRole('button', { name: m.library_copy_add() })).not.toBeInTheDocument();
   },
 };

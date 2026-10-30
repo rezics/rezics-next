@@ -21,6 +21,53 @@ import { slug } from '@rezics/definitions/slug';
 import { browserSessionToken } from './session-token';
 import type { Page } from 'playwright';
 
+const timeout = 300_000;
+function decodedKey(value: string | null): string {
+  const decoded = JSON.parse(value ?? 'null') as string;
+  expect(value).toBe(JSON.stringify(decoded));
+  expect(decoded).toMatch(uuid);
+  return decoded;
+}
+
+test(
+  'an empty selected subject page resolves copy choices from the subject and sends the selected kind',
+  async () => {
+    reset();
+    copies.length = 0;
+    calls.length = 0;
+    const { page } = await open(`/en/library/copies?subjectId=${encodeURIComponent(edition)}`);
+    try {
+      const subjectReads = calls.filter((call) => call.method === 'GET' && call.path === `/v1/subjects/${edition}`);
+      expect(subjectReads).toHaveLength(1);
+      expect(await page.locator('main').getByRole('button', { name: 'Add a copy' }).count()).toBe(1);
+
+      await page.locator('main').getByRole('button', { name: 'Add a copy' }).click();
+      const form = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
+      await form.getByLabel('Kind').selectOption('digital');
+      await form.getByLabel('Status').selectOption('owned');
+      await form.getByRole('button', { name: 'More' }).click();
+      await form.getByLabel('Note').fill('Digital copy');
+      await form.getByRole('button', { name: 'Add copy' }).click();
+      await article(page, 'Digital copy').waitFor({ timeout: 15_000 });
+
+      const create = calls.find((call) => call.method === 'POST' && call.path === '/v1/copies');
+      expect(create?.body).toEqual({
+        subjectId: edition,
+        kind: 'digital',
+        status: 'owned',
+        location: null,
+        source: null,
+        acquiredOn: null,
+        disposedOn: null,
+        note: 'Digital copy',
+      });
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
 test(
   'a signed-in person lists their copies and adds one with its status, location, source, dates and note',
   async () => {
@@ -45,7 +92,15 @@ test(
       expect(await page.locator('main input, main select').count()).toBe(0);
       const waiting = article(page, 'Waiting');
       expect(await waiting.innerText()).toContain('Unavailable');
-      expect(await waiting.innerText()).toContain('Ordered');
+      expect(await waiting.innerText()).toContain('Other');
+      // A legacy/unknown kind has no matching release choice, so its editor is delete-only.
+      await waiting.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+      const legacy = page.getByRole('dialog').getByRole('form', { name: 'Edit copy' });
+      expect(await legacy.innerText()).toContain('This copy’s type is no longer offered for this item.');
+      expect(await legacy.getByRole('button', { name: 'Save' }).count()).toBe(0);
+      expect(await legacy.getByRole('button', { name: 'Delete', exact: true }).count()).toBe(1);
+      await legacy.getByRole('button', { name: 'Cancel', exact: true }).click();
       expect(await main.innerHTML()).not.toContain(hiddenSubjectId);
       expect(await main.innerText()).not.toContain('Secret other copy');
       const reads = lists();
@@ -63,9 +118,9 @@ test(
 
       await main.getByRole('button', { name: 'Add a copy' }).click();
       const add = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
+      await add.getByLabel('Edition').fill(newSubject);
       await add.getByRole('button', { name: 'More' }).click();
       const html = await add.evaluate((element) => element.outerHTML);
-      await add.getByLabel('Edition').fill(newSubject);
       await add.getByLabel('Status').selectOption({ label: 'Disposed' });
       await add.getByLabel('Location').fill('Shelf');
       await add.getByLabel('Source').fill('Shop');
@@ -83,11 +138,11 @@ test(
       expect(new URL(requests[0]!.url()).origin).toBe(origin);
       const posts = calls.filter((call) => call.method === 'POST' && call.path === '/v1/copies');
       expect(posts).toHaveLength(1);
-      expect(posts[0]?.key).toMatch(uuid);
-      expect(html).toContain(posts[0]!.key!);
+      expect(html).toContain(decodedKey(posts[0]!.key));
       expect(posts[0]?.authorization).toBe(`Bearer ${access}`);
       expect(posts[0]?.body).toEqual({
         subjectId: newSubject,
+        kind: 'physical',
         status: 'disposed',
         location: 'Shelf',
         source: 'Shop',
@@ -96,8 +151,8 @@ test(
         note: 'Second shelf',
       });
       expect(await created.innerText()).toContain('Unavailable');
-      expect(await created.innerText()).toContain('2030-02-02');
-      expect(await created.innerText()).toContain('2030-02-20');
+      expect(await created.innerText()).toContain('Feb 2, 2030');
+      expect(await created.innerText()).toContain('Feb 20, 2030');
       expect(await created.innerText()).not.toContain(newSubject);
       expect(await created.innerText()).toContain('Disposed');
       expect(await created.innerText()).toContain('Shelf');
@@ -113,7 +168,11 @@ test(
       expect(await main.innerText()).not.toContain('Waiting');
       expect(await main.innerText()).not.toContain('Second shelf');
       await main.getByRole('button', { name: 'Add a copy' }).click();
-      expect(await page.getByRole('dialog').getByLabel('Edition').inputValue()).toBe(edition);
+      const filteredAdd = page.getByRole('dialog').getByRole('form', { name: 'Add a copy' });
+      expect(await filteredAdd.locator('input[name="subjectId"]').inputValue()).toBe(edition);
+      expect(await filteredAdd.getByLabel('Kind').inputValue()).toBe('physical');
+      expect(await filteredAdd.getByLabel('Status').inputValue()).toBe('owned');
+      expect(await filteredAdd.getByLabel('Edition').count()).toBe(0);
       const filtered = lists().at(-1);
       expect(filtered?.view).toBe('FULL');
       expect(filtered?.limit).toBe(pageLimit);
@@ -135,6 +194,7 @@ test(
       accountId: 'alice',
       subjectId: edition,
       subject: zebra,
+      kind: 'physical',
       status: 'owned',
       location: 'Desk',
       source: 'Shop',
@@ -146,7 +206,8 @@ test(
       accountId: 'alice',
       subjectId: edition,
       subject: zebra,
-      status: 'ordered',
+      kind: 'physical',
+      status: 'owned',
       location: 'Box',
       source: 'Gift',
       acquiredOn: null,
@@ -164,39 +225,39 @@ test(
       const form = dialog.getByRole('form', { name: 'Edit copy' });
       await form.getByRole('button', { name: 'More' }).click();
       const html = await form.evaluate((element) => element.outerHTML);
-      await form.getByLabel('Status').selectOption({ label: 'Lent' });
+      await form.getByLabel('Status').selectOption({ label: 'Disposed' });
       await form.getByLabel('Location').fill('Friend');
       await form.getByLabel('Note').fill('Loan');
       const requests = observe(page);
       await form.getByRole('button', { name: 'Save' }).click();
       const edited = article(page, 'Loan');
       await edited.waitFor({ timeout: 15_000 });
-      expect(await edited.innerText()).toContain('Lent');
+      expect(await edited.innerText()).toContain('Disposed');
       expect(await edited.innerText()).toContain('Friend');
       expect(await edited.innerText()).toContain('Loan');
-      await edited.getByRole('button', { name: 'Edit' }).click();
+      await edited.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const editedDialog = page.getByRole('dialog');
       await editedDialog.getByRole('button', { name: 'More' }).click();
-      expect(await editedDialog.getByLabel('Status').inputValue()).toBe('lent');
+      expect(await editedDialog.getByLabel('Status').inputValue()).toBe('disposed');
       expect(await editedDialog.getByLabel('Location').inputValue()).toBe('Friend');
       expect(await editedDialog.getByLabel('Source').inputValue()).toBe('Shop');
       expect(await editedDialog.getByLabel('Acquired').innerText()).toContain('Mar 3, 2030');
       expect(await editedDialog.getByLabel('Note').inputValue()).toBe('Loan');
       await editedDialog.getByRole('button', { name: 'Cancel' }).click();
       const spareArticle = article(page, 'Spare copy');
-      expect(await spareArticle.innerText()).toContain('Ordered');
+      expect(await spareArticle.innerText()).toContain('Owned');
       expect(await spareArticle.innerText()).toContain('Box');
       expect(await spareArticle.innerText()).toContain('Spare copy');
       expect(requests).toHaveLength(1);
       const patches = calls.filter((call) => call.method === 'PATCH');
       expect(patches).toHaveLength(1);
       expect(patches[0]?.path).toBe(`/v1/copies/${desk.id}`);
-      expect(patches[0]?.key).toMatch(uuid);
-      expect(html).toContain(patches[0]!.key!);
+      expect(html).toContain(decodedKey(patches[0]!.key));
       expect(patches[0]?.authorization).toBe(`Bearer ${access}`);
       expect(patches[0]?.body).toEqual({
         revision: 1,
-        status: 'lent',
+        status: 'disposed',
         location: 'Friend',
         source: 'Shop',
         acquiredOn: '2030-03-03',
@@ -204,19 +265,20 @@ test(
         note: 'Loan',
       });
       expect(copies.find((copy) => copy.id === desk.id)).toMatchObject({
-        status: 'lent',
+        status: 'disposed',
         location: 'Friend',
         note: 'Loan',
         revision: 2,
       });
       expect(copies.find((copy) => copy.id === spare.id)).toMatchObject({
-        status: 'ordered',
+        status: 'owned',
         location: 'Box',
         note: 'Spare copy',
         revision: 1,
       });
 
-      await spareArticle.getByRole('button', { name: 'Edit' }).click();
+      await spareArticle.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const spareDialog = page.getByRole('dialog');
       await spareDialog.getByRole('button', { name: 'Delete', exact: true }).click();
       await spareDialog.getByRole('alertdialog').waitFor();
@@ -227,7 +289,8 @@ test(
       expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(0);
       expect(await spareArticle.innerText()).toContain('Spare copy');
 
-      await edited.getByRole('button', { name: 'Edit' }).click();
+      await edited.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Edit copy' }).click();
       const deleteDialog = page.getByRole('dialog');
       const deleteHtml = await deleteDialog.evaluate((element) => element.outerHTML);
       const deleteRequests = observe(page);
@@ -241,8 +304,7 @@ test(
       expect(deletions).toHaveLength(1);
       expect(deletions[0]?.path).toBe(`/v1/copies/${desk.id}`);
       expect(deletions[0]?.revision).toBe('2');
-      expect(deletions[0]?.key).toMatch(uuid);
-      expect(deleteHtml).toContain(deletions[0]!.key!);
+      expect(deleteHtml).toContain(decodedKey(deletions[0]!.key));
       expect(deletions[0]?.authorization).toBe(`Bearer ${access}`);
       expect(copies.some((copy) => copy.id === desk.id)).toBe(false);
       expect(copies.find((copy) => copy.id === spare.id)?.note).toBe('Spare copy');
@@ -263,6 +325,7 @@ test(
       accountId: 'alice',
       subjectId: edition,
       subject: zebra,
+      kind: 'physical',
       status: 'owned',
       location: 'Study',
       source: 'Bookshop',
@@ -293,15 +356,14 @@ test(
       expect(await form.getByLabel('Note').inputValue()).toBe('Moved downstairs');
       expect(await form.getByLabel('Status').inputValue()).toBe('owned');
       expect(await form.getByLabel('Source').inputValue()).toBe('Bookshop');
-      expect(await form.getByLabel('Acquired').inputValue()).toBe('2030-04-04');
+      expect(await form.getByLabel('Acquired').innerText()).toContain('Apr 4, 2030');
       expect(await card.innerText()).toContain('Shelf note');
       expect(await card.innerText()).toContain('Study');
       const patches = calls.filter((call) => call.method === 'PATCH');
       expect(patches).toHaveLength(1);
       expect(patches[0]?.path).toBe(`/v1/copies/${shelf.id}`);
       expect(patches[0]?.authorization).toBe(`Bearer ${access}`);
-      expect(patches[0]?.key).toMatch(uuid);
-      expect(html).toContain(patches[0]!.key!);
+      expect(html).toContain(decodedKey(patches[0]!.key));
       expect(patches[0]?.body).toEqual({
         revision: 1,
         status: 'owned',

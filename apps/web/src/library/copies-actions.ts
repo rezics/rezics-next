@@ -18,6 +18,7 @@ import {
   type CopyRemoveResult,
   type CopyWriteResult,
 } from './copies-read';
+import { subjectOf as presentSubject, type LibrarySubject } from './reads';
 
 function validateQuery(input: unknown): { subjectId?: string; cursor?: string } {
   if (!input || typeof input !== 'object') return {};
@@ -44,8 +45,16 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
     const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
     const locale = getLocale();
+    const pageSubject = page.subjectId
+      ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
+        (await readCopySubjectSummary(page.subjectId)))
+      : null;
+    if (pageSubject) await nameSubjectTypes([pageSubject]);
     const profiles = new Map<string, ReturnType<typeof resolveCopyProfile>>();
     for (const copy of page.copies) {
+      // The native copy page carries subjectId, not an embedded subject. A filtered page has one known subject, so
+      // reuse its single bounded read for every row instead of issuing one subject request per copy.
+      if (!copy.subject && pageSubject) copy.subject = pageSubject;
       const type = copy.subject?.type ?? '';
       let profile = profiles.get(type);
       if (!profile) {
@@ -55,10 +64,10 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
       Object.assign(copy, { profile, ...copyLabels(release, type, copy.kind, copy.status, locale) });
     }
     if (page.subjectId) {
-      // An empty filtered list has no embedded subject; resolve just the explicitly selected subject.
-      page.profile =
-        page.copies.find((copy) => copy.subject?.id === page.subjectId)?.profile ??
-        (await resolveSubject(page.subjectId));
+      // The same selected-subject read provides released choices even when the filtered list is empty.
+      page.profile = pageSubject
+        ? (profiles.get(pageSubject.type) ?? resolveCopyProfile(release, pageSubject.type, locale))
+        : { kinds: [] };
     }
     page.csrfToken = (await readSessionIdentity(getRequest(), env as Partial<SessionEnv>)).csrfToken;
     return page;
@@ -85,15 +94,28 @@ export const deleteCopy = createServerFn({ method: 'POST' })
     return removeCopy(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
-async function resolveSubject(id: string) {
-  if (!copiesSubjectId(id)) return { kinds: [] };
+async function readCopySubjectSummary(id: string): Promise<LibrarySubject | null> {
+  if (!copiesSubjectId(id)) return null;
   const request = getRequest();
   await prepareSession(request, env as Partial<SessionEnv>);
   const authorization = viewerCredential(request);
-  if (!authorization) return { kinds: [] };
+  if (!authorization) return null;
   const result = await kernelClient().subjects({ id }).get({ headers: { authorization } });
-  if (result.error || !result.data?.subject) return { kinds: [] };
-  return resolveCopyProfile(await readRelease(), result.data.subject.type, getLocale());
+  if (result.error || !result.data?.subject) return null;
+  const subject = result.data.subject;
+  const locale = getLocale();
+  return presentSubject({
+    id: subject.id,
+    type: subject.type,
+    label: subject.labels[locale] ?? subject.labels.en ?? null,
+    cover: null,
+  });
+}
+
+async function resolveSubject(id: string) {
+  const subject = await readCopySubjectSummary(id);
+  if (!subject) return { kinds: [] };
+  return resolveCopyProfile(await readRelease(), subject.type, getLocale());
 }
 
 /** Resolve a newly entered edition on the server, using its authoritative type rather than a browser hint. */

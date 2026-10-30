@@ -22,6 +22,7 @@ export type NativeKernelRequest = {
   url: string;
   authorization: string | null;
   idempotencyKey: string | null;
+  body?: string;
   failure?: { status: number; body: string };
 };
 export type NativeKernelFailureInjection = {
@@ -501,6 +502,7 @@ async function startStack(): Promise<
       join(repositoryRoot, '.temp'),
     );
 
+    const testWriteRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
     const workerEnv = {
       ...workerTestEnv({
         ...consentServer.env,
@@ -509,6 +511,7 @@ async function startStack(): Promise<
         AUTH_JWKS_URL: driver.fixtures.runtime.authJwksUrl,
         KERNEL_ROUTE_KEY: driver.fixtures.runtime.routeKey,
         KERNEL_SESSION_KEYS: driver.fixtures.runtime.sessionKeys,
+        ...(testWriteRateOverrides ? { KERNEL_WRITE_RATE_OVERRIDES: testWriteRateOverrides } : {}),
       }),
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
       KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
@@ -528,6 +531,7 @@ async function startStack(): Promise<
           url: `${url.pathname}${url.search}`,
           authorization: request.headers.get('authorization'),
           idempotencyKey: request.headers.get('idempotency-key'),
+          ...(request.method === 'POST' && url.pathname === '/v1/copies' ? { body: await request.clone().text() } : {}),
         };
         requests.push(observed);
         const failureIndex = injectedKernelFailures.findIndex(
@@ -791,7 +795,7 @@ function reportOwnedProcessGroup(label: string, child: ChildProcess, stateDirect
   } satisfies HostReply);
 }
 
-export async function startNativeWebStack(): Promise<NativeWebStack> {
+export async function startNativeWebStack(options: { writeRateOverrides?: string } = {}): Promise<NativeWebStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native web stack startup requires an active native test lifecycle');
   lifecycle.assertOpen('start native web stack');
@@ -801,11 +805,15 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   const stateDirectories = new Set<string>();
   let nativeStack: NativeWebStack | undefined;
   const ownedGroups = new Map<number, NativeProcessOwnership>();
+  const hostEnvironment: NodeJS.ProcessEnv = { ...process.env, NATIVE_WEB_STACK_HOST: '1' };
+  // Rate changes apply only to this explicitly configured native fixture stack.
+  if (options.writeRateOverrides) hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES = options.writeRateOverrides;
+  else delete hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
   const host = fork(import.meta.filename, [], {
     execPath: resolveBunCommand(['bun'], repositoryRoot)[0]!,
     execArgv: [],
     cwd: repositoryRoot,
-    env: { ...process.env, NATIVE_WEB_STACK_HOST: '1' },
+    env: hostEnvironment,
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     detached: true,
   });

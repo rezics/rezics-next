@@ -61,6 +61,7 @@ export type ProgressSessionCore = {
 export type ProgressIndex = {
   signedIn: boolean;
   subjectId: string;
+  selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
   sessions: ProgressSessionCore[];
   next: string | null;
@@ -217,7 +218,7 @@ function failure(status: number, body: unknown): ProgressFailure {
 }
 
 function writeHeaders(authorization: string, key: string): { 'idempotency-key': string } {
-  return { authorization, 'idempotency-key': key } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': JSON.stringify(key) } as { 'idempotency-key': string };
 }
 
 function readData<T>(result: LibraryCall): T {
@@ -250,6 +251,23 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
     headers: { authorization },
   });
   return readData<{ progressSessions: RawSession[]; next: string | null }>(result);
+}
+
+/** Resolve the one subject named by the page when no listed session embeds it. */
+async function readSelectedSubject(client: KernelClient, subjectId: string, authorization: string) {
+  const result = await client.subjects({ id: subjectId }).get({ headers: { authorization } });
+  const body = readData<{
+    subject: { id: string; type: string };
+    summary?: { id: string; type: string; types?: readonly string[]; label?: LibraryLabel; cover?: unknown } | null;
+  }>(result);
+  const summary = body.summary;
+  return presentSubject({
+    id: summary?.id ?? body.subject.id,
+    type: summary?.type ?? body.subject.type,
+    ...(summary?.types === undefined ? {} : { types: summary.types }),
+    label: summary?.label ?? null,
+    cover: summary?.cover ?? null,
+  });
 }
 
 async function readOne(client: KernelClient, sessionId: string, authorization: string) {
@@ -287,7 +305,14 @@ export async function loadProgressIndex(
   const idempotencyKey = crypto.randomUUID();
   const subjectId = input.subjectId ?? '';
   if (!authorization || !routeId.test(subjectId)) {
-    return { signedIn: authorization !== null, subjectId, sessions: [], next: null, idempotencyKey };
+    return {
+      signedIn: authorization !== null,
+      subjectId,
+      selectedSubject: null,
+      sessions: [],
+      next: null,
+      idempotencyKey,
+    };
   }
   const load = (cursor?: string) => readList(client, subjectId, authorization, cursor);
   let page: { progressSessions: RawSession[]; next: string | null };
@@ -297,10 +322,15 @@ export async function loadProgressIndex(
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await load();
   }
+  const sessions = page.progressSessions.map(presentSession);
+  const selectedSubject =
+    sessions.find((session) => session.subjectId === subjectId)?.subject ??
+    (await readSelectedSubject(client, subjectId, authorization));
   return {
     signedIn: true,
     subjectId,
-    sessions: page.progressSessions.map(presentSession),
+    selectedSubject,
+    sessions,
     next: page.next,
     idempotencyKey,
   };

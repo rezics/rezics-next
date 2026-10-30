@@ -1,13 +1,12 @@
 import { browserSessionToken } from './session-token';
 import { afterAll, expect } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { slug } from '@rezics/definitions/slug';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 import definitions from '../src/kernel/recorded/definitions-release.json';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -62,7 +61,7 @@ type StoredCopy = {
   subjectId: string;
   subject: Subject;
   status: CopyStatus;
-  kind?: string;
+  kind?: string | null;
   revision: number;
   location: string | null;
   source: string | null;
@@ -72,6 +71,7 @@ type StoredCopy = {
 };
 type Draft = {
   subjectId?: string;
+  kind?: string;
   status?: CopyStatus;
   location?: string | null;
   source?: string | null;
@@ -99,6 +99,7 @@ export function seedDefault() {
       accountId: 'alice',
       subjectId: edition,
       subject: zebra,
+      kind: 'physical',
       status: 'owned',
       location: 'Study',
       source: 'Bookshop',
@@ -110,6 +111,7 @@ export function seedDefault() {
       accountId: 'alice',
       subjectId: hiddenSubjectId,
       subject: null,
+      kind: 'future-copy-kind',
       status: 'ordered',
       location: null,
       source: null,
@@ -121,6 +123,7 @@ export function seedDefault() {
       accountId: 'blake',
       subjectId: id(12),
       subject: { id: id(12), label: 'Secret story', type: 'book' },
+      kind: 'physical',
       status: 'owned',
       location: 'Vault',
       source: 'Private',
@@ -169,8 +172,7 @@ export function reset() {
 }
 function wire(copy: StoredCopy, full: boolean) {
   const { accountId: _accountId, subject, ...rest } = copy;
-  const withKind = { ...rest, kind: copy.kind ?? 'physical' };
-  return full ? { ...withKind, subject } : withKind;
+  return full ? { ...rest, subject } : rest;
 }
 function applyDraft(copy: StoredCopy, draft: Draft) {
   if (draft.status) copy.status = draft.status;
@@ -322,8 +324,32 @@ const fake = Bun.serve({
     // Home reads POST /v1/pages/$read with no session. Unknown routes answer 404, as posting.test.ts does,
     // so that read is a missing page rather than a 401 that fails the document.
     const copyRoute = url.pathname === '/v1/copies' || /^\/v1\/copies\/([^/]+)$/.test(url.pathname);
-    if (!copyRoute) return json(problem(404, 'not_found'), 404, true);
     if (!accountId) return json(problem(401, 'unauthorized'), 401, true);
+    const subjectRoute = /^\/v1\/subjects\/([^/]+)$/.exec(url.pathname);
+    const subject =
+      subjectRoute?.[1] === edition
+        ? zebra
+        : subjectRoute?.[1] === newSubject
+          ? { id: newSubject, label: 'New edition', type: 'bf:Instance' }
+          : null;
+    if (request.method === 'GET' && subject) {
+      return json({
+        subject: {
+          id: subject.id,
+          type: subject.type,
+          revision: 1,
+          release: definitions.digest,
+          context: 'test',
+          resolution: {},
+          relationCounts: {},
+          labels: { en: subject.label },
+          descriptions: {},
+          aliases: {},
+          statements: {},
+        },
+      });
+    }
+    if (!copyRoute) return json(problem(404, 'not_found'), 404, true);
     const key = request.headers.get('idempotency-key');
     const writing = request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE';
     if (writing && (!key || key.length < 3)) return json(problem(400, 'invalid_request'), 400, true);
@@ -347,7 +373,7 @@ const fake = Bun.serve({
         subjectId: draft.subjectId ?? '',
         subject: copies.find((copy) => copy.subjectId === draft.subjectId)?.subject ?? null,
         status: draft.status ?? 'owned',
-        kind: 'physical',
+        ...(draft.kind === undefined ? {} : { kind: draft.kind }),
         location: draft.location ?? null,
         source: draft.source ?? null,
         acquiredOn: draft.acquiredOn ?? null,
@@ -382,33 +408,16 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
   started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+    server = await startDevServer({
       cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      firstPath: '/@vite/client',
+      warmUpPaths: ['/en/no-such-page'],
       env: {
-        ...process.env,
         KERNEL_ORIGIN: fake.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
@@ -416,22 +425,20 @@ function site(): Promise<string> {
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
+      command: ({ port, origin }) => [
+        'env',
+        `PUBLIC_ORIGIN=${origin}`,
+        'bun',
+        'run',
+        'dev',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--strictPort',
+      ],
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
-      }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
+    return server.origin;
   })();
   return started;
 }
@@ -492,9 +499,38 @@ export async function open(path: string, viewport = { width: 1280, height: 860 }
     },
   ]);
   const page = await context.newPage();
+  const browserErrors: string[] = [];
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text());
+  });
+  page.on('requestfailed', (request) =>
+    browserErrors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'failed'}`),
+  );
   const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-  return { page, access: auth.access, origin, response };
+  if (!response?.ok()) {
+    const body = (
+      await page
+        .locator('body')
+        .innerText()
+        .catch(() => '')
+    ).slice(0, 2_000);
+    throw new Error(`page returned ${response?.status()} at ${page.url()}: ${body}`);
+  }
+  try {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  } catch (error) {
+    const body = (
+      await page
+        .locator('body')
+        .innerText()
+        .catch(() => '')
+    ).slice(0, 2_000);
+    throw new Error(
+      `page did not hydrate (${response.status()} ${page.url()}): ${body}; browser errors: ${browserErrors.join('; ') || '(none)'}; ${String(error)}`,
+    );
+  }
+  return { page, access: auth.access, origin, response, browserErrors };
 }
 export function observe(page: Page) {
   const requests: BrowserRequest[] = [];
@@ -509,11 +545,6 @@ export const lists = () => calls.filter((call) => call.method === 'GET' && call.
 
 afterAll(async () => {
   await browser?.close();
+  await server?.stop();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
 });

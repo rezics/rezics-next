@@ -156,11 +156,11 @@ export const readProgressIndex = createServerFn({ method: 'GET' })
     const page = await shareRead(viewerReadKey(request, 'index', data), () =>
       loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data),
     );
-    await nameSubjectTypes(page.sessions.map((session) => session.subject));
+    await nameSubjectTypes([page.selectedSubject, ...page.sessions.map((session) => session.subject)]);
     if (page.signedIn) {
       const release = await readRelease();
       const locale = requestLocale(request) ?? 'en';
-      const subject = page.sessions.find((session) => session.subjectId === page.subjectId)?.subject;
+      const subject = page.selectedSubject;
       page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
       page.sessions = page.sessions.map((session) => ({
         ...session,

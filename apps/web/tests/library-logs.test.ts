@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
+import definitions from '../src/kernel/recorded/definitions-release.json';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -51,7 +51,7 @@ const json = (body: unknown, status = 200, problem = false) =>
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const stamp = '2026-04-02T15:04:05.000Z';
 const subjectId = id(1);
-const subject = { id: subjectId, label: 'Night watch', type: 'book' };
+const subject = { id: subjectId, label: 'Night watch', type: 'bf:Instance' };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const decimal = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
@@ -324,6 +324,13 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/v1/definitions/active')
+      return json({ digest: definitions.digest });
+    if (
+      request.method === 'GET' &&
+      url.pathname === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`
+    )
+      return json(definitions);
     if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['reading_progress'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
@@ -585,34 +592,16 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+    server = await startDevServer({
       cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      firstPath: '/@vite/client',
+      warmUpPaths: ['/en/no-such-page'],
       env: {
-        ...process.env,
         KERNEL_ORIGIN: fake.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
@@ -620,42 +609,20 @@ function site(): Promise<string> {
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
+      command: ({ port, origin }) => [
+        'env',
+        `PUBLIC_ORIGIN=${origin}`,
+        'bun',
+        'run',
+        'dev',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--strictPort',
+      ],
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) {
-          browser ??= await chromium.launch();
-          const context = await browser.newContext({ javaScriptEnabled: true });
-          try {
-            const page = await context.newPage();
-            for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
-              for (let attempt = 0; ; attempt += 1) {
-                try {
-                  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-                  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
-                  break;
-                } catch (error) {
-                  if (attempt >= 1) throw error;
-                }
-              }
-            }
-          } finally {
-            await context.close();
-          }
-          return origin;
-        }
-      } catch {
-        // The dev server is still starting.
-      }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
+    return server.origin;
   })();
   return started;
 }
@@ -695,6 +662,18 @@ async function signIn(returnTo = '/en', sub = 'alice') {
 
 let browser: Browser | undefined;
 const people = new Map<string, Promise<{ cookie: string; access: string }>>();
+const browserErrors = new WeakMap<Page, string[]>();
+function trackBrowserErrors(page: Page) {
+  const errors: string[] = [];
+  browserErrors.set(page, errors);
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('requestfailed', (request) =>
+    errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText ?? 'failed'}`),
+  );
+}
 async function open(path: string, sub = 'alice'): Promise<{ page: Page; access: string }> {
   let person = people.get(sub);
   if (!person) {
@@ -721,6 +700,7 @@ async function open(path: string, sub = 'alice'): Promise<{ page: Page; access: 
     },
   ]);
   const page = await context.newPage();
+  trackBrowserErrors(page);
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
   await hydrated(page);
   return { page, access: auth.access };
@@ -734,26 +714,40 @@ async function openAnonymous(path: string): Promise<Page> {
     javaScriptEnabled: true,
   });
   const page = await context.newPage();
+  trackBrowserErrors(page);
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
   await hydrated(page);
   return page;
 }
 async function hydrated(page: Page) {
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  try {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  } catch (error) {
+    const body = (
+      await page
+        .locator('body')
+        .innerText()
+        .catch(() => '')
+    ).slice(0, 2_000);
+    throw new Error(
+      `page did not hydrate (${page.url()}): ${body}; browser errors: ${browserErrors.get(page)?.join('; ') || '(none)'}; ${String(error)}`,
+    );
+  }
 }
 afterAll(async () => {
   await browser?.close();
+  await server?.stop();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
 });
 
 const writesTo = (path: string) => calls.filter((call) => call.path === path && call.method !== 'GET');
 const logListReads = () => calls.filter((call) => call.method === 'GET' && call.path === '/v1/publishedLogs');
+function decodedKey(value: string | null): string {
+  const decoded = JSON.parse(value ?? 'null') as string;
+  expect(value).toBe(JSON.stringify(decoded));
+  expect(decoded).toMatch(uuid);
+  return decoded;
+}
 
 function seedLogs(count: number) {
   publishedLogs.clear();
@@ -793,10 +787,11 @@ test(
         note: 'A public reading milestone',
       });
       expect(writesTo('/v1/publishedLogs')).toHaveLength(1);
-      expect(writesTo('/v1/publishedLogs')[0]).toMatchObject({
+      const publish = writesTo('/v1/publishedLogs')[0]!;
+      expect(decodedKey(publish.key)).toBeTruthy();
+      expect(publish).toMatchObject({
         body: { sessionId, note: 'A public reading milestone' },
         authorization: expect.stringMatching(/^Bearer access-/),
-        key: expect.stringMatching(uuid),
       });
 
       const anonymous = await openAnonymous(`/en/logs/${logId}`);
@@ -899,7 +894,7 @@ test(
       await owner.getByText('This log has been deleted.', { exact: true }).waitFor();
       const deletion = writesTo(`/v1/publishedLogs/${logId}`);
       expect(deletion).toHaveLength(beforeOwnerDelete + 1);
-      expect(deletion.at(-1)?.key).toMatch(uuid);
+      expect(decodedKey(deletion.at(-1)!.key)).toBeTruthy();
       expect(publishedLogs.has(logId)).toBe(false);
     } finally {
       await owner.context().close();

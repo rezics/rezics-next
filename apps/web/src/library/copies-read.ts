@@ -268,7 +268,7 @@ export function writeFailure(status: number | undefined, error: unknown): CopyWr
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string): { 'idempotency-key': string } {
-  return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) } as { 'idempotency-key': string };
 }
 
 async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string | CopyWriteFailure> {
@@ -308,7 +308,9 @@ export async function loadCopiesPage(
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
   if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
   const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
-  const sendKind = page.copies.some((copy) => Object.hasOwn(copy, 'kind'));
+  // The activated profile choice is part of every current copy create request,
+  // including an empty filtered page. Do not infer producer support from rows.
+  const sendKind = true;
   const copies = page.copies.map(present);
   return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
 }

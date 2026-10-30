@@ -51,7 +51,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
     () => false,
   );
   const [chosen, setChosen] = useState(() => {
-    const subject = sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
+    const subject = page.selectedSubject ?? sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
     return subject ? [pickerSubject(subject)] : [];
   });
   const [seenSubject, setSeenSubject] = useState(page.subjectId);
@@ -74,7 +74,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   if (seenSubject !== page.subjectId) {
     setSeenSubject(page.subjectId);
     setChoices(page.progressChoices);
-    const next = sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
+    const next = page.selectedSubject ?? sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
     setChosen(next ? [pickerSubject(next)] : []);
   }
 
@@ -172,6 +172,11 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                   }
                 }}
               />
+            ) : null}
+            {chosen.length > 0 && !choosing && !choices?.length && !alert ? (
+              <p role="status" className="text-muted-foreground">
+                {m.library_progress_unsupported()}
+              </p>
             ) : null}
             {choices?.length && !choosing ? (
               <form className="max-w-xl space-y-5" onSubmit={onStart}>

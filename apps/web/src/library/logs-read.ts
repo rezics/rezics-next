@@ -136,7 +136,7 @@ function codeOf(error: unknown): string | undefined {
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string) {
-  return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) } as { 'idempotency-key': string };
 }
 
 function writeFailure(result: WriteResult<unknown>): PublishedLogWriteResult {
