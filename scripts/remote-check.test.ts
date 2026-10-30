@@ -5561,15 +5561,19 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
         .events()
         .some((event) => event.kind === 'run' && String(event.script).includes('echo two-slot-work-fits-eight-gib')),
     );
-    const grant = totalReservation.events().find(
-      (event) =>
-        event.kind === 'slot' &&
-        event.granted &&
-        String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
-    )!;
+    const grant = totalReservation
+      .events()
+      .find(
+        (event) =>
+          event.kind === 'slot' &&
+          event.granted &&
+          String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
+      )!;
     expect(grant.actualAdmissionLimit).toBe(2);
     expect(grant.script).toContain('memory_reserved + landing_waiting_slots * landing_waiting_memory_bytes');
-    expect(totalReservation.events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')).toBe(false);
+    expect(
+      totalReservation.events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant'),
+    ).toBe(false);
     expect(await fittingOrdinary.child.exited).toBe(0);
   } finally {
     for (const run of [fittingOrdinary, oversizedHead]) {

@@ -135,7 +135,10 @@ export function processIdentity(pid = process.pid, procRoot = '/proc'): RunnerId
   if (!Number.isSafeInteger(pid) || pid < 1) return null;
   try {
     const stat = readFileSync(join(procRoot, String(pid), 'stat'), 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    const fields = stat
+      .slice(stat.lastIndexOf(')') + 2)
+      .trim()
+      .split(/\s+/);
     if (fields[0] === 'Z' || fields[0] === 'X' || !fields[19]) return null;
     const group = Number(fields[2]);
     if (!Number.isSafeInteger(group) || group < 1) return null;
@@ -177,7 +180,10 @@ export function processTreeMembers(rootPid: number): RunnerIdentity[] {
       const pid = Number(entry);
       try {
         const stat = readFileSync(join('/proc', entry, 'stat'), 'utf8');
-        const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+        const fields = stat
+          .slice(stat.lastIndexOf(')') + 2)
+          .trim()
+          .split(/\s+/);
         const identity = processIdentity(pid);
         const parent = Number(fields[1]);
         if (!identity || !Number.isSafeInteger(parent)) continue;
@@ -198,7 +204,9 @@ export function processTreeMembers(rootPid: number): RunnerIdentity[] {
         }
       }
     }
-    return [...descendants].map((pid) => identities.get(pid)).filter((item): item is RunnerIdentity => item !== undefined);
+    return [...descendants]
+      .map((pid) => identities.get(pid))
+      .filter((item): item is RunnerIdentity => item !== undefined);
   } catch {
     return [];
   }
@@ -237,7 +245,9 @@ export async function terminateDetachedGroup(
   if (identity.group !== identity.pid || identity.group === processIdentity(process.pid)?.group) {
     return { terminal: false, reason: 'runner does not own a detached process group' };
   }
-  const treeMembers = new Map<number, RunnerIdentity>(processTreeMembers(identity.pid).map((member) => [member.pid, member]));
+  const treeMembers = new Map<number, RunnerIdentity>(
+    processTreeMembers(identity.pid).map((member) => [member.pid, member]),
+  );
   let members = processGroupMembers(identity.group);
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start))) {
     return { terminal: false, reason: 'process group identity changed' };
@@ -263,7 +273,10 @@ export async function terminateDetachedGroup(
     if (!members.length && !treeAlive) return { terminal: true };
     await new Promise<void>((done) => setTimeout(done, 25));
   }
-  const owned = new Map<number, RunnerIdentity>([...treeMembers, ...members.map((member) => [member.pid, member] as const)]);
+  const owned = new Map<number, RunnerIdentity>([
+    ...treeMembers,
+    ...members.map((member) => [member.pid, member] as const),
+  ]);
   for (const member of owned.values()) {
     if (!sameProcess(member)) continue;
     try {
@@ -304,7 +317,12 @@ export function cleanupReceiptHistoryDirectory(root: string, checkId: string, ph
   return join(custodyDirectory(root), 'receipts', `${checkId}.${physicalRunId}`);
 }
 
-export function cleanupReceiptEventPath(root: string, checkId: string, physicalRunId: string, receiptId: string): string {
+export function cleanupReceiptEventPath(
+  root: string,
+  checkId: string,
+  physicalRunId: string,
+  receiptId: string,
+): string {
   return join(cleanupReceiptHistoryDirectory(root, checkId, physicalRunId), `${receiptId}.json`);
 }
 
@@ -390,7 +408,8 @@ export function validatedRegistryDirectory(value: string | undefined): string | 
   } catch {
     throw new Error('worker-check: GOAL_CHECK_REGISTRY is unavailable');
   }
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error('worker-check: GOAL_CHECK_REGISTRY is not a directory');
+  if (!stats.isDirectory() || stats.isSymbolicLink())
+    throw new Error('worker-check: GOAL_CHECK_REGISTRY is not a directory');
   const real = realpathSync(value);
   if (resolve(value) !== real) throw new Error('worker-check: GOAL_CHECK_REGISTRY resolves through a path alias');
   return real;
@@ -423,7 +442,10 @@ export function registrationPath(registry: string, checkId: string, physicalRunI
   return join(registry, `${checkId}.${physicalRunId}.json`);
 }
 
-export function validRegistration(registration: unknown, expected: CheckRegistration): registration is CheckRegistration {
+export function validRegistration(
+  registration: unknown,
+  expected: CheckRegistration,
+): registration is CheckRegistration {
   if (!registration || typeof registration !== 'object') return false;
   const value = registration as Partial<CheckRegistration>;
   try {

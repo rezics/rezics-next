@@ -289,7 +289,9 @@ export async function stackRun(
       try {
         writeArtifactCatalog(run.root, logicalCheckId, returned);
       } catch (error) {
-        console.error(`stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`);
+        console.error(
+          `stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`,
+        );
       }
     }
     return remoteCode;

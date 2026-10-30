@@ -373,7 +373,10 @@ function writePhysicalRecord(record: CheckPhysicalRecord): void {
       ...(finishedAt === undefined ? {} : { finishedAt }),
       terminalHistory: [
         ...new Map(
-          [...(previous.terminalHistory ?? []), ...(record.terminalHistory ?? [])].map((proof) => [JSON.stringify(proof), proof]),
+          [...(previous.terminalHistory ?? []), ...(record.terminalHistory ?? [])].map((proof) => [
+            JSON.stringify(proof),
+            proof,
+          ]),
         ).values(),
       ],
     };
@@ -410,7 +413,8 @@ function checkRoot(record: CheckRecord): string {
 
 function registryForStart(env: NodeJS.ProcessEnv, ownership: CheckOwnership | undefined): string | undefined {
   const registry = validatedRegistryDirectory(env.GOAL_CHECK_REGISTRY);
-  if (registry && !ownership) throw new Error('worker-check: GOAL_CHECK_REGISTRY requires a valid task attempt identity');
+  if (registry && !ownership)
+    throw new Error('worker-check: GOAL_CHECK_REGISTRY requires a valid task attempt identity');
   return registry;
 }
 
@@ -467,7 +471,11 @@ function checkCancelled(root: string, id: string): CheckCancellationReceipt | un
   return receipt?.checkId === id ? receipt : undefined;
 }
 
-function checkStopIntent(root: string, id: string, physicalRunId: string | undefined): { purpose?: string } | undefined {
+function checkStopIntent(
+  root: string,
+  id: string,
+  physicalRunId: string | undefined,
+): { purpose?: string } | undefined {
   if (!physicalRunId) return undefined;
   const intent = readJsonFile<{ checkId?: string; physicalRunId?: string; purpose?: string }>(
     stopIntentPath(root, id, physicalRunId),
@@ -999,7 +1007,10 @@ export async function runWorkerCheck(
   applyTaskPriority(root, env);
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
-  if (logicalCheckId && (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId))) {
+  if (
+    logicalCheckId &&
+    (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId))
+  ) {
     wait.stop();
     closeSync(descriptor);
     process.stderr.write('worker-check: cancelled check was not started; physical cleanup remains unknown\n');
@@ -1011,7 +1022,9 @@ export async function runWorkerCheck(
     try {
       clearDeclaredArtifacts(root, readArtifactCatalog(root, logicalCheckId));
     } catch (error) {
-      process.stderr.write(`worker-check: prior artifact cleanup failed: ${error instanceof Error ? error.message : error}\n`);
+      process.stderr.write(
+        `worker-check: prior artifact cleanup failed: ${error instanceof Error ? error.message : error}\n`,
+      );
     }
     env.REZICS_CHECK_ID = logicalCheckId;
     env.REZICS_CHECK_PHYSICAL_RUN_ID = physicalRunId;
@@ -1095,7 +1108,9 @@ export async function runWorkerCheck(
       prepareArtifactRun(root, physicalRunId);
       artifactPrepared = true;
     } catch (error) {
-      process.stderr.write(`worker-check: artifact handoff unavailable: ${error instanceof Error ? error.message : error}\n`);
+      process.stderr.write(
+        `worker-check: artifact handoff unavailable: ${error instanceof Error ? error.message : error}\n`,
+      );
     }
     if (logicalCheckId) {
       try {
@@ -1282,10 +1297,12 @@ export async function runWorkerCheck(
         }
       }
     });
-    const saveRemote = (stream: 'stdout' | 'stderr') => (chunk: Buffer): void => {
-      writeSync(descriptor, chunk);
-      consumeRemoteText(stream, chunk.toString('utf8'));
-    };
+    const saveRemote =
+      (stream: 'stdout' | 'stderr') =>
+      (chunk: Buffer): void => {
+        writeSync(descriptor, chunk);
+        consumeRemoteText(stream, chunk.toString('utf8'));
+      };
     remote.stdout?.on('data', saveRemote('stdout'));
     remote.stderr?.on('data', saveRemote('stderr'));
     let remoteSignal: number | undefined;
@@ -1334,7 +1351,8 @@ export async function runWorkerCheck(
       : undefined;
     remoteSignal ??= cancelled()?.signal;
     const failedTransport = transportFailureMarker
-      ? transportReason ?? remoteOutput.match(/^remote-check: connection to .+ failed during .+ before a result$/m)?.[0]
+      ? (transportReason ??
+        remoteOutput.match(/^remote-check: connection to .+ failed during .+ before a result$/m)?.[0])
       : undefined;
     const remoteCustody = readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, physicalRunId));
     if (artifactPrepared) {
@@ -1346,13 +1364,17 @@ export async function runWorkerCheck(
           );
         }
         for (const path of restored.missing) {
-          process.stderr.write(`worker-check: declared artifact missing physical=${physicalRunId} path=${JSON.stringify(path)}\n`);
+          process.stderr.write(
+            `worker-check: declared artifact missing physical=${physicalRunId} path=${JSON.stringify(path)}\n`,
+          );
         }
         for (const problem of restored.rejected) {
           process.stderr.write(`worker-check: artifact return rejected physical=${physicalRunId}: ${problem}\n`);
         }
       } catch (error) {
-        process.stderr.write(`worker-check: artifact return failed: ${error instanceof Error ? error.message : error}\n`);
+        process.stderr.write(
+          `worker-check: artifact return failed: ${error instanceof Error ? error.message : error}\n`,
+        );
       } finally {
         try {
           cleanupArtifactRun(root, physicalRunId);
@@ -1385,10 +1407,13 @@ export async function runWorkerCheck(
       try {
         writeArtifactCatalog(root, logicalCheckId, returnPaths);
       } catch (error) {
-        process.stderr.write(`worker-check: could not record returned outputs: ${error instanceof Error ? error.message : error}\n`);
+        process.stderr.write(
+          `worker-check: could not record returned outputs: ${error instanceof Error ? error.message : error}\n`,
+        );
       }
     }
-    const stoppedBeforeFallback = logicalCheckId !== undefined && Boolean(checkStopIntent(root, logicalCheckId, physicalRunId));
+    const stoppedBeforeFallback =
+      logicalCheckId !== undefined && Boolean(checkStopIntent(root, logicalCheckId, physicalRunId));
     const cancelledBeforeFallback = logicalCheckId !== undefined && checkCancelled(root, logicalCheckId) !== undefined;
     const remoteTerminal = remoteCustody?.physicalRunId === physicalRunId && remoteCustody.status === 'terminal';
     if (
@@ -1401,7 +1426,11 @@ export async function runWorkerCheck(
     ) {
       wait.stop();
       const exitCode =
-        remoteSignal !== undefined ? 128 + remoteSignal : cancelledBeforeFallback || stoppedBeforeFallback ? 125 : remoteCode;
+        remoteSignal !== undefined
+          ? 128 + remoteSignal
+          : cancelledBeforeFallback || stoppedBeforeFallback
+            ? 125
+            : remoteCode;
       if (ledger && Object.keys(remoteCommandPhases).length) ledger.commandPhases = remoteCommandPhases;
       endLedger(
         exitCode,
@@ -1492,18 +1521,23 @@ export async function runWorkerCheck(
       writeLedger(ledger, checkout, console.warn, env);
     }
     const executionIntent = cancelled();
-    const logicalStop = logicalCheckId !== undefined &&
-      (checkCancelled(root, logicalCheckId) !== undefined || Boolean(checkStopIntent(root, logicalCheckId, physicalRunId)));
-    const code = signalNumber !== undefined
-      ? 128 + signalNumber
-      : executionIntent
-        ? 128 + executionIntent.signal
-        : logicalStop
-          ? 125
-          : 1;
+    const logicalStop =
+      logicalCheckId !== undefined &&
+      (checkCancelled(root, logicalCheckId) !== undefined ||
+        Boolean(checkStopIntent(root, logicalCheckId, physicalRunId)));
+    const code =
+      signalNumber !== undefined
+        ? 128 + signalNumber
+        : executionIntent
+          ? 128 + executionIntent.signal
+          : logicalStop
+            ? 125
+            : 1;
     endLedger(
       code,
-      code === 1 ? `local memory admission failed: ${error instanceof Error ? error.message : String(error)}` : undefined,
+      code === 1
+        ? `local memory admission failed: ${error instanceof Error ? error.message : String(error)}`
+        : undefined,
     );
     stopForwarders();
     closeSync(descriptor);
@@ -1517,11 +1551,7 @@ export async function runWorkerCheck(
   const admissionIntent = cancelled();
   const cancelledBeforeStart = logicalCheckId !== undefined && Boolean(checkCancelled(root, logicalCheckId));
   if (signalNumber !== undefined || admissionIntent || cancelledBeforeStart) {
-    const code = signalNumber !== undefined
-      ? 128 + signalNumber
-      : admissionIntent
-        ? 128 + admissionIntent.signal
-        : 125;
+    const code = signalNumber !== undefined ? 128 + signalNumber : admissionIntent ? 128 + admissionIntent.signal : 125;
     wait.stop();
     await lease?.release();
     endLedger(code);
@@ -1569,7 +1599,8 @@ export async function runWorkerCheck(
     if (
       logicalCheckId &&
       (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId))
-    ) throw new CheckCancelled();
+    )
+      throw new CheckCancelled();
     const spawnCommand = () =>
       spawn(
         scoped ? 'systemd-run' : ownedCommand[0]!,
@@ -1607,19 +1638,19 @@ export async function runWorkerCheck(
     const logicalCancelled =
       error instanceof CheckCancelled ||
       (logicalCheckId !== undefined &&
-        (checkCancelled(root, logicalCheckId) !== undefined || Boolean(checkStopIntent(root, logicalCheckId, physicalRunId))));
-    const code = signalNumber !== undefined
-      ? 128 + signalNumber
-      : executionIntent
-        ? 128 + executionIntent.signal
-        : logicalCancelled
-          ? 125
-          : 1;
+        (checkCancelled(root, logicalCheckId) !== undefined ||
+          Boolean(checkStopIntent(root, logicalCheckId, physicalRunId))));
+    const code =
+      signalNumber !== undefined
+        ? 128 + signalNumber
+        : executionIntent
+          ? 128 + executionIntent.signal
+          : logicalCancelled
+            ? 125
+            : 1;
     endLedger(
       code,
-      code === 1
-        ? `local spawn failed: ${error instanceof Error ? error.message : String(error)}`
-        : undefined,
+      code === 1 ? `local spawn failed: ${error instanceof Error ? error.message : String(error)}` : undefined,
     );
     stopForwarders();
     closeSync(descriptor);
@@ -1726,14 +1757,7 @@ export async function runWorkerCheck(
       }
       process.stderr.write(line);
       if (recordedCheckId && logicalCheckId) {
-        await scheduleOverloadRerun(
-          root,
-          recordedCheckId,
-          physicalRunId,
-          rerunCommand ?? command,
-          code,
-          line,
-        );
+        await scheduleOverloadRerun(root, recordedCheckId, physicalRunId, rerunCommand ?? command, code, line);
         return code;
       }
       const rerunStatus = await runWorkerCheck(
@@ -1776,7 +1800,9 @@ export async function runWorkerCheck(
     try {
       writeArtifactCatalog(root, logicalCheckId, returnPaths);
     } catch (error) {
-      process.stderr.write(`worker-check: could not record declared outputs: ${error instanceof Error ? error.message : error}\n`);
+      process.stderr.write(
+        `worker-check: could not record declared outputs: ${error instanceof Error ? error.message : error}\n`,
+      );
     }
   }
   if (ledger) ledger.phases = { ...(ledger.phases ?? {}), command: (performance.now() - physicalStarted) / 1000 };
@@ -1853,7 +1879,8 @@ async function waitForPublishedRunner(root: string, id: string, physicalRunId: s
       executionCancellation(workerCheckCancellation(id, root)) ||
       checkCancelled(root, id) ||
       checkStopIntent(root, id, physicalRunId)
-    ) throw new CheckCancelled();
+    )
+      throw new CheckCancelled();
     if (record.status !== 'running' || record.physicalRunId !== physicalRunId) {
       throw new Error('worker-check: detached runner was superseded before registration');
     }
@@ -1951,7 +1978,8 @@ async function waitForPriorPhysicalRun(
             executionCancellation(workerCheckCancellation(id, root)) ||
             checkCancelled(root, id) ||
             checkStopIntent(root, id, currentPhysicalRunId)
-          ) throw new CheckCancelled();
+          )
+            throw new CheckCancelled();
           const latestHead = readRecord(root, id);
           const latestPredecessor = readPhysicalRecord(root, id, priorPhysicalRunId);
           if (
@@ -1961,7 +1989,8 @@ async function waitForPriorPhysicalRun(
             latestPredecessor.status !== 'finished' ||
             latestPredecessor.exitCode === undefined ||
             !sameRunnerIdentity(latestPredecessor.runnerIdentity, identity)
-          ) throw new Error('worker-check: predecessor custody changed before terminal publication');
+          )
+            throw new Error('worker-check: predecessor custody changed before terminal publication');
           updatePhysicalRecord(root, id, priorPhysicalRunId, (record) => ({
             ...record,
             terminalProof: {
@@ -1997,7 +2026,8 @@ async function scheduleOverloadRerun(
       executionCancellation(workerCheckCancellation(id, root)) ||
       checkCancelled(root, id) ||
       checkStopIntent(root, id, priorPhysicalRunId)
-    ) throw new CheckCancelled();
+    )
+      throw new CheckCancelled();
     const current = readRecord(root, id);
     if (current.physicalRunId !== priorPhysicalRunId || current.status !== 'running' || (current.reruns ?? 0) >= 1) {
       throw new Error('worker-check: overload rerun lost its logical generation');
@@ -2097,7 +2127,11 @@ export function readWorkerCheckRecord(id: string, cwd = process.cwd()): CheckRec
   return readRecord(resolve(cwd), id);
 }
 
-export function readWorkerCheckHistory(id: string, physicalRunId: string, cwd = process.cwd()): CheckPhysicalRecord | undefined {
+export function readWorkerCheckHistory(
+  id: string,
+  physicalRunId: string,
+  cwd = process.cwd(),
+): CheckPhysicalRecord | undefined {
   if (!isCheckId(id)) throw new Error(`Invalid check id: ${id}`);
   if (!isPhysicalRunId(physicalRunId)) throw new Error('worker-check: invalid physical run identity');
   return readPhysicalRecord(resolve(cwd), id, physicalRunId);
@@ -2136,7 +2170,10 @@ function receiptFor(
   };
 }
 
-function remoteTerminalState(root: string, physicalRunId: string): { terminal: boolean | null; run?: { host: string; id: string } } {
+function remoteTerminalState(
+  root: string,
+  physicalRunId: string,
+): { terminal: boolean | null; run?: { host: string; id: string } } {
   const custody = readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, physicalRunId));
   if (!custody || custody.version !== 1 || custody.physicalRunId !== physicalRunId) return { terminal: false };
   const latest = custody.attempts.at(-1);
@@ -2149,10 +2186,7 @@ function remoteTerminalState(root: string, physicalRunId: string): { terminal: b
 function persistCleanupReceipt(root: string, receipt: CheckCleanupReceipt): void {
   const historyDirectory = cleanupReceiptHistoryDirectory(root, receipt.checkId, receipt.physicalRunId);
   mkdirSync(historyDirectory, { recursive: true });
-  writeAtomicJson(
-    cleanupReceiptEventPath(root, receipt.checkId, receipt.physicalRunId, receipt.receiptId),
-    receipt,
-  );
+  writeAtomicJson(cleanupReceiptEventPath(root, receipt.checkId, receipt.physicalRunId, receipt.receiptId), receipt);
   writeAtomicJson(cleanupReceiptPath(root, receipt.checkId, receipt.physicalRunId), receipt);
 }
 
@@ -2161,7 +2195,8 @@ export function readWorkerCheckCleanupReceipt(
   physicalRunId: string,
   cwd = process.cwd(),
 ): CheckCleanupReceipt | undefined {
-  if (!isCheckId(id) || !isPhysicalRunId(physicalRunId)) throw new Error('worker-check: invalid cleanup receipt identity');
+  if (!isCheckId(id) || !isPhysicalRunId(physicalRunId))
+    throw new Error('worker-check: invalid cleanup receipt identity');
   const receipt = readJsonFile<CheckCleanupReceipt>(cleanupReceiptPath(resolve(cwd), id, physicalRunId));
   return receipt?.checkId === id && receipt.physicalRunId === physicalRunId ? receipt : undefined;
 }
@@ -2171,7 +2206,8 @@ export function readWorkerCheckCleanupHistory(
   physicalRunId: string,
   cwd = process.cwd(),
 ): CheckCleanupReceipt[] {
-  if (!isCheckId(id) || !isPhysicalRunId(physicalRunId)) throw new Error('worker-check: invalid cleanup history identity');
+  if (!isCheckId(id) || !isPhysicalRunId(physicalRunId))
+    throw new Error('worker-check: invalid cleanup history identity');
   const directory = cleanupReceiptHistoryDirectory(resolve(cwd), id, physicalRunId);
   try {
     return readdirSync(directory)
@@ -2196,7 +2232,8 @@ async function stopWorkerCheckOwned(
   purpose: 'requested' | 'watchdog',
 ): Promise<CheckCleanupReceipt> {
   const root = resolve(cwd);
-  if (!isCheckId(id) || !isPhysicalRunId(expected?.physicalRunId)) throw new Error('worker-check: invalid cleanup expectation');
+  if (!isCheckId(id) || !isPhysicalRunId(expected?.physicalRunId))
+    throw new Error('worker-check: invalid cleanup expectation');
   validateOwnership(expected.ownership);
   validateRunnerIdentity(expected.runnerIdentity);
   const history = readPhysicalRecord(root, id, expected.physicalRunId);
@@ -2224,16 +2261,16 @@ async function stopWorkerCheckOwned(
       !currentHistory ||
       !sameOwnership(currentHistory.ownership, expected.ownership) ||
       !sameRunnerIdentity(currentHistory.runnerIdentity, expected.runnerIdentity)
-    ) return false;
+    )
+      return false;
     const prior = readJsonFile<typeof intent>(stopIntentPath(root, id, expected.physicalRunId));
     if (prior) {
-      const matches = (
+      const matches =
         prior.checkId === intent.checkId &&
         prior.physicalRunId === intent.physicalRunId &&
         prior.runnerHost === intent.runnerHost &&
         sameOwnership(prior.ownership, intent.ownership) &&
-        sameRunnerIdentity(prior.runnerIdentity, intent.runnerIdentity)
-      );
+        sameRunnerIdentity(prior.runnerIdentity, intent.runnerIdentity);
       if (matches && purpose === 'requested' && prior.purpose === 'watchdog') {
         writeAtomicJson(stopIntentPath(root, id, expected.physicalRunId), { ...prior, purpose: 'requested' });
       }
@@ -2243,7 +2280,14 @@ async function stopWorkerCheckOwned(
     return true;
   });
   if (!intentAccepted) {
-    return receiptFor(id, expected, 'refused', false, history.remoteExpected ? false : null, 'physical custody changed before stop');
+    return receiptFor(
+      id,
+      expected,
+      'refused',
+      false,
+      history.remoteExpected ? false : null,
+      'physical custody changed before stop',
+    );
   }
 
   const existing = readJsonFile<CheckCleanupReceipt>(cleanupReceiptPath(root, id, expected.physicalRunId));
@@ -2256,7 +2300,14 @@ async function stopWorkerCheckOwned(
     return existing;
   }
   if (expected.runnerHost !== hostname()) {
-    const uncertain = receiptFor(id, expected, 'uncertain', false, history.remoteExpected ? false : null, 'runner host is not local');
+    const uncertain = receiptFor(
+      id,
+      expected,
+      'uncertain',
+      false,
+      history.remoteExpected ? false : null,
+      'runner host is not local',
+    );
     persistCleanupReceipt(root, uncertain);
     return uncertain;
   }
@@ -2265,13 +2316,27 @@ async function stopWorkerCheckOwned(
   let localTerminal = false;
   let stopped = false;
   if (currentIdentity && !sameProcess(expected.runnerIdentity)) {
-    const refused = receiptFor(id, expected, 'refused', false, history.remoteExpected ? false : null, 'runner PID identity was reused');
+    const refused = receiptFor(
+      id,
+      expected,
+      'refused',
+      false,
+      history.remoteExpected ? false : null,
+      'runner PID identity was reused',
+    );
     persistCleanupReceipt(root, refused);
     return refused;
   }
   if (sameProcess(expected.runnerIdentity)) {
     if (!runnerCommandMatches(expected.runnerIdentity, import.meta.path, id, expected.physicalRunId)) {
-      const refused = receiptFor(id, expected, 'refused', false, history.remoteExpected ? false : null, 'runner command does not match physical custody');
+      const refused = receiptFor(
+        id,
+        expected,
+        'refused',
+        false,
+        history.remoteExpected ? false : null,
+        'runner command does not match physical custody',
+      );
       persistCleanupReceipt(root, refused);
       return refused;
     }
@@ -2279,7 +2344,14 @@ async function stopWorkerCheckOwned(
     localTerminal = stoppedTree.terminal;
     stopped = localTerminal;
     if (!localTerminal) {
-      const uncertain = receiptFor(id, expected, 'uncertain', false, history.remoteExpected ? false : null, stoppedTree.reason);
+      const uncertain = receiptFor(
+        id,
+        expected,
+        'uncertain',
+        false,
+        history.remoteExpected ? false : null,
+        stoppedTree.reason,
+      );
       persistCleanupReceipt(root, uncertain);
       return uncertain;
     }
@@ -2292,7 +2364,9 @@ async function stopWorkerCheckOwned(
     } else localTerminal = true;
   }
 
-  let remote = history.remoteExpected ? remoteTerminalState(root, expected.physicalRunId) : { terminal: null as boolean | null };
+  let remote = history.remoteExpected
+    ? remoteTerminalState(root, expected.physicalRunId)
+    : { terminal: null as boolean | null };
   if (history.remoteExpected && !remote.terminal) {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline && !remote.terminal) {
@@ -2331,7 +2405,12 @@ async function stopWorkerCheckOwned(
         ...record,
         status: record.status === 'running' ? 'unknown' : record.status,
         finishedAt: record.finishedAt ?? new Date().toISOString(),
-        terminalProof: { local: true, remote: remoteTerminal, resultKnown: resultTerminal, observedAt: new Date().toISOString() },
+        terminalProof: {
+          local: true,
+          remote: remoteTerminal,
+          resultKnown: resultTerminal,
+          observedAt: new Date().toISOString(),
+        },
       }));
     });
   }
@@ -2347,7 +2426,11 @@ export async function stopWorkerCheck(
   return await stopWorkerCheckOwned(id, cwd, expected, 'requested');
 }
 
-function cancellationRefusal(auth: CheckCancellationAuthorization, digest: string, reason: string): CheckCancellationReceipt {
+function cancellationRefusal(
+  auth: CheckCancellationAuthorization,
+  digest: string,
+  reason: string,
+): CheckCancellationReceipt {
   return {
     version: 1,
     checkId: auth.checkId,
@@ -2383,7 +2466,8 @@ export async function cancelWorkerCheck(
     auth.receiptReference.length === 0 ||
     auth.receiptReference.length > 2048 ||
     /[\0\r\n]/.test(auth.receiptReference)
-  ) throw new Error('worker-check: invalid logical cancellation authorization');
+  )
+    throw new Error('worker-check: invalid logical cancellation authorization');
   validateOwnership(auth.ownership);
   return await withCheckFence(root, auth.checkId, () => {
     const existing = readJsonFile<CheckCancellationReceipt>(cancellationPath(root, auth.checkId));
@@ -2396,7 +2480,8 @@ export async function cancelWorkerCheck(
         existing.receiptSha256 === auth.receiptSha256 &&
         sameOwnership(existing.ownership, auth.ownership) &&
         existing.disposition === 'logically-cancelled-physical-cleanup-unknown'
-      ) return existing;
+      )
+        return existing;
       return cancellationRefusal(auth, auth.expectedRecordSha256, 'a different cancellation tombstone already exists');
     }
     const expectedPath = recordPath(root, auth.checkId);
@@ -2405,7 +2490,12 @@ export async function cancelWorkerCheck(
     }
     const receiptLocation = resolve(auth.receiptReference);
     const receiptRelative = relative(root, receiptLocation);
-    if (receiptRelative === '' || (receiptRelative !== '..' && !receiptRelative.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(receiptRelative))) {
+    if (
+      receiptRelative === '' ||
+      (receiptRelative !== '..' &&
+        !receiptRelative.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) &&
+        !isAbsolute(receiptRelative))
+    ) {
       return cancellationRefusal(auth, auth.expectedRecordSha256, 'Root receipt must be outside the checked workspace');
     }
     let receiptBytes: Buffer;
@@ -2422,7 +2512,9 @@ export async function cancelWorkerCheck(
     if (receiptDigest !== auth.receiptSha256) {
       return cancellationRefusal(auth, auth.expectedRecordSha256, 'Root receipt digest changed');
     }
-    let receiptValue: { records?: Array<{ id?: unknown; task?: unknown; taskId?: unknown; attempt?: unknown; argv?: unknown }> };
+    let receiptValue: {
+      records?: Array<{ id?: unknown; task?: unknown; taskId?: unknown; attempt?: unknown; argv?: unknown }>;
+    };
     try {
       if (receiptBytes.length > 256 * 1024) throw new Error('Root receipt exceeds the size bound');
       receiptValue = JSON.parse(receiptBytes.toString('utf8')) as typeof receiptValue;
@@ -2436,7 +2528,11 @@ export async function cancelWorkerCheck(
       (authorizedRow.attempt !== undefined && authorizedRow.attempt !== auth.ownership.attempt) ||
       JSON.stringify(authorizedRow.argv) !== JSON.stringify(auth.expectedArgv)
     ) {
-      return cancellationRefusal(auth, auth.expectedRecordSha256, 'Root receipt does not authorize this task and command');
+      return cancellationRefusal(
+        auth,
+        auth.expectedRecordSha256,
+        'Root receipt does not authorize this task and command',
+      );
     }
     let bytes: Buffer;
     try {
@@ -2522,7 +2618,14 @@ export async function waitWorkerCheck(
     if (alive === false) {
       const recoverable = await recoverablePhysicalRun(record, root, id);
       if (!recoverable) return unknownCustodyResult(record, monitor.write ?? ((text) => process.stdout.write(text)));
-      return await rerunInterruptedCheck(record, root, id, 'runner process exited', Math.max(0, timeoutMs - (Date.now() - started)), monitor);
+      return await rerunInterruptedCheck(
+        record,
+        root,
+        id,
+        'runner process exited',
+        Math.max(0, timeoutMs - (Date.now() - started)),
+        monitor,
+      );
     }
     if (Date.now() - lastGrowth >= stallMs) {
       const custody = record.physicalRunId ? readPhysicalRecord(root, id, record.physicalRunId) : undefined;
@@ -2594,7 +2697,8 @@ function recordedRunnerAlive(record: CheckRecord, id: string): boolean | undefin
 async function recoverablePhysicalRun(record: CheckRecord, root: string, id: string): Promise<boolean> {
   if (!record.physicalRunId || !record.runnerIdentity || !record.runnerHost) return false;
   const physical = readPhysicalRecord(root, id, record.physicalRunId);
-  if (!physical || physical.status !== 'running' || !sameRunnerIdentity(physical.runnerIdentity, record.runnerIdentity)) return false;
+  if (!physical || physical.status !== 'running' || !sameRunnerIdentity(physical.runnerIdentity, record.runnerIdentity))
+    return false;
   if (!processGroupMembers(record.runnerIdentity.group).length && !sameProcess(record.runnerIdentity)) {
     const remote = physical.remoteExpected ? remoteTerminalState(root, record.physicalRunId).terminal : null;
     if (remote === null || remote === true) {
@@ -2607,7 +2711,8 @@ async function recoverablePhysicalRun(record: CheckRecord, root: string, id: str
           !latest ||
           latest.status !== 'running' ||
           !sameRunnerIdentity(latest.runnerIdentity, record.runnerIdentity)
-        ) return false;
+        )
+          return false;
         updatePhysicalRecord(root, id, record.physicalRunId!, (current) => ({
           ...current,
           status: 'unknown',
@@ -2635,22 +2740,33 @@ async function stopPhysicalForWatchdog(
   physical: CheckPhysicalRecord,
 ): Promise<WatchdogStopReceipt> {
   if (record.ownership && record.physicalRunId && record.runnerIdentity && record.runnerHost) {
-    return await stopWorkerCheckOwned(id, root, {
-      ownership: record.ownership,
-      physicalRunId: record.physicalRunId,
-      runnerHost: record.runnerHost,
-      runnerIdentity: record.runnerIdentity,
-    }, 'watchdog');
+    return await stopWorkerCheckOwned(
+      id,
+      root,
+      {
+        ownership: record.ownership,
+        physicalRunId: record.physicalRunId,
+        runnerHost: record.runnerHost,
+        runnerIdentity: record.runnerIdentity,
+      },
+      'watchdog',
+    );
   }
   const identity = physical.runnerIdentity;
   if (
     physical.ownership !== undefined ||
     physical.runnerHost !== hostname() ||
     !sameRunnerIdentity(identity, record.runnerIdentity)
-  ) return { disposition: 'refused', localTerminal: false, remoteTerminal: false, resultTerminal: false };
+  )
+    return { disposition: 'refused', localTerminal: false, remoteTerminal: false, resultTerminal: false };
   const existed = sameProcess(identity);
   if (existed && !runnerCommandMatches(identity, import.meta.path, id, physical.physicalRunId)) {
-    return { disposition: 'refused', localTerminal: false, remoteTerminal: physical.remoteExpected ? false : null, resultTerminal: false };
+    return {
+      disposition: 'refused',
+      localTerminal: false,
+      remoteTerminal: physical.remoteExpected ? false : null,
+      resultTerminal: false,
+    };
   }
   const intent = {
     version: 1,
@@ -2668,13 +2784,22 @@ async function stopPhysicalForWatchdog(
     const file = stopIntentPath(root, id, physical.physicalRunId);
     const prior = readJsonFile<typeof intent>(file);
     if (prior) {
-      return prior.checkId === id && prior.physicalRunId === physical.physicalRunId &&
-        sameRunnerIdentity(prior.runnerIdentity, identity);
+      return (
+        prior.checkId === id &&
+        prior.physicalRunId === physical.physicalRunId &&
+        sameRunnerIdentity(prior.runnerIdentity, identity)
+      );
     }
     writeAtomicJson(file, intent);
     return true;
   });
-  if (!intentAccepted) return { disposition: 'refused', localTerminal: false, remoteTerminal: physical.remoteExpected ? false : null, resultTerminal: false };
+  if (!intentAccepted)
+    return {
+      disposition: 'refused',
+      localTerminal: false,
+      remoteTerminal: physical.remoteExpected ? false : null,
+      resultTerminal: false,
+    };
   const groupMembers = processGroupMembers(identity.group);
   let localTerminal = !existed && groupMembers.length === 0;
   let stopped = false;
@@ -2683,7 +2808,13 @@ async function stopPhysicalForWatchdog(
     localTerminal = result.terminal;
     stopped = localTerminal && existed;
   }
-  if (!localTerminal) return { disposition: 'uncertain', localTerminal: false, remoteTerminal: physical.remoteExpected ? false : null, resultTerminal: false };
+  if (!localTerminal)
+    return {
+      disposition: 'uncertain',
+      localTerminal: false,
+      remoteTerminal: physical.remoteExpected ? false : null,
+      resultTerminal: false,
+    };
   let remoteTerminal = physical.remoteExpected ? remoteTerminalState(root, physical.physicalRunId).terminal : null;
   if (physical.remoteExpected && !remoteTerminal) {
     const deadline = Date.now() + 60_000;
@@ -2707,7 +2838,12 @@ async function stopPhysicalForWatchdog(
       updatePhysicalRecord(root, id, physical.physicalRunId, (latest) => ({
         ...latest,
         status: latest.status === 'running' ? 'unknown' : latest.status,
-        terminalProof: { local: true, remote: remoteTerminal, resultKnown: resultTerminal, observedAt: new Date().toISOString() },
+        terminalProof: {
+          local: true,
+          remote: remoteTerminal,
+          resultKnown: resultTerminal,
+          observedAt: new Date().toISOString(),
+        },
       }));
     });
   }
@@ -2724,7 +2860,14 @@ async function stopPhysicalForWatchdog(
 
 function latestLogLine(file: string): string {
   try {
-    return readFileSync(file, 'utf8').trimEnd().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? '';
+    return (
+      readFileSync(file, 'utf8')
+        .trimEnd()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .at(-1) ?? ''
+    );
   } catch {
     return '';
   }
@@ -2750,7 +2893,8 @@ async function rerunInterruptedCheck(
   const oldLog = record.log;
   if ((record.reruns ?? 0) >= 1) {
     await withCheckFence(root, id, () => {
-      if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id)) throw new CheckCancelled();
+      if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id))
+        throw new CheckCancelled();
       const current = readRecord(root, id);
       if (current.physicalRunId !== record.physicalRunId || current.status !== 'running') return;
       current.status = 'finished';
@@ -2768,12 +2912,14 @@ async function rerunInterruptedCheck(
   const newPhysicalRunId = randomUUID();
   const rerunLog = logPath(root);
   const next = await withCheckFence(root, id, () => {
-    if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id)) throw new CheckCancelled();
+    if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id))
+      throw new CheckCancelled();
     const current = readRecord(root, id);
     if (
       current.physicalRunId !== record.physicalRunId ||
       (current.status !== 'running' && !(reason.startsWith('log did not grow') && current.status === 'finished'))
-    ) return current;
+    )
+      return current;
     if (current.physicalRunId) {
       const physical = readPhysicalRecord(root, id, current.physicalRunId);
       const terminal =
@@ -2821,7 +2967,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
   if (executionIntent) return 128 + executionIntent.signal;
   if (checkCancelled(root, id)) return 125;
   const physicalRunId = physicalArgument ?? initial.physicalRunId;
-  if (!isPhysicalRunId(physicalRunId)) throw new Error('worker-check: detached check has no valid physical run identity');
+  if (!isPhysicalRunId(physicalRunId))
+    throw new Error('worker-check: detached check has no valid physical run identity');
   const executionArgv = initial.physicalArgv ?? initial.argv;
   if (
     !Array.isArray(executionArgv) ||
@@ -2838,13 +2985,15 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       executionCancellation(workerCheckCancellation(id, root)) ||
       checkCancelled(root, id) ||
       checkStopIntent(root, id, physicalRunId)
-    ) throw new CheckCancelled();
+    )
+      throw new CheckCancelled();
     const current = readRecord(root, id);
     if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
       throw new Error('worker-check: detached runner was superseded before start');
     }
     const supplied = ownershipFromEnvironment(process.env);
-    if (!sameOwnership(current.ownership, supplied)) throw new Error('worker-check: task attempt identity changed before start');
+    if (!sameOwnership(current.ownership, supplied))
+      throw new Error('worker-check: task attempt identity changed before start');
     if (current.runnerPid !== process.pid) {
       throw new Error('worker-check: detached runner PID does not match the published head');
     }
@@ -2871,7 +3020,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
         registeredAt: new Date().toISOString(),
       };
       publishCheckRegistration(registry, registration);
-      if (!registrationIsPresent(registry, registration)) throw new Error('worker-check: check registration could not be verified');
+      if (!registrationIsPresent(registry, registration))
+        throw new Error('worker-check: check registration could not be verified');
     }
     record = updated;
     writeReadyReceipt(root, id, physicalRunId, { status: 'ready', physicalRunId });
@@ -2936,7 +3086,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
             executionCancellation(workerCheckCancellation(id, root)) ||
             checkCancelled(root, id) ||
             checkStopIntent(root, id, physicalRunId)
-          ) throw new CheckCancelled();
+          )
+            throw new CheckCancelled();
           if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
             throw new Error('worker-check: physical run changed before local command start');
           }
@@ -2991,7 +3142,11 @@ if (import.meta.main) {
     const args = Bun.argv.slice(2);
     if (args[0] === '--run' && args[1] && isCheckId(args[1])) {
       const record = (() => {
-        try { return readRecord(process.cwd(), args[1]!); } catch { return undefined; }
+        try {
+          return readRecord(process.cwd(), args[1]!);
+        } catch {
+          return undefined;
+        }
       })();
       const physicalRunId = args[3] === '--physical-run' ? args[4] : record?.physicalRunId;
       if (record && isPhysicalRunId(physicalRunId)) {

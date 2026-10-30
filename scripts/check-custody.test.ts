@@ -1,15 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -39,7 +31,13 @@ function rootFixture(): string {
 }
 
 function restoreEnvironment(): void {
-  for (const key of ['GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_CHECK_REGISTRY', 'REZICS_CHECK_MEMORY', 'REZICS_CHECK_SCOPE']) {
+  for (const key of [
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'GOAL_CHECK_REGISTRY',
+    'REZICS_CHECK_MEMORY',
+    'REZICS_CHECK_SCOPE',
+  ]) {
     const value = inheritedEnvironment[key];
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -150,7 +148,12 @@ test('exact normal stop reaps only the selected task tree and preserves a shared
     expect(secondExpected.ownership).toEqual({ taskId: secondTask, attempt: 4 });
     expect(firstExpected.physicalRunId).not.toBe(secondExpected.physicalRunId);
     const receipt = await stopWorkerCheck(first, root, firstExpected);
-    expect(receipt).toMatchObject({ disposition: 'stopped', localTerminal: true, remoteTerminal: null, resultTerminal: true });
+    expect(receipt).toMatchObject({
+      disposition: 'stopped',
+      localTerminal: true,
+      remoteTerminal: null,
+      resultTerminal: true,
+    });
     expect(processIdentity(markerPid(firstMarker))).toBeNull();
     expect(processIdentity(markerPid(secondMarker))).not.toBeNull();
     expect(readWorkerCheckRecord(first, root)).toMatchObject({ status: 'finished', exitCode: 143 });
@@ -179,7 +182,10 @@ test('wrong host, task, attempt, boot, start and group expectations refuse witho
       { ...expected, ownership: { ...expected.ownership, attempt: expected.ownership.attempt + 1 } },
       { ...expected, runnerHost: 'foreign-host.invalid' },
       { ...expected, runnerIdentity: { ...expected.runnerIdentity, boot: randomUUID() } },
-      { ...expected, runnerIdentity: { ...expected.runnerIdentity, start: `${BigInt(expected.runnerIdentity.start) + 1n}` } },
+      {
+        ...expected,
+        runnerIdentity: { ...expected.runnerIdentity, start: `${BigInt(expected.runnerIdentity.start) + 1n}` },
+      },
       { ...expected, runnerIdentity: { ...expected.runnerIdentity, group: expected.runnerIdentity.group + 1 } },
     ];
     for (const expectation of invalid) {
@@ -199,11 +205,17 @@ test('successive task attempts and detached physical reruns keep separate immuta
   const taskId = randomUUID();
   const marker = join(root, 'attempt.pid');
   configureTask(taskId, 1, registry);
-  const first = startWorkerCheck([process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'first')`], root);
+  const first = startWorkerCheck(
+    [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'first')`],
+    root,
+  );
   expect(await waitWorkerCheck(first, root, 5_000, { pollMs: 10 })).toBe(0);
   const firstRecord = readWorkerCheckRecord(first, root);
   configureTask(taskId, 2, registry);
-  const second = startWorkerCheck([process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'second')`], root);
+  const second = startWorkerCheck(
+    [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'second')`],
+    root,
+  );
   expect(await waitWorkerCheck(second, root, 5_000, { pollMs: 10 })).toBe(0);
   const secondRecord = readWorkerCheckRecord(second, root);
   expect(firstRecord.ownership).toEqual({ taskId, attempt: 1 });
@@ -219,9 +231,15 @@ test('Root-authorized legacy cancellation persists an idempotent tombstone and l
   const taskId = randomUUID();
   const resultDirectory = join(root, '.temp/goal/checks/results');
   mkdirSync(resultDirectory, { recursive: true });
-  const argv = [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(join(root, 'must-not-start'))},'bad')`];
+  const argv = [
+    process.execPath,
+    '-e',
+    `require('node:fs').writeFileSync(${JSON.stringify(join(root, 'must-not-start'))},'bad')`,
+  ];
   const recordPath = join(resultDirectory, `${id}.json`);
-  const recordBytes = Buffer.from(`${JSON.stringify({ id, cwd: root, argv, status: 'running', log: '.temp/old.log', runnerPid: 2147483646 })}\n`);
+  const recordBytes = Buffer.from(
+    `${JSON.stringify({ id, cwd: root, argv, status: 'running', log: '.temp/old.log', runnerPid: 2147483646 })}\n`,
+  );
   writeFileSync(recordPath, recordBytes);
   const receiptReference = join(root, '..', `root-cancel-${randomUUID()}.json`);
   roots.push(receiptReference);
@@ -253,9 +271,9 @@ test('Root-authorized legacy cancellation persists an idempotent tombstone and l
     expect(existsSync(join(root, 'must-not-start'))).toBe(false);
     expect(readFileSync(recordPath)).toEqual(recordBytes);
   }
-  await expect(cancelWorkerCheck({ ...authorization, issuer: 'untrusted' } as unknown as typeof authorization, root)).rejects.toThrow(
-    'invalid logical cancellation authorization',
-  );
+  await expect(
+    cancelWorkerCheck({ ...authorization, issuer: 'untrusted' } as unknown as typeof authorization, root),
+  ).rejects.toThrow('invalid logical cancellation authorization');
   const cancelled = await cancelWorkerCheck(authorization, root);
   expect(cancelled.disposition).toBe('logically-cancelled-physical-cleanup-unknown');
   expect(readFileSync(recordPath)).toEqual(recordBytes);
@@ -316,7 +334,13 @@ test('verified watchdog rerun keeps old physical custody and stale cleanup canno
     expect(readFileSync(runs, 'utf8')).toBe('2');
   } finally {
     const current = readWorkerCheckRecord(id, root);
-    if (current.status === 'running' && current.ownership && current.physicalRunId && current.runnerIdentity && current.runnerHost) {
+    if (
+      current.status === 'running' &&
+      current.ownership &&
+      current.physicalRunId &&
+      current.runnerIdentity &&
+      current.runnerHost
+    ) {
       await stopWorkerCheck(id, root, {
         ownership: current.ownership,
         physicalRunId: current.physicalRunId,

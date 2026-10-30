@@ -653,11 +653,10 @@ function workerFixture(): {
   const memory = join(root, 'memory');
   const scripts = join(root, 'scripts');
   mkdirSync(scripts);
-  const initialized = spawnSync(
-    'git',
-    ['init', '-q', '--separate-git-dir', join(root, '.fixture-git'), root],
-    { cwd: root, encoding: 'utf8' },
-  );
+  const initialized = spawnSync('git', ['init', '-q', '--separate-git-dir', join(root, '.fixture-git'), root], {
+    cwd: root,
+    encoding: 'utf8',
+  });
   if (initialized.status !== 0) throw new Error(initialized.stderr || 'could not initialize placement fixture');
   const remoteEvents = join(root, 'remote-events');
   const remoteArgs = join(root, 'remote-args.json');
@@ -922,9 +921,9 @@ test('stack-free placement: explicit pure file tests lint and pure type commands
   expect(await needsStack(['bun', 'run', '--cwd', 'services/importer', 'typecheck'])).toBe(false);
   expect(await needsStack(['bun', 'run', '--cwd', 'packages/filter', 'typecheck'])).toBe(false);
   expect(await needsStack(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])).toBe(false);
-  expect(
-    await needsStack(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], join(repository, 'apps/web')),
-  ).toBe(false);
+  expect(await needsStack(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], join(repository, 'apps/web'))).toBe(
+    false,
+  );
   expect(await needsStack(['bun', 'check', '--no-script', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
   expect(await needsStack(['tsc', '--noEmit', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
 });
@@ -1090,7 +1089,8 @@ test('worker-check CLI keeps canonical launch, explicit compatibility alias and 
   const env = cleanTestEnvironment(process.env);
   env.REZICS_CHECK_MEMORY = 'off';
   env.REZICS_CHECK_SCOPE = 'off';
-  const invoke = (args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8', timeout: 15_000 });
+  const invoke = (args: string[]) =>
+    spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8', timeout: 15_000 });
   const started = join(root, 'canonical.started');
   const release = join(root, 'canonical.release');
   const command = [
@@ -1128,14 +1128,7 @@ test('worker-check CLI keeps canonical launch, explicit compatibility alias and 
     expect(existsSync(aliasMarker)).toBe(true);
 
     const malformedMarker = join(root, 'malformed.must-not-run');
-    const malformed = invoke([
-      '--run',
-      'not-a-valid-id',
-      '--',
-      '/bin/sh',
-      '-c',
-      `touch ${malformedMarker}`,
-    ]);
+    const malformed = invoke(['--run', 'not-a-valid-id', '--', '/bin/sh', '-c', `touch ${malformedMarker}`]);
     expect(malformed.status).not.toBe(0);
     expect(malformed.stderr).toContain('Invalid check id');
     expect(existsSync(malformedMarker)).toBe(false);
@@ -1261,7 +1254,21 @@ function placementEnvironment(
 
 function writeHosts(fixture: ReturnType<typeof workerFixture>): string {
   const hosts = join(fixture.root, 'hosts.json');
-  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'check-a', address: 'ops@check-a.test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 800, slots: 2 }] }));
+  writeFileSync(
+    hosts,
+    JSON.stringify({
+      hosts: [
+        {
+          name: 'check-a',
+          address: 'ops@check-a.test',
+          identity: '/unused',
+          memoryMaxGiB: 8,
+          cpuQuotaPercent: 800,
+          slots: 2,
+        },
+      ],
+    }),
+  );
   return hosts;
 }
 
@@ -1285,7 +1292,10 @@ async function boundedWorkerExit(worker: NativeWorker, timeoutMs = 10_000): Prom
     return await Promise.race([
       worker.wait(),
       new Promise<number>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(`worker process ${worker.pid} did not exit within ${timeoutMs} ms`)), timeoutMs);
+        timer = setTimeout(
+          () => reject(new Error(`worker process ${worker.pid} did not exit within ${timeoutMs} ms`)),
+          timeoutMs,
+        );
       }),
     ]);
   } finally {
@@ -1320,10 +1330,7 @@ test('stack-free placement: the actual Web compiler invocation runs locally with
   const hosts = writeHosts(fixture);
   const web = join(fixture.root, 'apps/web');
   const priorLedger = process.env.REZICS_CHECK_LEDGER_DIR;
-  const compilerCommand = resolveRepositoryBun(
-    ['bun', 'check', '--no-script', '-p', 'tsconfig.json'],
-    repository,
-  );
+  const compilerCommand = resolveRepositoryBun(['bun', 'check', '--no-script', '-p', 'tsconfig.json'], repository);
   mkdirSync(web, { recursive: true });
   writeFileSync(join(web, 'package.json'), JSON.stringify({ name: '@fixture/web', private: true, type: 'module' }));
   writeFileSync(
@@ -1452,7 +1459,13 @@ test('bounded artifact returns: the real outer wrapper restores inner stack-run 
     expect(existsSync(join(remoteBase, `run-${failedPhysicalRun}`))).toBe(false);
   } finally {
     restoreWorkerEnvironment(old);
-    for (const key of ['WORKER_ARTIFACT_REMOTE_BASE', 'WORKER_ARTIFACT_PATHS', 'WORKER_ARTIFACT_BYTES', 'WORKER_ARTIFACT_WRITE', 'WORKER_ARTIFACT_EXIT']) {
+    for (const key of [
+      'WORKER_ARTIFACT_REMOTE_BASE',
+      'WORKER_ARTIFACT_PATHS',
+      'WORKER_ARTIFACT_BYTES',
+      'WORKER_ARTIFACT_WRITE',
+      'WORKER_ARTIFACT_EXIT',
+    ]) {
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
     }
@@ -1494,7 +1507,12 @@ test('placement memory: a remotely queued check holds zero local check-memory sl
       const localProgress = join(fixture.root, `local-progress-${mode}`);
       const progress = startNativeWorker(
         fixture,
-        ['--local', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(localProgress)}, 'ran')`],
+        [
+          '--local',
+          process.execPath,
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(localProgress)}, 'ran')`,
+        ],
         env,
       );
       try {
@@ -1529,14 +1547,20 @@ test('placement memory: a local execution is admitted under its measured local m
   for (let count = 0; count < 3; count++) recordPeak(localFixture.memory, weightClass, 2.1 * 2 ** 30);
   const localEnv = placementEnvironment(localFixture, undefined);
   localEnv.REZICS_CHECK_MEMORY_GIB = '4';
-  const holder = await acquireStackSlot('placement memory holder', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: localFixture.memory,
-  }, 2);
+  const holder = await acquireStackSlot(
+    'placement memory holder',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: localFixture.memory,
+    },
+    2,
+  );
   const weighted = startNativeWorker(localFixture, ['--local', ...localCommand], localEnv);
   try {
-    await waitUntil(() => readdirSync(localFixture.memory).some((name) => name.startsWith('ticket-')),
-      'weighted local execution did not enter memory admission');
+    await waitUntil(
+      () => readdirSync(localFixture.memory).some((name) => name.startsWith('ticket-')),
+      'weighted local execution did not enter memory admission',
+    );
     expect(existsSync(localStarted)).toBe(false);
     await holder.release();
     await waitUntil(() => existsSync(localStarted), 'weighted local command did not start after admission released');
@@ -1565,13 +1589,20 @@ test('placement memory: a local execution is admitted under its measured local m
   for (let count = 0; count < 3; count++) recordPeak(fallbackFixture.memory, fallbackClass, 4 * 2 ** 30);
   const fallbackEnv = placementEnvironment(fallbackFixture, hosts, 'transport-admission');
   fallbackEnv.WORKER_REMOTE_RELEASE = remoteRelease;
-  const blocker = await acquireStackSlot('placement memory fallback blocker', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: fallbackFixture.memory,
-  }, 4);
+  const blocker = await acquireStackSlot(
+    'placement memory fallback blocker',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: fallbackFixture.memory,
+    },
+    4,
+  );
   const fallback = startNativeWorker(fallbackFixture, fallbackCommand, fallbackEnv, 'fallback-logical');
   try {
-    await waitUntil(() => existsSync(fallbackFixture.remoteEvents + '.waiting'), 'remote attempt did not reach admission');
+    await waitUntil(
+      () => existsSync(fallbackFixture.remoteEvents + '.waiting'),
+      'remote attempt did not reach admission',
+    );
     expect(lockedSlots(fallbackFixture.memory, 4)).toEqual([1, 2, 3, 4]);
     expect(existsSync(localStart)).toBe(false);
     writeFileSync(remoteRelease, 'release');
@@ -1613,7 +1644,10 @@ test('placement memory: actual local and remote admission waits are nonzero in t
   for (let count = 0; count < 3; count++) recordPeak(remoteFixture.memory, remoteClass, 4 * 2 ** 30);
   const remote = startNativeWorker(remoteFixture, heavyCommand, remoteEnv, 'remote-wait');
   try {
-    await waitUntil(() => existsSync(remoteFixture.remoteEvents + '.waiting'), 'remote telemetry fixture did not queue');
+    await waitUntil(
+      () => existsSync(remoteFixture.remoteEvents + '.waiting'),
+      'remote telemetry fixture did not queue',
+    );
     await Bun.sleep(100);
     writeFileSync(remoteRelease, 'release');
     expect(await boundedWorkerExit(remote)).toBe(0);
@@ -1637,10 +1671,14 @@ test('placement memory: actual local and remote admission waits are nonzero in t
     '-e',
     `(async()=>{const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(localStart)},'started');while(!fs.existsSync(${JSON.stringify(localDone)}))await Bun.sleep(5)})()`,
   ];
-  const localHolder = await acquireStackSlot('placement memory local wait holder', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: localFixture.memory,
-  }, 4);
+  const localHolder = await acquireStackSlot(
+    'placement memory local wait holder',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: localFixture.memory,
+    },
+    4,
+  );
   const local = startNativeWorker(localFixture, ['--local', ...localWaitCommand], localEnv, 'local-wait');
   try {
     await waitUntil(
@@ -1673,7 +1711,10 @@ test('placement memory: actual local and remote admission waits are nonzero in t
   for (let count = 0; count < 3; count++) recordPeak(cancelledFixture.memory, cancelClass, 4 * 2 ** 30);
   const cancelled = startNativeWorker(cancelledFixture, cancelCommand, cancelledEnv, 'cancel-wait');
   try {
-    await waitUntil(() => existsSync(cancelledFixture.remoteEvents + '.waiting'), 'remote cancellation fixture did not queue');
+    await waitUntil(
+      () => existsSync(cancelledFixture.remoteEvents + '.waiting'),
+      'remote cancellation fixture did not queue',
+    );
     await Bun.sleep(100);
     cancelled.child.kill('SIGTERM');
     expect(await boundedWorkerExit(cancelled)).toBe(143);
@@ -1697,7 +1738,12 @@ test('placement memory: signals, transport failure and spawn failure release onl
   const inheritedEnv = { ...env, REZICS_CHECK_MEMORY_LEASE: holder.env.REZICS_STACK_SLOT };
   const inherited = startNativeWorker(
     fixture,
-    ['--local', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(fixture.localMarker)}, process.env.REZICS_CHECK_MEMORY_LEASE)`],
+    [
+      '--local',
+      process.execPath,
+      '-e',
+      `require('node:fs').writeFileSync(${JSON.stringify(fixture.localMarker)}, process.env.REZICS_CHECK_MEMORY_LEASE)`,
+    ],
     inheritedEnv,
   );
   try {
@@ -1714,10 +1760,14 @@ test('placement memory: signals, transport failure and spawn failure release onl
   const waitingEnv = placementEnvironment(waitingFixture);
   const waitingMarker = join(waitingFixture.root, 'cancelled-local-wait.started');
   const waitingCommand = localCommand(waitingMarker);
-  const waitingHolder = await acquireStackSlot('placement memory local cancellation holder', {
-    REZICS_STACK_SLOTS: '4',
-    REZICS_STACK_LEASE_DIR: waitingFixture.memory,
-  }, 4);
+  const waitingHolder = await acquireStackSlot(
+    'placement memory local cancellation holder',
+    {
+      REZICS_STACK_SLOTS: '4',
+      REZICS_STACK_LEASE_DIR: waitingFixture.memory,
+    },
+    4,
+  );
   const waitingWorker = startNativeWorker(waitingFixture, ['--local', ...waitingCommand], waitingEnv, 'local-cancel');
   try {
     await waitUntil(
@@ -1759,7 +1809,11 @@ test('placement memory: signals, transport failure and spawn failure release onl
   expect(lockedSlots(signalFixture.memory, 4)).toEqual([]);
 
   const spawnFixture = workerFixture();
-  const spawnFailure = startNativeWorker(spawnFixture, ['/missing/placement-memory-command'], placementEnvironment(spawnFixture));
+  const spawnFailure = startNativeWorker(
+    spawnFixture,
+    ['/missing/placement-memory-command'],
+    placementEnvironment(spawnFixture),
+  );
   try {
     expect(await boundedWorkerExit(spawnFailure)).toBe(1);
   } finally {
@@ -1773,7 +1827,12 @@ test('placement memory: signals, transport failure and spawn failure release onl
   const resultFile = join(spawnFixture.root, 'exit-75-count');
   const failure = startNativeWorker(
     spawnFixture,
-    ['--local', process.execPath, '-e', `require('node:fs').appendFileSync(${JSON.stringify(resultFile)}, 'run\\n');process.exit(75)`],
+    [
+      '--local',
+      process.execPath,
+      '-e',
+      `require('node:fs').appendFileSync(${JSON.stringify(resultFile)}, 'run\\n');process.exit(75)`,
+    ],
     placementEnvironment(spawnFixture),
   );
   try {
@@ -2253,7 +2312,11 @@ test('transient response', () => {
     const firstPhysical = readWorkerCheckHistory(id, record.physicalRunId, root);
     const rerunPhysical = readWorkerCheckHistory(id, finished.physicalRunId, root);
     expect(firstPhysical).toMatchObject({ status: 'finished', exitCode: 1 });
-    expect(rerunPhysical).toMatchObject({ status: 'finished', exitCode: 0, argv: ['bun', 'test', 'overloaded.test.ts'] });
+    expect(rerunPhysical).toMatchObject({
+      status: 'finished',
+      exitCode: 0,
+      argv: ['bun', 'test', 'overloaded.test.ts'],
+    });
     expect(rerunPhysical?.runnerIdentity).not.toEqual(firstPhysical?.runnerIdentity);
     expect(firstPhysical?.terminalProof).toMatchObject({ local: true, resultKnown: true });
     expect(readFileSync(healthyRuns, 'utf8')).toBe('ran');

@@ -258,7 +258,8 @@ export async function registerArtifactDeclarations(
     if (declarations.size > CHECK_ARTIFACTS_MAX_FILES) {
       throw new Error('check-artifacts: output declaration set exceeds its entry bound');
     }
-    if (entries.size > CHECK_ARTIFACTS_MAX_FILES) throw new Error('check-artifacts: output manifest exceeds its entry bound');
+    if (entries.size > CHECK_ARTIFACTS_MAX_FILES)
+      throw new Error('check-artifacts: output manifest exceeds its entry bound');
     writeManifest(stage, { ...manifest, declarations: [...declarations], entries: [...entries.values()] });
     clearDeclaredArtifacts(root, declared);
   });
@@ -289,11 +290,19 @@ export async function captureArtifactReturns(
       mkdirSync(filesDirectory);
     }
     let total = manifest.entries
-      .filter((entry) => entry.status === 'returned' && !declared.some((path) => entry.path === path || entry.path.startsWith(`${path}/`)))
+      .filter(
+        (entry) =>
+          entry.status === 'returned' &&
+          !declared.some((path) => entry.path === path || entry.path.startsWith(`${path}/`)),
+      )
       .reduce((sum, entry) => sum + (entry.size ?? 0), 0);
     const usedFiles = new Set(
       manifest.entries
-        .filter((entry) => entry.status === 'returned' && !declared.some((path) => entry.path === path || entry.path.startsWith(`${path}/`)))
+        .filter(
+          (entry) =>
+            entry.status === 'returned' &&
+            !declared.some((path) => entry.path === path || entry.path.startsWith(`${path}/`)),
+        )
         .map((entry) => entry.file)
         .filter((file): file is string => file !== undefined),
     );
@@ -346,7 +355,11 @@ export async function captureArtifactReturns(
         if (sourceStats.isDirectory()) {
           for (const prior of manifest.entries.filter((entry) => entry.path.startsWith(`${path}/`))) {
             if (prior.file) {
-              try { unlinkSync(join(stage, prior.file)); } catch { /* replaced evidence is not reused */ }
+              try {
+                unlinkSync(join(stage, prior.file));
+              } catch {
+                /* replaced evidence is not reused */
+              }
               usedFiles.delete(prior.file);
             }
             entries.delete(prior.path);
@@ -387,7 +400,8 @@ function ensureSafeDestination(root: string, path: string): string {
   while (parent !== resolve(root)) {
     try {
       const stats = lstatSync(parent);
-      if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error(`check-artifacts: unsafe destination parent for ${path}`);
+      if (stats.isSymbolicLink() || !stats.isDirectory())
+        throw new Error(`check-artifacts: unsafe destination parent for ${path}`);
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -517,7 +531,8 @@ export function readArtifactCatalog(root: string, logicalCheckId: string): strin
 export function writeArtifactCatalog(root: string, logicalCheckId: string, paths: readonly string[]): void {
   const file = catalogPath(root, logicalCheckId);
   const merged = new Set([...readArtifactCatalog(root, logicalCheckId), ...validateArtifactDeclarations(paths)]);
-  if (merged.size > CHECK_ARTIFACTS_MAX_FILES) throw new Error('check-artifacts: logical output catalog exceeds its bound');
+  if (merged.size > CHECK_ARTIFACTS_MAX_FILES)
+    throw new Error('check-artifacts: logical output catalog exceeds its bound');
   mkdirSync(dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   writeFileSync(temporary, `${JSON.stringify({ version: CHECK_ARTIFACTS_VERSION, paths: [...merged] })}\n`, {
