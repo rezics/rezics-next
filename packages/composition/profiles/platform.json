@@ -1758,7 +1758,7 @@
                   "es": "Obras escritas"
                 },
                 "property": "schema:author",
-                "limit": 12
+                "limit": 11
               }
             },
             {
@@ -1776,7 +1776,7 @@
                   "es": "Obras ilustradas"
                 },
                 "property": "schema:illustrator",
-                "limit": 12
+                "limit": 11
               }
             },
             {
@@ -1794,7 +1794,7 @@
                   "es": "Obras dirigidas"
                 },
                 "property": "schema:director",
-                "limit": 12
+                "limit": 11
               }
             },
             {
@@ -1812,7 +1812,7 @@
                   "es": "Música"
                 },
                 "property": "schema:musicBy",
-                "limit": 12
+                "limit": 11
               }
             },
             {
@@ -1830,7 +1830,7 @@
                   "es": "Papeles de voz"
                 },
                 "property": "wdt:P725",
-                "limit": 12
+                "limit": 11
               }
             },
             {

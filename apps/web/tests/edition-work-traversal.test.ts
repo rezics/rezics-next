@@ -141,6 +141,7 @@ test('creator-to-Works continues each current configured role independently with
   const before = structuredClone(initial);
   for (const node of ['author', 'illustrator']) {
     const result = group(initial, node).result.body as { next: string };
+    expect(result.next).toBe(`fixture-${node}-next`);
     const input = {
       subject: traversalSubjects.creator.id,
       locale: 'en',
