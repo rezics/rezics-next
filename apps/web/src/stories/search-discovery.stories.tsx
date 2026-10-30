@@ -12,10 +12,11 @@ export const MixedCards: Story = {
   play: async (context) => {
     await pageReady(context);
     const main = within(context.canvasElement).getByRole('main');
+    await within(main).findByText('Mira Reading Room');
     await expect(main.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(4);
     const canvas = within(context.canvasElement);
     if (window.matchMedia('(max-width: 767px)').matches)
-      await userEvent.click(canvas.getByRole('button', { name: m.search_label(), exact: true }));
+      await userEvent.click(canvas.getByRole('button', { name: m.search_label() }));
     else await userEvent.click(canvas.getByRole('combobox', { name: m.search_label() }));
     const input = canvas.getByRole('combobox', { name: m.search_label() });
     await userEvent.clear(input);

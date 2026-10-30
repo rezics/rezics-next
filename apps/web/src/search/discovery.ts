@@ -15,8 +15,8 @@ const cover = v.object({
   credit: v.nullable(
     v.object({
       rightsHolder: v.string(),
-      via: v.optional(v.object({ name: v.string(), url: v.string() })),
-      license: v.optional(v.string()),
+      via: v.exactOptional(v.object({ name: v.string(), url: v.string() })),
+      license: v.exactOptional(v.string()),
     }),
   ),
 });

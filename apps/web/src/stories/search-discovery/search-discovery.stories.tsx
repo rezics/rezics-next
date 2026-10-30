@@ -36,7 +36,7 @@ export const Mixed: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('listitem')).toHaveLength(4);
     const account = canvasElement.querySelector<HTMLElement>('[data-discovery-account]')!;
-    const link = within(account).getByRole('link', { name: 'Mira', exact: true });
+    const link = within(account).getByRole('link', { name: 'Mira' });
     await expect(link).toHaveAttribute('href', `/${getLocale()}/@mira`);
     link.focus();
     await userEvent.tab();
@@ -104,7 +104,7 @@ export const CurrentLinkRefusal: Story = {
   args: { state: { status: 'ready', page: currentLinkRefusal() } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'Mira', exact: true })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Mira' })).toBeVisible();
     await expect(canvas.queryByRole('link')).toBeNull();
     await userEvent.tab();
     await expect(canvasElement.querySelector('a:focus')).toBeNull();

@@ -86,10 +86,10 @@ export function currentLinkRefusal(): DiscoveryPage {
   const result = structuredClone(discoveryExample);
   result.hits = result.hits
     .filter((hit) => hit.summary.kind === 'account')
-    .map((hit) => {
-      if (hit.summary.kind !== 'account') return hit;
+    .map<DiscoveryPage['hits'][number]>((hit) => {
+      if (hit.summary.kind !== 'account' || hit.key.owner !== 'accounts') return hit;
       return {
-        ...hit,
+        key: hit.key,
         summary: { ...hit.summary, value: { ...hit.summary.value, handle: null, verifiedAgent: null } },
       };
     });
