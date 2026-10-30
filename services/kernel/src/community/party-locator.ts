@@ -77,7 +77,7 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
         return source.run(client, {
           route,
           id,
-          realm: data.realmId,
+          realm: ownerId,
           kind,
           target: data.accountId ?? null,
           at: data.at ?? null,

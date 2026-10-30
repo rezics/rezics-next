@@ -368,6 +368,8 @@ function transition(
       if (state === 'removed' && !current) throw new GrantDeniedError();
       // Existing discovery triggers append the same-home epoch change with the executor's real transaction.
       bindRealmDiscoveryCommand(tx);
+      const recordedRole = current ?? row.remover_role;
+      if (recordedRole === null) throw new GrantDeniedError();
       const params = {
         ...resource,
         head: body.expectedHead,
@@ -375,7 +377,7 @@ function transition(
         state,
         at: authoritativeTimeValue(command.time),
         actor: actor.accountId,
-        role: current ?? row.remover_role,
+        role: recordedRole,
         reason: body.reason,
       };
       const [changed] = body.kind === 'space' ? await writeSpace.run(tx, params) : await writeRealm.run(tx, params);

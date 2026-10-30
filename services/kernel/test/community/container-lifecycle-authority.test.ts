@@ -5,6 +5,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { restoreContainer, type ContainerKind } from '../../src/community/container-lifecycle.ts';
 import {
   createNativeContentSystemWithWriteRateOverrides,
@@ -130,7 +131,7 @@ test('platform restoration uses the installed exact Global action, independently
       pool: system.database.pool, access: derived, routeKey: system.routeKey, clock: () => new Date(current),
     }, platform().actor, {
       kind, id: target.id, expectedHead: target.head, expectedVersion: removed.version,
-    }, { deadline: Date.now() + 30_000, idempotencyKey: crypto.randomUUID() })).rejects.toThrow();
+    }, { deadline: Date.now() + 30_000, idempotencyKey: crypto.randomUUID() })).rejects.toBeInstanceOf(GrantDeniedError);
     await seedGovernanceAuthority(system.database.pool, 0, GLOBAL_CONTEXT, platform().actor.accountId,
       [`${kind}:restore`]);
     expect((await change(platform(), removed, 'restoration')).status).toBe(200);
