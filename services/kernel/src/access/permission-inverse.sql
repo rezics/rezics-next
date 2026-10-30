@@ -20,7 +20,7 @@ LEFT JOIN LATERAL (
   FROM (VALUES ('organization'), ('realm')) AS k(kind)
   CROSS JOIN LATERAL (
     SELECT kind, group_id FROM access.membership_inverse
-    WHERE route = c.route AND account_id = c.account_id AND kind = k.kind
+    WHERE route = m.route AND account_id = m.account_id AND kind = k.kind
     ORDER BY group_id
     OFFSET 0
   ) membership
