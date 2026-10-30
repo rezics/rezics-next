@@ -96,9 +96,7 @@ export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 
 }
 
 /** The subject read planned for this page, when that read succeeded. */
-export function subjectBody(
-  page: SubjectPageData,
-):
+export function subjectBody(page: SubjectPageData):
   | {
       subject: Subject;
       account?: SubjectRead['account'];
