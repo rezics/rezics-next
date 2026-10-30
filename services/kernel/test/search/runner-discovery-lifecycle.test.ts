@@ -212,7 +212,7 @@ async function setup(history: number) {
   for (const generation of [1, 2, 3]) {
     await admin.query(
       `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
-       SELECT partition_no, $1, epoch, position FROM core.partition`,
+       SELECT partition_no, $1, CASE WHEN position = 0 THEN NULL ELSE epoch END, position FROM core.partition`,
       [consumer(generation)],
     );
   }
@@ -328,6 +328,7 @@ for (const history of [64, 512, 4096]) {
         `bulk ${index(2)}`,
       ]);
       expect(f.sql.checkpoints - checkpoints).toBe(2);
+      expect(f.sql.scans - scans).toBe(2);
       console.info(
         'native runner history',
         JSON.stringify({ history, metadata: 4, source: 2, bulk: 2, checkpoints: 2 }),
@@ -505,4 +506,68 @@ test('failed delivery and concurrent refresh/resume recover using one current ge
     expect(f.calls.filter((call) => call === `bulk ${index(2)}`)).toHaveLength(1);
     expect(f.calls.filter((call) => call.startsWith('source '))).toHaveLength(3);
   });
+});
+
+test('a later pause cancels queued resume and paused or stopped runners own no scheduled ticks', async () => {
+  const scheduled = new Set<ReturnType<typeof setTimeout>>();
+  const originalSet = globalThis.setTimeout;
+  const originalClear = globalThis.clearTimeout;
+  // Keep real timers; observe only the fixture's two 60-second schedules, without advancing a fake clock.
+  globalThis.setTimeout = new Proxy(originalSet, {
+    apply(target, receiver, args: unknown[]) {
+      const timer = Reflect.apply(target, receiver, args) as ReturnType<typeof setTimeout>;
+      if (args[1] === 60_000) scheduled.add(timer);
+      return timer;
+    },
+  });
+  globalThis.clearTimeout = new Proxy(originalClear, {
+    apply(target, receiver, args: unknown[]) {
+      scheduled.delete(args[0] as ReturnType<typeof setTimeout>);
+      return Reflect.apply(target, receiver, args);
+    },
+  });
+  try {
+    await fixture(async (f) => {
+      expect(scheduled.size).toBe(0);
+      const position = await f.append(8);
+      const source = f.holdSource('cancelled-resume');
+      f.runner.resume();
+      await bounded(source.reached, 'cancelled resume Source');
+      const first = f.runner.pause();
+      f.runner.resume();
+      const last = f.runner.pause();
+      await pending(first, f);
+      await pending(last, f);
+      source.release();
+      await bounded(Promise.all([first, last]), 'repeated pause');
+      expect(scheduled.size).toBe(0);
+      expect(await f.checkpoint(1)).toBe(position);
+      const next = await f.append(9);
+      const calls = f.calls.length;
+      const scans = f.sql.scans;
+      await f.runner.refresh();
+      expect(f.calls.slice(calls)).toEqual([`GET ${resolvePath}`, `GET /${index(1)}/_mapping`]);
+      expect(f.sql.scans).toBe(scans);
+      expect(await f.checkpoint(1)).toBe(position);
+      expect(scheduled.size).toBe(0);
+      const bulk = f.holdBulk(1, 'explicit-resume');
+      f.runner.resume();
+      f.runner.resume();
+      await bounded(bulk.reached, 'explicit resume bulk');
+      const closing = f.runner.stop();
+      bulk.release();
+      await bounded(closing, 'scheduled runner stop');
+      expect(await f.checkpoint(1)).toBe(next);
+      expect(scheduled.size).toBe(0);
+      const stoppedCalls = [...f.calls];
+      f.runner.resume();
+      await f.runner.refresh();
+      await f.runner.stop();
+      expect(f.calls).toEqual(stoppedCalls);
+      expect(scheduled.size).toBe(0);
+    });
+  } finally {
+    globalThis.setTimeout = originalSet;
+    globalThis.clearTimeout = originalClear;
+  }
 });
