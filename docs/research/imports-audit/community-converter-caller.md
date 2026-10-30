@@ -76,12 +76,12 @@ no media calls. The captured bundled catalogue is
 
 Exact create-receipt transaction anchors in that evidence line:
 
-| Source | Native subject | Create receipt transaction | Accepted source digest |
-| --- | --- | --- | --- |
-| Bangumi | `01a18d40-7ae1-772b-95eb-2f1e8968ebcb` | `01a18d40-7adf-76f5-815b-1e770d3c7b69` | `48f702e557b4825e1719d043374ddbf93d3cbe6a24abe7841d9a4ade564dea98` |
-| VNDB | `01a18d40-7cc0-7232-881b-01570f96975c` | `01a18d40-7cc0-7231-bf9e-b23abb0a44c5` | `2e6be9cee2be365748e3c7fdbd8d948ead443ebc6f4cbe5b6216185445b625e0` |
+| Source       | Native subject                         | Create receipt transaction             | Accepted source digest                                             |
+| ------------ | -------------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| Bangumi      | `01a18d40-7ae1-772b-95eb-2f1e8968ebcb` | `01a18d40-7adf-76f5-815b-1e770d3c7b69` | `48f702e557b4825e1719d043374ddbf93d3cbe6a24abe7841d9a4ade564dea98` |
+| VNDB         | `01a18d40-7cc0-7232-881b-01570f96975c` | `01a18d40-7cc0-7231-bf9e-b23abb0a44c5` | `2e6be9cee2be365748e3c7fdbd8d948ead443ebc6f4cbe5b6216185445b625e0` |
 | Open Library | `01a18d40-7ea3-72ae-9c60-834d1286deb5` | `01a18d40-7ea3-72ad-bdc1-b4406f0a7621` | `8ae945d072b4eedbc65d006f79e3d9d7337d698c89e77d3009a11210061c98b1` |
-| Wikidata | `01a18d40-8003-70ab-9488-e0b5e62a8919` | `01a18d40-8003-70aa-b960-77b21d7f9063` | `b7c8313cc3dfcc7f7607694469b53860004fed95ce2872623ee33d55d7f98782` |
+| Wikidata     | `01a18d40-8003-70ab-9488-e0b5e62a8919` | `01a18d40-8003-70aa-b960-77b21d7f9063` | `b7c8313cc3dfcc7f7607694469b53860004fed95ce2872623ee33d55d7f98782` |
 
 Local proof is the focused
 [`public-bulk-example.test.ts`](../../../packages/conversion/tests/public-bulk-example.test.ts).
