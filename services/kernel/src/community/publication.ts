@@ -8,6 +8,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
+  mintReadTime,
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
@@ -20,6 +21,7 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
 import { realmReadEligibility } from './realm.ts';
+import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
 import { realmGovernanceAuthorization } from './realm-continuity.ts';
 import realmActive from './publication-realm.sql';
 import insertRecord from './publication-insert.sql';
@@ -347,12 +349,26 @@ export async function readPublication(
   if (route === null || routeOf(subjectId) === null || !open(context.deadline)) return null;
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
+  const before = await withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    return readContainerBinding(bounded, { realmId, subjectId, at });
+  });
+  if (!before || before.publicationId === null) return null;
   const subjectCheck = await prepareSubject(deps, context.actor, subjectId, context.deadline);
-  return snapshot(deps.pool, context.deadline, async (client) => {
+  const result = await snapshot(deps.pool, context.deadline, async (client) => {
     if (!(await realmCheck(client))) return null;
     const head = await readHead.run(client, { route, realm: realmId, subject: subjectId });
     if (!head?.publishedAt || !(await subjectCheck(client))) return null;
     return view(realmId, subjectId, head.publicationId, head.publishedAt);
+  });
+  if (!result || result.publicationId !== before.publicationId) return null;
+  // The earlier repeatable-read snapshot is released before the current disclosure fence.
+  return withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    if (!(await realmCheck(bounded, at)) || !(await revalidateContainerBinding(bounded, before, at))) return null;
+    return result;
   });
 }
 
@@ -395,6 +411,12 @@ export async function listPublications(
   }
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
+  const before = await withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    return readContainerBinding(bounded, { realmId, at });
+  });
+  if (!before) return null;
   // One keyset seek chooses the window. Disclosure then revalidates each head at T.
   const fetched = await withConnection(deps.pool, (client) =>
     within(context.deadline, () =>
@@ -406,7 +428,7 @@ export async function listPublications(
   const subjects = new Map<string, AccessCheck>();
   for (const row of window)
     subjects.set(row.subjectId, await prepareSubject(deps, context.actor, row.subjectId, context.deadline));
-  return snapshot(deps.pool, context.deadline, async (client) => {
+  const result = await snapshot(deps.pool, context.deadline, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition || !(await realmCheck(client))) return null;
     if (cursorEpoch !== null && cursorEpoch !== partition.epoch) throw new PublicationCursorError('stale');
@@ -426,5 +448,17 @@ export async function listPublications(
           })
         : null;
     return { items, next };
+  });
+  if (!result) return null;
+  return withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    // At most the fixed page limit of exact publication-head keys; never a history scan.
+    for (const item of result.items) {
+      const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
+      if (head?.publicationId !== item.publicationId) return null;
+    }
+    const at = await mintReadTime(bounded, deps.clock);
+    if (!(await realmCheck(bounded, at)) || !(await revalidateContainerBinding(bounded, before, at))) return null;
+    return result;
   });
 }

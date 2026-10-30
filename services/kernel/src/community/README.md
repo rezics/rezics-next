@@ -544,6 +544,8 @@ A removed Space also hides its carried Realm through direct Realm reads, partici
 A removed Realm or host never selects a Global fallback. Ordinary Realm eligibility binds preparation to the current
 Realm/Space heads and lifecycle versions and repeats that anchor at final validation, rejecting a remove/restore cycle
 while a reader is in flight. Space viewer reads repeat their own anchor after the separately authorized carried Realm read.
+Publication point/page reads release their source snapshot, then check current publication-head keys and the retained
+lifecycle/binding anchor immediately before disclosure; a stale preparation returns unavailable.
 
 `ContainerBindingSchema`, `ContainerBinding`, `readContainerBinding(client,{realmId,subjectId?,at})` and
 `revalidateContainerBinding(client,expected,at)` are the delivered Semantic data port. Its closed version-1 shape is

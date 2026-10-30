@@ -253,6 +253,7 @@ function transition(
   if (
     routeOf(body.expectedHead) !== resource.route ||
     !/^(0|[1-9][0-9]{0,18})$/.test(body.expectedVersion) ||
+    BigInt(body.expectedVersion) > 9223372036854775807n ||
     (state === 'removed' &&
       (typeof body.reason !== 'string' ||
         !body.reason.trim() ||
