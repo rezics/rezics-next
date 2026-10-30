@@ -41,3 +41,25 @@ silently fall back to Global; the existing Realm resolver still owns that native
 The session BFF preserves caller authorization and continuity and marks responses private/no-store. The existing
 safe change-detail adapter can explain the selected statement’s exact revision when supplied and matched; its
 currently absent native binding stays explicitly unavailable. No historical snapshot or write authority is assumed.
+
+## Browser flow: subject contributions
+
+The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies
+keyboard navigation, Escape/focus return, and the phone bottom sheet with its localized Back control. Initial
+creation, editing this subject, review, and read-only Sources/history occupy separate groups. The entry consumes
+the existing native action components and their shared destination descriptors, preserving the caller's actual
+Recipe and publication conditions and unrelated native actions. It introduces no second search or editor engine.
+
+The review link uses the exact current Context returned by the subject/page read; without that identity it offers
+no guessed Context. Relations retain the current Realm address and its native unsupported-context explanation.
+Sources and Changes remain ordinary readers. Signed-out editing/review navigation carries the exact chosen
+localized destination, including Context or work query, through the existing session sign-in return parameter.
+This is navigation, not a client permission model: native pages and BFF responses still decide current access,
+availability, disclosure and action authority. Initial creation remains separate from later proposals and term
+PATCH, and citations never become ingestion Source metadata or a permission grant.
+
+Navigation adds no producer call or per-row hydration read. Existing forms, readers, drafts, concurrency and request
+keys remain with their owning components. Terms mutation and detailed Changes producers still require their actual
+native bindings; a menu link establishes neither availability nor a successful write. The Contribute stories use
+actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
+interaction execution and phone/desktop visual review remain integration work.

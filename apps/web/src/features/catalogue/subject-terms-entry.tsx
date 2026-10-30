@@ -1,15 +1,11 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { m } from '../../paraglide/messages.js';
-import { subjectHref } from '../../subject/subject-href';
+import { catalogueEntries } from './catalogue-entry';
 
-/** Navigation offers an attempt; only the current native terms response decides eligibility. */
 export function SubjectTermsEntry({ id, label, locale }: { id: string; label: string; locale: string }) {
+  const entry = catalogueEntries.terms({ id, label, locale });
   return (
-    <a
-      href={`${subjectHref({ id, label }, locale).href}/terms`}
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-    >
-      {m.catalogue_terms_title({}, { locale: locale as never })}
+    <a href={entry.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      {entry.label}
     </a>
   );
 }

@@ -1,3 +1,4 @@
+import { EditorialEntry } from '../catalogue/editorial-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
@@ -42,6 +43,8 @@ const PRECISION_ISO = { 9: 4, 10: 7, 11: 10 } as const;
 export type SubjectFrameData = {
   id: string;
   type: string;
+  /** Exact current Context from the same native subject/page read. */
+  context?: string | undefined;
   /** The title in the reader's language; empty for a subject with no label at all. */
   title: { text: string; lang?: string | undefined };
   /** The title the subject was first written under, when it differs from the one shown. */
@@ -87,6 +90,7 @@ export function subjectFrame(overview: SubjectPageData, locale: string): Subject
   return {
     id: subject.id,
     type: subject.type,
+    context: overview.context?.id ?? subject.context,
     title: label,
     ...(first && label.text && first.text !== label.text ? { original: first } : {}),
     ...(date ? { date } : {}),
@@ -252,6 +256,7 @@ export function SubjectFrame({
           )}
         </div>
         <div data-slot="actions">
+          <EditorialEntry id={frame.id} label={title} locale={locale} context={frame.context} realm={realm}>
           {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
           <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
@@ -259,6 +264,7 @@ export function SubjectFrame({
           {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
           <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
           <SubjectChangesLink id={frame.id} title={title} locale={locale} />
+          </EditorialEntry>
         </div>
       </header>
       {navigation ?? (

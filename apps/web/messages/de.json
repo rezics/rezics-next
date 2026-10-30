@@ -1,4 +1,10 @@
 {
+  "contribute_title": "Mitwirken",
+  "contribute_create": "Neues Objekt anlegen",
+  "contribute_edit": "Dieses Objekt bearbeiten",
+  "contribute_review": "Beiträge prüfen",
+  "contribute_read": "Quellen und Verlauf",
+  "contribute_back": "Zurück",
   "prq_title": "Importprüfung",
   "prq_help": "Vorschläge eines Anbieters im gewählten Kontext prüfen. Zustimmung und Auswahl sind getrennt.",
   "prq_source": "Anbieter",

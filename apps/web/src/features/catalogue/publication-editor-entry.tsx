@@ -1,14 +1,11 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { m } from '../../paraglide/messages.js';
+import { catalogueEntries } from './catalogue-entry';
 
-/** The editor resolves the exact work and emitted profiles before offering a creation form. */
 export function PublicationEditorEntry({ work, locale }: { work: string; locale: string }) {
+  const entry = catalogueEntries.publication({ work, locale });
   return (
-    <a
-      href={`/${locale}/catalogue/publication?work=${encodeURIComponent(work)}`}
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-    >
-      {m.publication_add({}, { locale: locale as never })}
+    <a href={entry.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      {entry.label}
     </a>
   );
 }

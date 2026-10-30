@@ -1,4 +1,10 @@
 {
+  "contribute_title": "編集に参加",
+  "contribute_create": "新しい項目を作成",
+  "contribute_edit": "この項目を編集",
+  "contribute_review": "投稿をレビュー",
+  "contribute_read": "出典と履歴",
+  "contribute_back": "戻る",
   "prq_title": "インポートの確認",
   "prq_help": "提供元とコンテキストを選んで提案を確認します。承認と採用は別の操作です。",
   "prq_source": "提供元",

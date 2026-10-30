@@ -1,4 +1,10 @@
 {
+  "contribute_title": "Contribuir",
+  "contribute_create": "Crear un objeto nuevo",
+  "contribute_edit": "Editar este objeto",
+  "contribute_review": "Revisar contribuciones",
+  "contribute_read": "Fuentes e historial",
+  "contribute_back": "Atrás",
   "prq_title": "Revisión de importaciones",
   "prq_help": "Revisa sugerencias de un proveedor en el contexto elegido. Aceptar y seleccionar son acciones distintas.",
   "prq_source": "Proveedor",

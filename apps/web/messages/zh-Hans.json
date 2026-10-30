@@ -1,4 +1,10 @@
 {
+  "contribute_title": "参与贡献",
+  "contribute_create": "创建新条目",
+  "contribute_edit": "编辑此条目",
+  "contribute_review": "审核贡献",
+  "contribute_read": "来源与历史",
+  "contribute_back": "返回",
   "prq_title": "导入审核队列",
   "prq_help": "按来源和上下文审核建议。接受建议与选用内容是两个独立操作。",
   "prq_source": "来源",

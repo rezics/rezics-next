@@ -1,4 +1,10 @@
 {
+  "contribute_title": "參與貢獻",
+  "contribute_create": "建立新條目",
+  "contribute_edit": "編輯此條目",
+  "contribute_review": "審核貢獻",
+  "contribute_read": "來源與歷史",
+  "contribute_back": "返回",
   "prq_title": "匯入審核佇列",
   "prq_help": "依來源與情境審核建議。接受建議與選用內容是兩個獨立操作。",
   "prq_source": "來源",

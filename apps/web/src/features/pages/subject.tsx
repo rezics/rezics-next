@@ -1,3 +1,4 @@
+import { EditorialEntry } from '../catalogue/editorial-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import type { PublicFigure } from './subject-ratings';
@@ -379,6 +380,13 @@ export function SubjectPage({
     read && !page.account ? (
       <>
         {existingActions}
+        <EditorialEntry
+          id={read.subject.id}
+          label={subjectPageTitle(page, locale)}
+          locale={locale}
+          context={page.context?.id ?? read.subject.context}
+          realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
+        >
         {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
         <CreateSubjectEntry locale={locale} />
         <AuthoredFieldEntry id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
@@ -388,6 +396,7 @@ export function SubjectPage({
         )}
         <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
         <SubjectChangesLink id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
+        </EditorialEntry>
       </>
     ) : (
       existingActions

@@ -1,4 +1,10 @@
 {
+  "contribute_title": "Contribute",
+  "contribute_create": "Create a new subject",
+  "contribute_edit": "Edit this subject",
+  "contribute_review": "Review contributions",
+  "contribute_read": "Sources and history",
+  "contribute_back": "Back",
   "creator_editions_heading": "Your editions",
   "creator_editions_intro": "Return to a draft or manage the next step for a fixed, published edition.",
   "creator_editions_create": "Create an edition",

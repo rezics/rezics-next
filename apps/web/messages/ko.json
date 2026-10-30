@@ -1,4 +1,10 @@
 {
+  "contribute_title": "기여하기",
+  "contribute_create": "새 항목 만들기",
+  "contribute_edit": "이 항목 편집",
+  "contribute_review": "기여 검토",
+  "contribute_read": "출처 및 변경 이력",
+  "contribute_back": "뒤로",
   "prq_title": "가져오기 검토 대기열",
   "prq_help": "제공자와 컨텍스트를 선택해 제안을 검토하세요. 승인과 채택은 별도입니다.",
   "prq_source": "제공자",

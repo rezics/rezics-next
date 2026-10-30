@@ -1,0 +1,77 @@
+import { m } from '../../paraglide/messages.js';
+import { subjectHref } from '../../subject/subject-href';
+
+export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
+export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
+type Locale = { locale: string };
+type Subject = Locale & { id: string; label: string };
+const options = (locale: string) => ({ locale: locale as never });
+const subject = ({ id, label, locale }: Subject) => subjectHref({ id, label }, locale).href;
+
+/** Shared destinations for standalone native entries and their grouped navigation. No capability decisions. */
+export const catalogueEntries = {
+  create: ({ locale }: Locale): CatalogueEntry => ({
+    group: 'create',
+    label: m.catalogue_create_title({}, options(locale)),
+    href: `/${locale}/catalogue/new`,
+  }),
+  authored: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
+    group: 'edit',
+    label: m.authored_title({}, options(locale)),
+    href: `${subject({ id, label: title, locale })}/authored`,
+  }),
+  facts: (address: Subject): CatalogueEntry => ({
+    group: 'edit',
+    label: m.facts_title({}, options(address.locale)),
+    href: `${subject(address)}/edit`,
+  }),
+  terms: (address: Subject): CatalogueEntry => ({
+    group: 'edit',
+    label: m.catalogue_terms_title({}, options(address.locale)),
+    href: `${subject(address)}/terms`,
+  }),
+  recipe: ({ id, label, locale }: Locale & { id?: string; label?: string }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: id ? m.recipe_edit({}, options(locale)) : m.recipe_title({}, options(locale)),
+    href: id ? `${subject({ id, label: label ?? '', locale })}/recipe` : `/${locale}/catalogue/recipe`,
+  }),
+  publication: ({ work, locale }: Locale & { work: string }): CatalogueEntry => ({
+    group: 'create',
+    label: m.publication_add({}, options(locale)),
+    href: `/${locale}/catalogue/publication?work=${encodeURIComponent(work)}`,
+  }),
+  changes: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
+    group: 'read',
+    label: m.changes_title({}, options(locale)),
+    href: `${subject({ id, label: title, locale })}/changes`,
+  }),
+};
+
+/** Navigation may request sign-in; the native page still owns every current availability/authority decision. */
+export function contributionHref(entry: CatalogueEntry, signedOut: boolean): string {
+  return signedOut && entry.group !== 'read' ? `/auth/sign-in?return_to=${encodeURIComponent(entry.href)}` : entry.href;
+}
+
+/** Exact current Context and Realm addresses come from the page read, never Source provenance or a grant guess. */
+export function subjectContributionEntries(
+  address: Subject & { context?: string | undefined; realm?: string | undefined },
+): CatalogueEntry[] {
+  const base = subject(address);
+  return [
+    {
+      group: 'edit',
+      label: m.relation_title({}, options(address.locale)),
+      href: `${base}/relation-edit${address.realm ? `?${new URLSearchParams({ realm: address.realm })}` : ''}`,
+    },
+    ...(address.context
+      ? [
+          {
+            group: 'review' as const,
+            label: m.context_title({}, options(address.locale)),
+            href: `${base}/context-review?${new URLSearchParams({ context: address.context })}`,
+          },
+        ]
+      : []),
+    { group: 'read', label: m.subject_sources({}, options(address.locale)), href: `${base}/sources` },
+  ];
+}
