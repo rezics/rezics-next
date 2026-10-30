@@ -170,10 +170,12 @@ export async function addCollectionMemberRecord(
   const session = await writeSession(request, sessionEnv);
   if (!asSession(session)) return session;
   try {
-    const result = await client.collections({ collectionId: input.collectionId }).members.post(
-      { subjectId: input.subjectId, ...(input.note === null ? {} : { note: input.note }) },
-      { headers: kernelHeaders(session.authorization, input.idempotencyKey) as never },
-    );
+    const result = await client
+      .collections({ collectionId: input.collectionId })
+      .members.post(
+        { subjectId: input.subjectId, ...(input.note === null ? {} : { note: input.note }) },
+        { headers: kernelHeaders(session.authorization, input.idempotencyKey) as never },
+      );
     return fromKernel(result, createdMemberId(result.data));
   } catch (error) {
     return refused(error);

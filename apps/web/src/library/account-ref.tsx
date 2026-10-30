@@ -18,14 +18,21 @@ export function AccountRef({ account, avatar = false }: { account: AccountRefere
   if (!account)
     return (
       <span className="inline-flex items-center gap-2">
-        {avatar ? <span aria-hidden="true" className="grid size-9 place-items-center rounded-full bg-muted text-xs">?</span> : null}
+        {avatar ? (
+          <span aria-hidden="true" className="grid size-9 place-items-center rounded-full bg-muted text-xs">
+            ?
+          </span>
+        ) : null}
         <span>{m.library_account_deleted()}</span>
       </span>
     );
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
       {avatar ? (
-        <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        <span
+          aria-hidden="true"
+          className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+        >
           {initials(account)}
         </span>
       ) : null}
