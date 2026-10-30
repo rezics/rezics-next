@@ -127,6 +127,7 @@ function withoutCounts(response: FacetsResponse): FacetsResponse {
   return {
     facets: response.facets.map((facet) => ({
       property: facet.property,
+      next: facet.next,
       values: facet.values.map((value) => ({ value: value.value, labels: value.labels })),
     })),
     as_of: response.as_of,
