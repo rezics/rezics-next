@@ -541,7 +541,6 @@ export async function readPage(options: {
       return response;
     });
   };
-  // Resolve the dependency first and release its owner connection before document.get.
   if (descriptor) {
     const subject: PageRead = {
       kind: 'subject',
@@ -591,7 +590,6 @@ export async function readPage(options: {
       }
     }
   };
-  // Both probes and planned reads use public hydration while retaining caller credentials and authority.
   await withPublicStatementReader(() =>
     Promise.all(Array.from({ length: Math.min(4, distinctReads.length) }, () => worker())),
   );
@@ -604,7 +602,6 @@ export async function readPage(options: {
   }
 
   const documents: Record<string, unknown> = {};
-  // Requests are deduplicated by effective native key, then admitted separately against every exact binding.
   for (const id of documentIds) {
     budget.charge(1);
     const headers = new Headers();

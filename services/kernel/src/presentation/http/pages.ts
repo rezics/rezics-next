@@ -434,10 +434,12 @@ export function pageRoutes<App>(
         ...(selected
           ? {
               context: selected.context,
-              finalGuard: async () => {
+              finalGuard: async (readSession: string | null) => {
+                const incoming = new Request(request, { headers: request.headers });
+                if (readSession !== null) incoming.headers.set(SESSION_HEADER, readSession);
                 const current = await readPage({
                   dispatch,
-                  incoming: request,
+                  incoming,
                   reads: { guard: { kind: 'subject', id: subject!.id, context: selected.context.id } },
                   session,
                   budget,
@@ -502,7 +504,7 @@ async function pageAnswer(input: {
   languages?: readonly string[];
   context?: SelectedContext;
   continuation?: PageContinuation;
-  finalGuard?: () => Promise<string | null>;
+  finalGuard?: (session: string | null) => Promise<string | null>;
 }): Promise<Response> {
   // The probes already ran; plan once and run what they did not answer in one call.
   const plan = (() => {
@@ -566,7 +568,12 @@ async function pageAnswer(input: {
   let readSession = mergedSession(input.session.ring, input.session.scope, input.probeSession, page.session);
 
   if (input.finalGuard)
-    readSession = mergedSession(input.session.ring, input.session.scope, readSession, await input.finalGuard());
+    readSession = mergedSession(
+      input.session.ring,
+      input.session.scope,
+      readSession,
+      await input.finalGuard(readSession),
+    );
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     let result = page.results[key];
