@@ -1,3 +1,5 @@
+import { newId } from '../../src/route/route.ts';
+import { realmViewerActionResource } from '../../src/community/realm.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { readResourceGrants } from '../../src/access/grant-read.ts';
@@ -20,6 +22,40 @@ let commands: ReturnType<typeof createGrantCommands>;
 beforeAll(async () => {
   f = await grantFixture(actions);
   commands = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
+  const client = await f.reader.connect();
+  const space = newId(f.resource.route);
+  const revision = newId(f.resource.route);
+  const spaceRevision = newId(f.resource.route);
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+      VALUES ($1,$2,'active',$3,'2020-01-01',$4)`,
+      [f.resource.route, space, spaceRevision, f.actor],
+    );
+    await client.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+      VALUES ($1,$2,$3,'Grant read Space','','2020-01-01',$4)`,
+      [f.resource.route, space, spaceRevision, f.actor],
+    );
+    await client.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+      VALUES ($1,$2,$3,'active','protected',$4,$5,'2020-01-01',$6)`,
+      [f.resource.route, f.resource.id, space, newId(f.resource.route), revision, f.actor],
+    );
+    await client.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+      SELECT route,realm_id,head_revision_id,'Grant read Realm','','protected',context_id,created_at,creator
+      FROM community.realm WHERE route=$1 AND realm_id=$2`,
+      [f.resource.route, f.resource.id],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }, 30_000);
 beforeEach(async () => {
   await f.reset();
@@ -50,10 +86,7 @@ async function read(port: typeof commands | null = commands, account = f.actor) 
       access: f.access,
       clock: () => new Date(),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
-      // Fixture-owned existence read, with production Access and actual native grant writer.
-      resources: new Map([
-        ['community.realm', { readAction: 'realm:read', read: async () => ({ [f.resource.id]: false }) }],
-      ]),
+      resources: new Map([['community.realm', realmViewerActionResource]]),
       ...(port ? { commands: port } : {}),
     },
     context.actor,
