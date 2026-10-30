@@ -24,7 +24,7 @@ const native = (leaf: OwnerLeaf): CurrentNativeLeaf => ({ kind: 'owner', leaf })
 
 test('mixed native plans deduplicate exact pins and preserve unknown through the shared Boolean interpreter', () => {
   const equivalent: OwnerLeaf = {
-    owner: { state: { in: ['finished', 'planned', 'finished'], stateSetId: 'reading', profileId: 'book' } },
+    owner: { state: { in: ['finished', 'planned'], stateSetId: 'reading', profileId: 'book' } },
   };
   const filter = admitFilter(
     parseFilter({ or: [{ and: [book, { not: state }] }, { and: [equivalent, { saved: 'owner/present' }] }] }),
