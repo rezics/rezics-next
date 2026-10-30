@@ -114,6 +114,8 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   const endPools = () => (ending ??= Promise.all([...pools].map((pool) => pool.end())));
   let service;
   try {
+    // Service construction performs restore admission before signer creation.
+    // A refusal happens before workflows/maintenance register or a handler escapes.
     service = await createAuthService(options);
   } catch (error) {
     await endPools();

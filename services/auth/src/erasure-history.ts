@@ -57,10 +57,19 @@ export async function dischargeErasureSource(database: Pool, id: string, value: 
   });
 }
 /** One page/unit. Missing coverage, live consumers and unmapped copies stay pending. */
-export async function erasureHistoryPage(database: Pool, id: string): Promise<boolean> {
+export async function erasureHistoryPage(database: Pool, id: string, restoreGeneration?: string): Promise<boolean> {
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
-  if (!row || !barrier(row) || !row.native_completed_at || !row.consent_completed_at || !row.source_discharged_at)
-    return false;
+  if (!row || !barrier(row) || !row.source_discharged_at) return false;
+  if (restoreGeneration) {
+    const replay = (
+      await database.query(
+        `SELECT 1 FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2
+       AND native_completed_at IS NOT NULL AND consent_completed_at IS NOT NULL`,
+        [restoreGeneration, id],
+      )
+    ).rowCount;
+    if (!replay) return false;
+  } else if (!row.native_completed_at || !row.consent_completed_at) return false;
   // One account prefix, eight raw exact keys. Multiple roles never duplicate an
   // artifact's cleanup; removed scopes are bounded independently of its history.
   const page = (
@@ -87,6 +96,14 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
     )
   ).rowCount;
   if (!covered || row.native_role_version !== 1) return false;
+  if (restoreGeneration) {
+    await database.query(
+      `UPDATE auth_restore_replay SET copies_completed_at=COALESCE(copies_completed_at,clock_timestamp()),
+       pending_code='external-owner-pending' WHERE generation=$1 AND obligation_id=$2`,
+      [restoreGeneration, id],
+    );
+    return true;
+  }
   await database.query(
     `UPDATE auth_erasure SET copies_completed_at=COALESCE(copies_completed_at,clock_timestamp()),
     inventory_coverage='covered',pending_code='proof-submission' WHERE id=$1`,
@@ -97,6 +114,9 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
 /** Every Auth query has released its connection before any trusted kernel call.
  * A lost reply replays the same immutable tuple from permanent native progress. */
 export async function publishErasureProofs(database: Pool, ports: TrustedAccessPorts, id: string): Promise<number> {
+  // Source discharge already recovered from genuine original progress remains
+  // intact, but a restored copy cannot publish old completion as new closure.
+  if ((await database.query('SELECT 1 FROM auth_restore_generation LIMIT 1')).rowCount) return 0;
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
   if (!row) return 0;
   const root = barrier(row);

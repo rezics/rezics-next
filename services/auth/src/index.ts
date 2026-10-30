@@ -112,7 +112,18 @@ export type PasskeyEffect =
       registrationDigest: string;
     };
 
+export { AuthRestoreAdmissionError, importRestoredAuthProgress, replayRestoredAuthPage } from './restore-admission.ts';
+export type {
+  AuthRestoredGeneration,
+  AuthRestoreDatabaseOwner,
+  AuthRestoreInventory,
+  AuthRestoreNativeProgress,
+  AuthRestorePendingCode,
+} from './restore-admission.ts';
+
 export interface AuthServiceOptions {
+  /** Deployment declaration: reconciliation precedes even service construction. */
+  restoredGeneration?: import('./restore-admission.ts').AuthRestoredGeneration;
   database: Pool;
   issuer: string;
   audience: string;

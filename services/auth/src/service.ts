@@ -1,3 +1,4 @@
+import { requireRestoredAuthAdmission } from './restore-admission.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { emitAuthDiagnostic } from './diagnostics.ts';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
@@ -167,6 +168,7 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  await requireRestoredAuthAdmission(options.database, options.restoredGeneration);
   installNativeRoleProducer(options.database);
   await installNativeRoleCoverage(options.database);
   const { trustedAccess } = options;

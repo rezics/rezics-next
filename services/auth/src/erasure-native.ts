@@ -36,6 +36,9 @@ type Obligation = {
   user_deleted_at: Date | null;
   consent_completed_at: Date | null;
   native_role_version: number;
+  consent_due_at: Date | null;
+  restore_generation?: string;
+  user_replayed?: boolean;
 };
 type Store = { table: string; key: string; roles: string[]; client?: string; children?: string[] };
 // Order is the native foreign-key/consumer order. No payload is selected by this manifest.
@@ -389,8 +392,11 @@ async function checkpoint(
   update: { phase?: number; clientPhase?: number; after?: string; client?: string | null; code?: string },
 ) {
   await connection.query(
-    `UPDATE auth_erasure SET phase=$2,client_phase=$3,after_key=$4,client_id=$5,
-     pending_code=$6,revision=revision+1 WHERE id=$1`,
+    row.restore_generation
+      ? `UPDATE auth_restore_replay SET phase=$2,client_phase=$3,after_key=$4,client_id=$5,
+         pending_code=$6 WHERE obligation_id=$1 AND generation=$7`
+      : `UPDATE auth_erasure SET phase=$2,client_phase=$3,after_key=$4,client_id=$5,
+         pending_code=$6,revision=revision+1 WHERE id=$1`,
     [
       row.id,
       update.phase ?? row.phase,
@@ -398,6 +404,7 @@ async function checkpoint(
       update.after ?? '',
       update.client === undefined ? row.client_id : update.client,
       update.code ?? 'native',
+      ...(row.restore_generation ? [row.restore_generation] : []),
     ],
   );
 }
@@ -405,18 +412,46 @@ async function checkpoint(
 /** Exactly one native store/role or one client/store page per transaction. The
  * only input/output crossing workflow history is an opaque progress id/code.
  */
-export async function nativeErasurePage(pool: Pool, id: string, runtime?: NativeConsumerRuntime): Promise<ErasurePage> {
+export async function nativeErasurePage(
+  pool: Pool,
+  id: string,
+  runtime?: NativeConsumerRuntime,
+  restoreGeneration?: string,
+): Promise<ErasurePage> {
   let held: NativeConsumerLocator | undefined;
   const result = await transaction(pool, async (connection) => {
     const row = (await connection.query<Obligation>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!row) throw new Error('Auth erasure obligation missing');
+    if (restoreGeneration) {
+      const replay = (
+        await connection.query<{
+          phase: number;
+          after_key: string;
+          client_id: string | null;
+          client_phase: number;
+          user_replayed: boolean;
+        }>('SELECT * FROM auth_restore_replay WHERE generation=$1 AND obligation_id=$2 FOR UPDATE', [
+          restoreGeneration,
+          id,
+        ])
+      ).rows[0];
+      if (!replay) throw new Error('Auth restore original progress unavailable');
+      // Revisit reintroduced bytes without resetting the original source,
+      // approval, immutable proof, native cutoff or ordinary native cursor.
+      row.phase = replay.phase;
+      row.after_key = replay.after_key;
+      row.client_id = replay.client_id;
+      row.client_phase = replay.client_phase;
+      row.user_replayed = replay.user_replayed;
+      row.restore_generation = restoreGeneration;
+    }
     // Consent is the caller's durable user-deletion checkpoint, not a one-time
     // edge. Maintenance may have committed it before this caller's next page.
     // The caller must then release its native consumers so post-user request
     // draining can finish. The pending reason remains durable on the obligation.
     const answer = (state: ErasurePage['state'], code: string): ErasurePage => ({
       id,
-      state: row.user_deleted_at ? 'consent' : state,
+      state: row.user_deleted_at && !restoreGeneration ? 'consent' : state,
       code,
     });
     if (row.kernel_at && !row.source_discharged_at) return answer('pending', 'native-source');
@@ -435,7 +470,9 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       // the existing engine once, preserving T, applicability, source handoff,
       // user deletion and the original consent cutoff. No second erasure root.
       await connection.query(
-        `UPDATE auth_erasure SET native_role_version=1,
+        restoreGeneration
+          ? 'UPDATE auth_erasure SET native_role_version=1 WHERE id=$1'
+          : `UPDATE auth_erasure SET native_role_version=1,
         phase=0,after_key='',client_id=NULL,client_phase=0,native_completed_at=NULL WHERE id=$1`,
         [id],
       );
@@ -554,7 +591,7 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       await checkpoint(connection, row, { phase: row.phase + (counters.length ? 0 : 1) });
       return answer('more', 'counter');
     }
-    if (!row.user_deleted_at) {
+    if (!row.user_deleted_at || (restoreGeneration && !row.user_replayed)) {
       const user = await connection.query('SELECT id FROM "user" WHERE id=$1 FOR UPDATE', [row.account_id]);
       // Upgrade only the proved-empty legacy session range, keeping the native
       // session-erasure trigger and all immutable evidence guards enabled.
@@ -562,22 +599,40 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
         return answer('pending', 'native-child');
       // A marker beside a live user is stale, not the cutoff of this deletion.
       // Remove it before the native DELETE trigger establishes the real due time.
-      // Replays with user_deleted_at set never enter this branch.
-      if (user.rowCount)
+      // Ordinary retries with user_deleted_at set never enter this branch;
+      // a restored generation revisits the DELETE with its original cutoff.
+      if (user.rowCount && !row.user_deleted_at)
         await connection.query('DELETE FROM auth_consent_erasure WHERE account_id=$1', [row.account_id]);
       await connection.query('UPDATE "user" SET sessions_bounded=true WHERE id=$1', [row.account_id]);
       await connection.query('DELETE FROM "user" WHERE id=$1', [row.account_id]);
+      if (restoreGeneration && row.user_deleted_at) {
+        // A restored user DELETE may fire the native trigger again. Restore the
+        // genuine first cutoff in this same transaction; no new delay escapes.
+        if (!row.consent_due_at) throw new Error('Auth restore original consent cutoff unavailable');
+        await connection.query(
+          `INSERT INTO auth_consent_erasure(account_id,due_at)
+           SELECT account_id,consent_due_at FROM auth_erasure WHERE id=$1
+           ON CONFLICT(account_id) DO UPDATE SET due_at=EXCLUDED.due_at,after_client=''`,
+          [id],
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO auth_consent_erasure (account_id,due_at) VALUES ($1,clock_timestamp()+interval '310 seconds')
+           ON CONFLICT (account_id) DO NOTHING`,
+          [row.account_id],
+        );
+      }
       await connection.query(
-        `INSERT INTO auth_consent_erasure (account_id,due_at) VALUES ($1,clock_timestamp()+interval '310 seconds')
-         ON CONFLICT (account_id) DO NOTHING`,
-        [row.account_id],
-      );
-      await connection.query(
-        `UPDATE auth_erasure SET applicable=applicable OR $2 OR EXISTS (SELECT 1 FROM auth_consent WHERE account_id=$3) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_subject_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_human_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_operator_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_member_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_previous_operator_id=$3 LIMIT 1),inventory_completed_at=clock_timestamp(),user_deleted_at=clock_timestamp(),
-         consent_due_at=(SELECT due_at FROM auth_consent_erasure WHERE account_id=$3),pending_code='native-request',revision=revision+1
+        `UPDATE auth_erasure SET applicable=applicable OR $2 OR EXISTS (SELECT 1 FROM auth_consent WHERE account_id=$3) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_subject_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_human_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_operator_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_member_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_previous_operator_id=$3 LIMIT 1),inventory_completed_at=COALESCE(inventory_completed_at,clock_timestamp()),user_deleted_at=COALESCE(user_deleted_at,clock_timestamp()),
+         consent_due_at=COALESCE(consent_due_at,(SELECT due_at FROM auth_consent_erasure WHERE account_id=$3)),pending_code='native-request',revision=revision+1
          WHERE id=$1`,
         [id, !!user.rowCount, row.account_id],
       );
+      if (restoreGeneration)
+        await connection.query(
+          'UPDATE auth_restore_replay SET user_replayed=true WHERE generation=$1 AND obligation_id=$2',
+          [restoreGeneration, id],
+        );
       return answer('consent', 'consent');
     }
     const requestRoles = [
@@ -616,6 +671,45 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       return answer('more', 'native-request');
     }
     const covered = await nativeRoleCoverageComplete(connection);
+    if (restoreGeneration) {
+      // Same native consent store/client lock and original due evidence. This
+      // generation has its own completion even if a snapshot carried an older
+      // completed marker; no ordinary source completion is cleared or renewed.
+      if (!row.consent_due_at) return answer('pending', 'original-consent-cutoff');
+      const due = (
+        await connection.query<{ due: boolean }>(
+          'SELECT consent_due_at<=statement_timestamp() AS due FROM auth_erasure WHERE id=$1',
+          [id],
+        )
+      ).rows[0]!.due;
+      if (!due) return answer('pending', 'consent');
+      const consent = (
+        await connection.query<{ client_id: string | null }>(
+          `SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id
+         FROM auth_consent WHERE account_id=$1 ORDER BY client_id LIMIT 1`,
+          [row.account_id],
+        )
+      ).rows[0];
+      if (consent) {
+        if (consent.client_id === null) return answer('pending', 'locator-size');
+        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          `auth-client:${consent.client_id}`,
+        ]);
+        await connection.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+          row.account_id,
+          consent.client_id,
+        ]);
+        return answer('more', 'consent');
+      }
+      if (!covered || row.native_role_version !== 1) return answer('pending', 'native-role-coverage');
+      await connection.query(
+        `UPDATE auth_restore_replay SET native_completed_at=COALESCE(native_completed_at,clock_timestamp()),
+         consent_completed_at=COALESCE(consent_completed_at,clock_timestamp()),pending_code='shared-copy-custody'
+         WHERE generation=$1 AND obligation_id=$2`,
+        [restoreGeneration, id],
+      );
+      return answer('pending', 'shared-copy-custody');
+    }
     // Native closure is independent of local-copy closure and its trusted proof.
     // The permanent obligation remains the shared-copy continuation anchor.
     await connection.query(

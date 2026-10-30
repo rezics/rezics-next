@@ -17,6 +17,71 @@ this service. Token issuance accepts `requested_by` only after current Access
 proof of a principal-created assignment for the authenticated actor. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
+## Restored database admission
+
+A deployment restoring Auth declares `restoredGeneration: { kind: 'RESTORED',
+generation, databaseOwner }` on `AuthServiceOptions` (also inherited by the host).
+The generation identifies the actual isolated restored image, not a startup UUID.
+`createAuthService` checks admission before native producer installation, signer
+loading or Better Auth construction. Consequently `createAuthHost` cannot return
+an active service/handler before `start()`: refusal also precedes workflow SDK
+registration/recovery, maintenance, client registration and mail writers. Host
+refusal closes its owned pools; library refusal leaves the caller's pool owned
+by the caller. A durable restore marker also refuses subsequent construction
+that omits the deployment declaration. Unmarked fresh library/host construction
+retains its ordinary lifecycle. Physical isolation of unmarked old snapshots and
+old executors remains the deployment owner's responsibility.
+
+`AuthRestoreDatabaseOwner` in [restore-admission.ts](src/restore-admission.ts)
+is the explicit trusted dependency for verifying the connected database against
+its inventory entry/version, original cluster/timeline/source lineage, capture
+point and recoverable committed native tail beyond the snapshot. Its exact
+account recovery returns original native identity, checkpoint, captured floor,
+applicability, first user-deletion/consent cutoff and genuine original consumer
+acceptance/discharge. There is no installed deployment/database implementation.
+No callback returning a boolean, generated identifier, wall clock, absent user or
+absent snapshot row verifies this evidence. Missing or conflicting evidence has
+an `AuthRestoreAdmissionError.code`; it never establishes no deletion or custody.
+
+`importRestoredAuthProgress` recovers one exact account obligation outside all
+Auth locks, then binds that evidence under the existing account producer lock.
+It preserves original source acceptance, workflow/receipt, applicability and
+consent cutoff; disagreement refuses the transaction. `auth_erasure` retains the
+source route/account/version/T and original floor. `auth_restore_generation`
+retains verified image identity, and `auth_restore_replay` holds immutable
+original progress and per-generation checkpoints beside the existing obligation.
+`replayRestoredAuthPage` reuses the native store/role/client engine and original
+consumer proofs, at most one native unit per call (48 raw keys, 1 KiB per locator,
+64 KiB whole-step ceiling), followed on later calls by existing shared-copy work.
+Each generation revisits reintroduced bytes, including an image carrying older
+completion. Original first consent due evidence is retained, without another
+310-second wait; a proved never-established cutoff uses the existing native
+first deletion transaction. Missing original consumer release stays pending.
+No approval, credential effect or 30-minute source authorization is renewed.
+
+The independent Source provider remains unavailable in this revision. Neither
+`packages/auth-contract/src/auth-erasure-obligations.ts` nor
+`services/kernel/src/access/auth-erasure-obligations.ts`, nor an exact
+owner-authored declaration adapter, is present. Auth therefore publishes no
+substitute point/feed/floor/cursor/seal API and admits no restored generation.
+Those original Access modules must supply their actual declarations verbatim,
+including literal `FIRST`, one of the fixed 4,096 partitions per page, at most
+48 obligations/64 KiB, immutable source/cut and sealed current boundary plus
+live fence/feed handoff. An active-user poll cannot implement this dependency.
+Native import/replay can proceed independently; successful local cleanup returns
+pending and cannot masquerade as current Source authority or consumer release.
+
+Even after the Source interface arrives, cutover must compose native required
+receiving closure and actual external-owner readiness before serving. Current
+admission fails explicitly with `source-authority-unavailable`; there is no
+successful unavailable placeholder or bypass RPC. Proof publication is held on
+a marked restore image, including old carried completion. This delivers no
+physical backup/replica/mail/log deletion or final coordinator ACK. Outstanding
+external custody and backup expiry remain separate pending owner obligations in
+[the external custody contract](src/external-custody-contract.md). The protected
+external/restore custody tests retain their explicit missing-owner failures;
+this change does not certify before-T restore or overall erasure completion.
+
 ## Database and checks
 
 From the repository root:
