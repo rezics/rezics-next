@@ -192,7 +192,7 @@ export function LibraryNavigation({
       </nav>
       {pins.state === 'unavailable' || collectionsState === 'unavailable' ? (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.library_pin_read_failed()}
+          {pins.state === 'unavailable' ? m.library_pin_read_failed() : m.library_collections_unavailable()}
         </p>
       ) : pins.state === 'preparing' || collectionsState === 'preparing' ? (
         <p role="status" className="text-sm text-muted-foreground">
