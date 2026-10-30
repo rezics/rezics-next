@@ -33,3 +33,12 @@ No automatic write, arbitrary group input, receipt-derived current status or loc
 
 Native acceptance, recorded native stories, browser review and full Goal closure remain integration debt. This
 handoff explicitly keeps the original acceptance command and full acceptance conditions; local typing is not that proof.
+
+The catalogue parser bounds processing to 4,096 paths/operations and 256 visible groups, rejecting malformed or
+oversized responses as unavailable. It preserves installed declaration syntax (`^[a-z][a-z_]{0,62}$`, reserved
+`any`, `open`, `close`); it does not widen declarations to the command's historical hyphen allowance.
+If native command metadata eventually declares exactly one resource type with a resource authority anchor,
+current `viewerActions` transport asks for that declared type at the fixed Global ID. Only its exact action AND
+operation pair can enable confirmation. Missing bindings and source errors are unavailable, never denied by inference.
+The session guard also classifies this route as private so the root cannot prepare anonymous exposure during SSR.
+Messages currently use English fallbacks in every supported locale.

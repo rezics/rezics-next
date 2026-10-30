@@ -15,6 +15,7 @@ const signedInPaths = [
   /^\/my\/zones(?:\/|$)/,
   /^\/access(?:\/|$)/,
   /^\/platform\/accounts(?:\/|$)/,
+  /^\/platform\/exposure(?:\/|$)/,
   /^\/creator\/statements(?:\/|$)/,
   /^\/creator\/offers(?:\/|$)/,
   /^\/entitlements(?:\/|$)/,
