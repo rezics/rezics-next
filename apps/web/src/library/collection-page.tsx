@@ -1,3 +1,4 @@
+import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { MemberListRow } from '@rezics/ui/list-presentation';
@@ -577,6 +578,7 @@ export function CollectionPage({
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2">
+            <ResourceAccessLink resourceId={page.id} />
             <CollectionReadActions
               onShare={() => copyLink(collectionHref(page.id))}
               entries={[

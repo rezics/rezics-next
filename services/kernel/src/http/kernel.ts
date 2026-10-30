@@ -406,6 +406,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(granted), realmRoleReader }),
     realmRoleReader,
+    grantResources: () => viewerResources,
   });
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,

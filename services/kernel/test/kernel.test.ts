@@ -197,6 +197,7 @@ const typed = [
   'POST /v1/media/:id/$complete',
   'DELETE /v1/media/:id',
   'GET /v1/media/:id/$authorizeDownload',
+  'GET /v1/grants',
   'POST /v1/grants',
   'POST /v1/grants/$change',
   'POST /v1/grants/$revoke',

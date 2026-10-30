@@ -8,6 +8,7 @@ type GuardContext = {
 };
 
 const signedInPaths = [
+  /^\/access(?:\/|$)/,
   /^\/creator\/statements(?:\/|$)/,
   /^\/entitlements(?:\/|$)/,
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,

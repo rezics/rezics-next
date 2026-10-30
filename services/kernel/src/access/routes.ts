@@ -39,6 +39,8 @@ import {
   type PublicAccountProfile,
 } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
+import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
 import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
 import { createSuspensionCommands } from './suspension.ts';
@@ -336,6 +338,43 @@ const grantChange = t.Union([
 const role = t.String();
 const roleGrant = t.Object({ resource, subject, role, valid }, closed);
 const roleChange = t.Object({ resource, subject, role, valid, previous: t.Object({ role, valid }, closed) }, closed);
+const grantReadPage = t.Unsafe<GrantReadPage>(
+  t.Object(
+    {
+      resource: t.Object({ ...resource.properties, type: t.String() }, closed),
+      authority: t.Object({ accountId: id, principalId: nullable(id), clientId: t.String() }, closed),
+      roles: t.Array(t.Object({ id: role, actions: t.Array(t.String()), delegable: t.Boolean() }, closed)),
+      actions: t.Array(t.String()),
+      grants: t.Array(
+        t.Object(
+          {
+            kind: t.Union([t.Literal('direct'), t.Literal('role')]),
+            state: t.Union([t.Literal('active'), t.Literal('scheduled')]),
+            subject: t.Union([
+              subject,
+              t.Object(
+                { kind: t.Literal('realm'), id, role: t.Union([t.Literal('owner'), t.Literal('member')]) },
+                closed,
+              ),
+            ]),
+            actions: t.Array(t.String()),
+            role: nullable(role),
+            valid,
+            startsAt: nullable(t.String()),
+            endsAt: nullable(t.String()),
+            manageable: t.Boolean(),
+          },
+          closed,
+        ),
+        { maxItems: 20 },
+      ),
+      identities: t.Array(t.Union([publicIdentity, deletedIdentity]), { maxItems: 22 }),
+      next: nullable(t.String()),
+      mutationState: t.Union([t.Literal('ready'), t.Literal('realm_guard_unavailable')]),
+    },
+    closed,
+  ),
+);
 
 function publicGrant(value: Static<typeof grant>): Static<typeof grant> {
   return {
@@ -443,6 +482,7 @@ export function accessRoutes(
     clock: () => Date;
     tokens: KeyRing;
     realmRoleReader?: AccessRealmRoleReader;
+    grantResources?: () => ViewerActionResources;
   },
 ) {
   let resolved: ReturnType<typeof createGrantCommands> | undefined;
@@ -496,6 +536,33 @@ export function accessRoutes(
       clock: dependencies.clock,
     }));
   return app
+    .get(
+      '/v1/grants',
+      {
+        query: strict(t.Object({ resourceId: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed)),
+        response: {
+          200: grantReadPage,
+          ...publicReadFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          503: problemSchema('dependency_unavailable', 'overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'grant.read',
+          'x-action': 'access:grant',
+          'x-exposure': 'public',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return readResourceGrants(
+          { ...dependencies, access: dependencies.access(), resources: dependencies.grantResources?.() ?? new Map() },
+          actor,
+          query,
+          job.deadline,
+        );
+      },
+    )
     .get(
       '/v1/accounts/:accountId/profile',
       {

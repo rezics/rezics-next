@@ -1,3 +1,4 @@
+import { ResourceAccessLink } from '../accounts/resource-access/link';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
@@ -322,6 +323,7 @@ export function SpacePage({ page, realmManagement }: { page: SpacePageData; real
       <SpaceSetupEntry spaceId={page.space.id} />
       <section aria-label={m.space_follow_label()}>
         <FollowTargetControl targetId={page.space.id} />
+        <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
       </section>
       {page.realm ? (
         <Home realm={page.realm} management={realmManagement ?? <RealmBansPanel realmId={page.realm.id} />} />
