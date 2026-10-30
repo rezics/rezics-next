@@ -2,8 +2,53 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from './cli.ts';
+import { createRuntime } from './config.ts';
 import { git } from './merge.ts';
-import { integrationHarness, markdown } from './test-support.ts';
+import { openDb } from './db.ts';
+import { harness, integrationHarness, markdown } from './test-support.ts';
+
+function cliRuntimeFixture() {
+  const h = harness();
+  const databasePath = join(h.settings.stateDirectory, 'control-plane-cli.sqlite');
+  const create = (options?: { trainMode: 'detached' | 'inline' }) => {
+    const runtime = createRuntime({
+      settings: h.settings,
+      ...(options ? { trainMode: options.trainMode } : {}),
+      db: openDb(databasePath),
+    });
+    runtime.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    runtime.db
+      .query('INSERT OR IGNORE INTO manager_sessions(id, state) VALUES (?, ?)')
+      .run('fixture-manager', JSON.stringify({}));
+    runtime.train.runWaiting = async () => {};
+    return runtime;
+  };
+  const managerDecision = () => {
+    const db = openDb(databasePath);
+    try {
+      return db.query('SELECT manager FROM manager_turn_decisions WHERE manager = ?').get('fixture-manager');
+    } finally {
+      db.close();
+    }
+  };
+  return { h, create, managerDecision };
+}
+
+async function withEnvironment<T>(values: Record<string, string | undefined>, runTest: () => Promise<T>): Promise<T> {
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await runTest();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
 
 async function controlPlaneOutcome(
   suiteOutput: string,
@@ -53,25 +98,47 @@ async function controlPlaneOutcome(
 
 test('run() passes detached train mode to its runtime factory without changing the process environment', async () => {
   const before = process.env.GOAL_TRAIN_MODE;
+  const fixture = cliRuntimeFixture();
   delete process.env.GOAL_TRAIN_MODE;
   let received: { trainMode: 'detached' | 'inline' } | undefined;
   try {
-    const status = await run(['status'], async (options) => {
-      received = options;
-      return {
-        settings: { stateDirectory: '/tmp/goal-cli-test' },
-        db: { close() {} },
-        store: { tasks: () => [] },
-        job: { drain: async () => {} },
-        managerSocket: '/missing',
-      } as never;
-    });
+    const status = await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, () =>
+      run(['status'], (options) => {
+        received = options;
+        return fixture.create(options);
+      }),
+    );
     expect(status).toBe(0);
     expect(received).toEqual({ trainMode: 'detached' });
     expect(process.env.GOAL_TRAIN_MODE).toBeUndefined();
+    expect(fixture.managerDecision()).toBeTruthy();
   } finally {
     if (before === undefined) delete process.env.GOAL_TRAIN_MODE;
     else process.env.GOAL_TRAIN_MODE = before;
+    fixture.h.dispose();
+  }
+});
+
+test.serial('run() selects train mode explicitly and attributes manager commands in SQLite without changing env', async () => {
+  const before = process.env.GOAL_TRAIN_MODE;
+  const fixture = cliRuntimeFixture();
+  const received: unknown[] = [];
+  try {
+    await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, async () => {
+      for (const command of ['status', 'train', 'status']) {
+        expect(
+          await run([command], (options) => {
+            received.push(options);
+            return fixture.create(options);
+          }),
+        ).toBe(0);
+        expect(process.env.GOAL_TRAIN_MODE).toBe(before);
+      }
+    });
+    expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
+    expect(fixture.managerDecision()).toBeTruthy();
+  } finally {
+    fixture.h.dispose();
   }
 });
 
@@ -94,27 +161,3 @@ test.serial(
   },
   30_000,
 );
-
-test('run() passes the detached train mode to the code that needs it instead of setting process.env', async () => {
-  const before = process.env.GOAL_TRAIN_MODE;
-  const received: unknown[] = [];
-  const runtime = {
-    settings: { stateDirectory: '.temp/goal-cli-test' },
-    db: { close() {} },
-    store: { tasks: () => [] },
-    job: { drain: async () => {} },
-    inbox: {},
-    queue: {},
-    train: { runWaiting: async () => {} },
-  };
-  for (const command of ['status', 'train', 'status']) {
-    expect(
-      await run([command], (options) => {
-        received.push(options);
-        return runtime as never;
-      }),
-    ).toBe(0);
-    expect(process.env.GOAL_TRAIN_MODE).toBe(before);
-  }
-  expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
-});
