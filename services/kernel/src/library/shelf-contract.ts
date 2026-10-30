@@ -6,6 +6,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { EntryState } from './entry-model.ts';
 import type { ProgressSession } from './progress-model.ts';
+import type { ShelfMaintenanceCheckpoint, ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
@@ -294,7 +295,21 @@ export type ShelfReadDependencies = {
   facetReader: ShelfFacetReader;
   typeKeys: ShelfTypeKeys;
   cursors: ShelfCursorCodec;
+  /** Native maintenance initialization, in an ordinary currently authorized owner command. */
+  maintenance?: Pick<ShelfMaintenanceOps, 'initialize'>;
+  /**
+   * Reload the current native gate in the read's RR snapshot. The maintenance producer must supply this
+   * adapter with its gate DDL; neither an initialization receipt nor caller metadata proves currentness.
+   */
+  generation?: ShelfReadGenerationReader;
 };
+
+export type ShelfReadGeneration = Pick<ShelfMaintenanceCheckpoint, 'epoch' | 'activeGeneration'> &
+  Pick<Awaited<ReturnType<ShelfMaintenanceOps['initialize']>>, 'readiness'>;
+export type ShelfReadGenerationReader = (
+  client: Client,
+  owner: ShelfMaintenanceCheckpoint['owner'],
+) => Promise<ShelfReadGeneration>;
 
 /**
  * Domain-level read service. `listShelf` requires `library_entry:list` and `progress_session:list`; the other two
