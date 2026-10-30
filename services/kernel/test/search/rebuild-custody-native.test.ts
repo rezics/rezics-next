@@ -279,7 +279,7 @@ test('every actually received malformed Source count snapshot refuses activation
       expect(f.counted).toContain(3600);
       expect(f.peak, name).toBeLessThanOrEqual(8);
     }
-    f.control.count = undefined;
+    delete f.control.count;
     expect(await f.run()).toEqual({ generation: 2, previous: 1 });
     expect(await f.visible()).toEqual([]);
   } finally {
@@ -459,7 +459,7 @@ test('actually executed native terms aggregation must supply complete unique int
       ).toHaveLength(1);
     }
     expect(aggregations).toBe(aggregationControls.length);
-    f.control.receipt = undefined;
+    delete f.control.receipt;
     expect(await f.run()).toEqual({ generation: 2, previous: 1 });
     expect((await f.visible()).map((hit) => hit._id)).toEqual([item.id]);
   } finally {
@@ -537,8 +537,8 @@ test('malformed count on a newly observed native home is unavailable rather than
     f.control.count = (home, snapshot) => (home === 3601 ? { count: 0 } : snapshot);
     await unavailable(f);
     expect(f.counted.filter((home) => home === 3601)).toHaveLength(1);
-    f.control.afterAggregation = undefined;
-    f.control.count = undefined;
+    delete f.control.afterAggregation;
+    delete f.control.count;
     expect(await f.run()).toEqual({ generation: 2, previous: 1 });
   } finally {
     await f.close();
@@ -659,7 +659,7 @@ for (const stage of ['mapping', 'alias'] as const) {
       expect(dispatched).toBe(1);
       expect(await f.active()).toBe(1);
       expect(activations(f.calls)).toHaveLength(stage === 'mapping' ? 0 : 1);
-      f.control.request = undefined;
+      delete f.control.request;
       expect(await f.run()).toEqual({ generation: 2, previous: 1 });
       expect(await f.active()).toBe(2);
     } finally {
@@ -724,7 +724,7 @@ for (const stage of ['mapping', 'alias'] as const) {
           ).map((hit) => hit._id),
         ).toEqual([item.id]);
         if ((mode === 'unobserved' || mode === 'wrong-target') && stage === 'mapping') {
-          f.control.receipt = undefined;
+          delete f.control.receipt;
           expect(await f.run()).toEqual({ generation: 2, previous: 1 });
         }
       } finally {
