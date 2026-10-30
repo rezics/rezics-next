@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import {
   ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkAccounting, AccessWorkUnavailableError,
-  accessNativeWork, accessOwnerWork, type AccessWork, type AccessWorkSink,
+  accessNativeWork, accessOwnerWork, accessCheckout, type AccessWork, type AccessWorkSink,
 } from '../../src/access/work.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
@@ -55,6 +55,21 @@ test('unproved and refused work never dispatch and report their exact dependency
     expect(called).toBe(false);
     expect(admitted).toHaveLength(0);
   }
+});
+
+test('checkout admission refuses before the pool wait and retains a failed dispatched acquisition', async () => {
+  const refused = accounting('access.pool-checkout');
+  let called = false;
+  expect((await refused.work.capture(() => accessCheckout(refused.work, async () => { called = true; }))).state)
+    .toBe('unavailable');
+  expect(called).toBe(false);
+  const failed = accounting();
+  await failed.work.capture(() => accessCheckout(failed.work, async () => {
+    expect(failed.admitted[0]?.operation).toBe('access.pool-checkout');
+    throw new Error('pool acquisition failed');
+  }));
+  expect(failed.work.usage()).toEqual({ ...EMPTY_ACCESS_WORK, points: 1 });
+  expect(failed.work.usage()).toEqual(sum(failed.settled));
 });
 
 test('failed, missing and invalid actual receipts retain all dispatched work and poison reuse', async () => {
@@ -283,6 +298,24 @@ describe.skipIf(!process.env.DATABASE_URL)('existing native formula with Access 
       expect(realmCalls).toBe(0);
       expect(result.usage).toEqual(sum(refused.settled));
       expect(result.usage.rows).toBeGreaterThan(0);
+      let buyerCalls = 0;
+      const benefitAccess = createAccess({ actions: new Map([['edition:read', { anonymous: false }]]),
+        accountEvidence: () => account,
+        contentEditionBuyerFactReader: async () => { buyerCalls++; return null; },
+      });
+      const buyerActor = { ...actor, scopes: ['edition:read'] };
+      const benefitTarget: Resource = { ...target, authenticatedBenefit: {
+        kind: 'content-edition', resourceType: 'content.edition', resource: target, action: 'edition:read',
+        version: { revisionId: resource().id, sha256: 'a'.repeat(64) },
+      } };
+      const commerce = accounting();
+      const buyerResult = await commerce.work.capture(() => benefitAccess.prepare!(buyerActor, 'edition:read', benefitTarget,
+        { pool, work: commerce.work, time, deadline: commerce.work.deadline }));
+      expect(buyerResult.state).toBe('unavailable');
+      if (buyerResult.state === 'unavailable') expect(buyerResult.dependency).toBe('Commerce ContentEditionBuyerFactReader');
+      expect(buyerCalls).toBe(0);
+      expect(buyerResult.usage).toEqual(sum(commerce.settled));
+      expect(commerce.admitted.map((entry) => entry.operation)).toEqual(['access.time', 'access.assignment']);
     } finally { releaseOperationalTime(time); }
   });
 
