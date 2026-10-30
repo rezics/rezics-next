@@ -133,7 +133,9 @@ invent that ABI or imply an active row authorizes bytes. Content independently c
 source/licence/digest/lifecycle/security fences, ancestry and Realm/Space before preparation and final disclosure.
 Unpublish/erasure makes delivery unavailable without inventing a refund; no alternate revision is substituted and
 no Library record is created. Subject discovery, real native sale/use proof, reviewed UI and promoted-main journey
-remain pending. This slice runs only the local compiler typecheck; it is not whole-journey acceptance.
+remain pending. The local kernel compiler typecheck passes for this source delivery. No acceptance, unit, native, database,
+browser or remote check was run; the temporary compiler database was used only by that typecheck. This is not
+whole-journey acceptance. Generated OpenAPI/client artifacts and native/interface gates remain controller work.
 
 ### Private buyer history
 
