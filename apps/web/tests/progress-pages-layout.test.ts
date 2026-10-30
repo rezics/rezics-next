@@ -1,12 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
 
-const app = join(import.meta.dir, '..');
+import { startDevServer } from './support/dev-server';
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -51,6 +48,71 @@ const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')
 const stamp = '2026-04-02T15:04:05.000Z';
 const subjectId = id(1);
 const subject = { id: subjectId, label: 'Night watch', type: 'book', types: ['schema:Book'] };
+const definitionsRelease = {
+  types: {
+    book: {
+      labels: { en: 'Book', 'zh-Hans': '图书' },
+      library: { profileId: 'book-reading' },
+    },
+  },
+  libraryProfiles: {
+    'book-reading': {
+      id: 'book-reading',
+      entryStateSet: {
+        id: 'book-reading-states',
+        states: [{ id: 'in_progress', labels: { en: 'Active', 'zh-Hans': '进行中' }, role: 'active' }],
+      },
+      progress: {
+        allowed: [
+          {
+            mode: 'scalar_amount',
+            units: [
+              {
+                id: 'page',
+                labels: { en: 'Page', 'zh-Hans': '页' },
+                totalPolicy: 'optional',
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+              {
+                id: 'chapter',
+                labels: { en: 'Chapter', 'zh-Hans': '章' },
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+          {
+            mode: 'cursor_position',
+            units: [
+              {
+                id: 'chapter',
+                labels: { en: 'Chapter', 'zh-Hans': '章' },
+                totalPolicy: 'forbidden',
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+          {
+            mode: 'completed_units',
+            units: [
+              {
+                id: 'episode',
+                labels: { en: 'Episode', 'zh-Hans': '集' },
+                totalPolicy: 'forbidden',
+                identity: { kind: 'session_local' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+        ],
+      },
+      importSources: [],
+    },
+  },
+  properties: {},
+};
 const cover = {
   media: id(900),
   width: 640,
@@ -61,6 +123,10 @@ const cover = {
   credit: null,
 };
 const extraReads: string[] = [];
+let publicExposureReads = 0;
+const publicExposureReadTimes: number[] = [];
+let viewerExposureReads = 0;
+let viewerExposureGroups = ['reading_progress'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const decimal = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
@@ -318,6 +384,15 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') {
+      if (!request.headers.has('authorization')) {
+        publicExposureReads += 1;
+        publicExposureReadTimes.push(Date.now());
+        return json({ admitted: ['reading_progress'] });
+      }
+      viewerExposureReads += 1;
+      return json({ admitted: viewerExposureGroups });
+    }
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -426,10 +501,7 @@ const fake = Bun.serve({
     }
     if (url.pathname === '/v1/definitions/active') return json({ digest: 'layout' });
     if (url.pathname === '/v1/definitions/releases/layout')
-      return json({
-        digest: 'layout',
-        release: { types: { book: { labels: { en: 'Book', 'zh-Hans': '图书' } } }, properties: {} },
-      });
+      return json({ digest: 'layout', release: definitionsRelease });
     if (url.pathname === '/v1/subjects:suggest') {
       extraReads.push(url.pathname);
       return json({
@@ -552,77 +624,27 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let devServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+    devServer = await startDevServer({
       env: {
-        ...process.env,
         KERNEL_ORIGIN: fake.url.origin,
+        PUBLIC_ORIGIN: fake.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: resource,
         WEBSITE_SCOPES: scopes.join(' '),
       },
+      // The warm-up has no session cookie; these protected routes intentionally redirect to sign-in.
+      javaScriptEnabled: false,
+      warmUpPaths: [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`],
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) {
-          browser ??= await chromium.launch();
-          const context = await browser.newContext({ javaScriptEnabled: true });
-          try {
-            const page = await context.newPage();
-            for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
-              for (let attempt = 0; ; attempt += 1) {
-                try {
-                  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-                  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
-                  break;
-                } catch (error) {
-                  if (attempt >= 1) throw error;
-                }
-              }
-            }
-          } finally {
-            await context.close();
-          }
-          return origin;
-        }
-      } catch {
-        // The dev server is still starting.
-      }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
+    return devServer.origin;
   })();
   return started;
 }
@@ -662,7 +684,11 @@ async function signIn(returnTo = '/en') {
 
 let browser: Browser | undefined;
 let person: Promise<{ cookie: string; access: string }> | undefined;
-async function open(path: string, javaScriptEnabled = true): Promise<{ page: Page; access: string }> {
+async function open(
+  path: string,
+  javaScriptEnabled = true,
+  waitUntil: 'domcontentloaded' | 'networkidle' = 'networkidle',
+): Promise<{ page: Page; access: string }> {
   person ??= signIn(path);
   const auth = await person;
   const origin = await site();
@@ -692,7 +718,7 @@ async function open(path: string, javaScriptEnabled = true): Promise<{ page: Pag
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="960"><rect width="640" height="960" fill="#547080"/></svg>',
       }),
   );
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  await page.goto(`${origin}${path}`, { waitUntil });
   if (javaScriptEnabled) await hydrated(page);
   return { page, access: auth.access };
 }
@@ -702,12 +728,7 @@ async function hydrated(page: Page) {
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await devServer?.stop();
 });
 
 function layoutSeed(size = 5) {
@@ -731,6 +752,7 @@ test(
   "the progress index shows each session as one row: cover, title, type label, state and a ProgressRow; the row links to its session and the subject page is in the row's menu",
   async () => {
     layoutSeed();
+    sessions.get(id(20))!.position = null; // Keep this row in locator mode so it displays the locator text.
     const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
     try {
       const rows = main(page).locator('ol > li');
@@ -744,6 +766,7 @@ test(
       expect(await row.getByRole('link').count()).toBe(1);
       expect(await row.getByRole('link').getAttribute('href')).toContain(`/library/progress/${id(20)}`);
       expect(await row.getByRole('link').innerText()).toContain('Night watch');
+      expect(await row.locator('.work-title').count()).toBe(0);
       const start = main(page).getByRole('heading', { level: 2, name: 'Start tracking', exact: true });
       expect(
         await start.evaluate((el) =>
@@ -784,9 +807,9 @@ test(
       await picker.fill('Night');
       await page.getByRole('option', { name: /Night watch/ }).click();
       expect(extraReads.slice(before)).toEqual(['/v1/subjects:suggest']);
+      expect(await main(page).getByRole('combobox', { name: 'Unit', exact: true }).inputValue()).toBe('page');
       await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
-      await main(page).getByRole('combobox', { name: 'Unit', exact: true }).click();
-      await page.getByRole('option', { name: 'Page', exact: true }).click();
+      await main(page).getByRole('combobox', { name: 'Unit', exact: true }).selectOption('page');
       await main(page).getByRole('spinbutton', { name: 'Total', exact: true }).fill('240');
       await main(page).getByRole('button', { name: 'Start', exact: true }).click();
       await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
@@ -807,6 +830,118 @@ test(
 );
 
 test(
+  'choosing a unit in the progress start form submits that unit',
+  async () => {
+    layoutSeed();
+    const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
+      const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
+      await unit.selectOption('chapter');
+      await main(page).getByRole('spinbutton', { name: 'Total', exact: true }).fill('240');
+      await main(page).getByRole('button', { name: 'Start', exact: true }).click();
+      await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
+      expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'chapter',
+        total: '240',
+      });
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'progress row and session Work titles use the interface font',
+  async () => {
+    layoutSeed();
+    const { page: indexPage } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      const rowTitle = main(indexPage).locator('ol > li').first().getByRole('link');
+      const rowFont = await rowTitle.evaluate((element) => getComputedStyle(element).fontFamily);
+      const interfaceFont = await indexPage.locator('body').evaluate((element) => getComputedStyle(element).fontFamily);
+      const titleFont = await indexPage.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--font-work-serif').trim(),
+      );
+      expect(rowFont).toBe(interfaceFont);
+      expect(rowFont).not.toBe(titleFont);
+    } finally {
+      await indexPage.context().close();
+    }
+
+    const { page: sessionPage } = await open(`/en/library/progress/${id(20)}`);
+    try {
+      const headingTitle = main(sessionPage).locator('article > header p.text-2xl');
+      const headingFont = await headingTitle.evaluate((element) => getComputedStyle(element).fontFamily);
+      const interfaceFont = await sessionPage
+        .locator('body')
+        .evaluate((element) => getComputedStyle(element).fontFamily);
+      const titleFont = await sessionPage.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--font-work-serif').trim(),
+      );
+      expect(headingFont).toBe(interfaceFont);
+      expect(headingFont).not.toBe(titleFont);
+    } finally {
+      await sessionPage.context().close();
+    }
+  },
+  timeout,
+);
+
+test('Unit and Total share the same field geometry at phone and desktop widths', async () => {
+  layoutSeed();
+  const serverRendered = await open(`/en/library/progress?subjectId=${subjectId}`, false, 'domcontentloaded');
+  try {
+    expect(await serverRendered.page.locator('select[name="unit"]').count()).toBe(1);
+  } finally {
+    await serverRendered.page.context().close();
+  }
+  const { page } = await open(`/en/library/progress?subjectId=${subjectId}`, true, 'domcontentloaded');
+  try {
+    const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
+    expect(await main(page).locator('select[name="unit"]').count()).toBe(1);
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 860 });
+      const geometry = await page.evaluate(() => {
+        const unit = document.querySelector('select[name="unit"]')!;
+        const total = document.querySelector('#progress-total')!;
+        const unitLabel = document.querySelector('label[for="progress-unit"]')!;
+        const totalLabel = document.querySelector('label[for="progress-total"]')!;
+        const style = (element: Element) => {
+          const rect = element.getBoundingClientRect();
+          const css = getComputedStyle(element);
+          return { top: rect.top, height: rect.height, radius: css.borderRadius, background: css.backgroundColor };
+        };
+        return { unit: style(unit), total: style(total), unitLabel: style(unitLabel), totalLabel: style(totalLabel) };
+      });
+      expect(geometry.unit).toEqual(geometry.total);
+      expect(geometry.unitLabel.top).toBe(geometry.totalLabel.top);
+      expect(await unit.count()).toBe(1);
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('the progress form stays closed after hydration when viewer exposure omits its group', async () => {
+  layoutSeed();
+  const readsBefore = viewerExposureReads;
+  viewerExposureGroups = ['unrelated'];
+  const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+  try {
+    expect(viewerExposureReads).toBeGreaterThan(readsBefore);
+    await page.waitForFunction(() => !document.querySelector('select[name="unit"]'));
+    expect(await main(page).locator('select[name="unit"]').count()).toBe(0);
+  } finally {
+    viewerExposureGroups = ['reading_progress'];
+    await page.context().close();
+  }
+});
+
+test(
   "the session page shows the subject's cover from the page's reads, its state and progress in one header, change history entries with their relative time and the locator and position as separate labelled parts, an empty section as a muted line with the same spacing as the others, and log authors as the name and @handle",
   async () => {
     layoutSeed();
@@ -823,17 +958,14 @@ test(
         'Publish a reading log',
         'Published logs',
       ]);
+      expect(await header.locator('p.text-2xl').getAttribute('class')).not.toContain('work-title');
       expect(await main(page).getByRole('button', { name: 'Update progress', exact: true }).count()).toBe(1);
-      expect(await main(page).getByRole('textbox', { name: 'Locator', exact: true }).count()).toBe(0);
-      await main(page).getByRole('button', { name: 'Update progress', exact: true }).click();
-      expect(await page.getByRole('heading', { name: 'Update progress', exact: true }).count()).toBe(1);
-      expect(await page.getByRole('textbox', { name: 'Locator', exact: true }).inputValue()).toBe('Part 2, chapter 14');
-      expect(await page.getByRole('textbox', { name: 'Position', exact: true }).inputValue()).toBe('42');
       const changes = main(page).getByRole('region', { name: 'Change history', exact: true });
       expect(await changes.locator('time').getAttribute('datetime')).toBe(stamp);
       expect(await changes.locator('time').innerText()).toMatch(/ago|yesterday/);
       expect(await changes.locator('dt').allTextContents()).toEqual(['Locator', 'Position']);
       expect(await changes.locator('dd').allTextContents()).toEqual(['Part 2, chapter 14', '42']);
+      expect(await main(page).getByRole('textbox', { name: 'Locator', exact: true }).count()).toBe(0);
       const empty = main(page).getByRole('region', { name: 'Completed units', exact: true });
       expect(await empty.locator('p').getAttribute('class')).toContain('text-muted-foreground');
       expect(await empty.innerText()).toContain('No units have been completed yet.');
@@ -855,7 +987,14 @@ test(
       expect(await log.locator('[data-slot="cover"]').count()).toBe(0);
       expect(await log.getByText('Night watch', { exact: true }).count()).toBe(0);
       expect(await log.innerText()).toContain('A quiet chapter.');
-      expect(await log.getByRole('link', { name: 'Read log', exact: true }).count()).toBe(1);
+      const readLinks = log.getByRole('link', { name: 'Read log', exact: true });
+      expect(await readLinks.count()).toBe(2);
+      expect(await readLinks.nth(0).getAttribute('href')).toContain('/en/logs/');
+      expect(await readLinks.nth(1).getAttribute('href')).toContain('/en/logs/');
+      await main(page).getByRole('button', { name: 'Update progress', exact: true }).click();
+      expect(await page.getByRole('heading', { name: 'Update progress', exact: true }).count()).toBe(1);
+      expect(await page.getByRole('textbox', { name: 'Locator', exact: true }).inputValue()).toBe('Part 2, chapter 14');
+      expect(await page.getByRole('spinbutton', { name: 'Position', exact: true }).inputValue()).toBe('42');
     } finally {
       await page.context().close();
     }
@@ -864,8 +1003,10 @@ test(
 );
 
 test(
-  'both pages render without JavaScript and make the same kernel reads as on base, plus at most one suggestion read per settled keystroke in the picker',
+  'both pages render without JavaScript, preserve bounded progress reads across the existing row fixtures, and keep suggestion reads bounded per settled keystroke',
   async () => {
+    const publicReadsBefore = publicExposureReads;
+    const startedAt = Date.now();
     for (const size of [10, 1_000, 10_000]) {
       layoutSeed(size);
       // Fresh sign-in isolates the SSR/hydration read caches at every size.
@@ -905,9 +1046,10 @@ test(
         try {
           expect(await main(plain).getByRole('heading', { level: 1 }).count()).toBe(1);
           expect(await main(plain).innerText()).toContain('Night watch');
-          if (path.includes('?'))
-            expect(await main(plain).getByRole('textbox', { name: 'Subject', exact: true }).count()).toBe(1);
-          else
+          if (path.includes('?')) {
+            expect(await main(plain).getByRole('combobox', { name: 'Subject', exact: true }).count()).toBe(1);
+            expect(await main(plain).locator('select[name="unit"]').count()).toBe(1);
+          } else
             expect(
               await main(plain).getByRole('region', { name: 'Change history', exact: true }).locator('time').count(),
             ).toBe(1);
@@ -916,6 +1058,10 @@ test(
         }
       }
     }
+    const scaleDuration = Date.now() - startedAt;
+    expect(publicExposureReads - publicReadsBefore).toBeLessThanOrEqual(Math.floor(scaleDuration / 60_000) + 1);
+    for (let index = 1; index < publicExposureReadTimes.length; index += 1)
+      expect(publicExposureReadTimes[index]! - publicExposureReadTimes[index - 1]!).toBeGreaterThanOrEqual(60_000);
   },
   timeout,
 );

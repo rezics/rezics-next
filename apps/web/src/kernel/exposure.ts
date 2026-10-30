@@ -67,6 +67,16 @@ export type LibraryLabelOperation =
   | 'library_label.assignment_list';
 type ExposureOperation = GatedOperation | LibraryLabelOperation;
 
+/** Resolve one operation against its admitted response, failing closed when it is absent. */
+export function operationIsAdmitted(operation: ExposureOperation, admitted: readonly string[] | undefined): boolean {
+  // This future route must be explicitly advertised; today's group admission does not imply support.
+  if (operation === 'library_entry.restore') return admitted?.includes(operation) ?? false;
+  const admittedKey = Object.hasOwn(operationGroups, operation)
+    ? operationGroups[operation as GatedOperation]
+    : operation;
+  return admitted?.includes(admittedKey) ?? false;
+}
+
 const minute = 60_000;
 const closed: string[] = [];
 
@@ -125,12 +135,7 @@ export function useOperation(operation: ExposureOperation): boolean {
   const { data: viewerGroups } = useQuery({ ...exposureQuery, enabled: hydrated && state === 'signed-in' }, client);
   const admitted =
     !hydrated || state === 'signed-out' ? publicGroups : state === 'signed-in' ? viewerGroups : undefined;
-  // This future route must be explicitly advertised; today's group admission does not imply support.
-  if (operation === 'library_entry.restore') return admitted?.includes(operation) ?? false;
-  const admittedKey = Object.hasOwn(operationGroups, operation)
-    ? operationGroups[operation as GatedOperation]
-    : operation;
-  return admitted?.includes(admittedKey) ?? false;
+  return operationIsAdmitted(operation, admitted);
 }
 
 export function Exposure({ operation, children }: { operation: ExposureOperation; children: ReactNode }) {

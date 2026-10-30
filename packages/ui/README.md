@@ -6,7 +6,7 @@ Run `bun run storybook` in this directory to review components. Run `bun run che
 
 Tests run in a private network namespace that holds only loopback, so changes to the host's network interfaces cannot interrupt browser requests. Run one test file with `bun run test <file>` to use the same isolation. Run `bun run test:stories:slow-frames` after changing a story or an editor or overlay component: it delays every animation frame by 400 ms, which reproduces the failures a loaded host causes.
 
-The logo red (`--brand`) marks identity and never colors text; use ink blue (`--primary`) for colored text and actions. Use Manrope for interface text and Source Serif 4 for Work titles only. Fonts are self-hosted, and theme selection belongs on `<html>` without a script. Mark icons in red with `fill-*` or `stroke-*` utilities, never `text-brand`.
+The logo red (`--brand`) marks identity and never colors text; use ink blue (`--primary`) for colored text and actions. Source Serif 4 sets the cover placeholder's title and Work titles marked inside documents; titles in rows, cards and page headings use Manrope. Fonts are self-hosted, and theme selection belongs on `<html>` without a script. Mark icons in red with `fill-*` or `stroke-*` utilities, never `text-brand`.
 
 ## shadcn components
 
@@ -21,6 +21,13 @@ The package uses shadcn's Rhea style on the Base UI primitives (`components.json
 - `shadcn-sync.json` records the last successful sync time and CLI version. The daily GitHub check opens one shared `shadcn-sync` issue when that sync is more than seven days old; it never syncs components. Anyone with repository issue access can also run `bun run shadcn:sync-check` in this directory.
 - Whoever takes the issue runs `bun run shadcn:sync` here as an ordinary task. It re-adds every cloned component from `shadcn@latest`, refreshes `shadcn-registry.json` and `SHADCN.md` with `scripts/shadcn-index.ts`, pins dependencies exactly, updates the sync record and shows the diff. Review all changes and run `bun run check` before committing. Include `Closes #<issue-number>` in the sync commit message; the issue closes when the commit reaches the default branch. The sync never runs automatically, so people do not redo it in parallel.
 - To refresh only the capability index outside a sync, run `bun scripts/shadcn-index.ts`; `--offline` regenerates `SHADCN.md` from the committed registry snapshot.
+
+## Form fields
+
+Fields that choose one value from a fixed list use `NativeSelect` from `@rezics/ui/shadcn/native-select`, with
+`NativeSelectOption`s, inside a shadcn `Field` with a `FieldLabel` from `@rezics/ui/shadcn/field`. This keeps form
+choices native, consistent with other fields, and available before hydration. `Menu` is for actions and navigation,
+not form values.
 
 ## Menu
 

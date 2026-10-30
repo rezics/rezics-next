@@ -259,7 +259,17 @@ function SessionEditor({
   const { min, max, step } = session.inputRules ?? {};
   const inputBounds = { min, max, step };
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
-  const progress = progressView(session, getLocale());
+  const progress = progressView(
+    {
+      ...session,
+      total: session.mode === 'scalar_amount' && session.inputRules?.total !== 'forbidden' ? session.total : null,
+    },
+    getLocale(),
+  );
+  const progressLabel =
+    session.mode === 'cursor_position' && session.position !== null && progress
+      ? `${m.library_progress_position()}: ${progress.text}`
+      : (progress?.text ?? m.home_continue_in_progress());
   const recordForm = (
     <Exposure operation="progress_session.record">
       <section aria-labelledby="record-progress-heading" className="space-y-4">
@@ -383,7 +393,7 @@ function SessionEditor({
           </div>
           <div className="min-w-0 flex-1 space-y-4">
             <div className="space-y-1">
-              <p className="work-title text-2xl font-medium sm:text-3xl">
+              <p className="text-2xl font-medium sm:text-3xl">
                 {session.subject ? (
                   <Link
                     to={
@@ -413,10 +423,15 @@ function SessionEditor({
             <p className="text-sm text-muted-foreground">
               <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
             </p>
-            <ProgressRow
-              value={progress?.percent == null ? null : progress.percent / 100}
-              label={progress?.text ?? m.home_continue_in_progress()}
-            />
+            <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+            {session.mode === 'cursor_position' && session.position !== null && session.locator ? (
+              <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">{m.library_progress_locator()}</dt>
+                  <dd className="break-words">{session.locator}</dd>
+                </div>
+              </dl>
+            ) : null}
             {session.total && session.mode === 'scalar_amount' && session.amount === null ? (
               <p className="text-sm text-muted-foreground">
                 {m.library_progress_total()}: {session.total}

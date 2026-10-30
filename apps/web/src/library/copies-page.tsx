@@ -8,6 +8,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popov
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { de, enUS, es, fr, ja, ko, zhCN, zhTW } from 'date-fns/locale';
 import { CalendarDays } from 'lucide-react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -47,10 +49,8 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   const id = useId();
   const selected = dateValue(value);
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           id={id}
@@ -78,17 +78,15 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
           />
         </PopoverContent>
       </Popover>
-    </div>
+    </Field>
   );
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const id = useId();
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <input
         id={id}
         className={inputClass}
@@ -96,7 +94,7 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
         autoComplete="off"
         onChange={(event) => onChange(event.currentTarget.value)}
       />
-    </div>
+    </Field>
   );
 }
 
@@ -115,11 +113,9 @@ function ChoiceField({
 }) {
   const id = useId();
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
-      <select
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <NativeSelect
         id={id}
         name={name}
         className={inputClass}
@@ -127,12 +123,12 @@ function ChoiceField({
         onChange={(event) => onChange(event.currentTarget.value)}
       >
         {choices.map((choice) => (
-          <option key={choice.id} value={choice.id}>
+          <NativeSelectOption key={choice.id} value={choice.id}>
             {choice.label}
-          </option>
+          </NativeSelectOption>
         ))}
-      </select>
-    </div>
+      </NativeSelect>
+    </Field>
   );
 }
 

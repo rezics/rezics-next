@@ -1,7 +1,7 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
@@ -12,7 +12,7 @@ import { ProgressRow } from '@rezics/ui/progress-row';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -40,16 +40,9 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
 
-const subscribe = () => () => {};
-
 export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
   const sessions = progressIndexSubjects(page.sessions);
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject ?? sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
     return subject ? [pickerSubject(subject)] : [];
@@ -147,7 +140,8 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
             <h2 id="start-progress-heading" className="text-xl font-semibold">
               {m.library_progress_start_heading()}
             </h2>
-            {hydrated ? (
+            <Field>
+              <FieldLabel>{m.library_progress_subject()}</FieldLabel>
               <ProgressPicker
                 value={chosen}
                 onValueChange={async (value) => {
@@ -172,7 +166,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                   }
                 }}
               />
-            ) : null}
+            </Field>
             {chosen.length > 0 && !choosing && !choices?.length && !alert ? (
               <p role="status" className="text-muted-foreground">
                 {m.library_progress_unsupported()}
@@ -183,7 +177,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                 <input type="hidden" name="idempotencyKey" value={key} />
                 <input type="hidden" name="subjectId" value={subject} />
                 <fieldset className="space-y-3">
-                  <legend className="text-sm font-medium">{m.library_progress_mode()}</legend>
+                  <FieldLegend variant="label">{m.library_progress_mode()}</FieldLegend>
                   <RadioGroup
                     name="progress-mode"
                     value={mode}
@@ -207,7 +201,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                       id="progress-unit"
                       name="unit"
                       value={unit}
-                      onChange={(event) => setUnit(event.target.value)}
+                      onChange={(event) => setUnit(event.currentTarget.value)}
                     >
                       {units.map((choice) => (
                         <NativeSelectOption key={choice.id} value={choice.id}>
@@ -217,9 +211,10 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                     </NativeSelect>
                   </Field>
                   {pair?.total !== 'forbidden' ? (
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">{m.library_progress_total()}</span>
+                    <Field>
+                      <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
                       <Input
+                        id="progress-total"
                         name="total"
                         type="number"
                         min={pair?.min}
@@ -229,7 +224,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                         value={total}
                         onChange={(event) => setTotal(event.target.value)}
                       />
-                    </label>
+                    </Field>
                   ) : null}
                 </div>
                 {alert ? (
@@ -295,7 +290,7 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
                   m.library_subject_unavailable()
                 )}
               </ListRowLink>
-              <span className="work-title line-clamp-2 text-lg font-medium">
+              <span className="line-clamp-2 text-lg font-medium">
                 {session.subject ? (
                   <LibraryTitle label={session.subject.label} locale={getLocale()} />
                 ) : (
@@ -304,7 +299,7 @@ function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessi
               </span>
             </>
           ) : (
-            <span className="work-title line-clamp-2 text-lg font-medium">
+            <span className="line-clamp-2 text-lg font-medium">
               {session.subject ? (
                 <LibraryTitle label={session.subject.label} locale={getLocale()} />
               ) : (

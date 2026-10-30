@@ -525,6 +525,17 @@ Each server render and browser session has its own query cache. Public reads sta
 - **Visual check:** `Pages/Exposure` stories show the subject, personal library, progress and offer with all groups
   admitted and with none, in either locale and at either viewport width.
 
+### Progress route admission
+
+- **Touches:** After `requireSignedIn`, the progress index and session routes call the existing anonymous
+  `prepareExposure` prefetch. It reuses the platform exposure query and its per-isolate cache; it adds no viewer
+  read or additional progress, session, changes, units, logs or suggestion request.
+- **Bound:** At most one additional anonymous kernel read per isolate per 60 seconds across both routes. The
+  pre-hydration form remains closed when public exposure is absent, unknown or unavailable; authenticated browser
+  exposure continues to gate the hydrated controls.
+- **Growth check:** `tests/progress-pages-layout.test.ts` checks the pre-hydration and hydrated Unit control and
+  bounds anonymous exposure reads across the existing 10, 1,000 and 10,000 row fixtures.
+
 ### Locale resolution (`/`)
 
 - **Touches:** URL, locale cookie, then weighted `Accept-Language`, then English; redirect before page loaders

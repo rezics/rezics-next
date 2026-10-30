@@ -1,4 +1,5 @@
 import { requireSignedIn } from '../../session/guard';
+import { prepareExposure } from '../../kernel/exposure';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
@@ -10,7 +11,10 @@ import { readProgressSession } from '../../library/progress-server';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/$id')({
-  beforeLoad: requireSignedIn,
+  beforeLoad: async (args) => {
+    await requireSignedIn(args);
+    await prepareExposure(args.context.queryClient);
+  },
   validateSearch: (search: Record<string, unknown>) => ({
     ...(typeof search.changes === 'string' && search.changes ? { changes: search.changes } : {}),
     ...(typeof search.units === 'string' && search.units ? { units: search.units } : {}),

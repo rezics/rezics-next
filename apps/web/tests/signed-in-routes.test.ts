@@ -135,7 +135,13 @@ afterAll(async () => {
 test('every signed-in route guards beforeLoad and every private or offer head uses pageHead noindex, nofollow', async () => {
   for (const [file] of routes) {
     const source = await Bun.file(join(app, 'src/routes', file)).text();
-    expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
+    if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
+      expect(source, file).toMatch(
+        /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await requireSignedIn\(args\);\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
+      );
+    } else {
+      expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
+    }
     expect(source, file).toMatch(/pageHead\(/);
     expect(source, file).toContain("robots: 'noindex, nofollow'");
     expect(source, file).not.toMatch(/session\s*===|session\s*!==|SignInPrompt/);

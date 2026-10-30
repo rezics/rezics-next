@@ -3,6 +3,9 @@ import { ClientOnly } from '@tanstack/react-router';
 import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { ErrorPage } from '../../shell/shell';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { csrfHeaders } from '../../threads/composer';
 import { overviewOf, profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
@@ -222,27 +225,28 @@ export function CurationView({ initial }: { initial: CurationRead }) {
                 Start from the generic page. Type keys use a CURIE such as schema:Book; routes use paths such as /books.
               </p>
               <div className="flex flex-wrap items-end gap-3">
-                <label className="space-y-1">
-                  Scope
-                  <select
-                    className={`${control} block`}
+                <Field>
+                  <FieldLabel htmlFor="curation-scope">Scope</FieldLabel>
+                  <NativeSelect
+                    id="curation-scope"
                     value={scope}
                     onChange={(event) => setScope(event.target.value as 'type' | 'route')}
                   >
-                    <option value="type">Type</option>
-                    <option value="route">Route</option>
-                  </select>
-                </label>
-                <label className="min-w-0 flex-1 space-y-1">
-                  Key
-                  <input
+                    <NativeSelectOption value="type">Type</NativeSelectOption>
+                    <NativeSelectOption value="route">Route</NativeSelectOption>
+                  </NativeSelect>
+                </Field>
+                <Field className="min-w-0 flex-1">
+                  <FieldLabel htmlFor="curation-key">Key</FieldLabel>
+                  <Input
+                    id="curation-key"
                     className={`${control} block w-full`}
                     value={key}
                     onChange={(event) => setKey(event.target.value)}
                     required
                     autoComplete="off"
                   />
-                </label>
+                </Field>
                 <button type="submit" className={button}>
                   Add template
                 </button>

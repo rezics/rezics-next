@@ -1,6 +1,8 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
@@ -90,21 +92,20 @@ export function CollectionRow({ collection }: { collection: OwnedCollection }) {
         <p className="mt-1 text-sm text-muted-foreground">{explanation(current.visibility)}</p>
       </div>
       <ListRowControl>
-        <label className="grid gap-1 text-sm font-medium">
-          {m.settings_privacy_visibility_label()}
-          <select
-            className="min-h-10 w-full rounded-md border border-input bg-background px-3 text-foreground"
+        <Field>
+          <FieldLabel>{m.settings_privacy_visibility_label()}</FieldLabel>
+          <NativeSelect
             value={current.visibility}
             disabled={!csrfToken || busy}
             onChange={(event) => void change(event.target.value as CollectionVisibility)}
           >
             {visibilityOptions.map((value) => (
-              <option key={value} value={value}>
+              <NativeSelectOption key={value} value={value}>
                 {label(value)}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
+          </NativeSelect>
+        </Field>
       </ListRowControl>
       <ListRowControl className="sm:col-span-2">
         <div aria-live="polite">
