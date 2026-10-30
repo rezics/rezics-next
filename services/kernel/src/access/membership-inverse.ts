@@ -278,7 +278,7 @@ export function createMembershipInverseCommands(config: {
         await createRealmMembershipTransitions({
           pool: config.pool,
           authority: { readTransition: config.realmAuthority.readTransition },
-          clock: config.clock,
+          ...(config.clock ? { clock: config.clock } : {}),
         }).consume({ ...(input as RealmMembershipTransition), key: `${identity.key}:transition` });
       }
       return execute(

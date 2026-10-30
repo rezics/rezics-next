@@ -680,12 +680,12 @@ test.serial(
 /** Historical fixture only: represent an old writer's stable hold using the
  * actual native inverse provenance and real published intervals. No account,
  * tombstone, grant, obligation or acknowledgement is fabricated. */
-async function oldStableHold(state: Native, realmId: string) {
+async function oldStableHold(state: Native, realmId: string, accountId = state.persona.accountId) {
   await state.system.database.pool.query(
     `INSERT INTO access.lifecycle_coordination(route,account_id,reservation_id,related_account_id,purpose,transaction_id)
      SELECT route,account_id,reservation_id,group_id,'membership',transaction_id FROM access.membership_inverse
      WHERE route=$1 AND account_id=$2 AND kind='realm' AND group_id=$3`,
-    [routeOf(state.persona.accountId), state.persona.accountId, realmId],
+    [routeOf(accountId), accountId, realmId],
   );
 }
 
@@ -734,6 +734,18 @@ test.serial(
       );
     await settleNative();
     for (const realmId of realms) await oldStableHold(state, realmId);
+    const other = await state.deletion.person();
+    await body(
+      await state.driver.request({
+        actor: { id: other.accountId, bearer: other.bearer },
+        method: 'POST',
+        path: `/v1/realms/${realms[0]!}/membership`,
+        key: JSON.stringify(key()),
+      }),
+      202,
+    );
+    await settleNative();
+    await oldStableHold(state, realms[0]!, other.accountId);
     // A real old source absent from the authority is pending, never cancellation.
     const pendingRealm = newId(routeOf(state.realm.realmId)!);
     const pendingReservation = newId(routeOf(state.persona.accountId)!);
@@ -776,9 +788,17 @@ test.serial(
       expect(firstPage.items).toHaveLength(32);
       expect(firstPage.completed).toBe(false);
       expect(firstPage.cursor).toBeString();
+      const cursor = firstPage.cursor!;
+      const changed = Math.floor(cursor.length / 2);
+      const forged = cursor.slice(0, changed) + (cursor[changed] === 'a' ? 'b' : 'a') + cursor.slice(changed + 1);
       await expect(
-        reconciler.page({ accountId: state.persona.accountId, cursor: firstPage.cursor!.slice(0, -1) + 'x' }),
+        reconciler.page({ accountId: state.persona.accountId, cursor: forged }),
       ).rejects.toThrow();
+      await expect(reconciler.page({ accountId: other.accountId, cursor })).rejects.toThrow();
+      const otherPage = await reconcileCommunityMembership({ accountId: other.accountId });
+      expect(otherPage.completed).toBe(true);
+      expect(otherPage.items).toHaveLength(1);
+      expect(otherPage.items[0]!.state).toBe('published');
       // Recreate the coordinator. Progress is native storage, not a process Map.
       reconciler = createRealmMembershipReconciler(config);
       const lastPage = await reconciler.page({ accountId: state.persona.accountId, cursor: firstPage.cursor });
@@ -800,6 +820,24 @@ test.serial(
       ).toHaveLength(2);
       await expect(state.erase()).rejects.toThrow();
       expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
+      await deletePersona({ pool: state.system.database.pool, auth: state.deletion.auth }, other);
+      expect(await readErasureStatus(state.system.database.pool, other.accountId)).not.toBeNull();
+
+      // Historical over-cap data must refuse even when no hold joins the selected
+      // page. No truncated admission may become a completed progress receipt.
+      const overflow = await state.deletion.person();
+      const overflowRoute = routeOf(overflow.accountId)!;
+      const historical = Array.from({ length: 1001 }, () => newId(overflowRoute));
+      await state.system.database.pool.query(
+        `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+         SELECT $1,$2,'realm',id,id,id FROM unnest($3::uuid[]) id`,
+        [overflowRoute, overflow.accountId, historical],
+      );
+      await expect(reconciler.page({ accountId: overflow.accountId })).rejects.toThrow();
+      expect((await state.system.database.pool.query(
+        'SELECT 1 FROM access.realm_membership_reconciliation WHERE route=$1 AND account_id=$2',
+        [overflowRoute, overflow.accountId],
+      )).rows).toEqual([]);
     } finally {
       await worker.stop();
       if (previousBarrier === undefined) delete process.env.KERNEL_REALM_MEMBERSHIP_BARRIER;
