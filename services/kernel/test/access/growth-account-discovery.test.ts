@@ -10,10 +10,14 @@ import type { AccountDiscoveryNative, AccountDiscoveryNativeOptions } from './ac
 
 const route = 23;
 const after = '00000000-0000-8000-8000-001700000000';
-const selected = Array.from({ length: 3 }, (_, index) =>
-  `00000000-0000-8000-8000-0017${(index + 1).toString(16).padStart(8, '0')}`);
+const selected = Array.from(
+  { length: 3 },
+  (_, index) => `00000000-0000-8000-8000-0017${(index + 1).toString(16).padStart(8, '0')}`,
+);
 let db: GrowthDatabase;
-beforeAll(async () => { db = await openGrowthDatabase(); });
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+});
 afterAll(async () => db?.close());
 
 async function seed(database: GrowthDatabase) {
@@ -22,7 +26,8 @@ async function seed(database: GrowthDatabase) {
   await database.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,display_name,transaction_id)
      SELECT $1,id,'actor','active','Selected discovery account',id FROM unnest($2::uuid[]) seed(id)`,
-    [route, selected]);
+    [route, selected],
+  );
 }
 
 for (const axis of ['unrelated-live', 'excluded', 'history'] as const) {
@@ -41,20 +46,26 @@ for (const axis of ['unrelated-live', 'excluded', 'history'] as const) {
             `INSERT INTO access.lifecycle_fence_receipt
                (route,account_id,receipt_id,minimum_authn_epoch,kind,transaction_id)
              SELECT $1,$2,id,ordinal,'fence',id FROM unnest($3::uuid[]) WITH ORDINALITY seed(id,ordinal)`,
-            [route, selected[0], keys]);
+            [route, selected[0], keys],
+          );
         } else {
           await database.admin.query(
             `INSERT INTO access.account(route,account_id,kind,state,authn_fenced,transaction_id)
              SELECT $1,id,'actor',CASE WHEN $3 AND ordinal%3=0 THEN 'pending'
                WHEN $3 AND ordinal%3=1 THEN 'deleted' ELSE 'active' END,
                $3 AND ordinal%3=2,id FROM unnest($2::uuid[]) WITH ORDINALITY seed(id,ordinal)`,
-            [route, keys, axis === 'excluded']);
+            [route, keys, axis === 'excluded'],
+          );
         }
       },
       async operation(database) {
-        const page = await withConnection(database.pool, (client) => pageActiveAccounts(client, {
-          afterRoute: route, afterAccountId: after, limit: 3,
-        }));
+        const page = await withConnection(database.pool, (client) =>
+          pageActiveAccounts(client, {
+            afterRoute: route,
+            afterAccountId: after,
+            limit: 3,
+          }),
+        );
         expect(page).toEqual(selected.map((accountId) => ({ route, accountId })));
         const identities = await readPublicIdentities(database.pool, [route, route, route], selected);
         expect(identities.map(({ id }) => id)).toEqual(selected);
@@ -67,9 +78,15 @@ for (const axis of ['unrelated-live', 'excluded', 'history'] as const) {
       expect(cost.relations['access.account']?.sequentialScans).toBe(0);
       expect(cost.relations['access.lifecycle_fence_receipt']).toBeUndefined();
     }
-    const { capture: raw } = await capture(db, () => withConnection(db.pool, (client) => pageActiveAccounts(client, {
-      afterRoute: route, afterAccountId: after, limit: 3,
-    })));
+    const { capture: raw } = await capture(db, () =>
+      withConnection(db.pool, (client) =>
+        pageActiveAccounts(client, {
+          afterRoute: route,
+          afterAccountId: after,
+          limit: 3,
+        }),
+      ),
+    );
     expect(JSON.stringify(raw.plans)).toContain('"Index Name":"account_active_pages"');
   }, 60_000);
 }
@@ -77,12 +94,18 @@ for (const axis of ['unrelated-live', 'excluded', 'history'] as const) {
 async function openNative(): Promise<AccountDiscoveryNative> {
   const path = new URL('../search/support/account-discovery-native.ts', import.meta.url).pathname;
   if (!(await Bun.file(path).exists()))
-    throw new Error('Native Account discovery growth is not delivered: Search must supply test/search/support/account-discovery-native.ts (openAccountDiscoveryNative) with actual engine/SQL/Access capture');
-  const module = await import(path) as {
+    throw new Error(
+      'Native Account discovery growth is not delivered: Search must supply test/search/support/account-discovery-native.ts (openAccountDiscoveryNative) with actual engine/SQL/Access capture',
+    );
+  const module = (await import(path)) as {
     openAccountDiscoveryNative: (options: AccountDiscoveryNativeOptions) => Promise<AccountDiscoveryNative>;
   };
-  return module.openAccountDiscoveryNative({ pool: db.pool, routeKey: new Uint8Array(32).fill(83),
-    access: admittedAccess({ actions: LIFECYCLE_ACTIONS }), clock: () => new Date() });
+  return module.openAccountDiscoveryNative({
+    pool: db.pool,
+    routeKey: new Uint8Array(32).fill(83),
+    access: admittedAccess({ actions: LIFECYCLE_ACTIONS }),
+    clock: () => new Date(),
+  });
 }
 
 for (const axis of ['matches', 'corpus', 'kinds', 'copies'] as const) {
@@ -94,7 +117,9 @@ for (const axis of ['matches', 'corpus', 'kinds', 'copies'] as const) {
         scales: [64, 512, 4096],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         counted: {
-          read(value) { return { iteratorSteps: (value as { iteratorSteps: number }).iteratorSteps }; },
+          read(value) {
+            return { iteratorSteps: (value as { iteratorSteps: number }).iteratorSteps };
+          },
           bounds: { iteratorSteps: 'logarithmic' },
         },
         async grow(_database, scale, previous) {
@@ -128,6 +153,8 @@ for (const axis of ['matches', 'corpus', 'kinds', 'copies'] as const) {
         },
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
-    } finally { await d.close(); }
+    } finally {
+      await d.close();
+    }
   }, 120_000);
 }
