@@ -721,9 +721,15 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
   const importerFile = 'services/importer/tests/media-fence-evidence.test.ts';
   const absoluteImporterFile = join(repository, importerFile);
   expect(await needsStack(['env', 'WRAPPER_KEEP=yes', 'bun', 'test', absoluteImporterFile, '-t', 'fence'])).toBe(false);
+  expect(
+    await needsStack(['bun', 'test', importerFile, '--test-name-pattern', 'services/kernel/test/native.test.ts']),
+  ).toBe(false);
   expect(await needsStack(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test', importerFile])).toBe(
     false,
   );
+  expect(await needsStack(['bun', 'test', importerFile, 'services/kernel/test'])).toBe(true);
+  expect(await needsStack(['bun', 'test', importerFile, '--preload', 'services/kernel/test/preload.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'test', importerFile, '--require', 'services/kernel/test/preload.ts'])).toBe(true);
   expect(await needsStack(['bun', 'test', join(repository, 'services/kernel/test/native.test.ts')])).toBe(true);
   expect(await needsStack(['bun', 'test', 'test/native.test.ts'], join(repository, 'services/kernel'))).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd=services/kernel', 'check'])).toBe(true);
