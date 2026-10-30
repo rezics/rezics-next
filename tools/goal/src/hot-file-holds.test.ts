@@ -178,7 +178,9 @@ test('a rebase conflict confined to bun.lock is resolved by taking the integrati
       // Fail unless checkout --ours selected the integration side before install.
       writeFileSync(
         join(bin, 'bun'),
-        scopedBun(h.root, `
+        scopedBun(
+          h.root,
+          `
 if [ "$1" = install ]; then
   if [ "$#" != 1 ]; then exit 0; fi
   test "$(cat bun.lock)" = 'integration lock' || exit 82
@@ -188,8 +190,8 @@ else
   exec ${JSON.stringify(process.execPath)} "$@"
 fi
 `,
-      ),
-    );
+        ),
+      );
       chmodSync(join(bin, 'bun'), 0o755);
       restorePath = prependPath(bin);
       if (surface === 'retry') {
@@ -255,7 +257,9 @@ test('a rebase that conflicts in bun.lock and in other files still stops at the 
     mkdirSync(bin);
     writeFileSync(
       join(bin, 'bun'),
-      scopedBun(h.root, `
+      scopedBun(
+        h.root,
+        `
 if [ "$1" = install ]; then
   if [ "$#" = 1 ]; then
     touch ${JSON.stringify(installed)}

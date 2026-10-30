@@ -89,7 +89,10 @@ function statusPaths(result: GitResult): string[] {
 }
 
 function boundedPaths(values: readonly string[]): string[] {
-  return [...values.slice(0, MAX_PATHS), ...(values.length > MAX_PATHS ? [`… ${values.length - MAX_PATHS} omitted`] : [])];
+  return [
+    ...values.slice(0, MAX_PATHS),
+    ...(values.length > MAX_PATHS ? [`… ${values.length - MAX_PATHS} omitted`] : []),
+  ];
 }
 
 function sanitizedDetail(value: unknown): string {
@@ -121,10 +124,7 @@ function takeSnapshot(cwd: string, phase: string, evidencePath: string): Candida
     .map(([name, result]) => `${name}: ${gitDetails(result)}`);
   const snapshot: CandidateSnapshot = {
     head: queryResults.head.status === 0 ? queryResults.head.stdout.trim() : '(unavailable)',
-    status:
-      queryResults.status.status === 0
-        ? boundedPaths(statusPaths(queryResults.status))
-        : ['(unavailable)'],
+    status: queryResults.status.status === 0 ? boundedPaths(statusPaths(queryResults.status)) : ['(unavailable)'],
     tracked: queryResults.tracked.status === 0 ? paths(queryResults.tracked) : ['(unavailable)'],
     staged: queryResults.staged.status === 0 ? paths(queryResults.staged) : ['(unavailable)'],
     unstaged: queryResults.unstaged.status === 0 ? paths(queryResults.unstaged) : ['(unavailable)'],
@@ -143,9 +143,7 @@ function takeSnapshot(cwd: string, phase: string, evidencePath: string): Candida
         unstaged: boundedPaths(snapshot.unstaged),
         untracked: boundedPaths(snapshot.untracked),
       },
-      git: Object.fromEntries(
-        Object.entries(queryResults).map(([name, result]) => [name, gitDetails(result)]),
-      ),
+      git: Object.fromEntries(Object.entries(queryResults).map(([name, result]) => [name, gitDetails(result)])),
       ...(failures.length ? { failures } : {}),
     })}\n`,
   );
@@ -156,7 +154,9 @@ function takeSnapshot(cwd: string, phase: string, evidencePath: string): Candida
 function assertNoOutsideTempUntracked(snapshot: CandidateSnapshot, phase: string): void {
   const outside = snapshot.untracked.filter((path) => path !== '.temp' && !path.startsWith('.temp/'));
   if (outside.length)
-    throw new Error(`Candidate produced untracked paths outside .temp during ${phase}: ${JSON.stringify(boundedPaths(outside))}`);
+    throw new Error(
+      `Candidate produced untracked paths outside .temp during ${phase}: ${JSON.stringify(boundedPaths(outside))}`,
+    );
 }
 
 function boundary(cwd: string, expected: string, phase: string, evidencePath: string): CandidateSnapshot {
@@ -177,7 +177,9 @@ function installIsolatedLocalConfig(sourceRoot: string, candidateRoot: string, i
     ? (JSON.parse(readFileSync(sourceSettings.localFile, 'utf8')) as Record<string, unknown>)
     : {};
   const integration =
-    originalLocal.integration && typeof originalLocal.integration === 'object' && !Array.isArray(originalLocal.integration)
+    originalLocal.integration &&
+    typeof originalLocal.integration === 'object' &&
+    !Array.isArray(originalLocal.integration)
       ? (originalLocal.integration as Record<string, unknown>)
       : {};
   const root = resolve(candidateRoot);
@@ -392,7 +394,10 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
   const sourceHead = gitText(worktreeRoot, 'rev-parse', 'HEAD');
   const sourceSettings = loadSettings({ cwd: worktreeRoot, env: safeEnvironment() });
   const sourceRefs = Object.fromEntries(
-    ['main', 'dev', 'stabilize'].map((name) => [name, gitText(sourceRoot, 'rev-parse', '--verify', `refs/heads/${name}`)]),
+    ['main', 'dev', 'stabilize'].map((name) => [
+      name,
+      gitText(sourceRoot, 'rev-parse', '--verify', `refs/heads/${name}`),
+    ]),
   );
   const metadata = {
     sourceRoot,
@@ -402,7 +407,9 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     sourceTreeStatus: gitText(worktreeRoot, 'status', '--porcelain=v1'),
   };
   if (metadata.sourceTreeStatus)
-    throw new Error(`Probe source worktree must be clean before cloning candidate: ${metadata.sourceTreeStatus.slice(0, 500)}`);
+    throw new Error(
+      `Probe source worktree must be clean before cloning candidate: ${metadata.sourceTreeStatus.slice(0, 500)}`,
+    );
 
   const evidenceDirectory = join(worktreeRoot, '.temp/goal');
   mkdirSync(evidenceDirectory, { recursive: true });
@@ -413,7 +420,10 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
   const isolatedState = join(candidateRoot, '.temp/goal/candidate-probe-state');
   const checkLog = join(isolatedState, 'checks.log');
   let preserve = false;
-  writeFileSync(evidencePath, `${JSON.stringify({ type: 'probe-start', ...metadata, probeDirectory, evidencePath })}\n`);
+  writeFileSync(
+    evidencePath,
+    `${JSON.stringify({ type: 'probe-start', ...metadata, probeDirectory, evidencePath })}\n`,
+  );
   logEvent(evidencePath, { type: 'candidate-clone-start', source: sourceRoot, commit: sourceHead });
 
   try {
@@ -438,17 +448,26 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     if (checkedOut.status !== 0 || checkedOut.error || checkedOut.signal)
       throw new Error(`Could not check out isolated candidate: ${gitDetails(checkedOut)}`);
     const expected = gitText(candidateRoot, 'rev-parse', 'HEAD');
-    if (expected !== sourceHead) throw new Error(`Isolated candidate HEAD ${expected} did not match source ${sourceHead}`);
+    if (expected !== sourceHead)
+      throw new Error(`Isolated candidate HEAD ${expected} did not match source ${sourceHead}`);
 
     const mainHead = gitText(candidateRoot, 'rev-parse', '--verify', `refs/heads/${sourceSettings.mainBranch}`);
     const base = gitText(candidateRoot, 'merge-base', mainHead, expected);
-    if (!base) throw new Error(`Candidate ${expected} and ${sourceSettings.mainBranch} ${mainHead} have no common base`);
+    if (!base)
+      throw new Error(`Candidate ${expected} and ${sourceSettings.mainBranch} ${mainHead} have no common base`);
     const ancestor = git(candidateRoot, ['merge-base', '--is-ancestor', base, expected]);
     if (ancestor.status !== 0 || ancestor.signal || ancestor.error)
       throw new Error(`Candidate base ${base} is not an ancestor of ${expected}: ${gitDetails(ancestor)}`);
     installIsolatedLocalConfig(sourceRoot, candidateRoot, isolatedState);
     boundary(candidateRoot, expected, 'candidate initial checkout', evidencePath);
-    logEvent(evidencePath, { type: 'candidate-ready', expectedHead: expected, mainHead, base, candidateRoot, isolatedState });
+    logEvent(evidencePath, {
+      type: 'candidate-ready',
+      expectedHead: expected,
+      mainHead,
+      base,
+      candidateRoot,
+      isolatedState,
+    });
 
     const installRunner = instrumentedGate(
       gateRunner(600_000, isolatedState),
@@ -571,7 +590,10 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
   } finally {
     try {
       const refsAfter = Object.fromEntries(
-        Object.keys(sourceRefs).map((name) => [name, gitText(sourceRoot, 'rev-parse', '--verify', `refs/heads/${name}`)]),
+        Object.keys(sourceRefs).map((name) => [
+          name,
+          gitText(sourceRoot, 'rev-parse', '--verify', `refs/heads/${name}`),
+        ]),
       );
       logEvent(evidencePath, {
         type: 'source-ref-final-state',

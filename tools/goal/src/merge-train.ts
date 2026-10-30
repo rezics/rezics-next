@@ -200,21 +200,16 @@ function candidateIntegrityEvidence(
     `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, 4000) || '(empty)' : candidateGitDetails(stat)}`,
   );
   if (tracked.length <= 64 && tracked.length) {
-    const patch = candidateGit(cwd, [
-      'diff',
-      '--no-ext-diff',
-      '--no-color',
-      '--unified=0',
-      expected,
-      '--',
-      ...tracked,
-    ], run);
+    const patch = candidateGit(
+      cwd,
+      ['diff', '--no-ext-diff', '--no-color', '--unified=0', expected, '--', ...tracked],
+      run,
+    );
     if (patch.status === 0) {
       const redacted = patch.stdout
         .split(/\r?\n/)
         .map((line) =>
-          (line.startsWith('+') && !line.startsWith('+++ ')) ||
-          (line.startsWith('-') && !line.startsWith('--- '))
+          (line.startsWith('+') && !line.startsWith('+++ ')) || (line.startsWith('-') && !line.startsWith('--- '))
             ? `${line[0]}[content redacted]`
             : line,
         )
@@ -223,7 +218,10 @@ function candidateIntegrityEvidence(
         .slice(0, 5000);
       report.push(`safe patch (changed line contents redacted):\n${redacted || '(empty)'}`);
     } else report.push(`safe patch unavailable: ${candidateGitDetails(patch)}`);
-  } else report.push(`safe patch omitted: ${tracked.length > 64 ? 'path bound exceeded' : 'no tracked paths were returned'}`);
+  } else
+    report.push(
+      `safe patch omitted: ${tracked.length > 64 ? 'path bound exceeded' : 'no tracked paths were returned'}`,
+    );
   appendFileSync(logPath, `${report.join('\n')}\n`);
 }
 
