@@ -341,7 +341,7 @@ test('the unprofiled label story loads the same complete subject and localized t
   const { loadSubject } = await import('../src/subject/load-subject');
   const { loadSubjectPage, subjectBody, subjectPageTitle } = await import('../src/features/pages/subject');
   const { libraryProfile } = await import('../src/library/profiles');
-  const definitions = await import('../src/kernel/recorded/definitions-release.json');
+  const { default: definitions } = await import('../src/kernel/recorded/definitions-release.json');
   const client = createKernelClient('https://kernel.example.test', { fetch: createStoryRecordedKernelFetch() });
   expect(
     libraryProfile(definitions.release as unknown as import('../src/subject/definitions').Release, 'schema:Person'),
