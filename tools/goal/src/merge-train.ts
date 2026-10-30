@@ -51,6 +51,14 @@ import { resolveImportConflicts } from './import-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
 
+/** Select the integration checks that the landing path matcher will run for these changed files. */
+export function integrationChecksForFiles(
+  changed: readonly string[],
+  checks: readonly IntegrationCheck[],
+): IntegrationCheck[] {
+  return checks.filter((check) => changed.some((path) => matchesPath(path, check.paths)));
+}
+
 /** Keep control-plane train fixtures hermetic even if package defaults name real workspace checks. */
 export function landingAffectedChecks(
   changed: readonly string[],
@@ -1520,9 +1528,7 @@ export class MergeTrain {
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
         const changed = [...new Set(prepared.flatMap((member) => member.result.changedFiles))].sort();
-        const integrationChecks = configuredChecks.filter((check) =>
-          changed.some((path) => matchesPath(path, check.paths)),
-        );
+        const integrationChecks = integrationChecksForFiles(changed, configuredChecks);
         const batchAffectedChecks = (o.affectedTests ?? defaults.affectedTests).filter((check) =>
           changed.some((path) => matchesPath(path, check.paths)),
         );
@@ -2175,9 +2181,7 @@ export class MergeTrain {
           appendFileSync(logPath, `\nChecks are not run at dev landing; dev is verified after the merge\n`);
         const configuredIntegrationChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const matchingIntegrationChecks = configuredIntegrationChecks.filter((check) =>
-          result.changedFiles.some((path) => matchesPath(path, check.paths)),
-        );
+        const matchingIntegrationChecks = integrationChecksForFiles(result.changedFiles, configuredIntegrationChecks);
         // `clean -fdx` above removed node_modules; remote checks resolve the pinned Bun from it, so every stabilize
         // landing's first check failed before running (2026-10-29). Control-plane landings install their own.
         if (!skipDevChecks && !controlPlane && !existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
@@ -2446,9 +2450,7 @@ export class MergeTrain {
         }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const integrationChecks = configuredChecks.filter((check) =>
-          result.changedFiles.some((path) => matchesPath(path, check.paths)),
-        );
+        const integrationChecks = integrationChecksForFiles(result.changedFiles, configuredChecks);
         if (!skipDevChecks && !controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
