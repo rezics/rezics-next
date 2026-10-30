@@ -6,7 +6,7 @@ import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
-import { RealmLastOwnerError } from '../access/realm-ownership.ts';
+import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 

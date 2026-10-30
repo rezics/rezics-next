@@ -10,12 +10,8 @@ import { validResource } from './grant-command.ts';
 import endStatement from './resource-denial-end.sql';
 import recordStatement from './resource-denial-record.sql';
 
-export class ResourceAccessWriteDeniedError extends Error {
-  constructor() {
-    super('Resource access write denied');
-    this.name = 'ResourceAccessWriteDeniedError';
-  }
-}
+import { ResourceAccessWriteDeniedError } from './resource-access-errors.ts';
+export { ResourceAccessWriteDeniedError } from './resource-access-errors.ts';
 
 const denialReasons = new Set(['resource', 'suspension', 'realm_ban']);
 const denialAction = /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/;

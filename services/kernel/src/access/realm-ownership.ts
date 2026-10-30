@@ -30,6 +30,8 @@ import {
   type CurrentResourceRoleKey,
 } from './current-resource-roles.ts';
 import { requireResourceCommand, ResourceAccessWriteDeniedError } from './resource-denials.ts';
+import { RealmLastOwnerError } from './resource-access-errors.ts';
+export { RealmLastOwnerError } from './resource-access-errors.ts';
 import catalogue from './resource-roles.json';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import read from './realm-ownership-read.sql';
@@ -39,14 +41,6 @@ import erasureSource from './realm-ownership-erasure-source.sql';
 import roleMutation from './role-grant-mutate.sql';
 
 export const REALM_OWNER_ROLE = 'community.realm.owner';
-
-/** Only the authorized, locked native holder predicate may issue this refusal. */
-export class RealmLastOwnerError extends ResourceAccessWriteDeniedError {
-  constructor() {
-    super();
-    this.name = 'RealmLastOwnerError';
-  }
-}
 
 // This ordering is container data. It changes neither role actions nor the Access formula.
 const roles = [
