@@ -8,7 +8,8 @@ import {
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
 export type CurationFailure =
-  | { ok: false; reason: 'stale' | 'forbidden' | 'unavailable' }
+  | { ok: false; reason: 'stale' | 'forbidden' }
+  | { ok: false; reason: 'unavailable'; outcome?: 'unknown'; phase?: 'publish' | 'activate' }
   | { ok: false; reason: 'invalid'; errors: { pointer: string; code: string }[] }
   | { ok: false; reason: 'rate-limited'; retryAfter?: number };
 export type PublishInput = {
@@ -140,13 +141,15 @@ export async function publishProfile(
   client: KernelClient,
   { profile, expectedHead, authorization, keys }: PublishInput & { authorization: string },
 ): Promise<PublishResult> {
+  let phase: 'publish' | 'activate' = 'publish';
   try {
     const published = await client.presentation.profiles.post(
       { profile },
       { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
     );
     if (published.status >= 400) return curationFailure(published.status, published.error?.value, published.headers);
-    if (!published.data) return { ok: false, reason: 'unavailable' };
+    if (!published.data) return { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
+    phase = 'activate';
     const activated = await client.presentation
       .profiles({ digest: published.data.digest })
       .$activate.post(
@@ -154,8 +157,10 @@ export async function publishProfile(
         { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
       );
     if (activated.status >= 400) return curationFailure(activated.status, activated.error?.value, activated.headers);
-    return activated.data ? { ok: true, ...activated.data } : { ok: false, reason: 'unavailable' };
+    return activated.data
+      ? { ok: true, ...activated.data }
+      : { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
   } catch {
-    return { ok: false, reason: 'unavailable' };
+    return { ok: false, reason: 'unavailable', outcome: 'unknown', phase };
   }
 }

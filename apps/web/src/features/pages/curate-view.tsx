@@ -1,6 +1,6 @@
 import { platformRegistry, validateProfile, type CompositionDocument } from '@rezics/composition';
 import { ClientOnly, useLocation } from '@tanstack/react-router';
-import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react';
+import { lazy, Suspense, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { ErrorPage } from '../../shell/shell';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -12,6 +12,14 @@ import { publishCuration, readCuration, type CurationRead } from './curate-actio
 import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
 import { CandidateReview } from '../../subject/candidate-review';
 import { useSession } from '../../session/query';
+import { m } from '../../paraglide/messages.js';
+import { CurationPublication, type PublicationConfirmation, type PublicationTransport } from './curation-publish';
+import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
+
+const publicationTransport: PublicationTransport = {
+  publish: (data) => publishCuration({ data, headers: csrfHeaders() }),
+  read: () => readCuration({ headers: csrfHeaders() }),
+};
 
 /** The subject's private curation region shares the existing prepared BFF transport. */
 export function SubjectCandidateCuration({ id, locale }: { id: string; locale: string }) {
@@ -57,35 +65,27 @@ const editorTheme = {
 } as CSSProperties;
 
 function Failure({ failure }: { failure: CurationFailure | Exclude<CurationRead, { ok: true }> }) {
-  return (
-    <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">
-      <p>
-        {failure.reason === 'invalid'
-          ? 'This profile cannot be published.'
-          : failure.reason === 'rate-limited'
-            ? `Too many requests. Try again${failure.retryAfter === undefined ? ' later' : ` in ${failure.retryAfter} seconds`}.`
-            : 'Presentation is unavailable. Please try again.'}
-      </p>
-      {failure.reason === 'invalid' ? (
-        <ul className="list-disc break-all ps-5">
-          {failure.errors.map(({ pointer, code }, index) => (
-            <li key={index}>
-              <code>
-                {pointer || '/'} — {code}
-              </code>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
+  return <CurationFailureNotice failure={failure} />;
 }
 
-export function CurationView({ initial }: { initial: CurationRead }) {
+export function CurationView({
+  initial,
+  transport = publicationTransport,
+}: {
+  initial: CurationRead;
+  transport?: PublicationTransport;
+}) {
   const [current, setCurrent] = useState(initial);
   const [failure, setFailure] = useState<CurationFailure | null>(null);
   const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [loading, setBusy] = useState(false);
+  const [publication] = useState(() => new CurationPublication(transport));
+  const publicationState = useSyncExternalStore(
+    publication.subscribe,
+    publication.getSnapshot,
+    publication.getSnapshot,
+  );
+  const busy = loading || publicationState.busy;
   const [selected, setSelected] = useState<Template | null>(null);
   const [scope, setScope] = useState<'type' | 'route'>('type');
   const [key, setKey] = useState('');
@@ -96,8 +96,11 @@ export function CurationView({ initial }: { initial: CurationRead }) {
     setBusy(true);
     setFailure(null);
     try {
-      setCurrent(await readCuration({ headers: csrfHeaders() }));
-      setSelected(null);
+      const result = await transport.read();
+      if (result.ok) {
+        setCurrent(result);
+        setSelected(null);
+      } else setFailure(result.reason === 'signed-out' ? { ok: false, reason: 'forbidden' } : result);
     } catch {
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
@@ -110,7 +113,7 @@ export function CurationView({ initial }: { initial: CurationRead }) {
       <div className="space-y-4">
         <Failure failure={current} />
         <button type="button" className={button} disabled={busy} onClick={reload}>
-          Reload presentation
+          {m.curation_reload()}
         </button>
       </div>
     );
@@ -145,49 +148,30 @@ export function CurationView({ initial }: { initial: CurationRead }) {
     setSelected(template);
     setKey('');
     setFailure(null);
-    setMessage('Template added to the draft. Publish to activate it.');
+    setMessage(m.curation_added());
+  }
+
+  function published({ result }: PublicationConfirmation) {
+    // Keep any edits made after the intent snapshot; the native result advances only its basis.
+    setCurrent((draft) => (draft.ok ? { ...draft, digest: result.digest, head: result.head } : draft));
   }
 
   async function publish(edited?: CompositionDocument) {
     if (!current.ok || busy) return;
     const next = edited && selected ? withTemplate(profile, selected, edited) : profile;
     setCurrent({ ...current, profile: next });
-    setBusy(true);
     setFailure(null);
     setMessage('');
-    try {
-      const result = await publishCuration({
-        data: {
-          profile: next,
-          expectedHead: head,
-          keys: { publish: crypto.randomUUID(), activate: crypto.randomUUID() },
-        },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setCurrent({ ok: true, profile: next, digest: result.digest, head: result.head });
-        setMessage(`Presentation published. New head: ${result.head}.`);
-      } else if (result.reason === 'stale') {
-        setSelected(null);
-        setCurrent(await readCuration({ headers: csrfHeaders() }));
-        setMessage('The active presentation changed. Reloaded the active profile; your draft was discarded.');
-      } else setFailure(result);
-    } catch {
-      setFailure({ ok: false, reason: 'unavailable' });
-    } finally {
-      setBusy(false);
-    }
+    const confirmation = await publication.start(next, head);
+    if (confirmation) published(confirmation);
   }
 
   return (
-    <article className="min-w-0 space-y-6 text-foreground" aria-busy={busy}>
+    <article className="min-w-0 space-y-6 font-sans text-foreground" aria-busy={busy}>
       <header className="space-y-2">
-        <h1 className="font-serif text-3xl font-semibold tracking-tight">Curate presentation</h1>
-        <p className="text-muted-foreground">Active head: {head}. Edit a template, then publish the whole profile.</p>
-        <p className="text-sm text-muted-foreground">
-          The editor's Publish button activates all draft templates. Close the editor before switching templates;
-          unpublished editor changes are discarded.
-        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading()}</h1>
+        <p className="text-muted-foreground">{m.curation_basis({ head })}</p>
+        <p className="text-sm text-muted-foreground">{m.curation_editor_help()}</p>
       </header>
       {message ? (
         <p role="status" className="rounded-lg border border-border bg-card p-4">
@@ -195,9 +179,20 @@ export function CurationView({ initial }: { initial: CurationRead }) {
         </p>
       ) : null}
       {failure ? <Failure failure={failure} /> : null}
+      <CurationPublicationRecovery
+        publication={publication}
+        profile={profile}
+        head={head}
+        onPublished={published}
+        onReviewed={(active, choice) => {
+          setCurrent(active);
+          if (choice === 'discard') setSelected(null);
+          setMessage(choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
+        }}
+      />
       <fieldset disabled={busy} className="min-w-0 space-y-6">
-        <section aria-label="Templates" className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-3 font-semibold">Templates</h2>
+        <section aria-label={m.curation_templates()} className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-3 font-semibold">{m.curation_templates()}</h2>
           <ul className="flex flex-wrap gap-2">
             {templates.map((template) => (
               <li key={`${template.scope}:${template.key}`} className="min-w-0 max-w-full">
@@ -212,25 +207,25 @@ export function CurationView({ initial }: { initial: CurationRead }) {
                   }}
                 >
                   <span className="text-sm text-muted-foreground">{template.scope}: </span>
-                  {template.key ?? 'Generic page'}
+                  {template.key ?? m.curation_generic()}
                 </button>
               </li>
             ))}
           </ul>
         </section>
         {selected && document ? (
-          <section className="min-w-0 space-y-3" aria-label="Template editor">
+          <section className="min-w-0 space-y-3" aria-label={m.curation_editor()}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="break-all font-semibold">
-                Editing {selected.scope}: {selected.key ?? 'Generic page'}
+                {m.curation_editing({ scope: selected.scope, key: selected.key ?? m.curation_generic() })}
               </h2>
               <button type="button" className={button} onClick={() => setSelected(null)}>
-                Close editor
+                {m.curation_close()}
               </button>
             </div>
             <div className="overflow-auto rounded-xl border border-border bg-card" style={editorTheme}>
-              <ClientOnly fallback={<p className="p-4">Loading editor…</p>}>
-                <Suspense fallback={<p className="p-4">Loading editor…</p>}>
+              <ClientOnly fallback={<p className="p-4">{m.curation_loading_editor()}</p>}>
+                <Suspense fallback={<p className="p-4">{m.curation_loading_editor()}</p>}>
                   <PageEditor
                     key={`${selected.scope}:${selected.key}`}
                     document={document}
@@ -244,24 +239,22 @@ export function CurationView({ initial }: { initial: CurationRead }) {
         ) : (
           <>
             <form className="space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={addTemplate}>
-              <h2 className="font-semibold">Add template</h2>
-              <p className="text-sm text-muted-foreground">
-                Start from the generic page. Type keys use a CURIE such as schema:Book; routes use paths such as /books.
-              </p>
+              <h2 className="font-semibold">{m.curation_add()}</h2>
+              <p className="text-sm text-muted-foreground">{m.curation_add_help()}</p>
               <div className="flex flex-wrap items-end gap-3">
                 <Field>
-                  <FieldLabel htmlFor="curation-scope">Scope</FieldLabel>
+                  <FieldLabel htmlFor="curation-scope">{m.curation_scope()}</FieldLabel>
                   <NativeSelect
                     id="curation-scope"
                     value={scope}
                     onChange={(event) => setScope(event.target.value as 'type' | 'route')}
                   >
-                    <NativeSelectOption value="type">Type</NativeSelectOption>
-                    <NativeSelectOption value="route">Route</NativeSelectOption>
+                    <NativeSelectOption value="type">{m.curation_type()}</NativeSelectOption>
+                    <NativeSelectOption value="route">{m.curation_route()}</NativeSelectOption>
                   </NativeSelect>
                 </Field>
                 <Field className="min-w-0 flex-1">
-                  <FieldLabel htmlFor="curation-key">Key</FieldLabel>
+                  <FieldLabel htmlFor="curation-key">{m.curation_key()}</FieldLabel>
                   <Input
                     id="curation-key"
                     className={`${control} block w-full`}
@@ -272,12 +265,17 @@ export function CurationView({ initial }: { initial: CurationRead }) {
                   />
                 </Field>
                 <button type="submit" className={button}>
-                  Add template
+                  {m.curation_add()}
                 </button>
               </div>
             </form>
-            <button type="button" className={button} onClick={() => void publish()}>
-              Publish profile
+            <button
+              type="button"
+              className={button}
+              disabled={publicationState.intent !== null}
+              onClick={() => void publish()}
+            >
+              {m.curation_publish()}
             </button>
           </>
         )}
