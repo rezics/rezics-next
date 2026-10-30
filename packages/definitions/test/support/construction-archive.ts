@@ -87,7 +87,10 @@ export function createConstructionArchive() {
           .filter(Boolean)
           .map((line) => JSON.parse(line) as string),
       async run(args: string[]) {
-        const argv = [process.execPath, '--preload', helper, ...args];
+        const argv =
+          args[0] === 'test'
+            ? [process.execPath, 'test', '--preload', helper, ...args.slice(1)]
+            : [process.execPath, '--preload', helper, ...args];
         const child = Bun.spawn(argv, {
           cwd: join(directory, 'packages/definitions'),
           env: {
