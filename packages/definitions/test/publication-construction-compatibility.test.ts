@@ -113,7 +113,7 @@ test('schema-valid semantic faults retain the outer 64-result cap and exact esca
     expect(Compile(schema).Check(release)).toBe(true);
     const expected = Array.from({ length: 64 }, (_, index) => ({
       pointer: `/types/grow:a~0~1${String(index).padStart(3, '0')}/iri`,
-      code: 'invalid',
+      code: 'invalid' as const,
     }));
     const original = oracle.validate(release);
     const delivered = validateRelease(release);

@@ -3,6 +3,7 @@ import { Compile } from 'typebox/schema';
 import schema from '../schema/release.json';
 import { CatalogueError, compileCatalogue } from '../src/compile.ts';
 import { validateRelease } from '../src/index.ts';
+import type { LibraryCountForms, LibraryLabels } from '../src/index.ts';
 import { compiledProfile, fixture, libraryProfile, releaseWith, unitData } from './support/library-profiles.ts';
 
 test('an optional empty library registry accepts no capabilities and never resolves a missing reference', () => {
@@ -253,7 +254,9 @@ test('release form validation uses exact locale/category pointers and Unicode co
 
 test('bundled countable units carry all eight authored locale maps and percent descriptors stay unchanged', async () => {
   const { bundledSources, bundledRelease } = await import('../src/bundled.ts');
-  const expected = (await import('./fixtures/library-count-forms.json')).default;
+  const expected: Record<keyof LibraryLabels, Record<string, LibraryCountForms>> = (
+    await import('./fixtures/library-count-forms.json')
+  ).default;
   const release = await compileCatalogue(bundledSources());
   expect(release).toEqual(bundledRelease);
   for (const profile of Object.values(release.libraryProfiles!))
@@ -274,7 +277,7 @@ test('bundled countable units carry all eight authored locale maps and percent d
           'zh-Hant',
         ]);
         for (const locale of Object.keys(expected) as (keyof typeof expected)[]) {
-          expect(unit.countForms![locale]).toEqual((expected[locale] as Record<string, unknown>)[unit.id]);
+          expect(unit.countForms![locale]).toEqual((expected[locale] as Record<string, LibraryCountForms>)[unit.id]);
           expect(unit.labels[locale]).toBe(unit.countForms![locale]!.one ?? unit.countForms![locale]!.other);
         }
       }

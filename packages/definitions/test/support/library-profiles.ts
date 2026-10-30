@@ -1,6 +1,6 @@
 import { verticalManifests, verticalProfile } from '../../../../services/kernel/test/support/manifests.ts';
 import { bundledSources } from '../../src/bundled.ts';
-import type { Release } from '../../src/index.ts';
+import type { LibraryProgressUnit, Release } from '../../src/index.ts';
 import countForms from '../fixtures/library-count-forms.json';
 
 export const LIBRARY_LOCALES = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
@@ -47,7 +47,10 @@ const copyStatusWords: Record<string, readonly string[]> = {
 
 export const MODES = ['scalar_amount', 'cursor_position', 'completed_units'] as const;
 export const LEGACY_UNITS = ['page', 'chapter', 'episode', 'volume', 'minute', 'percent'] as const;
-export function unitData(id: string, mode: string = 'scalar_amount'): ProfileData {
+export function unitData(
+  id: string,
+  mode: string = 'scalar_amount',
+): Omit<LibraryProgressUnit, 'labels' | 'countForms'> {
   return {
     id,
     minimum: '0',
