@@ -585,9 +585,11 @@ After the actual seed-settle prerequisite integrated at `fc0de8d4c855858e5307580
 native command ran once at `26f11804490567af598ff32ccfbec69585a9a998`:
 `bun run --cwd services/kernel check test/imports/growth-outcomes.test.ts`. Check
 `a1954e6f-dd8a-49f1-a752-8e5ced8cc394` exited 1; its retained log is
-`.temp/goal/checks/worker-check-2026-10-30T00-42-50.267Z-0f1a8b4d.log`. The wrapper's automatic isolated rerun
-repeated the same result: each run had 17 native child cases, 8 passed and 9 failed. The outer
-`all real import growth outcomes pass` test failed in each run. Passing children were all four independent
+`.temp/goal/checks/worker-check-2026-10-30T00-42-50.267Z-0f1a8b4d.log`. This single invocation had 17 native child
+cases, 8 passed, 9 failed and 63,280 assertions. Its log explicitly records `Load reruns: 0 files`; duplicate full
+failure-output copies do not establish an isolated rerun. The retained raw log SHA-256 is
+`b3b91bbe8ef28ffc6aadf84c218c9c7e9890bbb9556b388ef3d78d631e79acef`. The outer
+`all real import growth outcomes pass` test failed. Passing children were all four independent
 converter cases, oversized-record rejection, bounded dump streaming, hard-cap bulk rejection, and the configured
 64 KiB reader-cap case. Failing children were native import growth, unchanged refresh, one new record, one changed
 record, converter revision change, mass disappearance, vanished-page reads, bulk request growth, and private 300
@@ -627,8 +629,10 @@ to seeding, settle, retry policy, deadlines, worker scheduling, or bounds. These
 than being treated as evidence that the measured acceptance passed.
 
 The Imports-only regression and composition work is committed, and no shared harness or portable validator file was
-changed. There is no safe Imports-only reconstruction for these native calls: the shared execution identity points
-at a different SQL operation, and matching by text/backend could attach a nested or repeated plan to an unrelated or
-failed attempt. Completing native acceptance now requires the shared Capture producer to supply the correct
-per-plan execution identity, after which this same bounded owner/backend/SQL projection can be rerun. The report
-preserves the exact native counterexample rather than substituting generic index proofs or weakening the invariant.
+changed. There is no safe Imports-only reconstruction for these retained native calls: the shared execution identity
+points at a different SQL operation, and matching by text/backend could attach a nested or repeated plan to an
+unrelated or failed attempt. The strict consumer projection and separate unmeasured generic usable-index proof remain
+unchanged. Shared producer and runtime repairs remain with their owners; native acceptance is deferred to the
+coordinator after integration and is not claimed green. This continuation corrects only this report, changes no
+workspace code and runs no additional checks. The earlier focused unit and typecheck results remain historical
+evidence, not proof that all 17 native outcomes pass.
