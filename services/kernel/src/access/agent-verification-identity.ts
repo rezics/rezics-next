@@ -73,6 +73,9 @@ type OriginalIdentity = Readonly<{
   epoch: number;
   position: bigint;
   transactionId: string;
+  workflowId: string;
+  deliveryKey: string;
+  handoff: Readonly<{ partition: number; epoch: number; position: string; transactionId: string; eventType: string }>;
   accounts: readonly import('../history/locator.ts').AccountReference[];
 }>;
 const originalIdentities = new WeakMap<CommandTransaction, OriginalIdentity>();
@@ -255,6 +258,15 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
       epoch: row.source_epoch,
       position: BigInt(row.source_position),
       transactionId: row.source_transaction_id,
+      workflowId,
+      deliveryKey: keyOf(source.receipt),
+      handoff: Object.freeze(source.decision ? {
+        partition: 0, epoch: source.decision.epoch, position: source.decision.position,
+        transactionId: source.decision.transaction_id, eventType: 'com.rezics.access.agent-verification.approved.v1',
+      } : {
+        partition: row.source_partition, epoch: row.source_epoch, position: String(row.source_position),
+        transactionId: row.source_transaction_id, eventType: 'com.rezics.access.agent-verification.reversing.v1',
+      }),
       accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
     }),
   );

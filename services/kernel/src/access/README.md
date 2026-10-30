@@ -3248,15 +3248,16 @@ The full native role union includes the subject, original requester as actor/pri
 any original acting human, the genuine prior undo source roles and all already verified command evidence. Each copy enrolls every role in
 `core.history_locator`; technical source-to-copy rows reference that inventory and hold the same open seals and
 native routing/restore generation. Exact source-leading and artifact-leading indexes bound both directions.
-The existing physical minimizers and receiving API report `agent-identity-source-retention-custody-pending` while
-the independent native retention consumer is unavailable. Technical linkage receives no metadata exemption or
+The existing physical minimizers and receiving API report `agent-identity-source-retention-custody-pending` for
+unconverted original sources. Converted sources use the native inventory cut described below. Technical linkage receives no metadata exemption or
 ordinary-record purge permission. This declaration does not introduce a second identity minimizer or erasure engine.
 
 Lookup accepts at most eight exact source keys in one home, examines one indexed candidate per key and returns at
 most one actual `HistoryArtifact` with the complete native role union. It releases the lookup home before using
-`readHistoryReceivingReceipt`. Every page, including an empty one, remains
-`agent-identity-original-inventory-unsealed`: new-writer conversion cannot prove historical absence, an original
-source inventory seal, receiving closure or Source consumer discharge. Old unassociated copies remain pending.
+`readHistoryReceivingReceipt`. Unknown historical or unconverted sources remain
+`agent-identity-original-inventory-unsealed`, including on empty pages. A newly converted original source can return
+a sealed native cut independently of page EOF, as described below. This does not discharge receiving or Source
+consumer custody; old unassociated copies remain pending.
 
 `history/durable.ts` exports `AGENT_IDENTITY_DURABLE_ASSOCIATION` with the exact unresolved SDK branch. The existing
 approval/reversal effect calls to `context.client.enqueue` and original `DBOS.registerStep` recordings in
@@ -3267,6 +3268,47 @@ and deterministic names do not establish an actual native recording locator or d
 this SDK branch remains pending; no workflow IDs, SDK rows, foreign SDK SQL or additional WorkClient are invented.
 The original DBOS steps and default WorkClient lifetime remain intact. Neither native association conversion nor
 this explicitly pending SDK branch claims family, native acceptance or Goal completion.
+
+### Original identity native inventory
+
+`history/agent-identity-inventory.ts` owns the first finite native inventory declaration. Its key is the original
+`AgentIdentitySourceKey` `{route, accountId, direction, receiptId}`. `AgentIdentityOriginal` adds the original
+`partition`, `epoch`, `position`, `transactionId` and canonical `digest`. No erasure generation or account time is
+substituted for that tuple. `AGENT_IDENTITY_INVENTORY` declares producer version 1, native receipt/outbox conversion,
+a maximum of three native copies and closed native future writers. Unknown historical or recovered sources have
+no such declaration and keep `agent-identity-original-inventory-unsealed`; there is no backfill or empty seal.
+
+The original native insert issues its transaction-bound declaration. The executor's actual receipt codec is reused,
+and all subject, requester/principal, reviewer, acting-human, released undo and authorization evidence roles are
+retained. Before nested event/response serialization, `captureAgentIdentityInventory` snapshots the exact native
+serializer obligations. The closed producer vocabulary requires one receipt and one pending event or two reversal
+events. The receipt/outbox hooks persist their actual associations after the physical fence. Only after every hook
+returns does finalization seal the inventory in that SAME original transaction. A deferred SQL validator compares
+each expected codec locator, original tuple, exact physical receipt/event slot and original transaction with its
+produced association. Incomplete hooks roll back the source and all copies together. Native admission rejects later
+copy writers instead of treating producer discovery as evidence about future SDK writers.
+
+`readAgentIdentityNativeInventory(pool, key, context)` returns an opaque `AgentIdentityInventoryProof` only for a
+current sealed native cut. `readAgentIdentityCopies` still pages one artifact across at most eight same-home keys;
+its native sealed state is independently checked in the same snapshot, including on empty pages. Enumeration and
+EOF never mint custody. `readAgentIdentityInventory(deps, barrier, key, context)` releases the native home before
+each existing receiving probe, carrying the entire retained role union under the real `HistoryBarrier`.
+`verifyAgentIdentityInventory(tx, barrier, key, proof)` must run in the SAME source home. It locks and rechecks the
+durable generation, restore domain, partition epoch, native writer seal, exact membership, full roles, every durable
+receiving receipt and every physical minimized payload. It uses only local core rows while held; a copied proof or
+caller assertion cannot bypass those checks. Its locks exclude enrollment and restore through command commit.
+
+A separate durable SDK obligation is created with each original source, bound to its receipt, generation, original
+workflow/delivery key and known approval/reversal enqueue handoff tuple. It contains no invented SDK work ID or
+opaque receiver coordinates. `agent_identity_sdk_obligation` retains `pending-recording-port`; absence of a future
+SDK mapping cannot certify absence of a copy. Later enrollment must advance that obligation's generation; its
+native trigger takes the inventory lock and advances the cut generation, invalidating old proofs. Artifact-leading
+role and event-consumer enrollment hooks take that same lock and advance the generation before admission returns. The actual SDK
+recording/mapping owner supplies the enrollment body and future-writer closure. Until then verification may return
+`native: 'verified'` but always remains pending specifically for `agent-identity-sdk-recording-port-unavailable`.
+Native physical minimizers may act on a sealed native association subject to their independent owner readiness;
+source, technical linkage, SDK obligation, Account-root and Semantic consumer custody remain mandatory. This module
+does not minimize original source rows, issue an account erasure ACK or claim full native acceptance.
 
 ## Selected automated creation operator
 

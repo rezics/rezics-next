@@ -1,3 +1,8 @@
+import {
+  declareAgentIdentityInventory,
+  readAgentIdentityInventoryInTransaction,
+  releaseAgentIdentityInventory,
+} from './agent-identity-inventory.ts';
 import type { Pool } from 'pg';
 import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -75,6 +80,7 @@ export async function declareAgentIdentitySource(
     }),
   );
   await guardHistoryAccounts(tx, command.partition, accounts);
+  await declareAgentIdentityInventory(tx, original);
 }
 
 export function commandAgentIdentitySource(tx: CommandTransaction): Declaration | undefined {
@@ -85,6 +91,7 @@ export function beginAgentIdentitySerialization(tx: CommandTransaction): void {
   serializing.add(tx);
 }
 export function releaseAgentIdentitySource(tx: CommandTransaction): void {
+  releaseAgentIdentityInventory(tx);
   declarations.delete(tx);
   serializing.delete(tx);
 }
@@ -163,9 +170,9 @@ export type AgentIdentityCopyCursor = Readonly<{
   locator: Uint8Array;
 }>;
 export type AgentIdentityCopyPage = Readonly<{
-  /** Enumeration is never an original inventory seal, source discharge or historical EOF proof. */
-  state: 'pending';
-  gap: 'agent-identity-original-inventory-unsealed';
+  /** Sealed means a current native producer cut exists for every key, independently of this page. */
+  state: 'pending' | 'sealed';
+  gap: 'agent-identity-original-inventory-unsealed' | null;
   artifact: HistoryArtifact | null;
   cursor: AgentIdentityCopyCursor | null;
 }>;
@@ -200,6 +207,12 @@ export async function readAgentIdentityCopies(
       await tx.query("SELECT set_config('statement_timeout',$1,true)", [
         `${Math.max(1, context.deadline - Date.now())}ms`,
       ]);
+      // Each exact original has an independent producer cut; page EOF never supplies it.
+      let sealed = true;
+      for (const key of keys) {
+        const inventory = await readAgentIdentityInventoryInTransaction(tx, key);
+        if (inventory.state !== 'sealed') sealed = false;
+      }
       // One statement for this row kind; the finite key relation drives at most eight
       // index seeks, each materializing one candidate before the final one-artifact choice.
       const selected = await tx.query<{ artifact_type: AgentIdentityCopyCursor['artifactType']; locator: Buffer }>(
@@ -242,8 +255,8 @@ export async function readAgentIdentityCopies(
       historyDeadline(context, partition);
       await tx.query('COMMIT');
       return {
-        state: 'pending',
-        gap: 'agent-identity-original-inventory-unsealed',
+        state: sealed ? 'sealed' : 'pending',
+        gap: sealed ? null : 'agent-identity-original-inventory-unsealed',
         artifact,
         cursor: first ? { artifactType: first.artifact_type, locator: first.locator } : null,
       };
@@ -268,18 +281,21 @@ export async function readAgentIdentityCopyReceiving(
   return { ...page, receipt };
 }
 
-/** Until the native identity owner discharges retention, this technical linkage is personal
- * inventory too. Existing minimizers must leave it pending rather than exempting its metadata. */
+/** Unconverted associations keep their original retention gap. A native seal permits the
+ * independent physical owner to minimize its payload; source and SDK metadata remain retained. */
 export async function agentIdentityCopyRetentionGap(
-  tx: CommandTransaction,
-  partition: number,
-  type: HistoryArtifact['locator']['artifactType'],
-  locator: Buffer,
+  tx: CommandTransaction, partition: number, type: HistoryArtifact['locator']['artifactType'], locator: Buffer,
 ): Promise<string | null> {
   const copy = await tx.query(
-    `SELECT 1 FROM core.agent_identity_history_copy
-     WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3 LIMIT 1`,
-    [partition, type, locator],
+    `SELECT 1 FROM core.agent_identity_history_copy c
+     WHERE c.partition_no=$1 AND c.artifact_type=$2 AND c.locator=$3
+     AND NOT EXISTS (SELECT 1 FROM core.agent_identity_inventory i
+       WHERE i.partition_no=c.partition_no AND i.source_route=c.source_route
+       AND i.source_account_id=c.source_account_id AND i.source_direction=c.source_direction
+       AND i.source_receipt_id=c.source_receipt_id AND i.state='sealed' AND i.native_writer_state='closed'
+       AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=i.partition_no
+         AND p.write_state='active' AND p.epoch=i.receiver_epoch)
+       AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation)) LIMIT 1`, [partition, type, locator],
   );
   return copy.rows.length ? 'agent-identity-source-retention-custody-pending' : null;
 }

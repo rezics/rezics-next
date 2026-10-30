@@ -915,3 +915,131 @@ test('original reversal serializers enroll both actual outbox slots and preserve
   expect(event0.artifact!.locator).toMatchObject({ artifactType: 'outbox-event/v1', eventSeq: 0 });
   expect(event1.artifact!.locator).toMatchObject({ artifactType: 'outbox-event/v1', eventSeq: 1 });
 });
+
+test('New fully converted original identity source has a genuine sealed finite generated-copy inventory and every current receiving copy is independently verified before source minimization while unknown old copies stay pending', async () => {
+  const { readAgentIdentityNativeInventory, readAgentIdentityInventory, verifyAgentIdentityInventory } =
+    await import('../../src/history/agent-identity-inventory.ts');
+  const { readAgentIdentityCopies } = await import('../../src/history/agent-identity-source.ts');
+  const { partitionOf } = await import('../../src/route/route.ts');
+  const { encodeLocator } = await import('../../src/history/locator.ts');
+  const { withConnection } = await import('../../src/database/pool.ts');
+  const { sealHistoryAccount } = await import('../../src/history/gates.ts');
+  const { recordHistoryReceivingProof } = await import('../../src/history/receiving.ts');
+  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
+  const account = await seedAccount(`inventory_${randomUUID().slice(0, 8)}`, { kind: 'organization' });
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES($1,$2,$3,'account:manage','(,)',$3)`, [accountRoute, account.id, manager.id],
+  );
+  const subject = await catalogueSubject('schema:Organization', 'Original inventory');
+  const applied = await request(account, subject, await bearer(manager));
+  expect(applied.response.status).toBe(201);
+  const approved = await post(`/v1/verification-requests/${applied.body.verificationRequest.id}:approve`, await bearer(staff), {});
+  expect(approved.response.status).toBe(200);
+  const decision = (await readAgentVerificationWorkflowRequest(pool, applied.body.verificationRequest.id))!;
+  const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
+  await recordPendingAgentVerification(pool, workflow, clock);
+  const sourceKey = { route: accountRoute, accountId: account.id, direction: 'account-agent.verify' as const, receiptId: workflow.receiptId };
+  const context = () => ({ deadline: Date.now() + 5000 });
+  const inventory = await readAgentIdentityNativeInventory(pool, sourceKey, context());
+  expect(inventory.state).toBe('sealed');
+  if (inventory.state !== 'sealed') throw new Error('Expected genuine original native cut');
+  const proof = inventory.proof;
+  const source = (await pool.query(
+    `SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+    [sourceKey.route, sourceKey.accountId, sourceKey.direction, sourceKey.receiptId],
+  )).rows[0];
+  expect(proof.original).toEqual({ key: sourceKey, partition: source.source_partition, epoch: source.source_epoch,
+    position: BigInt(source.source_position), transactionId: source.source_transaction_id, digest: source.intent_digest });
+  expect(proof.artifacts.map((artifact) => artifact.locator.artifactType)).toEqual(['command-receipt/v1', 'outbox-event/v1']);
+  for (const artifact of proof.artifacts) expect(artifact.accounts).toEqual(expect.arrayContaining([
+    { accountRoute, accountId: account.id, roles: ACCOUNT_ROLE_BITS.subject },
+    { accountRoute, accountId: manager.id, roles: ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal },
+    { accountRoute, accountId: staff.id, roles: ACCOUNT_ROLE_BITS.reviewer },
+  ]));
+  // A real source cut exists independently of page cardinality, including after page EOF.
+  const first = await readAgentIdentityCopies(pool, [sourceKey], context());
+  const second = await readAgentIdentityCopies(pool, [sourceKey], context(), first.cursor!);
+  const end = await readAgentIdentityCopies(pool, [sourceKey], context(), second.cursor!);
+  expect(end.state).toBe('sealed');
+  expect(end.artifact).toBeNull();
+  const unknown = { ...sourceKey, receiptId: randomUUID() };
+  expect(await readAgentIdentityNativeInventory(pool, unknown, context())).toMatchObject({ state: 'pending' });
+  expect(await readAgentIdentityCopies(pool, [unknown], context())).toMatchObject({
+    state: 'pending', gap: 'agent-identity-original-inventory-unsealed', artifact: null,
+  });
+  // Replay preserves the exact original generation, tuple, obligation and copy membership.
+  await recordPendingAgentVerification(pool, workflow, clock);
+  expect(await readAgentIdentityNativeInventory(pool, sourceKey, context())).toEqual(inventory);
+  const erased = (await pool.query(
+    'INSERT INTO access.erasure(route,account_id,version,at) VALUES($1,$2,1,now()) RETURNING version,at::text',
+    [accountRoute, account.id],
+  )).rows[0];
+  const barrier = { accountRoute, accountId: account.id, version: erased.version, at: erased.at };
+  const verify = (candidate = proof) => runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) =>
+    noEffect(await verifyAgentIdentityInventory(tx, barrier, sourceKey, candidate)));
+  expect((await verify()).value.native).toBe('pending');
+  // Existing fixture models the physical owners' committed dispositions, then invokes the real
+  // receiving recorder. Each receipt remains independently mandatory; source payload is retained.
+  for (let index = 0; index < proof.artifacts.length; index++) {
+    const artifact = proof.artifacts[index]!;
+    await withConnection(pool, async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        await sealHistoryAccount(tx, artifact.partition, accountRoute, account.id);
+        if (artifact.locator.artifactType === 'command-receipt/v1') {
+          await tx.query(`UPDATE core.receipt SET response='null'::jsonb,payload_state='minimized'
+            WHERE partition_no=$1 AND transaction_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
+            [artifact.partition, source.source_transaction_id, source.native_command_kind, source.native_receipt_key]);
+        } else if (artifact.locator.artifactType === 'outbox-event/v1') {
+          await tx.query(`UPDATE core.outbox SET data='{}'::jsonb,subject=NULL,payload_state='minimized'
+            WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
+            [artifact.partition, artifact.locator.position.toString(), artifact.locator.eventSeq]);
+        }
+        await tx.query(`UPDATE core.history_locator SET state='minimized',proof_barrier=$2
+          WHERE partition_no=$1 AND account_id=$2 AND artifact_type=$3 AND locator=$4`,
+          [artifact.partition, account.id, artifact.locator.artifactType, Buffer.from(encodeLocator(artifact.locator))]);
+        expect(await recordHistoryReceivingProof(tx, barrier, artifact.partition, artifact.locator)).toBeNull();
+        await tx.query('COMMIT');
+      } catch (error) { await tx.query('ROLLBACK'); throw error; }
+    });
+    const current = (await verify()).value;
+    expect(current.native).toBe(index === proof.artifacts.length - 1 ? 'verified' : 'pending');
+  }
+  expect((await verify()).value).toEqual({ state: 'pending', native: 'verified', gap: 'agent-identity-sdk-recording-port-unavailable' });
+  expect(await readAgentIdentityInventory({ pool }, barrier, sourceKey, context())).toMatchObject({
+    state: 'pending', native: 'sealed', gap: 'agent-identity-sdk-recording-port-unavailable',
+  });
+  expect((await verify({ ...proof, artifacts: proof.artifacts.slice(0, 1) })).value.native).toBe('pending');
+  expect((await pool.query(`SELECT minimized FROM access.agent_identity_intent
+    WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+    [sourceKey.route, sourceKey.accountId, sourceKey.direction, sourceKey.receiptId])).rows[0].minimized).toBe(false);
+  // Later enrollment serializes with holds and invalidates the old cut even without adding a copy.
+  await pool.query(`UPDATE core.agent_identity_sdk_obligation SET generation=generation+1
+    WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4 AND source_receipt_id=$5`,
+    [proof.original.partition, sourceKey.route, sourceKey.accountId, sourceKey.direction, sourceKey.receiptId]);
+  expect((await verify()).value.gap).toBe('agent-identity-native-cut-stale');
+  const refreshed = await readAgentIdentityNativeInventory(pool, sourceKey, context());
+  if (refreshed.state !== 'sealed') throw new Error('Expected refreshed native inventory');
+  await pool.query(`UPDATE core.history_locator SET roles=roles | $5
+    WHERE partition_no=$1 AND account_id=$2 AND artifact_type=$3 AND locator=$4`,
+    [proof.original.partition, staff.id, proof.artifacts[0]!.locator.artifactType,
+      Buffer.from(encodeLocator(proof.artifacts[0]!.locator)), ACCOUNT_ROLE_BITS.actor]);
+  expect((await verify(refreshed.proof)).value.gap).toBe('agent-identity-native-cut-stale');
+});
+
+test('identity inventory rejects foreign source declarations and late native enrollment', async () => {
+  const { declareAgentIdentitySource } = await import('../../src/history/agent-identity-source.ts');
+  const { beginRecordHistorySerialization } = await import('../../src/history/record-source.ts');
+  const { partitionOf } = await import('../../src/route/route.ts');
+  const sourceKey = { route: accountRoute, accountId: manager.id, direction: 'account-agent.verify' as const, receiptId: randomUUID() };
+  await expect(runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
+    await declareAgentIdentitySource(tx, sourceKey, 'a'.repeat(64));
+    return noEffect(null);
+  })).rejects.toThrow('actual original source writer');
+  await expect(runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
+    beginRecordHistorySerialization(tx);
+    await declareAgentIdentitySource(tx, sourceKey, 'a'.repeat(64));
+    return noEffect(null);
+  })).rejects.toThrow('late Agent identity');
+});

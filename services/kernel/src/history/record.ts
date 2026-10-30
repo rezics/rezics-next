@@ -1,3 +1,4 @@
+import { captureAgentIdentityInventory, finalizeAgentIdentityInventory } from './agent-identity-inventory.ts';
 import { hasCommandRecordSourceSet } from './record-source-set.ts';
 import {
   commandAgentIdentitySource,
@@ -118,6 +119,7 @@ export function validateCommandHistoryScope(
   kind: string | undefined,
   events: readonly { type: string }[],
 ): void {
+  captureAgentIdentityInventory(tx, kind, events);
   beginRecordHistorySerialization(tx);
   const identitySource = commandAgentIdentitySource(tx);
   if (identitySource) {
@@ -215,6 +217,7 @@ export async function recordCommandHistory(
         eventSeq,
       }),
     );
+  await finalizeAgentIdentityInventory(tx, input.position);
 }
 
 export function releaseCommandHistory(tx: CommandTransaction): void {
