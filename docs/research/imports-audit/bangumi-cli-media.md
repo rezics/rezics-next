@@ -37,6 +37,37 @@ The existing `cover-recovery-pixels.test.ts` and `media-distinct-input.test.ts` 
 The new caller preserves those contracts and independently verifies reencoding on the public variant bytes.
 Native verification must identify the first reached failure; source inspection is not a passing native receipt.
 
+## Native observation
+
+The managed acceptance at code revision `7866d4137d` completed the fixture and then failed the frozen original-byte
+inequality at `bangumi-cli-media.test.ts:15`, with 566 assertions executed. It is not a native acceptance pass.
+The actual original and supplied SHA-256 values match for both admitted images:
+
+- Red: `18d3228bdfacca8431a92d7b7e9eaf8d5cd28ac2e4d5f4e732c13ac974f0b905`.
+- Blue: `80642985ef55e449db5ef812e1635ee6893cb2ca83b68e4d743fd9bed565217c`.
+
+The observed subject was `01a18be7-6fd1-7590-a44e-b7ae9b34fad0`; its two media IDs were
+`01a18be7-703c-77cf-9dc6-b7ae0c63777c` and `01a18be7-755b-767f-8f5a-b7ae1f65c14a`.
+The worker executed exactly two `content.importFromUrl` children and two `content.image` children. Their actual
+effect anchors were epoch 1, partition 2938, positions 2/3 and 17/18, event index 0. Sixteen native write receipt
+identities were observed, including the bootstrap `subject.batch_create` receipt at partition 2938, account
+`764ada75-62ac-8c41-a37c-a3c38c0cfe2a`, key
+`bangumi:424242:333c04dd151a2a6831c039cb9a651df29198be8a04e16ce861d4b6a34a11c954`.
+
+The converter stayed `bangumi@3`, the record revision stayed `unversioned`, and the bundle was
+`sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`. The three actual source digests were
+`5fc1248acf2e21f5b213b4adf9045b585dd82a63263da1eb543cd2eabab01705`,
+`3f0986d0fd897aa0f606605381b116c14b47812e28b9ae4c026dac756c6f5631` and
+`f00f0dd5624c21639b953189590a0e18c76e185b79e1eea3947c6f24352e001c`.
+
+The first native setup attempt exposed a fixture document-reference mistake, corrected to consume the actual
+`document` reference. The next attempt reached a genuine subject-read disclosure defect: the independently built
+cover summary survived a source takedown. The minimal repair outside the declared paths is
+`services/kernel/src/semantic/subject.ts`: one exact media probe and an independently anchored exact source-fence
+read suppress that selected cover's metadata. The final journey observed no disclosed cover after the fence,
+denied both old and refreshed variant downloads, preserved independent metadata and bootstrap bytes/receipts,
+and independently fenced the licensed summary. It does not extend the other discovery readers.
+
 ## Bounds and evidence
 
 - Touches: supplied JSONL and two source images, the exact source/key/run journal, captured public requests,
