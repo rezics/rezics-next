@@ -99,8 +99,10 @@ home → board → membership settlement → publication → ban/unban with nati
 Realm-owned presentation is adopted in the Community/Content READMEs: revisioned settings select native exact
 rules, and the shared current-authorized reader enriches board responses and the Space home. The assigned native
 assets producer owns permanent claims/derivative summaries; its missing adapter remains unavailable. Accounts owns
-current membership version/removal coverage and Content's assigned aggregate waits for it, so members remain
-unknown. Exact rules retain native author/editor and disclosure authority. This adoption and implementation claim
+the original native member-count reader, current version/removal coverage and bounded initialization. Content binds
+that reader at its fixed before/final Realm anchors; its throwing declaration keeps members unknown until the
+producer lands, and changed final counts are withheld without refill. Exact rules retain native author/editor and
+disclosure authority. This adoption and implementation claim
 no runtime or visual pass; Web retains header/settings design and screenshot review.
 Semantic's existing writer owns Realm page binding; do not duplicate it or claim contextual publication from a shelf.
 

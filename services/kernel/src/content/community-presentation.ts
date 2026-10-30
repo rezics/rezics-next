@@ -7,6 +7,7 @@ import { prepareReadDecisions } from '../request/access.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { realmPresentation } from '../community/presentation.ts';
+import { readRealmMemberCount } from '../community/member-count.ts';
 import type { CommunityPresentation } from './community-presentation-model.ts';
 import type { ReadContext } from './model.ts';
 import { readExactPublishedRules } from './reads.ts';
@@ -82,6 +83,15 @@ export async function readCommunityPresentations(
         const membership = context.actor.kind === 'account' ? member ? 'member' : 'nonmember' : 'unknown';
         const action = context.actor.kind === 'anonymous' ? realm.visibility === 'public' ? 'sign-in' : null :
           admission[realm.realm_id]?.allowed && !isBanned(realm.realm_id) ? member ? 'leave' : realm.visibility === 'public' ? 'join' : null : null;
+        let members: CommunityPresentation['members'] = unknownMembers;
+        try {
+          // This snapshot owns the Realm read time. Other source homes have
+          // been released before either round; no per-card remote read occurs.
+          const count = await readRealmMemberCount(client, { realmId: realm.realm_id, at: time });
+          if (count !== null) members = { state: 'current', count: count.count, version: count.version };
+        } catch {
+          // An unavailable native source cannot supply a total, including zero.
+        }
         result.set(realm.realm_id, {
           signature: JSON.stringify([realm, space, partitions.map((p) => [p.partitionNo, p.epoch]), membership, action]),
           reference: presentation.rules,
@@ -89,7 +99,7 @@ export async function readCommunityPresentations(
             name: realm.title, description: realm.summary,
             avatar: presentation.avatarMediaId === null ? none : unavailable,
             banner: presentation.bannerMediaId === null ? none : unavailable,
-            members: unknownMembers, rules: presentation.rules === null ? none : unavailable,
+            members, rules: presentation.rules === null ? none : unavailable,
             join: { membership, action } },
         });
       }
@@ -107,9 +117,16 @@ export async function readCommunityPresentations(
   const final = await round();
   const output = new Map<string, CommunityPresentation>();
   for (const [id, current] of final) {
-    if (initial.get(id)?.signature !== current.signature) continue;
+    const prepared = initial.get(id);
+    if (prepared?.signature !== current.signature) continue;
+    // A changed or lost native count is withheld under this fixed protocol.
+    // Never refill or label a prepared cached value current after a transition.
+    const before = prepared.value.members;
+    const after = current.value.members;
+    const members = before.state === 'current' && after.state === 'current' &&
+      before.version === after.version && before.count === after.count ? after : unknownMembers;
     const rule = current.reference && rules?.get(rulesKey(current.reference, current.value.realmId));
-    output.set(id, { ...current.value, rules: !current.reference ? none : rules === null ? unavailable : rule ? { state: 'available', value: rule } : none });
+    output.set(id, { ...current.value, members, rules: !current.reference ? none : rules === null ? unavailable : rule ? { state: 'available', value: rule } : none });
   }
   return output;
 }

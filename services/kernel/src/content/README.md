@@ -1155,9 +1155,18 @@ and stored optional placeholder/focal-point/credit, with absent metadata null. T
 storage keys or account identity. Summaries never authorize downloads: the existing media id/variant transport
 must check current container and media fences, including conditional requests. No successful media claim is stubbed.
 
-`members` remains `{state:'unknown', count:null, version:null}` until Accounts supplies its real current version
-and removal coverage and Content supplies the matching aggregate. No membership COUNT, fabricated zero or cached
-membership total is substituted. `join.membership` reads the actual current self interval; its action also needs
+`members` consumes Accounts' original `community/member-count.ts` export
+`readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returning
+`Promise<Readonly<{count:number, version:string}>|null>`. The installed producer owns native source version,
+removal coverage and bounded initialization; Content owns no count, version, control row or transition engine.
+Until that producer lands, its declaration throws unavailable. Null or source failure maps only to
+`{state:'unknown', count:null, version:null}`. A native positive result maps exactly to
+`{state:'current', count, version}`, including a genuinely proven zero. The reader calls the native fixed-point
+helper once per distinct readable Realm in each existing round, using that snapshot's actual `AuthoritativeTime`.
+It releases other source homes before the final Realm snapshot. Final source loss or a changed count/version
+withholds members as unknown without retry or refill; privacy, lifecycle, source binding and epochs must still
+pass independently. No membership COUNT, roles, follows, visitors, fabricated zero or cached total is substituted.
+`join.membership` reads the actual current self interval; its action also needs
 the native `realm:join` admission used by join/leave. Public anonymous readers receive sign-in, protected self-join
 is absent, and owners or viewer actions are never treated as membership. A 202 workflow remains pending until its
 native interval settles. All membership, permission and source evidence is refreshed at final disclosure.
@@ -1165,7 +1174,8 @@ native interval settles. All membership, permission and source evidence is refre
 ### Cost: community presentation read
 
 - Touches: distinct full Realm/Space keys, current self memberships and protected bans; fixed source/final
-  placement/head anchors and native Access batches; at most one exact rules pin per distinct Realm.
+  placement/head anchors and native Access batches; one native member-count point helper and at most one exact
+  rules pin per distinct Realm per round.
 - Bound: O(changes log R), at most 100 returned boards and their deduplicated containers/rules, two fixed
   source rounds, at most 33 post keys per rules chain, 65,536 canonical bytes per rules document and at most
   twelve actual derivative facts per image. Existing list candidate bounds remain; no count scan or history walk.

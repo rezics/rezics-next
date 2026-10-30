@@ -665,6 +665,14 @@ for a currently readable carried Realm. Space-only homes retain their own native
 Membership, setup and publication remain separate regions. The final Space head and carried-Realm binding must
 still match. The independent `contextId` pointer is preserved; it grants no editorial permission.
 
+Accounts owns `member-count.ts` and its `RealmMemberCount = Readonly<{count:number, version:string}>` export.
+`readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returns that native current result
+or null when unknown. Content binds this original module at the reader's existing before/final Realm anchors;
+it neither initializes nor maintains counts. Until the native source/version/removal coverage and bounded
+initialization land, the permitted declaration throws unavailable. Source errors and null remain unknown,
+never zero; a changed final count/version is withheld without retry. This registration grants no membership,
+role admission, removal or creator authority.
+
 ### Cost: presentation settings and rules adoption
 
 - Touches: fixed Realm authority/head/CAS, at most two media claims and one exact prepared Content source;
