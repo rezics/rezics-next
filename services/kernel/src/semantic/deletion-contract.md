@@ -127,6 +127,27 @@ identities, times and decisions. No body in their payloads. Search and Content d
 availability regardless of delivery. Shared receipt/outbox cleanup needs exact native custody locators and
 owner retention hooks, not broad JSON scans in production. Test-wide JSON evidence scans are not a job design.
 
+## Ordinary owner-issued purge authority
+
+The native source implementation is `record-purge-authority.ts`. Its closed reference binds
+`subjectId`, `candidateId`, original `revision`, optional exact `documentId` and `deletionGeneration`.
+The opaque authority is held in a private identity registry, never in JSON or a durable workflow payload.
+`prepareRecordPurgeAuthority({pool,clock?},reference,{deadline})` verifies native committed ordinary deletion;
+`readRecordPurgeAuthoritySource` revalidates it after releasing the source home, and
+`lockRecordPurgeAuthoritySource(tx,authority)` takes the current source locks in the consuming native command.
+Both reads return actual source version, deletion transaction/time and original expiry, or null only for
+ineligible/stale native lifecycle. A changed/unavailable source home or absent native commit remains an error.
+Hold, restoration, generation and current takedown serialize before removal. This ordinary authority supplies
+no early/legal-order or account-erasure permission.
+
+Content alone implements `purgeAuthoredFieldForDeletedRecord(tx,authority)` and exact body/binding validation.
+Its agreed declaration is presently a throwing unavailable adapter. Accounts alone supplies
+`history/record-purge.ts` prepare/minimize implementations and actual receiving/consumer closure. The adopted
+declarations are present with provisional throwing adapters; released-home candidate progress consumes those
+exact ports and source-locked completion. Context/Zone still need their own native shared-history authority.
+Local progress is distinct from completion and missing implementations explicitly fail unavailable. These seams do
+not replace the original native physical absence, exact custody, growth or rollback outcomes above.
+
 ## Field-scoped takedown proposal
 
 This section is the single proposed field-disclosure seam for the implementation brief to Semantic and Root.

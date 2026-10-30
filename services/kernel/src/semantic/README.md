@@ -1097,7 +1097,7 @@ The global context is inserted once by migration and has no runtime semantic rea
 proof or an HTTP surface. The caller owns authorization, branded authoritative time and its RR or command
 snapshot. The reader opens no connection or transaction, performs no writes, follows no redirects and hydrates
 no payload. See [the deletion contract](deletion-contract.md#first-independent-state-and-attribution-slice)
-for its closed shapes and exact pre-IO rejection behavior. Candidate identity returns `active/null/null/false` until its separate lifecycle commands exist. Context evidence
+for its closed shapes and exact pre-IO rejection behavior. Candidate identity reads the native ordinary-record lifecycle when present and otherwise retains its active default. Context evidence
 reads its actual state, original deletion window and independent held flag from the native Context identity;
 unknown or mismatched locators return null. This metadata still supplies no Access allow decision.
 
@@ -1110,7 +1110,7 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   compact candidates instead use `fact_compact_candidate` with at most two assertion rows from the finite compact
   log (33 entries maximum per slot), sufficient to detect ambiguity. Context uses its PK and, for a community,
   one direct temporal role-grant probe. No subject proposal/revision history scan or property inference.
-- Bound: one statement for a candidate or Global, two for a community Context; constant point rows and
+- Bound: two statements for a candidate (including its lifecycle point), one for Global, two for a community Context; constant point rows and
   statements, logarithmic B-tree blocks in actual history/population. No cost depends on unrelated revisions.
 - Growth check: `test/semantic/growth-lifecycle-state.test.ts` measures the native reader at 64/512/4096 actual
   unrelated proposals on the same subject with constant rows/statements and logarithmic blocks. Native
@@ -1268,9 +1268,47 @@ defaults, current extension head and adoption history, and respects current subj
 
 Only real transitions emit the registered `com.rezics.semantic.record.deleted.v1` or `.restored.v1` identity event,
 with Context kind, ID and monotonic version. Receipts, basis and outbox commit atomically; no subject revision or
-counter is rewound. Ordinary DELETE retains native rows and payload. This capability adds no automatic purge,
-account-terminal cleanup, legal hold commands or takedown deadline. Future retention must remove minimal personal
-or private fields and preserve the nonpersonal identity skeleton unless that skeleton is itself private.
+counter is rewound. Ordinary DELETE retains native rows and payload. Ordinary retention below removes local personal/private fragments at the original expiry; it creates no
+account erasure acknowledgement, legal-hold service or destructive takedown deadline.
 
 The bounded lifecycle derivation and evidence qualifications are recorded in the Community Context deletion,
 restoration and current disclosure row of the [Cost table](#cost).
+
+### Ordinary record retention
+
+`semanticRetention(pool,{clock}).step({partition,limit,key})` is the native ordinary-record adapter.
+A page accepts a limit through 100 and selects at most `min(limit, 4)` raw source keys (the scheduler uses two), then removes at most four physical
+payload fragments. Its rotating partition cursor revisits held and future-due keys. The original native
+720-hour window survives restart, and restoration remains exclusive at that deadline. Payload mutation,
+fragment progress and the exact page result share a native transaction. Reusing a page key with another
+limit is refused. Native Content and shared-history closure are required before a key counts as purged.
+
+`record-purge-authority.ts` owns the closed `RecordPurgeReference`, `RecordPurgeSource`, opaque
+`RecordPurgeAuthority` and prepare/read/lock exports. Issuance checks native committed deletion, current
+source version, generation, expiry and hold/takedown state. A live authority has private object identity;
+serialized work retains only source keys and reacquires authority. Read/lock revalidate the exact source
+and current home epoch. Ordinary authority grants neither account erasure nor early/legal-order purge.
+
+`retention-lifecycle.ts` supplies the source-native contribution lifecycle writer. The contribution command
+must bind it to its actual original-revision authorization, suppression and identity events; that command
+producer is absent on this base. Context and Zone discovery already follows their actual native lifecycle
+rows. Zone cleanup uses its existing locked CAS writer and retains its stable resource identity.
+
+The agreed Content export `purgeAuthoredFieldForDeletedRecord` is represented by a visibly provisional,
+throwing adapter until Content supplies its own implementation. Accounts' adopted record-purge declaration is
+copied under `history/record-purge.ts` with provisional throwing implementations of
+`prepareRecordHistoryPurge` and `minimizeRecordHistoryPurge`. Candidate shared work calls these exact
+ports with released source checkouts, then locks the current source again before accepting real completion.
+Context/Zone still lack a declared native shared-history authority; no candidate identities stand in for them.
+Missing producer implementations therefore throw unavailable, rather than reporting cleanup, custody or completion.
+The same slice still requires actual producer integration and the original native physical-absence proof.
+No account-T, caller callback, author Actor or direct Content/Core SQL substitutes for those boundaries.
+
+- Touches: only selected native source identities, their exact indexed fragments, owning source locks,
+  partition cursor and page result. Shared physical minimizers retain their existing immutable field guards.
+- Bound: source-key limits apply before eligibility/hold filtering; four payload rows per page, fixed store
+  prefixes and the existing command deadline. Discovery seeks by partition/key, and fragment lookup seeks
+  by source prefix/physical key. No unrelated revision, account, payload or outbox scan.
+- Growth check: the original `growth-deletion.test.ts` retains its 64/512/4096 native proof after integration.
+  Focused source/body, held revisit, rollback and restart cases are in `record-retention.test.ts` and
+  `test/zones/record-retention.test.ts`. These outcomes are unexecuted in the current typecheck-only stage.

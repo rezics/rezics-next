@@ -6,29 +6,21 @@ export type RecordHistoryPurgeContext = Readonly<{ deadline: number }>;
 declare const recordHistoryPurge: unique symbol;
 export type PreparedRecordHistoryPurge = { readonly [recordHistoryPurge]: true };
 export type RecordHistoryPurgeResult = Readonly<{
-  state: 'pending' | 'progress' | 'complete';
-  examined: number;
-  minimized: number;
+  state: 'pending' | 'progress' | 'complete'; examined: number; minimized: number;
 }>;
 
-/**
- * The Semantic owner source reader and record-to-copy inventory are not delivered in this
- * checkout. Until both exist, this port cannot safely distinguish a complete empty inventory
- * from unknown copies and must not issue a preparation capability.
- */
+/** PROVISIONAL agreed Accounts declaration. Its native receiving implementation replaces this adapter. */
 export async function prepareRecordHistoryPurge(
-  _deps: RecordHistoryPurgeDependencies,
-  _authority: RecordPurgeAuthority,
+  _deps: RecordHistoryPurgeDependencies, _authority: RecordPurgeAuthority,
   _context: RecordHistoryPurgeContext,
 ): Promise<PreparedRecordHistoryPurge | null> {
-  throw new Error('Record history purge source and copy inventory unavailable');
+  throw new Error('history_record_purge_unavailable: prepareRecordHistoryPurge');
 }
 
-/** No persisted source-bound receiving job can be advanced until its native inventory is delivered. */
+/** Never turn absent inventory, receiving custody or consumer completion into successful cleanup. */
 export async function minimizeRecordHistoryPurge(
-  _deps: RecordHistoryPurgeDependencies,
-  _preparation: PreparedRecordHistoryPurge,
+  _deps: RecordHistoryPurgeDependencies, _preparation: PreparedRecordHistoryPurge,
   _context: RecordHistoryPurgeContext,
 ): Promise<RecordHistoryPurgeResult> {
-  throw new Error('Record history purge receiving custody unavailable');
+  throw new Error('history_record_purge_unavailable: minimizeRecordHistoryPurge');
 }

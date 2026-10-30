@@ -1,6 +1,10 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { lockRecordPurgeAuthoritySource, type RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
+import {
+  lockRecordPurgeAuthoritySource,
+  type RecordPurgeAuthority,
+  type RecordPurgeReference,
+} from '../semantic/record-purge-authority.ts';
 import lock from './authored-field-retention-lock.sql';
 import purge from './authored-field-retention-purge.sql';
 import bind from './authored-field-retention-bind.sql';
@@ -24,6 +28,10 @@ export async function purgeAuthoredFieldForDeletedRecord(
   if (source === null) return null;
   if (source.disposition !== 'ordinary-deletion') throw new TypeError('Invalid record purge disposition');
   const reference = source.reference;
+  // Content owns authored fields only for semantic contributions. Context and
+  // Zone payloads have their own native owners and must never be interpreted as
+  // document-bearing contribution references.
+  if (!isContributionReference(reference)) return null;
   if (reference.documentId === null) return null;
   const route = routeOf(reference.subjectId);
   if (
@@ -78,4 +86,8 @@ export async function purgeAuthoredFieldForDeletedRecord(
     deletionGeneration: reference.deletionGeneration,
     state: alreadyErased ? 'already-purged' : 'purged',
   };
+}
+
+function isContributionReference(reference: unknown): reference is RecordPurgeReference {
+  return typeof reference === 'object' && reference !== null && 'subjectId' in reference;
 }

@@ -99,3 +99,9 @@ CREATE CONSTRAINT TRIGGER zone_erasure_capture AFTER INSERT OR UPDATE ON zones.z
 --
 
 
+
+CREATE TRIGGER zone_record_retention AFTER INSERT OR UPDATE OF state,deleted_at ON zones.zone
+ FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
+CREATE INDEX zone_record_retention_due ON zones.zone(route,zone_id) WHERE state='deleted';
+
+

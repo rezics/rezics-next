@@ -18,7 +18,9 @@ import { synchronizeAccountAgent } from '../access/account-agent-effect.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { beginSemanticErasure, createSemanticLocatorEffect, SEMANTIC_ERASURE_SCHEDULED } from './account-erasure.ts';
 import { registerSemanticErasureWork } from './account-erasure-work.ts';
-import { providerReviewProjection, registerProviderReviewWork } from './provider-review-queue.ts';
+
+import { registerRecordRetentionWork } from './retention-work.ts';
+import { registerProviderReviewWork } from './provider-review-queue.ts';
 
 const ACCOUNT_TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
 
@@ -45,6 +47,7 @@ export const semanticWorkModule: WorkModule = {
     // Establish the writer cut before DBOS can resume an old bootstrap delivery.
     await installIdentityEpochBootstrap(context.pool);
     const scheduleErasure = registerSemanticErasureWork(context);
+    await registerRecordRetentionWork(context);
     registerProviderReviewWork(context);
     context.addEffects([
       createSemanticErasureEffect(context.pool),
@@ -94,7 +97,7 @@ export const semanticWorkModule: WorkModule = {
         // Four bounded wake chains share the existing effect registration and queue limits.
         events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
       }));
-      return startRelays(context.pool, [linkProjection(context.pool), providerReviewProjection(context.pool)]);
+      return startRelays(context.pool, [linkProjection(context.pool)]);
     });
   },
 };

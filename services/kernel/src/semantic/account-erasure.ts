@@ -1,3 +1,4 @@
+import { minimizeSemanticRecordPayload } from './retention-payload.ts';
 import type { Pool } from 'pg';
 import { noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -307,11 +308,9 @@ async function minimize(
       nativeKey,
     );
     if (eligible.rowCount) return;
-    await tx.query(
-      `UPDATE semantic.candidate SET statement='{}',erasure_private=true
-        WHERE route=$1 AND subject_id=$2 AND candidate_id=$3 AND slot_id=$4`,
-      nativeKey,
-    );
+    await minimizeSemanticRecordPayload(tx, 'candidate', {
+      low: candidate.route, high: candidate.route, recordKey: key,
+    });
   } else if (store === 'fact') {
     // Historical values are removed; a private latest slot keeps an empty retract marker so older values cannot reappear.
     await tx.query(
@@ -331,12 +330,9 @@ async function minimize(
       [...values, accountId],
     );
   } else if (store === 'revision') {
-    await tx.query(
-      `UPDATE semantic.revision SET source=NULL,verification_receipt_id=NULL,revocation_receipt_id=NULL WHERE ${where}`,
-      values,
-    );
+    await minimizeSemanticRecordPayload(tx, 'revision', { low, high, recordKey: key });
   } else if (store === 'moderation') {
-    await tx.query(`UPDATE semantic.moderation SET body='{}',actor=NULL WHERE ${where}`, values);
+    await minimizeSemanticRecordPayload(tx, 'moderation', { low, high, recordKey: key });
   } else if (store === 'context') {
     const context = (
       await tx.query(
@@ -390,7 +386,7 @@ async function minimize(
       values,
     );
   } else if (store === 'retraction') {
-    await tx.query(`UPDATE semantic.retraction SET "references"='[]' WHERE ${where}`, values);
+    await minimizeSemanticRecordPayload(tx, 'retraction', { low, high, recordKey: key });
   } else if (store === 'statement_disclosure') {
     // Consent state cannot be retained as a new, publishable assertion after the account's T.
     await tx.query(
