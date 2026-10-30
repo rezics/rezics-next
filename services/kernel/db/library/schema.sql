@@ -2887,6 +2887,8 @@ CREATE TABLE library.owner_member_index (
 );
 CREATE INDEX owner_index_label_live ON library.label_assignment(route,account_id,subject_id,label_id)
   WHERE deleted_at IS NULL;
+CREATE INDEX owner_index_label_legacy ON library.label_assignment(route,account_id,subject_id,label_id)
+  WHERE deleted_at IS NULL AND (slot_no IS NULL OR assignment_id IS NULL);
 CREATE TABLE library.owner_index_control (
   route integer NOT NULL,
   account_id uuid NOT NULL,
@@ -2961,7 +2963,8 @@ BEGIN
       AND deletion_id IS NULL AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='label' THEN
     SELECT EXISTS (SELECT 1 FROM library.label_assignment x WHERE x.route=r AND x.account_id=a AND x.subject_id=s
-      AND x.deleted_at IS NULL AND x.slot_no IS NOT NULL AND EXISTS (
+      -- Keep legacy unresolved children in the structural directory; predicate truth reports their readiness.
+      AND x.deleted_at IS NULL AND EXISTS (
         SELECT 1 FROM library.personal_label l WHERE l.route=r AND l.account_id=a AND l.label_id=x.label_id
           AND l.deleted_at IS NULL)) INTO live;
   ELSE RAISE EXCEPTION 'Unknown owner member family'; END IF;

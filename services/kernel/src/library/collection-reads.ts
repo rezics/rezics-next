@@ -1,4 +1,4 @@
-import { createBuiltinRuntime, type DynamicMemberView, type BuiltinCollectionView } from './builtin-runtime.ts';
+import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -38,7 +38,6 @@ type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
 export type CollectionView = CollectionPresentation & {
-  membershipKind: 'curated';
   id: string;
   curatorAccountId: string | null;
   title: string;
@@ -46,15 +45,16 @@ export type CollectionView = CollectionPresentation & {
   visibility: 'private' | 'unlisted' | 'public';
   revision: number;
   memberCount: number;
-  orderEpoch: number;
   createdAt: string;
   updatedAt: string;
 };
 
+export type CuratedCollectionView = CollectionView & { membershipKind: 'curated'; orderEpoch: number };
+
 export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'createdAt' | 'updatedAt'> & {
   membershipKind: 'dynamic';
 };
-export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
+export type CollectionResourceView = CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
 
 export type MemberView = {
   id: string;
@@ -106,7 +106,7 @@ function collectionView(row: {
   orderEpoch: number;
   createdAt: string;
   updatedAt: string;
-}): CollectionResourceView {
+}): CuratedCollectionView | SavedDynamicCollectionView {
   if (row.visibility !== 'private' && row.visibility !== 'unlisted' && row.visibility !== 'public') throw notFound();
   if (row.membershipKind === 'dynamic')
     return {
@@ -238,7 +238,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
   const anchors = { pool, access };
   const builtins = createBuiltinRuntime({ pool });
 
-  return { readCollection, listCollections, listAccountCollections, listMembers, listSubjectCollections };
+  return { readCollection, listCollections, listAccountCollections, listMembers, readMembers, listSubjectCollections };
 
   async function loadCollection(
     viewer: Actor,
@@ -299,7 +299,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       sourceGeneration: string;
     },
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ): Promise<CollectionResourceView> {
+  ): Promise<CuratedCollectionView | SavedDynamicCollectionView> {
     const cover =
       row.coverMediaId === null
         ? null
@@ -436,14 +436,22 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     return { ...result, collections };
   }
 
+  /** Common dynamic/curated reader; the native curated primitive retains its occurrence DTO. */
+  async function readMembers(
+    viewer: Actor,
+    collectionId: string,
+    options: { cursor?: string | null; limit?: number } = {},
+  ) {
+    const logical = await builtins.read(viewer, collectionId);
+    return logical ? builtins.members(viewer, collectionId, options) : listMembers(viewer, collectionId, options);
+  }
+
   async function listMembers(
     viewer: Actor,
     collectionId: string,
     options: { cursor?: string | null; limit?: number } = {},
-  ): Promise<{ members: (MemberView | DynamicMemberView)[]; next: string | null }> {
+  ): Promise<{ members: MemberView[]; next: string | null }> {
     const page = pageRequest(options, ['cursor', 'limit']);
-    const logical = await builtins.read(viewer, collectionId);
-    if (logical) return builtins.members(viewer, collectionId, options);
     const collection = await loadCollection(viewer, collectionId);
     if (!collection) throw notFound();
     if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();

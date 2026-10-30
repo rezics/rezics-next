@@ -119,6 +119,7 @@ export async function recentDisplay(
   const { createCollectionReads } = await import('../library/collection-reads.ts');
   try {
     const collection = await createCollectionReads(d).readCollection(actor, entry.scope.id, deadline);
+    if (collection.title === null) return null;
     return { name: collection.title, href: `/collections/${collection.id}`, avatar: collection.cover };
   } catch (error) {
     if (error instanceof ProblemError && error.code === 'not_found') return null;

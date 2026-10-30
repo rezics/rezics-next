@@ -170,6 +170,11 @@ export function createBuiltinRuntime(config: { pool: Pool }) {
       // Labels introduce no profile lookup or sibling identities. Unknown pinned meanings never become ready zero.
       if (presence.entry || presence.session || presence.copy) return requireCurrentQueryRuntime();
       const value = descriptor(owner.accountId, { kind: 'everything' });
+      const stored = await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [
+        routeOf(value.id),
+        value.id,
+      ]);
+      if (stored.rows.length) return requireCurrentQueryRuntime();
       return after === null || value.id > after ? [value] : [];
     });
   }
@@ -191,6 +196,11 @@ export function createBuiltinRuntime(config: { pool: Pool }) {
         return requireCurrentQueryRuntime();
       // There is no published source/identity cursor basis to validate yet; never accept a foreign/forged cursor.
       if (options.cursor != null) throw new ProblemError('invalid_cursor');
+      const stored = await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [
+        routeOf(id),
+        id,
+      ]);
+      if (stored.rows.length) return requireCurrentQueryRuntime();
       return { members: [], next: null };
     });
   }

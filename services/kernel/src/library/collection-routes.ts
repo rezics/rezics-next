@@ -523,10 +523,16 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                 viewDependencies(),
                 actor,
                 params.collectionId,
-                { cursor: query.cursor, limit: query.limit },
+                {
+                  ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                  ...(query.limit === undefined ? {} : { limit: query.limit }),
+                },
                 job.deadline,
               )
-            : read().listMembers(actor, params.collectionId, { cursor: query.cursor, limit: query.limit }),
+            : read().readMembers(actor, params.collectionId, {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: query.limit }),
+              }),
         );
       },
     )

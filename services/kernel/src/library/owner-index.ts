@@ -130,6 +130,7 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
   const { rows } = await client.query<{
     entry: boolean;
     label: boolean;
+    labelUnready: boolean;
     session: boolean;
     copy: boolean;
     state: string | null;
@@ -138,8 +139,12 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
   }>(
     `SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS entry,
     EXISTS(SELECT 1 FROM library.label_assignment x WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
-      AND x.deleted_at IS NULL AND x.slot_no IS NOT NULL AND EXISTS(SELECT 1 FROM library.personal_label l
+      AND x.deleted_at IS NULL AND x.slot_no IS NOT NULL AND x.assignment_id IS NOT NULL AND EXISTS(SELECT 1 FROM library.personal_label l
         WHERE l.route=$1 AND l.account_id=$2 AND l.label_id=x.label_id AND l.deleted_at IS NULL)) AS label,
+    EXISTS(SELECT 1 FROM library.label_assignment x WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
+      AND x.deleted_at IS NULL AND (x.slot_no IS NULL OR x.assignment_id IS NULL)
+      AND EXISTS(SELECT 1 FROM library.personal_label l WHERE l.route=$1 AND l.account_id=$2
+        AND l.label_id=x.label_id AND l.deleted_at IS NULL)) AS "labelUnready",
     EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS session,
     EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND deletion_id IS NULL) AS copy,
     e.state, e.owner_write_seq::text AS sequence, e.library_profile_pin AS pin
@@ -149,8 +154,13 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
   const row = rows[0]!;
   return {
     original,
-    presence: row.entry || row.label || row.session || row.copy,
-    families: { entry: row.entry, label: row.label, session: row.session, copy: row.copy },
+    presence: row.entry || row.label || row.session || row.copy || (row.labelUnready ? null : false),
+    families: {
+      entry: row.entry,
+      label: row.label || (row.labelUnready ? null : false),
+      session: row.session,
+      copy: row.copy,
+    },
     state:
       row.state === null
         ? null
@@ -169,15 +179,22 @@ export function currentOwnerState(
 ):
   | { status: 'unready'; reason: 'unsequenced' | 'unpinned' }
   | { status: 'complete'; state: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null } {
-  let winner: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null = null;
-  for (const original of originals) {
-    const state = original.state;
-    if (!state) continue;
-    if (state.sequence === null) return { status: 'unready', reason: 'unsequenced' };
-    if (state.pin === null) return { status: 'unready', reason: 'unpinned' };
-    if (winner?.sequence === state.sequence) throw new Error('Duplicate live owner state-write sequence');
-    if (!winner || state.sequence > winner.sequence)
-      winner = { original: original.original, ...state, sequence: state.sequence, pin: state.pin };
-  }
-  return { status: 'complete', state: winner };
+  type Result = ReturnType<typeof currentOwnerState>;
+  return originals.reduce<Result>(
+    (result, original) => {
+      if (result.status === 'unready') return result;
+      const state = original.state;
+      if (!state) return result;
+      if (state.sequence === null) return { status: 'unready', reason: 'unsequenced' };
+      if (state.pin === null) return { status: 'unready', reason: 'unpinned' };
+      const winner = result.state;
+      if (winner && winner.sequence === state.sequence) throw new Error('Duplicate live owner state-write sequence');
+      if (winner && winner.sequence > state.sequence) return result;
+      return {
+        status: 'complete',
+        state: { original: original.original, id: state.id, sequence: state.sequence, pin: state.pin },
+      };
+    },
+    { status: 'complete', state: null },
+  );
 }

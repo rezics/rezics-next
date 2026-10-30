@@ -30,7 +30,8 @@ export async function nextOwnerPin(client: Client, accountId: string): Promise<u
 }
 export async function loadOwnerPinMeaning(pool: Pool, accountId: string, value: unknown): Promise<OwnerPinMeaning> {
   // Empty is the structural label/unpinned scope, not a fabricated accepted profile.
-  if (typeof value === 'object' && value !== null && Object.keys(value).length === 0) return { pin: value, states: [] };
+  if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0)
+    return { pin: value, states: [] };
   const pin = decodeLibraryProfilePin(value);
   if (!pin) throw new ProblemError('semantic_not_ready');
   const release = await readRelease(pool, pin.releaseDigest, { composed: false });
@@ -69,12 +70,16 @@ export async function applyOwnerPinMeaning(tx: OperationalTransaction, accountId
   );
   if (!found.rows.length) return;
   for (const state of meaning.states) {
-    await tx.query(
-      `INSERT INTO library.builtin_collection_reference
+    const reference = await tx.query(
+      `INSERT INTO library.builtin_collection_reference AS current
       (route,account_id,collection_id,profile_id,state_set_id,state_id) VALUES($1,$2,$3,$4,$5,$6)
-      ON CONFLICT DO NOTHING`,
+      ON CONFLICT(route,collection_id) DO UPDATE SET collection_id=EXCLUDED.collection_id
+      WHERE (current.account_id,current.profile_id,current.state_set_id,current.state_id)=
+        (EXCLUDED.account_id,EXCLUDED.profile_id,EXCLUDED.state_set_id,EXCLUDED.state_id)
+      RETURNING collection_id`,
       [...key, state.collectionId, state.profileId, state.stateSetId, state.stateId],
     );
+    if (reference.rows.length !== 1) throw new Error('Builtin state reference collision');
     await tx.query(
       `INSERT INTO library.owner_index_state(route,account_id,pin,collection_id,labels)
       VALUES($1,$2,$3::jsonb,$4,$5::jsonb) ON CONFLICT DO NOTHING`,
