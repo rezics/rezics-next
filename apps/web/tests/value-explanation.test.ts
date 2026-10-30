@@ -117,4 +117,9 @@ test('documents use only the current authorized representation and the existing 
     }),
   });
   expect(unrelated.kind === 'ready' && unrelated.page.change).toEqual({ kind: 'unavailable' });
+  const revoked = await readValueExplanation(fixture.client, fixture.address, {
+    detail: async () => ({ kind: 'denied', scope: 'subject' }),
+  });
+  expect(revoked).toEqual({ kind: 'denied' });
+  expect(html(revoked)).not.toContain('Authorized original words');
 });

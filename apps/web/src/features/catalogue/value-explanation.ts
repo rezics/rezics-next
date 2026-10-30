@@ -187,6 +187,13 @@ export async function readValueExplanation(
         ...(session ? { session } : {}),
       }).catch((): DetailRead => ({ kind: 'unavailable' })),
     ]);
+    if (detail.kind !== 'ready' && detail.scope === 'subject')
+      return {
+        kind:
+          detail.kind === 'denied' || detail.kind === 'missing' || detail.kind === 'invalid'
+            ? detail.kind
+            : 'unavailable',
+      };
     let continuationSession = detail.kind === 'ready' ? (detail.session ?? session) : session;
     page.typeLabel = pageText(definitions?.types[subject.type]?.labels, input.locale);
     page.propertyLabel = pageText(
