@@ -61,7 +61,7 @@ async function setup(type = 'schema:Book', configure?: (f: Awaited<ReturnType<ty
     const consumer = await createPublicFilterConsumerFixture({
       pool: f.db.pool,
       source,
-      binding:createPublicFilterSourceBinding(f.db.pool,f.config.routeKey,f.config.access),
+      binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
       search,
       clock: systemClock,
       context: context(),
@@ -70,7 +70,7 @@ async function setup(type = 'schema:Book', configure?: (f: Awaited<ReturnType<ty
     return {
       f,
       source,
-      binding:createPublicFilterSourceBinding(f.db.pool,f.config.routeKey,f.config.access),
+      binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
       search,
       consumer,
       operations: consumer.operations,
