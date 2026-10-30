@@ -39,7 +39,20 @@ export const NoBanner: Story = {
 };
 export const Member: Story = {
   name: 'Banner, Member',
-  play: spaceReady,
+  play: async (context) => {
+    await spaceReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    const membership = within(view.getByRole('region', { name: m.realm_membership_label() }));
+    await expect(await membership.findByRole('button', { name: m.realm_leave() })).toBeEnabled();
+    await expect(membership.getByText(m.realm_state_member())).toBeVisible();
+    await expect(membership.queryByRole('button', { name: m.realm_join() })).toBeNull();
+    for (const board of realmBoardsRecording.items)
+      await expect(view.getByRole('link', { name: board.title })).toBeVisible();
+    await expect(view.getByRole('heading', { name: m.realm_published_heading() })).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+    await expect(view.getByRole('button', { name: m.realm_publication_publish() })).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.realm_publication_curate() }));
+  },
   render: () => <PageStory visitor="Signed In" path="/spaces/atlas-member" />,
 };
 
@@ -52,7 +65,8 @@ export const Unavailable: Story = {
     if (!board) throw new Error('The recorded Realm has no board.');
     await view.findByRole('link', { name: new RegExp(board) });
     await view.findByRole('heading', { level: 2, name: m.realm_published_heading() });
-    await expect(await view.findByRole('status')).toHaveTextContent(m.realm_membership_unavailable());
+    const membership = within(view.getByRole('region', { name: m.realm_membership_label() }));
+    await expect(await membership.findByRole('status')).toHaveTextContent(m.realm_membership_unavailable());
     await expect(view.queryByRole('button', { name: m.realm_join() })).toBeNull();
     await expect(view.getByText(m.realm_published_unavailable())).toBeVisible();
     await expect(view.queryByText(m.realm_published_empty())).toBeNull();

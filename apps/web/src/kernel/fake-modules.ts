@@ -25,7 +25,8 @@ export type FakeRoute = {
 };
 
 type FixtureFile = Pick<Partial<Fixtures>, 'subjects' | 'accounts'>;
-type RouteModule = { routes: FakeRoute[] };
+// The glob also includes fixture helpers. Only modules exporting routes contribute HTTP handlers.
+type RouteModule = { routes?: FakeRoute[] };
 type Discovered = {
   routes: FakeRoute[];
   recordings: Record<string, KernelRecording>;
@@ -79,7 +80,7 @@ function discover(): Discovered {
         './fake/library-continue.ts': libraryContinue,
         './fake/review-conflicts.ts': reviewConflicts,
         './fake/library-label-assignments.ts': libraryLabelAssignments,
-      }).flatMap(([, module]) => module.routes),
+      }).flatMap(([, module]) => module.routes ?? []),
     ],
     recordings: Object.fromEntries(
       ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),

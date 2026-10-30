@@ -27,6 +27,10 @@ function SpaceRoute() {
     enabled: personalRead.enabled && session === 'signed-in' && publicPage.realm === null,
     retry: false,
   });
-  const page = sessionPage.isSuccess && !sessionPage.isFetching && !sessionPage.isError ? sessionPage.data : publicPage;
+  // A personal response belongs only to the current signed-in reader. Required read failures
+  // still reach the route boundary, and cached protected content cannot survive sign-out or refresh.
+  const personal = session === 'signed-in' && publicPage.realm === null;
+  if (personal && sessionPage.isError) throw sessionPage.error;
+  const page = personal && sessionPage.isSuccess && !sessionPage.isFetching ? sessionPage.data : publicPage;
   return <SpacePage page={page} />;
 }
