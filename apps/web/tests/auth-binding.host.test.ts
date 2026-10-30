@@ -41,6 +41,7 @@ let devServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let keys: ReturnType<typeof createLocalJWKSet>;
 let webState: string | undefined;
 let privateDirectory: string | undefined;
+let configDirectory: string | undefined;
 
 beforeAll(async () => {
   fixture = testDatabase();
@@ -89,12 +90,14 @@ beforeAll(async () => {
       },
     },
   });
+  await mkdir(join(app, '.temp'), { recursive: true });
+  configDirectory = await mkdtemp(join(app, '.temp/web-auth-binding-vite-'));
   privateDirectory = await mkdtemp(join(tmpdir(), 'web-auth-binding-'));
   webState = join(privateDirectory, 'state');
   await mkdir(webState);
   const viteCache = join(privateDirectory, 'vite-cache');
   await mkdir(viteCache);
-  const viteConfig = join(privateDirectory, 'vite.config.ts');
+  const viteConfig = join(configDirectory, 'vite.config.ts');
   await writeFile(
     viteConfig,
     `import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};\n` +
@@ -192,6 +195,7 @@ afterAll(async () => {
   await pool?.end();
   fixture?.close();
   if (privateDirectory) await rm(privateDirectory, { recursive: true, force: true });
+  if (configDirectory) await rm(configDirectory, { recursive: true, force: true });
 });
 
 function cookie(response: Response, name: string) {

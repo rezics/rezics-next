@@ -11,7 +11,6 @@ import fixtures from '../src/kernel/fixtures.json';
 import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
-const root = join(app, '../..');
 const clientId = 'rezics-website';
 const resource = 'https://api.rezics.test';
 const requestedScopes = 'openid offline_access';
@@ -48,8 +47,8 @@ function safeProblem(response: Response): Promise<string> {
 }
 
 test('a cold isolated checkout completes the signed issuer flow through the production BFF and renders the requested signed-in page', async () => {
-  await mkdir(join(root, '.temp'), { recursive: true });
-  const ownedDirectory = await mkdtemp(join(root, '.temp/stabilize-bootstrap-'));
+  await mkdir(join(app, '.temp'), { recursive: true });
+  const ownedDirectory = await mkdtemp(join(app, '.temp/stabilize-bootstrap-'));
   const cacheDirectory = join(ownedDirectory, 'vite-cache');
   const viteConfig = join(ownedDirectory, 'vite.config.ts');
 
