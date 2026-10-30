@@ -31,10 +31,6 @@ export type DeletedPublicIdentity = {
     id: string;
     kind: 'actor' | 'organization';
     state: 'deleted';
-    handle?: never;
-    displayName?: never;
-    automated?: never;
-    operatorId?: never;
 };
 export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
 export type PublicIdentityFields = {
@@ -42,7 +38,7 @@ export type PublicIdentityFields = {
     kind: 'actor' | 'organization';
     handle: string | null;
     displayName: string | null;
-    state: 'active' | 'deleted';
+    state: 'active';
     automated: boolean;
     operatorId: string | null;
 };

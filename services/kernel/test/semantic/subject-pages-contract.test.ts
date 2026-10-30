@@ -15,6 +15,10 @@ type Feed = ClientKernel['~Routes']['v1']['subject-pages']['get'];
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type ExpectedPage = {
   id: string;
+  target?:
+    | { family: 'subject'; subjectId: string }
+    | { family: 'account'; accountId: string; canonicalPath: string };
+  views?: string[];
   lastModified?: string;
   originalLanguage?: string;
   labels: { language: string; value: string }[];

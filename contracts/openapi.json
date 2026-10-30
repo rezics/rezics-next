@@ -293,10 +293,7 @@
                                 "type": "boolean"
                               },
                               "state": {
-                                "enum": [
-                                  "active",
-                                  "deleted"
-                                ],
+                                "const": "active",
                                 "type": "string"
                               },
                               "subject": {
@@ -384,10 +381,7 @@
                                 ]
                               },
                               "state": {
-                                "enum": [
-                                  "active",
-                                  "deleted"
-                                ],
+                                "const": "active",
                                 "type": "string"
                               },
                               "subject": {
@@ -468,10 +462,7 @@
                                 ]
                               },
                               "state": {
-                                "enum": [
-                                  "active",
-                                  "deleted"
-                                ],
+                                "const": "active",
                                 "type": "string"
                               }
                             },
@@ -12157,10 +12148,7 @@
                             ]
                           },
                           "state": {
-                            "enum": [
-                              "active",
-                              "deleted"
-                            ],
+                            "const": "active",
                             "type": "string"
                           }
                         },
@@ -72908,10 +72896,7 @@
                                 ]
                               },
                               "state": {
-                                "enum": [
-                                  "active",
-                                  "deleted"
-                                ],
+                                "const": "active",
                                 "type": "string"
                               }
                             },

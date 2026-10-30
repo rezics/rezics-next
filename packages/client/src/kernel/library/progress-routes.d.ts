@@ -1,4 +1,3 @@
-import type { ProgressPresentation } from './progress-model.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
@@ -27,7 +26,20 @@ export declare const sessionSchema: import("typebox").TObject<{
     startedAt: import("typebox").TString;
     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
-export declare const progressPresentationSchema: import("typebox").TUnsafe<ProgressPresentation>;
+export declare const progressPresentationSchema: import("typebox").TUnsafe<Readonly<{
+    meaning: 'known' | 'unknown' | 'unavailable';
+    unitLabel?: string;
+    unitLabelLanguage?: string;
+    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+    dimension?: string;
+    structure: 'unverified';
+    recording: Readonly<{
+        state: 'supported';
+        inputRules: import("./progress-model.ts").ProgressInputRules;
+    } | {
+        state: 'unsupported' | 'unavailable';
+    }>;
+}>>;
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
@@ -3951,14 +3963,13 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                         sessionId: string;
                     };
                     query: {
-                        presentation?: "FULL";
                         view?: "BASIC" | "FULL";
+                        presentation?: "FULL";
                     };
                     headers: unknown;
                     response: {
                         200: {
                             progressSession: {
-                                presentation?: ProgressPresentation;
                                 subject?: {
                                     id: string;
                                     type: string;
@@ -4053,6 +4064,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 revision: number;
                                 startedAt: string;
                                 completedAt: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
                             };
                         };
                         400: {
@@ -4096,11 +4121,8 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: 'validation';

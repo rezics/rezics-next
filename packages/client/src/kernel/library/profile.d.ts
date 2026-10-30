@@ -13,3 +13,10 @@ export declare function resolveLibraryProfilePin(snapshot: {
 export declare function hasEntryState(profile: LibraryProfileDescriptor, stateId: string): boolean;
 export declare function hasCopyStatus(profile: LibraryProfileDescriptor, kindId: string, statusId: string): boolean;
 export declare function progressUnit(profile: LibraryProfileDescriptor, mode: LibraryProgressMode, unitId: string): LibraryProgressUnitDescriptor | null;
+/** These are the only native manual structures and identities, shared by reads and writes. */
+export declare function nativeProgressUnit(profile: LibraryProfileDescriptor, session: {
+    mode: LibraryProgressMode;
+    unit: string;
+}): LibraryProgressUnitDescriptor | null;
+/** Bounds may change admission, but a dimension/identity change cannot reinterpret a session. */
+export declare function compatibleProgressUnits(original: LibraryProgressUnitDescriptor, current: LibraryProgressUnitDescriptor): boolean;

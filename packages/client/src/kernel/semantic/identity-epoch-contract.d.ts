@@ -212,7 +212,8 @@ export type IdentityEpochStore = Readonly<{
      */
     publish(tx: CommandTransaction, job: IdentityJobRef): Promise<CommandResult<IdentityJobRef>>;
 }>;
-/** MISSING producer: semantic/identity-epoch-mapping.ts, export stepIdentityEpochMapping.
+/** Native producer: semantic/identity-epoch-mapping.ts, export stepIdentityEpochMapping.
+ * Its provisional unavailable declaration does not establish executable native mapping.
  * One bounded native step; reads saved work, never takes a caller-supplied frontier as authority.
  */
 export type IdentityEpochStep = (pool: Pool, job: IdentityJobRef) => Promise<IdentityStepProgress>;
@@ -226,7 +227,7 @@ export type IdentityEpochParticipants = Readonly<{
     /** Same participant/receipt ABI; all canonical removals/additions/fences/directory rekeys must be custodied. */
     'library-private-follow-counts': IdentityEpochStep;
 }>;
-/** MISSING producer: semantic/identity-epoch-coordinator.ts.
+/** Final composition: semantic/identity-epoch-coordinator.ts.
  * DBOS resumes job identity only. Completion reads persisted native receipts, not this return value.
  */
 export type ResumeIdentityEpochJob = (pool: Pool, job: IdentityJobRef) => Promise<void>;
