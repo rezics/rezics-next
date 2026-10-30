@@ -5,7 +5,12 @@ import { newId } from '../../src/route/route.ts';
 import { documentActions } from '../../src/search/document.ts';
 import { RebuildError, rebuildSubjects } from '../../src/search/generations.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
-import { createOpenSearch, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
+import {
+  createOpenSearch,
+  OpenSearchError,
+  SearchUnavailableError,
+  type OpenSearch,
+} from '../../src/search/opensearch.ts';
 import { startSearchIndexing, subjectConsumer } from '../../src/search/runner.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import { writeIndexActions } from '../../src/search/write-actions.ts';
@@ -86,10 +91,17 @@ async function fixture(homes = [3600, 3601], dbPool: Pool = pool, replay = false
         responseBytes: 0,
       };
       calls.push(call);
-      const raw = (await control.request?.(method, path, body)) ?? (await native.request(method, path, body, options));
-      call.responseBytes = Buffer.byteLength(JSON.stringify(raw));
-      if (path === `/${index}/_search`) await control.afterAggregation?.();
-      return control.receipt ? control.receipt(method, path, structuredClone(raw)) : raw;
+      try {
+        const raw =
+          (await control.request?.(method, path, body)) ?? (await native.request(method, path, body, options));
+        call.responseBytes = Buffer.byteLength(JSON.stringify(raw));
+        if (path === `/${index}/_search`) await control.afterAggregation?.();
+        return control.receipt ? control.receipt(method, path, structuredClone(raw)) : raw;
+      } catch (error) {
+        if (error instanceof OpenSearchError)
+          call.responseBytes = Buffer.byteLength(JSON.stringify({ status: error.status, body: error.body }));
+        throw error;
+      }
     }) as OpenSearch['request'],
   };
   async function position(home: number) {
@@ -212,17 +224,18 @@ async function fixture(homes = [3600, 3601], dbPool: Pool = pool, replay = false
       await admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer = ANY($1)', [
         [consumer, subjectConsumer(prefix, 1)],
       ]);
-      for (const row of saved) {
-        if (replay)
+      if (replay)
+        for (const row of saved)
           await admin.query('DELETE FROM core.outbox WHERE partition_no = $1 AND position > $2', [
             row.partition_no,
             row.position,
           ]);
-        await admin.query('UPDATE core.partition SET position = $2 WHERE partition_no = $1', [
-          row.partition_no,
-          row.position,
-        ]);
-      }
+      await admin.query(
+        `UPDATE core.partition p SET position = prior.position
+         FROM unnest($1::integer[], $2::bigint[]) AS prior(partition_no, position)
+         WHERE p.partition_no = prior.partition_no`,
+        [saved.map((row) => row.partition_no), saved.map((row) => row.position)],
+      );
     },
   };
 }
@@ -292,6 +305,18 @@ test('coincident numeric counts at stale or ahead positions stay busy, including
       home === 3600 && ++observations < 3 ? { ...snapshot, position: 0n } : snapshot;
     expect(await f.run({ rounds: 3 })).toEqual({ generation: 2, previous: 1 });
     expect(observations).toBe(3);
+  } finally {
+    await f.close();
+  }
+}, 60_000);
+
+test('an actual quiet PostgreSQL bigint boundary position remains a valid empty snapshot', async () => {
+  const f = await fixture([3600]);
+  try {
+    await admin.query('UPDATE core.partition SET position = $1 WHERE partition_no = 3600', ['9223372036854775807']);
+    await f.checkpoint();
+    expect(await f.run()).toEqual({ generation: 2, previous: 1 });
+    expect(await f.visible()).toEqual([]);
   } finally {
     await f.close();
   }
@@ -520,13 +545,13 @@ test('malformed count on a newly observed native home is unavailable rather than
   }
 }, 60_000);
 
-async function bounded<T>(promise: Promise<T>): Promise<T> {
+async function bounded<T>(promise: Promise<T>, timeoutMs = 10_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('native fixture gate was not reached')), 10_000);
+        timer = setTimeout(() => reject(new Error('native fixture operation did not finish')), timeoutMs);
       }),
     ]);
   } finally {
@@ -824,6 +849,7 @@ test('one fixed native rebuild retains its work across 64/512/4096 unrelated his
 test('actual nonempty partition work grows linearly to 4096 with exact keys and bounded eight-count concurrency', async () => {
   const db = await openGrowthDatabase(url);
   const samples: GrowthSample[] = [];
+  const engineSamples: GrowthSample[] = [];
   try {
     for (const scale of [64, 512, 4096]) {
       const homes = Array.from({ length: scale }, (_, n) => n);
@@ -851,10 +877,20 @@ test('actual nonempty partition work grows linearly to 4096 with exact keys and 
         expect(f.counted).toHaveLength(8);
         expect(f.peak).toBe(8);
         release.resolve();
-        const measured = await bounded(rebuilding);
+        const measured = await bounded(rebuilding, 120_000);
         expect(measured.value).toEqual({ generation: 2, previous: 1 });
         const cost = costOf(measured.capture);
         samples.push({ scale, cost });
+        engineSamples.push({
+          scale,
+          cost: {
+            rows: 0,
+            blocks: 0,
+            statements: f.calls.length,
+            requestBytes: f.calls.reduce((sum, call) => sum + call.bytes, 0),
+            responseBytes: f.calls.reduce((sum, call) => sum + call.responseBytes, 0),
+          },
+        });
         expect(f.counted.sort((a, b) => a - b)).toEqual(homes);
         expect(f.peak).toBe(8);
         expect(f.calls.filter((call) => call.path.endsWith('/_search'))).toHaveLength(1);
@@ -881,6 +917,10 @@ test('actual nonempty partition work grows linearly to 4096 with exact keys and 
       }
     }
     expect(growthViolations(samples, { rows: 'linear', blocks: 'linear', statements: 'linear' })).toEqual([]);
+    expect(growthViolations(engineSamples, { rows: 'constant', blocks: 'constant', statements: 'constant' })).toEqual(
+      [],
+    );
+    expect(growthByteViolations(engineSamples, { requestBytes: 'constant', responseBytes: 'linear' })).toEqual([]);
   } finally {
     await db.close();
   }
