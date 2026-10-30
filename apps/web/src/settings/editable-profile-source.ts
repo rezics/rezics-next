@@ -9,6 +9,12 @@ export type EditableProfileSource = {
   read: (authorization: string, accountId: string) => Promise<EditableProfile>;
 };
 
+export class EditableProfileReadError extends Error {
+  constructor(readonly status: number) {
+    super('Profile unavailable');
+  }
+}
+
 const dimension = v.pipe(v.number(), v.integer(), v.minValue(1));
 const coordinate = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 const fields = {
@@ -50,7 +56,7 @@ export function createEditableProfileSource(client: KernelClient): EditableProfi
         headers: { authorization, 'cache-control': 'no-store' },
         fetch: { cache: 'no-store' },
       });
-      if (result.error || !result.data) throw new Error('Profile unavailable');
+      if (result.error || !result.data) throw new EditableProfileReadError(result.status);
       const { profile } = v.parse(response, result.data);
       if (profile.id !== accountId) throw new Error('Profile unavailable');
       return profile;

@@ -2700,5 +2700,15 @@
   "realm_review_guidance_heading": "A careful handover",
   "realm_review_guidance_dates": "Each request belongs to its original orphan episode. The waiting period is 720 hours; the displayed dates do not establish current eligibility.",
   "realm_review_guidance_authority": "Only a currently permitted platform approval can appoint an owner. Membership or a Realm role alone does not grant approval access.",
-  "realm_review_guidance_privacy": "Review uses account and request identifiers. Account profiles, request bodies and private Realm details are not included."
+  "realm_review_guidance_privacy": "Review uses account and request identifiers. Account profiles, request bodies and private Realm details are not included.",
+  "account_profile_title": "Edit account profile",
+  "account_profile_authority": "Edits use your current authority and website consent for this account.",
+  "account_profile_denied": "You cannot currently edit this account. Current permissions or website consent may not allow account updates.",
+  "account_profile_missing": "This account profile was not found.",
+  "account_profile_unavailable": "The current editable profile is unavailable. Reload before continuing.",
+  "account_profile_signed_out": "Your current sign-in could not be confirmed. Sign in again before editing this account.",
+  "account_profile_confirm_title": "Confirm account profile change",
+  "account_profile_confirm_text": "Apply the changes shown to this account:",
+  "account_profile_confirm": "Confirm changes",
+  "account_profile_cancel": "Keep editing"
 }
