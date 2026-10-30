@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
+import { MAX_WEBHOOK_SECRETS } from './config.ts';
 import { HANDLED_STRIPE_EVENTS, type HandledStripeEvent, type StripeEventRef } from './model.ts';
 
+const MAX_SIGNATURE_BYTES = 8192;
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 const handled = new Set<string>(HANDLED_STRIPE_EVENTS);
 
@@ -18,7 +20,15 @@ export async function verifyStripeEvent(
   secrets: readonly string[],
   receivedAt: number,
 ): Promise<Stripe.Event> {
-  if (!header || !Number.isFinite(receivedAt)) throw new WebhookSignatureError();
+  if (
+    !header ||
+    header.length > MAX_SIGNATURE_BYTES ||
+    Buffer.byteLength(header, 'utf8') > MAX_SIGNATURE_BYTES ||
+    secrets.length === 0 ||
+    secrets.length > MAX_WEBHOOK_SECRETS ||
+    !Number.isFinite(receivedAt)
+  )
+    throw new WebhookSignatureError();
   for (const secret of secrets) {
     try {
       return await Stripe.webhooks.constructEventAsync(raw, header, secret, 300, cryptoProvider, receivedAt);

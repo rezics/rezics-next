@@ -77,8 +77,12 @@ are unavailable. Signed fixtures and implementation work do not wait for live ke
 
 Configure public HTTPS `POST /v1/webhooks/stripe` for this direct account, snapshot events matching
 [the handled set](model.ts), and an API version compatible with the installed SDK. Thin notifications are not the
-current classifier's input. Supply rotated signing secrets with overlap. Refunds, disputes and evidence management
-stay in Stripe, including Stripe-initiated refunds. Creator payments occur outside Stripe; an agreed payout method
+current classifier's input. Supply matching endpoint-specific signing secrets with overlap during rotation in
+`STRIPE_WEBHOOK_SECRETS`: a comma-separated list of one to four distinct nonempty secrets. Duplicate or excessive
+entries fail startup without exposing their values. Four is a local verification-work cap, not a Stripe account or
+rotation limit; provision the endpoint's overlap within this cap. Maintain a trusted server arrival clock.
+Refunds, disputes and evidence management stay in Stripe, including Stripe-initiated refunds.
+Creator payments occur outside Stripe; an agreed payout method
 and actual external reference are operational conditions, not evidence supplied by a statement row.
 
 ### Checkout return URLs
@@ -120,9 +124,13 @@ identification/reconciliation, not automatic creation of another purchase.
 ## Session refresh and payment truth
 
 [Webhook intake](webhook-routes.ts) verifies the exact raw signed bytes through [SDK verification](webhook.ts),
-bounds the body at 256 KiB and awaits durable enqueue before acknowledging. Invalid signatures have no effects;
-valid payload claims about payment never substitute for a provider read. Event-ID dedupe uses the durable identity
-in [enqueue](enqueue.ts), independently of entitlement uniqueness and Balance Transaction accounting dedupe.
+bounds the body at 256 KiB and the `Stripe-Signature` input at 8192 UTF-8 bytes, and tries at most four configured
+secrets. Oversized signatures are `invalid_signature` (400) before SDK crypto, JSON parsing or domain routing, with
+no durable or payment effects. The pinned SDK's 300-second tolerance rejects excessive age against trusted arrival
+time; it does not promise a symmetric future-skew bound. Intake awaits durable enqueue before acknowledging.
+Invalid signatures have no effects; valid payload claims about payment never substitute for a provider read.
+Event-ID dedupe uses the durable identity in [enqueue](enqueue.ts), independently of entitlement uniqueness and
+Balance Transaction accounting dedupe.
 
 <a id="receipt-aware-native-refresh-admission-implementation-pending"></a>
 
@@ -367,8 +375,9 @@ initial/expiry workflows exit for paid/failed orders; their completion shortcuts
 The internal `createCommerceWork(client).enqueueKnownOrderRepair(orderId, name)` caller accepts paid orders and
 uses a distinct durable identity for each bounded repair name. Reusing a name dedupes that request. It fabricates
 no buyer and exposes no public repair endpoint. `recoverSignedEventPage` accepts at most 100 signed deliveries,
-each with the existing 256-KiB body bound and a 16-KiB signature-header bound. It verifies/classifies the entire
-page before dispatch through ordinary Event-ID dedupe and returns only count/last Event ID as continuation.
+each with the existing 256-KiB body bound and the shared verifier's 8192-byte UTF-8 signature bound. It verifies and
+classifies the entire page before dispatch through ordinary Event-ID dedupe and returns only count/last Event ID
+as continuation.
 Provider resends must carry a current valid signature; an expired archived signature grants no bypass. Operational
 outage enumeration stays outside this service and must supply finite pages, never a global paid-order sweep.
 
@@ -544,6 +553,17 @@ The growth runs below also fail their stated bounds. Frozen Commerce queue accep
 integrated erasure registry requires the seventh `locator-effects` queue; that registry has been retained.
 
 ## Cost
+
+### Raw signed ingress verification
+
+- Touches: at most 256 KiB of exact raw body, 8192 UTF-8 signature-header bytes and four configured secret
+  verifications, followed by the existing Event-ID durable enqueue. No buyer SQL or provider read precedes verification.
+- Bound: parser/crypto work is `O(bodyBytes * 4 + headerBytes)` with a constant configured secret count. Excessive
+  headers or secret counts fail before SDK work; invalid input has no durable or domain effects.
+- Growth check: focused cases in `test/commerce/webhook.test.ts` and `test/commerce/config.test.ts` cover exact
+  caps, rejection without effects, duplicate/empty configuration and overlapping multiple-`v1` rotation.
+
+### Existing operation derivations
 
 These are derivations from the commerce adapters and SQL, `src/work/`, `db/commerce/migrations/` and `db/commerce/schema.sql`, not measurements or guaranteed PostgreSQL plans.
 The criterion is an anchor with a bounded number of hops and results, costing about changes times index depth.

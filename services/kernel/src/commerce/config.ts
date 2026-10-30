@@ -1,5 +1,7 @@
 import type { StripePortConfig } from './stripe.ts';
 
+export const MAX_WEBHOOK_SECRETS = 4;
+
 export class ConfigError extends Error {
   constructor(variable: string) {
     super(`Invalid or missing ${variable}`);
@@ -83,10 +85,13 @@ function readStripeApiKey(env: Environment): string {
 }
 
 function readWebhookSecrets(env: Environment): readonly string[] {
-  const webhookSecrets = required(env, 'STRIPE_WEBHOOK_SECRETS')
-    .split(',')
-    .map((value) => value.trim());
-  if (webhookSecrets.some((value) => !/^whsec_[A-Za-z0-9_]+$/.test(value)))
+  const values = required(env, 'STRIPE_WEBHOOK_SECRETS').split(',', MAX_WEBHOOK_SECRETS + 1);
+  if (values.length > MAX_WEBHOOK_SECRETS) throw new ConfigError('STRIPE_WEBHOOK_SECRETS');
+  const webhookSecrets = values.map((value) => value.trim());
+  if (
+    webhookSecrets.some((value) => !/^whsec_[A-Za-z0-9_]+$/.test(value)) ||
+    new Set(webhookSecrets).size !== webhookSecrets.length
+  )
     throw new ConfigError('STRIPE_WEBHOOK_SECRETS');
   return webhookSecrets;
 }
