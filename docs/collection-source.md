@@ -75,7 +75,16 @@ Library seam. `createNativeLibrarySourceCustody({pool, clock?})` exports these e
   work, or `unavailable`. Releasing the same real hold again is idempotent under its exact owner fences.
 
 `NativeSourceIdentity` contains `route`, `collectionId`, `accountId`, native `incarnation`, source
-`generation`, `scope` (`curated` or `private_builtin`), `ownerEpoch`, `receivingEpoch` and `effectKey`.
+`generation`, `scope`, `ownerEpoch`, `receivingEpoch` and `effectKey`.
+The ordinary `curated` and `private_builtin` variants are unchanged. Commerce and Semantic consumers may use the
+additional exact variant `{scope:'active_explicit_output', outputGeneration:string,
+publicationTransactionId:string, publicationPosition:string}` with all of those common fields. The account is the
+actual current curator, never an Account synthesized from a Collection ID. Output generation is a native UUID;
+publication transaction and positive position identify the native publication receipt and its same-transaction
+Core write basis. The owner rereads native xid, selected head, exact member count and source/writer fences; these
+locator fields do not certify completeness. No consumer type or public-catalogue capture is imported by the owner.
+This variant covers active curator-owned output only. Frozen output after curator removal still needs an exact
+existing ownership binding from Semantic/Commerce; it remains explicitly unavailable and retains public custody.
 These are lookup hints, never evidence or admission. Receiving owns the meaning/currentness of its epoch and
 planned/accepted record; the native seam requires exact equality to the committed capture's binding.
 `NativeSourceCaptureWork` carries the existing `WorkAllowance` and unchanged absolute deadline. Every result,
