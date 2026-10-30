@@ -114,8 +114,8 @@ function transaction<T>(deps: Dependencies, accountId: string, body: (tx: Operat
       deadline: workStepDeadline(),
       ...(deps.clock === undefined ? {} : { clock: deps.clock }),
     },
-    async tx => {
-      await fenceShelfTechnicalWrite(tx,{route:key.route,accountId});
+    async (tx) => {
+      await fenceShelfTechnicalWrite(tx, { route: key.route, accountId });
       return body(tx);
     },
   );

@@ -40,7 +40,10 @@ export const libraryErasureWorkflowId = (accountId: string) => {
  * Shared/foreign custody still has no complete-proof path; this module cannot ACK.
  * See erasure-participant.md for every remaining producer and cleanup obligation.
  */
-export function registerLibraryErasure({ pool, client, addEffects }: WorkContext, maintenance?: ShelfMaintenanceOps): void {
+export function registerLibraryErasure(
+  { pool, client, addEffects }: WorkContext,
+  maintenance?: ShelfMaintenanceOps,
+): void {
   const inspect = DBOS.registerStep(
     async (accountId: string) => {
       const route = requireRoute(accountId);

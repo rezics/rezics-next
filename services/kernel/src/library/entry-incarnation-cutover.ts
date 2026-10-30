@@ -126,7 +126,7 @@ export async function cutoverEntryIncarnationsPage(
             ...(clock === undefined ? {} : { clock }),
           },
           async (tx) => {
-            await fenceShelfTechnicalWrite(tx,{route:source.route,accountId:source.accountId});
+            await fenceShelfTechnicalWrite(tx, { route: source.route, accountId: source.accountId });
             // Lock only the exact captured row. xmin is ephemeral CAS evidence and is never checkpointed.
             const exact = await lock.run(tx, {
               route: source.route,
