@@ -1,14 +1,13 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runImportCli } from '../src/cli.ts';
 
 async function fixture() {
-  const root = join(import.meta.dir, '../../../.temp');
-  await mkdir(root, { recursive: true });
-  const dir = await mkdtemp(join(root, 'cli-upstream-'));
+  const dir = await mkdtemp(join(tmpdir(), 'cli-upstream-'));
   const state = join(dir, 'state.sqlite');
   const key = join(dir, 'account.jwk');
   const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -34,10 +33,10 @@ async function fixture() {
     'https://auth.rezics.test',
   ];
   let requests = 0;
-  const fetchBoundary = (async () => {
+  const fetchBoundary = (async (_input: RequestInfo | URL): Promise<Response> => {
     requests++;
     throw new Error('HTTP forbidden during acquisition');
-  }) as unknown as typeof fetch;
+  }) as typeof fetch;
   const invoke = (stdin: AsyncIterable<Uint8Array>, signal?: AbortSignal) =>
     runImportCli(args, { stdin, ...(signal ? { signal } : {}), fetch: fetchBoundary });
   const snapshot = () => {

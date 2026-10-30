@@ -754,7 +754,8 @@ ownership and cleanup. Native execution and growth evidence are separate; this c
 
 During incomplete acquisition, interruption requests upstream iterator cleanup once and releases the actual
 source guard even if that cleanup never settles or is queued behind a stalled read. Late read/cleanup rejection
-is observed. Incomplete input cannot seal a successful or empty dump, advance the prior completed baseline,
+is observed. The CLI reports exit 130 after closing its owned handles, so a same-state rerun can acquire the
+source normally. Incomplete input cannot seal a successful or empty dump, advance the prior completed baseline,
 or start Auth/public effects. Ordinary EOF and parser-error cleanup retain their existing behavior; cancellation
 can interrupt a pending source cleanup. Owned file reads and already-dispatched writes settle before SQLite
 and descriptor closure. This boundary does not detach ingestion or change post-dispatch authorization cleanup.
