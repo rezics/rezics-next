@@ -3973,6 +3973,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             collectionId: string;
                             target: {
                                 id: string;
+                                membershipKind: "curated";
                                 curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
@@ -4009,8 +4010,31 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
+                                orderEpoch: number;
                                 createdAt: string;
                                 updatedAt: string;
+                            } | {
+                                id: string;
+                                curatorAccountId: string;
+                                membershipKind: "dynamic";
+                                builtinKind: "everything" | "state";
+                                builtin: {
+                                    kind: "everything";
+                                } | {
+                                    kind: "state";
+                                    profileId: string;
+                                    stateSetId: string;
+                                    stateId: string;
+                                };
+                                builtinLabels?: Record<string, string>;
+                                title: string | null;
+                                description: string | null;
+                                visibility: "private";
+                                revision: number;
+                                presentationKind: null;
+                                presentationKindSource: "empty";
+                                cover: null;
+                                coverSource: "none";
                             } | {
                                 id: string;
                                 curatorAccountId: string | null;

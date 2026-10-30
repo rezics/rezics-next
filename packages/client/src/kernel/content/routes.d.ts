@@ -7453,6 +7453,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         boards: Readonly<{
                             id: import("./model.ts").BoardId;
                             realmId: string | null;
+                            community: import("./community-presentation-model.ts").CommunityPresentation | null;
                             route: import("./model.ts").Route;
                             title: string | null;
                             purpose: 'discussion' | 'reviews';
@@ -7569,6 +7570,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         board: Readonly<{
                             id: import("./model.ts").BoardId;
                             realmId: string | null;
+                            community: import("./community-presentation-model.ts").CommunityPresentation | null;
                             route: import("./model.ts").Route;
                             title: string | null;
                             purpose: 'discussion' | 'reviews';
@@ -7582,6 +7584,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         board: Readonly<{
                             id: import("./model.ts").BoardId;
                             realmId: string | null;
+                            community: import("./community-presentation-model.ts").CommunityPresentation | null;
                             route: import("./model.ts").Route;
                             title: string | null;
                             purpose: 'discussion' | 'reviews';
@@ -7760,6 +7763,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 board: Readonly<{
                                     id: import("./model.ts").BoardId;
                                     realmId: string | null;
+                                    community: import("./community-presentation-model.ts").CommunityPresentation | null;
                                     route: import("./model.ts").Route;
                                     title: string | null;
                                     purpose: 'discussion' | 'reviews';
@@ -7773,6 +7777,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 board: Readonly<{
                                     id: import("./model.ts").BoardId;
                                     realmId: string | null;
+                                    community: import("./community-presentation-model.ts").CommunityPresentation | null;
                                     route: import("./model.ts").Route;
                                     title: string | null;
                                     purpose: 'discussion' | 'reviews';
@@ -7949,6 +7954,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 items: Readonly<{
                                     id: import("./model.ts").BoardId;
                                     realmId: string | null;
+                                    community: import("./community-presentation-model.ts").CommunityPresentation | null;
                                     route: import("./model.ts").Route;
                                     title: string | null;
                                     purpose: 'discussion' | 'reviews';
@@ -10301,6 +10307,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             board: Readonly<{
                                 id: import("./model.ts").BoardId;
                                 realmId: string | null;
+                                community: import("./community-presentation-model.ts").CommunityPresentation | null;
                                 route: import("./model.ts").Route;
                                 title: string | null;
                                 purpose: 'discussion' | 'reviews';

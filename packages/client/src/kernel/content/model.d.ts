@@ -1,3 +1,5 @@
+import type { CommunityPresentation } from './community-presentation-model.ts';
+export type { CommunityPresentation } from './community-presentation-model.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 import type { Actor } from '../request/access.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -110,6 +112,7 @@ export declare function isErasedPlaceholder(entry: Readonly<{
 export type BoardView = Readonly<{
     id: BoardId;
     realmId: string | null;
+    community: CommunityPresentation | null;
     route: Route;
     title: string | null;
     purpose: 'discussion' | 'reviews';
@@ -118,6 +121,7 @@ export type BoardView = Readonly<{
     availability: Availability;
     createdAt: string;
 }>;
+export type BoardRecord = Omit<BoardView, 'community'>;
 export type ThreadInput = Readonly<{
     kind?: 'discussion' | 'review';
     title: string;

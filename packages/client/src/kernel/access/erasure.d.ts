@@ -9,6 +9,9 @@ export declare const ERASURE_PARTICIPANTS: Readonly<{
 export declare const ERASURE_PARTICIPANT_VERSION = 1;
 /** Owners register every effect that writes cross-partition erasure locators here. */
 export declare const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string>;
+export declare class SharedHistoryIncompleteError extends Error {
+    constructor();
+}
 export type ErasureOutcome = 'erased' | 'none';
 export type RetentionException = {
     store: string;

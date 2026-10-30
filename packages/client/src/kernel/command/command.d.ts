@@ -153,6 +153,7 @@ export type CompletedCommandAuthorization = Readonly<{
     mode: CommandAuthorizationMode;
 }>;
 export type CurrentCommand = CommandAttempt & Readonly<{
+    transactionId: string;
     authorization: CompletedCommandAuthorization | null;
 }>;
 type CommandContext = {

@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import { type WorkClient } from './client.ts';
-import { type Effect } from '../events/effects.ts';
+import { type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
+import { HistoryRegistry } from '../history/registry.ts';
 export type WorkService = {
     stop(): Promise<void>;
 };
@@ -12,7 +13,9 @@ export type WorkContext = {
     readonly client: WorkClient;
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly clock: KernelClock;
+    readonly history?: HistoryRegistry;
     addEffects(effects: Effect[]): void;
+    addNativeEffects?(effects: NativeEffect[]): void;
     addService(start: () => WorkService | Promise<WorkService>): void;
 };
 export type WorkModule = {

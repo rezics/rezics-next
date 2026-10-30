@@ -1186,6 +1186,9 @@ declare const productEventTypes: {
         targetId: Type.TString;
     }>;
     readonly 'com.rezics.library.follow-count.withdrawn.v1': Type.TObject<{}>;
+    readonly 'com.rezics.library.shelf-maintenance.advanced.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TString;
@@ -1350,6 +1353,11 @@ declare const productEventTypes: {
         voters: Type.TInteger;
     }>;
     readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
+    readonly 'com.rezics.history.erasure-acknowledged.v1': Type.TObject<{
+        version: Type.TInteger;
+        outcome: Type.TUnion<[Type.TLiteral<"erased">, Type.TLiteral<"none">]>;
+    }>;
+    readonly 'com.rezics.history.minimized.v1': Type.TObject<{}>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;
     }>;

@@ -5552,6 +5552,109 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 revisionCreatedAt: string;
                                 author: string;
                             };
+                            community: {
+                                realmId: string;
+                                spaceId: string;
+                                contextId: string;
+                                name: string;
+                                description: string;
+                                avatar: {
+                                    state: "available";
+                                    value: {
+                                        id: string;
+                                        containerId: string;
+                                        digest: string;
+                                        width: number;
+                                        height: number;
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                            height: number;
+                                        }[];
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        } | null;
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                        } | null;
+                                    };
+                                } | {
+                                    state: "none" | "unavailable";
+                                    value: null;
+                                };
+                                banner: {
+                                    state: "available";
+                                    value: {
+                                        id: string;
+                                        containerId: string;
+                                        digest: string;
+                                        width: number;
+                                        height: number;
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                            height: number;
+                                        }[];
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        } | null;
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                        } | null;
+                                    };
+                                } | {
+                                    state: "none" | "unavailable";
+                                    value: null;
+                                };
+                                members: {
+                                    state: "current";
+                                    count: number;
+                                    version: string;
+                                } | {
+                                    state: "unknown";
+                                    count: null;
+                                    version: null;
+                                };
+                                rules: {
+                                    state: "available";
+                                    value: {
+                                        postId: string;
+                                        revisionId: string;
+                                        body: unknown;
+                                        licence: string;
+                                        sha256: string;
+                                    };
+                                } | {
+                                    state: "none" | "unavailable";
+                                    value: null;
+                                };
+                                join: {
+                                    membership: "member" | "nonmember" | "unknown";
+                                    action: "join" | "leave" | "sign-in" | null;
+                                };
+                            } | null;
                         };
                         400: {
                             type: unknown;
@@ -6128,6 +6231,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             revisionCreatedAt: string;
                             author: string;
                             votes: Readonly<Partial<Record<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote", import("./realm-votes.ts").RealmVoteWeight>>>;
+                            presentation: Readonly<{
+                                avatarMediaId: string | null;
+                                bannerMediaId: string | null;
+                                rules: Readonly<{
+                                    postId: string;
+                                    revisionId: string;
+                                }> | null;
+                            }>;
                         };
                     };
                     201: {
@@ -6158,6 +6269,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 laugh?: -1 | 1;
                                 insightful?: -1 | 1;
                                 sad?: -1 | 1;
+                            };
+                            presentation: {
+                                avatarMediaId: string | null;
+                                bannerMediaId: string | null;
+                                rules: {
+                                    postId: string;
+                                    revisionId: string;
+                                } | null;
                             };
                         };
                     };
@@ -6332,6 +6451,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     laugh?: -1 | 1;
                                     insightful?: -1 | 1;
                                     sad?: -1 | 1;
+                                };
+                                presentation: {
+                                    avatarMediaId: string | null;
+                                    bannerMediaId: string | null;
+                                    rules: {
+                                        postId: string;
+                                        revisionId: string;
+                                    } | null;
                                 };
                             };
                         };
@@ -6536,6 +6663,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
             ":realmId": {
                 patch: {
                     body: {
+                        presentation?: {
+                            avatarMediaId: string | null;
+                            bannerMediaId: string | null;
+                            rules: {
+                                postId: string;
+                                revisionId: string;
+                            } | null;
+                        };
                         title?: string;
                         summary?: string;
                         visibility?: "protected" | "public";
@@ -6587,6 +6722,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     laugh?: -1 | 1;
                                     insightful?: -1 | 1;
                                     sad?: -1 | 1;
+                                };
+                                presentation: {
+                                    avatarMediaId: string | null;
+                                    bannerMediaId: string | null;
+                                    rules: {
+                                        postId: string;
+                                        revisionId: string;
+                                    } | null;
                                 };
                             };
                         };
@@ -6782,6 +6925,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         laugh?: -1 | 1;
                                         insightful?: -1 | 1;
                                         sad?: -1 | 1;
+                                    };
+                                    presentation: {
+                                        avatarMediaId: string | null;
+                                        bannerMediaId: string | null;
+                                        rules: {
+                                            postId: string;
+                                            revisionId: string;
+                                        } | null;
                                     };
                                 };
                             };

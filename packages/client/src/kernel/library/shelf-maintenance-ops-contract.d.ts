@@ -1,11 +1,12 @@
-/** Specification ports only; effectful operations deliberately throw. See the adjacent prose contract. */
+/** Native shelf maintenance contracts. Locators are never capabilities. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import type { CloudEvent } from '../events/log.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ShelfSourceStamp, ShelfTypeKeys } from './shelf-contract.ts';
-import type { TypePreparationIdentity } from './type-preparation-contract.ts';
+import type { WorkClient } from '../work/client.ts';
+import type { TypePreparationDependencies, TypePreparationIdentity } from './type-preparation-contract.ts';
 export interface InitialShelfInputs {
     readonly hasEntries: boolean;
     readonly hasCollections: boolean;
@@ -124,8 +125,10 @@ export interface ShelfMaintenanceDependencies {
     readonly pool: Pool;
     readonly access: Access;
     readonly clock?: KernelClock;
+    readonly client?: WorkClient;
+    /** Released source adapter only; absent identity evidence leaves the exact native frontier pending. */
+    readonly sources?: Pick<TypePreparationDependencies, 'observe' | 'observeIdentity'>;
+    /** The allocator owner supplies its native derived composition with the existing exact key ABI. */
+    readonly derivedKeys?: ShelfTypeKeys;
 }
-export declare function createShelfMaintenanceOps(_dependencies: ShelfMaintenanceDependencies): ShelfMaintenanceOps;
-/** Only the future native runner may compose this; factory does not accept an allow-maintenance flag. */
-export declare function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPorts;
-export {};
+export { createShelfMaintenanceOps, createShelfMaintenanceDerivedPorts } from './shelf-maintenance-runtime.ts';

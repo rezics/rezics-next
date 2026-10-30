@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { type Partition } from '../partition/partition.ts';
 import { type Access, type AccessClient, type Actor, type ReadDecisions, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, AnchoredPosition, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
 declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
 export type RealmDisclosureScope = {
@@ -74,7 +74,7 @@ type BoardDisclosureHint = Readonly<{
 }>;
 export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
 export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
-export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<BoardView | null>>;
+export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<import('./model.ts').BoardView | null>>;
 export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
     board: BoardView;
     anchor: Anchored<BoardView>;
@@ -134,3 +134,11 @@ export declare function readPost(dependencies: ContentReadDependencies, threadId
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<RevisionView>>;
 export declare function discloseThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;
+/** Exact native rules reader. It shares the ordinary row, ancestry and Access
+ * formula; the immutable requested revision never becomes the current head. */
+export declare function readExactPublishedRules(dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>, references: readonly (import('./community-presentation-rules.ts').RulesReference & {
+    realmId: string;
+})[], context: ReadContext): Promise<ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>>;
+/** Current bounded board response composition. The native internal reader stays
+ * independent, so exact post/rules reads cannot recurse into presentation. */
+export declare function readBoards(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;

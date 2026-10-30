@@ -7,9 +7,17 @@ export declare const EFFECTS_CONSUMER = "effects";
 export type Effect = {
     name: string;
     types: string[];
+    delivery?: undefined;
     run(event: CloudEvent): Promise<void>;
     admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
+export type NativeEffect = {
+    name: string;
+    types: string[];
+    delivery: 'native';
+    admit(client: PoolClient, event: CloudEvent): Promise<void>;
+};
+type RegisteredEffect = Effect | NativeEffect;
 type RegisteredEffects = {
     enqueue(envelopes: readonly Envelope[]): Promise<void>;
     admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
@@ -20,7 +28,7 @@ type WorkOptions = {
     systemDatabasePool?: Pool;
 };
 export declare function effectWorkflowId(envelope: Envelope, eventSeq: number, name: string): string;
-export declare function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffects;
+export declare function registerEffects(effects: RegisteredEffect[], pool?: Pool): RegisteredEffects;
 /** Compatibility for tests that register effects before launching the shared executor. */
 export declare function launchWork(options: WorkOptions): Promise<void>;
 export declare function shutdownWork(): Promise<void>;

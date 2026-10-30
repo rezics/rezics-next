@@ -13,6 +13,7 @@ type Dependencies = {
 };
 export declare const collectionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
+    membershipKind: import("typebox").TLiteral<"curated">;
     curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     title: import("typebox").TString;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -49,9 +50,87 @@ export declare const collectionSchema: import("typebox").TObject<{
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
+    orderEpoch: import("typebox").TInteger;
     createdAt: import("typebox").TString;
     updatedAt: import("typebox").TString;
 }>;
+export declare const collectionReadSchema: import("typebox").TUnion<[import("typebox").TObject<{
+    id: import("typebox").TString;
+    membershipKind: import("typebox").TLiteral<"curated">;
+    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    title: import("typebox").TString;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        media: import("typebox").TString;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+        placeholder: import("typebox").TObject<{
+            thumbhash: import("typebox").TString;
+            color: import("typebox").TString;
+        }>;
+        variants: import("typebox").TArray<import("typebox").TObject<{
+            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+            width: import("typebox").TInteger;
+        }>>;
+        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+            x: import("typebox").TNumber;
+            y: import("typebox").TNumber;
+        }>, import("typebox").TNull]>;
+        credit: import("typebox").TObject<{
+            rightsHolder: import("typebox").TString;
+            via: import("typebox").TObject<{
+                name: import("typebox").TString;
+                url: import("typebox").TString;
+            }>;
+            license: import("typebox").TString;
+            obligations: import("typebox").TArray<import("typebox").TString>;
+        }>;
+    }>, import("typebox").TNull]>>;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
+    coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    revision: import("typebox").TInteger;
+    memberCount: import("typebox").TInteger;
+    orderEpoch: import("typebox").TInteger;
+    createdAt: import("typebox").TString;
+    updatedAt: import("typebox").TString;
+} & {
+    curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TNull]>>;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TString;
+    membershipKind: import("typebox").TLiteral<"dynamic">;
+    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">]>;
+    builtin: import("typebox").TUnion<[import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"everything">;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"state">;
+        profileId: import("typebox").TString;
+        stateSetId: import("typebox").TString;
+        stateId: import("typebox").TString;
+    }>]>;
+    builtinLabels: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
+    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TLiteral<"private">;
+    revision: import("typebox").TInteger;
+    presentationKind: import("typebox").TNull;
+    presentationKindSource: import("typebox").TLiteral<"empty">;
+    cover: import("typebox").TNull;
+    coverSource: import("typebox").TLiteral<"none">;
+} & {
+    curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        id: import("typebox").TString;
+        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>, import("typebox").TNull]>>;
+}>]>;
 export declare const savedDynamicCollectionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
     curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -93,6 +172,7 @@ export declare const savedDynamicCollectionSchema: import("typebox").TObject<{
 }>;
 export declare const collectionResourceSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
+    membershipKind: import("typebox").TLiteral<"curated">;
     curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     title: import("typebox").TString;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -129,6 +209,7 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
+    orderEpoch: import("typebox").TInteger;
     createdAt: import("typebox").TString;
     updatedAt: import("typebox").TString;
 }>, import("typebox").TObject<{
@@ -169,6 +250,28 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TString;
+    membershipKind: import("typebox").TLiteral<"dynamic">;
+    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">]>;
+    builtin: import("typebox").TUnion<[import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"everything">;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"state">;
+        profileId: import("typebox").TString;
+        stateSetId: import("typebox").TString;
+        stateId: import("typebox").TString;
+    }>]>;
+    builtinLabels: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
+    title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TLiteral<"private">;
+    revision: import("typebox").TInteger;
+    presentationKind: import("typebox").TNull;
+    presentationKindSource: import("typebox").TLiteral<"empty">;
+    cover: import("typebox").TNull;
+    coverSource: import("typebox").TLiteral<"none">;
 }>]>;
 /** Validate original JSON without Elysia's removal of undeclared body properties. */
 export declare function strict<S extends TSchema>(schema: S): {
@@ -4317,8 +4420,10 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             title: string;
                             description: string | null;
                             visibility: import("./collection-model.ts").CollectionVisibility;
+                            membershipKind: 'curated';
                             revision: number;
                             memberCount: number;
+                            orderEpoch: number;
                             createdAt: string;
                             updatedAt: string;
                         } | {
@@ -4344,8 +4449,10 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             title: string;
                             description: string | null;
                             visibility: import("./collection-model.ts").CollectionVisibility;
+                            membershipKind: 'curated';
                             revision: number;
                             memberCount: number;
+                            orderEpoch: number;
                             createdAt: string;
                             updatedAt: string;
                             coverMediaId: string;
@@ -4354,6 +4461,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     201: {
                         collection: {
                             id: string;
+                            membershipKind: "curated";
                             curatorAccountId: string | null;
                             title: string;
                             description: string | null;
@@ -4390,8 +4498,31 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             coverMediaId?: string | null;
                             revision: number;
                             memberCount: number;
+                            orderEpoch: number;
                             createdAt: string;
                             updatedAt: string;
+                        } | {
+                            id: string;
+                            curatorAccountId: string;
+                            membershipKind: "dynamic";
+                            builtinKind: "everything" | "state";
+                            builtin: {
+                                kind: "everything";
+                            } | {
+                                kind: "state";
+                                profileId: string;
+                                stateSetId: string;
+                                stateId: string;
+                            };
+                            builtinLabels?: Record<string, string>;
+                            title: string | null;
+                            description: string | null;
+                            visibility: "private";
+                            revision: number;
+                            presentationKind: null;
+                            presentationKindSource: "empty";
+                            cover: null;
+                            coverSource: "none";
                         } | {
                             id: string;
                             curatorAccountId: string | null;
@@ -4557,6 +4688,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 displayName: string | null;
                             } | null;
                             id: string;
+                            membershipKind: "curated";
                             curatorAccountId: string | null;
                             title: string;
                             description: string | null;
@@ -4593,8 +4725,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             coverMediaId?: string | null;
                             revision: number;
                             memberCount: number;
+                            orderEpoch: number;
                             createdAt: string;
                             updatedAt: string;
+                        } | {
+                            curator?: {
+                                id: string;
+                                handle: string | null;
+                                displayName: string | null;
+                            } | null;
+                            id: string;
+                            curatorAccountId: string;
+                            membershipKind: "dynamic";
+                            builtinKind: "everything" | "state";
+                            builtin: {
+                                kind: "everything";
+                            } | {
+                                kind: "state";
+                                profileId: string;
+                                stateSetId: string;
+                                stateId: string;
+                            };
+                            builtinLabels?: Record<string, string>;
+                            title: string | null;
+                            description: string | null;
+                            visibility: "private";
+                            revision: number;
+                            presentationKind: null;
+                            presentationKindSource: "empty";
+                            cover: null;
+                            coverSource: "none";
                         } | {
                             curator?: {
                                 id: string;
@@ -4769,6 +4929,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         displayName: string | null;
                                     } | null;
                                     id: string;
+                                    membershipKind: "curated";
                                     curatorAccountId: string | null;
                                     title: string;
                                     description: string | null;
@@ -4805,8 +4966,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     coverMediaId?: string | null;
                                     revision: number;
                                     memberCount: number;
+                                    orderEpoch: number;
                                     createdAt: string;
                                     updatedAt: string;
+                                } | {
+                                    curator?: {
+                                        id: string;
+                                        handle: string | null;
+                                        displayName: string | null;
+                                    } | null;
+                                    id: string;
+                                    curatorAccountId: string;
+                                    membershipKind: "dynamic";
+                                    builtinKind: "everything" | "state";
+                                    builtin: {
+                                        kind: "everything";
+                                    } | {
+                                        kind: "state";
+                                        profileId: string;
+                                        stateSetId: string;
+                                        stateId: string;
+                                    };
+                                    builtinLabels?: Record<string, string>;
+                                    title: string | null;
+                                    description: string | null;
+                                    visibility: "private";
+                                    revision: number;
+                                    presentationKind: null;
+                                    presentationKindSource: "empty";
+                                    cover: null;
+                                    coverSource: "none";
                                 } | {
                                     curator?: {
                                         id: string;
@@ -4980,6 +5169,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     displayName: string | null;
                                 } | null;
                                 id: string;
+                                membershipKind: "curated";
                                 curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
@@ -5016,8 +5206,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
+                                orderEpoch: number;
                                 createdAt: string;
                                 updatedAt: string;
+                            } | {
+                                curator?: {
+                                    id: string;
+                                    handle: string | null;
+                                    displayName: string | null;
+                                } | null;
+                                id: string;
+                                curatorAccountId: string;
+                                membershipKind: "dynamic";
+                                builtinKind: "everything" | "state";
+                                builtin: {
+                                    kind: "everything";
+                                } | {
+                                    kind: "state";
+                                    profileId: string;
+                                    stateSetId: string;
+                                    stateId: string;
+                                };
+                                builtinLabels?: Record<string, string>;
+                                title: string | null;
+                                description: string | null;
+                                visibility: "private";
+                                revision: number;
+                                presentationKind: null;
+                                presentationKindSource: "empty";
+                                cover: null;
+                                coverSource: "none";
                             } | {
                                 curator?: {
                                     id: string;
@@ -5189,6 +5407,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             200: {
                                 collection: {
                                     id: string;
+                                    membershipKind: "curated";
                                     curatorAccountId: string | null;
                                     title: string;
                                     description: string | null;
@@ -5225,8 +5444,31 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     coverMediaId?: string | null;
                                     revision: number;
                                     memberCount: number;
+                                    orderEpoch: number;
                                     createdAt: string;
                                     updatedAt: string;
+                                } | {
+                                    id: string;
+                                    curatorAccountId: string;
+                                    membershipKind: "dynamic";
+                                    builtinKind: "everything" | "state";
+                                    builtin: {
+                                        kind: "everything";
+                                    } | {
+                                        kind: "state";
+                                        profileId: string;
+                                        stateSetId: string;
+                                        stateId: string;
+                                    };
+                                    builtinLabels?: Record<string, string>;
+                                    title: string | null;
+                                    description: string | null;
+                                    visibility: "private";
+                                    revision: number;
+                                    presentationKind: null;
+                                    presentationKindSource: "empty";
+                                    cover: null;
+                                    coverSource: "none";
                                 } | {
                                     id: string;
                                     curatorAccountId: string | null;
@@ -5396,6 +5638,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         200: {
                             collection: {
                                 id: string;
+                                membershipKind: "curated";
                                 curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
@@ -5432,8 +5675,31 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
+                                orderEpoch: number;
                                 createdAt: string;
                                 updatedAt: string;
+                            } | {
+                                id: string;
+                                curatorAccountId: string;
+                                membershipKind: "dynamic";
+                                builtinKind: "everything" | "state";
+                                builtin: {
+                                    kind: "everything";
+                                } | {
+                                    kind: "state";
+                                    profileId: string;
+                                    stateSetId: string;
+                                    stateId: string;
+                                };
+                                builtinLabels?: Record<string, string>;
+                                title: string | null;
+                                description: string | null;
+                                visibility: "private";
+                                revision: number;
+                                presentationKind: null;
+                                presentationKindSource: "empty";
+                                cover: null;
+                                coverSource: "none";
                             } | {
                                 id: string;
                                 curatorAccountId: string | null;
@@ -5719,7 +5985,50 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         headers: unknown;
                         response: {
                             200: {
-                                members: {
+                                members: ({
+                                    subject?: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | {
+                                        id: string;
+                                        type: string;
+                                        label: string;
+                                    } | null;
+                                    kind: "dynamic";
+                                    subjectId: string;
+                                } | {
                                     subject?: {
                                         id: string;
                                         type: string;
@@ -5779,7 +6088,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         kind: "code";
                                         value: string;
                                     })[]>;
-                                }[];
+                                })[];
                                 next: string | null;
                             };
                             400: {
@@ -6049,6 +6358,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 200: {
                                     collection: {
                                         id: string;
+                                        membershipKind: "curated";
                                         curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
@@ -6085,6 +6395,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
+                                        orderEpoch: number;
                                         createdAt: string;
                                         updatedAt: string;
                                     };
@@ -6225,6 +6536,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 200: {
                                     source: {
                                         id: string;
+                                        membershipKind: "curated";
                                         curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
@@ -6261,11 +6573,13 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
+                                        orderEpoch: number;
                                         createdAt: string;
                                         updatedAt: string;
                                     };
                                     destination: {
                                         id: string;
+                                        membershipKind: "curated";
                                         curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
@@ -6302,6 +6616,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
+                                        orderEpoch: number;
                                         createdAt: string;
                                         updatedAt: string;
                                     };
