@@ -28,11 +28,11 @@ type Story = StoryObj<typeof meta>;
 
 async function mountedReplyEditor(canvas: ReturnType<typeof within>) {
   // The accessible fallback is replaced when Tiptap mounts. Requery instead of retaining that detached node.
-  return waitFor(() => {
+  return waitFor(async () => {
     const editor = canvas.getByRole('textbox', { name: m.thread_reply_label() });
-    expect(editor).toHaveClass('ProseMirror');
-    expect(editor).toHaveAttribute('contenteditable', 'true');
-    expect(editor).toBeVisible();
+    await expect(editor).toHaveClass('ProseMirror');
+    await expect(editor).toHaveAttribute('contenteditable', 'true');
+    await expect(editor).toBeVisible();
     return editor;
   });
 }
