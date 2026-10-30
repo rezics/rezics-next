@@ -1,4 +1,5 @@
 {
+  "publication_missing_work": "Abre una obra existente y elige Añadir edición o versión.",
   "publication_add": "Añadir edición o versión",
   "publication_intro": "Crea una publicación con identidad propia de esta obra. Un archivo, idioma, formato, ejemplar personal o evento de distribución por sí solo no constituye una nueva publicación. No se copian los créditos ni el progreso.",
   "publication_work": "Obra existente",

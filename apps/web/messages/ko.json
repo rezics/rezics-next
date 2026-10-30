@@ -1,4 +1,5 @@
 {
+  "publication_missing_work": "기존 작품을 열고 판 또는 릴리스 추가를 선택하세요.",
   "publication_add": "판 또는 릴리스 추가",
   "publication_intro": "작품과 별개로 식별되는 발행판을 만듭니다. 파일, 언어, 형식, 개인 소장본 또는 배포 행사만으로는 새 발행판이 되지 않습니다. 작품의 크레딧과 진행 상황은 복사되지 않습니다.",
   "publication_work": "기존 작품",

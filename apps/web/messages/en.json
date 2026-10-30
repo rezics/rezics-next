@@ -1,4 +1,5 @@
 {
+  "publication_missing_work": "Open an existing work, then choose Add edition or release.",
   "publication_add": "Add edition or release",
   "publication_intro": "Create a separate, independently identified publication of this work. A file, language, format, personal copy or distribution event alone is not a new publication. Work credits and progress are not copied.",
   "publication_work": "Existing work",

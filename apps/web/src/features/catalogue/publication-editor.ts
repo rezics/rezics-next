@@ -79,7 +79,7 @@ export function publicationProfiles(release: Release, workType: string, locale: 
         (id) =>
           definition.properties.includes(id) &&
           !!pickText(release.properties[id]?.labels ?? {}, locale).text &&
-          (editableScalar(release.properties[id]) || (id === 'schema:publisher' && !!release.properties[id]?.relation)),
+          ((id === 'schema:publisher' && !!release.properties[id]?.relation) || editableScalar(release.properties[id])),
       ),
     },
   ];

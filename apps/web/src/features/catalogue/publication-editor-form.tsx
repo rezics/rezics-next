@@ -182,11 +182,19 @@ export function PublicationEditor({
               <p>
                 {query.data?.ok === false && query.data.reason === 'concealed'
                   ? m.catalogue_create_concealed({}, o)
-                  : m.catalogue_create_unavailable({}, o)}
+                  : query.data?.ok === false && query.data.reason === 'invalid'
+                    ? m.publication_missing_work({}, o)
+                    : m.catalogue_create_unavailable({}, o)}
               </p>
-              <Button variant="outline" onClick={() => void query.refetch()}>
-                {m.catalogue_create_retry({}, o)}
-              </Button>
+              {query.data?.ok === false && query.data.reason === 'invalid' ? (
+                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                  {m.catalogue_create_search({}, o)}
+                </a>
+              ) : (
+                <Button variant="outline" onClick={() => void query.refetch()}>
+                  {m.catalogue_create_retry({}, o)}
+                </Button>
+              )}
             </div>
           )}
           {read && (

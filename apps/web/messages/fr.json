@@ -1,4 +1,5 @@
 {
+  "publication_missing_work": "Ouvrez une œuvre existante, puis choisissez Ajouter une édition ou une version.",
   "publication_add": "Ajouter une édition ou une version",
   "publication_intro": "Créez une publication identifiée séparément de cette œuvre. Un fichier, une langue, un format, un exemplaire personnel ou un événement de distribution ne suffit pas. Les crédits et la progression ne sont pas copiés.",
   "publication_work": "Œuvre existante",
