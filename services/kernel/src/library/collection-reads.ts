@@ -30,6 +30,7 @@ import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
 import { requireCollectionRuleExecution } from './collection-rules.ts';
+import { admitCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
 
 type CuratorPageOptions = { curatorAccountId: string | null; cursor?: string | null; limit?: number };
 
@@ -470,11 +471,19 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
   async function listMembers(
     viewer: Actor,
     collectionId: string,
-    options: { cursor?: string | null; limit?: number } = {},
+    options: CollectionMemberQuery = {},
+    deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<{ members: MemberView[]; next: string | null }> {
-    const page = pageRequest(options, ['cursor', 'limit']);
-    const collection = await loadCollection(viewer, collectionId);
+    const page = pageRequest(options, ['cursor', 'limit', 'filter', 'sort']);
+    const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
+    if (options.filter !== undefined || options.sort !== undefined) {
+      await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
+      // Admission compiles every leaf through Search's shared owner/catalogue Boolean planner.
+      // The candidate/support directory and complete native CollectionSource are still unavailable.
+      // Do not execute an ordinal raw window as a canonical filtered page or create a second interpreter.
+      throw new ProblemError('dependency_unavailable');
+    }
     if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
     const route = routeOf(collectionId)!;
     const binding: CursorBinding = { operation: 'library.collection.members', parameters: { collectionId } };

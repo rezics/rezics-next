@@ -568,34 +568,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        if (query.filter !== undefined || query.sort !== undefined) {
-          let filter: unknown;
-          try {
-            filter = query.filter === undefined ? undefined : JSON.parse(query.filter);
-          } catch {
-            throw new ProblemError('invalid_request');
-          }
-          if (filter === undefined) throw new ProblemError('unsupported_query');
-          parseCollectionRule({ filter, ...(query.sort === undefined ? {} : { sort: query.sort }) });
-          // No common filter/page admission is published yet; never silently run a paging-only request.
-          await requireCollectionRuleExecution();
-        }
         return admission.run('normal', job, () =>
-          query.view === 'FULL'
-            ? fullMembers(
-                viewDependencies(),
-                actor,
-                params.collectionId,
-                {
-                  ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-                  ...(query.limit === undefined ? {} : { limit: query.limit }),
-                },
-                job.deadline,
-              )
-            : read().readMembers(actor, params.collectionId, {
-                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-                ...(query.limit === undefined ? {} : { limit: query.limit }),
-              }),
+          query.filter !== undefined || query.sort !== undefined
+            ? read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline)
+            : query.view === 'FULL'
+              ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
+              : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
       },
     )

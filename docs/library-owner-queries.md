@@ -547,11 +547,23 @@ runtime symbol, schema migration, API tests or gate. File presence and document 
 
 Current source receipts are narrower than runtime readiness:
 
-- Shared Filter structural grammar and walking are delivered; viewer-self authorization and owner execution are not.
+- Shared Filter structural grammar and walking are delivered; owner execution is not.
+- Common member HTTP filter admission now uses that grammar and release expansion. It validates all owner-family
+  list scopes and gates, including OR/NOT branches, against the authenticated viewer before any private-fact SQL.
+  Explicit `filter`/`sort` requests reach the same boundary for BASIC and FULL and return dependency unavailability
+  until native plans can execute. This is input/admission support, not a successful filtered-members implementation.
+  The actual shared `search/current-filter-plan.ts` now exports `compileCurrentOwnerFilter` with tagged owner and
+  catalogue leaves. Admission consumes that compiler; the public catalogue compiler continues rejecting owner
+  nodes. Native leaf adapters share the Source ledger, preflight variable-width projections, and preserve unknown
+  negative evidence. Presence remains independent of profile/pin readiness. All deduplicated observations are
+  required before shared Boolean evaluation. Integration still requires complete selective Collection Source
+  observations and the native owner candidate/support directory. `prepareCollectionMemberFilter` uses the exact
+  existing Source preparation ABI with the caller's context and allowance. No local
+  Boolean interpreter, guessed callback, successful empty adapter or duplicate directory substitutes for them.
 - [`allocateOwnerWriteSeq`](../services/kernel/src/library/owner-write-sequence.md), nullable positive live/archive
   columns and [`readOwnerFactVersion`](../services/kernel/src/library/owner-fact-version.md) with full changed-row
-  hooks are delivered primitives. Actual `entries.ts` set/clear does not call the allocator; production Undo,
-  complete profiled writer/source coverage and authoritative NULL cutover remain pending.
+  hooks are delivered primitives. Actual `entries.ts` allocates and persists sequence order for set, retained clear
+  and exact Undo. Complete profiled writer/source coverage and authoritative NULL cutover remain pending.
 - `entry-store.ts` now accepts private pins for entry writes and pin/kind for copy writes, and exports
   `readEntryFact`/`readCopyFact`; `progress-store.ts` accepts session pins and exports `readSessionFact`.
   These preserve native accepted data, without proving profile acceptance in every production command or a ready

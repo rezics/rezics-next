@@ -66,6 +66,30 @@ Current implementation evidence is narrower than the capability:
   These primitives establish neither complete owner-query coverage nor dynamic/canonical runtime readiness.
 - Shared `FilterDocument`/`OwnerLeaf` and `parseFilter`/`admitFilter`/`walkFilter` deliver structural owner grammar,
   including saved expansion. `owner: true` is not authorization or a native owner plan.
+- The common members route now accepts the adopted JSON `filter` and `sort=id` inputs through
+  `owner-filter.ts`. It uses strict JSON and shared release admission, expands saved filters before private-family
+  admission, binds owner facts to the authenticated viewer, and checks each family's native list scopes and gates.
+  BASIC and FULL requests both reach that admission. Filtered/canonical execution remains explicitly
+  `dependency_unavailable`: the owner candidate/support directory is absent, and `CollectionSource` has no native
+  implementation. Admission consumes the actual `compileCurrentOwnerFilter` exports, which share Search's Boolean
+  interpreter with catalogue-only compilation. No raw ordinal window is returned as
+  a filtered page. Existing unfiltered occurrence reads retain their current contract.
+- Admission now also returns `owner: OwnerFilterLeafProvider | null`. Its full-key native entry, live-parent label,
+  retained session and retained copy points are bound to that admitted viewer and private family set, with the
+  original request deadline. The caller must use its source-authorized snapshot and the same `NativeCollectionWork`
+  ledger as the Source read. Every SQL point reserves rows, points, keys, statements, bytes and misses before dispatch;
+  pin/text hydration requires a same-snapshot size point and a sufficient reservation first. `readPresence` reads only
+  fixed-width current native support and does not depend on profile/pin readiness.
+  `matchOwnerFilterSupport` checks a profiled supporter against its immutable accepted release, including actual session
+  mode/unit and same-copy kind/status. `ownerFilterStateWinner` selects live native sequence order before
+  `matchOwnerFilterState` tests profile/set/state. Missing accepted meaning or sequence stays `not_proven`.
+  `matchOwnerFilterCatalogue` consumes the actual shared Semantic leaf evidence and pure matchers; incomplete or
+  changed-basis negative evidence stays unknown. `evaluateOwnerFilterLeaves` requires all deduplicated observations
+  before invoking the shared compiler. Admission also supplies the expanded query/release digest for cursor and
+  preparation binding. `prepareCollectionMemberFilter` composes admission with the actual Source ABI and its caller's
+  reserved allowance, returning only the real producer's opaque Source handle. These exports do not discover
+  candidates, prove complete canonical absence, authorize originals/terminals, allocate another budget or implement
+  the unavailable native Source/support execution.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
@@ -1113,6 +1137,16 @@ Where a named test does not call the operation, or does not grow the rows that o
   [the shared three-scale checks](../../../../docs/filtered-lists.md#three-scale-checks), with duplicate histories, stale label parents
   and sparse filters are required. Native helpers and existing curated measurements below do not supply these
   results. Complete built-in/filter runtime and these measurements are missing; no native check ran for adoption.
+
+### Common member filter admission
+
+- Touches: the shared bounded AST/release expansion, one current viewer account point and existing private-family
+  exposure gates after Collection read authorization. Presence admits all three native family list actions;
+  state/label use `library_entry:list`, session uses `progress_session:list`, holding uses `copy:list`.
+- Bound: shared AST bounds, at most one owner account point and three existing family gate decisions. No native
+  fact, candidate, history, identity or preparation enumeration occurs while execution producers are unavailable.
+- Growth check: `test/library/owner-filter-growth.test.ts` requires useful first/deep native pages and the existing
+  direct-plan physical bounds under retained-session growth. It is unrun and remains a runtime requirement.
 
 ### Terminal whole-graph cleanup (required; runtime incomplete)
 

@@ -246,3 +246,52 @@ test('native state CAS replay clear and Undo update the same logical shelf', asy
   status(await world.request('alice', 'POST', `${path}:restore`, undo, restoreKey));
   expect((await page()).ids.filter((id) => id === subject.id)).toHaveLength(1);
 });
+import { createOwnerFilterFixture, ownerRecord, ownerStatus, ownerString } from './support/owner-filter-fixture.ts';
+
+test('Everything and state share the common owner-filter member caller without entry proxies for labels sessions or copies', async () => {
+  const f = await createOwnerFilterFixture();
+  try {
+    const accountId = f.native.personas.alice.accountId;
+    const everything = builtinCollectionId(accountId, { kind: 'everything' });
+    const state = builtinCollectionId(accountId, {
+      kind: 'state',
+      profileId: f.profileId,
+      stateSetId: f.stateSet.id,
+      stateId: f.state.id,
+    });
+    expect(await f.members(f.leaves.presence, 'alice', everything)).toEqual(
+      [f.subjects.entry.id, f.subjects.labelOnly.id, f.subjects.sessionOnly.id, f.subjects.copyOnly.id].sort(),
+    );
+    expect(await f.members(f.leaves.state, 'alice', state)).toEqual([f.subjects.entry.id]);
+    // Retained completed history survives a real entry set/clear on its original.
+    const put = await f.native.request(
+      'alice',
+      'PUT',
+      `/v1/libraryEntries/${f.subjects.sessionOnly.id}`,
+      {
+        state: f.state.id,
+      },
+      discoveryKey(),
+    );
+    ownerStatus(put, 201);
+    const entry = put.body.libraryEntry;
+    ownerRecord(entry);
+    expect(Number.isSafeInteger(entry.revision)).toBe(true);
+    const incarnationId = ownerString(entry.incarnationId);
+    const cleared = await f.native.request(
+      'alice',
+      'DELETE',
+      `/v1/libraryEntries/${f.subjects.sessionOnly.id}?${new URLSearchParams({
+        revision: String(entry.revision),
+        incarnationId,
+      })}`,
+      undefined,
+      discoveryKey(),
+    );
+    ownerStatus(cleared, 204);
+    expect(await f.members(f.leaves.session, 'alice', everything)).toEqual([f.subjects.sessionOnly.id]);
+    expect(await f.members({ not: f.leaves.state }, 'alice', everything)).toContain(f.subjects.sessionOnly.id);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
