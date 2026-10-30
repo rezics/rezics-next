@@ -64,7 +64,12 @@ No foreign native implementation is claimed by publishing these ports. The expli
 are account command admission (`Auth command admission current identity/consent native work producer`) and
 `ReadDecisions.prepareAccountAuthority` (`Access AccountAuthority current account/operator projection native work
 producer`). Both refuse before their dependent work. The latter's existing prepared answer map is not a metered
-permission cache. Unmetered account authority and command admission keep their existing behavior.
+permission cache. Other explicitly unsupported entry points are `accountStandingCheck`
+(`Access AccountStanding current native account producer`), standalone platform-gate transactions
+(`Access standalone platform gate native transaction producer`) and bearer `actorOf` authentication
+(`Auth bearer authentication native work producer`). They refuse before their dependent IO. A metered platform
+gate with an existing shared read window executes its final formula afresh instead of using the legacy check map.
+Unmetered entry points keep their existing behavior.
 
 ### Native declaration proof
 

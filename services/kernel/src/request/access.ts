@@ -305,6 +305,8 @@ export async function accessCommandAuthorization(
       current = undefined;
       try {
         const preparation = commandAccessContext(context, attempt);
+        if (context.work && actor.kind === 'account')
+          context.work.unavailable('Auth command admission current identity/consent native work producer');
         await requireCommandAdmission(access, actor, preparation);
         const evidence = access.prepare ? await access.prepare(actor, action, target, preparation) : null;
         const prepared: Prepared = {
@@ -390,6 +392,7 @@ export async function actorOf(access: Access, request: Request, context: AccessC
 
   const credentials = /^Bearer[ \t]+([A-Za-z0-9\-._~+/]+=*)$/i.exec(authorization);
   if (!credentials) throw invalidRequest();
+  if (context.work) context.work.unavailable('Auth bearer authentication native work producer');
   return access.authenticate(credentials[1]!, context);
 }
 

@@ -1165,6 +1165,7 @@ export function createAccess(config: PermissionConfig): Access {
     },
   };
   installAccountStandingCheck(access, async ({ accountId, action, target, context }) => {
+    if (context.work) context.work.unavailable('Access AccountStanding current native account producer');
     const page = 'ids' in target ? resourcePage(target) : undefined;
     const resource = page ? { route: page.route, id: page.ids[0]! } : (Object.freeze({ ...target }) as Resource);
     const ids = page?.ids ?? [resource.id];

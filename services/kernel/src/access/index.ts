@@ -1,3 +1,4 @@
+import { accessCheckout } from './work.ts';
 export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 import { accountStandingCheck, installAccountStandingCheck } from './account-standing.ts';
@@ -416,7 +417,7 @@ export function createAccess(config: AccessConfig): Access {
         return false;
       for (const action of [...new Set(requested)]) {
         const key = `${resource.route}/${resource.id}/${action}`;
-        let check = shared.checks.get(key);
+        let check = context.work ? undefined : shared.checks.get(key);
         if (!check) {
           check = authorizePreparedReadGate(
             shared.handle,
@@ -425,7 +426,7 @@ export function createAccess(config: AccessConfig): Access {
             clientAction,
             resource,
           );
-          shared.checks.set(key, check);
+          if (!context.work) shared.checks.set(key, check);
         }
         if (await check) {
           requireAccessDeadline(context.deadline);
@@ -436,6 +437,7 @@ export function createAccess(config: AccessConfig): Access {
       return false;
     }
 
+    if (context.work) context.work.unavailable('Access standalone platform gate native transaction producer');
     const originals = new WeakMap<AccountActor, AccountActor>();
     const gateActorFor = (action: string): AccountActor => {
       const gateActor = Object.freeze({ ...actor, scopes: Object.freeze([action]) });
@@ -515,9 +517,9 @@ export function createAccess(config: AccessConfig): Access {
       ...(config.clock ? { clock: config.clock } : {}),
     });
     const evidence = await native.prepare!(claims.actor, 'account:manage', resource, context);
-    return withConnection(context.pool, (client) =>
+    return accessCheckout(context.work, () => withConnection(context.pool, (client) =>
       native.authorize(client, claims.actor, 'account:manage', resource, evidence, accessCommandAttempt(context)?.time),
-    );
+    ));
   });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
   return access;
