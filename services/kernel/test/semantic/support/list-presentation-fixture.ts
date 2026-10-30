@@ -4,15 +4,18 @@ import type { Pool } from 'pg';
 import type { Source, BatchCommand } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createKernel } from '../../../src/http/kernel.ts';
-import type { Access, Actor } from '../../../src/request/access.ts';
-import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import type { Actor } from '../../../src/request/access.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { createRealAccess } from '../real-access.ts';
+import { nativeFixture } from '../../access/native-account-bindings-fixture.ts';
+import { createPersonas } from '../../support/personas.ts';
+import { testKernel, testRouteKey } from '../../support/test-kernel.ts';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { deletePersona } from '../../support/account-deletion.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 
-export const listRouteKey = new Uint8Array(32).fill(127);
+export const listRouteKey = testRouteKey();
 export const citedValue = (property: string, content: unknown, references = true) => ({
   property: { id: property },
   value: { type: 'value', content },
@@ -42,16 +45,42 @@ export async function createListPresentationFixture(options: { poolMax?: number;
   pool.on('release', () => {
     held--;
   });
-  const accounts = { operator: newId(0x7c10), editor: newId(0x7c20), reader: newId(0x7c30) };
+  await bootstrapRelease(pool, bundledRelease);
+  const auth = await nativeFixture(pool, () => db.openPool({ max: 1 }));
+  const service = auth.host.service;
+  const kernel = testKernel({
+    pool,
+    auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+    writeRate: createWriteRateLimiter({
+      secret: 'list-presentation-native-api-write-rate-secret',
+      overrides: JSON.stringify(
+        Object.fromEntries(
+          ['new-account', 'member', 'trusted', 'service'].map((kind) => [
+            kind,
+            { write: { maximum: 100000, seconds: 60 } },
+          ]),
+        ),
+      ),
+    }),
+  });
+  const people = await createPersonas(kernel, { version: 1, pool, auth });
+  const personas = {
+    operator: people.staff,
+    editor: people.alice,
+    reader: people.bob,
+    suspended: people.suspended,
+    revoked: people.revoked,
+  };
+  const accounts = Object.fromEntries(
+    Object.entries(personas).map(([name, person]) => [name, person.accountId]),
+  ) as Record<keyof typeof personas, string>;
+  const access = kernel.testAccess;
+  const global = { route: 0, id: GLOBAL_CONTEXT };
   const actions = [
-    'access:grant',
-    'gate:any',
     'subject:create',
-    'subject:read',
     'subject:batch_write',
     'subject:merge',
     'statement:propose',
-    'account:delete',
     'context:accept',
     'context:adopt',
     'moderation:hide',
@@ -60,34 +89,13 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     'definitions:publish',
     'definitions:activate',
   ];
-  const real = await createRealAccess(db.admin, accounts, actions);
-  const global = { route: 0, id: GLOBAL_CONTEXT };
-  // Only the bootstrap administrator receives setup authority directly. Every publisher grant below uses the API.
-  await real.grant(global, 'operator', 'access:grant');
-  await real.grant(global, 'operator', 'gate:any');
-  await db.admin.query(
-    "UPDATE access.account SET rate_tier='trusted' WHERE route=ANY($1::integer[]) AND account_id=ANY($2::uuid[])",
-    [Object.values(accounts).map((id) => routeOf(id)!), Object.values(accounts)],
-  );
-  await bootstrapRelease(pool, bundledRelease);
-  let access!: Access;
-  const kernel = createKernel({
-    pool,
-    routeKey: listRouteKey,
-    writeRate: real.writeRate,
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(126)]]) },
-    access(config) {
-      access = real.access(config);
-      return access;
-    },
-  });
-  type Persona = keyof typeof accounts | 'anonymous';
+  type Persona = keyof typeof personas | 'anonymous';
   async function call(method: string, path: string, body?: unknown, as: Persona = 'editor') {
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
-          ...(as === 'anonymous' ? {} : { authorization: `Bearer ${real.bearer(as)}` }),
+          ...(as === 'anonymous' ? {} : { authorization: `Bearer ${personas[as].bearer}` }),
           ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -110,10 +118,7 @@ export async function createListPresentationFixture(options: { poolMax?: number;
       'operator',
     );
   }
-  for (const action of actions.filter(
-    (action) => !['access:grant', 'gate:any', 'subject:read', 'account:delete'].includes(action),
-  ))
-    await grant('editor', action);
+  for (const action of actions) await grant('editor', action);
   for (const gate of ['gate:subject_identity', 'gate:definition_publication']) await grant('editor', gate);
   const homes = new Set<number>();
   const projection = linkProjection(pool);
@@ -194,10 +199,26 @@ export async function createListPresentationFixture(options: { poolMax?: number;
       subject: {
         type: 'schema:Book',
         labels: { en: 'Native imported book' },
-        statements: { [property]: [citedValue(property, content)] },
       },
     });
-    const id = result.subject.id as string;
+    const id = result.id as string;
+    const proposed = await batch({
+      op: 'propose',
+      key: randomUUID(),
+      source,
+      subject: id,
+      statement: {
+        ...citedValue(property, content),
+        references: [
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/list-facts' } },
+            ],
+          },
+        ],
+      },
+    });
+    await adopt(id, property, [proposed.candidate as string]);
     homes.add(partitionOf(routeOf(id)!));
     await drain();
     return { id, source };
@@ -214,14 +235,14 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     kernel.compile();
     const deadline = Date.now() + 30_000;
     const actor: Actor =
-      as === 'anonymous' ? { kind: 'anonymous' } : await access.authenticate(real.bearer(as), { pool, deadline });
+      as === 'anonymous' ? { kind: 'anonymous' } : await access.authenticate(personas[as].bearer, { pool, deadline });
     return { pool, access, actor, routeKey: listRouteKey, deadline };
   }
   return {
     db,
     pool,
     accounts,
-    real,
+    auth,
     kernel,
     call,
     checked,
@@ -235,9 +256,14 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     drain,
     publish,
     deps,
+    erase: () => deletePersona({ version: 1, pool, auth }, personas.editor),
     maximumHeldBackends: () => maximum,
     close: async () => {
-      if (!options.db) await db.close();
+      try {
+        await auth.close();
+      } finally {
+        if (!options.db) await db.close();
+      }
     },
   };
 }

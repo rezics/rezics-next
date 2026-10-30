@@ -15,6 +15,7 @@ import type { IndexedStatement } from '../search/source.ts';
 import { activeRelease } from './definitions.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
+import type { IdentityMapping } from './identity-epoch-contract.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
 import { isRelationProperty, type FactRow } from './item.ts';
 import { indexedStatement } from './search-source.ts';
@@ -43,6 +44,7 @@ type Origin = {
   candidate: string;
   source: Source | null;
   author: string | null;
+  principal_kind: string | null;
   consent_account: string | null;
   disclosed: boolean | null;
   retracted: boolean;
@@ -69,6 +71,7 @@ function groups(ids: readonly string[]) {
 const json = (value: unknown) =>
   JSON.stringify(value, (_key, entry) => (typeof entry === 'bigint' ? entry.toString() : entry));
 const equal = (a: unknown, b: unknown) => json(a) === json(b);
+const entries = <T>(map: Map<string, T>) => [...map].sort(([a], [b]) => a.localeCompare(b));
 
 /** Each native home is released before Access preparation or any foreign home. */
 async function snapshot<T>(
@@ -240,7 +243,7 @@ async function observeSubjects(
           const byKey = new Map(origins.map((row) => [`${row.id}/${row.candidate}`, row]));
           for (const entry of page) {
             const origin = byKey.get(`${entry.id}/${entry.fact.statement_id}`);
-            if (!origin) unready();
+            if (!origin || origin.principal_kind === null) unready();
             visible.get(entry.id)!.selected.push({ ...entry, origin });
           }
         }
@@ -318,11 +321,16 @@ function representable(fact: FactRow, release: Release): IndexedStatement | null
     if (!Number.isFinite(amount) || (Number.isInteger(amount) && !Number.isSafeInteger(amount))) return null;
     // Decimal round-trip: accepting +1.00 is exact; accepting a rounded 16-digit fraction is not.
     const normalize = (input: string) => {
-      const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(input);
+      const match = /^([+-]?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(input);
       if (!match) return null;
-      const integer = match[2]!.replace(/^0+(?=\d)/, ''),
-        fraction = (match[3] ?? '').replace(/0+$/, '');
-      return `${match[1] === '-' && (integer !== '0' || fraction) ? '-' : ''}${integer}${fraction ? '.' + fraction : ''}`;
+      let digits = (match[2]! + (match[3] ?? '')).replace(/^0+/, '');
+      if (!digits) return '0';
+      let exponent = Number(match[4] ?? 0) - (match[3]?.length ?? 0);
+      while (digits.endsWith('0')) {
+        digits = digits.slice(0, -1);
+        exponent++;
+      }
+      return `${match[1] === '-' ? '-' : ''}${digits}e${exponent}`;
     };
     if (normalize(content.amount) === null || normalize(content.amount) !== normalize(String(amount))) return null;
   }
@@ -424,7 +432,7 @@ export async function readListPresentationFacts(
               ),
             ),
           ];
-          const itemMapping = [];
+          const itemMapping: IdentityMapping[] = [];
           for (let offset = 0; offset < itemIds.length; offset += 100)
             itemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
           if (itemMapping.some((value) => value.state === 'pending' || value.state === 'unavailable')) unready();
@@ -446,7 +454,7 @@ export async function readListPresentationFacts(
           if (!equal(mapping, await readIdentityMappings(deps.pool, admitted))) unready();
           if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false))])) unready();
           if (!equal([...subjects], [...(await observeSubjects(deps, terminals, active.release, true))])) unready();
-          const finalItemMapping = [];
+          const finalItemMapping: IdentityMapping[] = [];
           for (let offset = 0; offset < itemIds.length; offset += 100)
             finalItemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
           if (
@@ -455,7 +463,7 @@ export async function readListPresentationFacts(
           )
             unready();
           if (
-            !equal([...authorStates], [...(await accounts(deps, accountIds))]) ||
+            !equal(entries(authorStates), entries(await accounts(deps, accountIds))) ||
             !equal([...fences], [...(await tuples(deps, sourceTuples))])
           )
             unready();

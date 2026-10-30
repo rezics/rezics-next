@@ -1,6 +1,6 @@
 -- Exact selected revision, current consent/retraction and original author binding.
 SELECT wanted.id::text AS id, wanted.candidate::text AS candidate, r.source,
-       b.principal_id::text AS author, d.account_id::text AS consent_account,
+       CASE WHEN b.principal_kind='account' THEN b.principal_id::text END AS author, b.principal_kind, d.account_id::text AS consent_account,
        d.disclosed,
        EXISTS (SELECT 1 FROM semantic.retraction t WHERE t.route=wanted.route
          AND t.subject_id=wanted.id AND t.candidate_id=wanted.candidate) AS retracted
@@ -10,9 +10,8 @@ JOIN LATERAL (
   WHERE route=wanted.route AND subject_id=wanted.id AND revision=wanted.revision LIMIT 1
 ) r ON true
 LEFT JOIN LATERAL (
-  SELECT principal_id FROM editorial.write_basis
-  WHERE partition_no=$2::integer AND transaction_id=r.recorded_transaction_id
-    AND principal_kind='account' LIMIT 1
+  SELECT principal_id, principal_kind FROM editorial.write_basis
+  WHERE partition_no=$2::integer AND transaction_id=r.recorded_transaction_id LIMIT 1
 ) b ON true
 LEFT JOIN LATERAL (
   SELECT account_id, disclosed FROM semantic.statement_disclosure

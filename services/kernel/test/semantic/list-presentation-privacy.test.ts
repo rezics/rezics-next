@@ -1,8 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createAccess } from '../../src/access/index.ts';
-import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, accountAgentId } from '../../src/semantic/index.ts';
@@ -162,14 +159,7 @@ test('current account T removes consent disclosures but retains deidentified pub
     expect(
       (await readListPresentationFacts(await f.deps(), [holder])).get(holder)?.facts['rezics:penNameOf'],
     ).toHaveLength(1);
-    await f.grant('editor', 'account:delete', { route: routeOf(f.accounts.editor)!, id: f.accounts.editor });
-    const access = createAccess({ actions: LIFECYCLE_ACTIONS, auth: f.real.auth });
-    const deadline = Date.now() + 30_000;
-    const actor = await access.authenticate(f.real.bearer('editor'), { pool: f.pool, deadline });
-    await createLifecycleCommands({ pool: f.pool, access }).tombstone(
-      { actor, deadline },
-      { accountId: f.accounts.editor, key: randomUUID() },
-    );
+    await f.erase();
     const values = await readListPresentationFacts(await f.deps(), [id, holder]);
     expect(values.get(id)?.facts['schema:wordCount']).toEqual([{ kind: 'quantity', amount: 7, unit: '1' }]);
     expect(values.get(holder)).toEqual({ id: holder, facts: {} });
@@ -229,6 +219,41 @@ test('overflow including duplicates, invalid controls and expired deadlines perf
     } finally {
       f.pool.off('acquire', acquire);
     }
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('lossy quantities are omitted and exactly representable decimal quantities retain their native units', async () => {
+  const f = await createListPresentationFixture();
+  try {
+    const unsafe = await f.create('schema:Book', { 'schema:wordCount': quantity('+9007199254740993') });
+    const rounded = await f.create('schema:Book', { 'schema:wordCount': quantity('+1.0000000000000001') });
+    const tiny = await f.create('schema:Book', { 'schema:wordCount': quantity('+0.0000001') });
+    const values = await readListPresentationFacts(await f.deps(), [unsafe, rounded, tiny]);
+    for (const id of [unsafe, rounded]) expect(values.get(id)).toEqual({ id, facts: {} });
+    expect(values.get(tiny)).toEqual({
+      id: tiny,
+      facts: {
+        'schema:wordCount': [{ kind: 'quantity', amount: 0.0000001, unit: '1' }],
+      },
+    });
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('suspended and revoked native bearers fail authentication while a finite anonymous read completes', async () => {
+  const f = await createListPresentationFixture();
+  try {
+    const id = await f.create('schema:Book', { 'schema:wordCount': quantity('+31') });
+    for (const persona of ['suspended', 'revoked'] as const) {
+      await expect(f.deps(persona)).rejects.toThrow();
+      expect((await f.call('GET', `/v1/subjects/${id}`, undefined, persona)).status).toBe(401);
+    }
+    expect((await readListPresentationFacts(await f.deps(), [id])).get(id)?.facts['schema:wordCount']).toEqual([
+      { kind: 'quantity', amount: 31, unit: '1' },
+    ]);
   } finally {
     await f.close();
   }
