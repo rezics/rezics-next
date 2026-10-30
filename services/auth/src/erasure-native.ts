@@ -390,6 +390,11 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       // session-erasure trigger and all immutable evidence guards enabled.
       if ((await connection.query('SELECT 1 FROM session WHERE "userId"=$1 LIMIT 1', [row.account_id])).rowCount)
         return answer('pending', 'native-child');
+      // A marker beside a live user is stale, not the cutoff of this deletion.
+      // Remove it before the native DELETE trigger establishes the real due time.
+      // Replays with user_deleted_at set never enter this branch.
+      if (user.rowCount)
+        await connection.query('DELETE FROM auth_consent_erasure WHERE account_id=$1', [row.account_id]);
       await connection.query('UPDATE "user" SET sessions_bounded=true WHERE id=$1', [row.account_id]);
       await connection.query('DELETE FROM "user" WHERE id=$1', [row.account_id]);
       await connection.query(
