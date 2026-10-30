@@ -65,14 +65,23 @@ export function RecentPanel({
             </button>
           </div>
           <p className="px-2 text-xs text-muted-foreground">
-            {history?.persistence === 'unavailable'
-              ? m.shell_account_unavailable()
-              : history?.persistence === 'memory'
-                ? m.header_search_history_memory()
-                : history?.sync === 'pending'
-                  ? m.header_search_history_pending()
-                  : m.header_search_history_local()}
+            {history?.failure === 'conflict'
+              ? m.search_history_conflict()
+              : history?.failure === 'unavailable'
+                ? m.search_history_offline()
+                : history?.persistence === 'unavailable'
+                  ? m.shell_account_unavailable()
+                  : history?.persistence === 'memory'
+                    ? m.header_search_history_memory()
+                    : history?.sync === 'pending'
+                      ? m.header_search_history_pending()
+                      : m.header_search_history_local()}
           </p>
+          {history?.failure && history.retry && (
+            <button type="button" className={control} onClick={history.retry}>
+              {m.search_history_reload()}
+            </button>
+          )}
           {entries.length ? (
             <ul>
               {entries.slice(0, all ? 32 : 5).map((entry) => (
@@ -95,9 +104,13 @@ export function RecentPanel({
                       <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
                     )}
                     <span className="min-w-0">
-                      <span className="block truncate">{entry.query || entry.scope?.name}</span>
+                      <span className="block truncate">
+                        {entry.query || entry.scope?.name || m.search_history_unavailable()}
+                      </span>
                       {entry.query && entry.scope ? (
-                        <span className="block truncate text-xs text-muted-foreground">{entry.scope.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {entry.scope.name || m.search_history_unavailable()}
+                        </span>
                       ) : null}
                     </span>
                   </button>

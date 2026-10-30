@@ -20,23 +20,25 @@ import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 0, maximum: 2147483646 });
+const recentScopeSchema = t.Union([
+  t.Object({ kind: t.Literal('realm'), id }, closed),
+  t.Object({ kind: t.Literal('collection'), id }, closed),
+  t.Object({ kind: t.Literal('route'), route: t.Literal('library') }, closed),
+]);
 export const recentEntrySchema = t.Union([
   t.Object(
     {
       kind: t.Literal('query'),
       text: t.String({ minLength: 1, maxLength: 256 }),
       languages: t.Optional(t.Array(t.String({ minLength: 1, maxLength: 35 }), { maxItems: 8 })),
+      scope: t.Optional(recentScopeSchema),
     },
     closed,
   ),
   t.Object(
     {
       kind: t.Literal('scope'),
-      scope: t.Union([
-        t.Object({ kind: t.Literal('realm'), id }, closed),
-        t.Object({ kind: t.Literal('collection'), id }, closed),
-        t.Object({ kind: t.Literal('route'), route: t.Literal('library') }, closed),
-      ]),
+      scope: recentScopeSchema,
     },
     closed,
   ),
@@ -74,6 +76,8 @@ function keys(actor: AccountActor) {
   return [partitionOf(route), route, actor.accountId];
 }
 function admitted(entry: RecentEntry): RecentEntry {
+  if (entry.scope && entry.scope.kind !== 'route' && routeOf(entry.scope.id) === null)
+    throw new ProblemError('invalid_request');
   if (entry.kind === 'query') {
     const text = entry.text.trim();
     if (
@@ -82,7 +86,12 @@ function admitted(entry: RecentEntry): RecentEntry {
       entry.languages?.some((tag) => !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(tag))
     )
       throw new ProblemError('invalid_request');
-    return { kind: 'query', text, ...(entry.languages ? { languages: [...new Set(entry.languages)] } : {}) };
+    return {
+      kind: 'query',
+      text,
+      ...(entry.languages ? { languages: [...new Set(entry.languages)] } : {}),
+      ...(entry.scope ? { scope: entry.scope } : {}),
+    };
   }
   if (entry.scope.kind !== 'route' && routeOf(entry.scope.id) === null) throw new ProblemError('invalid_request');
   return entry;
@@ -94,8 +103,11 @@ export async function recentDisplay(
   entry: RecentEntry,
   deadline: number,
 ): Promise<RecentSearch['display']> {
-  if (entry.kind === 'query')
-    return { name: entry.text, href: `/search?q=${encodeURIComponent(entry.text)}`, avatar: null };
+  if (entry.kind === 'query') {
+    if (!entry.scope) return { name: entry.text, href: `/search?q=${encodeURIComponent(entry.text)}`, avatar: null };
+    const display = await recentDisplay(d, actor, { kind: 'scope', scope: entry.scope }, deadline);
+    return display ? { ...display, href: `${display.href}?q=${encodeURIComponent(entry.text)}` } : null;
+  }
   if (entry.scope.kind === 'route') return { name: 'Library', href: '/library', avatar: null };
   if (entry.scope.kind === 'realm') {
     const { readRealm } = await import('../community/realm.ts');
@@ -219,7 +231,7 @@ export async function changeRecentSearches(
   const { shareAccount } = await import('../access/account-share.ts');
   const { principalCommandIdentity, runCommand, authoritativeTimeValue } = await import('../command/command.ts');
   const identity = principalCommandIdentity(actor);
-  const scopeAvailable = !entry || entry.kind !== 'scope' || (await recentDisplay(d, actor, entry, deadline));
+  const scopeAvailable = !entry?.scope || (await recentDisplay(d, actor, entry, deadline));
   const result = await runCommand(
     d.pool,
     {

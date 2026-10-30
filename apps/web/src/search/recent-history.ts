@@ -3,19 +3,22 @@ import type { SearchScope } from './header-search/types';
 export const RECENT_HISTORY_LIMIT = 32;
 export type RecentEntry = { id: string; query: string; scope?: SearchScope; visitedAt: number };
 export type RecentStorage = Pick<Storage, 'getItem' | 'setItem'>;
-/** Optional future owner transport; no server history endpoint is assumed. */
+/** Own-account transport; local history remains the sole producer and store. */
 export type RecentSyncAdapter = { sync(entries: readonly RecentEntry[], signal: AbortSignal): Promise<void> };
 export type RecentHistory = {
   entries: readonly RecentEntry[];
   persistence: 'local' | 'memory' | 'unavailable';
   sync: 'local-only' | 'pending' | 'synced';
+  failure?: 'unavailable' | 'conflict';
+  clear?(): void;
+  retry?(): void;
   remember(query: string, scope?: SearchScope): void;
   remove(id: string): void;
 };
 export function recentBucket(state: string, subject?: string | null): string | null {
   return state === 'signed-out' ? 'anonymous' : state === 'signed-in' && subject ? `account:${subject}` : null;
 }
-const key = (bucket: string) => `rezics.search-history.v1:${encodeURIComponent(bucket)}`;
+export const recentHistoryKey = (bucket: string) => `rezics.search-history.v1:${encodeURIComponent(bucket)}`;
 const kinds = new Set(['Library', 'Collection', 'Realm', 'Zone', 'Agent']);
 function cleanScope(raw: unknown): SearchScope | undefined {
   if (!raw || typeof raw !== 'object') return;
@@ -34,9 +37,10 @@ function cleanScope(raw: unknown): SearchScope | undefined {
   };
 }
 export function readRecentHistory(storage: RecentStorage, bucket: string): RecentEntry[] {
-  const serialized = storage.getItem(key(bucket));
+  const serialized = storage.getItem(recentHistoryKey(bucket));
   try {
-    const raw: unknown = JSON.parse(serialized ?? '[]');
+    const parsed = JSON.parse(serialized ?? '[]');
+    const raw: unknown = Array.isArray(parsed) ? parsed : parsed?.entries;
     if (!Array.isArray(raw)) return [];
     return raw.slice(0, RECENT_HISTORY_LIMIT).flatMap((item) => {
       if (
@@ -79,9 +83,43 @@ export function rememberRecent(
 }
 export function writeRecentHistory(storage: RecentStorage, bucket: string, entries: readonly RecentEntry[]): boolean {
   try {
-    storage.setItem(key(bucket), JSON.stringify(entries.slice(0, RECENT_HISTORY_LIMIT)));
+    const document = readRecentDocument(storage, bucket);
+    writeRecentDocument(storage, bucket, { ...document, entries: [...entries] });
     return true;
   } catch {
     return false;
   }
+}
+
+/** Queue metadata shares the delivered history key; old array values remain readable. */
+export type RecentDocument = {
+  entries: RecentEntry[];
+  removed: string[];
+  clear?: string;
+  native?: unknown;
+};
+export function readRecentDocument(storage: RecentStorage, bucket: string): RecentDocument {
+  const entries = readRecentHistory(storage, bucket);
+  try {
+    const raw = JSON.parse(storage.getItem(recentHistoryKey(bucket)) ?? '[]');
+    return {
+      entries,
+      removed: Array.isArray(raw?.removed)
+        ? raw.removed.filter((id: unknown) => typeof id === 'string').slice(0, 100)
+        : [],
+      ...(typeof raw?.clear === 'string' ? { clear: raw.clear } : {}),
+      ...(raw?.native ? { native: raw.native } : {}),
+    };
+  } catch {
+    return { entries, removed: [] };
+  }
+}
+export function writeRecentDocument(storage: RecentStorage, bucket: string, document: RecentDocument): void {
+  const entries = document.entries.slice(0, RECENT_HISTORY_LIMIT).map((entry) => {
+    // Account scope labels/actions must be hydrated again; browser history is never their authority.
+    if (bucket.startsWith('account:') && entry.scope)
+      return { ...entry, scope: { kind: entry.scope.kind, id: entry.scope.id, name: '' } };
+    return entry;
+  });
+  storage.setItem(recentHistoryKey(bucket), JSON.stringify({ ...document, entries }));
 }

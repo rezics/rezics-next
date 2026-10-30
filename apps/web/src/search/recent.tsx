@@ -1,13 +1,12 @@
-import { useContext, useEffect, useSyncExternalStore } from 'react';
-import { QueryClientContext } from '@tanstack/react-query';
 import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronRight, Search, X } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
-import { useSession, sessionCsrfToken } from '../session/query';
-import type { SpacePageData } from '../community/space';
+import { useSession } from '../session/query';
+import { recentBucket, type RecentEntry as HistoryEntry, type RecentHistory } from './recent-history';
+import { useRecentHistory } from './recent-history-hook';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -17,7 +16,8 @@ export type RecentItem = RecentPage['recentSearches'][number];
 export type Change = { kind: 'use'; entry: RecentEntry } | { kind: 'remove'; id: string } | { kind: 'clear' };
 export type Pending = { key: string; change: Change; queuedAt: string };
 export type LocalRecent = { revision: number; entries: RecentItem[]; pending: Pending[] };
-export const RECENT_STORAGE = 'rezics:recent:v1:';
+/** Compatibility helpers for existing pure fixtures; production persists only recent-history.ts. */
+export const RECENT_STORAGE = 'rezics.search-history.v1:';
 const lifetime = 90 * 86400000;
 export const emptyRecent = (): LocalRecent => ({ revision: 0, entries: [], pending: [] });
 export const entryKey = (entry: RecentEntry) => JSON.stringify(entry);
@@ -69,7 +69,7 @@ export function localChange(
 export function savedRecent(state: LocalRecent): string {
   return JSON.stringify({
     ...state,
-    entries: state.entries.map((item) => ({ ...item, display: item.entry.kind === 'scope' ? null : item.display })),
+    entries: state.entries.map((item) => ({ ...item, display: item.entry.scope ? null : item.display })),
   });
 }
 export function restoreRecent(value: string | null, now = Date.now()): LocalRecent {
@@ -111,7 +111,7 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
         .filter((i) => Date.parse(i.lastUsed) > now - lifetime)
         .map((i) => ({
           ...i,
-          display: i.entry.kind === 'query' ? queryDisplay(i.entry.text) : null,
+          display: i.entry.kind === 'query' && !i.entry.scope ? queryDisplay(i.entry.text) : null,
         })),
     };
   } catch {
@@ -140,9 +140,19 @@ export const readRecent = createServerFn({ method: 'GET' })
     const result = await auth.api.recentSearches.get({
       query: { limit: 20, ...(cursor ? { cursor } : {}) },
       headers: { authorization: auth.authorization },
-      fetch: { cache: 'no-store' },
+      fetch: { cache: 'no-store', signal: getRequest().signal },
     });
-    if (result.error || !result.data) return { accountId: auth.accountId, page: null };
+    if (result.error || !result.data) {
+      const failure = result.error?.value;
+      return {
+        accountId: auth.accountId,
+        page: null,
+        code:
+          failure && typeof failure === 'object' && 'code' in failure && typeof failure.code === 'string'
+            ? failure.code
+            : 'unavailable',
+      };
+    }
     return { accountId: auth.accountId, page: result.data };
   });
 export const writeRecent = createServerFn({ method: 'POST' })
@@ -151,18 +161,19 @@ export const writeRecent = createServerFn({ method: 'POST' })
     const auth = await authenticatedRecent();
     if (!auth || auth.accountId !== data.accountId) return { ok: false as const, code: 'forbidden' };
     const headers = { authorization: auth.authorization, 'idempotency-key': JSON.stringify(data.pending.key) },
+      fetch = { signal: getRequest().signal },
       change = data.pending.change;
     const result =
       change.kind === 'use'
         ? await auth.api.recentSearches.post(
             { entry: change.entry, expectedRevision: data.expectedRevision },
-            { headers },
+            { headers, fetch },
           )
         : change.kind === 'clear'
-          ? await auth.api.recentSearches.$clear.post({ expectedRevision: data.expectedRevision }, { headers })
+          ? await auth.api.recentSearches.$clear.post({ expectedRevision: data.expectedRevision }, { headers, fetch })
           : await auth.api
               .recentSearches({ id: change.id })
-              .delete(undefined, { query: { expectedRevision: data.expectedRevision }, headers });
+              .delete(undefined, { query: { expectedRevision: data.expectedRevision }, headers, fetch });
     if (result.error || !result.data) {
       const failure = result.error?.value;
       return {
@@ -176,248 +187,38 @@ export const writeRecent = createServerFn({ method: 'POST' })
     return { ok: true as const, value: result.data };
   });
 export type RecentState = 'loading' | 'local' | 'ready' | 'unavailable' | 'conflict';
-const marker = `${RECENT_STORAGE}account`;
-type Snapshot = { data: LocalRecent; status: RecentState; next: string | null; accountId: string | null };
-const initial: Snapshot = { data: emptyRecent(), status: 'loading', next: null, accountId: null };
-// One browser coordinator serves the shared input and History page. No personal state is populated during SSR.
-let snapshot = initial,
-  session = 'unknown',
-  sessionOwner: string | null = null,
-  generation = 0,
-  busy = -1,
-  inFlight: string | undefined;
-let requested = false,
-  lastVisit = '';
-const listeners = new Set<() => void>();
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => void listeners.delete(listener);
-};
-function update(value: Partial<Snapshot>) {
-  snapshot = { ...snapshot, ...value };
-  for (const listener of listeners) listener();
+/** Both consumers use the delivered bucketed local helper and its own-account adapter. */
+export function useRecentSearches(): RecentHistory {
+  const session = useSession();
+  return useRecentHistory(recentBucket(session.state, session.subject));
 }
-function save(data: LocalRecent) {
-  update({ data });
-  try {
-    localStorage.setItem(RECENT_STORAGE + (snapshot.accountId ?? 'anonymous'), savedRecent(data));
-  } catch {
-    /* Storage is optional. */
-  }
-}
-function hideScopes() {
-  update({
-    data: {
-      ...snapshot.data,
-      entries: snapshot.data.entries.map((item) => (item.entry.kind === 'scope' ? { ...item, display: null } : item)),
-    },
-  });
-}
-function fail(status: RecentState = 'unavailable') {
-  hideScopes();
-  update({ status });
-}
-function accept(page: RecentPage) {
-  save({ revision: page.revision, entries: page.recentSearches, pending: [] });
-  update({ next: page.next, status: 'ready' });
-}
-function changeRecent(change: Change) {
-  if (session !== 'signed-in' && session !== 'signed-out') return;
-  try {
-    if (session === 'signed-in' && !snapshot.accountId) {
-      update({ data: localChange(snapshot.data, change, true) });
-      return;
-    }
-    save(localChange(snapshot.data, change, !!snapshot.accountId, new Date(), inFlight));
-    requested = true;
-    void synchronize();
-  } catch {
-    update({ status: 'unavailable' });
-  }
-}
-async function synchronize() {
-  if (session !== 'signed-in' || busy === generation) return;
-  const run = generation,
-    live = () => generation === run;
-  busy = run;
-  requested = false;
-  hideScopes();
-  let succeeded = false;
-  try {
-    const result = await readRecent({ data: undefined });
-    if (!live()) return;
-    if (!result.accountId || (sessionOwner && result.accountId !== sessionOwner)) return fail();
-    if (snapshot.accountId !== result.accountId) {
-      const provisional = snapshot.accountId ? [] : snapshot.data.pending;
-      update({ accountId: result.accountId });
-      let restored = emptyRecent();
-      try {
-        restored = restoreRecent(localStorage.getItem(RECENT_STORAGE + result.accountId));
-        localStorage.setItem(marker, result.accountId);
-      } catch {
-        /* Memory remains usable. */
-      }
-      if (!restored.pending.length && result.page)
-        restored = { revision: result.page.revision, entries: result.page.recentSearches, pending: [] };
-      for (const pending of provisional) restored = localChange(restored, pending.change, true);
-      save(restored);
-    }
-    if (!result.page) return fail();
-    if (!snapshot.data.pending.length) {
-      accept(result.page);
-      succeeded = true;
-      return;
-    }
-    // Preserve the revision actually observed by this account's offline queue, including removes and clears.
-    for (let n = 0; n < 100 && snapshot.data.pending.length; n++) {
-      const pending = snapshot.data.pending[0]!,
-        state = snapshot.data;
-      inFlight = pending.key;
-      const response = await writeRecent({
-        data: { accountId: result.accountId, expectedRevision: state.revision, pending },
-        headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
-      });
-      if (!live()) return;
-      inFlight = undefined;
-      if (!response.ok) return fail(response.code === 'conflict' ? 'conflict' : 'unavailable');
-      const entry = pending.change.kind === 'use' ? pending.change.entry : null;
-      const receipt = response.value;
-      save({
-        ...snapshot.data,
-        revision: receipt.revision,
-        entries: snapshot.data.entries.map((item) =>
-          entry && receipt.id && entryKey(item.entry) === entryKey(entry)
-            ? { ...item, id: receipt.id, revision: receipt.revision, lastUsed: receipt.lastUsed }
-            : item,
-        ),
-        pending: snapshot.data.pending
-          .filter((p) => p.key !== pending.key)
-          .map((p) =>
-            p.change.kind === 'remove' && receipt.id && p.change.id === `pending:${pending.key}`
-              ? { ...p, change: { kind: 'remove', id: receipt.id } }
-              : p,
-          ),
-      });
-    }
-    const refreshed = await readRecent({ data: undefined });
-    if (!live()) return;
-    if (refreshed.accountId !== result.accountId || !refreshed.page) return fail();
-    if (!snapshot.data.pending.length) accept(refreshed.page);
-    update({ status: 'ready' });
-    succeeded = true;
-  } catch {
-    if (live()) fail();
-  } finally {
-    if (live()) {
-      busy = -1;
-      inFlight = undefined;
-      if (requested && succeeded) void synchronize();
-    }
-  }
-}
-function setSession(value: string, accountId: string | null) {
-  if (session === value && sessionOwner === accountId) return;
-  sessionOwner = accountId;
-  generation++;
-  session = value;
-  inFlight = undefined;
-  update({ ...initial, status: value === 'signed-out' ? 'local' : 'loading' });
-  if (value === 'signed-out') {
-    try {
-      const accountCache = localStorage.getItem(marker);
-      for (const key of Object.keys(localStorage))
-        if (key.startsWith('rezics.search-history.v1:') || (accountCache && key.startsWith(RECENT_STORAGE)))
-          localStorage.removeItem(key);
-      save(restoreRecent(localStorage.getItem(RECENT_STORAGE + 'anonymous')));
-    } catch {
-      /* Memory remains usable. */
-    }
-  } else void synchronize();
-}
-export function useRecentSearches() {
-  const { state, subject } = useSession(),
-    client = useContext(QueryClientContext);
-  const current = useSyncExternalStore(
-    subscribe,
-    () => snapshot,
-    () => initial,
-  );
-  useEffect(() => setSession(state, subject ?? null), [state, subject]);
-  useEffect(() => {
-    const refresh = () => void synchronize();
-    const events = ['focus', 'online', 'storage'];
-    events.forEach((event) => window.addEventListener(event, refresh));
-    return () => events.forEach((event) => window.removeEventListener(event, refresh));
-  }, []);
-  const scope = useSyncExternalStore(
-    (listener) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
-    () => {
-      const path = window.location.pathname,
-        match = path.match(/\/(realms|collections)\/([0-9a-f-]{36})\/?$/);
-      if (match)
-        return JSON.stringify({
-          kind: 'scope',
-          scope: { kind: match[1] === 'realms' ? 'realm' : 'collection', id: match[2] },
-        });
-      if (/\/library\/?$/.test(path))
-        return JSON.stringify({ kind: 'scope', scope: { kind: 'route', route: 'library' } });
-      const address = path.match(/\/spaces\/([^/]+)\/?$/)?.[1];
-      if (address && client) {
-        // Reuse the actual current page's owner data, including the protected Realm's session read.
-        const key = ['space', decodeURIComponent(address), getLocale()];
-        const personal = client.getQueryState<SpacePageData>([...key, 'session']);
-        const page =
-          personal?.status === 'success' && personal.fetchStatus === 'idle'
-            ? personal.data
-            : client.getQueryData<SpacePageData>([...key, 'anonymous']);
-        if (page?.realm) return JSON.stringify({ kind: 'scope', scope: { kind: 'realm', id: page.realm.id } });
-      }
-      return '';
-    },
-    () => '',
-  );
-  useEffect(() => {
-    if (state !== 'signed-out' && !current.accountId) return;
-    const key = `${state}:${current.accountId}:${window.location.pathname}:${scope}`;
-    if (lastVisit === key) return;
-    lastVisit = key;
-    if (scope) changeRecent({ kind: 'use', entry: JSON.parse(scope) as RecentEntry });
-  });
-  const visible = state === session && (subject ?? null) === sessionOwner ? current : initial;
+/** Render local entries without inventing an available scoped destination. */
+function historyItem(entry: HistoryEntry): RecentItem {
+  const ref = entry.scope;
+  const scope =
+    ref?.kind === 'Library'
+      ? { kind: 'route' as const, route: 'library' as const }
+      : { kind: ref?.kind === 'Realm' ? ('realm' as const) : ('collection' as const), id: ref?.id ?? '' };
+  const native: RecentEntry = ref
+    ? entry.query
+      ? { kind: 'query', text: entry.query, scope }
+      : { kind: 'scope', scope }
+    : { kind: 'query', text: entry.query };
+  const action = ref?.searchAction;
+  const href = ref
+    ? action?.startsWith('/') && !action.startsWith('//') && !/[\\\r\n]/.test(action)
+      ? `${action.replace(/^\/(en|zh-Hant|zh-Hans)(?=\/)/, '')}${entry.query ? `?q=${encodeURIComponent(entry.query)}` : ''}`
+      : undefined
+    : `/search?q=${encodeURIComponent(entry.query)}`;
   return {
-    entries: visible.data.entries,
-    status: visible.status,
-    next: visible.next,
-    onRemove: (id: string) => changeRecent({ kind: 'remove', id }),
-    onClear: () => changeRecent({ kind: 'clear' }),
-    remember: (entry: RecentEntry) => changeRecent({ kind: 'use', entry }),
-    onReload: () => {
-      if (snapshot.status === 'conflict') save({ ...snapshot.data, pending: [] });
-      void synchronize();
-    },
-    onMore: async () => {
-      const { accountId, next, data } = snapshot;
-      if (!next || data.pending.length || busy === generation) return;
-      const run = generation;
-      try {
-        const result = await readRecent({ data: next });
-        if (run !== generation) return;
-        if (
-          result.accountId === accountId &&
-          result.page &&
-          result.page.revision === snapshot.data.revision &&
-          !snapshot.data.pending.length
-        ) {
-          save({ ...snapshot.data, entries: [...snapshot.data.entries, ...result.page.recentSearches].slice(0, 100) });
-          update({ next: result.page.next });
-        } else fail('conflict');
-      } catch {
-        if (run === generation) fail();
-      }
-    },
+    id: entry.id,
+    entry: native,
+    revision: 0,
+    lastUsed: new Date(entry.visitedAt).toISOString(),
+    display: href ? { name: ref?.name ?? entry.query, href, avatar: null } : null,
   };
 }
-type ViewProps = {
+type NativeViewProps = {
   entries: RecentItem[];
   status: RecentState;
   onRemove(id: string): void;
@@ -427,8 +228,19 @@ type ViewProps = {
   onMore?(): void;
   next?: string | null;
 };
-export function RecentHistoryView(props: ViewProps) {
-  const { entries, status, onRemove, onClear, onReload, history = false, onMore, next } = props;
+export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { history?: boolean })) {
+  const local = 'persistence' in props ? props : undefined;
+  const native = 'status' in props ? props : undefined;
+  const entries = local ? local.entries.map(historyItem) : native!.entries;
+  const status: RecentState = local
+    ? (local.failure ?? (local.sync === 'pending' ? 'loading' : 'local'))
+    : native!.status;
+  const onRemove = local?.remove ?? native!.onRemove;
+  const onClear = local?.clear ?? native?.onClear;
+  const onReload = local?.retry ?? native?.onReload;
+  const history = props.history ?? false,
+    onMore = native?.onMore,
+    next = native?.next;
   const locale = getLocale();
   return (
     <section className="space-y-2 px-3 py-3" aria-label={m.search_recent()}>
@@ -464,7 +276,7 @@ export function RecentHistoryView(props: ViewProps) {
           const name =
             item.entry.kind === 'query'
               ? item.entry.text
-              : item.entry.scope.kind === 'route'
+              : item.entry.scope.kind === 'route' && item.display
                 ? m.nav_library()
                 : (item.display?.name ?? m.search_history_unavailable());
           const href = item.display ? `/${locale}${item.display.href}` : undefined;
@@ -486,7 +298,14 @@ export function RecentHistoryView(props: ViewProps) {
                     <Search aria-hidden="true" className="size-4 text-muted-foreground" />
                   )}
                 </span>
-                <span className="truncate text-sm">{name}</span>
+                <span className="min-w-0 text-sm">
+                  <span className="block truncate">{name}</span>
+                  {item.entry.kind === 'query' && item.entry.scope && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {item.display?.name || m.search_history_unavailable()}
+                    </span>
+                  )}
+                </span>
               </Tag>
               <Button
                 type="button"

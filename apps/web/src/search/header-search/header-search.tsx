@@ -1,4 +1,4 @@
-import { RecentHistoryView, useRecentSearches } from '../recent';
+import { useRecentSearches } from '../recent';
 import { Cover, coverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -340,7 +340,7 @@ export function HeaderSearchView({
   );
 }
 
-export function HeaderSearch({
+function HeaderSearchController({
   locale,
   scope,
   initialQuery = '',
@@ -356,7 +356,6 @@ export function HeaderSearch({
   const [state, dispatch] = useReducer(reduceHeaderSearchState, undefined, () =>
     initialHeaderSearchState(scope, initialQuery),
   );
-  const recent = useRecentSearches();
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -458,7 +457,6 @@ export function HeaderSearch({
     const action = headerSearchAction(locale, scope);
     if (!action || (!query.trim() && !scope)) return;
     history?.remember(query, scope);
-    if (!history && query.trim()) recent.remember({ kind: 'query', text: query.trim(), languages: [locale] });
     const url = new URL(action, window.location.origin);
     url.searchParams.delete('q');
     url.searchParams.delete('cursor');
@@ -469,7 +467,6 @@ export function HeaderSearch({
   };
   return (
     <HeaderSearchView
-      recent={<RecentHistoryView {...recent} />}
       id={id}
       history={history}
       discovery={discovery}
@@ -549,7 +546,6 @@ export function HeaderSearch({
             event.preventDefault();
             const hit = subjects[state.activeIndex]!;
             history?.remember(state.query, state.scope);
-            if (!history) recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -562,7 +558,6 @@ export function HeaderSearch({
             return;
           }
           history?.remember(state.query, state.scope);
-          if (!history) recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);
@@ -599,4 +594,12 @@ export function HeaderSearch({
       }}
     />
   );
+}
+
+function ConnectedHeaderSearch(props: HeaderSearchProps) {
+  const history = useRecentSearches();
+  return <HeaderSearchController {...props} history={history} />;
+}
+export function HeaderSearch(props: HeaderSearchProps) {
+  return props.history ? <HeaderSearchController {...props} /> : <ConnectedHeaderSearch {...props} />;
 }
