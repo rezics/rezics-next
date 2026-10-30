@@ -10,9 +10,20 @@ import recording from '../kernel/recorded/subject-page.json';
 export function CandidateStory({ scenario = 'ready', page = false }: { scenario?: CandidateScenario; page?: boolean }) {
   const locale = getLocale();
   const fixture = useMemo(() => candidateFixture(scenario, locale), [scenario, locale]);
-  const region = <CandidateReview key={`${scenario}:${locale}`} id={fixture.id} locale={locale} transport={fixture.transport} />;
+  const region = (
+    <CandidateReview key={`${scenario}:${locale}`} id={fixture.id} locale={locale} transport={fixture.transport} />
+  );
   const publicPage = structuredClone(recording) as unknown as SubjectPageData;
-  if (page) return <SubjectPage page={publicPage} locale={locale} messages={subjectPageMessages()}
-    tabs={subjectTabs(publicPage)} tabLabels={viewTabLabels()} curation={region} />;
+  if (page)
+    return (
+      <SubjectPage
+        page={publicPage}
+        locale={locale}
+        messages={subjectPageMessages()}
+        tabs={subjectTabs(publicPage)}
+        tabLabels={viewTabLabels()}
+        curation={region}
+      />
+    );
   return <div className="mx-auto max-w-4xl p-4 sm:p-8">{region}</div>;
 }

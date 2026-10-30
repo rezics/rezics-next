@@ -17,10 +17,17 @@ import { useSession } from '../../session/query';
 export function SubjectCandidateCuration({ id, locale }: { id: string; locale: string }) {
   const { state } = useSession();
   if (state !== 'signed-in') return null;
-  return <CandidateReview key={`${id}:${locale}`} id={id} locale={locale} transport={{
-    read: (property, cursor) => readSubjectCandidates({ data: { id, property, cursor }, headers: csrfHeaders() }),
-    confirm: (data) => confirmSubjectCandidate({ data, headers: csrfHeaders() }),
-  }} />;
+  return (
+    <CandidateReview
+      key={`${id}:${locale}`}
+      id={id}
+      locale={locale}
+      transport={{
+        read: (property, cursor) => readSubjectCandidates({ data: { id, property, cursor }, headers: csrfHeaders() }),
+        confirm: (data) => confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+      }}
+    />
+  );
 }
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));

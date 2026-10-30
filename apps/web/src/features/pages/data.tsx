@@ -243,23 +243,48 @@ export function CandidateValue({ snak, related, locale }: { snak: Snak; related:
     unknown: m.subject_value_unknown({}, { locale: locale as never }),
     none: m.subject_value_none({}, { locale: locale as never }),
     unlabelled: m.subject_value_unlabelled({}, { locale: locale as never }),
-    sources: '', aliases: '', search: '',
+    sources: '',
+    aliases: '',
+    search: '',
   };
   const content = snak.value.type === 'value' ? snak.value.content : undefined;
   if (snak.property.data_type === 'document' && isRecord(content)) {
     const document = readableDocument(content.document);
-    if (document) return <DocumentValue document={document} lang={typeof content.language === 'string' ? content.language : undefined}
-      labels={{ documentSpoiler: m.thread_reveal_spoiler({}, { locale: locale as never }), spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } }} />;
+    if (document)
+      return (
+        <DocumentValue
+          document={document}
+          lang={typeof content.language === 'string' ? content.language : undefined}
+          labels={{
+            documentSpoiler: m.thread_reveal_spoiler({}, { locale: locale as never }),
+            spoilerShow: '',
+            cover: { withheld: '', reveal: '', credit: '', via: '' },
+          }}
+        />
+      );
   }
-  if (snak.property.data_type === 'media') return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
-  if (snak.property.data_type === 'quantity' && isRecord(content) && typeof content.unit === 'string' && content.unit !== '1') {
+  if (snak.property.data_type === 'media')
+    return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+  if (
+    snak.property.data_type === 'quantity' &&
+    isRecord(content) &&
+    typeof content.unit === 'string' &&
+    content.unit !== '1'
+  ) {
     const label = pageText(related[content.unit]?.labels, locale).text;
     if (!label) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
     snak = { ...snak, value: { type: 'value', content: { ...content, unit: label } } };
   }
-  return inlineValue(snak, related, { locale, messages, link: PlainLink, reader: defaultReader,
-    frame: {}, labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } } }) ??
-    <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+  return (
+    inlineValue(snak, related, {
+      locale,
+      messages,
+      link: PlainLink,
+      reader: defaultReader,
+      frame: {},
+      labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
+    }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
+  );
 }
 
 type Creator = { id: string; name: string; node: ReactNode };
