@@ -20,7 +20,7 @@ import { reapContainers } from './containers.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, type ManagerServices, type ManagerSpec } from './managers.ts';
+import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
@@ -144,41 +144,105 @@ async function stopRecordedAppServers(path: string): Promise<void> {
   rmSync(path, { force: true });
 }
 
-export function hostRequest(socketPath: string, request: HostRequest): Promise<any> {
+export function hostRequest(
+  socketPath: string,
+  request: HostRequest,
+  timeoutMs = 60_000,
+  retryDelayMs = 25,
+): Promise<any> {
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + 60_000;
-    const connect = () => {
-      const socket = createConnection(socketPath);
-      let connected = false;
-      const retry = (error: NodeJS.ErrnoException) => {
-        if (connected || !['ENOENT', 'ECONNREFUSED'].includes(error.code ?? '') || Date.now() >= deadline) {
-          reject(connected ? error : new Error('Manager host request timed out'));
-          return;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || !Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0) {
+      reject(new Error('Manager host request timeout and retry delay must be valid milliseconds'));
+      return;
+    }
+    const deadline = Date.now() + timeoutMs;
+    const timeoutError = () => new Error(`Manager host request timed out after ${timeoutMs}ms`);
+    let socket: ReturnType<typeof createConnection> | undefined;
+    let lines: ReturnType<typeof createInterface> | undefined;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    let connected = false;
+    let connect: () => void = () => {};
+
+    const cleanupAttempt = () => {
+      lines?.close();
+      lines = undefined;
+      if (socket) {
+        const closing = socket;
+        closing.removeAllListeners('connect');
+        closing.removeAllListeners('end');
+        closing.removeAllListeners('close');
+        closing.removeAllListeners('error');
+        if (!closing.destroyed) {
+          // A pending write can report EPIPE while destroy is closing the descriptor. Keep one guard until close.
+          closing.once('error', () => {});
+          closing.once('close', () => closing.removeAllListeners('error'));
+          closing.destroy();
         }
-        setTimeout(connect, 25);
-      };
-      socket.setTimeout(Math.max(1, deadline - Date.now()), () =>
-        socket.destroy(new Error('Manager host request timed out')),
-      );
-      socket.once('connect', () => {
-        connected = true;
-        socket.write(`${JSON.stringify(request)}\n`);
-      });
-      socket.once('error', (error) => retry(error as NodeJS.ErrnoException));
-      createInterface({ input: socket }).once('line', (line) => {
-        socket.end();
-        try {
-          const response = JSON.parse(line);
-          if (response.error) reject(new Error(response.error));
-          else resolve(response.result);
-        } catch (error) {
-          reject(error);
-        }
-      });
-      socket.on('end', () => {
-        if (connected) reject(new Error('Manager host closed without a response'));
-      });
+        socket = undefined;
+      }
     };
+    const finish = (error?: unknown, result?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (deadlineTimer) clearTimeout(deadlineTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      cleanupAttempt();
+      if (error !== undefined) reject(error instanceof Error ? error : new Error(String(error)));
+      else resolve(result);
+    };
+    const retryConnection = (error: NodeJS.ErrnoException) => {
+      if (connected || !['ENOENT', 'ECONNREFUSED'].includes(error.code ?? '')) {
+        finish(error);
+        return;
+      }
+      cleanupAttempt();
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        finish(timeoutError());
+        return;
+      }
+      retryTimer = setTimeout(connect, Math.min(retryDelayMs, remaining));
+    };
+    const onLine = (line: string) => {
+      try {
+        const response = JSON.parse(line);
+        if (response.error) finish(new Error(response.error));
+        else finish(undefined, response.result);
+      } catch (error) {
+        finish(error);
+      }
+    };
+    connect = () => {
+      if (settled) return;
+      connected = false;
+      let attempt: ReturnType<typeof createConnection>;
+      try {
+        attempt = createConnection(socketPath);
+      } catch (error) {
+        finish(error);
+        return;
+      }
+      socket = attempt;
+      attempt.once('connect', () => {
+        connected = true;
+        lines = createInterface({ input: attempt, crlfDelay: Infinity });
+        lines.once('line', onLine);
+        attempt.once('end', () => finish(new Error('Manager host closed without a response')));
+        attempt.once('close', () => finish(new Error('Manager host closed without a response')));
+        try {
+          attempt.write(`${JSON.stringify(request)}\n`, (error) => {
+            if (error) finish(error);
+          });
+        } catch (error) {
+          finish(error);
+        }
+      });
+      attempt.once('error', (error) => retryConnection(error as NodeJS.ErrnoException));
+    };
+
+    deadlineTimer = setTimeout(() => finish(timeoutError()), timeoutMs);
     connect();
   });
 }
@@ -267,7 +331,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   const registryPath = join(runtime.stateDirectory, appServerRegistryName);
   const server = createServer((socket) => {
     const lines = createInterface({ input: socket });
+    socket.once('close', () => lines.close());
     lines.once('line', async (line) => {
+      lines.close();
       activeRequests++;
       let completed = false;
       const completeRequest = () => {
@@ -293,7 +359,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
             result = await managers.stop(request.manager!);
             break;
           case 'complete':
-            result = await managers.complete(request.manager!);
+            result = await managers.completeCommand(request.manager!);
             break;
           case 'decision':
             result = await managers.noteCommand(request.manager!);
@@ -312,9 +378,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           default:
             throw new Error('Unknown manager host command');
         }
-        socket.end(`${JSON.stringify({ result: result ?? null })}\n`, completeRequest);
+        if (socket.destroyed || !socket.writable) completeRequest();
+        else socket.end(`${JSON.stringify({ result: result ?? null })}\n`, completeRequest);
       } catch (error) {
-        socket.end(`${JSON.stringify({ error: String(error) })}\n`, completeRequest);
+        if (socket.destroyed || !socket.writable) completeRequest();
+        else socket.end(`${JSON.stringify({ error: String(error) })}\n`, completeRequest);
       }
     });
     socket.on('error', () => {});
@@ -365,13 +433,28 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     rmSync(runtime.managerSocket, { force: true });
     // Recovery waits for adopted workers, which can run for an hour; the socket must not wait with it.
     void recoverOrphans().catch((error) => console.error(error));
-    await managers.recover();
-    if (stopRequested) return;
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(runtime.managerSocket, resolve);
     });
     chmodSync(runtime.managerSocket, 0o600);
+    if (stopRequested) return;
+    let reportRecoveryProgress!: () => void;
+    const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
+    void managers.recover(reportRecoveryProgress).catch((error) => {
+      console.error('manager recovery failed:', error);
+      reportRecoveryProgress();
+    });
+    let readinessTimer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      recoveryProgress,
+      new Promise<void>((resolve) => {
+        readinessTimer = setTimeout(resolve, 100);
+      }),
+    ]);
+    if (readinessTimer) clearTimeout(readinessTimer);
+    // The socket is already accepting requests. Yield once so a submitted recovery RPC reaches its provider first.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     console.log('ready');
     const remind = () => {
       try {
@@ -608,6 +691,11 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           !state.continuationRenewed
         ) {
           await ensureHost(runtime);
+          // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
+          // isolated delivery attempt; its failure must not change the inbox-send or continuation result.
+          await hostRequest(runtime.managerSocket, { command: 'decision', manager: sender }, 500).catch((error) =>
+            console.error(`manager decision audit delivery failed: ${String(error)}`),
+          );
           await hostRequest(runtime.managerSocket, {
             command: 'outgoing-message',
             manager: sender,
@@ -677,7 +765,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           }),
         ),
       );
-    } else if (subcommand && ['stop', 'complete', 'decision', 'turn-start', 'turn-end'].includes(subcommand)) {
+    } else if (subcommand === 'decision') {
+      await ensureHost(runtime);
+      recordManagerDecision(runtime.db, id);
+    } else if (subcommand && ['stop', 'complete', 'turn-start', 'turn-end'].includes(subcommand)) {
       await ensureHost(runtime);
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);
       const result = await hostRequest(runtime.managerSocket, {
@@ -694,8 +785,12 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */
 export async function recordManagerCommand(runtime: IntegrationRuntime): Promise<void> {
   const manager = callingManager(runtime);
-  if (manager && existsSync(runtime.managerSocket))
-    await hostRequest(runtime.managerSocket, { command: 'decision', manager });
+  if (!manager) return;
+  const hasSessions = runtime.db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'")
+    .get();
+  if (!hasSessions || !runtime.db.query('SELECT 1 FROM manager_sessions WHERE id = ?').get(manager)) return;
+  recordManagerDecision(runtime.db, manager);
 }
 
 function callingManager(runtime: IntegrationRuntime): string | undefined {
