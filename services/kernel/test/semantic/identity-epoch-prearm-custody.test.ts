@@ -84,6 +84,7 @@ test('The exact native admitted prearm directory remains boundedly readable and 
       if (!ticket) throw new Error('Missing original active native ticket');
       originalTickets.push(ticket);
     }
+    expect((await readIdentityPrearmCustodyPage(f.pool, { job: { jobId: randomUUID(), epoch: 1n }, after: null, limit: 1, allowance: allowance() }, context())).status).toBe('unavailable');
     expect((await readIdentityPrearmCustodyPage(f.pool, { job, after: null, limit: 1, allowance: allowance() }, context())).status).toBe('unavailable');
     await (await nativeCutoverCoordinator())(f.pool, job);
     expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('published');
@@ -106,6 +107,10 @@ test('The exact native admitted prearm directory remains boundedly readable and 
       expect(result.work.rows).toBeLessThanOrEqual(100);
       expect(result.frontier.after.length).toBeLessThanOrEqual(8);
       expect(Buffer.byteLength(JSON.stringify(result.frontier))).toBeLessThanOrEqual(2048);
+      if (page === 0 && result.status === 'progress') {
+        expect((await readIdentityPrearmCustodyPage(f.pool, { job, limit: 1, allowance: allowance(),
+          after: { ...result.frontier, segment: result.frontier.segment + 1 } }, context())).status).toBe('unavailable');
+      }
       if (after) expect(result.frontier.segment > after.segment ||
         (result.frontier.segment === after.segment && BigInt(result.frontier.after[0] as string) > BigInt(after.after[0] as string))).toBe(true);
       // Serialization preserves the scalar continuation; caller-created positions do not authenticate.

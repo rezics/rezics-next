@@ -1,6 +1,7 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { withRequestDeadline } from '../request/deadline.ts';
+import { routeOf } from '../route/route.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { withReadTransaction } from './read.ts';
 import { identityJobPartition, serializeIdentityValue as json } from './identity-epoch-store.ts';
@@ -43,8 +44,8 @@ const refuse = (reason: string): never => { throw new Unavailable(reason); };
 const stamp = (value: unknown) => createHash('sha256').update(json(value)).digest('hex');
 const sameJob = (a: IdentityJobRef, b: IdentityJobRef) => a.jobId === b.jobId && a.epoch === b.epoch;
 const validJob = (job: IdentityJobRef) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(job.jobId) &&
-  typeof job.epoch === 'bigint' && job.epoch > 0n;
+  routeOf(job.jobId) !== null && typeof job.epoch === 'bigint' &&
+  job.epoch > 0n && job.epoch <= 9223372036854775807n;
 const validAllowance = (allowance: NativeStepWork) =>
   keys.every((key) => Number.isSafeInteger(allowance[key]) && allowance[key] >= 0);
 
