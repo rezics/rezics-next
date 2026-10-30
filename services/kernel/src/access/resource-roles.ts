@@ -133,10 +133,7 @@ function compileResourceRoles(actions: RoleActions, extension?: ResourceRoleCata
  * Extensions cannot replace a built-in definition, including the empty report
  * template. Missing roles/actions disable the whole referring template.
  */
-export function resolveResourceRoles(
-  actions: RoleActions,
-  extension?: ResourceRoleCatalogue,
-): ResolvedResourceRoles {
+export function resolveResourceRoles(actions: RoleActions, extension?: ResourceRoleCatalogue): ResolvedResourceRoles {
   const compiled = compileResourceRoles(actions, extension);
   return { roles: compiled.roles, types: compiled.types, declaredTypes: compiled.declaredTypes };
 }

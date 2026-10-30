@@ -188,8 +188,11 @@ export function createGrantCommands(config: {
           const at = currentCommand(tx).time;
           const ownership = { resource: input.resource, accountId: subject.id, at };
           const effect = await realmMutation.run(tx, {
-            route: input.resource.route, resource_id: input.resource.id, account_id: subject.id,
-            previous_valid: previous?.valid ?? input.valid, valid: input.valid,
+            route: input.resource.route,
+            resource_id: input.resource.id,
+            account_id: subject.id,
+            previous_valid: previous?.valid ?? input.valid,
+            valid: input.valid,
             retains_owner: operation !== 'revoke' && input.role === REALM_OWNER_ROLE,
             at: authoritativeTimeValue(at),
           });
@@ -227,67 +230,100 @@ export function createGrantCommands(config: {
     const from = grantSubject({ kind: 'account', id: input.fromAccountId });
     const to = grantSubject({ kind: 'account', id: input.toAccountId });
     const actions = resourceRoleCatalogue(config.access)?.roles.get(REALM_OWNER_ROLE);
-    if (!validResource(input.resource) || !from || !to || from.id === to.id || !actions ||
-      typeof input.previousValid !== 'string') throw new GrantDeniedError();
-    return grantCommand(config, context, {
-      resource: input.resource, actions: [config.managementAction, ...actions],
-      recipientAccountId: to.id,
-      // The existing change event identifies the resulting explicit holder.
-      // The receipt digest also binds the former holder and exact old interval.
-      kind: 'access.role-grant.change', key: input.key, input,
-      denied: () => new GrantDeniedError(),
-    }, async (tx, transactionId) => {
-      const at = currentCommand(tx).time;
-      const ownership = { resource: input.resource, accountId: from.id, at };
-      try {
-        await lockRealmOwnership(tx, ownership);
-      } catch (error) {
-        if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
-        throw error;
-      }
-      // The exact interval being transferred must be the former holder's live
-      // owner grant. Removing a historical interval must not mint a new holder
-      // while silently retaining the former holder's actual current grant.
-      const source = await realmMutation.run(tx, {
-        route: input.resource.route,
-        resource_id: input.resource.id,
-        account_id: from.id,
-        previous_valid: input.previousValid,
-        valid: input.previousValid,
-        retains_owner: false,
-        at: authoritativeTimeValue(at),
-      });
-      if (!source.realm || !source.current) throw new GrantDeniedError();
-      // A recipient already holding an open-ended explicit owner grant needs no
-      // replacement interval. Preserve its real scope and original service time.
-      const recipient = await realmRecipient.run(tx, {
-        route: input.resource.route, resource_id: input.resource.id, account_id: to.id,
-        at: authoritativeTimeValue(at),
-      });
-      const valid = recipient?.valid ?? `[${authoritativeTimeValue(at)},)`;
-      const parameters = {
-        route: input.resource.route, resource_id: input.resource.id,
-        subject_kind: 'identity', subject_role: '', grant_role: REALM_OWNER_ROLE,
-        previous_role: REALM_OWNER_ROLE, previous_valid: input.previousValid, transaction_id: transactionId,
-      };
-      if (!recipient) {
-        const inserted = await roleStatement.run(tx, {
-          ...parameters, subject_id: to.id, valid, operation: 'create',
+    if (
+      !validResource(input.resource) ||
+      !from ||
+      !to ||
+      from.id === to.id ||
+      !actions ||
+      typeof input.previousValid !== 'string'
+    )
+      throw new GrantDeniedError();
+    return grantCommand(
+      config,
+      context,
+      {
+        resource: input.resource,
+        actions: [config.managementAction, ...actions],
+        recipientAccountId: to.id,
+        // The existing change event identifies the resulting explicit holder.
+        // The receipt digest also binds the former holder and exact old interval.
+        kind: 'access.role-grant.change',
+        key: input.key,
+        input,
+        denied: () => new GrantDeniedError(),
+      },
+      async (tx, transactionId) => {
+        const at = currentCommand(tx).time;
+        const ownership = { resource: input.resource, accountId: from.id, at };
+        try {
+          await lockRealmOwnership(tx, ownership);
+        } catch (error) {
+          if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
+          throw error;
+        }
+        // The exact interval being transferred must be the former holder's live
+        // owner grant. Removing a historical interval must not mint a new holder
+        // while silently retaining the former holder's actual current grant.
+        const source = await realmMutation.run(tx, {
+          route: input.resource.route,
+          resource_id: input.resource.id,
+          account_id: from.id,
+          previous_valid: input.previousValid,
+          valid: input.previousValid,
+          retains_owner: false,
+          at: authoritativeTimeValue(at),
         });
-        if (inserted.length !== 1) throw new GrantDeniedError();
-      }
-      try {
-        await assertRealmOwnerMayLeave(tx, ownership);
-      } catch (error) {
-        if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
-        throw error;
-      }
-      const removed = await roleStatement.run(tx, {
-        ...parameters, subject_id: from.id, valid: input.previousValid, operation: 'revoke',
-      });
-      if (removed.length !== 1) throw new GrantDeniedError();
-      return { resource: input.resource, subject: { kind: 'account' as const, id: to.id }, role: REALM_OWNER_ROLE, valid };
-    });
+        if (!source.realm || !source.current) throw new GrantDeniedError();
+        // A recipient already holding an open-ended explicit owner grant needs no
+        // replacement interval. Preserve its real scope and original service time.
+        const recipient = await realmRecipient.run(tx, {
+          route: input.resource.route,
+          resource_id: input.resource.id,
+          account_id: to.id,
+          at: authoritativeTimeValue(at),
+        });
+        const valid = recipient?.valid ?? `[${authoritativeTimeValue(at)},)`;
+        const parameters = {
+          route: input.resource.route,
+          resource_id: input.resource.id,
+          subject_kind: 'identity',
+          subject_role: '',
+          grant_role: REALM_OWNER_ROLE,
+          previous_role: REALM_OWNER_ROLE,
+          previous_valid: input.previousValid,
+          transaction_id: transactionId,
+        };
+        if (!recipient) {
+          const inserted = await roleStatement.run(tx, {
+            ...parameters,
+            subject_id: to.id,
+            valid,
+            operation: 'create',
+          });
+          if (inserted.length !== 1) throw new GrantDeniedError();
+        }
+        try {
+          await assertRealmOwnerMayLeave(tx, ownership);
+        } catch (error) {
+          if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
+          throw error;
+        }
+        const removed = await roleStatement.run(tx, {
+          ...parameters,
+          subject_id: from.id,
+          valid: input.previousValid,
+          operation: 'revoke',
+        });
+        if (removed.length !== 1) throw new GrantDeniedError();
+        return {
+          resource: input.resource,
+          subject: { kind: 'account' as const, id: to.id },
+          role: REALM_OWNER_ROLE,
+          valid,
+        };
+      },
+    );
   }
   return {
     transferRealmOwner,
