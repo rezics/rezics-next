@@ -12,13 +12,14 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { dependencyKey, installShared, pruneStores, sealReadOnly } from './shared-dependencies.ts';
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'goal-deps-'));
+  const temporaryRoot = resolve(import.meta.dir, '../../../.temp/goal-tests');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const root = mkdtempSync(join(temporaryRoot, 'goal-deps-'));
   const tree = (name: string) => {
     const path = join(root, name);
     mkdirSync(join(path, 'packages', 'sample'), { recursive: true });
@@ -133,6 +134,69 @@ test('an interrupted store build is discarded and the next use builds it cleanly
     h.close();
   }
 });
+
+function processIsAlive(pid: number): boolean {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z ')) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function expectProcessStopped(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100 && processIsAlive(pid); attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(processIsAlive(pid)).toBe(false);
+}
+
+test.serial(
+  'a timed out shared install is an infrastructure failure, reaps descendants, releases its lease, and publishes no store',
+  async () => {
+    const h = fixture();
+    const previousPath = process.env.PATH;
+    try {
+      const a = h.tree('a');
+      const stores = join(h.root, 'stores');
+      const bin = join(h.root, 'bin');
+      const pidFile = join(h.root, 'installer-descendant.pid');
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, 'bun'),
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\necho 'Installing package @fixture/shared-stall@3.4.5' >&2\nsleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'\nwait\n`,
+      );
+      chmodSync(join(bin, 'bun'), 0o755);
+      process.env.PATH = `${bin}:${previousPath ?? ''}`;
+
+      let failure: unknown;
+      const started = performance.now();
+      try {
+        installShared(a, stores, { startupMs: 2_000, runMs: 250, terminationMs: 500 });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      expect(String(failure)).toContain('ETIMEDOUT: Infrastructure failure');
+      expect(String(failure)).toContain('phase=run');
+      expect(String(failure)).toContain('bun install --frozen-lockfile --backend=copyfile');
+      expect(String(failure)).toContain('package="@fixture/shared-stall"');
+      expect(performance.now() - started).toBeLessThan(2_500);
+
+      const key = dependencyKey(a);
+      expect(existsSync(join(stores, key, 'node_modules', '.bun'))).toBe(false);
+      expect(readdirSync(stores).filter((name) => name.startsWith('.building-'))).toEqual([]);
+      expect(existsSync(join(stores, '.leases', key))).toBe(false);
+      await expectProcessStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      h.close();
+    }
+  },
+  10_000,
+);
 
 test('an install without node_modules/.bun stays private and publishes no store', async () => {
   const h = fixture();
