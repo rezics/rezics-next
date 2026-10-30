@@ -159,5 +159,11 @@ The original managed native materialization wrapper is the remaining acceptance:
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-materialization-native.test.ts
 ```
 
-Its new receipt is recorded after execution. Historical failures above remain
-scoped to their recorded revisions.
+The wrapper was submitted once at `ebe0b12832`, with check UUID
+`e08a5a0f-a9e0-4ac2-abfc-5be483038053`. It returned the UUID without a terminal
+result. Native acceptance is pending controller collection; no new native pass,
+failure or assertion count is claimed. The check record is
+`.temp/goal/checks/results/e08a5a0f-a9e0-4ac2-abfc-5be483038053.json`.
+The task's explicit suspend handoff leaves this check with the controller rather
+than submitting another run. Historical failures above remain scoped to their
+recorded revisions.
