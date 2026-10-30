@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
   costOf,

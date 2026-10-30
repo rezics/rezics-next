@@ -319,8 +319,8 @@ test('catalog projection keeps native occurrence links, documents, errors and ba
     raw.statementBackends![2],
     raw.statementBackends![3],
   ]);
-  expect(projected.requestBytes).toEqual([raw.requestBytes![0], raw.requestBytes![2], raw.requestBytes![3]]);
-  expect(projected.responseBytes).toEqual([raw.responseBytes![0], raw.responseBytes![2], raw.responseBytes![3]]);
+  expect(projected.requestBytes).toEqual([raw.requestBytes![0]!, raw.requestBytes![2]!, raw.requestBytes![3]!]);
+  expect(projected.responseBytes).toEqual([raw.responseBytes![0]!, raw.responseBytes![2]!, raw.responseBytes![3]!]);
   expect(raw.statements).toHaveLength(4);
   expect(raw.plans).toEqual(beforePlans);
 
