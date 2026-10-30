@@ -276,6 +276,37 @@ test('list hints never enter LibraryProfileSource or change retained personal pi
 
 test('published catalogue and both normal recordings share the new immutable release while historical bytes still load', async () => {
   expect(await compileCatalogue(bundledSources())).toEqual(bundledRelease);
+  const unhinted = bundledSources();
+  for (const [file, text] of Object.entries(unhinted.schemas)) {
+    const schema = Bun.YAML.parse(text) as Record<string, any>;
+    for (const definition of Object.values(schema.classes ?? {}) as Record<string, any>[])
+      if (definition.annotations) delete definition.annotations.list_presentation;
+    unhinted.schemas[file] = JSON.stringify(schema);
+  }
+  // Every pre-existing semantic member, label, unit, profile and source role is
+  // recovered by removing only the new inert bytes.
+  expect(withoutHints(bundledRelease)).toEqual(await compileCatalogue(unhinted));
+  for (const [aspect, types] of Object.entries({
+    portrait: [
+      'schema:Book',
+      'bf:Instance',
+      'schema:ComicSeries',
+      'schema:PublicationVolume',
+      'wd:Q689445',
+      'schema:Person',
+      'wd:Q95074',
+    ],
+    landscape: [
+      'schema:Movie',
+      'schema:TVSeries',
+      'schema:TVSeason',
+      'schema:Episode',
+      'rezics:AnimeRelease',
+      'schema:Recipe',
+    ],
+    square: ['schema:MusicAlbum'],
+  }))
+    for (const type of types) expect(bundledRelease.types[type]!.listPresentation!.imageAspect).toBe(aspect);
   const active = await Bun.file(
     new URL('../../../apps/web/src/kernel/recorded/definitions-active.json', import.meta.url),
   ).json();
