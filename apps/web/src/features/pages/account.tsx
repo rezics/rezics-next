@@ -14,7 +14,7 @@ import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
 import { DocumentValue, readableDocument } from './values';
 import { subjectHref } from '../../subject/subject-href';
-import { FollowTargetControl } from '../../library/follow-target-control';
+import { AccountFollow } from '../../accounts/public-profile/follow';
 
 function dateText(value: unknown, locale: string): string | null {
   if (typeof value !== 'string') return null;
@@ -82,7 +82,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
             </p>
           )}
           {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
-          {value.subject ? <FollowTargetControl targetId={value.subject} /> : null}
+          {value.subject ? <AccountFollow targetId={value.subject} /> : null}
           {profile.verified && profile.subject && (
             <p className="text-sm" data-slot="agent-verified">
               <value.link
