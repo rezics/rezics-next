@@ -16,8 +16,8 @@ import {
 import {
   capture,
   captureMeasuredRun,
-  GrowthSettleInfrastructureError,
   captureWarmup,
+  GrowthSettleInfrastructureError,
   settle,
   trackGrow,
   type GrowthDatabase,
@@ -33,6 +33,7 @@ import {
   type Cost,
 } from './growth-cost.ts';
 import { classifySeries, type SeriesClassification, type SeriesInterval, type SeriesPoint } from './growth-model.ts';
+import { GROWTH_BASELINE } from './growth-baseline.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
 import {
   formatStatementAttribution,
@@ -652,7 +653,13 @@ export function withoutCatalogStatements(name: string, captureResult: Capture): 
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
-  const rule = check.rule ?? (process.env.GROWTH_RULE === 'series' ? 'series' : 'step');
+  const growthRule = process.env.GROWTH_RULE;
+  if (growthRule !== undefined && growthRule !== 'series')
+    throw new TypeError(`${check.name}: GROWTH_RULE must be 'series' when set`);
+  const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
+  if (listed && check.rule !== undefined)
+    throw new TypeError(`${check.name}: listed checks must not set rule in growth-baseline.ts`);
+  const rule = check.rule ?? (growthRule === 'series' || !listed ? 'series' : 'step');
   const scales = check.scales ?? [1, 8, 64];
   const repetitions = check.repetitions ?? 5;
   const warmups = check.warmups ?? 1;
@@ -899,6 +906,13 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         }),
   };
   appendProfile(report);
+  if (
+    listed &&
+    growthRule !== 'series' &&
+    (['rows', 'blocks', 'statements'] as const).every((metric) => shadow[metric].outcome === 'compatible')
+  ) {
+    throw new Error(`${check.name}: series establishes this bound; delete its entry from growth-baseline.ts`);
+  }
   for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
     const verdict = report.verdicts[metric];
     if (verdict) writeGrowthReview(check, rule, metric, classified[metric]?.bound, verdict, samples, failedStatements);
@@ -947,6 +961,5 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       error.message += `\nfailed attempts by SQLSTATE at scale: ${failedAttempts.join(', ')}`;
     throw error;
   }
-
   return report;
 }

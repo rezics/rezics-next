@@ -73,11 +73,12 @@ test('the series rule passes dispersed repetitions without throwing an evidence 
   expect(report.verdicts.rows).toMatchObject({ outcome: 'inconclusive', reason: 'noise' });
 });
 
-test('the step rule stays the default and GROWTH_RULE=series selects the series rule', async () => {
+test('series is the default and explicit step and GROWTH_RULE=series select their rules', async () => {
   const prior = process.env.GROWTH_RULE;
   try {
     delete process.env.GROWTH_RULE;
-    expect((await check('default step rule', { fixed: true })).rule).toBe('step');
+    expect((await check('default series rule', { fixed: true })).rule).toBe('series');
+    expect((await check('explicit step rule', { rule: 'step', fixed: true })).rule).toBe('step');
     process.env.GROWTH_RULE = 'series';
     expect((await check('environment series rule', { fixed: true })).rule).toBe('series');
   } finally {

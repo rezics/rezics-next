@@ -141,6 +141,7 @@ async function reset(database: GrowthDatabase): Promise<void> {
 function arrayCheck(byteBounds?: GrowthCheck['byteBounds']): GrowthCheck {
   return {
     name: 'one growing array row',
+    rule: 'step',
     scales: [1, 8, 64],
     repetitions: 1,
     bounds,

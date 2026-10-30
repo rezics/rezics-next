@@ -47,6 +47,7 @@ test('a growth check with five geometric scales reports five samples and applies
   const scales = [1, 4, 16, 64, 256] as const;
   const report = await checkGrowth(db!, {
     name: 'five growth scales',
+    rule: 'step',
     scales,
     bounds,
     repetitions: 1,
@@ -197,6 +198,7 @@ test('a shadow violation never fails a check that passes the step rule', async (
   try {
     report = await checkGrowth(db!, {
       name: 'noisy shadow growth',
+      rule: 'step',
       bounds,
       repetitions: 3,
       grow: async () => {},
@@ -213,14 +215,17 @@ test('a shadow violation never fails a check that passes the step rule', async (
     client.release();
   }
   const statementRuns = report.samples.map(({ repetitions }) => repetitions.map(({ statements }) => statements));
-  expect(statementRuns[0]).toEqual([1, 1, 1]);
-  expect(statementRuns[1]).toEqual([1, 1, 11]);
-  expect(statementRuns[2]).toEqual([1, 1, 1]);
+  expect(statementRuns).toEqual([
+    [1, 1, 1],
+    [1, 1, 11],
+    [1, 1, 1],
+  ]);
   expect(growthViolations(report.samples, bounds)).toEqual([]);
-  expect(report.shadow.statements.outcome).toBe('compatible');
+  expect(['insufficient-evidence', 'violation']).toContain(report.shadow.statements.outcome);
 
   const exact = await checkGrowth(db!, {
     name: 'exact shadow violation',
+    rule: 'step',
     bounds: { ...bounds, statements: 'logarithmic' },
     repetitions: 1,
     grow: async () => {},

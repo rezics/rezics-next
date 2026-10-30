@@ -57,6 +57,7 @@ async function reset(database: GrowthDatabase): Promise<void> {
 function check(database: GrowthDatabase, operation: GrowthCheck['operation'], bounds: GrowthCheck['bounds']) {
   return checkGrowth(database, {
     name: 'growth table scan',
+    rule: 'step',
     bounds,
     grow: async (growthDb, scale, previous) => {
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
