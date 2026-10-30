@@ -34,8 +34,11 @@ export function RemovedPost({
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;
 }) {
-  const author = authors?.[post.authorId];
-  const owner = viewerId !== undefined && post.authorId === viewerId;
+  const authorId = 'authorId' in post ? post.authorId : undefined;
+  const author = authorId ? authors?.[authorId] : undefined;
+  const owner =
+    (viewerId !== undefined && authorId === viewerId) ||
+    (post.availability === 'erased' && Boolean(post.restorableUntil));
   const common = {
     id: anchorId,
     ref: itemRef,
@@ -69,9 +72,9 @@ export function RemovedPost({
     );
   }
 
-  const deleted = post.availability === 'erased' || post.removed === true;
+  const deleted = post.availability === 'erased' || ('removed' in post && post.removed === true);
   const reason = deleted ? 'deleted' : 'unavailable';
-  const restorableUntil = owner && deleted ? post.restorableUntil : undefined;
+  const restorableUntil = owner && deleted && 'restorableUntil' in post ? post.restorableUntil : undefined;
   return (
     <li {...common}>
       <div className="relative">

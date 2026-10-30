@@ -389,14 +389,14 @@ function PostSlot({
         post={post}
         authors={authors}
         now={now}
-        viewerId={viewerId}
+        {...(viewerId === undefined ? {} : { viewerId })}
         anchorId={anchorId}
         itemRef={itemElement}
         menuButton={menuButton}
         minHeight={removedMinHeight}
         restoreError={restoreError}
         onCopyLink={copyLink}
-        {...(post.availability === 'erased' && viewerId === post.authorId && post.restorableUntil
+        {...(post.availability === 'erased' && post.restorableUntil
           ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) }
           : {})}
       />

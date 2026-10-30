@@ -7,6 +7,7 @@ import { coverSrc } from '../media/cover-src';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { rowRatio } from './subject-row';
+import { displayLibraryTitle } from './title';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
@@ -72,9 +73,9 @@ export function DynamicCollectionPage({
       ) : null}
       <CollectionFilterFeedback
         id={current.id}
-        filter={current.filter}
-        ignored={current.filterIgnored}
-        status={current.filterStatus}
+        {...(current.filter === undefined ? {} : { filter: current.filter })}
+        {...(current.filterIgnored === undefined ? {} : { ignored: current.filterIgnored })}
+        {...(current.filterStatus === undefined ? {} : { status: current.filterStatus })}
         empty={current.members.length === 0}
         unavailable={current.unavailable}
         emptyLabel={empty}
@@ -88,8 +89,10 @@ export function DynamicCollectionPage({
       ) : current.members.length ? (
         <CoverGrid ratio={ratio}>
           {current.members.map(({ subject }, index) => {
-            const href = subject ? subjectHref({ id: subject.id, label: subject.label }, getLocale()) : null;
-            const title = subject?.label ?? m.library_subject_unavailable();
+            const locale = getLocale();
+            const localizedTitle = subject ? displayLibraryTitle(subject.label, locale) : null;
+            const title = localizedTitle?.text ?? m.library_subject_unavailable();
+            const href = subject ? subjectHref({ id: subject.id, label: title }, locale) : null;
             return (
               <CoverCard
                 key={subject?.id ?? index}

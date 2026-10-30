@@ -120,12 +120,16 @@ const usedMedia = () => (
 function ReuploadingReply() {
   useLayoutEffect(() => {
     const originalFetch = window.fetch;
-    window.fetch = (input, init) => {
-      const href = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
-      if (new URL(href, window.location.origin).pathname === `/media/${reusedImageId}/original`)
-        return new Promise<Response>(() => {});
-      return originalFetch.call(window, input, init);
-    };
+    const interceptedFetch = Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const href = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
+        if (new URL(href, window.location.origin).pathname === `/media/${reusedImageId}/original`)
+          return new Promise<Response>(() => {});
+        return originalFetch.call(window, input, init);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    window.fetch = interceptedFetch;
     return () => {
       window.fetch = originalFetch;
     };

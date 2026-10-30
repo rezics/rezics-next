@@ -4,6 +4,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { libraryEntryStateLabel, type LibraryRestoreInput, type LibraryRestoreResult } from './entries-read';
+import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
 
@@ -81,7 +82,7 @@ export function restoreFailureText(result: LibraryRestoreResult): string | null 
 }
 
 /** This is also the document form's result: only a refusal that says occupied may display a current entry. */
-export function EntryRestoreFeedback({ restore }: { restore: LibraryRestoreResult }) {
+export function EntryRestoreFeedback({ restore, locale }: { restore: LibraryRestoreResult; locale: string }) {
   const entry = restore.ok || restore.reason === 'occupied' ? restore.entry : undefined;
   const message = restoreFailureText(restore);
   return (
@@ -97,7 +98,13 @@ export function EntryRestoreFeedback({ restore }: { restore: LibraryRestoreResul
           data-entry-revision={entry.revision}
           className="rounded-lg border border-border p-4"
         >
-          <p className="font-medium">{entry.subject?.label ?? m.library_subject_unavailable()}</p>
+          <p className="font-medium">
+            {entry.subject ? (
+              <LibraryTitle label={entry.subject.label} locale={locale} />
+            ) : (
+              m.library_subject_unavailable()
+            )}
+          </p>
           <p className="text-sm text-muted-foreground">{libraryEntryStateLabel(entry.state)}</p>
         </article>
       ) : null}
@@ -128,7 +135,7 @@ export function EntryFormPage({
       {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken} returnTo={returnTo} /> : null}
       {removed && !undo ? <p role="status">{m.library_removed()}</p> : null}
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
-      {restore ? <EntryRestoreFeedback restore={restore} /> : null}
+      {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
       <a className="text-primary underline" href={returnTo}>
         {m.library_menu_back()}
       </a>

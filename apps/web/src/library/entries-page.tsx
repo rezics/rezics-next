@@ -248,7 +248,7 @@ export function PersonalLibraryPage({
       <div className="max-w-6xl space-y-6 text-foreground">
         <PageHeading>{m.library_heading()}</PageHeading>
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
-        {restore ? <EntryRestoreFeedback restore={restore} /> : null}
+        {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
         <SignedInLibrary page={page as SignedIn} cursor={cursor} locale={locale} display={display} />
       </div>
     </Toaster>

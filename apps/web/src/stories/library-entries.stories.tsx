@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { displayLibraryTitle } from '../library/title';
 import { PageStory, libraryEntriesReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
 
@@ -45,7 +47,7 @@ export const LargeGrid: Story = {
 
 async function removeFromShelf(
   context: { canvasElement: HTMLElement },
-  title = entries.libraryEntries[0]!.subject.label,
+  title = displayLibraryTitle(entries.libraryEntries[0]!.subject.label, getLocale()).text,
 ) {
   await pageReady(context);
   const canvas = within(context.canvasElement);

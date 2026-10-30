@@ -285,13 +285,13 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         {data.undo ? (
           <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={action} />
         ) : null}
-        {data.restore ? <EntryRestoreFeedback restore={data.restore} /> : null}
+        {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
         {entry && data.session === 'signed-in' ? (
           <noscript>
             <EntryRemoveForm
               subjectId={subject.id}
               revision={entry.revision}
-              incarnationId={entry.incarnationId}
+              {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
               idempotencyKey={removeKey}
               locale={locale}
               csrfToken={data.csrfToken}

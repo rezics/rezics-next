@@ -378,11 +378,11 @@ export function ShelfEntries({
       <noscript>
         {shelfRows.rows.map(({ entry }) => (
           <div key={entry.subjectId}>
-            <p>{titleOf(entry)}</p>
+            <p>{titleOf(entry, locale).text}</p>
             <EntryRemoveForm
               subjectId={entry.subjectId}
               revision={entry.revision}
-              incarnationId={entry.incarnationId}
+              {...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId })}
               idempotencyKey={entry.removeKey}
               locale={locale}
             />

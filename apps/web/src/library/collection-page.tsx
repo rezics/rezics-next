@@ -422,9 +422,9 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
         </h2>
         <CollectionFilterFeedback
           id={page.id}
-          filter={page.filter}
-          ignored={page.filterIgnored}
-          status={page.filterStatus}
+          {...(page.filter === undefined ? {} : { filter: page.filter })}
+          {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
+          {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
           empty={members.length === 0}
           emptyLabel={m.library_collection_empty()}
           buttonClass={buttonClass}
