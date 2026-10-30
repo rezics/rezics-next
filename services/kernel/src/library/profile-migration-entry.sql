@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 ), source AS MATERIALIZED (
-  SELECT subject_id, revision, library_profile_pin
+  SELECT subject_id, revision, library_profile_pin IS NULL AS pending
   FROM library.entry
   WHERE route = (SELECT route FROM input) AND account_id = (SELECT account_id FROM input)
     AND subject_id > :after_id::uuid
@@ -14,7 +14,7 @@ WITH input AS NOT MATERIALIZED (
   FROM source
   WHERE fact.route = (SELECT route FROM input) AND fact.account_id = (SELECT account_id FROM input)
     AND fact.subject_id = source.subject_id AND fact.revision = source.revision
-    AND source.library_profile_pin IS NULL AND fact.library_profile_pin IS NULL
+    AND source.pending AND fact.library_profile_pin IS NULL
   RETURNING fact.subject_id
 )
 SELECT source.subject_id::text AS id, changed.subject_id IS NOT NULL AS changed, false AS incompatible
