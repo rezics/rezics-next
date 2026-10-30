@@ -1503,7 +1503,8 @@ test('a queue of long runs never delays a short run beyond one short run', () =>
 test('a long or unestimated run never takes the express slot', async () => {
   for (const options of [[], ['--estimate-ms', '120001']]) {
     const ordinary = scenario({ a: { available: 20e9, slots: 2 } });
-    expect((await remote(ordinary.env, workspace(), ['true'], options)).code).toBe(0);
+    const result = await remote(ordinary.env, workspace(), ['true'], options);
+    expect(result.code, JSON.stringify({ ...result, events: ordinary.events() })).toBe(0);
     const admitted = ordinary.events().find((event) => event.kind === 'slot' && event.granted)!;
     expect(admitted.slotClass).toBe('ordinary');
     expect(admitted.script).not.toContain('/slots/express.lock');

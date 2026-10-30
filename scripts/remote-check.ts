@@ -141,6 +141,9 @@ const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
 export const REMOTE_DEADLINE_EXIT = 124;
 export const HARD_RUN_LIFETIME_MS = 2 * 60 * 60 * 1000;
+// Admission's estimate saturation is separate from execution's effective deadline. Keep the generated shell and
+// client ranking on the same finite bound when a landing marker has no usable estimate.
+const DEFAULT_MAX_MS = HARD_RUN_LIFETIME_MS;
 const FALLBACK_ESTIMATE_MS = 40 * 60 * 1000;
 export const RUN_LIFETIME_FAILURE_MARKER = 'remote-check: infrastructure failure: remote run timed out ';
 export type RunLifetimeFailure = {
