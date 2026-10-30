@@ -46,7 +46,7 @@ async function gates(driver: SemanticOutcomeDriver, name: string) {
   const account = await driver.fixtures.person(name);
   const result = await driver.fixtures.pool.query<{ action: string }>(
     `SELECT action FROM access.resource_grant
-      WHERE route=0 AND resource_id=$1 AND subject_kind='account' AND subject_id=$2
+      WHERE route=0 AND resource_id=$1 AND subject_kind='identity' AND subject_role='' AND subject_id=$2
         AND action LIKE 'gate:%' AND valid @> now()
       ORDER BY action`,
     [driver.globalContext, account.accountId],
@@ -117,7 +117,7 @@ test('original binding grants only named native gates, preserves resource denial
     const editor = await driver.fixtures.person('editor');
     const domain = await driver.fixtures.pool.query(
       `SELECT action FROM access.resource_grant
-        WHERE route=0 AND resource_id=$1 AND subject_kind='account' AND subject_id=$2
+        WHERE route=0 AND resource_id=$1 AND subject_kind='identity' AND subject_role='' AND subject_id=$2
           AND action=ANY($3::text[]) AND valid @> now()`,
       [driver.globalContext, editor.accountId, ['definitions:publish', 'definitions:activate', 'subject:merge']],
     );
