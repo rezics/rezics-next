@@ -133,7 +133,8 @@ receipt and final pending promotion. The colocated fast path proves empty closed
 transaction; a nonempty prefix requires released preparation. No caller boolean supplies coverage.
 
 `identity-epoch-prearm-contract.ts` exposes a locator-only read of immutable native page/item, exact attempt,
-input, bridge and current owner. Source enrollment owns the real capture and forward/inverse ticket custody;
+immutable input handoff, retained membership, bridge and current owner. Captured membership cannot be changed
+until release, including by the admitted job; structural results use a new generation. Source enrollment owns the real capture and forward/inverse ticket custody;
 it takes the native generation bridge lock before issuing a ticket and retains retirement while closed.
 The selected Source receiving exports commit unsafe state and their own native receipt together. Missing Source
 receiving support remains retryably unavailable. Ordinary post-admission arm does not supply admission proof.

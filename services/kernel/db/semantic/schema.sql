@@ -79,33 +79,28 @@ END; $$;
 CREATE FUNCTION semantic.acquire_identity_epoch_admission(p_home integer, p_job uuid, p_epoch bigint, p_scope text) RETURNS void
     LANGUAGE plpgsql
     AS $$
-DECLARE a semantic.identity_epoch_admission_attempt;c semantic.identity_epoch_control;h semantic.identity_epoch_admission_handoff;
+DECLARE a semantic.identity_epoch_admission_attempt;h semantic.identity_epoch_admission_handoff;
 BEGIN
- SELECT * INTO c FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
- IF NOT FOUND THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ PERFORM 1 FROM semantic.identity_epoch_control WHERE partition_no=p_home AND prepare_job=p_job AND prepare_epoch=p_epoch FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  SELECT * INTO a FROM semantic.identity_epoch_admission_attempt WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
- IF FOUND THEN
-  IF a.state='closed' OR a.job_epoch<>p_epoch OR a.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
-  RETURN;
- END IF;
+ IF NOT FOUND OR a.state='closed' OR a.job_epoch<>p_epoch OR a.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ IF a.state='acquired' THEN RETURN; END IF;
+ IF NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_prearm_claim WHERE partition_no=p_home AND job_id=p_job AND job_epoch=p_epoch AND scope_digest=p_scope)
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  SELECT * INTO h FROM semantic.identity_epoch_admission_handoff WHERE partition_no=p_home AND job_id=p_job;
- IF NOT FOUND OR h.job_epoch<>p_epoch OR h.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
- PERFORM 1 FROM semantic.identity_epoch_group g
- JOIN jsonb_to_recordset(h.inputs) i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
- ON g.partition_no=p_home AND g.terminal=i.terminal ORDER BY g.terminal FOR UPDATE OF g;
- IF EXISTS(SELECT 1 FROM semantic.identity_epoch_group g
- JOIN jsonb_to_recordset(h.inputs) i(terminal uuid) ON g.partition_no=p_home AND g.terminal=i.terminal
- WHERE g.pending_job IS NOT NULL AND g.pending_job<>p_job) THEN RAISE EXCEPTION 'identity_epoch_busy'; END IF;
- IF c.pending_job IS NOT NULL AND c.pending_job<>p_job THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  IF EXISTS(SELECT 1 FROM jsonb_to_recordset(h.inputs) i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
- LEFT JOIN semantic.identity_epoch_group g ON (g.partition_no,g.terminal,g.generation,g.version,g.owner_epoch)=
- (p_home,i.terminal,i.generation,i.basis_version,i.owner_epoch)
- LEFT JOIN core.partition o ON o.partition_no=p_home AND o.epoch=i.owner_epoch AND o.write_state='active'
- WHERE g.terminal IS NULL OR o.partition_no IS NULL) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
- INSERT INTO semantic.identity_epoch_admission_attempt VALUES(p_home,p_job,p_epoch,p_scope,'acquired');
+ LEFT JOIN semantic.identity_epoch_prearm_directory d ON d.partition_no=p_home AND d.job_id=p_job AND d.generation=i.generation
+  AND d.job_epoch=p_epoch AND d.basis_version=i.basis_version AND d.owner_epoch=i.owner_epoch AND NOT d.released
+ LEFT JOIN semantic.identity_epoch_group g ON g.partition_no=p_home AND g.terminal=i.terminal AND g.generation=i.generation
+  AND g.version=i.basis_version AND g.owner_epoch=i.owner_epoch
+ LEFT JOIN core.partition p ON p.partition_no=p_home AND p.epoch=i.owner_epoch AND p.write_state='active'
+ WHERE d.sealed_transaction_id IS NULL OR g.terminal IS NULL OR p.partition_no IS NULL)
+ THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ UPDATE semantic.identity_epoch_admission_attempt SET state='acquired' WHERE partition_no=p_home AND job_id=p_job;
  UPDATE semantic.identity_epoch_group SET pending_job=p_job,pending_epoch=p_epoch WHERE partition_no=p_home
- AND terminal IN (SELECT i.terminal FROM jsonb_to_recordset(h.inputs) i(terminal uuid));
- UPDATE semantic.identity_epoch_control SET pending_job=p_job,pending_epoch=p_epoch,allocated_epoch=greatest(allocated_epoch,p_epoch) WHERE partition_no=p_home;
+  AND terminal IN (SELECT i.terminal FROM jsonb_to_recordset(h.inputs) i(terminal uuid));
+ UPDATE semantic.identity_epoch_control SET pending_job=p_job,pending_epoch=p_epoch WHERE partition_no=p_home;
 END; $$;
 
 
@@ -423,6 +418,14 @@ BEGIN
  WHEN 'identity_epoch_receiving_record' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_record WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_receiving_effect' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_effect WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  WHEN 'identity_epoch_receiving_custody' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_custody WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_bridge' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_inverse' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_inverse WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_directory' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_directory WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_page' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_page WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_disposition' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_disposition WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_custody' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_custody WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_claim' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_claim WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_prearm_decision' THEN SELECT true INTO v_present FROM semantic.identity_epoch_prearm_decision WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
  ELSE v_present:=false;
  END CASE;
  IF v_candidate IS NOT NULL AND v_original IS NOT NULL AND
@@ -779,6 +782,23 @@ END; $$;
 
 
 --
+-- Name: capture_identity_prearm_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_prearm_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=coalesce((to_jsonb(NEW)->>'transaction_id')::uuid,
+   nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,native_tx);
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_identity_receiving_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1090,16 +1110,11 @@ CREATE FUNCTION semantic.close_identity_epoch_admission(p_home integer, p_job uu
     AS $$
 DECLARE a semantic.identity_epoch_admission_attempt;
 BEGIN
-  PERFORM 1 FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
-  SELECT * INTO a FROM semantic.identity_epoch_admission_attempt
-    WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
-  IF FOUND AND (a.job_epoch<>p_epoch OR a.scope_digest<>p_scope) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
-  INSERT INTO semantic.identity_epoch_admission_attempt VALUES(p_home,p_job,p_epoch,p_scope,'closed')
-    ON CONFLICT(partition_no,job_id) DO UPDATE SET state='closed';
-  UPDATE semantic.identity_epoch_group SET pending_job=NULL,pending_epoch=NULL
-    WHERE partition_no=p_home AND pending_job=p_job AND pending_epoch=p_epoch;
-  UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL
-    WHERE partition_no=p_home AND pending_job=p_job AND pending_epoch=p_epoch;
+ PERFORM 1 FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
+ SELECT * INTO a FROM semantic.identity_epoch_admission_attempt WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
+ IF FOUND AND (a.job_epoch<>p_epoch OR a.scope_digest<>p_scope) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ INSERT INTO semantic.identity_epoch_admission_attempt(partition_no,job_id,job_epoch,scope_digest,state)
+ VALUES(p_home,p_job,p_epoch,p_scope,'closed') ON CONFLICT(partition_no,job_id) DO UPDATE SET state='closed';
 END; $$;
 
 
@@ -1275,6 +1290,107 @@ END; $$;
 
 
 --
+-- Name: guard_identity_prearm_group(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_prearm_group() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE b semantic.identity_epoch_prearm_bridge;
+BEGIN
+ SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
+ IF FOUND AND b.job_id IS NOT NULL AND (TG_OP='DELETE' OR
+ (NEW.partition_no,NEW.terminal,NEW.generation,NEW.version,NEW.owner_epoch,NEW.observed_count) IS DISTINCT FROM
+ (OLD.partition_no,OLD.terminal,OLD.generation,OLD.version,OLD.owner_epoch,OLD.observed_count))
+ AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_attempt a WHERE a.partition_no=OLD.partition_no
+ AND a.job_id=b.job_id AND a.job_epoch=b.job_epoch AND a.state='acquired'
+ AND current_setting('semantic.identity_prearm_effect_job',true)=b.job_id::text)
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_identity_prearm_inverse(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_prearm_inverse() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE b semantic.identity_epoch_prearm_bridge;
+BEGIN
+ SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge
+ WHERE partition_no=coalesce(NEW.partition_no,OLD.partition_no) AND generation=coalesce(NEW.generation,OLD.generation) FOR UPDATE;
+ IF NOT FOUND OR b.job_id IS NOT NULL THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ IF TG_OP='INSERT' AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_original m
+ JOIN semantic.identity_epoch_group g ON g.partition_no=m.partition_no AND g.generation=m.generation
+ JOIN core.partition p ON p.partition_no=g.partition_no AND p.epoch=g.owner_epoch AND p.write_state='active'
+ WHERE m.partition_no=NEW.partition_no AND m.generation=NEW.generation AND m.original=NEW.original
+ AND g.terminal=b.terminal AND g.version=b.basis_version AND g.pending_job IS NULL)
+ THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_identity_prearm_membership(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_prearm_membership() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE b semantic.identity_epoch_prearm_bridge;g uuid;h integer;
+BEGIN
+ g:=coalesce(NEW.generation,OLD.generation);h:=coalesce(NEW.partition_no,OLD.partition_no);
+ SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=h AND generation=g FOR UPDATE;
+ IF FOUND AND b.job_id IS NOT NULL AND current_setting('semantic.identity_prearm_effect_job',true) IS DISTINCT FROM b.job_id::text
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ IF TG_OP='UPDATE' AND (NEW.partition_no,NEW.generation) IS DISTINCT FROM (OLD.partition_no,OLD.generation) THEN
+  SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
+  IF FOUND AND b.job_id IS NOT NULL AND current_setting('semantic.identity_prearm_effect_job',true) IS DISTINCT FROM b.job_id::text
+  THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_identity_prearm_owner(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_prearm_owner() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF (TG_OP='DELETE' OR (NEW.epoch,NEW.write_state) IS DISTINCT FROM (OLD.epoch,OLD.write_state))
+ AND (EXISTS(SELECT 1 FROM semantic.identity_epoch_control WHERE partition_no=OLD.partition_no AND prepare_job IS NOT NULL)
+ OR EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=OLD.partition_no AND NOT closed))
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_identity_prearm_page(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_prearm_page() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND semantic.erasure_mutation_allowed(TG_TABLE_NAME,OLD.partition_no*16,OLD.erasure_key)
+ AND NEW.scope='{}'::jsonb AND NEW.capture_id='' AND
+ (to_jsonb(NEW)-ARRAY['scope','capture_id'])=(to_jsonb(OLD)-ARRAY['scope','capture_id'])
+ THEN RETURN NEW; END IF;
+ RAISE EXCEPTION 'Immutable identity pre-arm page';
+END; $$;
+
+
+--
 -- Name: guard_subject_security(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1338,6 +1454,46 @@ BEGIN
  IF (OLD.partition_no,OLD.receipt_key,OLD.account_id,OLD.intent_digest) IS DISTINCT FROM
     (NEW.partition_no,NEW.receipt_key,NEW.account_id,NEW.intent_digest) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
  RETURN NEW;
+END; $$;
+
+
+--
+-- Name: prepare_identity_epoch_admission(integer, uuid, bigint, text); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.prepare_identity_epoch_admission(p_home integer, p_job uuid, p_epoch bigint, p_scope text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE a semantic.identity_epoch_admission_attempt;c semantic.identity_epoch_control;h semantic.identity_epoch_admission_handoff;i record;b semantic.identity_epoch_prearm_bridge;
+BEGIN
+ SELECT * INTO c FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ SELECT * INTO a FROM semantic.identity_epoch_admission_attempt WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
+ IF FOUND THEN
+  IF a.state='closed' OR a.job_epoch<>p_epoch OR a.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+  RETURN;
+ END IF;
+ SELECT * INTO h FROM semantic.identity_epoch_admission_handoff WHERE partition_no=p_home AND job_id=p_job;
+ IF NOT FOUND OR h.job_epoch<>p_epoch OR h.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ IF (c.pending_job IS NOT NULL AND c.pending_job<>p_job) OR (c.prepare_job IS NOT NULL AND c.prepare_job<>p_job)
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ FOR i IN SELECT * FROM jsonb_to_recordset(h.inputs) r(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer) ORDER BY terminal LOOP
+  PERFORM 1 FROM semantic.identity_epoch_group g JOIN core.partition p ON p.partition_no=g.partition_no
+   AND p.epoch=g.owner_epoch AND p.write_state='active' WHERE g.partition_no=p_home AND g.terminal=i.terminal
+   AND g.generation=i.generation AND g.version=i.basis_version AND g.owner_epoch=i.owner_epoch AND g.pending_job IS NULL FOR UPDATE OF g;
+  IF NOT FOUND THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+  INSERT INTO semantic.identity_epoch_prearm_bridge(partition_no,generation,terminal,owner_epoch,basis_version)
+   VALUES(p_home,i.generation,i.terminal,i.owner_epoch,i.basis_version) ON CONFLICT DO NOTHING;
+  SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=p_home AND generation=i.generation FOR UPDATE;
+  IF b.terminal<>i.terminal OR b.owner_epoch<>i.owner_epoch OR b.basis_version<>i.basis_version OR
+   (b.job_id IS NOT NULL AND (b.job_id<>p_job OR b.job_epoch<>p_epoch OR b.scope_digest<>p_scope))
+  THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+  UPDATE semantic.identity_epoch_prearm_bridge SET job_id=p_job,job_epoch=p_epoch,scope_digest=p_scope,bridge_version=bridge_version+1
+   WHERE partition_no=p_home AND generation=i.generation;
+ END LOOP;
+ INSERT INTO semantic.identity_epoch_admission_attempt(partition_no,job_id,job_epoch,scope_digest,state)
+  VALUES(p_home,p_job,p_epoch,p_scope,'prepared');
+ UPDATE semantic.identity_epoch_control SET prepare_job=p_job,prepare_epoch=p_epoch,allocated_epoch=greatest(allocated_epoch,p_epoch) WHERE partition_no=p_home;
 END; $$;
 
 
@@ -2711,7 +2867,7 @@ CREATE TABLE semantic.identity_epoch_admission_attempt (
     scope_digest text NOT NULL,
     state text NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT identity_epoch_admission_attempt_state_check CHECK ((state = ANY (ARRAY['acquired'::text, 'closed'::text])))
+    CONSTRAINT identity_epoch_admission_attempt_state_check CHECK ((state = ANY (ARRAY['prepared'::text, 'acquired'::text, 'closed'::text])))
 );
 
 
@@ -2745,7 +2901,11 @@ CREATE TABLE semantic.identity_epoch_admission_plan (
     closed_epoch integer,
     closed_position bigint,
     waiting boolean DEFAULT true NOT NULL,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    prepared_transaction_id uuid,
+    prepared_epoch integer,
+    prepared_position bigint,
+    released boolean DEFAULT false NOT NULL
 );
 
 
@@ -2764,7 +2924,7 @@ CREATE TABLE semantic.identity_epoch_admission_receipt (
     stage text NOT NULL,
     version integer NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
-    CONSTRAINT identity_epoch_admission_receipt_stage_check CHECK ((stage = ANY (ARRAY['acquired'::text, 'closed'::text]))),
+    CONSTRAINT identity_epoch_admission_receipt_stage_check CHECK ((stage = ANY (ARRAY['prepared'::text, 'acquired'::text, 'closed'::text]))),
     CONSTRAINT identity_epoch_admission_receipt_version_check CHECK ((version = 1))
 );
 
@@ -2958,6 +3118,8 @@ CREATE TABLE semantic.identity_epoch_control (
     pending_job uuid,
     pending_epoch bigint,
     allocated_epoch bigint DEFAULT 1 NOT NULL,
+    prepare_job uuid,
+    prepare_epoch bigint,
     CONSTRAINT identity_epoch_control_check CHECK (((pending_job IS NULL) = (pending_epoch IS NULL))),
     CONSTRAINT identity_epoch_control_published_epoch_check CHECK ((published_epoch >= 0))
 );
@@ -3052,7 +3214,12 @@ CREATE TABLE semantic.identity_epoch_input (
     original_count bigint NOT NULL,
     control_partition integer NOT NULL,
     owner_epoch integer,
-    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    prearm_sequence bigint DEFAULT 0 NOT NULL,
+    prearm_transaction_id uuid,
+    prearm_epoch integer,
+    prearm_position bigint,
+    prearm_cancelled_transaction_id uuid
 );
 
 
@@ -3097,7 +3264,11 @@ CREATE TABLE semantic.identity_epoch_job (
     state text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    prearm_phase text DEFAULT 'prearm-open'::text NOT NULL,
+    prearm_transaction_id uuid,
+    cancellation_transaction_id uuid,
     CONSTRAINT identity_epoch_job_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT identity_epoch_job_prearm_phase_check CHECK ((prearm_phase = ANY (ARRAY['prearm-open'::text, 'prearm-sealed'::text, 'claiming'::text]))),
     CONSTRAINT identity_epoch_job_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'pending'::text, 'cancelling'::text, 'cancelled'::text, 'published'::text])))
 );
 
@@ -3179,6 +3350,160 @@ CREATE TABLE semantic.identity_epoch_original (
     source_generation bigint NOT NULL,
     present boolean NOT NULL,
     generation uuid NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_prearm_bridge; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_bridge (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    terminal uuid NOT NULL,
+    owner_epoch integer NOT NULL,
+    basis_version bigint NOT NULL,
+    bridge_version bigint DEFAULT 0 NOT NULL,
+    job_id uuid,
+    job_epoch bigint,
+    scope_digest text,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_prearm_bridge_check CHECK (((job_id IS NULL) = (job_epoch IS NULL)))
+);
+
+
+--
+-- Name: identity_epoch_prearm_claim; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_claim (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope_digest text NOT NULL,
+    seal jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_prearm_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_custody (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    sequence bigint NOT NULL,
+    directory_partition integer NOT NULL,
+    page_id uuid NOT NULL,
+    directory_receipt jsonb NOT NULL,
+    source_receipt jsonb,
+    empty boolean NOT NULL,
+    transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_prearm_decision; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_decision (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope_digest text NOT NULL,
+    stage text NOT NULL,
+    transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_prearm_decision_stage_check CHECK ((stage = ANY (ARRAY['sealed'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: identity_epoch_prearm_directory; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_directory (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    generation uuid NOT NULL,
+    terminal uuid NOT NULL,
+    basis_version bigint NOT NULL,
+    owner_epoch integer NOT NULL,
+    scope_digest text NOT NULL,
+    attempt_transaction_id uuid NOT NULL,
+    sequence bigint DEFAULT 0 NOT NULL,
+    after_original uuid,
+    after_scope text,
+    after_registration text,
+    exhausted boolean DEFAULT false NOT NULL,
+    sealed_transaction_id uuid,
+    released boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    cancel_sequence bigint DEFAULT 0 NOT NULL,
+    cancelled_transaction_id uuid
+);
+
+
+--
+-- Name: identity_epoch_prearm_disposition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_disposition (
+    partition_no integer NOT NULL,
+    page_id uuid NOT NULL,
+    stage text NOT NULL,
+    transaction_id uuid NOT NULL,
+    source_receipt jsonb,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_prearm_disposition_stage_check CHECK ((stage = ANY (ARRAY['unsafe'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: identity_epoch_prearm_inverse; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_inverse (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    original uuid NOT NULL,
+    scope_key text NOT NULL,
+    registration text NOT NULL,
+    scope jsonb NOT NULL,
+    capture_id text NOT NULL,
+    source_partition integer NOT NULL,
+    source_owner_epoch integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    retired boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_prearm_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_prearm_page (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    sequence bigint NOT NULL,
+    page_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    original uuid,
+    scope_key text,
+    registration text,
+    scope jsonb,
+    capture_id text,
+    source_partition integer,
+    source_owner_epoch integer,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_prearm_page_check CHECK (((original IS NULL) = (scope IS NULL)))
 );
 
 
@@ -4870,6 +5195,150 @@ ALTER TABLE ONLY semantic.identity_epoch_original
 
 
 --
+-- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_bridge
+    ADD CONSTRAINT identity_epoch_prearm_bridge_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_bridge
+    ADD CONSTRAINT identity_epoch_prearm_bridge_pkey PRIMARY KEY (partition_no, generation);
+
+
+--
+-- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_claim
+    ADD CONSTRAINT identity_epoch_prearm_claim_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_claim
+    ADD CONSTRAINT identity_epoch_prearm_claim_pkey PRIMARY KEY (partition_no, job_id);
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_partition_no_directory_partit_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
+    ADD CONSTRAINT identity_epoch_prearm_custody_partition_no_directory_partit_key UNIQUE (partition_no, directory_partition, page_id);
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
+    ADD CONSTRAINT identity_epoch_prearm_custody_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
+    ADD CONSTRAINT identity_epoch_prearm_custody_pkey PRIMARY KEY (partition_no, job_id, generation, sequence);
+
+
+--
+-- Name: identity_epoch_prearm_decision identity_epoch_prearm_decision_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
+    ADD CONSTRAINT identity_epoch_prearm_decision_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_decision identity_epoch_prearm_decision_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
+    ADD CONSTRAINT identity_epoch_prearm_decision_pkey PRIMARY KEY (partition_no, job_id, stage);
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_epoch_prearm_directory_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
+    ADD CONSTRAINT identity_epoch_prearm_directory_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_epoch_prearm_directory_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
+    ADD CONSTRAINT identity_epoch_prearm_directory_pkey PRIMARY KEY (partition_no, job_id, generation);
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposition_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_disposition
+    ADD CONSTRAINT identity_epoch_prearm_disposition_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_disposition
+    ADD CONSTRAINT identity_epoch_prearm_disposition_pkey PRIMARY KEY (partition_no, page_id, stage);
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_inverse
+    ADD CONSTRAINT identity_epoch_prearm_inverse_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_inverse
+    ADD CONSTRAINT identity_epoch_prearm_inverse_pkey PRIMARY KEY (partition_no, generation, original, scope_key, registration);
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_partition_no_erasure_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_page
+    ADD CONSTRAINT identity_epoch_prearm_page_partition_no_erasure_key_key UNIQUE (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_partition_no_page_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_page
+    ADD CONSTRAINT identity_epoch_prearm_page_partition_no_page_id_key UNIQUE (partition_no, page_id);
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_page
+    ADD CONSTRAINT identity_epoch_prearm_page_pkey PRIMARY KEY (partition_no, job_id, generation, sequence);
+
+
+--
 -- Name: identity_epoch_receipt_binding identity_epoch_receipt_binding_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -5809,6 +6278,41 @@ CREATE INDEX identity_epoch_original_source ON semantic.identity_epoch_original 
 
 
 --
+-- Name: identity_epoch_prearm_bridge_held; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_prearm_bridge_held ON semantic.identity_epoch_prearm_bridge USING btree (partition_no, job_id, generation) WHERE (job_id IS NOT NULL);
+
+
+--
+-- Name: identity_epoch_prearm_directory_unsealed; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_prearm_directory_unsealed ON semantic.identity_epoch_prearm_directory USING btree (partition_no, job_id, generation) WHERE (sealed_transaction_id IS NULL);
+
+
+--
+-- Name: identity_epoch_prearm_input_uncancelled; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_prearm_input_uncancelled ON semantic.identity_epoch_input USING btree (partition_no, job_id, terminal) WHERE (prearm_cancelled_transaction_id IS NULL);
+
+
+--
+-- Name: identity_epoch_prearm_input_unsealed; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_prearm_input_unsealed ON semantic.identity_epoch_input USING btree (partition_no, job_id, terminal) WHERE (prearm_transaction_id IS NULL);
+
+
+--
+-- Name: identity_epoch_prearm_page_order; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_prearm_page_order ON semantic.identity_epoch_prearm_page USING btree (partition_no, job_id, generation, sequence, page_id);
+
+
+--
 -- Name: identity_epoch_preparing_home; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -6635,6 +7139,62 @@ CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identi
 
 
 --
+-- Name: identity_epoch_prearm_bridge erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_bridge DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_claim erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_claim DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_custody erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_custody DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_decision erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_decision DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_directory erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_directory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_disposition erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_disposition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_inverse erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_inverse DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_prearm_page erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_prearm_page DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
 -- Name: identity_epoch_receiving_custody erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -7019,6 +7579,118 @@ CREATE CONSTRAINT TRIGGER identity_epoch_mapping_erasure_capture AFTER INSERT OR
 --
 
 CREATE TRIGGER identity_epoch_native_commit_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_native_commit FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_prearm_bridge identity_epoch_prearm_bridge_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_bridge_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_bridge DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_claim_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_claim DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_claim_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_prearm_claim FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_custody_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_custody DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_custody_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_prearm_custody FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_prearm_decision identity_epoch_prearm_decision_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_decision_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_decision DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_decision identity_epoch_prearm_decision_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_decision_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_prearm_decision FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_epoch_prearm_directory_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_directory_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_directory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposition_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_disposition_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_disposition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposition_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_disposition_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_prearm_disposition FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_group identity_epoch_prearm_group_gate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_group_gate BEFORE DELETE OR UPDATE ON semantic.identity_epoch_group FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_group();
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_inverse_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_inverse DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_gate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_inverse_gate BEFORE INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_prearm_inverse FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_inverse();
+
+
+--
+-- Name: identity_epoch_original identity_epoch_prearm_membership_gate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_membership_gate BEFORE INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_original FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_membership();
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_prearm_page_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_prearm_page DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_prearm_erasure();
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_page_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_prearm_page FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_page();
 
 
 --
@@ -7634,6 +8306,94 @@ ALTER TABLE ONLY semantic.identity_epoch_installation
 
 ALTER TABLE ONLY semantic.identity_epoch_mapping
     ADD CONSTRAINT identity_epoch_mapping_route_original_fkey FOREIGN KEY (route, original) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: identity_epoch_prearm_claim identity_epoch_prearm_claim_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_claim
+    ADD CONSTRAINT identity_epoch_prearm_claim_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
+    ADD CONSTRAINT identity_epoch_prearm_custody_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
+
+
+--
+-- Name: identity_epoch_prearm_custody identity_epoch_prearm_custody_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_custody
+    ADD CONSTRAINT identity_epoch_prearm_custody_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_decision identity_epoch_prearm_decision_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_decision
+    ADD CONSTRAINT identity_epoch_prearm_decision_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_epoch_prearm_directo_partition_no_attempt_transac_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
+    ADD CONSTRAINT identity_epoch_prearm_directo_partition_no_attempt_transac_fkey FOREIGN KEY (partition_no, attempt_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposit_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_disposition
+    ADD CONSTRAINT identity_epoch_prearm_disposit_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_disposition identity_epoch_prearm_disposition_partition_no_page_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_disposition
+    ADD CONSTRAINT identity_epoch_prearm_disposition_partition_no_page_id_fkey FOREIGN KEY (partition_no, page_id) REFERENCES semantic.identity_epoch_prearm_page(partition_no, page_id);
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_partition_no_generation_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_inverse
+    ADD CONSTRAINT identity_epoch_prearm_inverse_partition_no_generation_fkey FOREIGN KEY (partition_no, generation) REFERENCES semantic.identity_epoch_prearm_bridge(partition_no, generation);
+
+
+--
+-- Name: identity_epoch_prearm_inverse identity_epoch_prearm_inverse_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_inverse
+    ADD CONSTRAINT identity_epoch_prearm_inverse_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_partition_no_job_id_generation_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_page
+    ADD CONSTRAINT identity_epoch_prearm_page_partition_no_job_id_generation_fkey FOREIGN KEY (partition_no, job_id, generation) REFERENCES semantic.identity_epoch_prearm_directory(partition_no, job_id, generation);
+
+
+--
+-- Name: identity_epoch_prearm_page identity_epoch_prearm_page_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_page
+    ADD CONSTRAINT identity_epoch_prearm_page_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --

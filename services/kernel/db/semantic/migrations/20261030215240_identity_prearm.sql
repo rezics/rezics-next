@@ -379,16 +379,18 @@ DROP TRIGGER identity_epoch_prearm_page_immutable ON semantic.identity_epoch_pre
 CREATE TRIGGER identity_epoch_prearm_page_immutable BEFORE UPDATE OR DELETE ON semantic.identity_epoch_prearm_page
  FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_page();
 
+-- Captured membership is immutable even to the admitted job. Stage results in a new
+-- generation; retaining the input cut is independent of changing its current group header.
 CREATE FUNCTION semantic.guard_identity_prearm_membership() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE b semantic.identity_epoch_prearm_bridge;g uuid;h integer;
 BEGIN
  g:=coalesce(NEW.generation,OLD.generation);h:=coalesce(NEW.partition_no,OLD.partition_no);
  SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=h AND generation=g FOR UPDATE;
- IF FOUND AND b.job_id IS NOT NULL AND current_setting('semantic.identity_prearm_effect_job',true) IS DISTINCT FROM b.job_id::text
+ IF FOUND AND b.job_id IS NOT NULL
  THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  IF TG_OP='UPDATE' AND (NEW.partition_no,NEW.generation) IS DISTINCT FROM (OLD.partition_no,OLD.generation) THEN
   SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
-  IF FOUND AND b.job_id IS NOT NULL AND current_setting('semantic.identity_prearm_effect_job',true) IS DISTINCT FROM b.job_id::text
+  IF FOUND AND b.job_id IS NOT NULL
   THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
  END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
