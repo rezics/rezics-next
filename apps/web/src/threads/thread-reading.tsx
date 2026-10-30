@@ -76,8 +76,10 @@ export function ThreadReading({
   );
   const currentRefresh = useRef(refreshScope);
   currentRefresh.current = refreshScope;
-  useEffect(() => () => {
-    currentRefresh.current = {};
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
   // A private query can temporarily have no data when its post IDs change. Keep the local draft and intent mounted,
   // but expose no participation controls until current personal data is available again.
@@ -98,7 +100,7 @@ export function ThreadReading({
   async function refreshPage() {
     const scope = currentRefresh.current;
     const updated = await onPageRefresh();
-    if (currentRefresh.current !== scope) throw new Error('Thread reader changed');
+    if (!mounted.current || currentRefresh.current !== scope) throw new Error('Thread reader changed');
     if (!updated) throw new Error('Current thread page unavailable');
     setReading({ source: sourcePage, page: updated });
     return updated;

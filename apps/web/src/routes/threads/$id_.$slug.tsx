@@ -112,8 +112,10 @@ function ThreadPage() {
     session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
   const currentRead = useRef({ scope: readScope, sequence: 0 });
   if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
-  useEffect(() => () => {
-    currentRead.current = { scope: {}, sequence: 0 };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
   useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
 
@@ -133,7 +135,7 @@ function ThreadPage() {
   async function refreshThreadPage() {
     const read = currentRead.current;
     const sequence = ++read.sequence;
-    const current = () => currentRead.current === read && read.sequence === sequence;
+    const current = () => mounted.current && currentRead.current === read && read.sequence === sequence;
     await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
     if (!current()) throw new Error('Thread reader changed');
     const updated = await queryClient.fetchQuery({
@@ -299,9 +301,15 @@ export function ThreadReadingPost({
     deleteKey.current = undefined;
   }
   const restoreIntent = useRef<((expected: object) => Promise<void>) | undefined>(undefined);
-  useEffect(() => () => {
-    restoreIntent.current = undefined;
-    intent.current = { scope: {}, key: undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      restoreIntent.current = undefined;
+      intent.current.key = undefined;
+      deleteKey.current = undefined;
+    };
   }, []);
   useEffect(() => {
     setRestoreError('');
@@ -345,11 +353,12 @@ export function ThreadReadingPost({
   }
 
   async function refreshCurrentPost() {
+    if (!mounted.current) return;
     const command = intent.current;
     const read = ++command.read;
     try {
       const page = await onPageRefresh();
-      if (intent.current !== command || command.read !== read) return;
+      if (!mounted.current || intent.current !== command || command.read !== read) return;
       if (!page || page.viewerId !== viewerId) throw new Error('Current thread page unavailable');
       command.deleted = false;
       const current = page.posts.posts.find((item) => item.id === post.id);
@@ -357,7 +366,7 @@ export function ThreadReadingPost({
       setRestoreError('');
       return current;
     } catch {
-      if (intent.current === command && command.read === read) {
+      if (mounted.current && intent.current === command && command.read === read) {
         setRestoreError(
           command.applied ? m.thread_post_restore_read_failure()
             : command.uncertain ? m.thread_post_restore_unknown()
@@ -370,7 +379,7 @@ export function ThreadReadingPost({
 
   async function restoreRemovedPost(expected = scope) {
     const command = intent.current;
-    if (command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId) return;
+    if (!mounted.current || command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId) return;
     command.pending = true;
     setRestoreError('');
     setExistingReviewId(undefined);
@@ -382,7 +391,7 @@ export function ThreadReadingPost({
       }
       if (command.uncertain) {
         const current = await refreshCurrentPost();
-        if (intent.current !== command || !current) return;
+        if (!mounted.current || intent.current !== command || !current) return;
         if (current.availability !== 'erased' || !current.restorableUntil) return;
       }
       command.key ??= crypto.randomUUID();
@@ -390,7 +399,7 @@ export function ThreadReadingPost({
         data: { postId: post.id, idempotencyKey: command.key },
         headers: csrfHeaders(),
       });
-      if (intent.current !== command) return;
+      if (!mounted.current || intent.current !== command) return;
       if (!result.ok) {
         command.uncertain = result.reason === 'unavailable';
         if (result.reason === 'conflict') {
@@ -409,13 +418,13 @@ export function ThreadReadingPost({
       restorePostFocus.current = true;
       await refreshCurrentPost();
     } catch {
-      if (intent.current === command) {
+      if (mounted.current && intent.current === command) {
         command.uncertain = true;
         setRestoreError(m.thread_post_restore_unknown());
       }
     } finally {
       command.pending = false;
-      if (intent.current === command) updateIntent((value) => value + 1);
+      if (mounted.current && intent.current === command) updateIntent((value) => value + 1);
     }
   }
   restoreIntent.current = restoreRemovedPost;
@@ -432,7 +441,7 @@ export function ThreadReadingPost({
       headers: csrfHeaders(),
     });
     if (!result.ok) throw new Error(postDeleteFailureText(result));
-    if (intent.current !== command) return;
+    if (!mounted.current || intent.current !== command) return;
     if (removedMinHeight === undefined) setRemovedMinHeight(itemElement.current?.getBoundingClientRect().height);
     command.deleted = true;
     restoreMenuFocus.current = true;
