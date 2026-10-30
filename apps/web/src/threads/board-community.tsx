@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../document-body';
 import { MediaImage } from '@rezics/ui/media-image';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';

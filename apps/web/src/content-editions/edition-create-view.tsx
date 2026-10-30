@@ -1,4 +1,4 @@
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';

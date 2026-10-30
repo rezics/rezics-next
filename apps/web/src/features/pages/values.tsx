@@ -1,6 +1,6 @@
 import { checkDocument, type DocumentSnapshot } from '@rezics/document';
 import { Cover, type CoverRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../../document-body';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';

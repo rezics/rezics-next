@@ -1,4 +1,4 @@
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useId, useState } from 'react';
 import { m } from '../paraglide/messages.js';

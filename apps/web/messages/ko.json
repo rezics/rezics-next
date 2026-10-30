@@ -994,6 +994,8 @@
   "thread_reply_label": "답글",
   "thread_reply_placeholder": "답글 쓰기",
   "thread_reveal_spoiler": "스포일러 보기",
+  "document_task_status": "작업 상태",
+  "document_embedded_component": "삽입된 구성 요소",
   "thread_review_boards_loading": "리뷰 게시판을 불러오는 중…",
   "thread_review_choose_board": "리뷰 게시판 선택",
   "thread_review_cite_vote": "현재 투표 인용 ({score}/10)",

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { checkDocument } from '@rezics/document';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../../document-body';
 import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
 import { ThreadReplyComposer } from '../../threads/reply-context-composer';
 import type { ReplyCommand } from '../../threads/reply-context-intent';

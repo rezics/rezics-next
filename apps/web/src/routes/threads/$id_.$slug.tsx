@@ -17,7 +17,7 @@ import type { ReactionKind } from '@rezics/ui/reactions';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ListRow } from '@rezics/ui/list-row';
-import { DocumentBody, type DocumentMentions } from '@rezics/ui/document-body';
+import { DocumentBody, type DocumentMentions } from '../../document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';

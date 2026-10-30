@@ -1,4 +1,4 @@
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';

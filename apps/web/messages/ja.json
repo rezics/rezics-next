@@ -994,6 +994,8 @@
   "thread_reply_label": "返信",
   "thread_reply_placeholder": "返信を書く",
   "thread_reveal_spoiler": "ネタバレを表示",
+  "document_task_status": "タスクの状態",
+  "document_embedded_component": "埋め込みコンポーネント",
   "thread_review_boards_loading": "レビュー掲示板を読み込み中…",
   "thread_review_choose_board": "レビュー掲示板を選択",
   "thread_review_cite_vote": "現在の投票を引用する（{score}/10）",

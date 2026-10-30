@@ -994,6 +994,8 @@
   "thread_reply_label": "Antwort",
   "thread_reply_placeholder": "Antwort schreiben",
   "thread_reveal_spoiler": "Spoiler anzeigen",
+  "document_task_status": "Aufgabenstatus",
+  "document_embedded_component": "Eingebettete Komponente",
   "thread_review_boards_loading": "Bewertungsforen werden geladen …",
   "thread_review_choose_board": "Bewertungsforum auswählen",
   "thread_review_cite_vote": "Meine aktuelle Bewertung zitieren ({score}/10)",

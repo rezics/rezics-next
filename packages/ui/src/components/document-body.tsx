@@ -11,9 +11,17 @@ const rel = 'noopener noreferrer nofollow ugc';
 
 export const documentBodyLabels = {
   revealSpoiler: 'Reveal spoiler',
+  taskStatus: 'Task status',
+  embeddedComponent: 'Embedded component',
+  imageUnavailable: 'Image unavailable',
 } as const;
 
-export type DocumentBodyLabels = { readonly [K in keyof typeof documentBodyLabels]: string };
+export type DocumentBodyLabels = {
+  readonly revealSpoiler: string;
+  readonly taskStatus?: string;
+  readonly embeddedComponent?: string;
+  readonly imageUnavailable?: string;
+};
 
 export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
 type Props = {
@@ -48,15 +56,16 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         image: ({ node }: any) => {
           const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
           if (renderImage) return renderImage({ mediaId: id, alt: node.attrs?.alt ?? '' });
-          const variant = typeof node.attrs?.variant === 'string' ? node.attrs.variant : 'original';
+          const alt = node.attrs?.alt ?? '';
           return (
-            <img
-              src={`/media/${encodeURIComponent(id)}/${encodeURIComponent(variant)}`}
-              alt={node.attrs?.alt ?? ''}
-              loading="lazy"
-              width={node.attrs?.width ?? undefined}
-              height={node.attrs?.height ?? undefined}
-            />
+            <span
+              className="block rounded-xl bg-muted p-5 text-sm text-muted-foreground"
+              role="img"
+              aria-label={alt || resolved.imageUnavailable}
+            >
+              {resolved.imageUnavailable}
+              {alt ? ` — ${alt}` : ''}
+            </span>
           );
         },
         media: ({ node, children }: any) => (
@@ -67,7 +76,7 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         ),
         taskItem: ({ node, children }: any) => (
           <li>
-            <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label="Task status" />
+            <NativeCheckbox checked={node.attrs?.checked ?? false} disabled aria-label={resolved.taskStatus} />
             {children}
           </li>
         ),
@@ -85,10 +94,10 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         ),
         tableHeader: ({ children }: any) => <th scope="col">{children}</th>,
         extensionBlock: ({ node }: any) => (
-          <div data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? 'Embedded component'}</div>
+          <div data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? resolved.embeddedComponent}</div>
         ),
         extensionInline: ({ node }: any) => (
-          <span data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? 'Embedded component'}</span>
+          <span data-document-component={node.attrs?.definition}>{node.attrs?.fallback ?? resolved.embeddedComponent}</span>
         ),
       },
       markMapping: {

@@ -1024,6 +1024,8 @@
   "thread_reply_label": "Reply",
   "thread_reply_placeholder": "Write a reply",
   "thread_reveal_spoiler": "Reveal spoiler",
+  "document_task_status": "Task status",
+  "document_embedded_component": "Embedded component",
   "thread_review_boards_loading": "Loading review boards…",
   "thread_review_choose_board": "Choose a reviews board",
   "thread_review_cite_vote": "Cite my current vote ({score}/10)",

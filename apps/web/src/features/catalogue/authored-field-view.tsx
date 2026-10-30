@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { RichTextEditor } from '@rezics/ui';
-import { DocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
