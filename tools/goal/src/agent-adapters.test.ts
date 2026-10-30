@@ -430,3 +430,18 @@ test('an explicitly selected adapter owns opaque exit parsing without global reg
     blocker: 'custom detail',
   });
 });
+
+test('a waiting exit whose check entries label their ids still yields the ids', () => {
+  const id = 'f17e9ecc-8227-4431-84ce-9beb6dbc7a78';
+  const adapter: AgentAdapter = {
+    ...fakeAdapter(),
+    parseExit(output) {
+      if (output === 'labelled') return { status: 'waiting', checks: [`Focused acceptance check: ${id}`, 'plain-id'] };
+      if (output === 'unlabelled') return { status: 'waiting', checks: ['acceptance check is queued'] };
+      return null;
+    },
+  };
+  const log = (value: string) => JSON.stringify({ kind: 'answer', value });
+  expect(measureLog(log('labelled'), { adapter }).waitingChecks).toEqual([id, 'plain-id']);
+  expect(measureLog(log('unlabelled'), { adapter }).waitingChecks).toBeNull();
+});
