@@ -129,7 +129,7 @@ export const StaleDelete: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: m.library_copy_more_actions() }));
     await userEvent.click(within(document.body).getAllByRole('menuitem')[0]!);
     const dialog = within(document.body);
-    await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_delete(), exact: true }));
+    await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_delete() }));
     await userEvent.click(await dialog.findByRole('button', { name: m.library_copy_delete_confirm() }));
     await expect(dialog.findByText(m.library_copy_conflict())).resolves.toBeVisible();
     await expect(
