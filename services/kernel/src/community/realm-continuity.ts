@@ -9,7 +9,7 @@ import {
   type AuthoritativeTime, type CommandAuthorization,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type AccessCheck, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import { accessCheck, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { realmParticipationAnchor } from './participation.ts';
 import { realmReadEligibility, RealmInputError, type RealmDependencies, type RealmContext } from './realm.ts';
@@ -43,12 +43,6 @@ export function realmContinuityView(row: {
     claimEligibleAt: row.claim_eligible_at === null ? null : new Date(row.claim_eligible_at).toISOString(),
     governanceReadOnly: row.ownership_state === 'orphaned',
   };
-}
-
-/** Shared pre-admission eligibility; direct role labels never supply ownership. */
-export async function realmGovernanceAllowed(client: AccessClient, resource: Resource, time: AuthoritativeTime) {
-  const row = await read.run(client, { route: resource.route, id: resource.id, at: authoritativeTimeValue(time) });
-  return row?.ownership_state === 'owned';
 }
 
 /** The transaction rechecks and locks the same native identity before receipt replay
