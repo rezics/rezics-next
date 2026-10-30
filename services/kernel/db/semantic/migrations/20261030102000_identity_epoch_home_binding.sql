@@ -33,8 +33,8 @@ BEGIN
     JOIN semantic.identity_epoch_home_gate g ON (g.route,g.destination,g.original)=(r.route,r.subject_id,r.subject_id)
     JOIN core.partition p ON p.partition_no=r.route/16
     WHERE r.route=NEW.route AND r.subject_id=NEW.subject_id AND r.revision=1 AND r.kind='create'
-      AND r.xmin::text=pg_current_xact_id()::text AND s.xmin::text=pg_current_xact_id()::text
-      AND m.xmin::text=pg_current_xact_id()::text AND g.xmin::text=pg_current_xact_id()::text
+      AND r.xmin=pg_current_xact_id()::xid AND s.xmin=pg_current_xact_id()::xid
+      AND m.xmin=pg_current_xact_id()::xid AND g.xmin=pg_current_xact_id()::xid
       AND r.recorded_transaction_id=NEW.recorded_transaction_id
       AND m.recorded_transaction_id=r.recorded_transaction_id AND g.recorded_transaction_id=r.recorded_transaction_id
       AND m.origin='creation' AND m.terminal=r.subject_id AND m.control_group=r.subject_id

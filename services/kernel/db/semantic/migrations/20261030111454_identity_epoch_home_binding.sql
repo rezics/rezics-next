@@ -7,6 +7,9 @@ DECLARE owner record;
 BEGIN
   IF EXISTS (SELECT 1 FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=p_home)
     OR EXISTS (SELECT 1 FROM semantic.subject WHERE route BETWEEN p_home*16 AND p_home*16+15)
+    OR EXISTS (SELECT 1 FROM semantic.revision WHERE route BETWEEN p_home*16 AND p_home*16+15)
+    OR EXISTS (SELECT 1 FROM semantic.redirect WHERE route BETWEEN p_home*16 AND p_home*16+15)
+    OR EXISTS (SELECT 1 FROM semantic.account_agent_subject WHERE route BETWEEN p_home*16 AND p_home*16+15)
     OR EXISTS (SELECT 1 FROM semantic.merge_member WHERE route BETWEEN p_home*16 AND p_home*16+15)
     OR EXISTS (SELECT 1 FROM semantic.identity_epoch_dirty WHERE route BETWEEN p_home*16 AND p_home*16+15)
     OR EXISTS (SELECT 1 FROM semantic.identity_epoch_member_dirty WHERE route BETWEEN p_home*16 AND p_home*16+15)
