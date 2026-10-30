@@ -63,6 +63,20 @@ This six-case binding is separate from the fourteen-case table/growth port.
 
 Keep the same SQLite state path when resuming. Prepared writes and receipts are durable, and a retry reuses their original command keys and request bodies. Do not replace or clear the state file after an interrupted or uncertain request. Exit codes are 0 for committed/help, 2 for invalid input, 3 for mass disappearance, 4 for authorization denial, 5 for a busy source, and 130 for interruption; other unresolved import failures exit 1. Diagnostics contain only bounded maintained counters.
 
+To rotate an operator key while a run is pending, provision and approve the new key for the same account and
+client before retiring the old key through Auth's credential-effect lifecycle. Replace the private JWK at the
+existing owner-only key-file path, then invoke the same command with the same SQLite state. Each CLI invocation
+loads its account key afresh; a live invocation retains the key it already imported. Keep the ordinary six scopes
+(plus the existing VNDB statistic scope only for VNDB). Grant restoration and key retirement are separate operations:
+current grants govern receipt replay, and retiring a key prevents new sign-ins with that key without claiming
+revocation of already-issued bearer tokens.
+
+The frozen [native key-rotation journey](../kernel/test/imports/cli-key-rotation.test.ts) connects the ordinary CLI
+to native Auth, Access, public commands and the registered media worker. It loses a real committed response,
+denies exact original-bearer replay after ordinary grant revocation, retires the old key, and resumes the durable
+run with its original bytes and command keys. The [evidence record](../../docs/research/imports-audit/cli-key-rotation.md)
+describes its observations and limits. The local credential test supplies only the file/crypto preflight.
+
 A complete source reduction exceeding the default 20% disappearance threshold exits 3 before public effects and
 retains the last completed baseline. After reviewing the supplied input, invoke the same CLI with the same state
 and input and an explicit existing `--disappearance-threshold` value (for example, `0.5` admits losing two of five
