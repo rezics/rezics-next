@@ -27,6 +27,14 @@ export function OrdersPage({ page, locale }: { page: BuyerOrderPage; locale: str
       <PageHeading id="orders-heading" className="text-foreground">
         {m.orders_heading()}
       </PageHeading>
+      <p>
+        <a
+          href={`/${locale}/entitlements`}
+          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+        >
+          {m.entitlements_heading()}
+        </a>
+      </p>
       {page.orders.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6">
           <p className="font-medium">{m.orders_empty()}</p>
