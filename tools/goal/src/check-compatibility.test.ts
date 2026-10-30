@@ -94,7 +94,9 @@ test('main consumer exercises actual dev worker-check forms, validates records a
     ]) {
       const checks = reportCheck(report, field);
       if (!checks.some((check) => check.status === 'compatible'))
-        throw new Error(`Expected ${field} to be compatible; received ${JSON.stringify(checks)}.`);
+        throw new Error(
+          `Expected ${field} to be compatible; received ${JSON.stringify({ checks, records: report.checks.filter((check) => check.field.startsWith('workerCheck.record')) })}.`,
+        );
     }
 
     const recordChecks = reportCheck(report, 'workerCheck.record.finished');
