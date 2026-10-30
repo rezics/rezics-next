@@ -3928,7 +3928,15 @@ async function uploadRun(
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
     else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
-    return { host, id, directory, connectionId, gitManifestRelativePath, gitManifestSha256 };
+    return {
+      host,
+      id,
+      directory,
+      connectionId,
+      ...(gitManifestRelativePath === undefined
+        ? {}
+        : { gitManifestRelativePath, gitManifestSha256: gitManifestSha256! }),
+    };
   } finally {
     if (localGitStage !== undefined) rmSync(localGitStage, { recursive: true, force: true });
   }
