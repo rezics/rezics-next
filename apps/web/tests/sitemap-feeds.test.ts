@@ -32,9 +32,7 @@ const samplePages: Record<FeedName, { items: Record<string, unknown>[]; next: st
   spaces: { items: [{ id, address: 'sample-space', lastModified }], next: 'spaces-next' },
 };
 const endpointCalls: { feed: FeedName; query: Record<string, unknown> }[] = [];
-let feedResponse:
-  | ((feed: FeedName, query: Record<string, unknown>) => { status: number; data?: unknown })
-  | undefined;
+let feedResponse: ((feed: FeedName, query: Record<string, unknown>) => { status: number; data?: unknown }) | undefined;
 
 mock.module('../src/kernel/client.ts', () => ({
   kernelClient() {
