@@ -522,10 +522,12 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
         return result(await send('GET', `${path}?${params}`, request.actor), (json) => page<{ id: string }>(json));
       },
       async holdPage(request: PageRequest) {
-        // Candidate selection runs only after readBoard succeeds. Post-page reaction
-        // enrichment similarly runs after the root/board checks and before serialization.
-        // No query interception or result modification participates in this barrier.
-        const table = request.kind === 'board' ? 'content.board_thread' : 'content.reaction_total';
+        // Board candidates are read before the parent decision; content.thread
+        // is first read after it. Post-page reaction enrichment follows the
+        // root and entry checks. pg_stat_activity confirms this request reached
+        // its later read before a mutation can run. No query hook or result
+        // modification participates in the barrier.
+        const table = request.kind === 'board' ? 'content.thread' : 'content.reaction_total';
         const lock = await pool.connect();
         let released = false;
         let held: HeldPage;
@@ -536,6 +538,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
           const {
             rows: [owner],
           } = await lock.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+          const requestStartedAt = Date.now();
           const response = driver.page(request);
           void response.catch(() => {});
           let finished = false;
@@ -554,8 +557,10 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
                 `
                 SELECT 1 FROM pg_stat_activity
                 WHERE datname=current_database() AND wait_event_type='Lock'
-                  AND $1::integer=ANY(pg_blocking_pids(pid)) AND query LIKE $2 LIMIT 1`,
-                [owner!.pid, `%${table}%`],
+                  AND $1::integer=ANY(pg_blocking_pids(pid))
+                  AND query_start >= to_timestamp($2::double precision / 1000)
+                  AND position($3::text in query) > 0 LIMIT 1`,
+                [owner!.pid, requestStartedAt, table],
               );
               if (waiting.rowCount) return;
               if (released || finished) throw new Error('Page finished before the post-authorization lock barrier');
@@ -574,8 +579,11 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
                 } finally {
                   lock.release();
                 }
-                await response;
-                holds.delete(held);
+                try {
+                  await response;
+                } finally {
+                  holds.delete(held);
+                }
               })()),
           };
           holds.add(held);
