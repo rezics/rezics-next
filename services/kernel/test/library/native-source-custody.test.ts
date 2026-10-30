@@ -695,3 +695,21 @@ test('actual output final fences reject raw rekey, unpublish, owner T and frozen
       .status,
   ).toBe('complete');
 });
+
+test('unchanged COMPLETE metadata cannot hide an intervening native publication source fence', async () => {
+  const source = await explicitSource(),
+    a = { ...source.ref, generation: entryKey() };
+  await source.output({ begin: a }, (tx) => beginCollectionSourceOutput(tx, { ...a, expectedMembers: 0 }));
+  await source.output({ complete: a }, (tx) => completeCollectionSourceOutput(tx, a));
+  const identity = await source.identity(),
+    captured = await scan(identity);
+  await native.pool.query(
+    "UPDATE library.native_source_fence SET generation=generation+1 WHERE route=$1 AND kind='collection' AND owner_id=$2",
+    [identity.route, identity.collectionId],
+  );
+  expect((await source.observe()).authority).toBe('unavailable_output');
+  expect((await custody.finishCapture({ ...work(), identity, frontier: captured.frontier })).status).toBe(
+    'unavailable',
+  );
+  expect((await custody.capturePage({ ...work(), identity, frontier: null, limit: 1 })).status).toBe('unavailable');
+});

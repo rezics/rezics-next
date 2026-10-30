@@ -385,7 +385,7 @@ async function bindOwner(
     if (source.kind !== 'dynamic' || source.builtin !== null) throw new Refused('output_authority');
     if (!retained) {
       if (source.visibility === 'private') throw new Refused('output_authority');
-      const [output] = await run<{ members: string }>(outputQuery, values, 48, 5);
+      const [output] = await run<{ members: string }>(outputQuery, values, 56, 7);
       if (!output) throw new Refused('output_authority');
       outputMembers = output.members;
     }
@@ -700,7 +700,7 @@ export function createNativeLibrarySourceCustody({
               input.identity.scope === 'active_explicit_output' ? rawExplicitOutput : rawQueries[driver],
               {
                 ...parameters(input.identity),
-                after: input.identity.scope === 'active_explicit_output' ? state.after || zeroId : after,
+                after: input.identity.scope === 'active_explicit_output' ? state.after || null : after,
                 tie: state.tie || zeroId,
                 session_id: state.sessionId,
                 limit,

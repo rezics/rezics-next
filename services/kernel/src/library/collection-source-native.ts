@@ -127,7 +127,7 @@ for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql,
 // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
 register(scopeIdentitySQL, fixed(4, 1, 4608));
 register(partitionSizeSQL, fixed(4, 1, 128));
-register(outputHead.sql, fixed(40, 6, 1024));
+register(outputHead.sql, fixed(48, 7, 1024));
 register(outputProbe.sql, () => ({
   nativeRows: 4,
   nativePoints: 1,

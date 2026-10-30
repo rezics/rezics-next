@@ -143,6 +143,8 @@ Active curator-owned public/unlisted saved-dynamic output uses `active_explicit_
 `outputPublication: CollectionOutputPublication | null` with `generation`, `transactionId`, `position`, `nativeXid`,
 `sourceGeneration`, `memberFence` and `members` (all strings). The selected COMPLETE head, its source generation,
 immutable publication receipt and actual same-transaction Core `editorial.write_basis` must agree on reread.
+The receipt's source writer fence must equal the current native Collection control; a restored head or unchanged
+caller metadata cannot hide an intervening writer. A build also retains and checks its actual curator at every append and completion.
 The publication hook uses Core's live command callback and executor transaction ID; a deferred native constraint
 requires the actual Core fence/basis at commit, including same native xid provenance. It copies no request body,
 private criteria, pins or author-approval JSON. Its source incarnation and actual curator are retained explicitly.

@@ -152,12 +152,13 @@ test('COMPLETE output has immutable same-command publication provenance and pend
         `SELECT r.transaction_id::text,b.position::text,r.native_xid::text,
       r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin AS same_transaction,
       r.source_generation=s.source_generation AND r.source_generation=h.source_generation AS same_source,
-      g.member_count::text,g.member_fence=r.member_fence AS same_members
+      g.member_count::text,g.member_fence=r.member_fence AS same_members,f.generation=r.collection_fence AS same_fence
      FROM library.collection_source_output_publication r
      JOIN editorial.write_basis b ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
      JOIN library.collection_source_output g USING(route,collection_id,generation)
      JOIN library.collection_source_output_head h USING(route,collection_id,generation)
      JOIN library.collection s ON s.route=r.route AND s.collection_id=r.collection_id
+     JOIN library.native_source_fence f ON f.route=r.route AND f.kind='collection' AND f.owner_id=r.collection_id
      WHERE r.route=$1 AND r.collection_id=$2 AND r.generation=$3`,
         [source.route, source.collectionId, a.generation],
       )
@@ -171,6 +172,7 @@ test('COMPLETE output has immutable same-command publication provenance and pend
       same_source: true,
       member_count: '1',
       same_members: true,
+      same_fence: true,
     }),
   ]);
   await f.command(source.collectionId, { begin: b }, (tx) => begin(tx, { ...b, expectedMembers: 0 }));
