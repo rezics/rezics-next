@@ -6,6 +6,7 @@ import type {
   LibraryProfilePersona,
   LibraryProfilesDriver,
   LibraryProfilesFixture,
+  ProfileEntryGuard,
   ProfileCompilation,
   ProfileMigrationBoundary,
   ProfileReleaseScenario,
@@ -99,14 +100,30 @@ async function setupProfiles(scenario: ProfileReleaseScenario = 'profile-v1') {
   return compiled;
 }
 
-async function entry(subjectId: string, state: string, key = idempotencyKey(), revision?: number) {
+async function entry(subjectId: string, state: string, key = idempotencyKey(), current?: ProfileEntryGuard) {
   return api(
     'owner',
     'PUT',
     `/v1/libraryEntries/${subjectId}`,
-    { state, ...(revision === undefined ? {} : { revision }) },
+    {
+      state,
+      ...(current === undefined ? {} : { revision: current.revision }),
+      ...(current?.incarnationId == null ? {} : { incarnationId: current.incarnationId }),
+    },
     key,
   );
+}
+
+async function entryGuard(subjectId: string): Promise<ProfileEntryGuard> {
+  const response = await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`);
+  expect(response.status).toBe(200);
+  return (await body(response)).libraryEntry;
+}
+
+function entryDeletePath(subjectId: string, current: ProfileEntryGuard) {
+  const query = new URLSearchParams({ revision: String(current.revision) });
+  if (current.incarnationId != null) query.set('incarnationId', current.incarnationId);
+  return `/v1/libraryEntries/${subjectId}?${query}`;
 }
 
 async function session(input: Record<string, unknown>, key = idempotencyKey()) {
@@ -620,7 +637,9 @@ test('exclusive state does not create or couple independent labels sessions hold
   expect(before.sessions.filter((item) => item.subjectId === subjectId)).toHaveLength(1);
   expect(before.copies.filter((item) => item.subjectId === subjectId)).toHaveLength(1);
 
-  expect((await entry(subjectId, 'completed', idempotencyKey(), row?.revision)).status).toBe(200);
+  const current = await entryGuard(subjectId);
+  expect(current.revision).toBe(row?.revision);
+  expect((await entry(subjectId, 'completed', idempotencyKey(), current)).status).toBe(200);
   const after = await driver.inspect(fixture);
   expect(after.independentLabels).toEqual(before.independentLabels);
   expect(after.ratings).toEqual(before.ratings);
@@ -900,11 +919,13 @@ test('migration CAS preserves a concurrent current-profile write and never incre
   await driver.seedLegacyFacts(fixture, { entries: 1, sessions: 0, copies: 0 });
   const release = await setupProfiles();
   const initial = (await driver.inspect(fixture)).entries[0]!;
+  const initialGuard = await entryGuard(initial.subjectId);
+  expect(initialGuard.revision).toBe(initial.revision);
   const pause = await driver.pauseNextMigration(fixture, 'after-page-read-before-cas');
   const migration = driver.migrateOwner(fixture, release.digest);
   await pause.reached;
   const subjectId = initial.subjectId;
-  const currentWrite = await entry(subjectId, 'completed', idempotencyKey(), initial.revision);
+  const currentWrite = await entry(subjectId, 'completed', idempotencyKey(), initialGuard);
   expect(currentWrite.status).toBe(200);
   const written = (await driver.inspect(fixture)).entries.find((row) => row.subjectId === subjectId)!;
   expect(written.state).toBe('completed');
@@ -995,21 +1016,15 @@ test('removed profile values remain pinned and readable and their owner can clea
   const subjectId = await driver.provisionSubject(fixture, 'game');
   expect((await entry(subjectId, 'planned')).status).toBe(201);
   const before = (await driver.inspect(fixture)).entries.find((row) => row.subjectId === subjectId)!;
+  const captured = await entryGuard(subjectId);
+  expect(captured.revision).toBe(before.revision);
   await setupProfiles('profile-v3-removed-ids');
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(200);
   expect((await driver.inspect(fixture)).entries.find((row) => row.subjectId === subjectId)).toEqual(before);
   await expectProblem(await entry(subjectId, 'planned'), 422, 'unsupported_library_profile');
-  expect(
-    (
-      await api(
-        'owner',
-        'DELETE',
-        `/v1/libraryEntries/${subjectId}?revision=${before.revision}`,
-        undefined,
-        idempotencyKey(),
-      )
-    ).status,
-  ).toBe(200);
+  const removed = await api('owner', 'DELETE', entryDeletePath(subjectId, captured), undefined, idempotencyKey());
+  expect(removed.status).toBe(204);
+  expect(await removed.text()).toBe('');
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
 });
 
@@ -1019,7 +1034,7 @@ test('migration bounds examined source keys through a long pinned prefix and int
   const rows = (await driver.inspect(fixture)).entries.toSorted((a, b) => a.subjectId.localeCompare(b.subjectId));
   for (const [index, row] of rows.entries()) {
     if (index < 512 || index % 2 === 0)
-      expect((await entry(row.subjectId, row.state, idempotencyKey(), row.revision)).status).toBe(200);
+      expect((await entry(row.subjectId, row.state, idempotencyKey(), await entryGuard(row.subjectId))).status).toBe(200);
   }
   const before = await driver.inspect(fixture);
   await driver.migrateOwner(fixture, release.digest);
@@ -1057,13 +1072,15 @@ test('removing a profile preserves historic state progress and holding pins whil
   const copyId = (await body(holding)).copy.id as string;
   const before = await driver.inspect(fixture);
   const state = before.entries.find((row) => row.subjectId === subjectId)!;
+  const captured = await entryGuard(subjectId);
+  expect(captured.revision).toBe(state.revision);
   await setupProfiles('profile-absent');
   const absent = await driver.inspect(fixture);
   for (const field of ['entries', 'sessions', 'copies'] as const) expect(absent[field]).toEqual(before[field]);
   for (const path of [`/v1/libraryEntries/${subjectId}`, `/v1/progressSessions/${progressId}`, `/v1/copies/${copyId}`])
     expect((await api('owner', 'GET', path)).status).toBe(200);
   await expectProblem(
-    await entry(subjectId, 'planned', idempotencyKey(), state.revision),
+    await entry(subjectId, 'planned', idempotencyKey(), captured),
     422,
     'unsupported_library_profile',
   );
@@ -1082,17 +1099,9 @@ test('removing a profile preserves historic state progress and holding pins whil
     expect(rejected[field]).toEqual(absent[field]);
   expect((await api('other', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(404);
   expect(await driver.inspect(fixture)).toEqual(rejected);
-  expect(
-    (
-      await api(
-        'owner',
-        'DELETE',
-        `/v1/libraryEntries/${subjectId}?revision=${state.revision}`,
-        undefined,
-        idempotencyKey(),
-      )
-    ).status,
-  ).toBe(200);
+  const removed = await api('owner', 'DELETE', entryDeletePath(subjectId, captured), undefined, idempotencyKey());
+  expect(removed.status).toBe(204);
+  expect(await removed.text()).toBe('');
   expect((await api('owner', 'DELETE', `/v1/copies/${copyId}`, undefined, idempotencyKey())).status).toBe(204);
   expect((await api('owner', 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
   expect((await api('owner', 'GET', `/v1/copies/${copyId}`)).status).toBe(404);
@@ -1103,7 +1112,7 @@ test('migration shares one examined-source allowance across pinned entries and p
   await driver.seedLegacyFacts(fixture, { entries: 120, sessions: 101, copies: 101 });
   const release = await setupProfiles();
   for (const row of (await driver.inspect(fixture)).entries)
-    expect((await entry(row.subjectId, row.state, idempotencyKey(), row.revision)).status).toBe(200);
+    expect((await entry(row.subjectId, row.state, idempotencyKey(), await entryGuard(row.subjectId))).status).toBe(200);
   const before = await driver.inspect(fixture);
   expect(before.entries.every((row) => row.pin !== null)).toBe(true);
   expect([...before.sessions, ...before.copies].every((row) => row.pin === null)).toBe(true);

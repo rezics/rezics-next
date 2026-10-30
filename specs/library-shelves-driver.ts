@@ -39,6 +39,7 @@ export interface Anchor {
 }
 export interface EntryView {
   subjectId: string;
+  incarnationId: string;
   state: EntryState;
   revision: number;
   createdAt: string;

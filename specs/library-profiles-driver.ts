@@ -38,9 +38,16 @@ export type StoredLibraryProfilePin =
       profileId: 'legacy-fixed-v1';
     };
 
+/** Captured from the actual entry response; pre-cutover legacy entries may have no incarnation yet. */
+export interface ProfileEntryGuard {
+  revision: number;
+  incarnationId?: string | null;
+}
+
 export interface ProfileEntryRow {
   accountId: string;
   subjectId: string;
+  incarnationId: string | null;
   state: string;
   revision: number;
   createdAt: string;

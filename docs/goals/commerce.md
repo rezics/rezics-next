@@ -84,30 +84,35 @@ variables. They do not rewrite assertions, normalize responses, or treat a missi
 | [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts) | Entry point added; `support/native-dynamic-driver.ts` is absent. |
 | [Shelves](../../specs/library-shelves-outcomes.test.ts) | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts) | Entry point added; `support/native-shelves-driver.ts` is absent. |
 
-Whole binding is blocked by incompatible frozen expectations. In the profile suite, both “removed profile values
-remain pinned and readable and their owner can clear them without reacceptance” and “removing a profile preserves
-historic state progress and holding pins while permitting own clear and delete” require successful entry DELETE
-to return `200`. The shelf suite's `removeEntry` requires `204`. The [current Library lifecycle
-contract](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration) explicitly retains `204`
-with an empty body, including clearing facts whose historical profile is missing. A driver cannot make these
-expectations agree while preserving raw HTTP responses.
+The authorized [entry lifecycle reconciliation](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration)
+is now represented in the original Library, profile and shelf specifications. The two historical-profile clear cases
+require `204` and an empty body. Revisioned writes and deletes explicitly carry the incarnation captured from an
+actual native entry response. Shelf response-key assertions include that incarnation. Migration concurrency captures
+the original native guard before pausing work; adapters never fetch a replacement guard. The Library suite also
+requires missing/foreign guard denial, concurrent CAS, stale-incarnation denial after recreation, and exact PUT/DELETE
+receipt replay with the originally submitted guard. These are source changes awaiting native proof.
 
-The same contract requires `incarnationId` with fresh revisioned PUT and DELETE after cutover. The frozen Library
-and shelf helpers send only `revision` and expect successful updates/deletes; the shelf's exact response-key checks
-also exclude `incarnationId`, which the current route emits for new entries. Resolving these frozen expectations
-belongs to the acceptance owner before completing adapters; weakening native preconditions or adding transport
-pre-reads would conceal the conflict.
+A separate frozen source conflict remains. The Library suite's `copy` helper sends fresh `POST /v1/copies` requests
+with `subjectId`, `status` and personal fields but no `kind`, and requires `201`, including in “two copies of one
+edition remain independent through revision updates and deletion”. The profile suite's “fresh copy creation requires
+a declared kind and never defaults to legacy-unspecified” requires `400 invalid_request` for that omission. The
+[profile consumer contract](../library-profile-consumers.md#legacy-command-compatibility-and-retirement) and
+[native create command](../../services/kernel/src/library/copies.ts) require a declared kind on every fresh create;
+kindless replay is only for an already existing receipt. The Library helper uses a fresh key, so that exception
+cannot apply. No profile selection makes a fresh kindless create valid. Adding a kind inside an adapter would
+rewrite the scenario's request and violate raw native binding. The limited frozen-source amendment covers entry
+lifecycle/incarnation changes only; reconciling copy-create input requires an additional acceptance-owner amendment.
 
 The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
 first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
 closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
-skipping these frozen cases. No suite is skipped here. The new entry points currently fail at missing native driver
-modules, before any claim of backend behavior. Provider and fixture implementations, native acceptance, regression
+skipping these frozen cases. No suite is skipped here. The four additional entry points still reference absent native
+driver modules; complete adapters have not been delivered. Provider and fixture implementations, native acceptance, regression
 evidence and promotion remain outstanding.
 
-No native or database checks were run for these entry points. Local workspace typing requires Reylo's migrated
-compiler database. Without a supplied `DATABASE_URL`, the kernel typecheck script places a remote check or starts
-a throwaway database; neither is allowed in minimal verification mode. That prerequisite remains unverified.
+No native acceptance, browser or regression checks were run. Minimal verification permits only changed-workspace
+typing, including the compiler database or placement started by the kernel's own `typecheck` command. That exception
+does not establish native outcome evidence. Whole-suite acceptance remains required after integration.
 
 ## External conditions
 

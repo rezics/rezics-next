@@ -652,7 +652,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       })) as LibraryInspection['members'];
       const entries = (
         await db!.admin.query(`
-        SELECT subject_id AS "subjectId", state, revision, created_at AS "createdAt", updated_at AS "updatedAt",
+        SELECT subject_id AS "subjectId", incarnation_id AS "incarnationId", state, revision, created_at AS "createdAt", updated_at AS "updatedAt",
                account_id AS "accountId", route
           FROM library.entry ORDER BY route, account_id, subject_id`)
       ).rows.map((row) => ({

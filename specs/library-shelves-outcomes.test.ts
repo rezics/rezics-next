@@ -57,7 +57,7 @@ const DEFAULT_ORDER: Record<EntryState, ShelfOrder> = {
   dropped: 'lastActivity',
 };
 const TABS: readonly ShelfTab[] = ['all', 'in_progress', 'planned', 'completed', 'paused', 'dropped', 'collections'];
-const ENTRY_KEYS = ['createdAt', 'revision', 'state', 'subjectId', 'updatedAt'];
+const ENTRY_KEYS = ['createdAt', 'incarnationId', 'revision', 'state', 'subjectId', 'updatedAt'];
 const SHELF_KEYS = [...ENTRY_KEYS, 'activeProgressSession', 'finishedAt', 'lastActivityAt'].sort();
 const SESSION_KEYS = [
   'amount',
@@ -100,17 +100,36 @@ async function problem(response: Response, status: number, code?: string) {
   return result;
 }
 
-type StoredView = { subjectId: string; state: EntryState; revision: number; createdAt: string; updatedAt: string };
-async function putEntry(subjectId: string, state: EntryState, revision?: number, as: Persona = 'owner') {
-  return write('PUT', `/v1/libraryEntries/${subjectId}`, revision === undefined ? { state } : { state, revision }, as);
+type StoredView = {
+  subjectId: string;
+  incarnationId: string;
+  state: EntryState;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+async function putEntry(
+  subjectId: string,
+  state: EntryState,
+  current?: Pick<StoredView, 'revision' | 'incarnationId'>,
+  as: Persona = 'owner',
+) {
+  return write(
+    'PUT',
+    `/v1/libraryEntries/${subjectId}`,
+    current === undefined ? { state } : { state, revision: current.revision, incarnationId: current.incarnationId },
+    as,
+  );
 }
 async function entry(subjectId: string, state: EntryState = 'planned', as: Persona = 'owner') {
   const response = await putEntry(subjectId, state, undefined, as);
   expect(response.status).toBe(201);
-  return (await body<{ libraryEntry: StoredView }>(response, 201)).libraryEntry;
+  const created = (await body<{ libraryEntry: StoredView }>(response, 201)).libraryEntry;
+  expect(created.incarnationId).toEqual(expect.any(String));
+  return created;
 }
 async function setState(current: StoredView, state: EntryState, as: Persona = 'owner') {
-  const response = await putEntry(current.subjectId, state, current.revision, as);
+  const response = await putEntry(current.subjectId, state, current, as);
   return (await body<{ libraryEntry: StoredView }>(response, 200)).libraryEntry;
 }
 async function readEntry(subjectId: string, as: Persona = 'owner') {
@@ -119,11 +138,12 @@ async function readEntry(subjectId: string, as: Persona = 'owner') {
 async function removeEntry(current: StoredView, as: Persona = 'owner') {
   const response = await write(
     'DELETE',
-    `/v1/libraryEntries/${current.subjectId}?revision=${current.revision}`,
+    `/v1/libraryEntries/${current.subjectId}?revision=${current.revision}&incarnationId=${encodeURIComponent(current.incarnationId)}`,
     undefined,
     as,
   );
   expect(response.status).toBe(204);
+  expect(await response.text()).toBe('');
 }
 async function start(
   subjectId: string,
@@ -635,8 +655,15 @@ test('a failed compare-and-swap or unknown subject leaves activity entries and c
     409,
     'conflict',
   );
-  await problem(await putEntry(s!.id, 'completed', created.revision + 5), 409, 'conflict');
-  await problem(await write('DELETE', `/v1/libraryEntries/${s!.id}?revision=${created.revision + 5}`), 409, 'conflict');
+  await problem(await putEntry(s!.id, 'completed', { ...created, revision: created.revision + 5 }), 409, 'conflict');
+  await problem(
+    await write(
+      'DELETE',
+      `/v1/libraryEntries/${s!.id}?revision=${created.revision + 5}&incarnationId=${encodeURIComponent(created.incarnationId)}`,
+    ),
+    409,
+    'conflict',
+  );
   await problem(
     await write('POST', '/v1/progressSessions', {
       subjectId: driver.unknownSubjectId,
@@ -1057,7 +1084,7 @@ test('tab counts follow every state transition delete Collection and privacy bou
   await atMinute(3);
   await start(a!.id);
   expect(await owner()).toEqual({ ...zeroTotals, all: 3, in_progress: 1, planned: 1, completed: 1 });
-  await problem(await putEntry(b!.id, 'dropped', eb.revision + 3), 409, 'conflict');
+  await problem(await putEntry(b!.id, 'dropped', { ...eb, revision: eb.revision + 3 }), 409, 'conflict');
   expect(await owner()).toEqual({ ...zeroTotals, all: 3, in_progress: 1, planned: 1, completed: 1 });
   await setState(eb, 'paused');
   await setState(ec, 'dropped');
@@ -1286,7 +1313,11 @@ test('shelf order and active progress have a bounded same-account contract', asy
     const current = await readEntry(fresh!.id);
     await measured(
       'entry delete',
-      () => write('DELETE', `/v1/libraryEntries/${fresh!.id}?revision=${current.revision}`),
+      () =>
+        write(
+          'DELETE',
+          `/v1/libraryEntries/${fresh!.id}?revision=${current.revision}&incarnationId=${encodeURIComponent(current.incarnationId)}`,
+        ),
       204,
     );
   }
