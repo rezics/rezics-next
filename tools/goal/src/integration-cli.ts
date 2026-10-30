@@ -15,11 +15,19 @@ import {
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { AttemptFence, GateOutcomeSink, LandingRequest, ManagerEventKind } from './contracts.ts';
+import type {
+  AttemptFence,
+  GateOutcomeSink,
+  InboxDocumentReference,
+  InboxEscalation,
+  LandingRequest,
+  ManagerEventKind,
+} from './contracts.ts';
 import { reapContainers } from './containers.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { SharedInboxQueries, type SharedInboxFilter } from './inbox-shared.ts';
 import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
@@ -30,6 +38,8 @@ export type IntegrationRuntime = {
   queue?: SqliteLandingQueue;
   train?: Pick<MergeTrain, 'runWaiting'>;
   inbox?: SqliteManagerInbox;
+  /** Pure shared read API for authenticated managers and report consumers. */
+  sharedInbox?: SharedInboxQueries;
   pump?(): Promise<void>;
   drain?(): Promise<void>;
   drainJobs?(): Promise<void>;
@@ -607,6 +617,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
 export async function runIntegration(argv: string[], runtime: IntegrationRuntime): Promise<number> {
   const [command, subcommand, id, ...flags] = argv;
   const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+  const sharedInbox = runtime.sharedInbox ?? new SharedInboxQueries(runtime.db);
   const queue = runtime.queue ?? new SqliteLandingQueue(runtime.db, runtime.fence);
   if (command === 'land' && subcommand) {
     if (flags.length) throw new Error('usage: land <task>');
@@ -688,20 +699,23 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     console.log(JSON.stringify(result));
     return 0;
   }
-  if (command === 'inbox' && id) {
+  if (command === 'inbox' && subcommand) {
     if (subcommand === 'send') {
+      if (!id) throw new Error('usage: inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>] [--reply <id>]');
       const [kind, summary, ...options] = flags;
       if (!kind || !summary)
-        throw new Error('usage: inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]');
-      const values = new Map<string, string>();
+        throw new Error('usage: inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>] [--reply <id>] [--document <reference>] [--escalation <metadata>]');
+      const values = new Map<string, string[]>();
       for (let index = 0; index < options.length; index += 2) {
         const option = options[index];
         const value = options[index + 1];
-        if ((option !== '--task' && option !== '--evidence') || !value || values.has(option))
+        const repeatable = option === '--document';
+        if (!['--task', '--evidence', '--reply', '--document', '--escalation'].includes(option ?? '') || !value || (!repeatable && values.has(option!)))
           throw new Error(`invalid inbox send option: ${option ?? '(missing value)'}`);
-        values.set(option, value);
+        values.set(option, [...(values.get(option!) ?? []), value]);
       }
       const allowed = [
+        'question', 'decision', 'blocker', 'handoff', 'info',
         'spec-conflict',
         'scope-growth',
         'environment',
@@ -715,6 +729,18 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       if (!allowed.includes(kind))
         throw new Error(`unknown inbox event kind: ${kind}. Valid kinds: ${allowed.join(', ')}`);
       if (/[\r\n]/.test(summary)) throw new Error('inbox event summary must be one line');
+      let replyToId: number | undefined;
+      if (values.has('--reply')) {
+        const reference = values.get('--reply')![0]!;
+        if (!/^\d+$/.test(reference) || !Number.isSafeInteger(Number(reference)) || Number(reference) <= 0)
+          throw new Error('inbox --reply must be an existing positive message id');
+        replyToId = Number(reference);
+      }
+      const documentRefs = (values.get('--document') ?? []).map(parseDocumentReference);
+      const escalation = values.has('--escalation') ? parseEscalation(values.get('--escalation')![0]!) : undefined;
+      const taskId = values.get('--task')?.[0];
+      if (values.has('--task') && !taskId?.trim()) throw new Error('inbox --task must be nonempty');
+      if (values.has('--evidence') && !values.get('--evidence')?.[0]?.trim()) throw new Error('inbox --evidence must be nonempty');
       // A completed Goal has no lead reading its inbox; what it owned returns to the supermanager.
       const recipient = runtime.db
         .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'")
@@ -725,15 +751,18 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         throw new Error(
           `manager ${id} has completed its Goal and reads no inbox; send to ${runtime.supermanager || 'supermanager'}`,
         );
-      const sender = callingManager(runtime);
+      const sender = resolveInboxSender(runtime);
       await recordManagerCommand(runtime);
       inbox.deliver({
         managerId: id,
         kind: kind as ManagerEventKind,
         summary,
         from: sender || runtime.supermanager || 'supermanager',
-        ...(values.has('--task') ? { taskId: values.get('--task')! } : {}),
-        ...(values.has('--evidence') ? { evidencePath: values.get('--evidence')! } : {}),
+        ...(taskId ? { taskId } : {}),
+        ...(values.get('--evidence')?.[0] ? { evidencePath: values.get('--evidence')![0] } : {}),
+        ...(replyToId !== undefined ? { replyToId } : {}),
+        ...(documentRefs.length ? { documentRefs } : {}),
+        ...(escalation ? { escalation } : {}),
       });
       if (
         sender &&
@@ -771,7 +800,26 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           });
         }
       }
+    } else if (subcommand === 'log' || subcommand === 'thread' || subcommand === 'digest') {
+      const args = subcommand === 'thread' ? [id, ...flags].filter((value): value is string => value !== undefined) : argv.slice(2);
+      const options = parseInboxQueryOptions(args);
+      if (subcommand !== 'thread' && options.reference !== undefined)
+        throw new Error(`unexpected inbox argument: ${options.reference}`);
+      if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+        throw new Error('workers cannot read the shared manager inbox');
+      if (!authenticatedCallingManager(runtime))
+        throw new Error('shared inbox reads require an authenticated manager session');
+      if (subcommand === 'log') printInboxResult(sharedInbox.log(options), options.json);
+      else if (subcommand === 'thread') {
+        if (!options.reference) throw new Error('usage: inbox thread <id|task> [--limit <n>] [--cursor <id>] [--json]');
+        printInboxResult(sharedInbox.thread(options.reference, { limit: options.limit, cursor: options.cursor }), options.json);
+      } else {
+        if (options.since === undefined)
+          throw new Error('usage: inbox digest --since <time> [--limit <n>] [--cursor <id>] [--json]');
+        printInboxResult(sharedInbox.digest(options.since, { limit: options.limit, cursor: options.cursor }), options.json);
+      }
     } else {
+      if (!id) throw new Error(`usage: inbox ${subcommand} <manager>`);
       await recordManagerCommand(runtime);
       if (subcommand === 'wait') {
         const at = flags.indexOf('--settle');
@@ -860,6 +908,138 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
 }
 
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */
+type InboxCliOptions = SharedInboxFilter & { json: boolean; reference?: string };
+
+function parseInboxQueryOptions(args: string[]): InboxCliOptions {
+  const options: InboxCliOptions = { json: false };
+  const seen = new Set<string>();
+  for (let index = 0; index < args.length; index++) {
+    const option = args[index]!;
+    if (!option.startsWith('--')) {
+      if (options.reference !== undefined) throw new Error(`unexpected inbox argument: ${option}`);
+      options.reference = option;
+      continue;
+    }
+    if (seen.has(option)) throw new Error(`duplicate inbox option: ${option}`);
+    seen.add(option);
+    if (option === '--json') {
+      options.json = true;
+      continue;
+    }
+    const value = args[++index];
+    if (!value || value.startsWith('--')) throw new Error(`missing value for inbox option ${option}`);
+    switch (option) {
+      case '--from': options.from = value; break;
+      case '--to': options.to = value; break;
+      case '--goal': options.goal = value; break;
+      case '--task': options.task = value; break;
+      case '--since': options.since = value; break;
+      case '--grep': options.grep = value; break;
+      case '--limit':
+        options.limit = Number(value);
+        if (!Number.isSafeInteger(options.limit) || options.limit < 1) throw new Error('inbox --limit must be a positive integer');
+        break;
+      case '--cursor':
+        options.cursor = Number(value);
+        if (!Number.isSafeInteger(options.cursor) || options.cursor < 1) throw new Error('inbox --cursor must be a positive integer');
+        break;
+      default: throw new Error(`unknown inbox query option: ${option}`);
+    }
+  }
+  return options;
+}
+
+function resolveInboxSender(runtime: IntegrationRuntime): string | undefined {
+  const env = process.env;
+  if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT) throw new Error('workers cannot send manager inbox messages');
+  const hasProviderIdentity = Boolean(env.CODEX_THREAD_ID || env.CLAUDE_CODE_SESSION_ID);
+  const authenticated = authenticatedCallingManager(runtime, env);
+  if (authenticated) return authenticated.id;
+  if (hasProviderIdentity) throw new Error('inbox sender identity does not match an authenticated manager session');
+  if (runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) {
+    const active = (runtime.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).some(({ state }) => {
+      try {
+        const parsed = JSON.parse(state) as { status?: unknown; threadId?: unknown; kind?: unknown };
+        return parsed.status === 'running' && typeof parsed.threadId === 'string' &&
+          (parsed.kind === undefined || parsed.kind === 'managed' || parsed.kind === 'resident-supermanager');
+      } catch { return false; }
+    });
+    if (active) throw new Error('inbox sender identity requires an authenticated manager session');
+  }
+  // Compatibility for standalone control-plane fixtures and pre-session administrative invocations.
+  return callingManager(runtime);
+}
+
+function parseDocumentReference(value: string): InboxDocumentReference {
+  let parsed: unknown = value;
+  if (value.trimStart().startsWith('{')) {
+    try { parsed = JSON.parse(value) as unknown; }
+    catch { throw new Error('inbox --document must be a path or a JSON document reference'); }
+  }
+  if (typeof parsed === 'string') {
+    if (!parsed.trim() || /[\r\n]/.test(parsed)) throw new Error('inbox --document path must be one line');
+    return { path: parsed };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('inbox --document must be a path or a JSON document reference');
+  const reference = parsed as Record<string, unknown>;
+  if (Object.keys(reference).some((key) => key !== 'path' && key !== 'change') || typeof reference.path !== 'string' || !reference.path.trim() ||
+      (reference.change !== undefined && (typeof reference.change !== 'string' || /[\r\n]/.test(reference.change))))
+    throw new Error('inbox --document JSON must contain a nonempty path and optional one-line change');
+  return { path: reference.path, ...(typeof reference.change === 'string' ? { change: reference.change } : {}) };
+}
+
+function parseEscalation(value: string): InboxEscalation {
+  let parsed: unknown = value;
+  if (value.trimStart().startsWith('{')) {
+    try { parsed = JSON.parse(value) as unknown; }
+    catch { throw new Error('inbox --escalation must be a reason or a JSON escalation object'); }
+  }
+  if (typeof parsed === 'string') {
+    if (!parsed.trim() || /[\r\n]/.test(parsed)) throw new Error('inbox --escalation reason must be one line');
+    return { reason: parsed };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('inbox --escalation must be a reason or a JSON escalation object');
+  const escalation = parsed as Record<string, unknown>;
+  if (Object.keys(escalation).some((key) => key !== 'reason' && key !== 'target') ||
+      typeof escalation.reason !== 'string' || !escalation.reason.trim() || /[\r\n]/.test(escalation.reason) ||
+      (escalation.target !== undefined && (typeof escalation.target !== 'string' || !escalation.target.trim())))
+    throw new Error('inbox --escalation JSON must contain a reason and optional target');
+  return { reason: escalation.reason, ...(typeof escalation.target === 'string' ? { target: escalation.target } : {}) };
+}
+
+function printInboxResult(value: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(value));
+    return;
+  }
+  if (value && typeof value === 'object' && 'entries' in value && Array.isArray(value.entries)) {
+    const page = value as { entries: { id: number; from: string | null; to: string; goal: string | null; task: string | null; kind: string | null; summary: string | null }[]; hasMore: boolean; nextCursor: number | null };
+    for (const entry of page.entries)
+      console.log(`#${entry.id} ${entry.kind ?? 'unknown'} Goal=${entry.goal ?? 'unknown'} task=${entry.task ?? 'unknown'} ${entry.from ?? 'unknown'} -> ${entry.to}: ${entry.summary ?? 'unknown summary'}`);
+    if (page.hasMore) console.log(`More results: continue with --cursor ${page.nextCursor}`);
+    if (!page.entries.length) console.log('No inbox messages.');
+    return;
+  }
+  if (value && typeof value === 'object' && 'groups' in value && Array.isArray(value.groups) &&
+      'details' in value && typeof value.details === 'object' && value.details !== null) {
+    const digest = value as {
+      since: number;
+      groups: { goal: string | null; counts: Record<string, number> }[];
+      details: { entries: { id: number; category: string; goal: string | null; summary: string | null }[]; hasMore: boolean; nextCursor: number | null };
+    };
+    console.log(`Inbox digest since ${new Date(digest.since).toISOString()}`);
+    for (const group of digest.groups)
+      console.log(`Goal=${group.goal ?? 'unknown'} ${Object.entries(group.counts).map(([name, count]) => `${name}=${count}`).join(' ')}`);
+    for (const entry of digest.details.entries)
+      console.log(`#${entry.id} ${entry.category} Goal=${entry.goal ?? 'unknown'}: ${entry.summary ?? 'unknown summary'}`);
+    if (digest.details.hasMore) console.log(`More results: continue with --cursor ${digest.details.nextCursor}`);
+    return;
+  }
+  console.log(JSON.stringify(value));
+}
+
 export async function recordManagerCommand(runtime: IntegrationRuntime): Promise<void> {
   const manager = callingManager(runtime);
   if (!manager) return;

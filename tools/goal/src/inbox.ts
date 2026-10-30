@@ -4,23 +4,18 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
-import { migrate } from './db.ts';
+import { migrateSharedInbox, sharedInboxFields } from './inbox-shared.ts';
 
 const wakingKinds = new Set<ManagerEventKind>(['spec-conflict', 'scope-growth', 'environment', 'round-limit', 'stalled',
-  'failed-after-consult', 'goal-unmet', 'goal-met', 'goal-idle', 'instruction']);
+  'failed-after-consult', 'goal-unmet', 'goal-met', 'goal-idle', 'instruction', 'question', 'decision', 'blocker', 'handoff', 'info']);
 export type InboxEntry = { id: number; event: ManagerEvent; readAt: number | null; acknowledgedAt: number | null };
 
 export class SqliteManagerInbox implements ManagerInbox {
   readonly signalDirectory: string;
-  constructor(readonly db: Database, readonly stateDirectory: string) {
+  constructor(readonly db: Database, readonly stateDirectory: string, private readonly now: () => number = Date.now) {
     this.signalDirectory = join(stateDirectory, 'manager-signals');
     mkdirSync(this.signalDirectory, { recursive: true });
-    migrate(db, [{ module: 'inbox', version: 1, sql: `
-      CREATE TABLE manager_inbox (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, manager TEXT NOT NULL, event TEXT NOT NULL,
-        wakeable INTEGER NOT NULL, notified INTEGER NOT NULL DEFAULT 0, read_at INTEGER, acknowledged_at INTEGER
-      );
-      CREATE INDEX manager_inbox_pending ON manager_inbox(manager, wakeable, read_at);` }]);
+    migrateSharedInbox(db);
   }
   signalPath(manager: string): string {
     return join(this.signalDirectory, createHash('sha256').update(manager).digest('hex'));
@@ -36,7 +31,93 @@ export class SqliteManagerInbox implements ManagerInbox {
   }
   record(manager: string, event: unknown): void { this.insert(manager, event, false); }
   private insert(manager: string, event: unknown, wakeable: boolean): void {
-    this.db.query('INSERT INTO manager_inbox(manager, event, wakeable) VALUES (?, ?, ?)').run(manager, JSON.stringify(event), Number(wakeable));
+    const write = () => {
+      const fields = sharedInboxFields(event);
+      const replyToId = fields.replyToId;
+      let parent: { id: number; reply_to_id: number | null; thread_root_id: number | null; task_id: string | null; goal_id: string | null } | null = null;
+      let rootId: number | null = null;
+      if (replyToId !== null) {
+        parent = this.db.query('SELECT id, reply_to_id, thread_root_id, task_id, goal_id FROM manager_inbox WHERE id = ?')
+          .get(replyToId) as typeof parent;
+        if (!parent) throw new Error(`inbox reply target does not exist: ${replyToId}`);
+        if (parent.task_id && fields.taskId && parent.task_id !== fields.taskId)
+          throw new Error(`inbox reply task does not match its parent message ${replyToId}`);
+        if (parent.goal_id && fields.goalId && parent.goal_id !== fields.goalId)
+          throw new Error(`inbox reply Goal does not match its parent message ${replyToId}`);
+        rootId = this.replyRoot(replyToId);
+      }
+
+      const taskId = fields.taskId ?? parent?.task_id ?? null;
+      const goalId = fields.goalId ?? parent?.goal_id ?? this.goalFor(fields.sender, taskId);
+      const storedEvent = event && typeof event === 'object' && !Array.isArray(event)
+        ? { ...event, ...(taskId ? { taskId } : {}), ...(goalId ? { goalId } : {}) }
+        : event;
+      const createdAt = this.now();
+      if (!Number.isSafeInteger(createdAt) || createdAt < 0) throw new Error('inbox clock returned an invalid timestamp');
+      const inserted = this.db.query(`INSERT INTO manager_inbox(
+        manager, event, wakeable, created_at, sender, goal_id, task_id, kind, summary,
+        reply_to_id, thread_root_id, document_refs, escalation
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        manager,
+        JSON.stringify(storedEvent),
+        Number(wakeable),
+        createdAt,
+        fields.sender,
+        goalId,
+        taskId,
+        fields.kind,
+        fields.summary,
+        replyToId,
+        rootId,
+        fields.documentRefs ? JSON.stringify(fields.documentRefs) : null,
+        fields.escalation ? JSON.stringify(fields.escalation) : null,
+      );
+      const id = Number(inserted.lastInsertRowid);
+      if (rootId === null) {
+        this.db.query('UPDATE manager_inbox SET thread_root_id = ? WHERE id = ?').run(id, id);
+      }
+    };
+    if (this.db.inTransaction) write();
+    else this.db.transaction(write).immediate();
+  }
+  private replyRoot(id: number): number {
+    const ancestry = this.db.query(`WITH RECURSIVE chain(id, reply_to_id, depth, path, cycle) AS (
+      SELECT id, reply_to_id, 0, printf('/%d/', id), 0 FROM manager_inbox WHERE id = ?
+      UNION ALL
+      SELECT parent.id, parent.reply_to_id, chain.depth + 1, chain.path || parent.id || '/',
+        instr(chain.path, printf('/%d/', parent.id)) > 0
+      FROM chain JOIN manager_inbox AS parent ON parent.id = chain.reply_to_id
+      WHERE chain.reply_to_id IS NOT NULL AND chain.cycle = 0 AND chain.depth < 10000
+    ) SELECT id, reply_to_id, depth, cycle FROM chain ORDER BY depth DESC`).all(id) as
+      { id: number; reply_to_id: number | null; depth: number; cycle: number }[];
+    const oldest = ancestry[0];
+    const newest = ancestry[ancestry.length - 1];
+    if (!oldest || !newest) throw new Error(`inbox reply target does not exist: ${id}`);
+    if (ancestry.some((entry) => entry.cycle) || oldest.depth >= 10000 || oldest.reply_to_id !== null)
+      throw new Error(`inbox reply target has an invalid or cyclic thread: ${id}`);
+    return oldest.id;
+  }
+  private goalFor(sender: string | null, taskId: string | null): string | null {
+    if (taskId && this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get()) {
+      const row = this.db.query('SELECT body FROM worker_tasks WHERE id = ?').get(taskId) as { body: string } | null;
+      if (!row) return null;
+      try {
+        const task = JSON.parse(row.body) as { brief?: { goal?: unknown } };
+        return typeof task.brief?.goal === 'string' && task.brief.goal ? task.brief.goal : null;
+      } catch {
+        return null;
+      }
+    }
+    if (taskId || !sender || !this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
+      return null;
+    const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender) as { state: string } | null;
+    if (!row) return null;
+    try {
+      const state = JSON.parse(row.state) as { goal?: unknown };
+      return typeof state.goal === 'string' && state.goal ? state.goal : null;
+    } catch {
+      return null;
+    }
   }
   pending(manager: string): InboxEntry[] {
     return this.rows(manager, 'wakeable = 1 AND read_at IS NULL');

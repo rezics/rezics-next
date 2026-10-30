@@ -15,6 +15,7 @@ import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { requestManagerLanding } from './manager-landing.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch } from './watchdog.ts';
@@ -312,6 +313,7 @@ export type Runtime = IntegrationRuntime & {
   job: WorkerJob;
   queue: SqliteLandingQueue;
   inbox: SqliteManagerInbox;
+  sharedInbox: SharedInboxQueries;
   train: MergeTrain;
   pump(): Promise<void>;
   drain(): Promise<void>;
@@ -350,6 +352,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const sharedInbox = new SharedInboxQueries(db);
   const checkResultOptions = {
     root: settings.mainCheckout,
     results: store.checkResults,
@@ -554,6 +557,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     job,
     queue,
     inbox,
+    sharedInbox,
     train,
     fence: store,
     sink: job,

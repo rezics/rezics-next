@@ -108,6 +108,11 @@ export interface GateOutcomeSink {
 
 /** Only these wake a manager. Passing gates, merges, environment reruns and automatic consultations are recorded only. */
 export type ManagerEventKind =
+  | 'question'
+  | 'decision'
+  | 'blocker'
+  | 'handoff'
+  | 'info'
   | 'spec-conflict'
   | 'scope-growth'
   | 'environment'
@@ -124,10 +129,21 @@ export type ManagerEvent = {
   kind: ManagerEventKind;
   from?: string;
   taskId?: string;
+  /** Goal identity is written only when it comes from persisted manager or task metadata. */
+  goalId?: string;
+  /** The exact inbox row this message answers or follows. */
+  replyToId?: number;
+  /** Document paths and optional change descriptions attached to a decision. */
+  documentRefs?: readonly InboxDocumentReference[];
+  /** Explicit escalation context; system event kinds are not inferred to be escalations. */
+  escalation?: InboxEscalation;
   /** One line; the manager reads details through the control plane. */
   summary: string;
   evidencePath?: string;
 };
+
+export type InboxDocumentReference = { path: string; change?: string };
+export type InboxEscalation = { target?: string; reason: string };
 
 /** Implemented by the integration side. */
 export interface ManagerInbox {

@@ -81,3 +81,62 @@ test('manager start creates its host and returns while the host stays alive', as
     process.kill(hostPid!, 'SIGTERM'); await released; hostPid = undefined;
   } finally { if (hostPid) process.kill(hostPid, 'SIGTERM'); child.kill(); t.close(); }
 }, 60_000);
+
+test('authenticated managers read cross-recipient filtered pages and threads without changing recipient state', async () => {
+  const t = temporaryDirectory();
+  const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path);
+  db.run('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run('reader', JSON.stringify({
+    id: 'reader', kind: 'managed', status: 'running', threadId: 'reader-thread', goal: 'reader-goal',
+  }));
+  inbox.deliver({ managerId: 'recipient-a', from: 'manager-a', kind: 'question', summary: 'Which signed ID?', goalId: 'goal-a', taskId: 'task-a' });
+  const rootId = (db.query("SELECT id FROM manager_inbox WHERE summary = 'Which signed ID?'").get() as { id: number }).id;
+  inbox.deliver({ managerId: 'manager-a', from: 'recipient-a', kind: 'info', summary: 'Use v2 signed IDs', goalId: 'goal-a', taskId: 'task-a', replyToId: rootId });
+  inbox.deliver({ managerId: 'recipient-a', from: 'manager-a', kind: 'info', summary: 'Second matching signed detail', goalId: 'goal-a', taskId: 'task-a' });
+  db.query('UPDATE manager_inbox SET read_at = 31, acknowledged_at = NULL, notified = 1 WHERE manager = ?').run('recipient-a');
+  db.query("UPDATE manager_inbox SET read_at = 32, acknowledged_at = 33 WHERE summary = 'Use v2 signed IDs'").run();
+  const before = db.query('SELECT id, manager, notified, read_at, acknowledged_at FROM manager_inbox ORDER BY id').all();
+  const env = {
+    ...process.env,
+    FAKE_GOAL_STATE: t.path,
+    FAKE_GOAL_MAIN: t.path,
+    GOAL_MANAGER: 'reader',
+    CODEX_THREAD_ID: 'reader-thread',
+    CLAUDE_CODE_SESSION_ID: undefined,
+  };
+  const invoke = async (environment: NodeJS.ProcessEnv, ...argv: string[]) => {
+    const child = Bun.spawn([process.execPath, runtime, ...argv], { env: environment, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+    ]);
+    return { code, stdout };
+  };
+  try {
+    const log = await invoke(env, 'inbox', 'log', '--from', 'manager-a', '--to', 'recipient-a', '--goal', 'goal-a',
+      '--task', 'task-a', '--since', String(Date.now() - 60_000), '--grep', 'SIGNED', '--limit', '1', '--json');
+    expect(log.code).toBe(0);
+    expect(log.stderr).toBe('');
+    const page = JSON.parse(log.stdout) as { entries: { summary: string }[]; hasMore: boolean; nextCursor: number | null };
+    expect(page.entries.map((entry) => entry.summary)).toEqual(['Second matching signed detail']);
+    expect(page.hasMore).toBe(true);
+    const next = await invoke(env, 'inbox', 'log', '--from', 'manager-a', '--to', 'recipient-a', '--goal', 'goal-a',
+      '--task', 'task-a', '--since', String(Date.now() - 60_000), '--grep', 'SIGNED', '--limit', '1', '--cursor', String(page.nextCursor), '--json');
+    expect(JSON.parse(next.stdout).entries.map((entry: { summary: string }) => entry.summary)).toEqual(['Which signed ID?']);
+
+    const byId = await invoke(env, 'inbox', 'thread', String(rootId), '--json');
+    expect(byId.stderr).toBe('');
+    const thread = JSON.parse(byId.stdout) as { entries: { summary: string; from: string | null }[] };
+    expect(thread.entries.map((entry) => entry.summary)).toEqual(['Which signed ID?', 'Use v2 signed IDs']);
+    expect(thread.entries.map((entry) => entry.from)).toEqual(['manager-a', 'recipient-a']);
+    const byTask = await invoke(env, 'inbox', 'thread', 'task-a', '--json');
+    expect(byTask.stderr).toBe('');
+    expect(JSON.parse(byTask.stdout).entries).toHaveLength(3);
+    expect(db.query('SELECT id, manager, notified, read_at, acknowledged_at FROM manager_inbox ORDER BY id').all()).toEqual(before);
+
+    const claimedByNameOnly = await invoke({ ...env, CODEX_THREAD_ID: undefined }, 'inbox', 'log', '--json');
+    expect(claimedByNameOnly.code).not.toBe(0);
+    const worker = await invoke({ ...env, GOAL_TASK_ID: 'task-a' }, 'inbox', 'log', '--json');
+    expect(worker.code).not.toBe(0);
+  } finally { db.close(); t.close(); }
+});
