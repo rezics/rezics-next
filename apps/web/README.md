@@ -2509,7 +2509,8 @@ These reuse the existing page main and Pattern. Incomplete native ownership resp
 than being upgraded to owned/ready by the consumer. No screenshot, browser, native or visual approval is claimed.
 `tests/space-home-presentation.test.ts` retains its original cases and adds the orphan read/write separation
 acceptance, actual denial/removal/source-change and optional availability cases for integration. Verification for
-this slice is limited to the local Web type check; acceptance execution remains with integration.
+this slice is limited to the local Web type check: `bun run --cwd apps/web typecheck` completed with no type errors.
+Acceptance execution remains with integration.
 
 Source reading for this connection: the original Content presentation reader/model, Community Realm/Space routes,
 Board parser/shared presentation parts, native claim/lifecycle binders, and the adopted research's read-only Lemmy
