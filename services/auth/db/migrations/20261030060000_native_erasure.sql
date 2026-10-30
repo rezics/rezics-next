@@ -7,6 +7,7 @@ CREATE TABLE auth_erasure (
   barrier integer NOT NULL CHECK (barrier >= 0),
   version integer NOT NULL CHECK (version = 1),
   applicable boolean NOT NULL DEFAULT false,
+  inventory_coverage text NOT NULL DEFAULT 'unknown' CHECK (inventory_coverage IN ('unknown','covered')),
   inventory_completed_at timestamptz,
   phase integer NOT NULL DEFAULT 0,
   after_key text NOT NULL DEFAULT '' CHECK (octet_length(after_key) <= 1024),
@@ -67,6 +68,10 @@ ALTER TABLE auth_workflow_request ADD COLUMN erasure_subject_id text;
 ALTER TABLE auth_workflow_request ADD COLUMN erasure_human_id text;
 ALTER TABLE auth_workflow_request ADD COLUMN erasure_operator_id text;
 ALTER TABLE auth_workflow_request ADD COLUMN erasure_client_id text;
+ALTER TABLE auth_workflow_request ADD COLUMN erasure_member_id text;
+ALTER TABLE auth_workflow_request ADD COLUMN erasure_previous_operator_id text;
+CREATE INDEX erasure_request_member ON auth_workflow_request (erasure_member_id,workflow_id);
+CREATE INDEX erasure_request_previous_operator ON auth_workflow_request (erasure_previous_operator_id,workflow_id);
 ALTER TABLE auth_workflow_request ADD COLUMN terminal_at timestamptz;
 CREATE INDEX erasure_request_subject ON auth_workflow_request (erasure_subject_id,workflow_id);
 CREATE INDEX erasure_request_human ON auth_workflow_request (erasure_human_id,workflow_id);
@@ -582,9 +587,11 @@ CREATE FUNCTION auth_erasure_guard_request() RETURNS trigger LANGUAGE plpgsql AS
 BEGIN
   IF TG_OP='UPDATE' AND NEW.request IS NOT DISTINCT FROM OLD.request
      AND NEW.digest IS NOT DISTINCT FROM OLD.digest
-     AND (NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_id)
-       IS NOT DISTINCT FROM (OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_id)
+     AND (NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_id,NEW.erasure_member_id,NEW.erasure_previous_operator_id)
+       IS NOT DISTINCT FROM (OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_id,OLD.erasure_member_id,OLD.erasure_previous_operator_id)
      AND NEW.terminal_at IS NOT NULL THEN RETURN NEW; END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_member_id);
+  PERFORM auth_erasure_admit(NEW.erasure_previous_operator_id);
   PERFORM auth_erasure_admit(NEW.erasure_subject_id);
   PERFORM auth_erasure_admit(NEW.erasure_human_id);
   PERFORM auth_erasure_admit(NEW.erasure_operator_id);

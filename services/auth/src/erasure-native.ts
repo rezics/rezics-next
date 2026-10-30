@@ -347,14 +347,20 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
         [row.account_id],
       );
       await connection.query(
-        `UPDATE auth_erasure SET applicable=applicable OR $2 OR EXISTS (SELECT 1 FROM auth_consent WHERE account_id=$3) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_subject_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_human_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_operator_id=$3 LIMIT 1),inventory_completed_at=clock_timestamp(),user_deleted_at=clock_timestamp(),
+        `UPDATE auth_erasure SET applicable=applicable OR $2 OR EXISTS (SELECT 1 FROM auth_consent WHERE account_id=$3) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_subject_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_human_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_operator_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_member_id=$3 LIMIT 1) OR EXISTS (SELECT 1 FROM auth_workflow_request WHERE erasure_previous_operator_id=$3 LIMIT 1),inventory_completed_at=clock_timestamp(),user_deleted_at=clock_timestamp(),
          consent_due_at=(SELECT due_at FROM auth_consent_erasure WHERE account_id=$3),pending_code='native-request',revision=revision+1
          WHERE id=$1`,
         [id, !!user.rowCount, row.account_id],
       );
       return answer('consent', 'consent');
     }
-    const requestRoles = ['erasure_subject_id', 'erasure_human_id', 'erasure_operator_id'];
+    const requestRoles = [
+      'erasure_subject_id',
+      'erasure_human_id',
+      'erasure_operator_id',
+      'erasure_member_id',
+      'erasure_previous_operator_id',
+    ];
     const requestRole = requestRoles[tail - 3];
     if (requestRole) {
       const requests = (

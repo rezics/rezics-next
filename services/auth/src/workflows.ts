@@ -1201,15 +1201,29 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ]);
     const row = (
       await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
         [
           id,
           digest,
           input,
-          'accountId' in input ? input.accountId : null,
+          'accountId' in input
+            ? input.accountId
+            : 'subjectAccountId' in input
+              ? input.subjectAccountId
+              : 'previous' in input
+                ? input.previous.subjectAccountId
+                : 'organizationId' in input
+                  ? input.organizationId
+                  : null,
           context ? (access.actorAccountId?.(context) ?? null) : null,
           'operatorAccountId' in input ? input.operatorAccountId : null,
           'clientId' in input ? input.clientId : null,
+          input.kind === 'membership' ? input.memberAccountId : null,
+          'previous' in input
+            ? input.previous.operatorAccountId
+            : input.kind === 'delete'
+              ? (input.responsibility?.operatorAccountId ?? null)
+              : null,
         ],
       )
     ).rows[0]!;
@@ -1572,8 +1586,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const digest = hash(operation);
       const row = (
         await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-          [id, digest, operation, null, access.actorAccountId?.(context) ?? null, null, input.clientId],
+          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+          [id, digest, operation, null, access.actorAccountId?.(context) ?? null, null, input.clientId, null, null],
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();

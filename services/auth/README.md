@@ -1520,7 +1520,7 @@ remains pending, including after native work and the original consent cutoff:
 - Client contacts, arbitrary resource/client metadata and legacy request or
   encrypted creation bindings do not have complete typed person attribution.
   Ownership is never inferred by searching JSON, handles, email or network address.
-  Request member/delegate/previous-operator roles still need producer attribution.
+  Trusted delegated-principal attribution still needs an explicit native producer port.
 - A stalled registration on a surviving subject can still require its native
   release consumer's stage witness. That lifecycle must supply a terminal proof
   before the witness can be removed; history deletion is not such a proof.
