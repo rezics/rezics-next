@@ -249,6 +249,8 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   const run = (env: NodeJS.ProcessEnv): Promise<number> => runWorkspaces(root, workspaces, env, write);
   // The compiler database only serves workspaces that type .sql imports; starting it costs most of a minute.
   if (!workspaces.some((workspace) => workspace.needsDatabase)) return run(process.env);
+  // An explicit developer URL selects this execution context and retains its SQL validation semantics.
+  if (process.env.DATABASE_URL) return run(process.env);
   if (options.startDatabase) return withStartedDatabase(options.startDatabase, run);
   const { prepareCompilerDatabase } = await import('./compiler-database.ts');
   return withStartedDatabase(prepareCompilerDatabase, run);

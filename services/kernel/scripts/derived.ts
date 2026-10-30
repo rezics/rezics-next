@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
-import { cleanup, cleanupStale, docker, run } from './check.ts';
+import { cleanup, docker, run } from './check.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -9,6 +9,8 @@ const pid = String(process.pid);
 /** Start a throwaway database, migrate it, run `work`, and always remove the container. */
 export async function withThrowawayDatabase<T>(work: (env: NodeJS.ProcessEnv) => Promise<T> | T): Promise<T> {
   let container = '';
+  const inheritedUrl = process.env.DATABASE_URL;
+  const inheritedContainer = process.env.KERNEL_DATABASE_CONTAINER;
   const onSigint = (): void => {
     cleanup([container]);
     process.exit(130);
@@ -20,8 +22,6 @@ export async function withThrowawayDatabase<T>(work: (env: NodeJS.ProcessEnv) =>
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   try {
-    if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE)
-      cleanupStale('derived');
     container = docker([
       'run',
       '-d',
@@ -56,6 +56,11 @@ export async function withThrowawayDatabase<T>(work: (env: NodeJS.ProcessEnv) =>
     return await work(env);
   } finally {
     cleanup([container]);
+    // A later consumer must not inherit the URL of the database we just removed.
+    if (inheritedUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = inheritedUrl;
+    if (inheritedContainer === undefined) delete process.env.KERNEL_DATABASE_CONTAINER;
+    else process.env.KERNEL_DATABASE_CONTAINER = inheritedContainer;
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
   }
