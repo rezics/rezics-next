@@ -1,3 +1,4 @@
+import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
@@ -248,6 +249,7 @@ export function SubjectFrame({
           {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
           <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+          <SubjectChangesLink id={frame.id} title={title} locale={locale} />
         </div>
       </header>
       {navigation ?? (

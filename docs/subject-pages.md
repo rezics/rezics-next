@@ -178,6 +178,26 @@ The private review remains explicitly opened after session preparation and uses 
 no candidate or authenticated overlay enters the public sources response. Back to subject returns to that same
 public subject. Relation-edge slots continue through their existing target-aware readers.
 
+### Recorded changes
+
+The subject header offers Changes at `/subjects/{id}/{slug}/changes`. This private, no-store, noindex
+companion page starts reads after browser session preparation. It follows the native revisions list and its
+opaque continuation unchanged, including an empty page with another continuation. The current public subject
+read supplies its identity, title and return address; it is independent of the authorized revisions read.
+
+Choosing a revision clears any previous detail and asks the same session BFF for its safe explanation. A failed
+detail read preserves the revision list and selection and offers an exact retry. Missing or concealed detail has
+one neutral state. A current subject refusal clears the page. No historical value, source input or current value
+is used to reconstruct withheld information. Only the producer's authorized summary may describe term fields and
+data languages, a proposal, a Context decision or an adoption. A proposal, acceptance and current public selection
+remain separate; the latest revision is never labelled as the current selection. Return to current reading uses
+the ordinary public subject journey. This page offers no lifecycle command or historical snapshot comparison.
+
+Loading, no revisions, denied, invalid, changed, unavailable/retry and limited safe detail are distinct states.
+The temporary detail port remains unavailable until the published closed Semantic response is bound; consumer
+presentation examples do not establish native detail availability. There is no guessed detail wire schema or
+successful runtime fallback. Definition labels use the existing locale fallback, independently of data languages.
+
 ### Open owner joins
 
 These joins complete the adopted journey; naming one here does not claim it is implemented:
