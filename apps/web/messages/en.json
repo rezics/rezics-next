@@ -1026,5 +1026,16 @@
   "subject_community_board": "Open board",
   "subject_community_review": "Write a review on this board",
   "subject_community_discuss": "Start a discussion on this board",
-  "subject_community_more": "More posts"
+  "subject_community_more": "More posts",
+  "settings_profile_edit_denied": "You cannot edit this profile with the current sign-in.",
+  "settings_profile_review_needed": "Review your draft against the current profile before saving again.",
+  "settings_profile_self_unavailable": "The current account’s editable profile is unavailable. Reload to try again. Some accounts without a public handle do not yet support profile editing.",
+  "settings_profile_retry_save": "Retry original save",
+  "settings_profile_reload_current": "Reload current profile",
+  "settings_profile_review_draft": "Review draft",
+  "settings_profile_text_limit": "Use no more than 4,096 characters.",
+  "settings_profile_label_limit": "Enter a label of 1–64 characters.",
+  "settings_profile_https_link": "Use an absolute HTTPS URL of at most 2,048 characters, without sign-in details or spaces.",
+  "settings_profile_visibility_help": "These choices control public lists. They do not change access to individual items or grant permissions.",
+  "settings_profile_save_activity": "Save activity choices"
 }

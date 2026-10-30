@@ -1025,5 +1025,16 @@
   "subject_community_board": "開啟看板",
   "subject_community_review": "在此看板撰寫評論",
   "subject_community_discuss": "在此看板發起討論",
-  "subject_community_more": "更多貼文"
+  "subject_community_more": "更多貼文",
+  "settings_profile_edit_denied": "目前的登入身分無法編輯這份個人資料。",
+  "settings_profile_review_needed": "請對照最新資料檢查草稿，再重新儲存。",
+  "settings_profile_self_unavailable": "暫時無法取得目前帳號的可編輯資料，請重新載入。部分沒有公開使用者名稱的帳號尚不支援編輯資料。",
+  "settings_profile_retry_save": "重試原儲存請求",
+  "settings_profile_reload_current": "重新載入目前資料",
+  "settings_profile_review_draft": "檢查草稿",
+  "settings_profile_text_limit": "請勿超過 4,096 個字元。",
+  "settings_profile_label_limit": "標籤須為 1–64 個字元。",
+  "settings_profile_https_link": "請輸入不超過 2,048 個字元的完整 HTTPS 網址，不含登入資訊或空格。",
+  "settings_profile_visibility_help": "這些選項僅控制公開清單，不會改變個別內容的存取權限，也不會授予權限。",
+  "settings_profile_save_activity": "儲存動態設定"
 }

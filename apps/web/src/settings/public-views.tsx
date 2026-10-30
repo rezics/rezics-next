@@ -1,85 +1,47 @@
-import { useQuery } from '@tanstack/react-query';
-import { useId, useLayoutEffect, useState } from 'react';
-import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
+import { useId, useSyncExternalStore } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
-import { personalRead } from '../kernel/query';
-import { useSession } from '../session/query';
-import { csrfHeaders } from '../threads/composer';
-import { readProfile, saveProfile } from './actions';
-import type { ProfileValues } from './profile-data';
-
-function profileError(status: number) {
-  if (status === 400) return m.settings_profile_error_400();
-  if (status === 403) return m.settings_profile_error_403();
-  if (status === 409) return m.settings_profile_error_409();
-  if (status === 422) return m.settings_profile_error_422();
-  return m.settings_profile_network_error();
-}
+import { ProfileFeedback } from './profile';
+import { profileChanges } from './profile-data';
+import type { ProfileEditor } from './profile-write';
+import { useProfileEditor } from './profile-write-query';
 
 export function PublicViewsSection() {
-  const session = useSession();
-  const query = useQuery({
-    ...personalRead,
-    queryKey: ['settings', 'profile'],
-    queryFn: () => readProfile(),
-    retry: false,
-  });
-  const [profile, setProfile] = useState<ProfileValues | null>(null);
-  const [known, setKnown] = useState<ProfileValues | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [savedSignal, setSavedSignal] = useState(false);
-  const [retryKey, setRetryKey] = useState<string | null>(null);
+  const { editor, writable } = useProfileEditor();
+  return <PublicViewsCard editor={editor} writable={writable} />;
+}
+
+export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEditor; writable?: boolean }) {
+  const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  const profile = state.draft;
   const ids = useId();
-  useLayoutEffect(() => {
-    if (query.data && !known) {
-      setProfile(query.data);
-      setKnown(query.data);
-    }
-  }, [query.data, known]);
-  async function change(next: ProfileValues) {
-    if (!profile || !known || !session?.csrfToken || saving) return;
-    const key = retryKey ?? crypto.randomUUID();
-    setRetryKey(key);
-    setSaving(true);
-    setSavedSignal(false);
-    setMessage('');
-    try {
-      const result = await saveProfile({
-        data: { before: known, after: next, idempotencyKey: key },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setProfile(result.profile);
-        setKnown(result.profile);
-        setRetryKey(null);
-        setSavedSignal(true);
-      } else {
-        setProfile(next);
-        setRetryKey(null);
-        setMessage(result.message || profileError(result.status));
-      }
-    } catch {
-      setProfile(next);
-      setMessage(m.settings_profile_network_error());
-    } finally {
-      setSaving(false);
-    }
-  }
+  const busy = state.phase === 'saving' || state.phase === 'reloading';
+  const closed = !writable || state.phase === 'unavailable';
+  const changed =
+    profile &&
+    state.known &&
+    Object.keys(
+      profileChanges(state.known, {
+        ...state.known,
+        publicViews: profile.publicViews,
+        ...(profile.kind === 'organization' ? { speakersListed: profile.speakersListed } : {}),
+      }),
+    ).length > 0;
   return (
     <Card>
       <CardHeader>
         <CardTitle>
           <h2>{m.settings_public_activity_heading()}</h2>
         </CardTitle>
-        <CardDescription>{m.settings_public_activity_text()}</CardDescription>
+        <CardDescription>
+          {m.settings_public_activity_text()} {m.settings_profile_visibility_help()}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {query.isPending ? <p role="status">{m.settings_profile_loading()}</p> : null}
-        {query.isError ? <p role="alert">{m.settings_profile_load_error()}</p> : null}
+      <CardContent className="space-y-4" aria-busy={busy}>
+        <ProfileFeedback editor={editor} scope="views" writable={writable} />
         {profile ? (
           <>
             {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
@@ -91,10 +53,11 @@ export function PublicViewsSection() {
                   <Switch
                     id={`${ids}-${view}`}
                     checked={profile.publicViews[view]}
-                    disabled={!session?.csrfToken || saving}
-                    onCheckedChange={(checked) =>
-                      void change({ ...profile, publicViews: { ...profile.publicViews, [view]: checked } })
-                    }
+                    disabled={closed || busy}
+                    onCheckedChange={(checked) => {
+                      editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
+                      void editor.submit('views');
+                    }}
                   />
                 </Field>
               </label>
@@ -108,18 +71,24 @@ export function PublicViewsSection() {
                   <Switch
                     id={`${ids}-speakers`}
                     checked={profile.speakersListed === true}
-                    disabled={!session?.csrfToken || saving}
-                    onCheckedChange={(checked) => void change({ ...profile, speakersListed: checked })}
+                    disabled={closed || busy}
+                    onCheckedChange={(checked) => {
+                      editor.edit({ speakersListed: checked });
+                      void editor.submit('views');
+                    }}
                   />
                 </Field>
               </label>
             ) : null}
-            {savedSignal ? <p role="status">{m.settings_saved()}</p> : null}
-            {message ? (
-              <Alert variant="destructive">
-                <AlertTitle>{m.settings_profile_error_title()}</AlertTitle>
-                <AlertDescription>{message}</AlertDescription>
-              </Alert>
+            {changed && !busy ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={closed || !!state.attempt}
+                onClick={() => void editor.submit('views')}
+              >
+                {m.settings_profile_save_activity()}
+              </Button>
             ) : null}
           </>
         ) : null}

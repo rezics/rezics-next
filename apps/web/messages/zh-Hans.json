@@ -1026,5 +1026,16 @@
   "subject_community_board": "打开版块",
   "subject_community_review": "在此版块写评论",
   "subject_community_discuss": "在此版块发起讨论",
-  "subject_community_more": "更多帖子"
+  "subject_community_more": "更多帖子",
+  "settings_profile_edit_denied": "当前登录身份无法编辑此资料。",
+  "settings_profile_review_needed": "请对照最新资料检查草稿，然后重新保存。",
+  "settings_profile_self_unavailable": "暂时无法获取当前账号的可编辑资料，请重新加载。部分没有公开用户名的账号尚不支持编辑资料。",
+  "settings_profile_retry_save": "重试原保存请求",
+  "settings_profile_reload_current": "重新加载当前资料",
+  "settings_profile_review_draft": "检查草稿",
+  "settings_profile_text_limit": "请勿超过 4,096 个字符。",
+  "settings_profile_label_limit": "标签需为 1–64 个字符。",
+  "settings_profile_https_link": "请输入不超过 2,048 个字符的完整 HTTPS 网址，不含登录信息或空格。",
+  "settings_profile_visibility_help": "这些选项仅控制公开列表，不会改变单个内容的访问权限，也不会授予权限。",
+  "settings_profile_save_activity": "保存动态设置"
 }

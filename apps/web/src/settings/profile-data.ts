@@ -1,49 +1,42 @@
 import type { KernelClient } from '@rezics/client';
 
+type AccountRead = NonNullable<Awaited<ReturnType<KernelClient['accounts']['get']>>['data']>['accounts'][number];
+type AccountProfile = Extract<AccountRead, { bio: string | null }>;
 export type ProfileLink = { label: string; url: string };
 export type ProfileValues = {
   accountId: string;
   kind: 'actor' | 'organization';
   displayName: string | null;
   biography: string | null;
-  avatar: { id: string; url?: string } | null;
+  // Keep Content's summary intact; a newly uploaded avatar initially has only its native media reference.
+  avatar: AccountProfile['avatar'] | { media: string };
   links: ProfileLink[];
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
   speakersListed?: boolean;
 };
+export type ProfilePatch = {
+  displayName?: string | null;
+  biography?: string | null;
+  avatar?: string | null;
+  links?: ProfileLink[];
+  publicViews?: Partial<ProfileValues['publicViews']>;
+  speakersListed?: boolean;
+};
+/** The PATCH acknowledges a command. Only a subsequent GET confirms the current profile. */
 export type ProfileSaveResult = { ok: true; profile: ProfileValues } | { ok: false; status: number; message: string };
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function accountProfile(value: unknown): ProfileValues {
-  if (!record(value) || typeof value.id !== 'string' || (value.kind !== 'actor' && value.kind !== 'organization'))
+function accountProfile(value: AccountRead): ProfileValues {
+  if (!('bio' in value) || !('avatar' in value) || !('links' in value) || !('publicViews' in value))
     throw new Error('Profile unavailable');
-  const rawAvatar = value.avatar;
-  const avatar =
-    record(rawAvatar) && typeof rawAvatar.id === 'string'
-      ? { id: rawAvatar.id, ...(typeof rawAvatar.url === 'string' ? { url: rawAvatar.url } : {}) }
-      : null;
-  const rawViews = record(value.publicViews) ? value.publicViews : {};
-  const links = Array.isArray(value.links)
-    ? value.links.filter(
-        (link): link is ProfileLink => record(link) && typeof link.label === 'string' && typeof link.url === 'string',
-      )
-    : [];
+  if (value.state === 'deleted') throw new Error('Profile unavailable');
   return {
     accountId: value.id,
     kind: value.kind,
-    displayName: typeof value.displayName === 'string' ? value.displayName : null,
-    biography: typeof value.bio === 'string' ? value.bio : null,
-    avatar,
-    links,
-    publicViews: {
-      posts: rawViews.posts !== false,
-      reviews: rawViews.reviews !== false,
-      collections: rawViews.collections !== false,
-      realms: rawViews.realms !== false,
-    },
+    displayName: value.displayName,
+    biography: value.bio,
+    avatar: value.avatar,
+    links: value.links,
+    publicViews: value.publicViews,
     ...(value.kind === 'organization' ? { speakersListed: value.speakersListed === true } : {}),
   };
 }
@@ -56,9 +49,10 @@ export async function loadProfileRecord(
   const identity = await client.accounts.get({ query: { ids: accountId }, headers: { authorization } });
   if (identity.error || !identity.data) throw new Error('Profile unavailable');
   const ownIdentity = identity.data.accounts.find((item) => item.id === accountId);
-  const handle = ownIdentity?.handle;
+  // Accounts currently exposes compact attribution by ID, with full profiles only by handle.
+  // A handleless/managed identity needs an Accounts-owned private self-profile read contract.
+  const handle = ownIdentity && 'handle' in ownIdentity ? ownIdentity.handle : null;
   if (!handle) throw new Error('Profile unavailable');
-
   const result = await client.accounts.get({ query: { handle }, headers: { authorization } });
   if (result.error || !result.data) throw new Error('Profile unavailable');
   const found = result.data.accounts.find((item) => item.id === accountId);
@@ -66,13 +60,21 @@ export async function loadProfileRecord(
   return accountProfile(found);
 }
 
-function changes(before: ProfileValues, after: ProfileValues) {
-  const body: Record<string, unknown> = {};
+function avatarReference(avatar: object | null): string | null {
+  if (!avatar) return null;
+  if ('media' in avatar && typeof avatar.media === 'string') return avatar.media;
+  // Preserve the earlier adapter's reference shape while existing callers transition to native summaries.
+  if ('id' in avatar && typeof avatar.id === 'string') return avatar.id;
+  return null;
+}
+
+export function profileChanges(before: ProfileValues, after: ProfileValues): ProfilePatch {
+  const body: ProfilePatch = {};
   if (before.displayName !== after.displayName) body.displayName = after.displayName;
   if (before.biography !== after.biography) body.biography = after.biography;
-  if (before.avatar?.id !== after.avatar?.id) body.avatar = after.avatar?.id ?? null;
+  if (avatarReference(before.avatar) !== avatarReference(after.avatar)) body.avatar = avatarReference(after.avatar);
   if (JSON.stringify(before.links) !== JSON.stringify(after.links)) body.links = after.links;
-  const publicViews: Record<string, boolean> = {};
+  const publicViews: NonNullable<ProfilePatch['publicViews']> = {};
   for (const key of ['posts', 'reviews', 'collections', 'realms'] as const)
     if (before.publicViews[key] !== after.publicViews[key]) publicViews[key] = after.publicViews[key];
   if (Object.keys(publicViews).length) body.publicViews = publicViews;
@@ -90,17 +92,16 @@ export async function saveProfileRecord(
   idempotencyKey: string,
 ): Promise<ProfileSaveResult> {
   if (after.links.length > 5) throw new Error('At most five links are allowed');
-  const body = changes(before, after);
+  const body = profileChanges(before, after);
   if (!Object.keys(body).length) return { ok: true, profile: before };
   const result = await client.accounts({ accountId }).patch(body, {
-    headers: { authorization, 'idempotency-key': idempotencyKey } as {
-      authorization: string;
-      'idempotency-key': string;
-    },
+    headers: { authorization, 'idempotency-key': idempotencyKey },
   });
   if (!result.error && result.data) return { ok: true, profile: after };
-  const status = result.status;
-  const errorBody = record(result.error?.value) ? result.error.value : undefined;
-  const message = typeof errorBody?.detail === 'string' ? errorBody.detail : '';
-  return { ok: false, status, message };
+  const errorBody = result.error?.value;
+  const message =
+    errorBody && typeof errorBody === 'object' && 'detail' in errorBody && typeof errorBody.detail === 'string'
+      ? errorBody.detail
+      : '';
+  return { ok: false, status: result.status, message };
 }

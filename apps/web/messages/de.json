@@ -1025,5 +1025,16 @@
   "subject_community_board": "Forum öffnen",
   "subject_community_review": "In diesem Forum eine Rezension schreiben",
   "subject_community_discuss": "In diesem Forum eine Diskussion beginnen",
-  "subject_community_more": "Weitere Beiträge"
+  "subject_community_more": "Weitere Beiträge",
+  "settings_profile_edit_denied": "Mit deiner aktuellen Anmeldung kannst du dieses Profil nicht bearbeiten.",
+  "settings_profile_review_needed": "Vergleiche deinen Entwurf mit dem aktuellen Profil, bevor du erneut speicherst.",
+  "settings_profile_self_unavailable": "Das bearbeitbare Profil dieses Kontos ist nicht verfügbar. Lade es erneut. Einige Konten ohne öffentlichen Nutzernamen unterstützen die Profilbearbeitung noch nicht.",
+  "settings_profile_retry_save": "Ursprünglichen Speicherversuch wiederholen",
+  "settings_profile_reload_current": "Aktuelles Profil neu laden",
+  "settings_profile_review_draft": "Entwurf prüfen",
+  "settings_profile_text_limit": "Verwende höchstens 4.096 Zeichen.",
+  "settings_profile_label_limit": "Gib eine Bezeichnung mit 1 bis 64 Zeichen ein.",
+  "settings_profile_https_link": "Verwende eine vollständige HTTPS-URL mit höchstens 2.048 Zeichen, ohne Anmeldedaten oder Leerzeichen.",
+  "settings_profile_visibility_help": "Diese Einstellungen steuern öffentliche Listen. Sie ändern weder den Zugriff auf einzelne Inhalte noch erteilen sie Berechtigungen.",
+  "settings_profile_save_activity": "Aktivitätseinstellungen speichern"
 }

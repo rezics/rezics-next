@@ -1025,5 +1025,16 @@
   "subject_community_board": "Ouvrir le forum",
   "subject_community_review": "Écrire une critique dans ce forum",
   "subject_community_discuss": "Lancer une discussion dans ce forum",
-  "subject_community_more": "Plus de publications"
+  "subject_community_more": "Plus de publications",
+  "settings_profile_edit_denied": "Votre connexion actuelle ne permet pas de modifier ce profil.",
+  "settings_profile_review_needed": "Comparez votre brouillon au profil actuel avant de l’enregistrer à nouveau.",
+  "settings_profile_self_unavailable": "Le profil modifiable de ce compte est indisponible. Rechargez-le pour réessayer. Certains comptes sans identifiant public ne permettent pas encore la modification du profil.",
+  "settings_profile_retry_save": "Réessayer l’enregistrement initial",
+  "settings_profile_reload_current": "Recharger le profil actuel",
+  "settings_profile_review_draft": "Vérifier le brouillon",
+  "settings_profile_text_limit": "Ne dépassez pas 4 096 caractères.",
+  "settings_profile_label_limit": "Saisissez un libellé de 1 à 64 caractères.",
+  "settings_profile_https_link": "Utilisez une URL HTTPS absolue de 2 048 caractères maximum, sans identifiants de connexion ni espaces.",
+  "settings_profile_visibility_help": "Ces choix règlent l’affichage des listes publiques. Ils ne modifient pas l’accès aux contenus et n’accordent aucune autorisation.",
+  "settings_profile_save_activity": "Enregistrer les choix d’activité"
 }
