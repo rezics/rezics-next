@@ -1,3 +1,4 @@
+import { registerDiscoveryWork } from './discovery-register.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
 import { createRevisionLocatorEffect } from './revision-locator.ts';
 import { createCommunityAccountErasureEffect, registerCommunityAccountErasureWork } from './account-erasure.ts';
@@ -84,10 +85,11 @@ export function registerCommunityWork({ pool, client, clock }: WorkContext): voi
 
 export const communityWorkModule: WorkModule = {
   name: 'community',
-  register(context) {
+  async register(context) {
     context.addEffects([createRevisionLocatorEffect(context.pool)]);
     registerCommunityWork(context);
     registerCommunityAccountErasureWork(context);
+    await registerDiscoveryWork(context);
     context.addEffects([createPartyLocatorEffect(context.pool), createCommunityAccountErasureEffect(context)]);
   },
 };

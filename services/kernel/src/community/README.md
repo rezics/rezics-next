@@ -4,6 +4,69 @@ A Space is the stable, routed identity for a future Realm (community) or Zone (s
 Its metadata is an append-only revision chain; the Space points to its current head.
 This module provides commands, point reads and HTTP routes.
 
+## Public Realm discovery
+
+Popular ranks originally qualified public discussion starts in the previous 30 complete UTC days. Trending ranks
+the previous complete UTC day; it measures recent volume. Both order count descending, then Realm ID ascending,
+and omit zero. Membership, unique people, views, votes, replies, edits and reviews contribute nothing. A start
+qualifies only at its original authoritative creation time: discussion thread and root available and published,
+published board, active explicitly public Realm and anonymously readable active host Space. Making private activity
+public later never qualifies it. Returning from protected visibility starts a new public epoch without backfill.
+
+The public API contract is `GET /v1/realms/discovery?sort=popular|trending&cursor=…&limit=…`, with the closed response
+`{realms:[{realmId,spaceId,name,description,avatar:null}],next:string|null}`. IDs are native routed IDs, name is the
+current Realm title, and description collapses whitespace, trims and truncates the current summary to 160 Unicode
+characters. No Realm or Space avatar selection authority exists, so avatar is null. No count, score, account ID,
+URL or target content is returned. Query limit is 1–100, default 20; a page examines at most `min(limit,20)` rank
+candidates, allowing sparse or empty results with continuation. There is one indexed rank seek and no refill loop.
+Consumers deduplicate Realm IDs because retractions can reorder candidates between pages.
+
+Continuation uses the native signed cursor bound to sort, normalized limit, definition version, completed UTC
+cutoff, current partition/publication epoch and the last examined count/Realm ID. A day or epoch change uses
+`stale_cursor`; invalid signatures and query changes use `invalid_cursor`. An omitted limit and explicit 20 bind
+identically. Counts stay exact bigint decimal strings internally and never enter the public card.
+
+Derived storage belongs on one explicit routed discovery anchor: Realm/public-epoch totals, at most 31 current day
+buckets per board, native source-version deduplication, guarded pending generation, two indexed rank orders and an
+indexed due frontier. Each write uses one home through the ordinary command executor under committed native source
+authority, after releasing the source anchor. Retraction/restoration uses only the original contribution and its
+current epoch/version. Replays and reordered delivery cannot double count or reset fences. Board invalidation
+subtracts at most 31 buckets per bounded step. Only actual application or native recovery may clear its exact fence;
+pending or mismatched generations never serve. Expiry consumes at most 50 indexed due keys per scheduled step on
+the shared worker, at kernel authoritative time. Overdue ranks are withheld. There are no Realm, board, thread,
+history or table sweeps, deployment scans or historical backfills.
+
+Candidate reads independently require native anonymous Realm and Space access, active explicitly public Realm,
+active host and matching carried slot, current publication and source gates. Bearer privileges never widen this
+check. Point reads are grouped by actual home in released per-partition snapshots; current heads, lifecycle,
+publication and source gates are rechecked before serialization. Unavailable authority or deadline produces the
+native error. A removed container never falls back to Global, and classification keeps its Context pointer.
+
+**Implementation.** `discovery.ts` installs the bounded signed page reader, `discovery-projection.ts` consumes
+at most 50 committed source records per step, and `discovery-expiry.ts` consumes at most 50 indexed due keys. Each
+source record uses its own aggregate command, with at most 31 board buckets. The designated derived anchor is route
+0, partition 0; it has a publication epoch advanced on source epoch changes. Current and final native owner reads
+use anonymous batched Access decisions and independent Realm source gates, never the requesting bearer's grants.
+Original board buckets remain separate from board publication, so restoring a board never changes a start's day.
+Original qualification establishes the published-board baseline until a committed board fact overrides it. Derived
+settlement uses the exact caught-up native head, including initial settlement and epoch changes without gate records.
+The consumer never resolves or clears source fences. It serves only an exact applied-generation match to a settled
+native source head. The shared Community worker registers wake-driven catch-up and minute-scheduled due work;
+continuations are durable and each history remains bounded. Old thread/bucket caches expire by exact indexed keys;
+old-epoch board gates have separate bounded cleanup. Current-epoch board gates remain available without rescanning
+threads. An overdue aggregate is suppressed until its indexed rollover runs.
+
+**Producer integration.** The consumer reads the committed source log and current gate through the original
+`discovery-source.ts` implementations. Content owns original qualification, source versions, guarded mutation
+outcomes and exact fence recovery. The Community wake retains the producer's closed `{realmId,realmEpoch}` schema;
+it only starts a committed-log read. No provisional producer declarations or alternate source coordinator remain.
+The native fixture in `test/community/discovery-native.test.ts` covers the integrated path. Runtime, physical,
+native worker, lifecycle-removal and growth proof remain integration obligations; compiler typing alone establishes
+none of them.
+
+The adopted design evidence is [Realm discovery research](../../../../docs/research/content-realm-discovery-design.md).
+Its proposed `items` envelope is superseded here by the kernel resource-plural `realms` envelope.
+
 `createSpace` derives its route from the authenticated account and idempotency key.
 It requires `space:create` on the Global Context through `parentCreationAuthorization`.
 One `runCommand` transaction inserts the Space, its first revision and native Access initialization:

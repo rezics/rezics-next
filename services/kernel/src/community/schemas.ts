@@ -24,6 +24,35 @@ export const SitemapSpaceItemSchema = t.Object(
 export const SitemapRealmPageSchema = sitemapPageSchema(SitemapRealmItemSchema);
 export const SitemapSpacePageSchema = sitemapPageSchema(SitemapSpaceItemSchema);
 
+export const discoveryQuerySchema = t.Object(
+  {
+    sort: t.Union([t.Literal('popular'), t.Literal('trending')]),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+  },
+  closed,
+);
+
+export const discoveryResponseSchema = t.Object(
+  {
+    realms: t.Array(
+      t.Object(
+        {
+          realmId: id,
+          spaceId: id,
+          name: t.String({ minLength: 1, maxLength: 1024 }),
+          description: t.String({ maxLength: 160 }),
+          avatar: t.Null(),
+        },
+        closed,
+      ),
+      { maxItems: 20 },
+    ),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
 export const ownRealmsQuerySchema = t.Object({ cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed);
 
 export const ownRealmsResponseSchema = t.Object(

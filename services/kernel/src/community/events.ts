@@ -153,4 +153,11 @@ export const COMMUNITY_EVENTS = {
   'com.rezics.community.publication.adopted.v1': publication('adopt'),
   'com.rezics.community.publication.withdrawn.v1': publication('withdraw'),
   'com.rezics.community.publication.rejected.v1': publication('reject'),
+  'com.rezics.community.realm-discovery.applied.v1': Type.Object(
+    { realmId: id, generation: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }) }, { additionalProperties: false },
+  ),
+  'com.rezics.community.realm-discovery.expired.v1': Type.Object(
+    { realmId: id, kind: Type.Union([Type.Literal('realm'), Type.Literal('bucket'), Type.Literal('thread'), Type.Literal('board')]) },
+    { additionalProperties: false },
+  ),
 } as const;

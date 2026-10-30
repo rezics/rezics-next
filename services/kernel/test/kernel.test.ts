@@ -107,6 +107,7 @@ const typed = [
   'PATCH /v1/spaces/:spaceId',
   'PATCH /v1/realms/:realmId',
   'GET /v1/spaces/:spaceId',
+  'GET /v1/realms/discovery',
   'GET /v1/realms/:realmId/publications/:subjectId',
   'GET /v1/realms/:realmId/publications',
   'GET /v1/realms/:realmId',
