@@ -60,6 +60,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       value: { type: 'value', content: target },
       qualifiers: [],
       references: [],
+      rezics: { release: definitions.digest, revision: 2 },
     },
   };
   if (scenario === 'sourced')
