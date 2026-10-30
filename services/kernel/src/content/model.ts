@@ -97,9 +97,10 @@ export function isErasedPlaceholder(
   return entry.availability === 'erased' && 'removed' in entry && !('revisionId' in entry);
 }
 
-export type BoardRecord = Readonly<{
+export type BoardView = Readonly<{
   id: BoardId;
   realmId: string | null;
+  community: CommunityPresentation | null;
   route: Route;
   title: string | null;
   purpose: 'discussion' | 'reviews';
@@ -109,7 +110,7 @@ export type BoardRecord = Readonly<{
   createdAt: string;
 }>;
 
-export type BoardView = BoardRecord & Readonly<{ community: CommunityPresentation | null }>;
+export type BoardRecord = Omit<BoardView, 'community'>;
 
 export type ThreadInput = Readonly<{
   kind?: 'discussion' | 'review';

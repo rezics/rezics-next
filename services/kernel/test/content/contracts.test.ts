@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import type { DocumentSnapshot } from '@rezics/document';
+import type { CommunityPresentation } from '../../src/content/community-presentation-model.ts';
 import type { CommandOutcome, CommandTransaction } from '../../src/command/command.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
@@ -489,6 +490,7 @@ function publishedModels(): void {
       Readonly<{
         id: string;
         realmId: string | null;
+        community: CommunityPresentation | null;
         route: number;
         title: string | null;
         purpose: 'discussion' | 'reviews';
