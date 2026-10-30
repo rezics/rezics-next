@@ -22,7 +22,8 @@ export function createIntegrationRuntime(): IntegrationRuntime {
       command: [process.execPath, import.meta.filename],
       connect: async () => {
         const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fake-app-server.ts')],
-          { ...process.env, FAKE_RPC_LOG: join(stateDirectory, 'rpc.jsonl') });
+          { ...process.env, FAKE_RPC_LOG: join(stateDirectory, 'rpc.jsonl') },
+          Number(process.env.FAKE_RPC_TIMEOUT_MS ?? 30_000));
         await client.initialize(); return client;
       },
       windows: { register: () => '@1', unregister() {} },

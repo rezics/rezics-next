@@ -64,6 +64,47 @@ export type ManagerServices = {
   onError?: (error: unknown) => void;
 };
 
+const managerDecisionMigration = {
+  module: 'manager-decisions',
+  version: 1,
+  sql: `CREATE TABLE manager_turn_decisions (
+    manager TEXT NOT NULL,
+    thread_id TEXT,
+    turn_id TEXT,
+    decided_at INTEGER NOT NULL,
+    CHECK(thread_id IS NULL OR length(thread_id) > 0),
+    CHECK(turn_id IS NULL OR length(turn_id) > 0)
+  );
+  CREATE UNIQUE INDEX manager_turn_decision_once
+    ON manager_turn_decisions(manager, thread_id, turn_id) WHERE turn_id IS NOT NULL;
+  CREATE UNIQUE INDEX manager_pending_decision_once
+    ON manager_turn_decisions(manager, thread_id) WHERE turn_id IS NULL AND thread_id IS NOT NULL;
+  CREATE UNIQUE INDEX manager_unassigned_decision_once
+    ON manager_turn_decisions(manager) WHERE turn_id IS NULL AND thread_id IS NULL;`,
+} as const;
+
+/** Persist a manager decision locally so a public CLI command never waits on the manager host. */
+export function recordManagerDecision(db: Database, id: string, at = Date.now()): void {
+  migrate(db, [managerDecisionMigration]);
+  db.transaction(() => {
+    const hasSessions = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get();
+    const row = hasSessions
+      ? (db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null)
+      : null;
+    if (!row) throw new Error(`Unknown manager: ${id}`);
+    const state = row ? (JSON.parse(row.state) as ManagerState) : null;
+    const threadId = state?.threadId ?? null;
+    db.query('INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at) VALUES (?, ?, ?, ?)')
+      .run(id, threadId, threadId ? (state?.activeTurnId ?? null) : null, at);
+  }).immediate();
+}
+
+function managerHasDecision(db: Database, id: string, threadId: string, turnId: string): boolean {
+  return Boolean(
+    db.query('SELECT 1 FROM manager_turn_decisions WHERE manager = ? AND thread_id = ? AND turn_id = ?').get(id, threadId, turnId),
+  );
+}
+
 export class ManagerSessions {
   private pools = new Map<string, Promise<AppServer>>();
   private chains = new Map<string, Promise<unknown>>();
@@ -83,6 +124,7 @@ export class ManagerSessions {
         sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);',
       },
     ]);
+    migrate(db, [managerDecisionMigration]);
     this.watcher = watchOrPoll(
       inbox.signalDirectory,
       () => {
@@ -101,14 +143,19 @@ export class ManagerSessions {
   get(id: string): ManagerState {
     const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
-    return JSON.parse(row.state);
+    const state = JSON.parse(row.state) as ManagerState;
+    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, id, state.threadId, state.activeTurnId)) state.decision = true;
+    return state;
   }
   list(): ManagerState[] {
-    return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map((row) =>
-      JSON.parse(row.state),
-    );
+    return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map((row) => {
+      const state = JSON.parse(row.state) as ManagerState;
+      if (state.threadId && state.activeTurnId && managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)) state.decision = true;
+      return state;
+    });
   }
   private save(state: ManagerState): void {
+    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)) state.decision = true;
     this.db
       .query(
         'INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',
@@ -519,18 +566,29 @@ export class ManagerSessions {
       state.countedTurn = turn;
     }
     state.activeTurnId = turn;
+    this.db.transaction(() => {
+      this.db.query(`INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at)
+        SELECT manager, COALESCE(thread_id, ?), ?, decided_at FROM manager_turn_decisions
+        WHERE manager = ? AND turn_id IS NULL AND (thread_id = ? OR thread_id IS NULL)`)
+        .run(state.threadId, turn, state.id, state.threadId);
+      this.db.query(`DELETE FROM manager_turn_decisions WHERE manager = ? AND turn_id IS NULL
+        AND (thread_id = ? OR thread_id IS NULL)`)
+        .run(state.id, state.threadId);
+      this.save(state);
+    }).immediate();
   }
   private turnEnded(state: ManagerState, turn: string): void {
-    if (state.activeTurnId !== turn) return;
-    if (!state.decision) state.turnsWithoutDecision++;
-    state.activeTurnId = null;
+    this.db.transaction(() => {
+      if (state.activeTurnId !== turn) return;
+      if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
+      if (!state.decision) state.turnsWithoutDecision++;
+      state.activeTurnId = null;
+      this.save(state);
+    }).immediate();
   }
   async noteCommand(id: string): Promise<void> {
-    return this.serial(id, async () => {
-      const state = this.get(id);
-      state.decision = true;
-      this.save(state);
-    });
+    this.get(id);
+    recordManagerDecision(this.db, id, this.now());
   }
   async claudeTurn(id: string, start: boolean): Promise<void> {
     return this.serial(id, async () => {
@@ -540,9 +598,9 @@ export class ManagerSessions {
       else if (state.activeTurnId) this.turnEnded(state, state.activeTurnId);
       else {
         // Background-command completion can start a Claude turn without UserPromptSubmit.
-        state.turns++;
-        if (!state.decision) state.turnsWithoutDecision++;
-        state.decision = false;
+        const turn = randomUUID();
+        this.turnStarted(state, turn);
+        this.turnEnded(state, turn);
       }
       this.save(state);
       await this.checkLimits(state);
@@ -749,55 +807,63 @@ export class ManagerSessions {
     this.background(id, () => this.completeInternal(id));
     return Promise.resolve(true);
   }
+  completeCommand(id: string): Promise<boolean> {
+    this.get(id);
+    return this.serial(id, () => this.completeInternal(id));
+  }
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(): Promise<void> {
-    for (const state of this.list().filter(
+    const states = this.list().filter(
       (state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal,
-    )) {
-      await this.serial(state.id, async () => {
-        let current = this.get(state.id);
-        if (current.pendingRenewal) {
-          if (
-            current.threadId &&
-            current.threadId !== current.pendingRenewal.oldThreadId &&
-            current.pendingRenewal.ready
-          ) {
-            await this.deliverRenewalNotice(current.id);
-            current = this.get(current.id);
-          } else {
-            await this.renewInternal(current.id, this.specFromState(current));
+    );
+    const results = await Promise.allSettled(
+      states.map((state) =>
+        this.serial(state.id, async () => {
+          let current = this.get(state.id);
+          if (current.pendingRenewal) {
+            if (
+              current.threadId &&
+              current.threadId !== current.pendingRenewal.oldThreadId &&
+              current.pendingRenewal.ready
+            ) {
+              await this.deliverRenewalNotice(current.id);
+              current = this.get(current.id);
+            } else {
+              await this.renewInternal(current.id, this.specFromState(current));
+              return;
+            }
+          }
+          if (current.status !== 'running' && current.status !== 'starting') return;
+          if (current.engine === 'codex' && current.threadId) {
+            const client = await this.client(current.pool);
+            const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
+            current.activeTurnId =
+              resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
+            const goal = await client.request('thread/goal/get', { threadId: current.threadId });
+            current.goalState = goal.goal;
+          }
+          if (current.status === 'starting') {
+            current.status = 'paused';
+            this.save(current);
+            await this.pauseRemote(current);
             return;
           }
-        }
-        if (current.status !== 'running' && current.status !== 'starting') return;
-        if (current.engine === 'codex' && current.threadId) {
-          const client = await this.client(current.pool);
-          const resumed = await client.request('thread/resume', { ...FULL_ACCESS, threadId: current.threadId });
-          current.activeTurnId =
-            resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
-          const goal = await client.request('thread/goal/get', { threadId: current.threadId });
-          current.goalState = goal.goal;
-        }
-        if (current.status === 'starting') {
-          current.status = 'paused';
           this.save(current);
-          await this.pauseRemote(current);
-          return;
-        }
-        this.save(current);
-        if (current.engine === 'codex' && current.threadId) {
-          const client = await this.client(current.pool);
-          this.services.windows.unregister(current.id);
-          this.registerCodexViewer(current, client);
-        }
-        if (await this.handleGoalUpdate(current)) return;
-        if (!(await this.checkLimits(current))) {
-          if (current.goalState?.status === 'complete') await this.completeInternal(current.id);
-          else await this.dispatch(current.id);
-        }
-      });
-    }
+          if (current.engine === 'codex' && current.threadId) {
+            const client = await this.client(current.pool);
+            this.services.windows.unregister(current.id);
+            this.registerCodexViewer(current, client);
+          }
+          if (await this.handleGoalUpdate(current)) return;
+          if (!(await this.checkLimits(current))) {
+            if (current.goalState?.status === 'complete') await this.completeInternal(current.id);
+            else await this.dispatch(current.id);
+          }
+        }),
+      ),
+    );
+    for (const result of results) if (result.status === 'rejected') this.error(result.reason);
   }
   async close(): Promise<void> {
     if (this.closed) return;
