@@ -446,6 +446,10 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
               <Settings aria-hidden="true" className="size-4" />
               {m.settings_heading()}
             </a>
+            <a href={`/${locale}/accounts`} className={accountMenuLinkClass}>
+              <Users aria-hidden="true" className="size-4" />
+              {m.av_accounts()}
+            </a>
             <a
               href={securitySettingsHref}
               data-account-security-settings
