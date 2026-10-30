@@ -254,9 +254,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."id":=COALESCE(OLD."id",NEW."id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -283,9 +280,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -319,12 +313,7 @@ BEGIN
     END IF;
     SELECT erasure_client_owner_id INTO NEW.erasure_client_owner_id FROM session WHERE id=NEW.session_id AND "userId"=NEW.subject_account_id FOR KEY SHARE; covered:=covered AND FOUND;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."subject_account_id":=COALESCE(OLD."subject_account_id",NEW."subject_account_id");
-      NEW."acting_human_id":=COALESCE(OLD."acting_human_id",NEW."acting_human_id");
-      NEW."operator_account_id":=COALESCE(OLD."operator_account_id",NEW."operator_account_id");
       NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -365,12 +354,8 @@ BEGIN
       END IF;
     END IF;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -415,13 +400,7 @@ BEGIN
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
       NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -472,10 +451,8 @@ BEGIN
       NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
       NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -522,13 +499,10 @@ BEGIN
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
       NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -575,13 +549,10 @@ BEGIN
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
       NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -620,11 +591,6 @@ BEGIN
       ELSE covered:=false;
       END IF;
     END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -658,12 +624,10 @@ BEGIN
     SELECT "clientId",erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_role_version INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,source_version FROM session WHERE id=NEW.session_id AND "userId"=NEW.account_id FOR KEY SHARE;
     covered:=FOUND AND source_version=1;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
       NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -705,13 +669,7 @@ BEGIN
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
       NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -747,13 +705,12 @@ BEGIN
       FROM auth_barrier_proof WHERE reference=NEW.reference AND account_id=NEW.account_id FOR KEY SHARE;
     covered:=FOUND AND source_version=1;
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
       NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
       NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
       NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
       NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -785,13 +742,6 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=NEW.erasure_actor_version=1;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-      NEW."erasure_creator_id":=COALESCE(OLD."erasure_creator_id",NEW."erasure_creator_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
-      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -830,9 +780,6 @@ BEGIN
     END IF;
     covered:=covered AND (NEW.erasure_stage_id IS NULL OR NEW.erasure_actor_version=1);
     IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-      NEW."erasure_creator_id":=COALESCE(OLD."erasure_creator_id",NEW."erasure_creator_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
       NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
       NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
     END IF;
@@ -865,9 +812,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -894,9 +838,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -923,9 +864,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -960,14 +898,6 @@ BEGIN
         covered:=covered AND FOUND;
       ELSE covered:=false;
       END IF;
-    END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-      NEW."acting_human_id":=COALESCE(OLD."acting_human_id",NEW."acting_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1006,18 +936,6 @@ BEGIN
       ELSE covered:=false;
       END IF;
     END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_subject_id":=COALESCE(OLD."erasure_subject_id",NEW."erasure_subject_id");
-      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
-      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
-      NEW."erasure_member_id":=COALESCE(OLD."erasure_member_id",NEW."erasure_member_id");
-      NEW."erasure_previous_operator_id":=COALESCE(OLD."erasure_previous_operator_id",NEW."erasure_previous_operator_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
-      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
-      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1048,9 +966,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1077,9 +992,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1106,9 +1018,6 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1142,12 +1051,6 @@ BEGIN
         covered:=covered AND FOUND;
       ELSE covered:=false;
       END IF;
-    END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1185,11 +1088,6 @@ BEGIN
       ELSE covered:=false;
       END IF;
     END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1225,11 +1123,6 @@ BEGIN
         covered:=covered AND FOUND;
       ELSE covered:=false;
       END IF;
-    END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1267,11 +1160,6 @@ BEGIN
       ELSE covered:=false;
       END IF;
     END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
-    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -1307,11 +1195,6 @@ BEGIN
         covered:=covered AND FOUND;
       ELSE covered:=false;
       END IF;
-    END IF;
-    IF TG_OP='UPDATE' AND NOT fresh THEN
-      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
-      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
-      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
