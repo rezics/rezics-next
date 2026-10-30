@@ -189,7 +189,11 @@ export const readInboxPage = createServerFn({ method: 'GET' })
 export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
+  try {
+    await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
+  } catch {
+    return { signedIn: false, count: 0, capped: false };
+  }
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, count: 0, capped: false };

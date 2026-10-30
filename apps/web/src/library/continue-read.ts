@@ -146,7 +146,7 @@ export async function loadContinue(
   readerLocale?: string,
 ): Promise<ContinueEntry[]> {
   try {
-    await prepareSession(request, sessionEnv);
+    await prepareSession(request, sessionEnv, { refresh: false });
     const authorization = viewerCredential(request);
     if (!authorization) return [];
     const reader = client as ContinueKernelClient;
@@ -197,7 +197,7 @@ export async function loadLegacyContinue(
   readerLocale?: string,
 ): Promise<ContinueEntry[]> {
   try {
-    await prepareSession(request, sessionEnv);
+    await prepareSession(request, sessionEnv, { refresh: false });
     const authorization = viewerCredential(request);
     if (!authorization) return [];
     const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);

@@ -16,7 +16,11 @@ const csrfTokens = new WeakMap<Request, string>();
 
 // Credential-using routes resolve before their first kernel call, outside any error
 // concealment. Page requests need no lookup. The boolean clears stale cookies.
-export async function prepareSession(request: Request, env: Partial<SessionEnv>): Promise<boolean> {
+export async function prepareSession(
+  request: Request,
+  env: Partial<SessionEnv>,
+  options: { refresh?: boolean } = {},
+): Promise<boolean> {
   assertPublicCacheReadAllowed(request, 'session');
   const id = cookie(request, SESSION_COOKIE);
   if (id === undefined) return false;
@@ -43,7 +47,8 @@ export async function prepareSession(request: Request, env: Partial<SessionEnv>)
     return false;
   }
 
-  const result = await env.SESSIONS.get(env.SESSIONS.idFromName(id)).credential();
+  const store = env.SESSIONS.get(env.SESSIONS.idFromName(id));
+  const result = options.refresh === false ? await store.credentialIfFresh() : await store.credential();
   if (requireCsrf) {
     const csrfToken = result.status === 'active' || result.status === 'unavailable' ? result.csrfToken : undefined;
     if (result.status === 'absent' || !csrfTokenMatches(csrfToken, await csrfTokenFromRequest(request)))

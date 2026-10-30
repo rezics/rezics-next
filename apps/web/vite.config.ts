@@ -12,6 +12,12 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
+const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
+const nativeWebCertificate = process.env.NATIVE_WEB_TEST_TLS_CERT;
+const nativeWebKey = process.env.NATIVE_WEB_TEST_TLS_KEY;
+const nativeWebTls = Boolean(nativeWebHost || nativeWebCertificate || nativeWebKey);
+if (nativeWebTls && (nativeWebHost !== 'web.native.rezics.com' || !nativeWebCertificate || !nativeWebKey))
+  throw new Error('Native web TLS requires the reserved host and its test certificate');
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
 const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
@@ -40,6 +46,7 @@ export default defineConfig((context) => {
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
+      ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
       fs: { allow: [workspaceRoot, dependencyRoot, ...fontDependencyRoots] },
     },

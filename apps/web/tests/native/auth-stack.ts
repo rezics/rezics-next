@@ -3,7 +3,6 @@ import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import {
-  chromium,
   type Browser,
   type BrowserContext,
   type Page,
@@ -18,7 +17,7 @@ import {
   type NativeTestLifecycle,
 } from './lifecycle.ts';
 
-export type AuthPersona = 'alice' | 'bob' | 'governor' | 'suspended' | 'newcomer' | 'anonymous';
+export type AuthPersona = 'alice' | 'bob' | 'governor' | 'suspended' | 'newcomer' | 'anonymous' | 'wrong-rp';
 export type AuthJourney = {
   url: string;
   context: BrowserContext;
@@ -105,6 +104,11 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   const port = await freePort();
   lifecycle.assertOpen('start native Auth app');
   const appOrigin = `http://127.0.0.1:${port}`;
+  const nativeIssuer = new URL(stack.issuerOrigin);
+  const turnstileScriptUrl =
+    nativeIssuer.hostname === 'auth.native.rezics.com'
+      ? new URL('/__native-turnstile.js', nativeIssuer).href
+      : undefined;
   let origin: string | undefined;
   const turnstile = Bun.serve({
     hostname: '127.0.0.1',
@@ -137,9 +141,9 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       ...process.env,
       REZICS_TEST_RUNTIME: '1',
       REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
-      AUTH_ORIGIN: stack.issuerOrigin,
+      AUTH_ORIGIN: stack.authIssuer,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
-      TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
+      TURNSTILE_SCRIPT_URL: turnstileScriptUrl ?? `${turnstile.url.origin}/api.js`,
     },
   });
   const childOwner = lifecycle.ownProcessGroup('native Auth Vite app', child);
@@ -233,6 +237,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         reducedMotion: 'reduce',
         locale: 'en',
         javaScriptEnabled: true,
+        ignoreHTTPSErrors: nativeIssuer.hostname === 'auth.native.rezics.com',
       });
     const ownContext = (value: BrowserContext, owner: NativeTestLifecycle, label: string) => {
       const close = async () => {

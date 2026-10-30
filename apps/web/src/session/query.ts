@@ -44,7 +44,7 @@ const readViewerExposure = createServerFn({ method: 'GET' }).handler(async () =>
   const { readAdmitted } = await import('../kernel/exposure');
   try {
     const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
+    await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
     const authorization = viewerCredential(request);
     return authorization ? await readAdmitted(authorization) : [];
   } catch {

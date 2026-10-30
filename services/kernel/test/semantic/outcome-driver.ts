@@ -227,6 +227,13 @@ async function startDriver(
             issuer,
             audience,
             jwksUrl: authJwksUrl,
+            ...(new URL(issuer).hostname === 'auth.native.rezics.com'
+              ? {
+                  // Auth's actual in-process public JWKS handler serves this browser-visible
+                  // native issuer while the kernel verifies the advertised issuer claim.
+                  fetch: (url: string | URL, init?: RequestInit) => service.handler(new Request(url, init)),
+                }
+              : {}),
           },
         });
         runtimeAuth = { issuer, audience, jwksUrl: authJwksUrl };

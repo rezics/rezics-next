@@ -1,5 +1,5 @@
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
-import { createServer, type Socket } from 'node:net';
+import { connect as connectTcp, createServer, type Socket } from 'node:net';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import {
@@ -48,7 +48,13 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
       `Private browser network namespace probe failed: ${probe.stderr.toString().trim() || probe.exitCode}`,
     );
 
-  const allowed = new Set(allowedOrigins.map((value) => new URL(value).origin));
+  const allowed = new Set<string>();
+  const secureOrigins = new Map<string, number>();
+  for (const value of allowedOrigins) {
+    const origin = new URL(value);
+    allowed.add(origin.origin);
+    if (origin.protocol === 'https:') secureOrigins.set(origin.origin, Number(origin.port || 443));
+  }
   const directory = join(repositoryRoot, '.temp', `pb-${crypto.randomUUID().slice(0, 8)}`);
   const socketPath = join(directory, 'bridge.sock');
   const localProxyPort = await freePort();
@@ -59,6 +65,9 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
   let bridgeClosed = false;
   const waiters: (() => void)[] = [];
   const sockets = new Set<Socket>();
+  const tunnels = new Set<Socket>();
+  const maxTlsTunnels = 16;
+  let activeTlsTunnels = 0;
   const controllers = new Set<AbortController>();
   const withSlot = async <T>(run: () => Promise<T>): Promise<T> => {
     if (bridgeClosed) throw new Error('Private browser bridge is closing');
@@ -76,17 +85,119 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
   const bridge = createServer({ allowHalfOpen: true }, (socket) => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
+    let mode: 'detect' | 'http' | 'tunnel' = 'detect';
+    let firstFrame = Buffer.alloc(0);
     const chunks: Buffer[] = [];
     let bytes = 0;
+    let tunnel: Socket | undefined;
+    let tunnelReserved = false;
+    let tunnelEstablished = false;
+    const queuedTunnelData: Buffer[] = [];
+    let queuedTunnelBytes = 0;
+    let initialTunnelBytes = 0;
+    const releaseTunnel = () => {
+      if (!tunnelReserved) return;
+      tunnelReserved = false;
+      activeTlsTunnels -= 1;
+    };
+    const beginTunnel = (authority: string, initialData: Buffer) => {
+      let targetOrigin: string;
+      try {
+        const target = new URL(`https://${authority}`);
+        if (target.username || target.password || target.pathname !== '/' || target.search || target.hash)
+          throw new Error('Invalid CONNECT authority');
+        targetOrigin = target.origin;
+      } catch {
+        socket.end('0\n');
+        return;
+      }
+      const targetPort = secureOrigins.get(targetOrigin);
+      if (targetPort === undefined || activeTlsTunnels >= maxTlsTunnels) {
+        socket.end('0\n');
+        return;
+      }
+      activeTlsTunnels += 1;
+      tunnelReserved = true;
+      tunnel = connectTcp(targetPort, '127.0.0.1');
+      tunnels.add(tunnel);
+      const pending = initialData.length ? [initialData] : [];
+      initialTunnelBytes = initialData.length;
+      tunnel.once('connect', () => {
+        tunnelEstablished = true;
+        mode = 'tunnel';
+        socket.write('1\n');
+        for (const chunk of pending) tunnel!.write(chunk);
+        for (const chunk of queuedTunnelData.splice(0)) tunnel!.write(chunk);
+        queuedTunnelBytes = 0;
+        socket.pipe(tunnel!);
+        tunnel!.pipe(socket);
+      });
+      tunnel.once('error', () => {
+        if (!tunnelEstablished) socket.end('0\n');
+        else socket.destroy();
+      });
+      tunnel.once('close', () => {
+        tunnels.delete(tunnel!);
+        releaseTunnel();
+        if (!socket.destroyed) socket.destroy();
+      });
+      socket.once('close', () => {
+        tunnel?.destroy();
+        releaseTunnel();
+      });
+    };
     socket.on('data', (chunk) => {
+      if (mode === 'tunnel') {
+        if (!tunnelEstablished && tunnelReserved) {
+          queuedTunnelData.push(chunk);
+          queuedTunnelBytes += chunk.length;
+          if (initialTunnelBytes + queuedTunnelBytes > maxFrameBytes) socket.destroy();
+        }
+        return;
+      }
+      if (mode === 'http') {
+        bytes += chunk.length;
+        if (bytes > maxFrameBytes) {
+          socket.destroy();
+          return;
+        }
+        chunks.push(chunk);
+        return;
+      }
+
       bytes += chunk.length;
       if (bytes > maxFrameBytes) {
         socket.destroy();
         return;
       }
-      chunks.push(chunk);
+      firstFrame = Buffer.concat([firstFrame, chunk]);
+      const connectPrefix = Buffer.from('CONNECT ');
+      const prefixLength = Math.min(firstFrame.length, connectPrefix.length);
+      const isConnectPrefix = firstFrame.subarray(0, prefixLength).equals(connectPrefix.subarray(0, prefixLength));
+      if (isConnectPrefix) {
+        const lineEnd = firstFrame.indexOf(0x0a);
+        if (lineEnd < 0) {
+          if (firstFrame.length > 2_048) socket.destroy();
+          return;
+        }
+        const command = firstFrame.subarray(0, lineEnd).toString('utf8').replace(/\r$/u, '');
+        if (!command.startsWith('CONNECT ')) {
+          socket.destroy();
+          return;
+        }
+        mode = 'tunnel';
+        const initialData = firstFrame.subarray(lineEnd + 1);
+        const authority = command.slice('CONNECT '.length);
+        firstFrame = Buffer.alloc(0);
+        beginTunnel(authority, initialData);
+        return;
+      }
+      mode = 'http';
+      chunks.push(firstFrame);
+      firstFrame = Buffer.alloc(0);
     });
     socket.on('end', () => {
+      if (mode !== 'http') return;
       void withSlot(async () => {
         let controller: AbortController | undefined;
         try {
@@ -155,6 +266,7 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
     bridgeClosed = true;
     for (const controller of controllers) controller.abort(new Error('Private browser bridge force-closed'));
     for (const socket of sockets) socket.destroy();
+    for (const tunnel of tunnels) tunnel.destroy();
     for (const wake of waiters.splice(0)) wake();
     await settledWithin(
       new Promise<void>((resolveClose) => {

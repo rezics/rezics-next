@@ -37,7 +37,7 @@ async function accountMenu(context: { canvasElement: HTMLElement }) {
   const content =
     window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
       ? await within(document.body).findByRole('dialog', { name: m.account_menu() })
-      : await within(document.body).findByRole('menu');
+      : await within(document.body).findByRole('dialog', { name: m.account_menu() });
   await waitFor(() => expect(content).toBeVisible());
   return content;
 }

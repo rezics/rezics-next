@@ -1,5 +1,6 @@
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { request as httpsRequest } from 'node:https';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -39,6 +40,23 @@ export type NativeAccountOperationActor = {
   accountId: string;
   scopes: readonly string[];
 };
+export type NativeWebStackOptions = {
+  /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
+  writeRateOverrides?: string;
+  /** Enable the production Commerce composition against an owned Stripe API fixture. */
+  commerce?: {
+    apiHost: string;
+    webhookSecret: string;
+    successUrl: string;
+    cancelUrl: string;
+  };
+  /** Browser-visible HTTPS Auth origin for native WebAuthn ceremonies. */
+  issuerOrigin?: string;
+  /** Test-only certificate for the reserved HTTPS website origin. */
+  webTls?: { certificate: string; key: string };
+  /** Initial offset for the isolated native Auth trusted clock. */
+  authClockOffsetSeconds?: number;
+};
 export type NativeWebStack = {
   kernelOrigin: string;
   authIssuer: string;
@@ -60,6 +78,7 @@ export type NativeWebStack = {
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
   request(url: string, persona?: string, headers?: Record<string, string>): Promise<Response>;
   credentials(persona: string): Promise<NativeCredentials>;
+  advanceAuthClock(seconds: number): Promise<void>;
   /** Flushes kernel requests made by the production Worker into this observer. */
   refreshKernelRequests(): Promise<void>;
   kernelRequests(): readonly NativeKernelRequest[];
@@ -80,20 +99,55 @@ type WebProcess = {
   exited: Promise<void>;
   output(): string;
 };
-export type NativeWebStackOptions = {
-  /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
-  writeRateOverrides?: string;
-  /** Enable the production Commerce composition against an owned Stripe API fixture. */
-  commerce?: {
-    apiHost: string;
-    webhookSecret: string;
-    successUrl: string;
-    cancelUrl: string;
-  };
-};
 
 const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
+const nativeWebsiteHost = 'web.native.rezics.com';
+const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
+
+function fetchNativeWebsite(input: string | URL, init?: RequestInit): Promise<Response> {
+  const url = new URL(input);
+  if (url.protocol !== 'https:' || url.hostname !== nativeWebsiteHost) return fetch(input, init);
+  if (init?.body !== undefined)
+    return Promise.reject(new Error('Native website TLS fetch only accepts bodyless requests'));
+  return new Promise((resolve, reject) => {
+    const headers = Object.fromEntries(new Headers(init?.headers).entries());
+    headers.host = url.host;
+    const target = new URL(url);
+    target.hostname = '127.0.0.1';
+    const request = httpsRequest(
+      target,
+      { method: init?.method ?? 'GET', headers, rejectUnauthorized: false, servername: nativeWebsiteHost },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+        response.on('error', reject);
+        response.on('end', () => {
+          const responseHeaders = new Headers();
+          for (const [name, value] of Object.entries(response.headers)) {
+            if (value === undefined) continue;
+            if (name === 'set-cookie' && Array.isArray(value)) {
+              for (const cookie of value) responseHeaders.append(name, cookie);
+            } else responseHeaders.set(name, Array.isArray(value) ? value.join(', ') : String(value));
+          }
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: response.statusCode ?? 502,
+              statusText: response.statusMessage,
+              headers: responseHeaders,
+            }),
+          );
+        });
+      },
+    );
+    request.on('error', reject);
+    if (init?.signal) {
+      if (init.signal.aborted) request.destroy(init.signal.reason);
+      else init.signal.addEventListener('abort', () => request.destroy(init.signal!.reason), { once: true });
+    }
+    request.end();
+  });
+}
 
 async function freePort(): Promise<number> {
   const server = Bun.serve({
@@ -164,7 +218,7 @@ async function startWeb(
     while (Date.now() < deadline) {
       failIfExited();
       try {
-        const response = await fetch(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
+        const response = await fetchNativeWebsite(`${origin}/en/subjects/00000000-0000-4000-8000-000000000000`, {
           redirect: 'manual',
           signal: AbortSignal.timeout(5000),
         });
@@ -334,6 +388,16 @@ async function startStack(): Promise<
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
+  const testIssuer = nativeAuthTestIssuer;
+  const testWebsiteHost = process.env.NATIVE_WEB_TEST_HOST || undefined;
+  const testWebsiteCertificate = process.env.NATIVE_WEB_TEST_TLS_CERT || undefined;
+  const testWebsiteKey = process.env.NATIVE_WEB_TEST_TLS_KEY || undefined;
+  const testWebsiteTls = Boolean(testWebsiteHost || testWebsiteCertificate || testWebsiteKey);
+  if (
+    testWebsiteTls &&
+    (!testIssuer || testWebsiteHost !== nativeWebsiteHost || !testWebsiteCertificate || !testWebsiteKey)
+  )
+    throw new Error('Native website TLS requires the reserved host and the Auth test issuer');
   const sampleMemory = () => {
     let bytes = process.memoryUsage().rss;
     if (webProcess?.child.pid) {
@@ -489,7 +553,7 @@ async function startStack(): Promise<
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
     await import('../../../../services/kernel/test/support/fixture-event-types.ts');
     const { workerTestEnv } = await import('../../../../services/kernel/test/support/worker-env.ts');
-    const { sharedAuth, closeOwnedSemanticAuth } =
+    const { sharedAuth, closeOwnedSemanticAuth, advanceNativeAuthClock } =
       await import('../../../../services/kernel/test/semantic/outcome-auth.ts');
     closeAuth = closeOwnedSemanticAuth;
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
@@ -513,25 +577,34 @@ async function startStack(): Promise<
       '/organizations/new',
     ]);
     auth.service.handler = async (request) => {
-      const url = new URL(request.url);
+      const serviceRequest = testIssuer
+        ? new Request(new URL(new URL(request.url).pathname + new URL(request.url).search, testIssuer), request)
+        : request;
+      const url = new URL(serviceRequest.url);
+      if (testIssuer && serviceRequest.method === 'GET' && url.pathname === '/__native-turnstile.js')
+        return new Response(
+          `window.turnstile={ready:function(callback){callback()},render:function(node,options){queueMicrotask(function(){options.callback('native-test-token')});return 'native-widget'},reset:function(){},remove:function(){}};`,
+          { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } },
+        );
       // The development app serves its source modules at Vite's standard paths.
       // Production bundles instead use only /auth-assets/.
       const asset =
         ['/auth-assets/', '/@vite/', '/@id/', '/@fs/', '/src/', '/node_modules/', '/_serverFn/'].some((prefix) =>
           url.pathname.startsWith(prefix),
         ) || url.pathname === '/@react-refresh';
-      if (pageOrigin && ((['GET', 'HEAD'].includes(request.method) && pagePaths.has(url.pathname)) || asset)) {
+      if (pageOrigin && ((['GET', 'HEAD'].includes(serviceRequest.method) && pagePaths.has(url.pathname)) || asset)) {
         const target = new URL(url.pathname + url.search, pageOrigin);
-        const forwarded = new Request(target, request);
-        forwarded.headers.set('x-native-auth-url', request.url);
+        const forwarded = new Request(target, serviceRequest);
+        forwarded.headers.set('x-native-auth-url', serviceRequest.url);
         return fetch(forwarded, { redirect: 'manual' });
       }
-      if (pageOrigin && request.method === 'POST' && url.pathname === '/signup') return signupHandler!(request);
+      if (pageOrigin && serviceRequest.method === 'POST' && url.pathname === '/signup')
+        return signupHandler!(serviceRequest);
       if (
-        request.method === 'POST' &&
+        serviceRequest.method === 'POST' &&
         ['/account-operations/approve', '/account-operations/execute'].includes(url.pathname)
       ) {
-        const cookie = request.headers.get('cookie');
+        const cookie = serviceRequest.headers.get('cookie');
         if (cookie) {
           const session = await authHandler(
             new Request(`${auth.issuer}/session`, {
@@ -553,16 +626,14 @@ async function startStack(): Promise<
           }
         }
       }
-      const response = await authHandler(request);
+      const response = await authHandler(serviceRequest);
       if (
-        new URL(request.url).pathname === '/token' &&
-        request.headers.get('content-type') === 'application/json' &&
+        new URL(serviceRequest.url).pathname === '/token' &&
+        serviceRequest.headers.get('content-type') === 'application/json' &&
         response.ok
       ) {
-        const token = (await response.clone().json()) as {
-          access_token: string;
-        };
-        const cookie = request.headers.get('cookie');
+        const token = (await response.clone().json()) as { access_token: string };
+        const cookie = serviceRequest.headers.get('cookie');
         if (cookie) authCookies.set(token.access_token, cookie);
       }
       return response;
@@ -681,7 +752,8 @@ async function startStack(): Promise<
     });
     kernelServer = server;
     const kernelOrigin = server.url.origin;
-    const webOrigin = `http://127.0.0.1:${await freePort()}`;
+    const webPort = await freePort();
+    const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
     const { actionCatalogue } = await import('../../../../services/kernel/src/http/request.ts');
     const actionScopes = [...actionCatalogue(sourceApp).keys()];
     governorScopes = [...actionScopes.filter((scope) => scope !== 'media:complete'), 'gate:any'];
@@ -714,6 +786,7 @@ async function startStack(): Promise<
         use: 'sig',
       }),
       WEBSITE_SCOPES: scopes.join(' '),
+      ...(testIssuer ? { AUTH_TEST_LOOPBACK_ORIGIN: authServer.url.origin } : {}),
     };
     const webCookies = new Map<string, Promise<string | undefined>>();
     let webStateDirectory: string | undefined;
@@ -728,23 +801,21 @@ async function startStack(): Promise<
     const websiteCookie = async (bearer: string) => {
       const cookie = authCookies.get(bearer);
       if (!cookie) throw new Error('The semantic harness did not issue an Auth session for this persona');
-      const login = await fetch(`${webOrigin}/auth/sign-in`, {
-        redirect: 'manual',
-      });
+      const login = await fetchNativeWebsite(`${webOrigin}/auth/sign-in`, { redirect: 'manual' });
       const authorize = new URL(login.headers.get('location')!, webOrigin);
       if (authorize.origin !== auth.issuer)
         throw new Error(`Native web sign-in left its Auth listener: ${login.status}`);
-      const authorized = await fetch(authorize, {
-        headers: { cookie },
-        redirect: 'manual',
-      });
+      const authorizeTransport = testIssuer
+        ? new URL(authorize.pathname + authorize.search, authServer!.url.origin)
+        : authorize;
+      const authorized = await fetch(authorizeTransport, { headers: { cookie }, redirect: 'manual' });
       // A revoked persona still carries its original bearer to the Worker. Auth
       // can refuse a new browser session; that must not replace the served read.
       if (authorized.status === 400 || authorized.status === 401 || authorized.status === 403) return undefined;
       const callback = new URL(authorized.headers.get('location')!, auth.issuer);
       if (callback.origin !== webOrigin || callback.pathname !== '/auth/callback')
         throw new Error(`Native Auth did not return to the owned web callback: ${authorized.status}`);
-      const completed = await fetch(callback, {
+      const completed = await fetchNativeWebsite(callback, {
         headers: { cookie: responseCookie(login, '__Host-rezics_login') },
         redirect: 'manual',
       });
@@ -787,6 +858,9 @@ async function startStack(): Promise<
           email: result.rows[0].email,
           authorization: `Bearer ${bearer}`,
         };
+      },
+      async advanceAuthClock(seconds) {
+        advanceNativeAuthClock(seconds);
       },
       async enableAccountOperations() {
         const probe = await authHandler(
@@ -964,6 +1038,7 @@ type HostCall = {
     | 'accountOperationActors'
     | 'createAutomatedActor'
     | 'routeAuthPages'
+    | 'advanceAuthClock'
     | 'restartWeb'
     | 'injectKernelFailureOnce'
     | 'observe'
@@ -992,6 +1067,16 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native web stack startup requires an active native test lifecycle');
   lifecycle.assertOpen('start native web stack');
+  if (options.issuerOrigin !== undefined) {
+    const issuer = new URL(options.issuerOrigin);
+    if (
+      issuer.protocol !== 'https:' ||
+      issuer.hostname !== 'auth.native.rezics.com' ||
+      !issuer.port ||
+      issuer.origin !== options.issuerOrigin
+    )
+      throw new Error('Native Auth test issuer must be the reserved HTTPS auth.native.rezics.com origin');
+  }
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let analysisDatabase: string | undefined;
   let postgresContainer: string | undefined;
@@ -1016,6 +1101,12 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
   // Rate changes apply only to this explicitly configured native fixture stack.
   if (options.writeRateOverrides) hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES = options.writeRateOverrides;
   else delete hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
+  hostEnvironment.NATIVE_AUTH_TEST_ISSUER = options.issuerOrigin;
+  hostEnvironment.NATIVE_WEB_TEST_HOST = options.webTls ? nativeWebsiteHost : undefined;
+  hostEnvironment.NATIVE_WEB_TEST_TLS_CERT = options.webTls?.certificate;
+  hostEnvironment.NATIVE_WEB_TEST_TLS_KEY = options.webTls?.key;
+  hostEnvironment.NATIVE_AUTH_TEST_CLOCK_OFFSET_SECONDS =
+    options.authClockOffsetSeconds === undefined ? undefined : String(options.authClockOffsetSeconds);
   const host = fork(import.meta.filename, [], {
     execPath: resolveBunCommand(['bun'], repositoryRoot)[0]!,
     execArgv: [],
@@ -1258,6 +1349,10 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
           authorization: string;
         };
       },
+      advanceAuthClock(seconds) {
+        lifecycle.assertOpen('advance native Auth clock');
+        return call('advanceAuthClock', String(seconds)).then(() => undefined);
+      },
       async enableAccountOperations() {
         lifecycle.assertOpen('check native account-operation boundary');
         await call('enableAccountOperations');
@@ -1328,7 +1423,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         const headers = await authenticatedHeaders(suppliedHeaders, persona);
         // Keep the HTTP Response itself: observing never reads its body, replaces
         // its headers, changes its status, or follows a Worker redirect.
-        return observe(await fetch(target, { headers, redirect: 'manual' }));
+        return observe(await fetchNativeWebsite(target, { headers, redirect: 'manual' }));
       },
       async refreshKernelRequests() {
         await call('observe');
@@ -1436,6 +1531,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
           };
           value = await stack.createAutomatedActor(input.operator, input.handle, input.authCookie);
         } else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
+        else if (method === 'advanceAuthClock') await stack.advanceAuthClock(Number(argument));
         else if (method === 'injectKernelFailureOnce')
           stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
         else if (method === 'observe') await stack.syncKernelRequests();

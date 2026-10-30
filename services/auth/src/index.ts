@@ -110,6 +110,8 @@ export interface AuthServiceOptions {
   secret: string;
   signing: { activeKid: string; privateKeys: JWK[] };
   trustedAccess: TrustedAccessPorts;
+  /** Trusted clock supplied by native contract harnesses; production uses wall time. */
+  clock?: () => Date;
   /** Trusted mounted x-action catalogue, supplied by production composition. */
   siteActions?: ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
   recoveryDelivery?: {

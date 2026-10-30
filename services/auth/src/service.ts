@@ -150,6 +150,18 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
   const { trustedAccess } = options;
+  const trustedNowSeconds = () => {
+    let now: Date;
+    try {
+      now = options.clock === undefined ? new Date() : options.clock();
+    } catch {
+      throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
+    }
+    const milliseconds = now instanceof Date ? now.getTime() : Number.NaN;
+    if (!Number.isFinite(milliseconds))
+      throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
+    return Math.floor(milliseconds / 1000);
+  };
   const scopeLimit = options.siteActions
     ? new Set(['openid', 'offline_access', 'media:complete', ...options.siteActions.keys()]).size
     : 1000;
@@ -448,7 +460,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                     clientId: selected.clientId,
                     grantedScope: selected.scopes.join(' '),
                     authnEpoch: account.authnEpoch,
-                    authTime: selected.authTime ?? Math.floor(Date.now() / 1000),
+                    authTime: selected.authTime ?? trustedNowSeconds(),
                     authMethods: selected.method ?? 'pwd',
                   },
                 };
@@ -489,7 +501,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       !Number.isSafeInteger(session.authnEpoch) ||
       session.authnEpoch < account.authnEpoch ||
       !Number.isSafeInteger(session.authTime) ||
-      session.authTime > Math.floor(Date.now() / 1000) ||
+      session.authTime > trustedNowSeconds() ||
       !['pwd', 'pop', 'private_key_jwt', 'operator'].includes(session.authMethods)
     )
       throw new Denied();
@@ -570,7 +582,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return opening.receipt_id;
   }
   function freshAuthentication(human: SessionProof) {
-    if (Math.floor(Date.now() / 1000) - human.auth_time > 600) throw new StepUpRequired();
+    if (trustedNowSeconds() - human.auth_time > 600) throw new StepUpRequired();
   }
   function freshCredentialProof(human: SessionProof, subjectId: string) {
     if (human.account_id === subjectId) freshAuthentication(human);

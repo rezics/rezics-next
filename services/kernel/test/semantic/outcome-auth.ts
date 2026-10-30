@@ -72,6 +72,43 @@ type Built = {
 let shared: Promise<Built> | undefined;
 let terminal = false;
 let closing: Promise<void> | undefined;
+const configuredNativeAuthClockOffset = process.env.NATIVE_AUTH_TEST_CLOCK_OFFSET_SECONDS;
+const nativeAuthClockInstalled = configuredNativeAuthClockOffset !== undefined;
+let nativeClockOffsetSeconds = Number(configuredNativeAuthClockOffset ?? 0);
+const configuredNativeAuthIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
+
+if (configuredNativeAuthIssuer !== undefined) {
+  let issuer: URL;
+  try {
+    issuer = new URL(configuredNativeAuthIssuer);
+  } catch {
+    throw new Error('NATIVE_AUTH_TEST_ISSUER must be the reserved HTTPS Auth origin with an explicit port');
+  }
+  if (
+    issuer.protocol !== 'https:' ||
+    issuer.hostname !== 'auth.native.rezics.com' ||
+    !issuer.port ||
+    issuer.origin !== configuredNativeAuthIssuer
+  )
+    throw new Error('NATIVE_AUTH_TEST_ISSUER must be the reserved HTTPS Auth origin with an explicit port');
+}
+
+if (!Number.isSafeInteger(nativeClockOffsetSeconds))
+  throw new Error('NATIVE_AUTH_TEST_CLOCK_OFFSET_SECONDS must be a safe integer');
+
+/** Advance only the trusted Auth clock owned by the native test process. */
+export function advanceNativeAuthClock(seconds: number): void {
+  if (terminal || closing) throw new Error('Owned semantic Auth is terminally closed in this process');
+  if (!nativeAuthClockInstalled) throw new Error('Native Auth trusted clock is not installed in this process');
+  if (!Number.isSafeInteger(seconds) || seconds < 0)
+    throw new Error('Native Auth clock advance must be a nonnegative safe integer');
+  const nextOffset = nativeClockOffsetSeconds + seconds;
+  if (!Number.isSafeInteger(nextOffset)) throw new Error('Native Auth clock offset exceeded safe range');
+  const nextMilliseconds = Date.now() + nextOffset * 1000;
+  if (!Number.isFinite(nextMilliseconds) || !Number.isFinite(new Date(nextMilliseconds).getTime()))
+    throw new Error('Native Auth clock time is outside the valid Date range');
+  nativeClockOffsetSeconds = nextOffset;
+}
 
 // bun test runs no exit handler, so nothing in this process can drop the database when it ends. A detached
 // watcher holds the read end of a pipe the process owns; the pipe closes when the process ends for any reason,
@@ -172,7 +209,7 @@ async function build(
     let service!: AuthService;
     const authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => service.handler(request) });
     server = authServer;
-    const issuer = `http://127.0.0.1:${authServer.port}`;
+    const issuer = configuredNativeAuthIssuer ?? `http://127.0.0.1:${authServer.port}`;
     const audience = 'https://semantic.api.rezics.test';
 
     const trusted = delegating<KernelPorts['trustedAccess']>('trusted Access');
@@ -183,6 +220,7 @@ async function build(
       issuer,
       audience,
       secret: 'semantic-outcome-auth-secret-with-at-least-32-bytes',
+      ...(nativeAuthClockInstalled ? { clock: () => new Date(Date.now() + nativeClockOffsetSeconds * 1000) } : {}),
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
       trustedAccess: trusted.port,
       access: access.port,

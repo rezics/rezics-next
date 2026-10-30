@@ -36,8 +36,62 @@ const server = createServer((request, response) => {
     }
   });
 });
-server.on('connect', (_request, socket) => {
-  socket.end('HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n');
+server.on('connect', (request, socket, head) => {
+  const authority = request.url ?? '';
+  if (!authority || authority.length > 2_048 || head.length > maxRequestBytes) {
+    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+    return;
+  }
+
+  const bridge = connect(socketPath);
+  let state: 'awaiting' | 'tunnel' | 'closed' = 'awaiting';
+  let responseFrame = Buffer.alloc(0);
+  const reject = (status: number, reason: string) => {
+    if (state !== 'awaiting') return;
+    state = 'closed';
+    if (!socket.destroyed) socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\n\r\n`);
+    bridge.destroy();
+  };
+
+  bridge.once('connect', () => {
+    bridge.write(Buffer.concat([Buffer.from(`CONNECT ${authority}\n`), head]));
+  });
+  bridge.on('data', (chunk) => {
+    if (state === 'tunnel') return;
+    if (state !== 'awaiting') return;
+    responseFrame = Buffer.concat([responseFrame, chunk]);
+    if (responseFrame.length > 4_096) {
+      reject(502, 'Bad Gateway');
+      return;
+    }
+    const lineEnd = responseFrame.indexOf(0x0a);
+    if (lineEnd < 0) return;
+    const verdict = responseFrame.subarray(0, lineEnd).toString('utf8').replace(/\r$/u, '');
+    if (verdict !== '1') {
+      reject(403, 'Forbidden');
+      return;
+    }
+    state = 'tunnel';
+    socket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: rezics-private-browser\r\n\r\n');
+    const pending = responseFrame.subarray(lineEnd + 1);
+    responseFrame = Buffer.alloc(0);
+    if (pending.length) socket.write(pending);
+    bridge.pipe(socket);
+    socket.pipe(bridge);
+  });
+  bridge.once('error', () => {
+    if (state === 'awaiting') reject(502, 'Bad Gateway');
+    else if (!socket.destroyed) socket.destroy();
+  });
+  bridge.once('close', () => {
+    if (state === 'awaiting') reject(502, 'Bad Gateway');
+    else if (state === 'tunnel' && !socket.destroyed) socket.end();
+  });
+  socket.once('error', () => bridge.destroy());
+  socket.once('close', () => {
+    if (state !== 'closed') state = 'closed';
+    bridge.destroy();
+  });
 });
 server.listen(port, '127.0.0.1');
 

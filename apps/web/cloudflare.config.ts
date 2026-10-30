@@ -9,6 +9,9 @@ export default {
     env: {
       SESSIONS: { type: 'durable-object', worker: 'rezics-web', exportName: 'SessionStore' },
       AUTH_ISSUER: { type: 'text', value: process.env.AUTH_ISSUER ?? '' },
+      ...(process.env.AUTH_TEST_LOOPBACK_ORIGIN
+        ? { AUTH_TEST_LOOPBACK_ORIGIN: { type: 'text', value: process.env.AUTH_TEST_LOOPBACK_ORIGIN } }
+        : {}),
       BUILD_ID: { type: 'text', value: process.env.BUILD_ID ?? process.env.GITHUB_SHA ?? 'development' },
       PUBLIC_ORIGIN: { type: 'text', value: process.env.PUBLIC_ORIGIN ?? '' },
       SITE_ORIGINS: { type: 'text', value: process.env.SITE_ORIGINS ?? '' },

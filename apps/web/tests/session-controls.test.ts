@@ -51,9 +51,9 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     authRequests += 1;
+    const url = new URL(request.url);
     // While stalled, Auth accepts connections and never answers.
     if (stalled) return new Promise<Response>(() => {});
-    const url = new URL(request.url);
     const issuer = `${url.origin}/auth`;
     const authenticated = async (form: URLSearchParams) => {
       try {
@@ -182,9 +182,11 @@ let browser: Browser | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
     let output = '';
     const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
+      const text = chunk.toString();
+      output = (output + text).slice(-8000);
     };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
@@ -193,6 +195,7 @@ function site(): Promise<string> {
       env: {
         ...process.env,
         KERNEL_ORIGIN: kernel.url.origin,
+        PUBLIC_ORIGIN: origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
@@ -202,7 +205,6 @@ function site(): Promise<string> {
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
