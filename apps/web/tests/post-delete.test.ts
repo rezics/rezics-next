@@ -443,6 +443,18 @@ async function eventually(read: () => boolean | Promise<boolean>, label: string)
   expect(await read(), label).toBe(true);
 }
 
+async function waitForKernelQuiescence() {
+  let count = kernelRequests.length;
+  let quietSince = Date.now();
+  while (Date.now() - quietSince < 500) {
+    await Bun.sleep(50);
+    if (kernelRequests.length !== count) {
+      count = kernelRequests.length;
+      quietSince = Date.now();
+    }
+  }
+}
+
 async function deleteFromMenu(page: Page, postId: string, locale: keyof typeof uiLabels = 'en') {
   const slot = page.locator(`#post-${postId}`);
   await slot.getByRole('button', { name: uiLabels[locale].moreActions }).click();
@@ -472,6 +484,7 @@ test(
     try {
       expect(access).toBeTruthy();
       const before = await slot.boundingBox();
+      await waitForKernelQuiescence();
       writes.length = 0;
       kernelRequests.length = 0;
       await deleteFromMenu(page, replyId);
