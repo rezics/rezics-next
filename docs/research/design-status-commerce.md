@@ -242,6 +242,8 @@ Focused consumer cases and six stories cover explicit empty/nonempty selection, 
 and uncertain retry using recorded subject summaries; they provide no positive native publication provider. Actual
 native publication, full snapshot/whole-query privacy and whole-main proof remain pending. Web owns the next ordinary
 390/1280 review; this source delivery does not establish visual, native, protected-use or promoted-main acceptance.
+Local `bun run --cwd apps/web typecheck` passes with no type errors in 1,156 files. The focused tests and story plays
+were added but not executed; no unit, native, browser, database or remote checks were run for this interface slice.
 
 **Follows / private owner counts — shared Accounts ownership.** Edge authority: [Library module](../../services/kernel/src/library/README.md);
 count authority: [private follow counts](../private-follow-counts.md); delivered [simplification research](follow-counts-simplest.md).
