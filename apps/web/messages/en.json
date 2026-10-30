@@ -531,10 +531,8 @@
   "settings_notifications_heading": "Notifications",
   "settings_notifications_mandatory": "Moderation decisions about your content are always sent.",
   "settings_notifications_restore": "Restore defaults",
-  "settings_notifications_text": "Choose which notifications you receive.",
-  "settings_heading": "Settings",
-  "settings_notifications_heading": "Notifications",
   "settings_notifications_text": "Choose which replies and mentions create in-app notifications.",
+  "settings_heading": "Settings",
   "settings_notification_replies": "Reply notifications",
   "settings_notification_mentions": "Mention notifications",
   "settings_notification_moderation_always_on": "Moderation outcomes always appear in your inbox.",
@@ -917,5 +915,13 @@
   "thread_post_erased": "Removed by its author",
   "moderation_evidence_label": "Report details",
   "moderation_appeal_target_label": "Affected content",
-  "moderation_appeal_conflict": "This appeal was already resolved. Refresh the queue before continuing."
+  "moderation_appeal_conflict": "This appeal was already resolved. Refresh the queue before continuing.",
+  "header_search_close": "Close search",
+  "header_search_filters_unavailable": "Filters are not available on this page.",
+  "header_search_global": "Search REZICS",
+  "header_search_in_scope": "Search in {scope}",
+  "header_search_loading": "Loading suggestions…",
+  "header_search_remove_scope": "Remove {scope} scope",
+  "header_search_scope_unavailable": "Search is not available in this scope. Remove the scope to search REZICS.",
+  "header_search_suggestions": "Suggestions"
 }

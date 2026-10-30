@@ -530,10 +530,8 @@
   "settings_notifications_heading": "Notificaciones",
   "settings_notifications_mandatory": "Las decisiones de moderación sobre tu contenido siempre se envían.",
   "settings_notifications_restore": "Restaurar valores predeterminados",
-  "settings_notifications_text": "Elige qué notificaciones recibes.",
-  "settings_heading": "Configuración",
-  "settings_notifications_heading": "Notificaciones",
   "settings_notifications_text": "Elige qué respuestas y menciones generan notificaciones en la aplicación.",
+  "settings_heading": "Configuración",
   "settings_notification_replies": "Notificaciones de respuestas",
   "settings_notification_mentions": "Notificaciones de menciones",
   "settings_notification_moderation_always_on": "Los resultados de moderación siempre aparecen en tu bandeja de entrada.",
@@ -916,5 +914,13 @@
   "thread_post_erased": "El autor eliminó esta publicación.",
   "moderation_evidence_label": "Detalles del informe",
   "moderation_appeal_target_label": "Contenido afectado",
-  "moderation_appeal_conflict": "Esta apelación ya se resolvió. Actualiza la lista antes de continuar."
+  "moderation_appeal_conflict": "Esta apelación ya se resolvió. Actualiza la lista antes de continuar.",
+  "header_search_close": "Cerrar búsqueda",
+  "header_search_filters_unavailable": "Los filtros no están disponibles en esta página.",
+  "header_search_global": "Buscar en REZICS",
+  "header_search_in_scope": "Buscar en {scope}",
+  "header_search_loading": "Cargando sugerencias…",
+  "header_search_remove_scope": "Quitar el ámbito {scope}",
+  "header_search_scope_unavailable": "La búsqueda no está disponible en este ámbito. Quítalo para buscar en REZICS.",
+  "header_search_suggestions": "Sugerencias de búsqueda"
 }

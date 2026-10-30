@@ -531,10 +531,8 @@
   "settings_notifications_heading": "通知",
   "settings_notifications_mandatory": "关于你内容的审核决定始终会发送。",
   "settings_notifications_restore": "恢复默认值",
-  "settings_notifications_text": "选择你要接收的通知。",
-  "settings_heading": "设置",
-  "settings_notifications_heading": "通知",
   "settings_notifications_text": "选择哪些回复和提及会生成应用内通知。",
+  "settings_heading": "设置",
   "settings_notification_replies": "回复通知",
   "settings_notification_mentions": "提及通知",
   "settings_notification_moderation_always_on": "审核结果始终会显示在收件箱中。",
@@ -917,5 +915,13 @@
   "thread_post_erased": "此帖已由作者删除。",
   "moderation_evidence_label": "举报详情",
   "moderation_appeal_target_label": "相关内容",
-  "moderation_appeal_conflict": "此申诉已处理。请刷新列表后再继续。"
+  "moderation_appeal_conflict": "此申诉已处理。请刷新列表后再继续。",
+  "header_search_close": "关闭搜索",
+  "header_search_filters_unavailable": "此页面暂不提供筛选。",
+  "header_search_global": "搜索 REZICS",
+  "header_search_in_scope": "在 {scope} 中搜索",
+  "header_search_loading": "正在加载建议…",
+  "header_search_remove_scope": "移除 {scope} 范围",
+  "header_search_scope_unavailable": "此范围内暂不支持搜索。移除范围后可搜索 REZICS。",
+  "header_search_suggestions": "搜索建议"
 }

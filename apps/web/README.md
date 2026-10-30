@@ -605,11 +605,18 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Site shell (navigation column and header)
 
-- The header owns the site's one search field, centred within a bounded 40rem width on desktop. Pages do not render
-  their own query field. A route may supply a removable scope chip; removing it widens the query, and Backspace in an
-  empty field removes it. Scope conditions enter the shared filter protocol only when the kernel supports that kind.
-  The field's filter button opens the current search filters, with the active condition count; on phones the header
-  search button opens a full-screen search view with the same query and filter controls.
+- The header mounts one responsive HeaderSearch owner, with one actual query input in a token-styled pill. Focus
+  expands the same region into a panel; its footer has Filters and submit. Escape/outside dismissal preserves the
+  query. On a phone the trigger opens the same structure as a full-screen sheet with contained focus and return.
+- Routes register their existing named filters through `search/header-search/filter-region.tsx`; unavailable
+  controls leave Filters disabled. Search retains its supported Type/facet/sort URL fields and drops the old cursor
+  when the query changes. Pages never add a second query box.
+- A removable scope chip needs an existing localized scoped search action before it can submit. Unsupported scope
+  labels stay unavailable, including suggestions; empty-input Backspace and the remove button explicitly return
+  to global search. The global suggestion operation never receives scoped text. The named `slots.ask` slot is empty.
+- [Header Search states](src/stories/header-search/README.md) lists every exact Patterns ID and the pending Root
+  review matrix for phone390/desktop1280, en/zh-Hans and light/dark. `search-field.stories.tsx` retains an import
+  compatibility entry. The stack-free presenter/request regressions live in `tests/header-search-panel.test.ts`.
 - **Touches:** A nonce-bearing inline head script applies theme and navigation cookies before first paint. The
   shell renders three fixed destinations, header controls and one navigation column; the column background and
   link underlines are CSS. The account slot reserves the same space while session state is unknown

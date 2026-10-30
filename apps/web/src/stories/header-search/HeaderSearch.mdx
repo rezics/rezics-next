@@ -1,0 +1,17 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as HeaderSearchStories from './header-search.stories';
+
+<Meta of={HeaderSearchStories} />
+
+# Header Search
+
+One pill owns the query, context chip, suggestions and expanded footer. Click or focus to expand; Escape or an
+outside click collapses it. Empty-input Backspace and the chip remove button both clear the scope explicitly.
+On a phone, the same input opens in a full-screen sheet and contains keyboard focus until dismissed.
+
+Filters opens the route's registered named filter controls. Without one, the footer action is unavailable.
+A chip without a supported scoped route cannot submit or request global suggestions.
+
+Use viewport, locale and theme toolbar globals to review every state at phone390 and desktop1280, en and
+zh-Hans, light and dark. The suggestion boundary preserves pending and failure behavior. These stories are
+component evidence; Root screenshot review and postintegration acceptance remain pending.

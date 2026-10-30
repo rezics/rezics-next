@@ -1,42 +1,29 @@
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
-import { Cover, sharedRatio } from '@rezics/ui/cover';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@rezics/ui/shadcn/combobox';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { SlidersHorizontalIcon } from 'lucide-react';
 import { cn } from '@rezics/ui/utils';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, type ReactElement } from 'react';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
-import { coverSrc } from '../media/cover-src';
-import { coverOf, coverSubject } from '../media/summary';
-import { subjectHref } from '../subject/subject-href';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { fieldLabel } from '../features/pages/shared';
-import { hitYear, localizedLabel, ResultList, SubjectMeta, type Fact, type ResultHit } from './results.tsx';
+import { localizedLabel, ResultList, type Fact, type ResultHit } from './results.tsx';
 import { SearchSort } from './sort.tsx';
 import { readSearchPage } from './search-request.ts';
-import type { SuggestionResult } from './suggestions.ts';
+import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   descriptions?: boolean;
   languages?: string[];
@@ -391,16 +378,16 @@ export function SearchPage({
   const activeFilterCount =
     (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
   useEffect(() => setHydrated(true), []);
+  const desktopPanel = useRef<HTMLDivElement>(null);
+  const openFilters = useCallback(() => {
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      setDesktopFiltersOpen(true);
+      requestAnimationFrame(() => desktopPanel.current?.querySelector<HTMLElement>('a, input, button')?.focus());
+    } else setMobileFiltersOpen(true);
+  }, []);
   useEffect(() => {
-    const open = () => {
-      const desktopForm = document.getElementById('desktop-filter-form');
-      if (desktopForm && window.getComputedStyle(desktopForm).display !== 'none') setDesktopFiltersOpen(true);
-      else setMobileFiltersOpen(true);
-    };
-    if (initiallyOpen) open();
-    window.addEventListener('rezics:open-search-filters', open);
-    return () => window.removeEventListener('rezics:open-search-filters', open);
-  }, [initiallyOpen]);
+    if (initiallyOpen) openFilters();
+  }, [initiallyOpen, openFilters]);
 
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
@@ -408,6 +395,11 @@ export function SearchPage({
   const hasFilterPanel = Boolean(
     query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
   );
+  const filterRegion = useMemo(
+    () => ({ activeCount: activeFilterCount, open: openFilters }),
+    [activeFilterCount, openFilters],
+  );
+  useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const results = renderResults(query, result, locale, type, selectedFacets, data);
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
@@ -551,12 +543,14 @@ export function SearchPage({
         className="hidden lg:block lg:col-start-1 lg:row-start-1"
       >
         <Collapsible
-          open={desktopFiltersOpen}
+          open={!hydrated || desktopFiltersOpen}
           onOpenChange={setDesktopFiltersOpen}
-          className="rounded-xl border border-border/60 p-4"
+          className={cn((!hydrated || desktopFiltersOpen) && 'rounded-xl border border-border/60 p-4')}
         >
           <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
-          <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
+          <CollapsibleContent>
+            <div ref={desktopPanel}>{filterContents('desktop')}</div>
+          </CollapsibleContent>
         </Collapsible>
       </form>
       <button
@@ -693,201 +687,7 @@ function readSearch({
 
 export { readSearch };
 
-type SuggestionItem = {
-  value: string;
-  label: string;
-  lang: string | undefined;
-  suggestion: SuggestionResult['subjects'][number];
-};
-
-export type SearchScopeKind = 'Library' | 'Collection' | 'Realm' | 'Zone' | 'Agent';
-export type SearchScope = { kind: SearchScopeKind; id: string; name: string; image?: string };
-let sharedSearchText = '';
-
-/** Route context can declare these when the shared filter protocol supports the condition. */
-export function ScopeChip({ scope, onRemove }: { scope: SearchScope; onRemove: () => void }) {
-  return (
-    <span className="inline-flex max-w-48 shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs">
-      {scope.image ? (
-        <img src={scope.image} alt="" className="size-5 rounded-full object-cover" />
-      ) : (
-        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-primary/10 font-semibold">
-          {scope.name.slice(0, 1)}
-        </span>
-      )}
-      <span className="truncate">{scope.name}</span>
-      <button
-        type="button"
-        aria-label={`Remove ${scope.name} scope`}
-        className="grid size-5 shrink-0 place-items-center rounded-full hover:bg-background"
-        onClick={onRemove}
-      >
-        <X aria-hidden="true" className="size-3" />
-      </button>
-    </span>
-  );
-}
-
-export function ShellSearch(): ReactElement;
-export function ShellSearch(props: { scope?: SearchScope; activeConditions?: number }): ReactElement;
-export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchScope; activeConditions?: number } = {}) {
-  const locale = getLocale();
-  const number = new Intl.NumberFormat(locale);
-  const navigate = useNavigate();
-  const [inputValue, setInputValue] = useState(sharedSearchText);
-  const [items, setItems] = useState<SuggestionItem[]>([]);
-  const [types, setTypes] = useState<SuggestionResult['types']>({});
-  const [failed, setFailed] = useState(false);
-  const [currentScope, setCurrentScope] = useState(scope);
-  useEffect(() => setCurrentScope(scope), [scope]);
-  useEffect(() => {
-    const sync = (event: Event) => setInputValue((event as CustomEvent<string>).detail);
-    window.addEventListener('rezics:search-query-change', sync);
-    return () => window.removeEventListener('rezics:search-query-change', sync);
-  }, []);
-  const changeText = (value: string) => {
-    sharedSearchText = value;
-    setInputValue(value);
-    window.dispatchEvent(new CustomEvent('rezics:search-query-change', { detail: value }));
-  };
-  useEffect(() => {
-    const value = inputValue.trim();
-    setFailed(false);
-    if (!value) {
-      setItems([]);
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `/api/search/suggestions?q=${encodeURIComponent(value)}&locale=${encodeURIComponent(locale)}`,
-          {
-            signal: controller.signal,
-          },
-        );
-        if (!response.ok) {
-          setItems([]);
-          setFailed(true);
-          return;
-        }
-        const result = (await response.json()) as SuggestionResult;
-        setTypes(result.types ?? {});
-        setItems(
-          result.subjects.map((suggestion) => {
-            const label = localizedLabel(suggestion.labels, locale);
-            return { value: suggestion.id, label: label.text, lang: label.lang, suggestion };
-          }),
-        );
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          setItems([]);
-          setFailed(true);
-        }
-      }
-    }, 200);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [inputValue, locale]);
-  const submit = () => {
-    if (inputValue.trim())
-      void navigate({
-        to: '/search',
-        search: { q: inputValue.trim(), type: undefined, cursor: undefined },
-      });
-  };
-  // One frame for the list, so covers of mixed types line up.
-  const ratio = sharedRatio(
-    items.map(({ suggestion }) => coverSubject(suggestion.id, '', suggestion.summary, suggestion.type)),
-  );
-  return (
-    // Without JavaScript the box is a plain form to the search page.
-    <form
-      method="get"
-      action={`/${locale}/search`}
-      className="flex w-full items-center gap-1 rounded-full border bg-background px-2"
-    >
-      {currentScope && <ScopeChip scope={currentScope} onRemove={() => setCurrentScope(undefined)} />}
-      <Combobox
-        items={items}
-        filter={null}
-        value={null}
-        inputValue={inputValue}
-        onInputValueChange={(value, details) => {
-          // Choosing a suggestion would write its title into the box; the box is cleared on choosing instead.
-          if (details.reason !== 'item-press') changeText(value);
-        }}
-        onValueChange={(item: SuggestionItem | null) => {
-          if (!item) return;
-          changeText('');
-          const target = subjectHref({ id: item.value, label: item.label }, locale);
-          void navigate({ to: target.to, params: target.params });
-        }}
-      >
-        <ComboboxInput
-          name="q"
-          className="h-9 w-full text-sm"
-          aria-label={m.search_label()}
-          placeholder={m.search_placeholder()}
-          showTrigger={false}
-          onKeyDown={(event) => {
-            if (event.key === 'Backspace' && !event.currentTarget.value && currentScope) {
-              event.preventDefault();
-              setCurrentScope(undefined);
-            }
-            if (event.key === 'Enter' && !event.currentTarget.getAttribute('aria-activedescendant')) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <button
-          type="button"
-          aria-label={`${m.search_filters()} (${number.format(activeConditions)})`}
-          className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent"
-          onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}
-        >
-          <SlidersHorizontal aria-hidden="true" className="size-4" />
-          <span className="sr-only">{activeConditions}</span>
-        </button>
-        <ComboboxContent className="w-80">
-          <ComboboxEmpty>{failed ? m.search_suggestions_failed() : m.search_no_suggestions()}</ComboboxEmpty>
-          <ComboboxList>
-            {(item: SuggestionItem) => {
-              const { suggestion } = item;
-              const typeName = localizedLabel(
-                Object.hasOwn(types, suggestion.type) ? (types[suggestion.type] ?? {}) : {},
-                locale,
-              );
-              return (
-                <ComboboxItem value={item} key={item.value} className="h-auto items-start gap-3 py-2">
-                  <Cover
-                    subject={coverSubject(suggestion.id, item.label, suggestion.summary, suggestion.type)}
-                    cover={coverOf(suggestion.summary)}
-                    size="xs"
-                    ratio={ratio}
-                    src={coverSrc}
-                    decorative
-                  />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="font-medium" lang={item.lang}>
-                      {item.label}
-                    </span>
-                    <SubjectMeta
-                      type={typeName}
-                      year={hitYear(suggestion.facts)}
-                      locale={locale}
-                      className="text-xs text-muted-foreground"
-                    />
-                  </span>
-                </ComboboxItem>
-              );
-            }}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-    </form>
-  );
-}
+// Retain current callers while the reusable region owns the only query implementation.
+export { ShellSearch } from './header-search/shell-search';
+export { ScopeChip } from './header-search/scope-chip';
+export type { SearchScope, SearchScopeKind } from './header-search/types';

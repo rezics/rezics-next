@@ -530,10 +530,8 @@
   "settings_notifications_heading": "通知",
   "settings_notifications_mandatory": "あなたのコンテンツに関するモデレーションの決定は常に送信されます。",
   "settings_notifications_restore": "デフォルトに戻す",
-  "settings_notifications_text": "受け取る通知を選んでください。",
-  "settings_heading": "設定",
-  "settings_notifications_heading": "通知",
   "settings_notifications_text": "アプリ内通知を受け取る返信とメンションを選択します。",
+  "settings_heading": "設定",
   "settings_notification_replies": "返信の通知",
   "settings_notification_mentions": "メンションの通知",
   "settings_notification_moderation_always_on": "モデレーション結果は常に受信箱に表示されます。",
@@ -916,5 +914,13 @@
   "thread_post_erased": "投稿者によって削除されました。",
   "moderation_evidence_label": "報告の詳細",
   "moderation_appeal_target_label": "対象のコンテンツ",
-  "moderation_appeal_conflict": "この異議申し立てはすでに処理されています。続行する前に一覧を更新してください。"
+  "moderation_appeal_conflict": "この異議申し立てはすでに処理されています。続行する前に一覧を更新してください。",
+  "header_search_close": "検索を閉じる",
+  "header_search_filters_unavailable": "このページでは絞り込みを利用できません。",
+  "header_search_global": "REZICS を検索",
+  "header_search_in_scope": "{scope} 内を検索",
+  "header_search_loading": "候補を読み込み中…",
+  "header_search_remove_scope": "検索範囲 {scope} を解除",
+  "header_search_scope_unavailable": "この範囲では検索できません。範囲を解除すると REZICS を検索できます。",
+  "header_search_suggestions": "検索候補"
 }

@@ -51,11 +51,12 @@ export function HeaderSearchFilterProvider({ children }: { children: ReactNode }
 /** Register the route's actual current filter surface with the shared header owner. */
 export function useRegisterHeaderSearchFilters(available: boolean, region: HeaderSearchFilterRegion) {
   const context = useContext(HeaderSearchFilterContext);
+  const register = context?.register;
   const owner = useRef<object>({});
   useEffect(() => {
-    if (!context) return;
-    return context.register(owner.current, available ? region : null);
-  }, [available, context, region]);
+    if (!register) return;
+    return register(owner.current, available ? region : null);
+  }, [available, register, region]);
 }
 
 export function useHeaderSearchFilterRegion(): HeaderSearchFilterRegion | null {

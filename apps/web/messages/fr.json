@@ -530,10 +530,8 @@
   "settings_notifications_heading": "Notifications",
   "settings_notifications_mandatory": "Les décisions de modération concernant votre contenu sont toujours envoyées.",
   "settings_notifications_restore": "Rétablir les valeurs par défaut",
-  "settings_notifications_text": "Choisissez les notifications que vous recevez.",
-  "settings_heading": "Paramètres",
-  "settings_notifications_heading": "Notifications",
   "settings_notifications_text": "Choisissez les réponses et mentions qui créent des notifications dans l’application.",
+  "settings_heading": "Paramètres",
   "settings_notification_replies": "Notifications de réponse",
   "settings_notification_mentions": "Notifications de mention",
   "settings_notification_moderation_always_on": "Les décisions de modération apparaissent toujours dans votre boîte de réception.",
@@ -916,5 +914,13 @@
   "thread_post_erased": "Cette publication a été supprimée par son auteur.",
   "moderation_evidence_label": "Détails du signalement",
   "moderation_appeal_target_label": "Contenu concerné",
-  "moderation_appeal_conflict": "Ce recours a déjà été traité. Actualisez la liste avant de continuer."
+  "moderation_appeal_conflict": "Ce recours a déjà été traité. Actualisez la liste avant de continuer.",
+  "header_search_close": "Fermer la recherche",
+  "header_search_filters_unavailable": "Les filtres sont indisponibles sur cette page.",
+  "header_search_global": "Rechercher dans REZICS",
+  "header_search_in_scope": "Rechercher dans {scope}",
+  "header_search_loading": "Chargement des suggestions…",
+  "header_search_remove_scope": "Retirer le périmètre {scope}",
+  "header_search_scope_unavailable": "La recherche est indisponible dans ce périmètre. Retirez-le pour rechercher dans REZICS.",
+  "header_search_suggestions": "Suggestions de recherche"
 }

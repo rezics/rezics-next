@@ -530,10 +530,8 @@
   "settings_notifications_heading": "Benachrichtigungen",
   "settings_notifications_mandatory": "Moderationsentscheidungen zu deinen Inhalten werden immer gesendet.",
   "settings_notifications_restore": "Standardeinstellungen wiederherstellen",
-  "settings_notifications_text": "Wähle aus, welche Benachrichtigungen du erhältst.",
-  "settings_heading": "Einstellungen",
-  "settings_notifications_heading": "Benachrichtigungen",
   "settings_notifications_text": "Lege fest, für welche Antworten und Erwähnungen du In-App-Benachrichtigungen erhältst.",
+  "settings_heading": "Einstellungen",
   "settings_notification_replies": "Benachrichtigungen für Antworten",
   "settings_notification_mentions": "Benachrichtigungen für Erwähnungen",
   "settings_notification_moderation_always_on": "Moderationsergebnisse erscheinen immer in deinem Posteingang.",
@@ -916,5 +914,13 @@
   "thread_post_erased": "Dieser Beitrag wurde von seinem Autor entfernt.",
   "moderation_evidence_label": "Meldungsdetails",
   "moderation_appeal_target_label": "Betroffener Inhalt",
-  "moderation_appeal_conflict": "Diese Beschwerde wurde bereits bearbeitet. Aktualisiere die Liste, bevor du fortfährst."
+  "moderation_appeal_conflict": "Diese Beschwerde wurde bereits bearbeitet. Aktualisiere die Liste, bevor du fortfährst.",
+  "header_search_close": "Suche schließen",
+  "header_search_filters_unavailable": "Auf dieser Seite sind keine Filter verfügbar.",
+  "header_search_global": "REZICS durchsuchen",
+  "header_search_in_scope": "In {scope} suchen",
+  "header_search_loading": "Vorschläge werden geladen…",
+  "header_search_remove_scope": "Suchbereich {scope} entfernen",
+  "header_search_scope_unavailable": "In diesem Bereich ist die Suche nicht verfügbar. Entferne den Bereich, um REZICS zu durchsuchen.",
+  "header_search_suggestions": "Suchvorschläge"
 }

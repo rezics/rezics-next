@@ -530,10 +530,8 @@
   "settings_notifications_heading": "通知",
   "settings_notifications_mandatory": "關於你內容的審核決定一律會傳送。",
   "settings_notifications_restore": "還原預設值",
-  "settings_notifications_text": "選擇你要接收的通知。",
-  "settings_heading": "設定",
-  "settings_notifications_heading": "通知",
   "settings_notifications_text": "選擇哪些回覆和提及會產生應用程式內通知。",
+  "settings_heading": "設定",
   "settings_notification_replies": "回覆通知",
   "settings_notification_mentions": "提及通知",
   "settings_notification_moderation_always_on": "審核結果一律會顯示在收件匣中。",
@@ -916,5 +914,13 @@
   "thread_post_erased": "此篇文章已由作者刪除。",
   "moderation_evidence_label": "檢舉詳細資訊",
   "moderation_appeal_target_label": "相關內容",
-  "moderation_appeal_conflict": "此申訴已處理。請重新整理列表後再繼續。"
+  "moderation_appeal_conflict": "此申訴已處理。請重新整理列表後再繼續。",
+  "header_search_close": "關閉搜尋",
+  "header_search_filters_unavailable": "此頁面暫不提供篩選。",
+  "header_search_global": "搜尋 REZICS",
+  "header_search_in_scope": "在 {scope} 中搜尋",
+  "header_search_loading": "正在載入建議…",
+  "header_search_remove_scope": "移除 {scope} 範圍",
+  "header_search_scope_unavailable": "此範圍內暫不支援搜尋。移除範圍後可搜尋 REZICS。",
+  "header_search_suggestions": "搜尋建議"
 }

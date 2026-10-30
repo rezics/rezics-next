@@ -60,3 +60,15 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
     sort: search.sort === 'rating' ? 'rating' : undefined,
   };
 }
+
+/** Carry the route's supported conditions through the header's ordinary GET form; a new query drops its cursor. */
+export function searchFormFields(search: Record<string, unknown>): [string, string][] {
+  const { type, facets, sort } = searchLoaderDeps(search);
+  return [
+    ...(type ? [['type', type] as [string, string]] : []),
+    ...(sort ? [['sort', sort] as [string, string]] : []),
+    ...Object.entries(facets).flatMap(([property, values]) =>
+      values.map((value): [string, string] => [`f.${property}`, value]),
+    ),
+  ];
+}

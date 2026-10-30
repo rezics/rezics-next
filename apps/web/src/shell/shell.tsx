@@ -3,7 +3,6 @@ import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { Menu } from '@rezics/ui/menu';
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@rezics/ui/shadcn/dialog';
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +20,8 @@ import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
-import { ShellSearch } from '../search/search.tsx';
+import { ShellSearch } from '../search/header-search/shell-search';
+import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
 import { UnreadBadge } from '../inbox/unread-badge';
 import {
   Folders,
@@ -537,7 +537,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const router = useRouter();
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const [phoneSearchOpen, setPhoneSearchOpen] = useState(false);
   useLayoutEffect(() => {
     setRailCollapsed(document.documentElement.dataset.nav === 'collapsed');
   }, []);
@@ -552,89 +551,71 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <SidebarProvider
-      className="flex-col"
-      open={!railCollapsed}
-      onOpenChange={(open) => {
-        setCollapsed(!open);
-        // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
-        setTimeout(() => {
-          document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
-        });
-      }}
-    >
-      <a href="#main-content" className={skipLink}>
-        {m.shell_skip_to_content()}
-      </a>
-      <link
-        rel="preload"
-        href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
-        as="font"
-        type="font/woff2"
-        crossOrigin="anonymous"
-      />
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
-        <div className="flex h-16 items-center gap-2 px-3">
-          <NavigationToggle
-            collapsed={railCollapsed}
-            onToggle={() => setCollapsed(!railCollapsed)}
-            pathname={location.pathname}
-            session={session}
-          />
-          <Logo />
-          <div className="pointer-events-none absolute inset-x-0 mx-auto hidden w-full max-w-[40rem] px-40 md:block">
-            <div className="pointer-events-auto">
+    <HeaderSearchFilterProvider>
+      <SidebarProvider
+        className="flex-col"
+        open={!railCollapsed}
+        onOpenChange={(open) => {
+          setCollapsed(!open);
+          // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+          setTimeout(() => {
+            document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+          });
+        }}
+      >
+        <a href="#main-content" className={skipLink}>
+          {m.shell_skip_to_content()}
+        </a>
+        <link
+          rel="preload"
+          href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
+          <div className="flex h-16 items-center gap-2 px-3">
+            <NavigationToggle
+              collapsed={railCollapsed}
+              onToggle={() => setCollapsed(!railCollapsed)}
+              pathname={location.pathname}
+              session={session}
+            />
+            <Logo />
+            <div className="ms-auto w-10 min-w-0 shrink-0 md:ms-6 md:w-full md:max-w-[40rem] md:flex-1">
               <ShellSearch />
             </div>
-          </div>
-          <div className="ms-auto flex items-center gap-2">
-            <Dialog open={phoneSearchOpen} onOpenChange={setPhoneSearchOpen}>
-              <DialogTrigger
-                render={
-                  <Button
-                    className={cn('md:hidden', headerControlClass)}
-                    variant="ghost"
-                    size="icon-lg"
-                    aria-label={m.search_label()}
-                  />
-                }
-              >
-                <Search aria-hidden="true" />
-              </DialogTrigger>
-              <DialogContent className="inset-0 h-svh w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 p-4 md:hidden">
-                <DialogTitle className="sr-only">{m.search_label()}</DialogTitle>
-                <ShellSearch />
-              </DialogContent>
-            </Dialog>
-            <LanguageControl />
-            <ThemeControl />
-            <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
-              <AccountMenu session={session} csrfToken={csrfToken} />
-              <noscript>
-                <a
-                  href={`/${getLocale()}/settings`}
-                  className={cn(
-                    headerControlClass,
-                    'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
-                  )}
-                >
-                  <UserRound aria-hidden="true" className="size-4" />
-                  <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-                </a>
-              </noscript>
+            <div className="ms-auto flex items-center gap-2">
+              <LanguageControl />
+              <ThemeControl />
+              <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
+                <AccountMenu session={session} csrfToken={csrfToken} />
+                <noscript>
+                  <a
+                    href={`/${getLocale()}/settings`}
+                    className={cn(
+                      headerControlClass,
+                      'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
+                    )}
+                  >
+                    <UserRound aria-hidden="true" className="size-4" />
+                    <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+                  </a>
+                </noscript>
+              </div>
             </div>
           </div>
+        </header>
+        <ScriptFreeNavigation pathname={location.pathname} session={session} />
+        <div className="flex flex-1">
+          <NavigationColumn pathname={location.pathname} session={session} />
+          <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+            <div className="mx-auto w-full max-w-5xl">{children}</div>
+          </SidebarInset>
         </div>
-      </header>
-      <ScriptFreeNavigation pathname={location.pathname} session={session} />
-      <div className="flex flex-1">
-        <NavigationColumn pathname={location.pathname} session={session} />
-        <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
-        </SidebarInset>
-      </div>
-      <Toaster />
-    </SidebarProvider>
+        <Toaster />
+      </SidebarProvider>
+    </HeaderSearchFilterProvider>
   );
 }
 export function StatusPage({ heading, message }: { heading: string; message: string }) {
