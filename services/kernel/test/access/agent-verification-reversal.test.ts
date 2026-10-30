@@ -769,7 +769,7 @@ test('Original native Account identity writers enroll actual generated receipt o
     expect(copy.writer_version).toBe(1);
   }
   const first = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 });
-  expect(first.state).toBe('pending');
+  expect(first.state).toBe('sealed');
   expect(first.artifact?.accounts).toEqual(
     expect.arrayContaining([
       { accountRoute, accountId: account.id, roles: ACCOUNT_ROLE_BITS.subject },
@@ -804,7 +804,9 @@ test('Original native Account identity writers enroll actual generated receipt o
   expect(outbox.position).toBe(BigInt(receipt.position));
   expect(outbox.eventSeq).toBe(0);
   expect(Buffer.from(encodeLocator(outbox))).toEqual(copies[1].locator);
-  // A receiving read cannot turn association enrollment into a barrier or inventory seal.
+  // The genuine native ORIGINAL writer cut seals independently of this unverified receiving
+  // read or page EOF. It is not a receiving receipt, SDK future-writer closure, Source terminal
+  // discharge or erasure ACK.
   const receiving = await readAgentIdentityCopyReceiving(
     { pool },
     {
@@ -817,10 +819,11 @@ test('Original native Account identity writers enroll actual generated receipt o
     { deadline: Date.now() + 5000 },
   );
   expect(receiving.receipt).toBeNull();
-  expect(receiving.state).toBe('pending');
+  expect(receiving.state).toBe('sealed');
   const end = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 }, second.cursor!);
   expect(end.artifact).toBeNull();
-  expect(end.gap).toBe('agent-identity-original-inventory-unsealed');
+  expect(end.gap).toBeNull();
+  expect(end.state).toBe('sealed');
   const unknown = await readAgentIdentityCopies(pool, [{ ...key, receiptId: randomUUID() }], {
     deadline: Date.now() + 5000,
   });
