@@ -82,6 +82,16 @@ promises still hold.
 
 Each owner documents in its README which records it soft-deletes, how restore works, and its purge job's bound.
 
+### Realm membership at deletion entry
+
+Realm membership is not an organization ownership or operator responsibility. Access's
+[Realm transition coordination contract](../services/kernel/src/access/README.md#realm-transition-coordination-and-deletion-entry)
+requires an exact committed-publication or cancellation proof to close each transient hold, retaining the inverse
+until authoritative leave or post-erasure cleanup. An in-flight or uncertain transition still prevents tombstone
+before T, the erasure obligation and its event. The current successful-join hold prevents that entry and remains
+an implementation gap. Post-T cleanup cannot satisfy its own pre-T prerequisite. Once entry is implemented, genuine
+participant cleanup, shared history and physical custody must still complete before final acknowledgement.
+
 ### Shared-history participant
 
 Accounts owns the `shared-history` participant for `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`.

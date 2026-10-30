@@ -409,6 +409,12 @@ edge type. [Private follow counts](private-follow-counts.md) remain manager-only
 list or public-zero fallback; represented source metadata is not count readiness. Global gate ordering and
 `403 platform_closed` remain unchanged. The exact count-only concealment exception needs Root adoption and
 Library/HTTP coordination; this contract does not silently change it to a global 404.
+Realm membership itself does not prevent account deletion. Its inverse survives until authoritative leave or
+post-erasure cleanup; only its in-flight publication transition holds deletion. Exact native committed-publication
+or cancellation proof closes that transition through the shared durable workflow. Fresh generations prevent an
+old receipt from closing a later transition. [Realm transition coordination and deletion entry][access-transition]
+owns proof binding, crash recovery, bounded legacy reconciliation and the current implementation gap. Organization
+ownership and operator responsibilities retain their existing deletion barriers.
 
 ## 6. Auth ownership and registration
 
@@ -727,6 +733,7 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [access-evidence]: ../services/kernel/src/access/README.md#resource-evidence-failures
 [access-organization]: ../services/kernel/src/access/README.md#organization-creation
 [access-membership]: ../services/kernel/src/access/README.md#membership-work
+[access-transition]: ../services/kernel/src/access/README.md#realm-transition-coordination-and-deletion-entry
 [access-rating]: ../services/kernel/src/access/README.md#rating-counting-key
 [access-verification]: ../services/kernel/src/access/README.md#agent-verification-policy
 [access-rate]: ../services/kernel/src/access/README.md#write-rate

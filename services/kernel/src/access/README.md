@@ -488,6 +488,42 @@ Mechanically completing an already committed platform decision—URL fetch, Shar
 
 ## Membership work
 
+### Realm transition coordination and deletion entry
+
+Realm membership is neither organization ownership nor an operator responsibility. Its inverse remains until
+authoritative leave or post-erasure cleanup. The coordination hold covers a publication transition, rather than
+the lifetime of a successful membership. Before every positive publication, including a repeated join, role change
+or rejoin, acquire a fresh transition generation under the member account's native lock. Stable inverse reservations
+and transition generations have separate lifetimes. A closed generation cannot authorize another publication.
+
+Only an immutable native committed-publication or cancellation proof may retire that exact transition's hold.
+The proof binds account, Realm, stable reservation, original operation, transition generation and source transaction.
+The shared durable membership workflow reads it on the Realm anchor, releases that connection, then consumes it
+atomically on the account anchor. Successful publication consumption preserves the inverse and the real membership.
+Wrong, missing, ambiguous, stale or replayed evidence cannot retire a later generation or unrelated coordination.
+Terminal inverse release remains a separate command requiring authoritative terminal evidence; a live membership
+cannot be terminalized to finalize its join.
+
+In-flight and uncertain outcomes retain coordination and block tombstone before any fence, erasure obligation or
+tombstone event. Deletion may commit only after exact transition closure; a queued old writer must then be unable to
+publish positively. Keep the account state, fence, authentication floor, current principal/delegation/client scopes,
+Realm read/participation and ban checks at native command time under the original fixed request deadline.
+Organization ownership and operator responsibility barriers retain their existing meaning.
+
+Recovery after foreign commit completes the same exact durable proof consumption under narrow committed mechanical
+authority, without repeating publication or needing a lost bearer. Failed proof reads remain pending. Compensation
+commits actual no-publication or terminal evidence before inverse/hold release; age or an absent source row never
+proves cancellation. Under the existing inverse writer/deployment barrier, old stable Realm holds require bounded,
+resumable reconciliation through opaque native keyset pages over at most the admitted 1,000 membership neighborhood,
+exact old reservations and source-proof points, with persisted progress. Historical live, unpublished and uncertain
+cases remain distinct and redrivable. No migration alone certifies completion.
+
+Implementation gap: the current workflow retains a successful Realm join's stable coordination hold and has no
+generation-bound publication-proof consumer or bounded legacy reconciler. The native deletion-entry acceptance in
+`test/access/realm-membership-transition.test.ts` requires real Auth approval and execution while membership and
+inverse rows remain. Closing this entry gap does not establish Access, Community or shared-history erasure or their
+acknowledgements; their physical custody and final cleanup remain separate obligations.
+
 `createMembershipWorkPorts` accepts an installed `RealmMembershipCommands` port from the owning Realm module. When the principal kind is `realm`, the enqueue check and the later publication step both call that port's `authorize`, and reserve, publication and terminalization call the port's commands. Organization creation and organization membership keep the supplied authorizer, or the native approval resolver when none was supplied. A Realm principal stays on the Realm port. With no Realm port installed, Realm membership work throws `RealmMembershipUnavailableError` before any inverse, coordination or publication write.
 
 An injected organization authorizer must return an identity authenticated by the same installed Access passed in
