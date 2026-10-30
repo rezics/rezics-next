@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -13,13 +13,9 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
-import { type AgentVerificationRequest, type VerificationInput } from './verification-core';
-import {
-  readVerificationState,
-  requestVerificationAction,
-  searchVerificationSubjects,
-  withdrawVerificationAction,
-} from './verification-actions';
+import { type AgentVerificationRequest } from './verification-core';
+import { VerificationSubjectChooser } from './verification-subject-chooser';
+import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
 function VerificationState({
   verification,
@@ -60,8 +56,6 @@ export function VerificationSection() {
   const admitted = useOperation('agent_verification.request');
   const queryClient = useQueryClient();
   const id = useId();
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selected, setSelected] = useState<{ id: string; title: string; type: string } | null>(null);
   const [statement, setStatement] = useState('');
   const [links, setLinks] = useState([{ label: '', url: '' }]);
@@ -73,16 +67,6 @@ export function VerificationSection() {
     enabled: personalRead.enabled && admitted,
     queryKey: ['settings', 'verification'],
     queryFn: readVerificationState,
-  });
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-  const suggestionsQuery = useQuery({
-    ...personalRead,
-    queryKey: ['settings', 'verification-suggestions', debouncedQuery],
-    queryFn: () => searchVerificationSubjects({ data: { query: debouncedQuery } }),
-    enabled: admitted && debouncedQuery.length > 0 && !selected,
   });
   const verification = verificationQuery.data?.verificationRequest ?? null;
   const subjectTitle = verificationQuery.data?.subjectTitle ?? null;
@@ -114,7 +98,6 @@ export function VerificationSection() {
         setStatement('');
         setLinks([{ label: '', url: '' }]);
         setSelected(null);
-        setQuery('');
         setMessage(m.settings_verification_sent());
       } else setMessage(result.message);
     } catch {
@@ -168,52 +151,7 @@ export function VerificationSection() {
             className="space-y-4"
           >
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor={`${id}-subject`}>{m.settings_verification_subject()}</FieldLabel>
-                {selected ? (
-                  <div className="flex items-center gap-2">
-                    <span>
-                      {selected.title} · {selected.type}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setSelected(null);
-                        setQuery('');
-                      }}
-                    >
-                      {m.settings_verification_change_subject()}
-                    </Button>
-                  </div>
-                ) : (
-                  <Input
-                    id={`${id}-subject`}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    autoComplete="off"
-                  />
-                )}
-                {!selected && suggestionsQuery.data?.length ? (
-                  <ul role="listbox" className="space-y-1">
-                    {suggestionsQuery.data.map((subject) => (
-                      <li key={subject.id}>
-                        <button
-                          type="button"
-                          role="option"
-                          className="w-full rounded border p-2 text-left"
-                          onClick={() => {
-                            setSelected(subject);
-                            setQuery(subject.title);
-                          }}
-                        >
-                          {subject.title} · {subject.type}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </Field>
+              <VerificationSubjectChooser selected={selected} onSelect={setSelected} disabled={pending || !csrfToken} />
               <Field>
                 <FieldLabel htmlFor={`${id}-statement`}>{m.settings_verification_statement()}</FieldLabel>
                 <Textarea

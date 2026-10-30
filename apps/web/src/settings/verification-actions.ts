@@ -88,6 +88,7 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
     return (input as { query: string }).query.slice(0, 100);
   })
   .handler(async ({ data: query }) => {
+    setResponseHeader('cache-control', 'private, no-store');
     if (!query.trim()) return [];
     const { request } = await viewer();
     const result = await suggestSubjects(query, request);
