@@ -668,7 +668,11 @@ The existing erasure inventory includes the source and recovery account, request
 indexes and typed primary keys. Receiving Semantic claims/jobs bind these same subject/actor/editor roles from
 the recovered source. The recovery writer declares its actual receipt and outbox through the existing original
 source declaration/serializer ports, with the account, requester, decider and retained undo roles. The Source native
-transaction is a reference, never a History artifact. Recovery metadata retains its receiving obligation alongside
+transaction is a reference, never a History artifact. Recovery declarations have no original SDK handoff;
+they enroll only the new recovery receipt and account wakeup. The copy guard independently verifies the genuine
+original Account and Source evidence, recovery command and exact native codec. It does not insert or reopen an
+original finite inventory or SDK obligation. Recovered sources therefore retain their original inventory/SDK gaps.
+Recovery metadata retains its receiving obligation alongside
 the original source; its guard does not permit early removal. Consumer-aware source minimization and shared
 receipt/outbox/DBOS transfer remain unfinished: the new inventory is no erasure ACK, and original proof cannot be
 purged while delivery still needs it. Native workflow, cutover, erasure and physical growth acceptance remains due.

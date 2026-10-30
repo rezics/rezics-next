@@ -80,6 +80,9 @@ export async function declareAgentIdentityInventory(
   tx: CommandTransaction,
   original: ReturnType<typeof originalAccountIdentitySource>,
 ): Promise<void> {
+  // The owner may declare the genuine NEW recovery writer for native copies.
+  // It cannot recreate the original command's finite cut or SDK enqueue seam.
+  if (original.handoff === null) return;
   const receipt = currentCommandReceipt(tx);
   const inserted = await tx.query(
     `INSERT INTO core.agent_identity_inventory
@@ -128,7 +131,7 @@ export function captureAgentIdentityInventory(
   events: readonly { type: string }[],
 ): void {
   const declaration = commandAgentIdentitySource(tx);
-  if (!declaration) return;
+  if (!declaration || declaration.original.handoff === null) return;
   if (expected.has(tx) || declaration.kind !== kind) throw new TypeError('Repeated identity serializer obligations');
   const types = eventsFor(kind!);
   if (types.length !== events.length || events.some((event, index) => event.type !== types[index]))
@@ -169,7 +172,7 @@ export function captureAgentIdentityInventory(
  * Durable validation matches each expected slot to its genuine association and physical row. */
 export async function finalizeAgentIdentityInventory(tx: CommandTransaction, position: bigint): Promise<void> {
   const declaration = commandAgentIdentitySource(tx);
-  if (!declaration) return;
+  if (!declaration || declaration.original.handoff === null) return;
   const locators = expected.get(tx);
   if (!locators || position !== declaration.original.position)
     throw new TypeError('Identity serializer obligations incomplete');

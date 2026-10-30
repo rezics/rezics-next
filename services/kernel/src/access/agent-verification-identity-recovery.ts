@@ -408,9 +408,12 @@ async function declareRecovery(
     }),
   ]).accounts;
   const component = (
-    await tx.query<{ epoch: number; position: string }>(
-      `SELECT epoch,position::text FROM core.partition WHERE partition_no=$1 AND write_state='active'`,
-      [command.partition],
+    await tx.query<{ epoch: number; position: string; workflow_id: string; delivery_key: string }>(
+      `SELECT p.epoch,p.position::text,i.workflow_id,i.delivery_key
+       FROM core.partition p JOIN access.agent_identity_intent i ON i.source_partition=p.partition_no
+       WHERE p.partition_no=$1 AND p.write_state='active'
+         AND i.route=$2 AND i.account_id=$3 AND i.direction=$4 AND i.receipt_id=$5`,
+      [command.partition, key.route, key.accountId, key.direction, key.receiptId],
     )
   ).rows[0]!;
   recoveredDeclarations.set(
@@ -422,6 +425,10 @@ async function declareRecovery(
       epoch: component.epoch,
       position: BigInt(component.position) + 1n,
       transactionId: command.transactionId,
+      workflowId: component.workflow_id,
+      deliveryKey: component.delivery_key,
+      // A recovery copy is not an original finite inventory or an SDK handoff.
+      handoff: null,
       accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
     }),
   );

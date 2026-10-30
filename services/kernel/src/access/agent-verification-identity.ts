@@ -79,7 +79,13 @@ type OriginalIdentity = Readonly<{
   transactionId: string;
   workflowId: string;
   deliveryKey: string;
-  handoff: Readonly<{ partition: number; epoch: number; position: string; transactionId: string; eventType: string }>;
+  handoff: Readonly<{
+    partition: number;
+    epoch: number;
+    position: string;
+    transactionId: string;
+    eventType: string;
+  }> | null;
   accounts: readonly import('../history/locator.ts').AccountReference[];
 }>;
 const originalIdentities = new WeakMap<CommandTransaction, OriginalIdentity>();

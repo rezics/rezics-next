@@ -144,5 +144,59 @@ LANGUAGE sql STABLE AS $$
  ) END;
 $$;
 
+-- Recovery enrolls its own physical artifacts as DATA. It never reopens or seals
+-- the original writer's finite inventory or fabricates its SDK handoff.
+CREATE OR REPLACE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE i core.agent_identity_inventory; s access.agent_identity_intent;
+ a access.agent_identity_recovery; expected bytea;
+BEGIN
+ SELECT * INTO s FROM access.agent_identity_intent
+ WHERE route=NEW.source_route AND account_id=NEW.source_account_id
+   AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id
+   AND source_partition=NEW.partition_no AND intent_digest=NEW.source_digest
+   AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+ IF FOUND THEN
+   SELECT * INTO a FROM access.agent_identity_recovery
+   WHERE route=s.route AND account_id=s.account_id AND direction=s.direction AND receipt_id=s.receipt_id
+     AND (source_partition,recovery_epoch,recovery_position,recovery_transaction_id)=
+       (NEW.partition_no,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id)
+     AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+   IF FOUND AND access.agent_identity_recovery_valid(s) THEN
+     IF NEW.artifact_type='command-receipt/v1' THEN
+       expected:=decode('0101','hex') || substring(int4send(NEW.partition_no) from 3 for 2) || decode('01','hex') ||
+         uuid_send(a.requested_by) || int4send(7) ||
+         substring(int4send(split_part(a.recovery_receipt_key,'.',2)::integer) from 3 for 2) ||
+         decode(translate(split_part(a.recovery_receipt_key,'.',3),'-_','+/') || '=', 'base64');
+     ELSIF NEW.artifact_type='outbox-event/v1' THEN
+       expected:=decode('0102','hex') || substring(int4send(NEW.partition_no) from 3 for 2) ||
+         int8send(NEW.source_position) || decode('0000','hex');
+       PERFORM 1 FROM core.outbox o WHERE o.partition_no=NEW.partition_no AND o.epoch=NEW.source_epoch
+         AND o.position=NEW.source_position AND o.event_seq=0 AND o.event_count=1
+         AND o.type='com.rezics.access.account-updated.v1' AND o.subject=s.account_id::text
+         AND o.data=jsonb_build_object('accountId',s.account_id::text) AND o.payload_state='present'
+         AND o.xmin::text=pg_current_xact_id()::text;
+       IF NOT FOUND THEN
+         RAISE EXCEPTION 'Recovery copy lacks its actual account wakeup' USING ERRCODE='23514';
+       END IF;
+     END IF;
+     IF expected IS NULL OR NEW.locator IS DISTINCT FROM expected THEN
+       RAISE EXCEPTION 'Recovery copy lacks its actual native codec' USING ERRCODE='23514';
+     END IF;
+     RETURN NEW;
+   END IF;
+ END IF;
+ -- Retain the exact original-writer admission rule for every other producer.
+ SELECT * INTO i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
+   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
+   AND xmin::text=pg_current_xact_id()::text FOR UPDATE;
+ IF NOT FOUND OR i.state<>'declared' OR
+   (NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id,NEW.receiver_epoch,NEW.domain_generation)
+   IS DISTINCT FROM (i.source_digest,i.source_epoch,i.source_position,i.source_transaction_id,i.receiver_epoch,i.domain_generation) THEN
+   RAISE EXCEPTION 'Identity copy requires original unsealed producer transaction' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
 -- migrate:down
 DO $$ BEGIN RAISE EXCEPTION 'Agent identity recovery source requires forward-only receiving custody'; END $$;
