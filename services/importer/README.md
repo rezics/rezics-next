@@ -25,6 +25,16 @@ bun services/importer/src/cli.ts \
 
 `--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input. `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API.
 
+Wikidata JSONL uses the registered `wikidata-4` converter and the shipped catalogue vocabulary. Supported
+names, dates, URLs and unresolved author statements retain their source references, supported qualifiers and
+ranks through editor acceptance/adoption and public reads. A refresh creates new cited proposals under the
+same returned subject identity; it preserves independent Context selections. Exact quantities with unsupported,
+unresolved or narrowed qualifiers are withheld as whole measurements, including after durable staging.
+Unknown-language text and unknown-licensed prose/images confer no import authority. Keep the same state path
+for unchanged refresh and interrupted work: reopen checks current tuple fences before delivering pending facts.
+The [connected native journey](../kernel/test/imports/wikidata-rich-cli.test.ts) and its
+[evidence notes](../../docs/research/imports-audit/wikidata-rich-cli.md) cover this operator flow.
+
 The account key must be a regular private-JWK file readable only by its owner (for example, mode `0600` or `0400`); symlinks, non-files, and group- or world-accessible files are refused before network access. The importer keeps the bearer only in memory, renews it 60 seconds before expiry, and renews and replays once after an API 401. Bangumi, Open Library, and Wikidata request six registered scopes. VNDB requests those six plus `source_statistic:write` for its aggregate rating. The account needs the fixed Global Context grants `subject:create`, `subject:batch_write`, `source_fence:read`, and `media:import_from_url`; a VNDB account also needs `source_statistic:write`. Platform staff put the importer actor on the `service` tier once through `setRateTier`, before the first large import. The VNDB token must carry `subject:create`, `subject:batch_write`, `source_statistic:write`, `statement:propose`, `source_fence:read`, `media:import_from_url`, and `media:read_reservation`; other sources omit `source_statistic:write`. `statement:propose` comes from the standing grant every active account has, and `media:read_reservation` lets the importer read the status of media it imported. Provision the account, client, key, grants, and tier outside the CLI.
 
 For compressed files, use an operator-owned, trusted decompressor and enable shell `pipefail` so a decompressor error cannot look like a complete dump:
