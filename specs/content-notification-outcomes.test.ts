@@ -385,9 +385,7 @@ test('the author appeals once within six months and another moderator upholds or
     const p = await post(t, fixture.author);
     const subject: Target = outcome === 'uphold' ? target(p) : { kind: 'thread', id: t.id };
     ok(await driver.readTarget(subject, fixture.mentioned));
-    const takenDown = written(
-      await driver.takedown(subject, 'Original reason', options(fixture.moderator)),
-    );
+    const takenDown = written(await driver.takedown(subject, 'Original reason', options(fixture.moderator)));
     const decisionId = await decisionIdFor(subject);
     await problem(await driver.readTarget(subject, fixture.mentioned), 404);
     const appeal = ok(await driver.appeal(decisionId, 'Please reconsider', options()), 201);

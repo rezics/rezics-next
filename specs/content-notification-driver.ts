@@ -120,11 +120,7 @@ export interface ContentNotificationDriver {
   inbox(accountId: string, actor: Persona, query?: { limit?: number; cursor?: string }): Promise<ApiResult<Inbox>>;
   unread(accountId: string, actor: Persona): Promise<ApiResult<{ count: number; capped: boolean }>>;
   markSeen(accountId: string, noticeId: string, options: WriteOptions): Promise<ApiResult<unknown>>;
-  takedown(
-    target: Target,
-    reason: string,
-    options: WriteOptions,
-  ): Promise<ApiResult<{ securityRevision: string }>>;
+  takedown(target: Target, reason: string, options: WriteOptions): Promise<ApiResult<{ securityRevision: string }>>;
   decision(id: string, actor: Persona): Promise<ApiResult<Decision>>;
   report(target: Target, options: WriteOptions): Promise<ApiResult<{ reportId: string }>>;
   readReport(id: string, actor: Persona): Promise<ApiResult<Report>>;

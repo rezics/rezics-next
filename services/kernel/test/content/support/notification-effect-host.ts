@@ -7,7 +7,10 @@ type Waiter = { matches(line: string): boolean; resolve(line: string): void; rej
 
 /** Keep the production DBOS effect boundary in its own process: the native
  * Auth fixture already owns DBOS in the test process. */
-export async function createNotificationEffectHost(databaseUrl: string, clock: KernelClock): Promise<{
+export async function createNotificationEffectHost(
+  databaseUrl: string,
+  clock: KernelClock,
+): Promise<{
   deliver(consumer: string, partitions: readonly number[]): Promise<void>;
   close(): Promise<void>;
 }> {
@@ -118,7 +121,9 @@ export async function createNotificationEffectHost(databaseUrl: string, clock: K
     async deliver(consumer, partitions) {
       if (closed) throw new Error('Notification effect host is closed');
       const id = `${++nextId}`;
-      child.stdin.write(`${JSON.stringify({ id, command: 'deliver', consumer, partitions, at: clock().toISOString() })}\n`);
+      child.stdin.write(
+        `${JSON.stringify({ id, command: 'deliver', consumer, partitions, at: clock().toISOString() })}\n`,
+      );
       child.stdin.flush();
       const line = await waitForLine((item) => item.startsWith(`NOTIFICATION_EFFECT_RESULT ${id} `), 300_000);
       const result = JSON.parse(line.slice(`NOTIFICATION_EFFECT_RESULT ${id} `.length)) as WorkerMessage;
