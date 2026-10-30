@@ -54,9 +54,9 @@ SQLite pending envelopes, public selections and native media observations. A loc
 `b04c79042ef8a0d354537e0197a1e894a3f0ab51484b15e4eafb4d30c991db90` and the definition bundle is
 `sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`.
 
-| Child | Converter | Native record revisions | Initial source digest | Successor source digest |
-| --- | --- | --- | --- | --- |
-| Bangumi | `bangumi@3` | `unversioned` throughout | `a3644ed0a27b96061586a50e697bb0e15ce0a3e84c50866b8cb43ffe84a7f0db` | `be4949cb963eae9b59962193c45177612200ff7612e632f1a0b64bba122643a5` |
+| Child        | Converter        | Native record revisions                  | Initial source digest                                              | Successor source digest                                            |
+| ------------ | ---------------- | ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Bangumi      | `bangumi@3`      | `unversioned` throughout                 | `a3644ed0a27b96061586a50e697bb0e15ce0a3e84c50866b8cb43ffe84a7f0db` | `be4949cb963eae9b59962193c45177612200ff7612e632f1a0b64bba122643a5` |
 | Open Library | `open-library@3` | `11` → interrupted `12` → successor `13` | `9983e19abb562ff65589f7530a35550e4ea8eb6949bb3bbed097cac9d2694eeb` | `12ba76dab8638fc5f70da8a13cfb096954d3abda043dd9b4b2ab0708db970a8b` |
 
 Two committed responses were interrupted, leaving two pending envelopes and 16 exact command receipts.
