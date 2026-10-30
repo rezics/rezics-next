@@ -32,7 +32,7 @@ import { ensureRealmMemberGrant } from './participation.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import read from './realm-read.sql';
-import currentBan from './ban-current.sql';
+import currentReadBan from './read-ban-current.sql';
 import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
 import moveHead from './realm-head.sql';
@@ -219,18 +219,20 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
     },
     async verify({ client, actor, at }) {
       const row = await read.run(client, { route: resource.route, id: resource.id, at });
-      if (
-        row?.visibility === 'protected' &&
-        actor.kind === 'account' &&
-        (await currentBan.run(client, {
+      if (row?.visibility === 'protected' && actor.kind === 'account') {
+        // Auth/Access validates the assignment reference. Its principal is a
+        // second fixed identity, never an expansion of grants or memberships.
+        const principal = actor.requestedBy?.split(':')[3];
+        const accountIds = [...new Set([actor.accountId, ...(principal ? [principal] : [])])];
+        if (await currentReadBan.run(client, {
           route: resource.route,
           realm_id: resource.id,
-          account_id: actor.accountId,
+          account_ids: accountIds,
           at,
         }))
-      )
-        // A false floor alone would leave independent grants available.
-        throw new RealmReadDeniedError();
+          // A false floor alone would leave independent grants available.
+          throw new RealmReadDeniedError();
+      }
       observe?.(row);
       return row?.visibility === 'public';
     },

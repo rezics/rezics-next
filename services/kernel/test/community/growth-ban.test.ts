@@ -23,6 +23,7 @@ import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import currentBan from '../../src/community/ban-current.sql';
+import currentReadBan from '../../src/community/read-ban-current.sql';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -622,13 +623,19 @@ test.serial(
             banned: true,
           });
           expect(await currentBan.run(client, { route, realm_id: realmId, account_id: absentId, at })).toBeNull();
+          // The same protected-read statement checks both identities, regardless
+          // of which one is banned, without a query per grant or board.
+          for (const account_ids of [[accountId], [accountId, absentId], [absentId, accountId]]) {
+            expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids, at })).toEqual({ banned: true });
+          }
+          expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids: [absentId, newId(route)], at })).toBeNull();
         });
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
     for (const { cost } of report.samples) {
-      expect(cost.statements).toBe(2);
-      expect(cost.rows).toBe(1);
+      expect(cost.statements).toBe(6);
+      expect(cost.rows).toBe(4);
       for (const relation of Object.values(cost.relations ?? {})) expect(relation.sequentialScans).toBe(0);
     }
   },

@@ -90,8 +90,9 @@ when the new visibility is protected, in the same transaction as `realm.updated`
 `banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
 A target holding the Realm's owner or moderator resource role is refused with 409 and
 must have the role removed first. From T, a protected Realm's read eligibility checks
-one indexed current-ban key in its own partition and refuses every grant for a banned
-account. The Realm, carried Realm ID, boards, threads, posts and publications are hidden
+one indexed current-ban key for the actor and, when delegated, the principal, in one
+statement in its own partition, and refuses every grant if either account is banned.
+The Realm, carried Realm ID, boards, threads, posts and publications are hidden
 even while removal is pending or an independent read grant remains. Public reads still
 answer exactly as for an anonymous reader. A read identity denial would also veto public
 eligibility, so protected reads consult the ban record instead. Join and add-member acceptance and membership
@@ -106,10 +107,21 @@ ban resumes enqueueing with the same durable key.
 
 `DELETE /v1/realms/{realmId}/bans/{accountId}` requires the same action and ends both
 denials in the record's transaction. Both mutations use `Idempotency-Key`. Unban never
-restores membership. `GET /v1/realms/{realmId}/bans` requires `realm:ban` and returns
+restores membership. Independent grants remain intact and become readable on the next
+request with the original bearer, without rejoining or regranting.
+`GET /v1/realms/{realmId}/bans` requires `realm:ban` and returns
 current records ordered by account ID, with an opaque cursor bound to the Realm,
 viewer, limit and partition epoch. A record's `actor` is null once the moderator's account is erased. Denials stay on the Realm; content writes must check
 Realm participation directly, and public reads remain open.
+
+The same ban precedence applies to non-public boards and their descendants in a public
+Realm, whether the independent grant names an account, an organization role or a
+delegated actor. Content owns those board checks. Protected Realm eligibility uses
+`read-ban-current.sql`: one statement probes at most the actor and principal's indexed
+current keys in the Realm partition, with O(log B) work per key for B ban records.
+It does not enumerate grants, boards or members. `test/community/growth-ban.test.ts`
+covers both identities as B grows through 256, 1024 and 4096 records, holding statements
+and returned rows constant.
 
 ## Account erasure
 
