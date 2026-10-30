@@ -324,3 +324,39 @@ test('a change checks the workspaces containing it and their dependents; a root 
   expect(names(['bun.lock'])).toHaveLength(4);
   expect(names(undefined)).toHaveLength(4);
 });
+
+test('an explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {
+  const repository = join(import.meta.dir, '..');
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/compiler-explicit-url-'));
+  try {
+    const fixture = join(directory, 'run.ts');
+    writeFileSync(fixture, `
+import assert from 'node:assert/strict';
+import { typecheck } from ${JSON.stringify(join(repository, 'scripts/typecheck.ts'))};
+let consumers = 0;
+Bun.spawn = (command, options) => {
+  assert.equal(options.env.DATABASE_URL, process.env.DATABASE_URL);
+  consumers++;
+  return { exited: Promise.resolve(0), stdout: new Blob([]).stream(), stderr: new Blob([]).stream() };
+};
+assert.equal(await typecheck({
+  root: ${JSON.stringify(repository)},
+  changedFiles: ['services/kernel/scripts/typecheck.ts'],
+  stdout: { write() {} },
+  startDatabase: async () => { throw new Error('must not replace a developer database'); },
+}), 0);
+assert.ok(consumers > 0);
+`);
+    const result = spawnSync(process.execPath, [fixture], {
+      cwd: repository,
+      encoding: 'utf8',
+      timeout: 10_000,
+      env: { ...process.env, DATABASE_URL: 'postgres://developer.test/explicit' },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

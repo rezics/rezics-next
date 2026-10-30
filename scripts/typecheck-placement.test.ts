@@ -298,3 +298,135 @@ test('auth removes its compiler database when starting tsc fails', async () => {
   await expect(result).rejects.toBe(failure);
   expect(events).toEqual(['tsc', 'removed']);
 });
+
+test('A compiler database remains reachable from the actual selected typecheck process until the compiler and kernel construct finish', () => {
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/compiler-consumers-'));
+  temporaryDirectories.push(directory);
+  const alive = join(directory, 'database-alive');
+  const record = join(directory, 'consumers');
+  const consumer = join(directory, 'consumer.ts');
+  writeFileSync(consumer, `
+import { appendFileSync, existsSync } from 'node:fs';
+import assert from 'node:assert/strict';
+assert.equal(existsSync(${JSON.stringify(alive)}), true);
+assert.equal(process.env.DATABASE_URL, 'postgres://rezics:rezics@127.0.0.1:34646/rezics?sslmode=disable');
+await Bun.sleep(20);
+assert.equal(existsSync(${JSON.stringify(alive)}), true);
+appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');
+`);
+  for (const executable of ['tsc', 'bun']) {
+    const path = join(directory, executable);
+    writeFileSync(path, `#!/bin/sh\nexec '${process.execPath}' '${consumer}' "$@"\n`);
+    chmodSync(path, 0o755);
+  }
+  const fixture = join(directory, 'run.ts');
+  writeFileSync(fixture, `
+import { mock } from 'bun:test';
+import assert from 'node:assert/strict';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+const inherited = { url: process.env.DATABASE_URL, container: process.env.KERNEL_DATABASE_CONTAINER };
+const starts = [];
+mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/database.ts'))}, () => ({
+  POSTGRES_IMAGE: 'postgres:fixture',
+  migrate(url) { assert.equal(existsSync(${JSON.stringify(alive)}), true); },
+  schemaDumps() { throw new Error('unexpected schema dump'); },
+  validateMigrationVersions() {},
+}));
+mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/check.ts'))}, () => ({
+  docker(args) {
+    if (args[0] === 'run') {
+      starts.push(args);
+      writeFileSync(${JSON.stringify(alive)}, 'owned');
+      return 'owned-compiler-container';
+    }
+    assert.deepEqual(args, ['port', 'owned-compiler-container', '5432/tcp']);
+    return '127.0.0.1:34646';
+  },
+  cleanup(ids) {
+    assert.deepEqual(ids, ['owned-compiler-container']);
+    rmSync(${JSON.stringify(alive)});
+  },
+  run() { throw new Error('unexpected generator'); },
+}));
+const { runKernelTypecheck } = await import(${JSON.stringify(join(repository, 'services/kernel/scripts/typecheck.ts'))});
+const { withThrowawayDatabase } = await import(${JSON.stringify(join(repository, 'services/kernel/scripts/derived.ts'))});
+assert.equal(await runKernelTypecheck({ ...process.env, DATABASE_URL: undefined }, {
+  place: async (_run, env) => {
+    assert.equal(env.DATABASE_URL, undefined);
+    assert.equal(existsSync(${JSON.stringify(alive)}), false);
+    return null;
+  },
+}), 0);
+assert.equal(existsSync(${JSON.stringify(alive)}), false);
+assert.equal(process.env.DATABASE_URL, inherited.url);
+assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
+const failure = new Error('consumer failed');
+await assert.rejects(withThrowawayDatabase(async () => {
+  await Promise.resolve();
+  throw failure;
+}), error => error === failure);
+assert.equal(process.env.DATABASE_URL, inherited.url);
+assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
+// These PostgreSQL helpers write only their tmpfs, never a root-owned bind-mounted checkout.
+assert.equal(starts.length, 2);
+for (const args of starts) {
+  assert.equal(args.includes('--tmpfs'), true);
+  for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(args.includes(flag), false);
+}
+`);
+  for (const inherited of [false, true]) {
+    const env = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
+    delete env.DATABASE_URL;
+    delete env.KERNEL_DATABASE_CONTAINER;
+    if (inherited) {
+      env.DATABASE_URL = 'postgres://developer.test/untouched';
+      env.KERNEL_DATABASE_CONTAINER = 'developer-container';
+    }
+    const result = spawnSync(process.execPath, [fixture], { cwd: repository, env, encoding: 'utf8', timeout: 10_000 });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  }
+  expect(readFileSync(record, 'utf8').trim().split('\n').map((line) => JSON.parse(line))).toEqual([
+    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], ['run', 'construct'],
+    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], ['run', 'construct'],
+  ]);
+});
+
+test('Compiler connection and SQL analysis failures keep their real diagnostics and status without disabling analysis', () => {
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/compiler-diagnostics-'));
+  temporaryDirectories.push(directory);
+  const tsc = join(directory, 'tsc');
+  writeFileSync(tsc, `#!/bin/sh
+test "$*" = '--noEmit --runExternalCode -p tsconfig.json' || exit 99
+printf '%s\\n' "$COMPILER_DIAGNOSTIC"
+printf '%s\\n' 'compiler stderr' >&2
+exit 23
+`);
+  chmodSync(tsc, 0o755);
+  const construct = join(directory, 'bun');
+  writeFileSync(construct, '#!/bin/sh\nprintf "%s\\n" "unexpected construct" >&2\nexit 99\n');
+  chmodSync(construct, 0o755);
+  for (const workspace of ['kernel', 'auth']) {
+    for (const diagnostic of [
+      'src/access/account-agent-active-page.sql(1,1): error reylo5: CONNECTION_CLOSED at 127.0.0.1:34646/rezics',
+      'src/example.sql(1,1): error reylo1: column "missing" does not exist',
+    ]) {
+      const result = spawnSync(process.execPath, [join(repository, `services/${workspace}/scripts/typecheck.ts`)], {
+        cwd: repository,
+        encoding: 'utf8',
+        timeout: 10_000,
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          DATABASE_URL: 'postgres://developer.test/explicit',
+          COMPILER_DIAGNOSTIC: diagnostic,
+        },
+      });
+      expect(result.status).toBe(23);
+      expect(result.stdout).toBe(`${diagnostic}\n`);
+      expect(result.stderr).toBe('compiler stderr\n');
+    }
+  }
+});
