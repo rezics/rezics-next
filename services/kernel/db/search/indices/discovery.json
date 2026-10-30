@@ -26,33 +26,21 @@
       "analyzer": {
         "cjk_bigram_v2": {
           "type": "custom",
-          "char_filter": [
-            "nfkc_cf"
-          ],
+          "char_filter": ["nfkc_cf"],
           "tokenizer": "standard",
-          "filter": [
-            "han_kana_fold",
-            "cjk_bigrams",
-            "cjk_stopwords"
-          ]
+          "filter": ["han_kana_fold", "cjk_bigrams", "cjk_stopwords"]
         },
         "name_prefix": {
           "type": "custom",
-          "char_filter": [
-            "nfkc_cf"
-          ],
+          "char_filter": ["nfkc_cf"],
           "tokenizer": "standard",
-          "filter": [
-            "han_kana_fold"
-          ]
+          "filter": ["han_kana_fold"]
         }
       },
       "normalizer": {
         "name_key": {
           "type": "custom",
-          "char_filter": [
-            "nfkc_cf"
-          ]
+          "char_filter": ["nfkc_cf"]
         }
       }
     }

@@ -12,16 +12,29 @@ import type {
 } from './discovery.ts';
 
 const SUBJECT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze([
-  'text', 'kind', 'type', 'statement', 'owner', 'collection', 'zone', 'realm',
+  'text',
+  'kind',
+  'type',
+  'statement',
+  'owner',
+  'collection',
+  'zone',
+  'realm',
 ]);
 const ACCOUNT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze(['text', 'kind']);
 
 function metadata(id: string, labels: Record<string, string>, icon: string) {
   if (
-    !id || typeof icon !== 'string' || !icon ||
-    typeof labels !== 'object' || labels === null || Array.isArray(labels) ||
-    Object.keys(labels).length === 0 || Object.values(labels).some((label) => typeof label !== 'string' || !label)
-  ) throw new TypeError('Discovery kinds require localized labels and an icon');
+    !id ||
+    typeof icon !== 'string' ||
+    !icon ||
+    typeof labels !== 'object' ||
+    labels === null ||
+    Array.isArray(labels) ||
+    Object.keys(labels).length === 0 ||
+    Object.values(labels).some((label) => typeof label !== 'string' || !label)
+  )
+    throw new TypeError('Discovery kinds require localized labels and an icon');
   return Object.freeze({ id, labels: Object.freeze({ ...labels }), icon });
 }
 
@@ -32,17 +45,31 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
   const byKind = new Map<string, DiscoveryRegistration>();
   for (const [kind, type] of types) {
     if (kind === 'account') throw new TypeError('The account kind is reserved for Accounts');
-    byKind.set(kind, Object.freeze({
-      owner: 'semantic', kind, summary: 'subject', domains: SUBJECT_DOMAINS,
-      metadata: metadata(kind, type.labels, options.semantic.icons[kind]!),
-      source: options.semantic.source, hydrate: options.semantic.hydrate,
-    }));
+    byKind.set(
+      kind,
+      Object.freeze({
+        owner: 'semantic',
+        kind,
+        summary: 'subject',
+        domains: SUBJECT_DOMAINS,
+        metadata: metadata(kind, type.labels, options.semantic.icons[kind]!),
+        source: options.semantic.source,
+        hydrate: options.semantic.hydrate,
+      }),
+    );
   }
-  byKind.set('account', Object.freeze({
-    owner: 'accounts', kind: 'account', summary: 'account', domains: ACCOUNT_DOMAINS,
-    metadata: metadata('account', options.accounts.labels, options.accounts.icon),
-    source: options.accounts.source, hydrate: options.accounts.hydrate,
-  }));
+  byKind.set(
+    'account',
+    Object.freeze({
+      owner: 'accounts',
+      kind: 'account',
+      summary: 'account',
+      domains: ACCOUNT_DOMAINS,
+      metadata: metadata('account', options.accounts.labels, options.accounts.icon),
+      source: options.accounts.source,
+      hydrate: options.accounts.hydrate,
+    }),
+  );
   const get = (kind: string): DiscoveryRegistration => {
     const entry = byKind.get(kind);
     if (!entry) throw new RangeError('Unregistered discovery kind');
@@ -55,7 +82,8 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
       const entry = get(value.kind);
       const route = routeOf(value.id);
       if (entry.owner !== value.owner) throw new TypeError('Discovery owner does not own this kind');
-      if (route === null || route !== value.route) throw new RangeError('Discovery key has an invalid or foreign route');
+      if (route === null || route !== value.route)
+        throw new RangeError('Discovery key has an invalid or foreign route');
       // Copy only the canonical identity; do not retain caller-added profile/authority fields.
       return entry.owner === 'accounts'
         ? { owner: 'accounts', kind: 'account', route, id: value.id }
@@ -65,7 +93,11 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
 }
 
 /** Domain admission is independent of membership, resource authorization and native source availability. */
-export function discoveryDomain(registry: DiscoveryRegistry, kind: string, domain: DiscoveryDomain): 'applicable' | 'not_applicable' {
+export function discoveryDomain(
+  registry: DiscoveryRegistry,
+  kind: string,
+  domain: DiscoveryDomain,
+): 'applicable' | 'not_applicable' {
   if (!SUBJECT_DOMAINS.includes(domain)) throw new TypeError('Unsupported discovery condition domain');
   return registry.get(kind).domains.includes(domain) ? 'applicable' : 'not_applicable';
 }
@@ -113,8 +145,12 @@ export function validateKindCountEvidence(registry: DiscoveryRegistry, count: Ki
     return { kind: count.kind, unavailable: true };
   }
   if (
-    typeof count.exact !== 'boolean' || !Number.isSafeInteger(count.value) || count.value < 0 ||
-    (!count.exact && count.value === 0) || Object.keys(count).some((key) => !['kind', 'value', 'exact'].includes(key))
-  ) throw new TypeError('Invalid kind count evidence');
+    typeof count.exact !== 'boolean' ||
+    !Number.isSafeInteger(count.value) ||
+    count.value < 0 ||
+    (!count.exact && count.value === 0) ||
+    Object.keys(count).some((key) => !['kind', 'value', 'exact'].includes(key))
+  )
+    throw new TypeError('Invalid kind count evidence');
   return { kind: count.kind, value: count.value, exact: count.exact };
 }

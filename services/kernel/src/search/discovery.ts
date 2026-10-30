@@ -156,3 +156,17 @@ export type IndexedDiscoveryDocument =
 export type DiscoveryIndexAction =
   | { op: 'index'; id: string; version: bigint; document: IndexedDiscoveryDocument }
   | { op: 'delete'; id: string; version: bigint };
+
+/** Inert mapping contract, shared by every configured kind in the discovery family. */
+export type DiscoveryIndexDefinition = {
+  settings: Record<string, unknown>;
+  mappings: {
+    _meta: {
+      discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
+      name_sort_format: number;
+      document_identity: string;
+    };
+    dynamic: 'strict';
+    properties: Record<string, Record<string, unknown>>;
+  };
+};

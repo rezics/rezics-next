@@ -1,5 +1,5 @@
 import type {
-  DiscoveryCondition, DiscoveryDomain, DiscoveryKey, DiscoveryRegistry, DiscoveryRegistryOptions,
+  DiscoveryCondition, DiscoveryDomain, DiscoveryRegistry, DiscoveryRegistryOptions,
   DiscoveryTruth, KindCountEvidence,
 } from './discovery.ts';
 export declare function createDiscoveryRegistry(options: DiscoveryRegistryOptions): DiscoveryRegistry;

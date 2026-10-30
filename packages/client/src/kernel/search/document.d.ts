@@ -1,4 +1,4 @@
-import type { IndexedStatement, IndexedSubject, SubjectSnapshot } from './source.ts';
+import type { SubjectSnapshot } from './source.ts';
 export declare const MISSING_NAME = "􏿿";
 export declare const MAX_NAME_SORT_CHARACTERS = 512;
 /** One nested fact. Qualifiers are `property=value` strings, unique and in source order. */
