@@ -81,7 +81,7 @@ export const TrustedIssuer: Story = {
     for (const [label, path] of [
       [m.library_nav_collections(), 'collections'],
       [m.library_nav_following(), 'following'],
-    ]) {
+    ] as const) {
       await expect(await menu.findByRole('link', { name: label })).toHaveAttribute(
         'href',
         `/${getLocale()}/library/${path}`,
