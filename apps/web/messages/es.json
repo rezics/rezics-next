@@ -2355,5 +2355,9 @@
   "recipe_replace_method": "Escribir nuevas instrucciones",
   "recipe_method_help": "Escribe tus propias instrucciones e indica el idioma y la licencia SPDX. Los documentos existentes se conservan; se crea un reemplazo nuevo.",
   "recipe_original": "Estas instrucciones son mi texto original.",
-  "recipe_remove_field": "Quitar campo"
+  "recipe_remove_field": "Quitar campo",
+  "library_collection_preview_preparing": "Preparando vista previa…",
+  "library_navigation_loading": "Cargando tus colecciones…",
+  "library_collections_denied": "Tus colecciones no están disponibles con tu acceso actual.",
+  "library_collections_unavailable": "Tus colecciones no están disponibles ahora. Inténtalo de nuevo."
 }

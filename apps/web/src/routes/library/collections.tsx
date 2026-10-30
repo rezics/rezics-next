@@ -9,8 +9,10 @@ import { readLibraryPinsPage } from '../../library/pins-read';
 
 export const Route = createFileRoute('/library/collections')({
   beforeLoad: requireSignedIn,
-  validateSearch: (search: Record<string, unknown>) =>
-    typeof search.cursor === 'string' ? { cursor: search.cursor } : {},
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
+    layout: search.layout === 'previews' ? ('previews' as const) : ('rows' as const),
+  }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   loader: async ({ deps }) => {
     const [page, pins] = await Promise.all([
@@ -23,6 +25,14 @@ export const Route = createFileRoute('/library/collections')({
     pageHead({ title: m.library_collections_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: () => {
     const { page, pins } = Route.useLoaderData();
-    return <MineCollectionsPageView page={page} pins={pins} />;
+    const search = Route.useSearch();
+    return (
+      <MineCollectionsPageView
+        page={page}
+        pins={pins}
+        layout={search.layout}
+        {...(search.cursor ? { cursor: search.cursor } : {})}
+      />
+    );
   },
 });

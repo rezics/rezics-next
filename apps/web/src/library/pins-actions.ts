@@ -12,27 +12,6 @@ type WriteResult = {
   data?: { revision: number } | null;
 };
 
-type LibraryPinsApi = {
-  libraryPins: (params: { collectionId: string }) => {
-    put(
-      body: { revision: number; after?: string | null },
-      options: { headers: { authorization: string; 'idempotency-key': string } },
-    ): Promise<WriteResult>;
-    delete(
-      body: undefined,
-      options: {
-        query: { revision: number };
-        headers: { authorization: string; 'idempotency-key': string };
-      },
-    ): Promise<WriteResult>;
-  };
-};
-
-function pinApi(client: KernelClient): LibraryPinsApi {
-  // The pin routes are waiting for the generated client update from commerce's library-pins runtime.
-  return client as unknown as LibraryPinsApi;
-}
-
 export type PinMutation =
   | { ok: true; revision: number }
   | { ok: false; reason: 'conflict' | 'full' | 'closed' | 'unavailable' | 'signed-out' };
@@ -48,11 +27,7 @@ function codeOf(error: WriteResult['error']): string | undefined {
 }
 
 function headers(authorization: string, idempotencyKey: string) {
-  // The pin endpoints are waiting for the generated client's header declaration from commerce.
-  return { authorization, 'idempotency-key': idempotencyKey } as {
-    authorization: string;
-    'idempotency-key': string;
-  };
+  return { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) };
 }
 
 /** Sends one revision-guarded pin placement with its structured idempotency key. */
@@ -65,7 +40,7 @@ export async function putLibraryPin(
   idempotencyKey: string,
 ): Promise<PinMutation> {
   try {
-    const result = await pinApi(client)
+    const result = await client
       .libraryPins({ collectionId })
       .put(
         { revision, ...(after === undefined ? {} : { after }) },
@@ -90,16 +65,15 @@ export async function deleteLibraryPin(
   idempotencyKey: string,
 ): Promise<PinMutation> {
   try {
-    const result = await pinApi(client)
-      .libraryPins({ collectionId })
-      .delete(undefined, {
-        query: { revision },
-        headers: headers(authorization, idempotencyKey),
-      });
+    const result = await client.libraryPins({ collectionId }).delete(undefined, {
+      query: { revision },
+      headers: headers(authorization, idempotencyKey),
+    });
     const status = statusOf(result);
     if (status === 409) return { ok: false, reason: 'conflict' };
-    if (result.error || (status !== undefined && status >= 400)) return { ok: false, reason: 'unavailable' };
-    return { ok: true, revision: result.data?.revision ?? revision };
+    if (result.error || (status !== undefined && status >= 400) || !result.data)
+      return { ok: false, reason: 'unavailable' };
+    return { ok: true, revision: result.data.revision };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

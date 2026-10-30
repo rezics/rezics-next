@@ -181,7 +181,7 @@ export function PersonalLibraryPage({
     : m.library_tracked_entries();
   return (
     <Toaster>
-      <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
+      <div className="w-full min-w-0 space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <PageHeading>{m.library_heading()}</PageHeading>
           <Exposure operation="library_label.list">
@@ -190,6 +190,13 @@ export function PersonalLibraryPage({
             </a>
           </Exposure>
         </header>
+        <LibraryNavigation
+          current="tracked"
+          locale={locale}
+          pins={navigation.data?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
+          collections={navigation.data?.collections ?? []}
+          collectionsState={navigation.data?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
+        />
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
         {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
         <ContinueSection
@@ -198,12 +205,6 @@ export function PersonalLibraryPage({
           busy={resume.busy}
           locale={locale}
           density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
-        />
-        <LibraryNavigation
-          current="tracked"
-          locale={locale}
-          pins={navigation.data?.pins ?? { state: 'closed' }}
-          collections={navigation.data?.collections ?? []}
         />
         <section aria-labelledby="tracked-entries-heading" className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">

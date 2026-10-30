@@ -26,7 +26,8 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
   notice: string;
   pending: boolean;
 } {
-  const canUpdate = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate !== false;
+  const canPut = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate !== false;
+  const canRemove = useOperation('library_pin.delete') && pins.state === 'loaded' && pins.canRemove !== false;
   const loadedPins = pins.state === 'loaded' ? pins : null;
   const { csrfToken } = useSession();
   const router = useRouter();
@@ -36,10 +37,11 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
 
   const index = pins.state === 'loaded' ? pins.pins.findIndex((pin) => pin.collectionId === collectionId) : -1;
   const pinned = index >= 0;
+  const canUpdate = pinned ? canPut || canRemove : canPut;
   const orderedIds = loadedPins?.pins.map((pin) => pin.collectionId) ?? [];
   const pinCount = loadedPins?.pins.length ?? 0;
   const perform = async (action: 'pin' | 'unpin' | 'up' | 'down') => {
-    if (!csrfToken || pending || !loadedPins) return;
+    if (!csrfToken || pending || !loadedPins || (action === 'unpin' ? !canRemove : !canPut)) return;
     setPending(true);
     setNotice('');
     const after =
@@ -84,10 +86,10 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
   };
 
   const moves: MenuEntry[] = [
-    ...(mode === 'list' && index > 0
+    ...(canPut && mode === 'list' && index > 0
       ? [{ type: 'item' as const, label: m.library_pin_move_up(), onSelect: () => void perform('up') }]
       : []),
-    ...(mode === 'list' && index < pinCount - 1
+    ...(canPut && mode === 'list' && index < pinCount - 1
       ? [{ type: 'item' as const, label: m.library_pin_move_down(), onSelect: () => void perform('down') }]
       : []),
   ];
@@ -98,7 +100,9 @@ export function usePinControlActions({ collectionId, pins, mode }: PinControlInp
         ? [
             ...moves,
             ...(moves.length ? [{ type: 'separator' as const }] : []),
-            { type: 'destructive' as const, label: m.library_pin_unpin(), onSelect: () => void perform('unpin') },
+            ...(canRemove
+              ? [{ type: 'destructive' as const, label: m.library_pin_unpin(), onSelect: () => void perform('unpin') }]
+              : []),
           ]
         : [{ type: 'item' as const, label: m.library_pin_pin(), onSelect: () => void perform('pin') }];
 

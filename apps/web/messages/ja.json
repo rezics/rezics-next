@@ -2355,5 +2355,9 @@
   "recipe_replace_method": "新しい作り方を書く",
   "recipe_method_help": "自分の言葉で作り方を書き、言語タグと SPDX ライセンスを指定してください。既存の文書を保持し、新しい置き換え文書を作成します。",
   "recipe_original": "この作り方は私が書いたオリジナルの文章です。",
-  "recipe_remove_field": "項目を削除"
+  "recipe_remove_field": "項目を削除",
+  "library_collection_preview_preparing": "プレビューを準備しています…",
+  "library_navigation_loading": "コレクションを読み込んでいます…",
+  "library_collections_denied": "現在のアクセス権ではコレクションを表示できません。",
+  "library_collections_unavailable": "現在コレクションを表示できません。もう一度お試しください。"
 }

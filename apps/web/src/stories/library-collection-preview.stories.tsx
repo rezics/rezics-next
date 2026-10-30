@@ -12,7 +12,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A bounded strip of the first three actual members, in source order. An unavailable preview is distinct from a proven empty Collection. The real list keeps this unavailable until Commerce supplies its bounded preview batch.',
+          'A bounded strip of the first three actual members, in source order. An unavailable preview is distinct from a proven empty Collection. The native preview transport is still unavailable in this checkout; these recorded members exercise only the presentation boundary.',
       },
     },
   },
@@ -20,13 +20,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function renderPreview(state: 'members' | 'empty' | 'unavailable') {
+function renderPreview(state: 'members' | 'empty' | 'unavailable' | 'preparing') {
   const collection: CollectionBrowseRecord = recordedBrowseCollection();
   if (state === 'empty') {
     collection.memberCount = 0;
     collection.preview = { state: 'loaded', members: [] };
   }
   if (state === 'unavailable') collection.preview = { state: 'unavailable' };
+  if (state === 'preparing') collection.preview = { state: 'preparing' };
   return (
     <PatternStory>
       <div className="w-full p-4">
@@ -56,5 +57,14 @@ export const Unavailable: Story = {
     await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(
       m.library_collection_preview_unavailable(),
     );
+  },
+};
+
+export const Preparing: Story = {
+  render: () => renderPreview('preparing'),
+  play: async ({ canvasElement }) => {
+    const status = await within(canvasElement).findByRole('status');
+    await expect(status).toHaveTextContent(m.library_collection_preview_preparing());
+    await expect(within(canvasElement).queryByText(m.library_collection_empty())).toBeNull();
   },
 };

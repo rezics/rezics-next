@@ -11,7 +11,7 @@ function validateInput(input: unknown): { cursor?: string } {
     typeof input !== 'object' ||
     ('cursor' in input &&
       input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 2048))
+      (typeof input.cursor !== 'string' || input.cursor.length > 4096))
   )
     throw new Error('Invalid collection cursor');
   return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};

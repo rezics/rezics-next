@@ -2356,5 +2356,9 @@
   "recipe_replace_method": "编写新做法",
   "recipe_method_help": "请用自己的话编写做法，明确语言标签和 SPDX 许可。原文档会保留，此操作创建新的替代内容。",
   "recipe_original": "这些做法是我原创的文字。",
-  "recipe_remove_field": "移除字段"
+  "recipe_remove_field": "移除字段",
+  "library_collection_preview_preparing": "正在准备预览…",
+  "library_navigation_loading": "正在加载你的收藏集…",
+  "library_collections_denied": "你当前的访问权限无法查看收藏集。",
+  "library_collections_unavailable": "暂时无法加载你的收藏集，请重试。"
 }

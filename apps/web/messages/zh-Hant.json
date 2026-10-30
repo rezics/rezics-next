@@ -2355,5 +2355,9 @@
   "recipe_replace_method": "撰寫新作法",
   "recipe_method_help": "請以自己的話撰寫作法，明確填寫語言標籤與 SPDX 授權。原文件會保留，此操作建立新的替代內容。",
   "recipe_original": "這些作法是我原創的文字。",
-  "recipe_remove_field": "移除欄位"
+  "recipe_remove_field": "移除欄位",
+  "library_collection_preview_preparing": "正在準備預覽…",
+  "library_navigation_loading": "正在載入你的收藏集…",
+  "library_collections_denied": "你目前的存取權限無法查看收藏集。",
+  "library_collections_unavailable": "暫時無法載入你的收藏集，請重試。"
 }

@@ -2355,5 +2355,9 @@
   "recipe_replace_method": "Neue Anleitung schreiben",
   "recipe_method_help": "Die Anleitung selbst verfassen und Sprachcode sowie SPDX-Lizenz angeben. Bestehende Dokumente bleiben erhalten; es entsteht ein neuer Ersatz.",
   "recipe_original": "Diese Anleitung habe ich selbst verfasst.",
-  "recipe_remove_field": "Feld entfernen"
+  "recipe_remove_field": "Feld entfernen",
+  "library_collection_preview_preparing": "Vorschau wird vorbereitet…",
+  "library_navigation_loading": "Deine Sammlungen werden geladen…",
+  "library_collections_denied": "Deine Sammlungen sind mit deinem aktuellen Zugriff nicht verfügbar.",
+  "library_collections_unavailable": "Deine Sammlungen sind gerade nicht verfügbar. Versuche es erneut."
 }

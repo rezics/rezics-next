@@ -1,4 +1,5 @@
 import { Cover } from '@rezics/ui/cover';
+import { CoverCard } from '@rezics/ui/cover-card';
 import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -7,7 +8,6 @@ import { Link } from '@tanstack/react-router';
 import {
   ChevronRightIcon,
   EllipsisIcon,
-  ImageOffIcon,
   LayoutListIcon,
   PanelsTopLeftIcon,
   LockKeyholeIcon,
@@ -19,13 +19,13 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { displayLibraryTitle } from './title';
-import { dynamicCollectionTitle, type DynamicBuiltinKind } from './dynamic-collection';
+import { dynamicCollectionTitle } from './dynamic-collection';
 import type { LibrarySubject } from './reads';
-import type { MineCollection } from './mine-collections';
+import type { MineCollection, MineCollectionPreview } from './mine-collections';
 import { collectionMemberRatio } from './collection-presentation';
 
 export type CollectionBrowseLayout = 'rows' | 'previews';
-export type CollectionPreviewData = { state: 'unavailable' } | { state: 'loaded'; members: readonly LibrarySubject[] };
+export type CollectionPreviewData = MineCollectionPreview;
 
 export type CollectionBrowseRecord = MineCollection & {
   preview: CollectionPreviewData;
@@ -37,7 +37,7 @@ export function browseCollectionTitle(
   if (collection.title !== null) return collection.title;
   return dynamicCollectionTitle(
     {
-      builtinKind: (collection.builtinKind ?? 'state') as DynamicBuiltinKind,
+      builtinKind: collection.builtinKind ?? 'unknown',
       title: null,
       ...(collection.builtinLabels ? { builtinLabels: collection.builtinLabels } : {}),
     },
@@ -55,43 +55,40 @@ function privateCollection(collection: MineCollection): boolean {
 
 function CollectionCover({ collection, subject }: { collection: MineCollection; subject?: LibrarySubject | null }) {
   const title = browseCollectionTitle(collection);
-  if (collection.coverSource !== undefined) {
-    if (collection.cover)
-      return (
+  if (collection.coverSource !== undefined || collection.cover) {
+    return (
+      <div className="min-w-0" data-collection-cover={collection.coverSource}>
         <Cover
           subject={{ id: collection.id, title, types: [] }}
-          cover={collection.cover}
+          cover={collection.cover ?? null}
           size="fill"
           ratio={collectionMemberRatio(collection.presentationKind ? { type: collection.presentationKind } : null)}
           src={coverSrc}
           decorative
         />
-      );
-    subject = null;
-  }
-  if (subject) {
-    const label = displayLibraryTitle(subject.label, getLocale()).text;
-    return (
-      <Cover
-        subject={{ id: subject.id, title: label, types: subject.types }}
-        cover={subject.cover}
-        size="fill"
-        ratio={collectionMemberRatio(subject)}
-        src={coverSrc}
-        decorative
-      />
+        {collection.coverSource === 'pending' ? (
+          <p role="status" className="mt-1 text-xs text-muted-foreground">
+            {m.library_collection_preview_preparing()}
+          </p>
+        ) : null}
+      </div>
     );
   }
   return (
-    <div
-      className="flex aspect-square w-24 sm:w-40 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 px-3 text-center text-muted-foreground"
-      role="img"
-      aria-label={`${title}: ${m.library_collection_preview_unavailable()}`}
-      data-collection-cover="unavailable"
-    >
-      <ImageOffIcon aria-hidden="true" className="size-6" />
-      <span className="text-xs">{m.library_collection_preview_unavailable()}</span>
-    </div>
+    <Cover
+      subject={
+        subject
+          ? { id: subject.id, title: displayLibraryTitle(subject.label, getLocale()).text, types: subject.types }
+          : { id: collection.id, title, types: [] }
+      }
+      cover={subject?.cover ?? null}
+      size="fill"
+      ratio={collectionMemberRatio(
+        subject ?? (collection.presentationKind ? { type: collection.presentationKind } : null),
+      )}
+      src={coverSrc}
+      decorative
+    />
   );
 }
 
@@ -184,27 +181,21 @@ export function CollectionBrowseRow({
 function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
   return (
     <ul className="grid min-w-0 grid-cols-3 gap-3">
-      {members.slice(0, 3).map((subject) => {
+      {members.slice(0, 3).map((subject, index) => {
         const title = displayLibraryTitle(subject.label, getLocale()).text;
         const href = subjectHref({ id: subject.id, label: title }, getLocale());
         return (
-          <li key={subject.id} className="min-w-0 space-y-2 rounded-lg bg-muted/30 p-2">
-            <Cover
-              subject={{ id: subject.id, title, types: subject.types }}
-              cover={subject.cover}
-              size="fill"
-              className="max-w-40"
-              ratio={collectionMemberRatio(subject)}
-              src={coverSrc}
-              decorative
+          <li key={`${subject.id}:${index}`} className="min-w-0">
+            <CoverCard
+              title={title}
+              href={href.href}
+              cover={{
+                subject: { id: subject.id, title, types: subject.types },
+                cover: subject.cover,
+                ratio: collectionMemberRatio(subject),
+                src: coverSrc,
+              }}
             />
-            <Link
-              to={href.to}
-              params={href.params}
-              className="line-clamp-2 min-w-0 text-sm font-medium hover:underline"
-            >
-              {title}
-            </Link>
           </li>
         );
       })}
@@ -213,7 +204,7 @@ function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
 }
 
 /** A preview entry uses only the bounded members supplied by its producer; an absent batch stays explicitly unavailable. */
-export function CollectionPreview({ collection }: { collection: CollectionBrowseRecord }) {
+export function CollectionPreview({ collection, menu }: { collection: CollectionBrowseRecord; menu?: ReactNode }) {
   const title = browseCollectionTitle(collection);
   const members = collection.preview.state === 'loaded' ? collection.preview.members.slice(0, 3) : [];
   return (
@@ -238,6 +229,7 @@ export function CollectionPreview({ collection }: { collection: CollectionBrowse
           ) : null}
           <ChevronRightIcon aria-hidden="true" className="ms-auto size-4 shrink-0" />
         </Link>
+        {menu}
       </header>
       <div className="mt-3">
         {members.length ? (
@@ -245,8 +237,10 @@ export function CollectionPreview({ collection }: { collection: CollectionBrowse
         ) : collection.preview.state === 'loaded' && collection.memberCount === 0 ? (
           <p className="text-sm text-muted-foreground">{m.library_collection_empty()}</p>
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.library_collection_preview_unavailable()}
+          <p role="status" data-preview-state={collection.preview.state} className="text-sm text-muted-foreground">
+            {collection.preview.state === 'preparing'
+              ? m.library_collection_preview_preparing()
+              : m.library_collection_preview_unavailable()}
           </p>
         )}
       </div>
@@ -330,7 +324,7 @@ export function CollectionBrowseList({
     return (
       <div className="min-w-0 space-y-3" data-collection-browse="previews">
         {collections.map((collection) => (
-          <CollectionPreview key={collection.id} collection={collection} />
+          <CollectionPreview key={collection.id} collection={collection} menu={menuFor?.(collection)} />
         ))}
       </div>
     );

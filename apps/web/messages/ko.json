@@ -2355,5 +2355,9 @@
   "recipe_replace_method": "새 조리 방법 작성",
   "recipe_method_help": "직접 쓴 조리 방법에 언어 태그와 SPDX 라이선스를 명시하세요. 기존 문서는 보존되며 새 대체 문서가 만들어집니다.",
   "recipe_original": "이 조리 방법은 제가 직접 쓴 글입니다.",
-  "recipe_remove_field": "필드 제거"
+  "recipe_remove_field": "필드 제거",
+  "library_collection_preview_preparing": "미리 보기를 준비하고 있습니다…",
+  "library_navigation_loading": "컬렉션을 불러오고 있습니다…",
+  "library_collections_denied": "현재 접근 권한으로는 컬렉션을 볼 수 없습니다.",
+  "library_collections_unavailable": "현재 컬렉션을 불러올 수 없습니다. 다시 시도해 주세요."
 }

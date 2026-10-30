@@ -21,31 +21,14 @@ export type LibraryPin = { collectionId: string; target: LibraryPinTarget | null
 export type LibraryPinsPage = { pins: LibraryPin[]; revision: number; next: string | null };
 export type LibraryPinsRead =
   | { state: 'closed' }
+  | { state: 'preparing' }
   | { state: 'unavailable' }
-  | ({ state: 'loaded'; canUpdate?: boolean } & LibraryPinsPage);
+  | ({ state: 'loaded'; canUpdate?: boolean; canRemove?: boolean } & LibraryPinsPage);
 
 type Result<T> = {
   data?: T | null;
   error?: { status?: number; value?: unknown } | null;
   status?: number;
-};
-
-type LibraryPinsApi = {
-  openapi: {
-    json: {
-      get(options?: {
-        headers?: { authorization: string };
-        fetch?: { signal: AbortSignal };
-      }): Promise<Result<{ paths?: Record<string, Record<string, { operationId?: string }>> }>>;
-    };
-  };
-  libraryPins: {
-    get(options: {
-      query: { limit: number };
-      headers: { authorization: string };
-      fetch?: { signal: AbortSignal };
-    }): Promise<Result<LibraryPinsPage>>;
-  };
 };
 
 function resultStatus(result: Result<unknown>): number | undefined {
@@ -68,23 +51,19 @@ export function libraryPinsListExposed(document: unknown): boolean {
   });
 }
 
-function libraryPinsUpdateExposed(document: unknown): boolean {
+function pinOperationExposed(document: unknown, method: 'put' | 'delete'): boolean {
   if (!document || typeof document !== 'object' || !('paths' in document)) return false;
   const paths = document.paths;
   if (!paths || typeof paths !== 'object') return false;
   return Object.values(paths).some((path) => {
     if (!path || typeof path !== 'object') return false;
-    const put = 'put' in path ? path.put : undefined;
-    const remove = 'delete' in path ? path.delete : undefined;
+    const operation: unknown =
+      method === 'put' ? ('put' in path ? path.put : undefined) : 'delete' in path ? path.delete : undefined;
     return (
-      put !== null &&
-      typeof put === 'object' &&
-      'operationId' in put &&
-      put.operationId === 'library_pin.put' &&
-      remove !== null &&
-      typeof remove === 'object' &&
-      'operationId' in remove &&
-      remove.operationId === 'library_pin.delete'
+      operation !== null &&
+      typeof operation === 'object' &&
+      'operationId' in operation &&
+      operation.operationId === `library_pin.${method}`
     );
   });
 }
@@ -95,24 +74,27 @@ export async function readLibraryPins(
   authorization: string,
   limit: 8 | 100,
 ): Promise<LibraryPinsRead> {
-  // The pin routes are waiting for the generated client update from commerce's library-pins runtime.
-  const api = client as unknown as LibraryPinsApi;
   try {
-    const exposed = await api.openapi.json.get({
+    const exposed = await client['openapi.json'].get({
       headers: { authorization },
       fetch: { signal: AbortSignal.timeout(2_000) },
     });
     if (exposed.error || !exposed.data) return { state: 'unavailable' };
     if (!libraryPinsListExposed(exposed.data)) return { state: 'closed' };
 
-    const result = await api.libraryPins.get({
+    const result = await client.libraryPins.get({
       query: { limit },
       headers: { authorization },
       fetch: { signal: AbortSignal.timeout(2_000) },
     });
     const status = resultStatus(result);
     if (result.error || (status !== undefined && status >= 400) || !result.data) return { state: 'unavailable' };
-    return { state: 'loaded', ...result.data, canUpdate: libraryPinsUpdateExposed(exposed.data) };
+    return {
+      state: 'loaded',
+      ...result.data,
+      canUpdate: pinOperationExposed(exposed.data, 'put'),
+      canRemove: pinOperationExposed(exposed.data, 'delete'),
+    };
   } catch {
     return { state: 'unavailable' };
   }
@@ -121,6 +103,7 @@ export async function readLibraryPins(
 export type LibraryNavigationRead = {
   pins: LibraryPinsRead;
   collections: MineCollection[];
+  collectionsState?: 'loaded' | 'unavailable' | 'preparing';
 };
 
 export async function loadLibraryNavigation(
@@ -132,12 +115,16 @@ export async function loadLibraryNavigation(
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
-  if (!authorization || !accountId) return { pins: { state: 'closed' }, collections: [] };
+  if (!authorization || !accountId) return { pins: { state: 'closed' }, collections: [], collectionsState: 'loaded' };
   const [pins, owner] = await Promise.all([
     readLibraryPins(client, authorization, limit),
     loadMineCollectionsForOwner(client, accountId, authorization).catch(() => undefined),
   ]);
-  return { pins, collections: owner?.collections ?? [] };
+  return {
+    pins,
+    collections: owner?.collections ?? [],
+    collectionsState: owner && (!owner.state || owner.state === 'loaded') ? 'loaded' : 'unavailable',
+  };
 }
 
 export const readLibraryNavigationPage = createServerFn({ method: 'GET' })

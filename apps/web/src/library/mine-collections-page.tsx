@@ -1,8 +1,8 @@
-import { Exposure, useOperation } from '../kernel/exposure';
+import { Exposure } from '../kernel/exposure';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { PlusIcon } from 'lucide-react';
+import { browseCollectionTitle } from './collection-browser';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -18,13 +18,23 @@ import {
 } from './collection-browser';
 
 function browseRecords(collections: readonly MineCollection[]): CollectionBrowseRecord[] {
-  return collections.map((collection) => ({ ...collection, preview: { state: 'unavailable' } }));
+  return collections.map((collection) => ({ ...collection, preview: collection.preview ?? { state: 'unavailable' } }));
 }
 
-export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsPage; pins: LibraryPinsRead }) {
-  const readable = useOperation('collection.get');
-  const canPin = useOperation('library_pin.put') && pins.state === 'loaded' && pins.canUpdate !== false;
-  const [layout, setLayout] = useState<CollectionBrowseLayout>('rows');
+export function MineCollectionsPageView({
+  page,
+  pins,
+  layout = 'rows',
+  cursor,
+}: {
+  page: MineCollectionsPage;
+  pins: LibraryPinsRead;
+  layout?: CollectionBrowseLayout;
+  cursor?: string;
+}) {
+  const navigate = useNavigate();
+  const setLayout = (next: CollectionBrowseLayout) =>
+    void navigate({ to: '/library/collections', search: { ...(cursor ? { cursor } : {}), layout: next } });
   const collections = browseRecords(page.collections);
   const navigationCollections = page.navigationCollections ?? page.collections;
   return (
@@ -32,36 +42,62 @@ export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsP
       <article className="w-full min-w-0 space-y-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <PageHeading>{m.library_collections_heading()}</PageHeading>
-          <Exposure operation="library_label.list">
-            <Link to="/library/labels" className={buttonVariants({ variant: 'outline' })}>
-              {m.library_labels_heading()}
-            </Link>
-          </Exposure>
+          <div className="flex flex-wrap items-center gap-2">
+            <Exposure operation="library_label.list">
+              <Link to="/library/labels" className={buttonVariants({ variant: 'outline' })}>
+                {m.library_labels_heading()}
+              </Link>
+            </Exposure>
+            <Exposure operation="collection.create">
+              <a
+                href={`/${getLocale()}/collections/new`}
+                className={buttonVariants({ variant: 'outline' })}
+                aria-label={m.library_collection_new()}
+              >
+                <PlusIcon aria-hidden="true" />
+                {m.library_collection_new()}
+              </a>
+            </Exposure>
+          </div>
         </header>
-        <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout}>
-          <LibraryNavigation current="collections" pins={pins} collections={navigationCollections} />
-          <Exposure operation="collection.create">
-            <a
-              href={`/${getLocale()}/collections/new`}
-              className={buttonVariants({ size: 'icon' })}
-              aria-label={m.library_collection_new()}
-            >
-              <PlusIcon aria-hidden="true" />
+        <LibraryNavigation
+          current="collections"
+          pins={pins}
+          collections={navigationCollections}
+          collectionsState={
+            page.state === 'preparing' ? 'preparing' : page.state && page.state !== 'loaded' ? 'unavailable' : 'loaded'
+          }
+        />
+        <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout} />
+        {!page.signedIn ? (
+          <p role="status">{m.library_sign_in()}</p>
+        ) : page.state && page.state !== 'loaded' ? (
+          <div className="space-y-3" data-collections-state={page.state}>
+            <h2 className="text-xl font-semibold">
+              {page.state === 'error' || page.state === 'unavailable'
+                ? m.error_heading()
+                : m.library_collections_heading()}
+            </h2>
+            <p role={page.state === 'error' || page.state === 'unavailable' ? 'alert' : 'status'}>
+              {page.state === 'preparing'
+                ? m.library_dynamic_preparing()
+                : page.state === 'denied'
+                  ? m.library_collections_denied()
+                  : page.state === 'error'
+                    ? m.error_message()
+                    : m.library_collections_unavailable()}
+            </p>
+            <a href={`/${getLocale()}/library/collections`} className={buttonVariants({ variant: 'outline' })}>
+              {m.library_follow_retry()}
             </a>
-          </Exposure>
-        </CollectionBrowseToolbar>
-        {collections.length ? (
+          </div>
+        ) : collections.length ? (
           <CollectionBrowseList
             collections={collections}
             layout={layout}
-            readable={readable}
-            {...(canPin
-              ? {
-                  menuFor: (collection: CollectionBrowseRecord) => (
-                    <PinControl collectionId={collection.id} pins={pins} mode="collection" />
-                  ),
-                }
-              : {})}
+            menuFor={(collection: CollectionBrowseRecord) => (
+              <PinControl collectionId={collection.id} pins={pins} mode="collection" />
+            )}
           />
         ) : (
           <p className="text-muted-foreground">{m.library_collections_empty()}</p>
@@ -84,7 +120,7 @@ export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsP
                         className="truncate hover:underline"
                         href={`/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}`}
                       >
-                        {pin.target.title ?? m.library_pin_unavailable()}
+                        {browseCollectionTitle({ ...pin.target, title: pin.target.title ?? null })}
                       </a>
                     ) : (
                       <span>{m.library_pin_unavailable()}</span>
@@ -101,7 +137,7 @@ export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsP
             <nav aria-label={m.library_collections_heading()}>
               <Link
                 to="/library/collections"
-                search={{ cursor: page.next }}
+                search={{ cursor: page.next, layout }}
                 className={buttonVariants({ variant: 'outline', size: 'lg' })}
               >
                 {m.library_collection_more()}

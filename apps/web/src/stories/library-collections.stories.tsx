@@ -138,9 +138,9 @@ export const LibraryThreePins: Story = {
     render('one', pagePaths['library-entries'], { pinCount: 3, builtins: 'everything', collectionCount: 1 }),
   play: async (context) => {
     await pageReady(context);
-    await expect(
-      within(context.canvasElement).getByText(m.library_pin_pinned_section(), { exact: true }),
-    ).toBeVisible();
+    const navigation = context.canvasElement.querySelector('[data-library-navigation-phone]');
+    if (!navigation) throw new globalThis.Error('Missing Library navigation');
+    await expect(navigation.querySelectorAll('a[data-library-pin]')).toHaveLength(3);
   },
 };
 
@@ -151,9 +151,9 @@ export const LibraryNinePins: Story = {
     await pageReady(context);
     const navigation = context.canvasElement.querySelector('[data-library-navigation-desktop]');
     await expect(navigation).toBeTruthy();
-    await expect(within(navigation as HTMLElement).getAllByRole('link', { name: /Pinned collection/ })).toHaveLength(8);
+    await expect(navigation?.querySelectorAll('a[data-library-pin]')).toHaveLength(8);
     await expect(
-      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_collections() }),
+      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_all_collections() }),
     ).toHaveLength(1);
   },
 };
@@ -168,7 +168,9 @@ export const LibraryUnavailablePin: Story = {
     }),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByText(m.library_pin_unavailable(), { exact: true })).toBeVisible();
+    const navigation = context.canvasElement.querySelector('[data-library-navigation]');
+    if (!navigation) throw new globalThis.Error('Missing Library navigation');
+    await expect(navigation.querySelector('span[data-library-pin]')).toHaveTextContent(m.library_pin_unavailable());
   },
 };
 
@@ -190,9 +192,9 @@ export const CollectionsNinePins: Story = {
     await collectionsReady(context);
     const navigation = context.canvasElement.querySelector('[data-library-navigation-desktop]');
     await expect(navigation).toBeTruthy();
-    await expect(within(navigation as HTMLElement).getAllByRole('link', { name: /Pinned collection/ })).toHaveLength(8);
+    await expect(navigation?.querySelectorAll('a[data-library-pin]')).toHaveLength(8);
     await expect(
-      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_collections() }),
+      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_all_collections() }),
     ).toHaveLength(1);
   },
 };
@@ -208,7 +210,9 @@ export const CollectionsUnavailablePin: Story = {
   play: async (context) => {
     await collectionsReady(context);
     const main = within(context.canvasElement).getByRole('main');
-    const title = within(main).getByText(m.library_pin_unavailable(), { exact: true });
+    const manager = main.querySelector<HTMLElement>('[data-library-pin-manager]');
+    if (!manager) throw new globalThis.Error('Missing pin manager');
+    const title = within(manager).getByText(m.library_pin_unavailable(), { exact: true });
     await expect(title).toBeVisible();
     const row = title.closest('li');
     if (!row) throw new globalThis.Error('The unavailable pin has no list row.');
@@ -239,7 +243,9 @@ export const PinAndUnpin: Story = {
     await selectResponsiveMenuAction(m.library_pin_pin());
     await openPinManager(context.canvasElement);
     await expect(within(main).getByRole('heading', { name: m.library_pin_pinned_section() })).toBeVisible();
-    const pin = within(main).getByText('Pinned collection 1').closest('li');
+    const manager = main.querySelector<HTMLElement>('[data-library-pin-manager]');
+    if (!manager) throw new globalThis.Error('Missing pin manager');
+    const pin = within(manager).getByText('To read this winter').closest('li');
     if (!pin) throw new globalThis.Error('The pinned Collection has no list row.');
     await userEvent.click(within(pin).getByRole('button', { name: m.library_pin_actions() }));
     await selectResponsiveMenuAction(m.library_pin_unpin());
@@ -255,13 +261,13 @@ export const MovePinnedCollection: Story = {
     const section = main.querySelector('#library-pinned-heading')?.closest('section');
     if (!section) throw new globalThis.Error('Missing pinned Collection section');
     const rows = () => [...section.querySelectorAll<HTMLElement>('li')];
-    await expect(rows()[0]!).toHaveTextContent('Pinned collection 1');
+    await expect(rows()[0]!).toHaveTextContent('To read this winter');
     await userEvent.click(within(rows()[1]!).getByRole('button', { name: m.library_pin_actions() }));
     await selectResponsiveMenuAction(m.library_pin_move_up());
-    await expect(rows()[0]!).toHaveTextContent('Pinned collection 2');
+    await expect(rows()[0]!).toHaveTextContent('Books I come back to');
     await userEvent.click(within(rows()[0]!).getByRole('button', { name: m.library_pin_actions() }));
     await selectResponsiveMenuAction(m.library_pin_move_down());
-    await expect(rows()[1]!).toHaveTextContent('Pinned collection 2');
+    await expect(rows()[1]!).toHaveTextContent('Books I come back to');
   },
 };
 
@@ -308,7 +314,7 @@ export const PhoneSelectorOpen: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.library_nav_selector() }));
-    const sheet = context.canvasElement.querySelector('[data-slot="drawer-content"]');
+    const sheet = document.querySelector('[data-slot="drawer-content"]');
     await expect(sheet).toBeVisible();
     await expect(
       within(sheet as HTMLElement).getByRole('link', { name: m.library_dynamic_everything() }),

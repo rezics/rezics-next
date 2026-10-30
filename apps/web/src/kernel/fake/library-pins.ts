@@ -24,7 +24,10 @@ let pinIds: string[] = [];
 
 export function setLibraryNavigationStoryState(next: Partial<LibraryNavigationStoryState>): void {
   state = { ...defaults, ...next };
-  pinIds = Array.from({ length: Math.max(0, state.pinCount) }, (_, index) => `story-pinned-${index + 1}`);
+  pinIds = Array.from(
+    { length: Math.max(0, state.pinCount) },
+    (_, index) => collectionsRecording.collections[index]?.id ?? `story-pinned-${index + 1}`,
+  );
   revision = 3;
 }
 
@@ -78,16 +81,16 @@ function openApi(): KernelRecording {
 
 function pinTarget(collectionId: string, index: number): unknown {
   if (state.unavailableTarget && index === 0) return null;
-  const targetNumber = Number(collectionId.split('-').at(-1)) || index + 1;
+  const recorded = collectionsRecording.collections.find((collection) => collection.id === collectionId);
   return {
     id: collectionId,
-    title: `Pinned collection ${targetNumber}`,
+    title: recorded?.title ?? (index === 2 ? 'Weekend reading' : `Reading list ${index + 1}`),
     membershipKind: 'curated',
     description: null,
     curatorAccountId: 'story-viewer',
     curator: null,
     visibility: 'private',
-    memberCount: 0,
+    memberCount: recorded?.memberCount ?? 0,
   };
 }
 
@@ -134,7 +137,7 @@ async function pinWrite(request: Request, collectionId: string, method: 'PUT' | 
 
 async function pinRecord(request: Request): Promise<KernelRecording | undefined> {
   const url = new URL(request.url);
-  if (request.method === 'GET' && url.pathname === '/v1/openapi/json') return openApi();
+  if (request.method === 'GET' && url.pathname === '/v1/openapi.json') return openApi();
   if (request.method === 'GET' && url.pathname === '/v1/libraryPins') {
     const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 20));
     return pins(limit);
@@ -175,7 +178,7 @@ function builtinMembersRecord(request: Request): KernelRecording | undefined {
 export const routes: FakeRoute[] = [
   {
     method: 'GET',
-    path: '/v1/openapi/json',
+    path: '/v1/openapi.json',
     story: ({ request }) => pinRecord(request),
     fixture: ({ request }) => pinRecord(request),
   },

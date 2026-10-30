@@ -2411,5 +2411,9 @@
   "recipe_replace_method": "Write new instructions",
   "recipe_method_help": "Write your own instructions, with an explicit language tag and SPDX licence. Existing documents stay intact; this creates a new replacement.",
   "recipe_original": "These instructions are my original writing.",
-  "recipe_remove_field": "Remove field"
+  "recipe_remove_field": "Remove field",
+  "library_collection_preview_preparing": "Preparing preview…",
+  "library_navigation_loading": "Loading your Collections…",
+  "library_collections_denied": "Your Collections are not available with your current access.",
+  "library_collections_unavailable": "Your Collections are unavailable right now. Try again."
 }
