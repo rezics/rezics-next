@@ -165,6 +165,7 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     expect(staged.effectRef).toBeString();
     const recovery = await f.call('/recovery/start', { email: victim.email });
     expect(recovery.status).toBe(200);
+    await eventually(async () => f.deliveries.length === 1);
     expect(f.deliveries.map((message) => message.accountId)).toEqual([owner]);
     expect((await f.pool.query('SELECT 1 FROM auth_recovery WHERE account_id=$1', [owner])).rowCount).toBe(1);
     const counterKeys = (
@@ -424,6 +425,7 @@ test('an absent native user with operating evidence retains original applicabili
         throw new Error('Did not reach the operating evidence page');
       })(),
     ).rejects.toThrow('crash before native page checkpoint');
+    pool.connect = connect;
     expect((await pool.query("SELECT 1 FROM auth_effect_receipt WHERE acting_human_id='missing-human'")).rowCount).toBe(
       105,
     );
