@@ -1,9 +1,11 @@
 import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
-import { accessCommandAuthorization } from '../request/access.ts';
+import { accessCheck, accessCommandAuthorization } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError } from './commands.ts';
 import type { ReadContext } from './model.ts';
-import { readThread, type ContentReadDependencies } from './reads.ts';
+import { ContentNotFoundError as ReadNotFoundError, readThread, type ContentReadDependencies } from './reads.ts';
+import { withEditionReadTime } from './edition-store.ts';
+import { prepareEditionSubject } from './edition-subject.ts';
 import originalReview from './restoration-conflict-original.sql';
 import readLiveReview from './live-review-read.sql';
 
@@ -61,22 +63,32 @@ export async function readCurrentRestorationConflict(
     // The index row is data only. Ordinary reads retain all current source and
     // ancestor fences and independently check the actual request actor's scopes.
     const { original, id } = candidate.value;
-    const thread = (await readThread(deps, id, context)).value;
-    if (
-      !thread ||
-      thread.id !== id ||
-      thread.kind !== 'review' ||
-      thread.authorId !== actor.accountId ||
-      thread.boardId !== original.board_id ||
-      thread.subjectIds.length !== 1 ||
-      thread.subjectIds[0] !== original.subject_id ||
-      thread.availability !== 'available' ||
-      thread.firstPost.availability !== 'available'
-    )
-      return null;
-    return { existingThreadId: thread.id };
+    return await withEditionReadTime(deps, context, async (time) => {
+      // Reuse the existing native source-subject guard: ordinary thread reads
+      // do not themselves authorize disclosure of the referenced subject.
+      const accessContext = { pool: deps.pool, deadline: context.deadline };
+      const subject = await prepareEditionSubject(deps, original.subject_id!, time, accessContext, (action, anchor) =>
+        accessCheck(deps.access, actor, action, anchor.resource, accessContext),
+      );
+      if (!subject) return null;
+      const thread = (await readThread(deps, id, context)).value;
+      if (
+        !thread ||
+        thread.id !== id ||
+        thread.kind !== 'review' ||
+        thread.authorId !== actor.accountId ||
+        thread.boardId !== original.board_id ||
+        thread.subjectIds.length !== 1 ||
+        thread.subjectIds[0] !== original.subject_id ||
+        thread.availability !== 'available' ||
+        thread.firstPost.availability !== 'available' ||
+        !(await subject.final())
+      )
+        return null;
+      return { existingThreadId: thread.id };
+    });
   } catch (error) {
-    if (error instanceof ContentNotFoundError) return null;
+    if (error instanceof ContentNotFoundError || error instanceof ReadNotFoundError) return null;
     // Unavailability and expired request budgets keep their native typed failure.
     throw error;
   }

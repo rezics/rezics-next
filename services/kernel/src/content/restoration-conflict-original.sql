@@ -7,5 +7,5 @@ WHERE p.route = :route::integer AND p.post_id = :post_id::uuid
   AND p.author_account_id = :author_id::uuid AND t.author_account_id = p.author_account_id
   AND t.first_post_id = p.post_id AND t.kind = 'review'
   AND t.availability = 'available' AND t.visibility <> 'taken_down'
-  AND p.availability = 'erased' AND p.deleted_at + interval '30 days' > :at::timestamptz
+  AND p.availability = 'erased' AND p.deleted_at > :at::timestamptz - interval '30 days'
   AND p.purge_started_at IS NULL AND NOT p.purge_completed;

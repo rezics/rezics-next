@@ -281,7 +281,9 @@ After the genuine native uniqueness failure has rolled back and discovery abort 
 `Promise<{ existingThreadId: string } | null>`. It reads only the original opening review's immutable author/board/subject
 metadata under fresh native `post:erase` authority and restoration eligibility, then reuses `live-review-read.sql`'s
 bounded author/board/subject probe. Its result is data until a fresh ordinary `readThread` with the actual request
-actor and fixed deadline independently permits disclosure and matches that original identity. Each home is released
+actor and fixed deadline independently permits disclosure and matches that original identity. The existing native
+source-subject guard (`prepareEditionSubject`) also checks the pinned subject before and after the thread read.
+Each home is released
 before foreign authority preparation; ordinary scope, subject, board, Realm, Space, ancestor and source fences remain
 in force. Hidden, revoked or disappeared destinations omit the extension; typed native unavailability can still fail
 the request. Null means unknown, not absence or authority. Replies never manufacture an opening-review hint.
