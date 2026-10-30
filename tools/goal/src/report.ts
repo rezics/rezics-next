@@ -1,4 +1,5 @@
 import type { AttemptRecord, StepClass, TaskClass } from './types.ts';
+import type { LifecycleMetrics } from './lifecycle-metrics.ts';
 
 type Percentiles = { count: number; p50: number | null; p90: number | null };
 type PoolReport = { attempts: number; passedTasks: number; input: number; cached: number; output: number };
@@ -204,5 +205,25 @@ export function formatUsageReport(result: Report): string[] {
         )
       : ['  (no landed tasks)']),
     `Spend on attempts that did not land: ${share} (${number(result.nonLandingSpend.rawTokens)} / ${number(result.nonLandingSpend.totalRawTokens)} raw tokens).`,
+  ];
+}
+
+/** Human-readable lifecycle measurements shared by the flow report and its CLI output. */
+export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
+  const age = (value: number | null) => (value === null ? 'unknown' : `${Math.round(value / 60_000)}m`);
+  const attempts = metrics.attemptsPerTaskPerTrailingHour;
+  const waiting = metrics.waiting;
+  const orphaned = metrics.orphanedLandings;
+  const promotion = metrics.promotion;
+  const quarantines = metrics.quarantines;
+  return [
+    `Launches in trailing hour: ${attempts.total}; tasks with launches: ${attempts.taskCount}; mean per task: ${attempts.meanPerTask?.toFixed(2) ?? 'unknown'}.`,
+    ...attempts.perTask.map(
+      (task) => `  ${task.taskId}: ${task.launches} launches (${task.sameAttemptResumes} same-attempt resumes).`,
+    ),
+    `Current waits: ${waiting.count}; oldest age ${age(waiting.oldestAgeMs)}; unknown ages ${waiting.unknownAgeCount}.`,
+    `Orphaned landings: ${orphaned.available ? orphaned.count : 'unknown'}${orphaned.taskIds.length ? ` (${orphaned.taskIds.join(', ')})` : ''}.`,
+    `Promotion phase: ${promotion.phase ?? (promotion.available ? 'none' : 'unknown')}; age ${age(promotion.phaseAgeMs)}.`,
+    `Quarantines: current ${quarantines.currentCount ?? 'unknown'}; recent new ${quarantines.recentNewCount ?? 'unknown'}; causes ${quarantines.currentByCause ? JSON.stringify(quarantines.currentByCause) : 'unknown'}.`,
   ];
 }
