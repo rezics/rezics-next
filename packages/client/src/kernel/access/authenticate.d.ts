@@ -21,9 +21,6 @@ type Identity = IdentityExpiry & {
     durableTime?: AuthoritativeTime;
     durableAction?: string;
 };
-/** Native 401 provenance for an otherwise verified bearer refused solely for suspension.
- * No actor is minted; only an explicit resource HTTP contract may distinguish this refusal. */
-export declare function isSuspendedAccountAuthenticationError(error: unknown): boolean;
 /** Also bounds pool queueing and transports that do not honor AbortSignal. */
 export declare function within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
 /** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
