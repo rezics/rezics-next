@@ -256,13 +256,11 @@ export const readRealmAppearanceSettings = createServerFn({ method: 'GET' })
 export const changeRealmAppearanceSettings = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(realmAppearanceCommandSchema, input))
   .handler(async ({ data }) => {
-    await setupCredential();
-    return changeRealmAppearance(data);
+    return changeRealmAppearance(data, kernelClient(), await setupCredential());
   });
 
 export const resolveRealmAppearanceChoice = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(realmAppearanceChoiceSchema, input))
   .handler(async ({ data }) => {
-    await setupCredential();
-    return selectRealmAppearance(data);
+    return selectRealmAppearance(data, kernelClient(), await setupCredential());
   });

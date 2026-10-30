@@ -1,23 +1,14 @@
-import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import type {
+  RealmPresentationImage,
+  RealmPresentationOptional,
+} from '../../../../packages/client/src/kernel/content/realm-media';
+export type {
+  RealmPresentationImage,
+  RealmPresentationOptional,
+} from '../../../../packages/client/src/kernel/content/realm-media';
 import * as v from 'valibot';
 import { coverSrc } from '../media/cover-src';
 
-// Isolated pending-producer types. Replace with the generated realm-media exports when delivered.
-// These match services/kernel/src/content/realm-media.ts in the adopted native contract.
-export type RealmPresentationOptional<T> =
-  | Readonly<{ state: 'available'; value: T }>
-  | Readonly<{ state: 'none' | 'unavailable'; value: null }>;
-export type RealmPresentationImage = Readonly<{
-  id: string;
-  containerId: string;
-  digest: string;
-  width: number;
-  height: number;
-  variants: readonly Readonly<{ format: 'avif' | 'webp'; width: number; height: number }>[];
-  placeholder: Readonly<{ thumbhash: string; color: string }> | null;
-  focalPoint: Readonly<{ x: number; y: number }> | null;
-  credit: MediaImportRequest['credit'] | null;
-}>;
 const id = v.pipe(v.string(), v.uuid());
 export const realmPresentationSchema = v.strictObject({
   avatarMediaId: v.nullable(id),
@@ -65,9 +56,11 @@ export type RealmAppearanceRead =
   | { kind: 'hidden' | 'unavailable' };
 export type RealmAppearanceResult =
   | { kind: 'confirmed'; snapshot: RealmAppearanceSnapshot }
-  | { kind: 'conflict' | 'denied' | 'invalid' | 'unavailable' };
+  | { kind: 'conflict' | 'denied' | 'invalid' }
+  | { kind: 'unavailable'; read?: RealmAppearanceRead };
 export type RealmAppearanceSelection =
   | { kind: 'image'; image: RealmPresentationImage }
+  | { kind: 'image-reference'; mediaId: string; realmId: string; purpose: 'realm-icon' | 'realm-banner' }
   | { kind: 'rules'; rules: RealmRulesSummary }
   | { kind: 'unavailable' };
 export type RealmAppearanceAdapter = Readonly<{
@@ -178,6 +171,24 @@ export function createRealmAppearance(
       });
     } else if (
       slot !== 'rules' &&
+      selection.kind === 'image-reference' &&
+      selection.realmId === realmId &&
+      selection.purpose === (slot === 'avatar' ? 'realm-icon' : 'realm-banner')
+    ) {
+      update({
+        draft: {
+          ...draft,
+          [slot]: { state: 'unavailable', value: null },
+          presentation: {
+            ...draft.presentation,
+            [slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']: selection.mediaId,
+          },
+        },
+        phase: 'idle',
+        notice: 'none',
+      });
+    } else if (
+      slot !== 'rules' &&
       selection.kind === 'image' &&
       selection.image.containerId === realmId &&
       realmImageSource({ state: 'available', value: selection.image })
@@ -266,6 +277,7 @@ export function createRealmAppearance(
       }
       update({ read: { kind: 'ready', snapshot }, draft: snapshot, attempt: null, phase: 'saved', busy: false });
     } else if (result.kind === 'unavailable') {
+      if (result.read) observe(result.read);
       update({ phase: 'uncertain', busy: false });
     } else if (result.kind === 'conflict') {
       update({ phase: 'conflict', busy: false });
@@ -310,10 +322,16 @@ export function createRealmAppearance(
         return;
       }
       if (
-        choice.kind !== 'image' ||
-        choice.image.id !== mediaId ||
-        choice.image.containerId !== realmId ||
-        !realmImageSource({ state: 'available', value: choice.image })
+        !(
+          (choice.kind === 'image' &&
+            choice.image.id === mediaId &&
+            choice.image.containerId === realmId &&
+            realmImageSource({ state: 'available', value: choice.image })) ||
+          (choice.kind === 'image-reference' &&
+            choice.mediaId === mediaId &&
+            choice.realmId === realmId &&
+            choice.purpose === (slot === 'avatar' ? 'realm-icon' : 'realm-banner'))
+        )
       )
         throw new Error('Image summary unavailable');
       update({ busy: false, phase: 'idle', pendingUpload: null });

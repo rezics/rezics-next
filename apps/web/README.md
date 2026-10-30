@@ -1959,34 +1959,38 @@ presentation and keeps the ordinary quoted `If-Match` head and `Idempotency-Key`
 from the actual Realm's viewer actions controls management visibility; native `realm:manage` executes every command,
 including receipt replay. Read-only Pattern fixtures demonstrate the same component without offered changes.
 
-**Native pending boundary:** this checkout's generated Realm client does not yet expose presentation, Realm media
-reservation, or current image/rules selection summaries. `realm-presentation-native.ts` is an explicit typed unavailable
-adapter. Its production read uses the generated current Realm GET, exact Realm viewer-actions batch, then a final
-Realm/head/Space/Context binding read; only current admitted managers see the unavailable region. It sends no speculative
-PATCH and returns no synthetic empty presentation. Missing Accounts scope mapping remains denial/unavailable. Replace
-this isolated adapter with the generated native producer when delivered; fixture success is never runtime support.
-The interim image types exactly match the selected `services/kernel/src/content/realm-media.ts` contract and must be
-replaced by its generated exports on delivery. No backend claims, permissions or source resolver are implemented here.
+`realm-presentation-native.ts` now consumes the mounted generated Realm GET/PATCH and Realm-media reservation
+client. Reads use the current Realm, its exact viewer-actions batch, the native Space `community` DTO and a final
+Realm/head/Space/Context binding read. Only current admitted managers see management. Orphaned, read-only, removed
+and unreadable containers hide the region. A missing dependency is unavailable without synthetic empty settings.
+Image types come from the generated native producer declarations. Native image/rules disclosure remains the sole
+source authority; members remain unknown until Accounts' count source is covered. No member-count request is added.
 
 Selection previews real derivative DTOs or initials. `none`, `unavailable` and failed image transport have distinct
 presentation; missing producer always stays unavailable. No object URL, original, hotlink, borrowed account avatar or
 browser token serves a preview. Optional metadata is used only when supplied; null stays null. The board/header owner
 consumes `realmPresentationAssets`' exact optional image DTOs through its existing enrichment boundary; this slice adds
-no feed/header layout or alternate enrichment route. The header consumer is absent in this base and remains integration
-work with that owner. A summary never authorizes downloads: every image still requests the existing media-id/variant
+no feed/header layout or alternate enrichment route. A summary never authorizes downloads: every image still requests
+the existing media-id/variant
 transport with current native download authorization.
 
 The site `/media` reservation accepts an exact Realm target with `realm-icon` or `realm-banner`, then delegates to the
-pending `POST /v1/realms/{id}/media` adapter. It never falls through to the post/account reservation. The browser reuses
+mounted `POST /v1/realms/{id}/media` adapter. It never falls through to the post/account reservation. The browser reuses
 the existing uploader-bound PUT, byte hashing, completion and bounded processing reads. It retains a known reservation
-on an uncertain upload, and manual retry reads that reference instead of reserving again. No draft image is adopted
-until processing and the actual derivative summary are available. Canceling a chooser or upload changes no setting.
+on an uncertain upload, and manual retry reads that reference instead of reserving again. A processed same-Realm
+matching-purpose uploader reservation can be staged as a reference, with an explicit
+preview-after-save notice. It supplies no invented dimensions or derivative. The ordinary native PATCH permanently
+claims that reference; only its subsequent current community read supplies an available preview. Canceling a chooser
+or upload changes no setting.
 Clear asks for confirmation and clears only the selected reference on save, without deleting the source.
 
 Rules select an exact published native post and immutable revision, with a readable producer-supplied summary and a
-link to the existing revision reader. Existing post composition/revision is the only authoring path. The native resolver
-must enforce same-Realm publication, Text profile, document/license validation and the 64 KiB limit, and recheck current
-source/container/lifecycle authority at final disclosure. The interface stores no body or licence and never fabricates
+link to the existing revision reader. Existing post composition/revision is the only authoring path. The chooser reads
+the exact native revision and its actual board, checks this Realm, published/readable Text,
+canonical bytes at most 64 KiB and the returned digest, then repeats exact revision and Realm binding reads.
+SPDX and authored-document validation remain with ordinary Content storage and native PATCH rules preparation.
+The current community rules preview uses the native exact rules resolver, including final source disclosure. The
+interface stores no body or licence and never fabricates
 a selection from IDs alone. Later post edits do not change the adopted revision.
 
 A lost save response retains the complete request, expected head, key, selected references and draft. Manual retry
@@ -2008,9 +2012,13 @@ Story review uses the existing `phone390`/`desktop1280`, theme and locale global
 - `patterns-community-realm-appearance-settings--unavailable`
 - `patterns-community-realm-appearance-settings--optional-unavailable`
 - `patterns-community-realm-appearance-settings--selection-cancelled`
+- `patterns-community-realm-appearance-settings--native-source`
+- `patterns-community-realm-appearance-settings--processed-image`
 - `pages-community-realm-appearance--management`
 
-The focused fixture interactions cover draft retry and canceled selection. Available image facts in stories are explicit
+The focused fixture interactions cover draft retry, canceled selection and processed references awaiting save.
+Native-source and management-page stories consume the mounted source adapter over explicit native HTTP DTO fixtures.
+Available image facts in stories are explicit
 fixtures using the existing derivative transport, not evidence of native Realm-media availability. New message keys use
 the configured English base-locale fallback until owner localization review. Web owns screenshots and visual review;
 this delivery runs only local typing. `tests/community-presentation.test.ts` records boundary assertions, without claiming
@@ -2018,11 +2026,12 @@ native privacy, physical/growth, cleanup, browser or promoted-source acceptance.
 
 Cost: appearance read and selection
 
-- Touches: one current Realm, one exact Realm viewer-action batch, one final Realm binding; after producer delivery,
+- Touches: one current Realm, one exact Realm viewer-action batch, its Space presentation and one final Realm binding;
   the exact same-Realm image or post/revision selection and fixed source/final disclosure anchors.
-- Bound: three native calls for pending management admission, zero selection calls while unavailable; no catalogues,
-  history walks or per-card enrichment. Delivered source reads remain bounded by two images, twelve variants each and
-  one exact rules source of at most 64 KiB. Native work is O(changes log R).
+- Bound: four native calls per management read; image choices add at most one uploader reservation and one final
+  Realm read; rules choices add at most two exact revision reads, one board and one final Realm read. No catalogues,
+  history walks or per-card enrichment. Source reads remain bounded by two images, twelve variants each and one
+  exact rules source of at most 64 KiB. Native work is O(changes log R).
 - Growth check: retain later native `test/community/growth-realm.test.ts`, `test/content/growth-realm-board-read.test.ts`
   and `test/content/growth-threads.test.ts` through their existing measured harness. Interface typing proves no growth result.
 
@@ -2030,8 +2039,9 @@ Cost: appearance save and retry
 
 - Touches: one ordinary Realm PATCH with current management, head/CAS, at most two media claims, one exact rules source,
   receipt and event. An uncertain retry reuses its original request; conflict review reads current settings explicitly.
-- Bound: one command per user action, constant source/final anchors, O(changes log R) indexed native work. The unavailable
-  adapter issues zero PATCH calls. No automatic retry/rebase loop, new authority store or body/licence copy.
+- Bound: one command per user action plus four reads for confirmation, constant source/final anchors and
+  O(changes log R) indexed native work. An uncertain response retains its original PATCH and quoted head/key headers.
+  No automatic retry/rebase loop, new authority store or body/licence copy.
 - Growth check: later reuse native `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`.
 
 Cost: Realm image upload and download
@@ -2040,6 +2050,6 @@ Cost: Realm image upload and download
   summary; each derivative request follows the existing current authorized media download operation.
 - Bound: existing 20 MiB limit, at most 32 processing reads within 60 seconds per manual attempt, twelve derivative
   variants; constant buffering in the BFF and fixed native source/final anchors. Native index work is O(changes log R).
-  Pending producer sends no reservation; known references survive uncertainty without another reserve.
+  Known references survive uncertainty without another reserve; new selection claims occur only in native PATCH.
 - Growth check: later reuse `test/content/growth-media.test.ts`, `test/content/growth-media-realm-download.test.ts` and
   `test/content/growth-media-native-collection.test.ts`; existing uploader and download evidence remains required.

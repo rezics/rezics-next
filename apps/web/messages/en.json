@@ -2292,6 +2292,7 @@
   "realm_appearance_upload": "Upload image",
   "realm_appearance_clear": "Clear",
   "realm_appearance_no_image": "No image selected",
+  "realm_appearance_preview_after_save": "Image uploaded and processed. Save to apply it and load its preview.",
   "realm_appearance_image_unavailable": "Image unavailable",
   "realm_appearance_no_rules": "No rules selected",
   "realm_appearance_rules_unavailable": "Rules unavailable",

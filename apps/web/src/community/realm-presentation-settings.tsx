@@ -19,10 +19,12 @@ function ImagePreview({
   image,
   title,
   banner = false,
+  pending = false,
 }: {
   image: RealmPresentationOptional<RealmPresentationImage>;
   title: string;
   banner?: boolean;
+  pending?: boolean;
 }) {
   const src = realmImageSource(image);
   const [failed, setFailed] = useState(false);
@@ -50,7 +52,9 @@ function ImagePreview({
           <span aria-hidden="true">{title.trim().slice(0, 2).toLocaleUpperCase()}</span>
         )}
       </div>
-      {image.state === 'unavailable' || failed || (image.state === 'available' && !src) ? (
+      {pending ? (
+        <p className="text-sm text-muted-foreground">{m.realm_appearance_preview_after_save()}</p>
+      ) : image.state === 'unavailable' || failed || (image.state === 'available' && !src) ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_image_unavailable()}</p>
       ) : image.state === 'none' ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_no_image()}</p>
@@ -105,6 +109,7 @@ export function RealmAppearanceSettings({
   useLayoutEffect(() => {
     incoming.current = initial;
     control.observe(initial);
+    setSelection(null);
   }, [control, initial]);
   useEffect(() => () => control.cancelUpload(), [control]);
   if (
@@ -173,10 +178,14 @@ export function RealmAppearanceSettings({
         ? candidate.kind === 'rules' &&
           candidate.rules.postId === selected.first &&
           candidate.rules.revisionId === selected.second
-        : candidate.kind === 'image' &&
-          candidate.image.id === selected.first &&
-          candidate.image.containerId === realmId &&
-          Boolean(realmImageSource({ state: 'available', value: candidate.image }));
+        : (candidate.kind === 'image' &&
+            candidate.image.id === selected.first &&
+            candidate.image.containerId === realmId &&
+            Boolean(realmImageSource({ state: 'available', value: candidate.image }))) ||
+          (candidate.kind === 'image-reference' &&
+            candidate.mediaId === selected.first &&
+            candidate.realmId === realmId &&
+            candidate.purpose === (selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner'));
     setSelection((current) =>
       current === null ? null : { ...selected, busy: false, candidate: valid ? candidate : null, unavailable: !valid },
     );
@@ -192,7 +201,17 @@ export function RealmAppearanceSettings({
         {(['avatar', 'banner'] as const).map((slot) => (
           <div key={slot} className="min-w-0 space-y-3">
             <h3 className="font-medium">{label(slot)}</h3>
-            <ImagePreview image={draft[slot]} title={snapshot.title} banner={slot === 'banner'} />
+            <ImagePreview
+              image={draft[slot]}
+              title={snapshot.title}
+              banner={slot === 'banner'}
+              pending={
+                draft[slot].state === 'unavailable' &&
+                draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !== null &&
+                draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !==
+                  snapshot.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']
+              }
+            />
             {snapshot.canManage ? (
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -321,6 +340,11 @@ export function RealmAppearanceSettings({
               title={snapshot.title}
               banner={selection.slot === 'banner'}
             />
+          ) : null}
+          {selection.candidate?.kind === 'image-reference' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.realm_appearance_preview_after_save()}
+            </p>
           ) : null}
           {selection.candidate?.kind === 'rules' ? (
             <div>

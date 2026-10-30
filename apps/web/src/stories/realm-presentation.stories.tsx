@@ -2,7 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { RealmAppearanceSettings } from '../community/realm-presentation-settings';
 import type { RealmAppearanceAdapter, RealmAppearanceCommand } from '../community/realm-presentation';
-import { available, configured, fixtureAdapter, imageId, revisionId } from './patterns/realm-presentation/fixtures';
+import {
+  available,
+  configured,
+  fixtureAdapter,
+  imageId,
+  revisionId,
+  readFixtureAppearance,
+} from './patterns/realm-presentation/fixtures';
 import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
 
@@ -15,7 +22,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual reusable management Pattern with explicit future-native fixtures. Production currently reports unavailable. Review these IDs with the existing phone390/desktop1280, locale and theme globals. These examples do not establish native privacy, lifecycle, image availability or visual acceptance.',
+          'The actual reusable management Pattern with explicit native DTO fixtures and the mounted source adapter. Review these IDs with the existing phone390/desktop1280, locale and theme globals. These examples do not establish native privacy, lifecycle, image availability or visual acceptance.',
       },
     },
   },
@@ -135,5 +142,35 @@ export const SelectionCancelled: Story = {
     await view.findByRole('button', { name: m.realm_appearance_use_selection() });
     await userEvent.click(view.getByRole('button', { name: m.editor_cancel() }));
     await expect(view.getAllByText(m.realm_appearance_no_image())).toHaveLength(2);
+  },
+};
+
+export const NativeSource: Story = {
+  args: Available.args,
+  loaders: [async () => ({ initial: await readFixtureAppearance() })],
+  render: (args, context) => render({ ...args, initial: context.loaded.initial }, context),
+};
+export const ProcessedImage: Story = {
+  args: {
+    ...Manage.args,
+    adapter: {
+      ...fixtureAdapter(),
+      select: async (choice) =>
+        choice.kind === 'image'
+          ? { kind: 'image-reference', mediaId: choice.mediaId, realmId: choice.realmId, purpose: choice.purpose }
+          : { kind: 'unavailable' },
+    },
+  },
+  render,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.upload(
+      view.getByLabelText(`${m.realm_appearance_icon()}: ${m.realm_appearance_upload()}`),
+      new File(['image'], 'icon.png', { type: 'image/png' }),
+    );
+    await view.findByText(m.realm_appearance_preview_after_save());
+    await expect(view.getByRole('button', { name: m.realm_appearance_save() })).toBeEnabled();
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_save() }));
+    await view.findByText(m.realm_appearance_saved());
   },
 };
