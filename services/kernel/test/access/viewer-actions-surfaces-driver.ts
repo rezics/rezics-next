@@ -87,6 +87,7 @@ export async function createViewerActionsSurfacesDriver(): Promise<NativeSurface
     await bootstrapRelease(database.pool, bundledRelease);
     auth = await nativeFixture(database.pool);
     const defaults = createKernelRuntimeDefaults({
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
       auth: {
         issuer,
         audience: 'https://ordinary.api.test',
