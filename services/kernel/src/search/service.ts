@@ -30,7 +30,7 @@ import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOpti
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
-import { countFacets, installTemplates, searchSubjects, suggestSubjects, type SearchPlan } from './query.ts';
+import { countFacets, installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
@@ -232,7 +232,7 @@ export function createSearchService({
   }
 
   async function ratingCandidates(
-    hits: Awaited<ReturnType<typeof searchSubjects>>['hits'],
+    hits: Awaited<ReturnType<typeof searchSubjectHits>>['hits'],
     rating: PublicRatingEpoch,
     positions: ReadonlyMap<number, bigint>,
   ) {
@@ -429,7 +429,7 @@ export function createSearchService({
       for (let round = 0; round < 3; round++) {
         const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
-          searchSubjects(client, prefix, {
+          searchSubjectHits(client, prefix, {
             ...plan,
             generation,
             size,

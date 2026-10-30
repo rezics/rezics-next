@@ -3,24 +3,26 @@ import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import {
   admitFacetPayload,
+  admitHitPayload,
   admitSearchPayload,
   admitSuggestPayload,
   requireSearchOverflow,
   validateSearchAfter,
 } from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
-import { searchRatingSubjects } from './rating-query.ts';
+import { searchRatingSubjectHits, searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
 export const SEARCH_TEMPLATE = 'subjects-search-v2';
+export const HIT_TEMPLATE = 'subjects-hits-v1';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
 
-const templates = [SEARCH_TEMPLATE, SUGGEST_TEMPLATE].map((name) => ({
+const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE].map((name) => ({
   name,
   body: JSON.parse(readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8')) as unknown,
 }));
@@ -71,6 +73,12 @@ export type SearchHit = SubjectHit & {
   sort: SortValue[];
 };
 
+export type HitResult = {
+  generation?: number;
+  hits: SearchHit[];
+  overflow?: boolean;
+};
+
 export type SearchResult = {
   generation?: number;
   hits: SearchHit[];
@@ -84,6 +92,11 @@ type StoredHit = {
   _source: { partition: number; security_revision: number };
   matched_queries?: string[];
   sort: SortValue[];
+};
+
+type HitResponse = {
+  hits: { hits: StoredHit[] };
+  aggregations?: { overflow: { doc_count: number } };
 };
 
 type SearchResponse = {
@@ -117,6 +130,40 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
   validateSize(plan.size, 200);
   if (plan.sort === 'rating')
     return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
+  return subjectSearch<SearchResponse>(search, prefix, plan, SEARCH_TEMPLATE).then((body) => {
+    admitSearchPayload(body, plan, prefix);
+    return {
+      ...hitResult(body, plan),
+      total: { value: body.hits.total.value, relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact' },
+    };
+  });
+}
+
+/** Ordinary candidate reads do not compute or require native totals. */
+export function searchSubjectHits(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<HitResult> {
+  validateSize(plan.size, 200);
+  if (plan.sort === 'rating') return searchRatingSubjectHits(search, prefix, { ...plan, rating: plan.rating! });
+  return subjectSearch<HitResponse>(search, prefix, plan, HIT_TEMPLATE).then((body) => {
+    admitHitPayload(body, plan, prefix);
+    return hitResult(body, plan);
+  });
+}
+
+function hitResult(body: HitResponse, plan: SearchPlan): HitResult {
+  const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
+  return {
+    ...(plan.generation === undefined ? {} : { generation: plan.generation }),
+    hits: body.hits.hits.map((hit) => ({ ...subjectHit(hit), matched: hit.matched_queries ?? [], sort: hit.sort })),
+    ...(hasOverflow ? { overflow: requireSearchOverflow(body) } : {}),
+  };
+}
+
+function subjectSearch<T extends HitResponse>(
+  search: OpenSearch,
+  prefix: string,
+  plan: SearchPlan,
+  template: string,
+): Promise<T> {
   validateSearchAfter(plan);
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
@@ -130,11 +177,11 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
           : [{ id: 'asc' }];
 
   return search
-    .request<SearchResponse>(
+    .request<T>(
       'POST',
       `/${target}/_search/template`,
       {
-        id: `${prefix}${SEARCH_TEMPLATE}`,
+        id: `${prefix}${template}`,
         params: {
           query: plan.query,
           has_query: plan.query !== undefined,
@@ -154,23 +201,11 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
       },
       { query: { allow_partial_search_results: false } },
     )
-    .then(({ body }) => {
+    .then(({ status, body }) => {
+      if (!Number.isInteger(status) || status < 200 || status >= 300)
+        throw new SearchUnavailableError('OpenSearch search status is missing or unsuccessful');
       assertCompleteSearch(body);
-      admitSearchPayload(body, plan, prefix);
-      const overflow = hasOverflow ? requireSearchOverflow(body) : false;
-      return {
-        ...(plan.generation === undefined ? {} : { generation: plan.generation }),
-        hits: body.hits.hits.map((hit) => ({
-          ...subjectHit(hit),
-          matched: hit.matched_queries ?? [],
-          sort: hit.sort,
-        })),
-        total: {
-          value: body.hits.total.value,
-          relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact',
-        },
-        ...(hasOverflow ? { overflow } : {}),
-      };
+      return body;
     });
 }
 

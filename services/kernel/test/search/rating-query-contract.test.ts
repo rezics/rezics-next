@@ -1,3 +1,7 @@
+import { HIT_TEMPLATE, searchSubjectHits, type HitResult } from '../../src/search/query.ts';
+import { searchRatingSubjectHits } from '../../src/search/rating-query.ts';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { expect, test } from 'bun:test';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import {
@@ -110,6 +114,61 @@ test('rating query metadata is admitted explicitly and invalid Global metadata n
     for (const invoke of [
       () => searchRatingSubjects(search, 'test-', native, SEARCH_TEMPLATE),
       () => searchSubjects(search, 'test-', { ...native, sort: 'rating' }),
+    ]) {
+      const error = await Promise.resolve()
+        .then(invoke)
+        .catch((error: unknown) => error);
+      expect(error instanceof TypeError || error instanceof RangeError).toBe(true);
+    }
+  }
+  expect(calls).toBe(0);
+});
+
+function hitTypeContract(search: OpenSearch, hit: SearchHit) {
+  const result: HitResult = { hits: [hit], generation: 1, overflow: false };
+  // @ts-expect-error Ordinary hits have no total, including a fake zero or an optional total.
+  const total = result.total;
+  const native: Promise<HitResult> = searchRatingSubjectHits(search, 'test-', plan);
+  const ordinary: Promise<HitResult> = searchSubjectHits(search, 'test-', { ...plan, sort: 'rating' });
+  const template: 'subjects-hits-v1' = HIT_TEMPLATE;
+  return { result, total, native, ordinary, template };
+}
+void hitTypeContract;
+
+test('hit-only rating metadata and frontiers reject before engine IO', async () => {
+  let calls = 0;
+  const noIO = () => {
+    calls++;
+    throw new Error('Unexpected engine access');
+  };
+  const search: OpenSearch = { request: noIO, bulk: noIO };
+  const good = {
+    size: 2,
+    rating: { questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: 7 },
+  };
+  for (const patch of [
+    { rating: undefined },
+    { rating: { ...good.rating, questionId: id } },
+    { rating: { ...good.rating, populationId: id } },
+    { rating: { ...good.rating, priorEpoch: 0 } },
+    { rating: { ...good.rating, priorEpoch: null }, ratingPhase: 'scored' },
+    { rating: { ...good.rating, selector: 'Realm' } },
+    { size: 0 },
+    { size: 201 },
+    { size: 1.5 },
+    { generation: 0 },
+    { after: ['A', id] },
+    { ratingPhase: 'private' },
+    { ratingPhase: 'scored', after: [null, 'A', id] },
+    { ratingPhase: 'scored', after: [11, 'A', id] },
+    { ratingPhase: 'unscored', after: [0, 'A', id] },
+    { ratingPhase: 'unscored', after: ['\ud800', id] },
+    { ratingPhase: 'unscored', after: ['x'.repeat(513), id] },
+  ]) {
+    const invalid = { ...good, ...patch } as RatingQueryPlan;
+    for (const invoke of [
+      () => searchRatingSubjectHits(search, 'test-', invalid),
+      () => searchSubjectHits(search, 'test-', { ...invalid, sort: 'rating' }),
     ]) {
       const error = await Promise.resolve()
         .then(invoke)

@@ -93,12 +93,13 @@ function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
   });
 }
 
-export function admitSearchPayload(
+function admitOrderedPayload(
   body: unknown,
   plan: KeysetPlan & { size: number; generation?: number },
   prefix: string,
+  total: boolean,
 ): asserts body is RecordValue {
-  const hits = hitsOf(body, plan.size, true);
+  const hits = hitsOf(body, plan.size, total);
   if (plan.after !== undefined && !sortTuple(plan.after, plan.sort)) fail();
   if (plan.generation !== undefined && (!safeCount(plan.generation) || plan.generation === 0)) fail();
   const physicalPrefix = `${prefix}subjects-g`;
@@ -126,6 +127,22 @@ export function admitSearchPayload(
     ids.add(hit._id as string);
     previous = tuple;
   }
+}
+
+export function admitSearchPayload(
+  body: unknown,
+  plan: KeysetPlan & { size: number; generation?: number },
+  prefix: string,
+): asserts body is RecordValue {
+  admitOrderedPayload(body, plan, prefix, true);
+}
+
+export function admitHitPayload(
+  body: unknown,
+  plan: KeysetPlan & { size: number; generation?: number },
+  prefix: string,
+): asserts body is RecordValue {
+  admitOrderedPayload(body, plan, prefix, false);
 }
 
 export function requireSearchOverflow(body: unknown): boolean {

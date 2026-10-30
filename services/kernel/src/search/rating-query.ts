@@ -4,7 +4,7 @@ import { routeOf } from '../route/route.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, type OpenSearch, SearchUnavailableError } from './opensearch.ts';
-import type { SearchPlan, SearchResult } from './query.ts';
+import { HIT_TEMPLATE, type HitResult, type SearchPlan, type SearchResult } from './query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
 export type RatingQueryPlan = Pick<
@@ -15,7 +15,8 @@ export type RatingQueryPlan = Pick<
 type Phase = 'scored' | 'unscored';
 type SortValue = string | number | null;
 type Total = { value: number; relation: 'eq' | 'gte' };
-type NativePhase = { hits: SearchResult['hits']; total: Total; overflow: boolean };
+type PhaseHits = { hits: HitResult['hits']; overflow: boolean };
+type NativePhase = PhaseHits & { total: Total };
 
 const MAX_NAME_LENGTH = 512;
 const TOTAL_LIMIT = 10_000;
@@ -142,11 +143,40 @@ function readOverflow(body: Record<string, unknown>, hasOverflow: boolean): bool
   return count > 0;
 }
 
-function validateHits(value: unknown, size: number, phase: Phase, index: string): SearchResult['hits'] {
+function compareTuple(left: readonly SortValue[], right: readonly SortValue[], phase: Phase): number {
+  for (let field = 0; field < left.length; field++) {
+    const a = left[field]!;
+    const b = right[field]!;
+    if (a === b) continue;
+    // Native keyword order is unsigned UTF-8; names are ascending, missing last.
+    const order =
+      a === null
+        ? 1
+        : b === null
+          ? -1
+          : typeof a === 'string' && typeof b === 'string'
+            ? Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'))
+            : a < b
+              ? -1
+              : 1;
+    return field === 0 && phase === 'scored' ? -order : order;
+  }
+  return 0;
+}
+
+function validateHits(
+  value: unknown,
+  size: number,
+  phase: Phase,
+  index: string,
+  after?: readonly SortValue[],
+): SearchResult['hits'] {
   if (!Array.isArray(value) || value.length > size)
     throw unavailable('OpenSearch rating hits are missing or exceed the requested size');
 
   const hits: SearchResult['hits'] = [];
+  const ids = new Set<string>();
+  let previous = after;
   for (const candidate of value) {
     if (!record(candidate)) throw unavailable('OpenSearch rating hit is malformed');
     const id = candidate._id;
@@ -179,6 +209,12 @@ function validateHits(value: unknown, size: number, phase: Phase, index: string)
       sortId !== id
     )
       throw unavailable('OpenSearch rating sort tuple is malformed');
+
+    const tuple = sort as SortValue[];
+    if (ids.has(id) || (previous !== undefined && compareTuple(previous, tuple, phase) >= 0))
+      throw unavailable('OpenSearch rating keyset is repeated or out of order');
+    ids.add(id);
+    previous = tuple;
 
     const matchedQueries = candidate.matched_queries;
     if (
@@ -264,7 +300,7 @@ async function resolveGeneration(search: OpenSearch, prefix: string, requested?:
   return generation;
 }
 
-async function searchPhase(
+async function requestPhase(
   search: OpenSearch,
   prefix: string,
   target: string,
@@ -276,7 +312,7 @@ async function searchPhase(
   size: number,
   after?: readonly SortValue[],
   countOnly = false,
-): Promise<NativePhase> {
+): Promise<PhaseHits & { nativeHits: Record<string, unknown> }> {
   const filter = nativeQuery(baseFilter, phase, plan.rating.priorEpoch);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort = countOnly
@@ -321,9 +357,65 @@ async function searchPhase(
   const body: unknown = response.body;
   assertCompleteSearch(body);
   if (!record(body) || !record(body.hits)) throw unavailable('OpenSearch rating response is malformed');
-  const total = readTotal(body.hits.total);
-  const hits = validateHits(body.hits.hits, size, phase, target);
-  return { hits, total, overflow: readOverflow(body, hasOverflow) };
+  const hits = validateHits(body.hits.hits, size, phase, target, countOnly ? undefined : after);
+  return { nativeHits: body.hits, hits, overflow: readOverflow(body, hasOverflow) };
+}
+
+async function searchPhase(...args: Parameters<typeof requestPhase>): Promise<NativePhase> {
+  const { nativeHits, hits, overflow } = await requestPhase(...args);
+  return { hits, overflow, total: readTotal(nativeHits.total) };
+}
+
+/** Native hit-only phases share the ordinary immutable template and never issue a count request. */
+export async function searchRatingSubjectHits(
+  search: OpenSearch,
+  prefix: string,
+  plan: RatingQueryPlan,
+): Promise<HitResult> {
+  const admitted = validatePlan(prefix, plan);
+  // Copy the admitted epoch so both phases use one context even across asynchronous engine I/O.
+  const pinned = { ...plan, rating: admitted.rating };
+  const generation = await resolveGeneration(search, prefix, plan.generation);
+  const target = subjectIndexName(prefix, generation);
+  const phases: PhaseHits[] = [];
+  if (admitted.phase === 'scored') {
+    phases.push(
+      await requestPhase(
+        search,
+        prefix,
+        target,
+        HIT_TEMPLATE,
+        pinned,
+        admitted.query,
+        admitted.filter,
+        'scored',
+        plan.size,
+        admitted.after,
+      ),
+    );
+  }
+  const remaining = plan.size - (phases[0]?.hits.length ?? 0);
+  if (remaining > 0) {
+    phases.push(
+      await requestPhase(
+        search,
+        prefix,
+        target,
+        HIT_TEMPLATE,
+        pinned,
+        admitted.query,
+        admitted.filter,
+        'unscored',
+        remaining,
+        admitted.phase === 'unscored' ? admitted.after : undefined,
+      ),
+    );
+  }
+  return {
+    generation,
+    hits: phases.flatMap((phase) => phase.hits),
+    ...(plan.overflowProperties?.length ? { overflow: phases.some((phase) => phase.overflow) } : {}),
+  };
 }
 
 function combinedTotal(a: Total, b: Total): SearchResult['total'] {

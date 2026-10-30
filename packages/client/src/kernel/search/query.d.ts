@@ -3,6 +3,7 @@ import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 export declare const SEARCH_TEMPLATE = "subjects-search-v2";
+export declare const HIT_TEMPLATE = "subjects-hits-v1";
 export declare const SUGGEST_TEMPLATE = "subjects-suggest-v1";
 export declare const FACET_TEMPLATE = "subjects-facets-v1";
 export declare const TOTAL_LIMIT = 10000;
@@ -32,6 +33,11 @@ export type SearchHit = SubjectHit & {
     matched: string[];
     sort: SortValue[];
 };
+export type HitResult = {
+    generation?: number;
+    hits: SearchHit[];
+    overflow?: boolean;
+};
 export type SearchResult = {
     generation?: number;
     hits: SearchHit[];
@@ -43,6 +49,8 @@ export type SearchResult = {
 };
 export declare function installTemplates(search: OpenSearch, prefix: string): Promise<void>;
 export declare function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult>;
+/** Ordinary candidate reads do not compute or require native totals. */
+export declare function searchSubjectHits(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<HitResult>;
 export declare function suggestSubjects(search: OpenSearch, prefix: string, plan: {
     text: string;
     size: number;
