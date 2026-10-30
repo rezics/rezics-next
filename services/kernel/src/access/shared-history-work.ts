@@ -2,6 +2,7 @@ import { advanceOutstandingRecordHistory } from '../history/work.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { withConnection } from '../database/pool.ts';
 import { admitSharedHistory, advanceSharedHistory } from './shared-history.ts';
+import { advancePendingContextRoleProvenance, type ContextRoleOccurrence } from './shared-history-context.ts';
 
 /** One native receiving worker. Its progress, barrier and errors are never a DBOS argument or
  * generic effect payload. Pending jobs sleep until an actual custody/registration change. */
@@ -61,9 +62,31 @@ export const sharedHistoryWorkModule: WorkModule = {
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
       let running: Promise<void> = Promise.resolve();
+      let contextHome = -1;
+      // Only native source keys, bounded by the fixed partition map. Losing this scheduling
+      // cursor on restart rereads pending rows; it never acknowledges or drops an occurrence.
+      const contextCursors = new Map<number, ContextRoleOccurrence>();
       const tick = () => {
         running = (async () => {
           try {
+            // Keyset one configured home per existing unit, releasing discovery before entering
+            // its LIVE work-step. No request-time all-home scan or account-bearing work payload.
+            const home = (
+              await context.pool.query<{ partition_no: number }>(
+                'SELECT partition_no FROM core.partition WHERE partition_no>$1 ORDER BY partition_no LIMIT 1',
+                [contextHome],
+              )
+            ).rows[0];
+            contextHome = home?.partition_no ?? -1;
+            if (home) {
+              const after = contextCursors.get(home.partition_no);
+              const progress = await advancePendingContextRoleProvenance(
+                { pool: context.pool, client: context.client, clock: context.clock },
+                { partition: home.partition_no, ...(after === undefined ? {} : { after }) },
+              );
+              if (progress.after) contextCursors.set(home.partition_no, progress.after);
+              else contextCursors.delete(home.partition_no);
+            }
             await advanceOutstandingRecordHistory(context.pool, context.clock);
             // Reopen one dependency-pending job per unit when the actual registry changes.
             await context.pool.query(
