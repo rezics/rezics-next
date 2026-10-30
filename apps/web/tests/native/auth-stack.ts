@@ -472,9 +472,12 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     await privateBrowser?.force().catch((cleanup) => cleanupErrors.push(cleanup));
     await stopChild(childOwner).catch((cleanup) => cleanupErrors.push(cleanup));
     if (persistenceDirectory && existsSync(persistenceDirectory))
-      cleanupErrors.push(new Error(`Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`));
+      cleanupErrors.push(
+        new Error(`Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`),
+      );
     turnstile.stop(true);
-    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], 'Native Auth startup and cleanup failed');
+    if (cleanupErrors.length)
+      throw new AggregateError([error, ...cleanupErrors], 'Native Auth startup and cleanup failed');
     throw error;
   }
 }
