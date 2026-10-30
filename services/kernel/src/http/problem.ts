@@ -32,6 +32,9 @@ export const PROBLEMS = {
   library_label_restore_expired: { status: 409, title: 'Library Label Restore Expired', retryable: false },
   library_label_restore_occupied: { status: 409, title: 'Library Label Restore Occupied', retryable: false },
   library_label_restore_capacity: { status: 409, title: 'Library Label Restore Capacity Reached', retryable: false },
+  published_log_restore_stale: { status: 409, title: 'Stale Published Log Restore', retryable: false },
+  published_log_restore_occupied: { status: 409, title: 'Published Log Restore Occupied', retryable: false },
+  published_log_restore_expired: { status: 409, title: 'Published Log Restore Expired', retryable: false },
   collection_full: { status: 409, title: 'Collection Full', retryable: false },
   library_entry_restore_occupied: {
     status: 409,

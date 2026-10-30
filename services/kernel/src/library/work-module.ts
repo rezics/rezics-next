@@ -11,6 +11,8 @@ export const libraryWorkModule: WorkModule = {
     const { registerLibraryEntryRetentionWork } = await import('./entry-due-work.ts');
     await registerLibraryEntryRetentionWork(context);
     await registerLabelRetention(context);
+    const { registerLibraryPublishedLogRetentionWork } = await import('./published-log-retention.ts');
+    await registerLibraryPublishedLogRetentionWork(context);
   },
 };
 

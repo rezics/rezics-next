@@ -805,20 +805,29 @@ CREATE TABLE library.progress_unit (
 CREATE TABLE library.published_log (
     route integer NOT NULL,
     log_id uuid NOT NULL,
-    account_id uuid NOT NULL,
+    account_id uuid,
     session_id uuid,
-    subject_id uuid NOT NULL,
-    session_state text NOT NULL,
-    started_at timestamp with time zone NOT NULL,
+    subject_id uuid,
+    session_state text,
+    started_at timestamp with time zone,
     completed_at timestamp with time zone,
     note text,
-    published_at timestamp with time zone NOT NULL,
-    transaction_id uuid NOT NULL,
+    published_at timestamp with time zone,
+    transaction_id uuid,
+    revision integer DEFAULT 1 NOT NULL,
+    deleted boolean DEFAULT false NOT NULL,
+    deletion_id uuid,
+    deleted_at timestamp with time zone,
+    restore_until timestamp with time zone,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     CONSTRAINT published_log_check CHECK ((route = ((get_byte(uuid_send(log_id), 10) * 256) + get_byte(uuid_send(log_id), 11)))),
     CONSTRAINT published_log_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT published_log_check2 CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT published_log_check3 CHECK (((session_state = 'completed'::text) = (completed_at IS NOT NULL))),
+    CONSTRAINT published_log_episode CHECK ((((NOT deleted) AND (deletion_id IS NULL) AND (deleted_at IS NULL) AND (restore_until IS NULL)) OR (deleted AND (deletion_id IS NOT NULL) AND (deleted_at IS NOT NULL) AND (restore_until = (deleted_at + '720:00:00'::interval))) OR (deleted AND (account_id IS NULL) AND (deletion_id IS NULL) AND (deleted_at IS NULL) AND (restore_until IS NULL)))),
     CONSTRAINT published_log_note_check CHECK (((note IS NULL) OR ((char_length(note) >= 0) AND (char_length(note) <= 1000)))),
+    CONSTRAINT published_log_payload CHECK ((((account_id IS NOT NULL) AND (subject_id IS NOT NULL) AND (session_state IS NOT NULL) AND (started_at IS NOT NULL) AND (published_at IS NOT NULL) AND (transaction_id IS NOT NULL)) OR (deleted AND (account_id IS NULL) AND (session_id IS NULL) AND (subject_id IS NULL) AND (session_state IS NULL) AND (started_at IS NULL) AND (completed_at IS NULL) AND (note IS NULL) AND (published_at IS NULL) AND (transaction_id IS NULL)))),
+    CONSTRAINT published_log_revision_check CHECK (((revision >= 1) AND (revision <= 2147483646))),
     CONSTRAINT published_log_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT published_log_session_state_check CHECK ((session_state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
 );
@@ -1937,7 +1946,21 @@ CREATE INDEX progress_session_raw_source ON library.progress_session USING btree
 -- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX published_log_account_page ON library.published_log USING btree (route, account_id, published_at DESC, log_id);
+CREATE INDEX published_log_account_page ON library.published_log USING btree (route, account_id, published_at DESC, log_id) WHERE (NOT deleted);
+
+
+--
+-- Name: published_log_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_due ON library.published_log USING btree (partition_no, restore_until, route, log_id) WHERE (deleted AND (restore_until IS NOT NULL));
+
+
+--
+-- Name: published_log_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_owner ON library.published_log USING btree (route, account_id, log_id) WHERE (account_id IS NOT NULL);
 
 
 --
@@ -2071,6 +2094,27 @@ CREATE TRIGGER progress_session_fact_source_rows AFTER INSERT OR DELETE ON libra
 --
 
 CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progress_session FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: published_log published_log_fact_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_delete AFTER DELETE ON library.published_log FOR EACH ROW WHEN (((old.account_id IS NOT NULL) AND (NOT old.deleted))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: published_log published_log_fact_insert; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_insert AFTER INSERT ON library.published_log FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: published_log published_log_fact_visibility; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_visibility AFTER UPDATE ON library.published_log FOR EACH ROW WHEN ((old.deleted IS DISTINCT FROM new.deleted)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --

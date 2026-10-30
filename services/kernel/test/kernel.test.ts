@@ -59,6 +59,7 @@ const typed = [
   'GET /v1/publishedLogs/:logId',
   'GET /v1/publishedLogs',
   'DELETE /v1/publishedLogs/:logId',
+  'POST /v1/publishedLogs/:logId/$restore',
   'POST /v1/subjects',
   'POST /v1/subjects/$batchWrite',
   'PUT /v1/realms/:realmId/boardScheme',

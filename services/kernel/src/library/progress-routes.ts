@@ -76,6 +76,15 @@ const publishedLogSchema = t.Object(
   },
   closed,
 );
+const tombstoneSchema = t.Object({ id, deleted: t.Literal(true) }, closed);
+const publishedLogConflicts = problemSchema(
+  'published_log_restore_stale',
+  'published_log_restore_occupied',
+  'published_log_restore_expired',
+);
+const revisionHeader = {
+  'Library-Published-Log-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+} as const;
 const publishedLogResponse = t.Object({ publishedLog: publishedLogSchema }, closed);
 const idempotencyHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const invalid = problemSchema('invalid_request', 'invalid_cursor');
@@ -427,7 +436,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           422: idempotencyConflict,
           503: unavailable,
         },
-        detail: detail('published_log.create', 'published_log:create'),
+        detail: {
+          ...detail('published_log.create', 'published_log:create'),
+          responses: { 201: { description: 'Snapshot published', headers: revisionHeader } },
+        },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
@@ -437,6 +449,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
+        if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     )
@@ -446,22 +460,26 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         query: t.Object(viewQuery, closed),
         params: t.Object({ logId: t.String() }, closed),
         response: {
-          200: t.Object({ publishedLog: embedded(publishedLogSchema, logFields) }, closed),
+          200: t.Object({ publishedLog: t.Union([embedded(publishedLogSchema, logFields), tombstoneSchema]) }, closed),
           400: invalid,
           404: notFound,
           503: unavailable,
         },
-        detail: detail('published_log.read', 'published_log:read', true),
+        detail: {
+          ...detail('published_log.read', 'published_log:read', true),
+          responses: {
+            200: { description: 'Public snapshot or safe tombstone; revision is owner-only', headers: revisionHeader },
+          },
+        },
       },
-      async ({ params, query, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
-          mapped(
-            async () =>
-              fullView(config(), actor, query.view, {
-                publishedLog: await publishedCommands().readPublishedLog(actor, params.logId),
-              }),
-            'not_found',
-          ),
+          mapped(async () => {
+            const result = await publishedCommands().readWithRevision(actor, params.logId);
+            set.headers['cache-control'] = 'private, no-store';
+            if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+            return fullView(config(), actor, query.view, { publishedLog: result.publishedLog });
+          }, 'not_found'),
         ),
     )
     .get(
@@ -493,24 +511,81 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       {
         params: t.Object({ logId: t.String() }, closed),
         headers: idempotencyHeaders,
+        query: t.Object(
+          { revision: t.Optional(t.Numeric({ minimum: 1, maximum: 2147483646, multipleOf: 1 })) },
+          closed,
+        ),
         response: {
           200: publishedLogResponse,
           400: invalid,
           401: unauthorized,
           403: forbidden,
           404: notFound,
+          409: publishedLogConflicts,
           422: idempotencyConflict,
           503: unavailable,
         },
-        detail: detail('published_log.delete', 'published_log:delete'),
+        detail: {
+          ...detail('published_log.delete', 'published_log:delete'),
+          responses: {
+            200: {
+              description: 'Snapshot retracted; exact old receipts may omit deletion headers',
+              headers: {
+                'Library-Published-Log-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
+                'Library-Published-Log-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+              },
+            },
+          },
+        },
       },
-      async ({ params, headers, actor, admission, job, session }) => {
+      async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey)),
+          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey, query.revision)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        if (result.deletionId !== undefined && result.revision !== undefined) {
+          set.headers['Library-Published-Log-Deletion-Id'] = result.deletionId;
+          set.headers['Library-Published-Log-Deletion-Revision'] = String(result.revision);
+        }
+        set.headers['cache-control'] = 'private, no-store';
+        return { publishedLog: result.value };
+      },
+    )
+    .post(
+      customMethod('/v1/publishedLogs/:logId', 'restore'),
+      {
+        params: t.Object({ logId: t.String() }, closed),
+        headers: idempotencyHeaders,
+        body: t.Object({ deletionId: id, revision }, closed),
+        response: {
+          200: publishedLogResponse,
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: publishedLogConflicts,
+          422: idempotencyConflict,
+          503: unavailable,
+        },
+        detail: {
+          ...detail('published_log.restore', 'published_log:create'),
+          responses: {
+            200: { description: 'Original snapshot restored', headers: revisionHeader },
+          },
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            publishedCommands().restoreLog(actor, params.logId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     );

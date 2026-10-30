@@ -24,6 +24,7 @@ candidates AS (
   CROSS JOIN args
   WHERE log.route = args.route
     AND log.account_id = args.account_id
+    AND NOT log.deleted
     AND (NOT args.has_cursor OR log.published_at < args.after_published_at)
   ORDER BY log.published_at DESC, log.log_id
   LIMIT (SELECT page_limit FROM args)
@@ -46,6 +47,7 @@ UNION ALL
   CROSS JOIN args
   WHERE log.route = args.route
     AND log.account_id = args.account_id
+    AND NOT log.deleted
     AND args.has_cursor
     AND log.published_at = args.after_published_at
     AND log.log_id > args.after_log_id

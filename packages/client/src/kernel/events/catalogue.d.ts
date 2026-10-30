@@ -1017,7 +1017,7 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.library.account-facts.purged.v1': Type.TObject<{
         accountId: Type.TString;
-        kind: Type.TUnion<[Type.TLiteral<"entry">, Type.TLiteral<"copy">, Type.TLiteral<"follow">]>;
+        kind: Type.TUnion<[Type.TLiteral<"entry">, Type.TLiteral<"copy">, Type.TLiteral<"follow">, Type.TLiteral<"published_log">]>;
         examined: Type.TInteger;
         removed: Type.TInteger;
     }>;
@@ -1052,6 +1052,9 @@ declare const productEventTypes: {
         copyId: Type.TString;
     }>;
     readonly 'com.rezics.library.published_log.updated.v1': Type.TObject<{
+        logId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.published_log.purged.v1': Type.TObject<{
         logId: Type.TString;
     }>;
     readonly 'com.rezics.library.published_log.deleted.v1': Type.TObject<{

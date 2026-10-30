@@ -1,11 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type pg from 'pg';
 import { Value } from 'typebox/value';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
@@ -15,31 +13,24 @@ import * as progress from '../../src/library/progress-store.ts';
 import type { AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
-const route = 0x21c0;
-const scopes = ['subject:read', 'published_log:create', 'published_log:delete'];
+let route: number;
+const scopes = ['subject:read', 'published_log:create', 'published_log:read', 'published_log:delete'];
 const updatedEvent = 'com.rezics.library.published_log.updated.v1';
 const deletedEvent = 'com.rezics.library.published_log.deleted.v1';
-const persona = (accountId: string, permissions = scopes): AccountActor => ({
-  kind: 'account',
-  accountId,
-  scopes: permissions,
-  clientId: 'published-logs-test',
-  requestedBy: null,
-  authnEpoch: 1,
-});
-const owner = persona(newId(route));
-const other = persona(newId(route));
-const suspended = persona(newId(route));
-const unscoped = persona(owner.accountId, ['subject:read']);
+let owner: AccountActor;
+let other: AccountActor;
+let suspended: AccountActor;
+let unscoped: AccountActor;
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
 const startedAt = '2026-10-26T08:00:00.000Z';
 const completedAt = '2026-10-26T18:00:00.000Z';
 let database: GrowthDatabase;
+let nativeFixture: NativeProfileFixture;
 let commands: ReturnType<typeof createPublishedLogCommands>;
 let subjectId: string;
 let subjectRoute: number;
@@ -48,22 +39,11 @@ const clock = () => new Date(now);
 const key = () => randomUUID();
 
 async function subject(): Promise<string> {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const request = key();
-    const result = await createSubject(database.pool, {
-      actor: owner,
-      target: subjectTarget(new Uint8Array(32).fill(73), owner.accountId, request),
-      idempotencyKey: request,
-      digest: createHash('sha256').update(request).digest(),
-      item: { type: 'schema:Book', labels: { en: 'Published log book' } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    });
-    const id = result.subject.id;
-    const idRoute = routeOf(id);
-    if (idRoute !== null && partitionOf(idRoute) !== partitionOf(route)) return id;
-  }
-  throw new Error('Subject partition matched the owner');
+  const id = await nativeFixture.createSubject('game', 'Published log book');
+  const idRoute = routeOf(id);
+  if (idRoute === null || partitionOf(idRoute) === partitionOf(route))
+    throw new Error('Subject partition matched the owner');
+  return id;
 }
 
 async function withAdmin<T>(body: (client: pg.PoolClient) => Promise<T>): Promise<T> {
@@ -141,7 +121,7 @@ async function storedLog(logId: string) {
   const row = (
     await database.admin.query(
       `SELECT route, log_id, account_id, session_id, subject_id, session_state, started_at, completed_at, note,
-              published_at, transaction_id
+              published_at, transaction_id, revision, deleted, deletion_id, deleted_at, restore_until
        FROM library.published_log WHERE log_id = $1`,
       [logId],
     )
@@ -176,26 +156,20 @@ async function rowsNaming(logId: string): Promise<number> {
 beforeAll(async () => {
   database = await openGrowthDatabase();
   await bootstrapRelease(database.pool, bundledRelease);
-  const accounts = new Map<string, Account>();
-  for (const actor of [owner, other, suspended]) {
-    await database.admin.query(
-      `INSERT INTO access.account
-         (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
-       VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-      [route, actor.accountId, actor === suspended ? 'suspended' : 'active', newId(route)],
-    );
-    accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
-  }
-  const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
-  });
-  commands = createPublishedLogCommands({ pool: database.pool, access, tokens, clock });
+  nativeFixture = await createProfileEntryFixture({ pool: database.pool });
+  owner = (await nativeFixture.identity(scopes)).actor;
+  other = (await nativeFixture.identity(scopes)).actor;
+  suspended = (await nativeFixture.identity(scopes)).actor;
+  unscoped = (await nativeFixture.identity(['subject:read'])).actor;
+  route = routeOf(owner.accountId)!;
+  await nativeFixture.suspend(suspended.accountId);
+  commands = createPublishedLogCommands({ pool: database.pool, access: nativeFixture.access, tokens, clock });
   subjectId = await subject();
   subjectRoute = routeOf(subjectId)!;
 });
 
 afterAll(async () => {
+  await nativeFixture?.close();
   if (database) await database.close();
 });
 
@@ -297,22 +271,38 @@ test('an owner publishes an immutable snapshot that anyone, including anonymous,
   expect(await rowsNaming(again.value.id)).toBe(0);
 });
 
-test('only the owner retracts a log, and a retracted log reads as unknown', async () => {
+test('only the owner retracts a log, and a retracted log reads as a safe structural tombstone', async () => {
   const session = await writeSession();
   const published = (await commands.publishLog(owner, { sessionId: session.id, note: 'Retract me' }, key())).value;
   expect(
     (await commands.listPublishedLogs(anonymous, { accountId: owner.accountId, limit: 100 })).publishedLogs,
   ).toContainEqual(published);
-  const removed = await commands.retractLog(owner, published.id, key());
+  const original = await commands.readWithRevision(owner, published.id);
+  if (original.revision === undefined) throw new Error('Owner read did not return the published log revision');
+  const removed = await commands.retractLog(owner, published.id, key(), original.revision);
   expect(removed.replayed).toBe(false);
   expect(removed.value).toEqual(published);
   expect(removed.partition).toBe(partitionOf(route));
-  await expect(commands.readPublishedLog(anonymous, published.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  expect(await commands.readPublishedLog(anonymous, published.id)).toEqual({ id: published.id, deleted: true });
   await expect(commands.readPublishedLog(owner, newId(route))).rejects.toBeInstanceOf(LibraryNotFoundError);
   await expect(commands.readPublishedLog(owner, 'not-a-log')).rejects.toBeInstanceOf(LibraryNotFoundError);
   const page = await commands.listPublishedLogs(anonymous, { accountId: owner.accountId, limit: 100 });
   expect(page.publishedLogs.map((log) => log.id)).not.toContain(published.id);
-  expect(await storedLog(published.id)).toBeNull();
+  expect(await storedLog(published.id)).toMatchObject({
+    log_id: published.id,
+    account_id: owner.accountId,
+    session_id: session.id,
+    subject_id: subjectId,
+    session_state: published.sessionState,
+    note: published.note,
+    revision: original.revision + 1,
+    deleted: true,
+    deletion_id: removed.deletionId,
+    deleted_at: new Date(now),
+    restore_until: new Date(now + 720 * 60 * 60 * 1000),
+  });
+  expect(new Date((await storedLog(published.id))!.started_at).toISOString()).toBe(published.startedAt);
+  expect(new Date((await storedLog(published.id))!.published_at).toISOString()).toBe(published.publishedAt);
   const events = await database.admin.query<{ partition_no: number; subject: string; data: { logId: string } }>(
     "SELECT partition_no, subject, data FROM core.outbox WHERE type = $1 AND data->>'logId' = $2",
     [deletedEvent, published.id],
@@ -384,18 +374,21 @@ test('replays return the original result and a reused key with a different body 
   expect(await counts()).toEqual(before);
   expect(await commands.readPublishedLog(anonymous, created.value.id)).toEqual(created.value);
 
-  const second = (await commands.publishLog(owner, { sessionId: session.id, note: 'Other' }, key())).value;
+  const secondOutcome = await commands.publishLog(owner, { sessionId: session.id, note: 'Other' }, key());
+  const second = secondOutcome.value;
   const retractKey = key();
-  const removed = await commands.retractLog(owner, created.value.id, retractKey);
+  const removed = await commands.retractLog(owner, created.value.id, retractKey, created.revision);
   const afterRetract = await counts();
-  expect(await commands.retractLog(owner, created.value.id, retractKey)).toMatchObject({
+  expect(await commands.retractLog(owner, created.value.id, retractKey, created.revision)).toMatchObject({
     value: removed.value,
     replayed: true,
   });
   expect(await counts()).toEqual(afterRetract);
-  await expect(commands.retractLog(owner, second.id, retractKey)).rejects.toBeInstanceOf(IdempotencyConflictError);
+  await expect(commands.retractLog(owner, second.id, retractKey, secondOutcome.revision)).rejects.toBeInstanceOf(
+    IdempotencyConflictError,
+  );
   expect(await commands.readPublishedLog(anonymous, second.id)).toEqual(second);
-  await expect(commands.readPublishedLog(anonymous, created.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  expect(await commands.readPublishedLog(anonymous, created.value.id)).toEqual({ id: created.value.id, deleted: true });
 });
 
 test('signed cursors are bound to the account page and tampered cursors are refused', async () => {
@@ -462,7 +455,7 @@ test('statements per publish, retract, read and page stay equal at three scales 
        SELECT $1, log_id, $2, log_id, $3, 'active', timestamptz '2026-10-01T00:00:00Z', NULL, NULL,
               timestamptz '2026-10-01T00:00:00Z' - (ordinal::text || ' seconds')::interval, $2
        FROM unnest($4::uuid[]) WITH ORDINALITY AS seed(log_id, ordinal)`,
-      [route, other.accountId, subjectId, Array.from({ length: scale - previous }, () => newId(route))],
+      [route, owner.accountId, subjectId, Array.from({ length: scale - previous }, () => newId(route))],
     );
     const published = await measure(database, () =>
       commands.publishLog(owner, { sessionId: session.id, note: `scale-${scale}` }, key()),
@@ -471,7 +464,9 @@ test('statements per publish, retract, read and page stay equal at three scales 
     const page = await measure(database, () =>
       commands.listPublishedLogs(anonymous, { accountId: owner.accountId, limit: 1 }),
     );
-    const retracted = await measure(database, () => commands.retractLog(owner, published.value.value.id, key()));
+    const retracted = await measure(database, () =>
+      commands.retractLog(owner, published.value.value.id, key(), published.value.revision),
+    );
     const countsForScale = [published, read, page, retracted].map((sample) => sample.cost.statements);
     expect(countsForScale.every((count) => Number.isInteger(count) && count > 0)).toBe(true);
     expect(read.value).toEqual(published.value.value);

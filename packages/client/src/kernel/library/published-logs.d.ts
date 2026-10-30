@@ -15,7 +15,7 @@ type Page = {
     cursor?: string | undefined;
     limit?: number | undefined;
 };
-/** Public snapshot of one progress session. Later session edits do not change it. */
+/** Explicit public snapshot. No private session values are read by Undo. */
 export type PublishedLog = {
     id: string;
     accountId: string;
@@ -26,21 +26,30 @@ export type PublishedLog = {
     note: string | null;
     publishedAt: string;
 };
+export type PublishedLogTombstone = {
+    id: string;
+    deleted: true;
+};
 export type PublishedLogPageResult = {
     publishedLogs: PublishedLog[];
     next: string | null;
 };
-/**
- * Publish and retract one account's session snapshots. Reads are public, including for anonymous
- * viewers, and stay in the owner's partition. Nothing is written on the subject's partition.
- */
+export type PublishedLogOutcome = CommandOutcome<PublishedLog> & {
+    revision?: number;
+    deletionId?: string;
+};
 export declare function createPublishedLogCommands(config: Dependencies): {
     publishLog: (actor: Actor, input: {
         sessionId: string;
         note?: string | null;
-    }, requestKey: string) => Promise<CommandOutcome<PublishedLog>>;
-    retractLog: (actor: Actor, logId: string, requestKey: string) => Promise<CommandOutcome<PublishedLog>>;
-    readPublishedLog: (_viewer: Actor, logId: string) => Promise<PublishedLog>;
-    listPublishedLogs: (_viewer: Actor, page: Page) => Promise<PublishedLogPageResult>;
+    }, requestKey: string) => Promise<PublishedLogOutcome>;
+    retractLog: (actor: Actor, logId: string, requestKey: string, revision?: number) => Promise<PublishedLogOutcome>;
+    restoreLog: (actor: Actor, logId: string, input: unknown, requestKey: string) => Promise<PublishedLogOutcome>;
+    readWithRevision: (viewer: Actor, logId: string) => Promise<{
+        publishedLog: PublishedLog | PublishedLogTombstone;
+        revision?: number;
+    }>;
+    readPublishedLog: (viewer: Actor, logId: string) => Promise<PublishedLog | PublishedLogTombstone>;
+    listPublishedLogs: (viewer: Actor, page: Page) => Promise<PublishedLogPageResult>;
 };
 export {};

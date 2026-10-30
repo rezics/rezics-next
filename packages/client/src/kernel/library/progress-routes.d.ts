@@ -5120,6 +5120,9 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             publishedLog: {
+                                id: string;
+                                deleted: true;
+                            } | {
                                 subject?: {
                                     id: string;
                                     type: string;
@@ -5378,6 +5381,138 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
     };
+} & {
+    v1: {
+        publishedLogs: {
+            ":logId": {
+                delete: {
+                    body: unknown;
+                    params: {
+                        logId: string;
+                    };
+                    query: {
+                        revision?: string | number;
+                    };
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            publishedLog: {
+                                id: string;
+                                accountId: string;
+                                subjectId: string;
+                                sessionState: "abandoned" | "active" | "completed";
+                                startedAt: string;
+                                completedAt: string | null;
+                                note: string | null;
+                                publishedAt: string;
+                            };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -5399,12 +5534,16 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
     schemas: {};
     response: {};
     error: [];
-}, "delete", "/v1/publishedLogs/:logId", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/publishedLogs/:logId/$restore", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         logId: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
+    }>;
+    body: import("typebox").TObject<{
+        deletionId: import("typebox").TString;
+        revision: import("typebox").TInteger;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -5475,6 +5614,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -5510,8 +5663,21 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-action': string;
         security: {}[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        responses: {
+            200: {
+                description: string;
+                headers: {
+                    readonly 'Library-Published-Log-Revision': {
+                        readonly schema: {
+                            readonly type: 'string';
+                            readonly pattern: '^[1-9][0-9]*$';
+                        };
+                    };
+                };
+            };
+        };
     };
-}, {}, "/v1/publishedLogs/:logId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, headers, actor, admission, job, session }: {
+}, {}, "/v1/publishedLogs/:logId/$restore">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, body, headers, actor, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -5576,6 +5742,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             }[];
         };
         404: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        409: {
             type: unknown;
             title: unknown;
             status: number;
@@ -5687,6 +5867,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 code: never;
             }[];
         };
+        409: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
         422: {
             type: unknown;
             title: unknown;
@@ -5722,6 +5916,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         }>;
         headers: import("typebox").TObject<{
             "idempotency-key": import("typebox").TString;
+        }>;
+        body: import("typebox").TObject<{
+            deletionId: import("typebox").TString;
+            revision: import("typebox").TInteger;
         }>;
         response: {
             200: import("typebox").TObject<{
@@ -5792,6 +5990,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
+            409: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             422: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -5827,8 +6039,21 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             'x-action': string;
             security: {}[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            responses: {
+                200: {
+                    description: string;
+                    headers: {
+                        readonly 'Library-Published-Log-Revision': {
+                            readonly schema: {
+                                readonly type: 'string';
+                                readonly pattern: '^[1-9][0-9]*$';
+                            };
+                        };
+                    };
+                };
+            };
         };
-    }, {}, "/v1/publishedLogs/:logId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/publishedLogs/:logId/$restore">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -5851,7 +6076,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
     rid?: string;
     request: Request;
     store: {};
-    body: unknown;
+    body: {
+        deletionId: string;
+        revision: number;
+    };
     query: Record<string, string | undefined>;
     params: {
         logId: string;
@@ -5882,6 +6110,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
+    }>;
+    body: import("typebox").TObject<{
+        deletionId: import("typebox").TString;
+        revision: import("typebox").TInteger;
     }>;
     response: {
         200: import("typebox").TObject<{
@@ -5952,6 +6184,20 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        409: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -5987,6 +6233,19 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-action': string;
         security: {}[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        responses: {
+            200: {
+                description: string;
+                headers: {
+                    readonly 'Library-Published-Log-Revision': {
+                        readonly schema: {
+                            readonly type: 'string';
+                            readonly pattern: '^[1-9][0-9]*$';
+                        };
+                    };
+                };
+            };
+        };
     };
 }>;
 export {};

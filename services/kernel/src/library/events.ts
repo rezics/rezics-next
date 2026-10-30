@@ -8,7 +8,7 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.account-facts.purged.v1': Type.Object(
     {
       accountId: id,
-      kind: Type.Union([Type.Literal('entry'), Type.Literal('copy'), Type.Literal('follow')]),
+      kind: Type.Union([Type.Literal('entry'), Type.Literal('copy'), Type.Literal('follow'), Type.Literal('published_log')]),
       examined: Type.Integer({ minimum: 0, maximum: 100 }),
       removed: Type.Integer({ minimum: 0, maximum: 100 }),
     },
@@ -25,6 +25,7 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.copy.updated.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
   'com.rezics.library.copy.deleted.v1': Type.Object({ copyId: id }, { additionalProperties: false }),
   'com.rezics.library.published_log.updated.v1': Type.Object({ logId: id }, { additionalProperties: false }),
+  'com.rezics.library.published_log.purged.v1': Type.Object({ logId: id }, { additionalProperties: false }),
   'com.rezics.library.published_log.deleted.v1': Type.Object({ logId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.updated.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.deleted.v1': Type.Object({ collectionId: id }, { additionalProperties: false }),
