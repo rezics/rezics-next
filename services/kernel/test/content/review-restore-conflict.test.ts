@@ -238,7 +238,9 @@ test('restore denials and reply restoration keep their native outcomes without a
       'SELECT deleted_at::text FROM content.post WHERE route = $1 AND post_id = $2',
       [routeOf(expired.original.postId), expired.original.postId],
     );
-    await f.system.clock.setCommandTime(new Date(Date.parse(deleted.rows[0]!.deleted_at) + 30 * 86400000).toISOString());
+    await f.system.clock.setCommandTime(
+      new Date(Date.parse(deleted.rows[0]!.deleted_at) + 30 * 86400000).toISOString(),
+    );
     const denied = await f.call('POST', `/v1/posts/${expired.original.postId}:restore`, { bearer: f.author.bearer });
     status(denied, 404);
     expect(denied.value).not.toHaveProperty('existingThreadId');
