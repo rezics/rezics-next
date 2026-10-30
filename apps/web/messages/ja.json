@@ -1457,5 +1457,12 @@
   "refinement_upper": "以下",
   "refinement_unit": "単位",
   "refinement_year_hint": "年を整数で入力してください。両端を含みます。",
-  "refinement_invalid_range": "少なくとも一方の境界を指定した有効な範囲を入力してください。"
+  "refinement_invalid_range": "少なくとも一方の境界を指定した有効な範囲を入力してください。",
+  "thread_provenance_heading": "改訂の詳細",
+  "thread_provenance_subjects": "この改訂の対象",
+  "thread_provenance_subject_reference": "対象の参照: {id}",
+  "thread_provenance_rating": "執筆時の評価",
+  "thread_provenance_vote": "{units} 単位 · 質問 {questionId} · 投票の改訂 {revision}",
+  "thread_provenance_current_vote": "現在のあなたの評価",
+  "thread_provenance_unscored": "評価の引用なし"
 }

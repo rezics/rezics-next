@@ -116,7 +116,6 @@ export async function revisePostRequest(
     const result = await client.posts({ id: input.postId }).revisions.post(
       {
         body: input.body,
-        licence: 'LicenseRef-rezics-terms',
         mediaIds: input.mediaIds ?? [],
       },
       {

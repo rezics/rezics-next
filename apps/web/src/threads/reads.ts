@@ -18,6 +18,7 @@ import { readDocumentMentions } from '../kernel/mentions';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
+import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -141,8 +142,21 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     const viewerId = sessionSubject(request);
-    if (!authorization || !viewerId) return { viewerId: null, reactions: {} as Record<string, string | null> };
+    if (!authorization || !viewerId) {
+      const reviewVotes: RevisionVotes = {};
+      return { viewerId: null, reactions: {} as Record<string, string | null>, reviewVotes };
+    }
     const client = kernelClient();
+    const reviewVotesRead = (async (): Promise<RevisionVotes> => {
+      try {
+        const result = await client.threads({ id: data.id }).get({ headers: { authorization } });
+        const thread = result.error ? undefined : result.data?.thread;
+        if (!thread || thread.kind !== 'review' || thread.authorId !== viewerId) return {};
+        return readAuthorRevisionVotes(client, [thread.firstPost], { id: viewerId, authorization });
+      } catch {
+        return {};
+      }
+    })();
     const targets = [data.id, ...data.postIds];
     const values = await Promise.all(
       targets.map(async (target) => {
@@ -161,7 +175,7 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
         }
       }),
     );
-    return { viewerId, reactions: Object.fromEntries(values) };
+    return { viewerId, reactions: Object.fromEntries(values), reviewVotes: await reviewVotesRead };
   });
 
 export const readPostHistory = createServerFn({ method: 'GET' })
@@ -193,6 +207,8 @@ export const readPostHistory = createServerFn({ method: 'GET' })
           next: string | null;
           authors: PageAuthors;
           mentions: DocumentMentions;
+          subjects: ThreadSubject[];
+          reviewVotes: RevisionVotes;
           now: string;
         }
     > => {
@@ -214,7 +230,8 @@ export const readPostHistory = createServerFn({ method: 'GET' })
         const result = await client.posts({ id: data.postId }).revisions.get(options);
         if (result.error || !result.data) return { available: false };
         const revisions = result.data.revisions;
-        const [authors, mentions] = await Promise.all([
+        const viewerId = sessionSubject(request);
+        const [authors, mentions, subjects, reviewVotes] = await Promise.all([
           readPageAuthors(
             client,
             revisions.map(({ authorId }) => authorId),
@@ -223,8 +240,23 @@ export const readPostHistory = createServerFn({ method: 'GET' })
             client,
             revisions.map(({ body }) => body),
           ),
+          readRevisionSubjects(client, revisions),
+          readAuthorRevisionVotes(
+            client,
+            revisions,
+            viewerId && authorization ? { id: viewerId, authorization } : null,
+          ),
         ]);
-        return { available: true, revisions, next: result.data.next, authors, mentions, now: new Date().toISOString() };
+        return {
+          available: true,
+          revisions,
+          next: result.data.next,
+          authors,
+          mentions,
+          subjects,
+          reviewVotes,
+          now: new Date().toISOString(),
+        };
       } catch {
         return { available: false };
       }
@@ -247,6 +279,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           verification: VerificationConfig;
           authors: PageAuthors;
           subjects: ThreadSubject[];
+          provenanceSubjects: ThreadSubject[];
           now: string;
         }
       | ThreadSlugRedirect
@@ -254,8 +287,9 @@ export const readThreadPage = createServerFn({ method: 'GET' })
       setResponseHeader('cache-control', 'private, no-store');
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
       const request = getRequest();
+      const client = kernelClient();
       const page = await loadThreadPageWithAuthors(
-        kernelClient(),
+        client,
         request,
         env as Partial<SessionEnv>,
         data,
@@ -268,6 +302,13 @@ export const readThreadPage = createServerFn({ method: 'GET' })
         data.credentialMode ?? 'anonymous',
       );
       if ('redirect' in page) return page;
-      return page;
+      return {
+        ...page,
+        provenanceSubjects: await readRevisionSubjects(
+          client,
+          page.posts.posts.filter((post) => post.availability === 'available'),
+          page.subjects,
+        ),
+      };
     },
   );

@@ -1457,5 +1457,12 @@
   "refinement_upper": "Como máximo",
   "refinement_unit": "Unidad",
   "refinement_year_hint": "Introduce años enteros. Se incluyen ambos límites.",
-  "refinement_invalid_range": "Introduce un intervalo válido con al menos un límite."
+  "refinement_invalid_range": "Introduce un intervalo válido con al menos un límite.",
+  "thread_provenance_heading": "Detalles de la revisión",
+  "thread_provenance_subjects": "Temas de esta revisión",
+  "thread_provenance_subject_reference": "Referencia de tema: {id}",
+  "thread_provenance_rating": "Valoración al escribir",
+  "thread_provenance_vote": "{units} unidades · pregunta {questionId} · revisión del voto {revision}",
+  "thread_provenance_current_vote": "Tu valoración actual",
+  "thread_provenance_unscored": "Sin valoración citada"
 }

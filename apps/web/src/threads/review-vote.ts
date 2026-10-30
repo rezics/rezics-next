@@ -4,19 +4,20 @@ import type { VoteCitation } from './post-writes';
 export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
 export type CurrentReviewVote = VoteCitation;
 
-/** Reads the signed-in author's current standard review vote once for a selected subject. */
+/** Reads only the caller's vote; the question never selects another account's vote. */
 export async function loadCurrentReviewVote(
   client: KernelClient,
   subjectId: string,
   authorization: string,
+  questionId: string = STANDARD_QUESTION_ID,
 ): Promise<CurrentReviewVote | null> {
   try {
     const result = await client
       .subjects({ id: subjectId })
-      .ratings({ questionId: STANDARD_QUESTION_ID })
+      .ratings({ questionId })
       .vote.get({ headers: { authorization } });
     if (result.error || !result.data) return null;
-    return { questionId: STANDARD_QUESTION_ID, units: result.data.units, revision: result.data.revision };
+    return { questionId, units: result.data.units, revision: result.data.revision };
   } catch {
     return null;
   }

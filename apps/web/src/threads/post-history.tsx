@@ -5,12 +5,21 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
 import { readPostHistory } from './reads';
+import { RevisionProvenance } from './revision-provenance-view';
 
 type HistoryPage = Extract<Awaited<ReturnType<typeof readPostHistory>>, { available: true }>;
 type Revision = HistoryPage['revisions'][number];
 
 /** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
-export function PostHistory({ postId }: { postId: string }) {
+export function PostHistory({
+  postId,
+  viewerId,
+  review = false,
+}: {
+  postId: string;
+  viewerId?: string;
+  review?: boolean;
+}) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,6 +28,8 @@ export function PostHistory({ postId }: { postId: string }) {
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [authors, setAuthors] = useState<HistoryPage['authors']>({});
   const [mentions, setMentions] = useState<HistoryPage['mentions']>({});
+  const [subjects, setSubjects] = useState<HistoryPage['subjects']>([]);
+  const [reviewVotes, setReviewVotes] = useState<HistoryPage['reviewVotes']>({});
   const [next, setNext] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date().toISOString());
 
@@ -35,6 +46,10 @@ export function PostHistory({ postId }: { postId: string }) {
       setRevisions((current) => (cursor ? [...current, ...result.revisions] : result.revisions));
       setAuthors((current) => ({ ...(current ?? {}), ...(result.authors ?? {}) }));
       setMentions((current) => ({ ...current, ...result.mentions }));
+      setSubjects((current) => [
+        ...new Map([...current, ...result.subjects].map((subject) => [subject.id, subject])).values(),
+      ]);
+      setReviewVotes((current) => ({ ...current, ...result.reviewVotes }));
       setNext(result.next);
       setNow(result.now);
       setLoaded(true);
@@ -90,6 +105,9 @@ export function PostHistory({ postId }: { postId: string }) {
                   authors={authors}
                   mentions={mentions}
                   now={now}
+                  subjects={subjects}
+                  currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
+                  review={review}
                 />
               ))}
             </ol>
@@ -116,20 +134,24 @@ function RevisionEntry({
   authors,
   mentions,
   now,
+  subjects,
+  currentVote,
+  review,
 }: {
   revision: Revision;
   number: number;
   authors: HistoryPage['authors'];
   mentions: HistoryPage['mentions'];
   now: string;
+  subjects: HistoryPage['subjects'];
+  currentVote: HistoryPage['reviewVotes'][string] | undefined;
+  review: boolean;
 }) {
   return (
     <li className="space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
       <h4 className="font-semibold">{m.thread_history_version({ number: String(number) })}</h4>
       <Byline author={authors?.[revision.authorId]} createdAt={revision.createdAt} now={now} showAuthor />
-      <p className="text-sm text-muted-foreground">
-        <span className="font-medium">{m.thread_history_licence()}:</span> {revision.licence}
-      </p>
+      <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
       {revision.body ? <DocumentBody document={revision.body} mentions={mentions} locale={getLocale()} /> : null}
     </li>
   );

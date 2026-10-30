@@ -30,6 +30,9 @@ import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
 import { PostHistory } from '../../threads/post-history';
+import { RevisionProvenance } from '../../threads/revision-provenance-view';
+import type { VoteCitation } from '../../threads/post-writes';
+import type { ThreadSubject } from '../../threads/subjects';
 import {
   erasePost,
   restorePost as restorePostAction,
@@ -84,6 +87,7 @@ function ThreadPage() {
     verification,
     authors,
     subjects,
+    provenanceSubjects,
     mentions,
     now,
   } = Route.useLoaderData();
@@ -181,6 +185,9 @@ function ThreadPage() {
                   post={post}
                   authors={authors}
                   mentions={currentMentions}
+                  subjects={provenanceSubjects}
+                  currentVote={personal?.reviewVotes[post.id]}
+                  review={firstPost && thread.kind === 'review'}
                   now={now}
                   counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
                   returnTo={returnTo}
@@ -290,6 +297,9 @@ function PostSlot({
   replyParents,
   replyPending,
   onReply,
+  subjects,
+  currentVote,
+  review,
 }: {
   post: ThreadPost;
   authors: PageAuthors;
@@ -311,6 +321,9 @@ function PostSlot({
   replyParents: ReplyParents;
   replyPending: boolean;
   onReply: () => void;
+  subjects: ThreadSubject[];
+  currentVote: VoteCitation | undefined;
+  review: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
@@ -528,7 +541,15 @@ function PostSlot({
             locale={getLocale()}
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
           />
-          {post.revisionId ? <PostHistory postId={post.id} /> : null}
+          <RevisionProvenance
+            revision={post}
+            subjects={subjects}
+            currentVote={ownsPost ? (currentVote ?? null) : null}
+            review={review}
+          />
+          {post.revisionId ? (
+            <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
+          ) : null}
           {signedIn && personalReady ? (
             <div className="mt-3 flex justify-end">
               <ReplyButton disabled={replyPending} onReply={onReply} />

@@ -152,7 +152,11 @@ they never supply or alter the native mean, vote count or ordering score.
 
 A review is a content item about one target. It may cite the author's vote on that target; a review never requires a
 score, and a score never requires a review. A cited vote is cited at the revision the author had when writing, so
-changing a vote later never rewrites an old review; the review shows the current vote beside it when they differ.
+changing a vote later never rewrites an old review. Permitted readers see the immutable citation's units, question
+ID and vote revision. Only the authenticated author sees a differing current vote beside it, using the existing
+private own-vote GET. The request never selects a public author vote. A missing, cleared or unavailable private
+read adds no comparison; a review without a citation is unscored. Post history uses each revision's stored citation
+and references, independently of today's thread references or vote.
 
 ## HTTP
 

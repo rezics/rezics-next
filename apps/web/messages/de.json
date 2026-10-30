@@ -1457,5 +1457,12 @@
   "refinement_upper": "Höchstens",
   "refinement_unit": "Einheit",
   "refinement_year_hint": "Ganze Jahreszahlen eingeben. Beide Grenzen sind eingeschlossen.",
-  "refinement_invalid_range": "Einen gültigen Bereich mit mindestens einer Grenze eingeben."
+  "refinement_invalid_range": "Einen gültigen Bereich mit mindestens einer Grenze eingeben.",
+  "thread_provenance_heading": "Revisionsdetails",
+  "thread_provenance_subjects": "Themen dieser Revision",
+  "thread_provenance_subject_reference": "Themenreferenz: {id}",
+  "thread_provenance_rating": "Bewertung beim Schreiben",
+  "thread_provenance_vote": "{units} Einheiten · Frage {questionId} · Bewertungsrevision {revision}",
+  "thread_provenance_current_vote": "Deine aktuelle Bewertung",
+  "thread_provenance_unscored": "Keine Bewertung zitiert"
 }

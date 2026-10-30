@@ -172,6 +172,21 @@ The executable API contract is `specs/content-notification-outcomes.test.ts`, wi
 `Content notification outcome driver is required`. The suite remains red until that binding and the product
 implementation exist. The specification verifier checks this intentional red state without substituting a driver.
 
+## Post revision provenance
+
+Ordinary site edits omit `licence`, allowing the native revision command to inherit the stored SPDX identifier.
+New posts retain the site's default licence. This journey offers no relicensing control. Edits preserve the
+canonical document and its block IDs, and a 412 retains the author's draft for recovery.
+
+The post and history interfaces display each revision's own `subjectIds`, licence and optional `voteCitation`.
+Current thread references and later votes never replace these immutable values. Labels reuse the existing bounded
+Semantic subject summaries: one deduplicated page-level lookup within the four-subject display bound. Every stored
+reference remains visible; unresolved labels use neutral reference text and the recorded ID without a link.
+History retains its 20-revision cursor page; label resolution adds no per-revision requests or history walks.
+
+Readers see citation units, question ID and vote revision. Only the authenticated author can receive a differing
+current vote through the existing own-vote GET. An absent, cleared or unavailable own-vote read adds no comparison.
+
 ## Reviews
 
 Global Context may hold several reviews boards, and a Realm one.

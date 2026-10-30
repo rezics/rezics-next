@@ -1458,5 +1458,12 @@
   "refinement_upper": "At most",
   "refinement_unit": "Unit",
   "refinement_year_hint": "Enter whole years. Both bounds are inclusive.",
-  "refinement_invalid_range": "Enter a valid inclusive range with at least one bound."
+  "refinement_invalid_range": "Enter a valid inclusive range with at least one bound.",
+  "thread_provenance_heading": "Revision details",
+  "thread_provenance_subjects": "Subjects in this revision",
+  "thread_provenance_subject_reference": "Subject reference: {id}",
+  "thread_provenance_rating": "Rating when written",
+  "thread_provenance_vote": "{units} units · question {questionId} · vote revision {revision}",
+  "thread_provenance_current_vote": "Your rating now",
+  "thread_provenance_unscored": "No rating cited"
 }

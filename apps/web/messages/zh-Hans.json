@@ -1458,5 +1458,12 @@
   "refinement_upper": "不大于",
   "refinement_unit": "单位",
   "refinement_year_hint": "请输入整数年份，包含上下限。",
-  "refinement_invalid_range": "请输入有效范围，至少指定一个边界。"
+  "refinement_invalid_range": "请输入有效范围，至少指定一个边界。",
+  "thread_provenance_heading": "修订详情",
+  "thread_provenance_subjects": "此修订的主题",
+  "thread_provenance_subject_reference": "主题引用：{id}",
+  "thread_provenance_rating": "写作时的评分",
+  "thread_provenance_vote": "{units} 单位 · 问题 {questionId} · 投票修订 {revision}",
+  "thread_provenance_current_vote": "你现在的评分",
+  "thread_provenance_unscored": "未引用评分"
 }
