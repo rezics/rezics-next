@@ -78,3 +78,22 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     }
   }
 });
+
+test('Workers resolve both share-card public Wasm exports through the installed dependency links', async () => {
+  const [{ resolveConfig }, { default: webConfig }] = await Promise.all([import('vite'), import('../vite.config')]);
+  const context = { command: 'build', mode: 'development' } as const;
+  const config = await resolveConfig(
+    { ...webConfig(context), root: appRoot, configFile: false, logLevel: 'silent' },
+    context.command,
+    context.mode,
+  );
+  expect(config.environments.ssr?.resolve.noExternal).toBe(true);
+  const resolveId = config.createResolver();
+  const importer = join(appRoot, 'src/media/share-card.worker.ts');
+  for (const exported of ['satori/yoga.wasm', '@resvg/resvg-wasm/index_bg.wasm']) {
+    const local = realpathSync(join(appRoot, 'node_modules', exported));
+    for (const query of ['', '?module'])
+      expect(await resolveId(`${exported}${query}`, importer, false, true)).toBe(`${local}${query}`);
+    expect(WebAssembly.validate(await Bun.file(local).arrayBuffer())).toBe(true);
+  }
+});
