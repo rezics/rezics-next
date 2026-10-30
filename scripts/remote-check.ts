@@ -6,9 +6,9 @@
 //
 // A short run (one slot, estimated at no more than 120,000 ms, and not a gate) waits at most one short run per host.
 // Each host keeps one slot as express capacity, so its ordinary capacity is one slot lower.
-// Waiter order is gate, landing, multi-slot, ordinary. While a gate waits, non-gate runs leave its reserved slots
-// free; while a landing waiter waits, ordinary and multi-slot runs leave its requested slots free. Short runs may
-// still use the express slot. A waiter starts once the runs holding its slots when it began waiting have ended.
+// Gates retain their reserved capacity. A fitting landing waiter gets its requested slots first for one configured
+// poll; ordinary work can use the remaining capacity, and a stale or ineligible landing waiter cannot hold it back.
+// Multi-slot waiters reserve their requested capacity after landing's opportunity. Short runs may still use express.
 // A non-gate run requesting more than one slot reserves its slot count on the host where it can start soonest: among
 // hosts with enough ordinary capacity and measured resource headroom to reach its request, it chooses the one with
 // the fewest busy ordinary slots; if none can reach it yet, it chooses the least busy eligible host. Other non-gate
@@ -239,6 +239,11 @@ function isShortRun(slots: number, estimateMs: number | undefined, gate: boolean
   return !gate && slots === 1 && estimateMs !== undefined && estimateMs <= EXPRESS_SLOT_ESTIMATE_LIMIT_MS;
 }
 
+function landingOpportunityMs(estimateMs: number | null, pollMs: number): number {
+  const finiteEstimate = Math.min(estimateMs ?? DEFAULT_MAX_MS, DEFAULT_MAX_MS);
+  return Math.max(1, Math.min(Math.max(1, pollMs), Math.max(1, finiteEstimate)));
+}
+
 export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
   if (!Array.isArray(parsed.hosts) || parsed.hosts.length === 0) throw new Error(`${file} lists no hosts`);
@@ -321,6 +326,32 @@ const sshOptions = (host: Host): string[] => [
 function probeScript(host: Host): string {
   return `set -eu
 mkdir -p ${ROOT}/slots
+marker_open_live() {
+  marker_file=$1
+  marker_attempt=0
+  while [ "$marker_attempt" -lt 3 ]; do
+    exec 7>&-
+    exec 7<>"$marker_file" 2>/dev/null || return 1
+    if flock -n 7; then
+      marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
+      marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
+      if [ -n "$marker_fd_identity" ] && [ "$marker_fd_identity" = "$marker_path_identity" ]; then
+        rm -f -- "$marker_file"
+        flock -u 7
+        exec 7>&-
+        return 1
+      fi
+      flock -u 7
+    else
+      marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
+      marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
+      if [ -n "$marker_fd_identity" ] && [ "$marker_fd_identity" = "$marker_path_identity" ]; then return 0; fi
+    fi
+    exec 7>&-
+    marker_attempt=$((marker_attempt + 1))
+  done
+  return 1
+}
 processors=$(nproc)
 load=$(awk 'NR == 1 { print $1; exit }' /proc/loadavg)
 available=$(awk 'BEGIN { while ((getline line < "/proc/meminfo") > 0) if (line ~ /^MemAvailable:/) { split(line, field, " "); printf "%.0f\\n", field[2] * 1024; exit } }' 2>/dev/null || true)
@@ -391,11 +422,13 @@ if [ -e "$express_lock" ]; then
 fi
 gate_waiting=0
 gate_marker=${ROOT}/slots/gate-wait.lock
+exec 6>"${ROOT}/slots/gate-queue.lock"
+flock -x 6
 if [ -e "$gate_marker" ]; then
-  exec 7>"$gate_marker"
-  if flock -n 7; then flock -u 7; else gate_waiting=1; fi
-  exec 7<&-
+  if marker_open_live "$gate_marker"; then gate_waiting=1; exec 7>&-; fi
 fi
+flock -u 6
+exec 6>&-
 multi_waiting_slots=0
 multi_waiting_id=-
 multi_waiting_sequence=
@@ -403,11 +436,7 @@ exec 6>"${ROOT}/slots/multi-queue.lock"
 flock -x 6
 for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
   [ -e "$multi_marker" ] || continue
-  exec 7<>"$multi_marker" || continue
-  if flock -n 7; then
-    rm -f -- "$multi_marker"
-    flock -u 7
-  else
+  if marker_open_live "$multi_marker"; then
     marker_slots=
     marker_started=
     marker_sequence=
@@ -430,26 +459,30 @@ exec 6>&-
 landing_waiting_slots=0
 landing_waiting_id=-
 landing_waiting_started=
+landing_waiting_estimate_ms=-1
+landing_waiting_memory_bytes=${CHECK_SLOT_MEMORY_BYTES}
 landing_waiting_sequence=
 exec 6>"${ROOT}/slots/landing-queue.lock"
 flock -x 6
 for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
   [ -e "$landing_marker" ] || continue
-  exec 7<>"$landing_marker" || continue
-  if flock -n 7; then
-    rm -f -- "$landing_marker"
-    flock -u 7
-  else
+  if marker_open_live "$landing_marker"; then
     marker_slots=
     marker_started=
     marker_sequence=
-    read -r marker_slots marker_started marker_sequence <&7 || true
+    marker_estimate_ms=
+    marker_memory_bytes=
+    read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
+    case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
       landing_waiting_slots=$marker_slots
       landing_marker_id=\${landing_marker##*/landing-wait-}
       landing_waiting_id=\${landing_marker_id%.lock}
       landing_waiting_started=$marker_started
+      landing_waiting_estimate_ms=$marker_estimate_ms
+      landing_waiting_memory_bytes=$marker_memory_bytes
       landing_waiting_sequence=$marker_sequence
     fi
   fi
@@ -457,15 +490,20 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
 done
 flock -u 6
 exec 6>&-
-printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\nLANDING_WAITING_SLOTS %s\\nLANDING_WAITING_ID %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id" "$landing_waiting_slots" "$landing_waiting_id"`;
+printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\nLANDING_WAITING_SLOTS %s\\nLANDING_WAITING_ID %s\\nLANDING_WAITING_STARTED %s\\nLANDING_WAITING_ESTIMATE_MS %s\\nLANDING_WAITING_MEMORY_BYTES %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id" "$landing_waiting_slots" "$landing_waiting_id" "\${landing_waiting_started:--}" "$landing_waiting_estimate_ms" "$landing_waiting_memory_bytes"`;
 }
 
 /** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
 function gateMarkerScript(): string {
   return `# REMOTE_CHECK_GATE_MARKER
 mkdir -p ${ROOT}/slots
-exec 8>"${ROOT}/slots/gate-wait.lock"
-flock -n 8 || exit ${SLOT_BUSY}
+exec 6>"${ROOT}/slots/gate-queue.lock"
+flock -x 6
+exec 8>>"${ROOT}/slots/gate-wait.lock"
+flock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }
+: > "${ROOT}/slots/gate-wait.lock"
+flock -u 6
+exec 6>&-
 echo GATE_MARKER
 exec cat >/dev/null`;
 }
@@ -480,9 +518,10 @@ set -eu
 mkdir -p ${ROOT}/slots
 exec 6>"${ROOT}/slots/multi-queue.lock"
 flock -x 6
-exec 8>${quote(marker)}
+exec 8>>${quote(marker)}
 flock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }
-trap 'rm -f -- ${quote(marker)}; exit 0' HUP INT TERM
+: > ${quote(marker)}
+trap 'exit 0' HUP INT TERM
 sequence_file=${ROOT}/slots/multi-wait-sequence
 sequence=0
 if [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi
@@ -494,13 +533,19 @@ flock -u 6
 exec 6>&-
 echo MULTI_SLOT_MARKER
 cat >/dev/null
-rm -f -- ${quote(marker)}`;
+`;
 }
 
 /** Holds a priority marker until a landing run starts, gives up or is aborted. */
-function landingMarkerScript(id: string, slots: number, arrivalOrder: string): string {
+function landingMarkerScript(
+  id: string,
+  slots: number,
+  arrivalOrder: string,
+  estimateMs: number | undefined,
+  memoryReservationBytes: number,
+): string {
   const marker = `${ROOT}/slots/landing-wait-${id}.lock`;
-  return `# REMOTE_CHECK_LANDING_MARKER\n# REMOTE_CHECK_LANDING_COUNT ${slots}\n# REMOTE_CHECK_LANDING_ID ${id}\n# REMOTE_CHECK_LANDING_ARRIVAL ${arrivalOrder}\nset -eu\nmkdir -p ${ROOT}/slots\nexec 6>"${ROOT}/slots/landing-queue.lock"\nflock -x 6\nexec 8>${quote(marker)}\nflock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }\ntrap 'rm -f -- ${quote(marker)}; exit 0' HUP INT TERM\nsequence_file=${ROOT}/slots/landing-wait-sequence\nsequence=0\nif [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi\ncase "$sequence" in ''|*[!0-9]*) sequence=0 ;; esac\nsequence=$((sequence + 1))\nprintf '%s\\n' "$sequence" > "$sequence_file"\nprintf '%s %s %s\\n' ${slots} ${arrivalOrder} "$sequence" >&8\nflock -u 6\nexec 6>&-\necho LANDING_MARKER\ncat >/dev/null\nrm -f -- ${quote(marker)}`;
+  return `# REMOTE_CHECK_LANDING_MARKER\n# REMOTE_CHECK_LANDING_COUNT ${slots}\n# REMOTE_CHECK_LANDING_ID ${id}\n# REMOTE_CHECK_LANDING_ARRIVAL ${arrivalOrder}\n# REMOTE_CHECK_LANDING_ESTIMATE_MS ${estimateMs ?? 'none'}\n# REMOTE_CHECK_LANDING_MEMORY_BYTES ${memoryReservationBytes}\nset -eu\nmkdir -p ${ROOT}/slots\nexec 6>"${ROOT}/slots/landing-queue.lock"\nflock -x 6\nexec 8>>${quote(marker)}\nflock -n 8 || { flock -u 6; exit ${SLOT_BUSY}; }\n: > ${quote(marker)}\ntrap 'exit 0' HUP INT TERM\nsequence_file=${ROOT}/slots/landing-wait-sequence\nsequence=0\nif [ -e "$sequence_file" ]; then read -r sequence < "$sequence_file" || sequence=0; fi\ncase "$sequence" in ''|*[!0-9]*) sequence=0 ;; esac\nsequence=$((sequence + 1))\nprintf '%s\\n' "$sequence" > "$sequence_file"\nprintf '%s %s %s %s %s\\n' ${slots} ${arrivalOrder} "$sequence" ${estimateMs ?? 'none'} ${memoryReservationBytes} >&8\nflock -u 6\nexec 6>&-\necho LANDING_MARKER\ncat >/dev/null\n`;
 }
 
 /** Takes all requested slots together, or none. The host reservation protects only this short take. */
@@ -514,9 +559,10 @@ export function slotScript(
   estimateMs: number | undefined,
   gate: boolean,
   priority: 'landing' | 'critical' | undefined = undefined,
-  multiWaiterId: string | undefined,
-  memoryReservationBytes: number,
-  landingWaiterId: string | undefined,
+  multiWaiterId?: string,
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  landingWaiterId?: string,
+  pollMs = 5000,
 ): string {
   const slotFdStart = 10;
   const ordinaryLocks = (start: number, end: number, action: 'count' | 'take' | 'skip'): string =>
@@ -569,35 +615,68 @@ fi`
   const gateRemainder = ordinaryCapacity - Math.max(0, ordinaryCapacity - 1);
   const markerPolicy = `gate_waiting=0
 gate_marker=${ROOT}/slots/gate-wait.lock
+marker_open_live() {
+  marker_file=$1
+  marker_attempt=0
+  while [ "$marker_attempt" -lt 3 ]; do
+    exec 7>&-
+    exec 7<>"$marker_file" 2>/dev/null || return 1
+    if flock -n 7; then
+      marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
+      marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
+      if [ -n "$marker_fd_identity" ] && [ "$marker_fd_identity" = "$marker_path_identity" ]; then
+        rm -f -- "$marker_file"
+        flock -u 7
+        exec 7>&-
+        return 1
+      fi
+      flock -u 7
+    else
+      marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
+      marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
+      if [ -n "$marker_fd_identity" ] && [ "$marker_fd_identity" = "$marker_path_identity" ]; then return 0; fi
+    fi
+    exec 7>&-
+    marker_attempt=$((marker_attempt + 1))
+  done
+  return 1
+}
+exec 6>"${ROOT}/slots/gate-queue.lock"
+flock -x 6
 if [ -e "$gate_marker" ]; then
-  exec 7<>"$gate_marker"
-  if flock -n 7; then
-    rm -f -- "$gate_marker"
-    flock -u 7
-  else
-    gate_waiting=1
-  fi
-  exec 7>&-
+  if marker_open_live "$gate_marker"; then gate_waiting=1; exec 7>&-; fi
 fi
+flock -u 6
+exec 6>&-
 landing_waiting_slots=0
 landing_waiting_id=-
+landing_waiting_started=
+landing_waiting_estimate_ms=-1
+landing_waiting_memory_bytes=${CHECK_SLOT_MEMORY_BYTES}
 landing_waiting_sequence=
+exec 6>"${ROOT}/slots/landing-queue.lock"
+flock -x 6
 for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
   [ -e "$landing_marker" ] || continue
-  exec 7<>"$landing_marker" || continue
-  if flock -n 7; then rm -f -- "$landing_marker"; flock -u 7; else
-    marker_slots=; marker_started=; marker_sequence=
-    read -r marker_slots marker_started marker_sequence <&7 || true
+  if marker_open_live "$landing_marker"; then
+    marker_slots=; marker_started=; marker_sequence=; marker_estimate_ms=; marker_memory_bytes=
+    read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
+    case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
       landing_waiting_slots=$marker_slots
       landing_marker_id=\${landing_marker##*/landing-wait-}; landing_waiting_id=\${landing_marker_id%.lock}
       landing_waiting_started=$marker_started
+      landing_waiting_estimate_ms=$marker_estimate_ms
+      landing_waiting_memory_bytes=$marker_memory_bytes
       landing_waiting_sequence=$marker_sequence
     fi
   fi
   exec 7>&-
 done
+flock -u 6
+exec 6>&-
 multi_waiting_slots=0
 multi_waiting_id=-
 multi_waiting_sequence=
@@ -605,11 +684,7 @@ exec 6>"${ROOT}/slots/multi-queue.lock"
 flock -x 6
 for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
   [ -e "$multi_marker" ] || continue
-  exec 7<>"$multi_marker" || continue
-  if flock -n 7; then
-    rm -f -- "$multi_marker"
-    flock -u 7
-  else
+  if marker_open_live "$multi_marker"; then
     marker_slots=
     marker_started=
     marker_sequence=
@@ -627,23 +702,38 @@ for multi_marker in ${ROOT}/slots/multi-wait-*.lock; do
   fi
   exec 7>&-
 done
-ordinary_admission_limit=${ordinaryAdmissionLimit}
+`;
+  const admissionPolicy = `ordinary_admission_limit=${ordinaryAdmissionLimit}
 wait_behind_older_multi=0
-wait_behind_older_landing=0
+landing_priority_active=0
 if [ "$gate_waiting" -eq 1 ]; then
   if [ ${gate ? 1 : 0} -eq 1 ]; then
     ordinary_admission_limit=${ordinaryCapacity}
   else
     ordinary_admission_limit=${gateRemainder}
   fi
-elif [ "$landing_waiting_slots" -gt 0 ] && [ ${gate ? 0 : 1} -eq 1 ]; then
+elif [ ${gate ? 0 : 1} -eq 1 ] && [ "$landing_waiting_slots" -gt 0 ]; then
   if [ ${landingWaiterId ? quote(landingWaiterId) : "''"} = "$landing_waiting_id" ]; then
     ordinary_admission_limit=${ordinaryCapacity}
+    landing_priority_active=1
   else
-    ordinary_admission_limit=0
-    wait_behind_older_landing=1
+    landing_estimate_ms=$landing_waiting_estimate_ms
+    case "$landing_estimate_ms" in ''|*[!0-9]*) landing_estimate_ms=${DEFAULT_MAX_MS} ;; esac
+    [ "$landing_estimate_ms" -le ${DEFAULT_MAX_MS} ] || landing_estimate_ms=${DEFAULT_MAX_MS}
+    landing_opportunity_ms=$landing_estimate_ms
+    [ "$landing_opportunity_ms" -le ${pollMs} ] || landing_opportunity_ms=${pollMs}
+    [ "$landing_opportunity_ms" -gt 0 ] || landing_opportunity_ms=1
+    landing_now_ms=$(date +%s%3N)
+    landing_age_ms=$((landing_now_ms - landing_waiting_started))
+    [ "$landing_age_ms" -ge 0 ] || landing_age_ms=0
+    landing_free_slots=$((${ordinaryCapacity} - ordinary_used))
+    if [ "$landing_age_ms" -lt "$landing_opportunity_ms" ] && [ "$landing_free_slots" -ge "$landing_waiting_slots" ] && [ "$((held_memory + landing_waiting_memory_bytes))" -le "$memory_max_bytes" ]; then
+      ordinary_admission_limit=$((${ordinaryCapacity} - landing_waiting_slots))
+      landing_priority_active=1
+    fi
   fi
-elif [ ${gate ? 1 : 0} -eq 0 ] && [ "$multi_waiting_slots" -gt 0 ]; then
+fi
+if [ ${gate ? 0 : 1} -eq 1 ] && [ "$gate_waiting" -eq 0 ] && [ "$landing_priority_active" -eq 0 ] && [ "$multi_waiting_slots" -gt 0 ]; then
   if [ ${multiWaiterId ? quote(multiWaiterId) : "''"} = "$multi_waiting_id" ]; then
     ordinary_admission_limit=${ordinaryCapacity}
   else
@@ -745,7 +835,8 @@ reserved_slots=
 ordinary_used=0
 # REMOTE_CHECK_ORDINARY_BUSY_COUNT_PASS
 ${countBusyOrdinary}
-if [ "$wait_behind_older_multi" -eq 1 ] || { [ "\${wait_behind_older_landing:-0}" -eq 1 ] && [ ${shortRun ? 0 : 1} -eq 1 ]; } || { [ ${priority !== undefined ? 1 : 0} -eq 1 ] && [ "$gate_waiting" -eq 1 ]; }; then exit ${SLOT_BUSY}; fi
+${admissionPolicy}
+if [ "$wait_behind_older_multi" -eq 1 ] || { [ ${priority !== undefined ? 1 : 0} -eq 1 ] && [ "$gate_waiting" -eq 1 ]; }; then exit ${SLOT_BUSY}; fi
 ${takeOrdinary}
 ${expressTake}
 ${countOtherOrdinary}
@@ -1172,6 +1263,9 @@ type HostProbe = {
   multiWaitingId: string | null;
   landingWaitingSlots: number;
   landingWaitingId: string | null;
+  landingWaitingStarted: number | null;
+  landingWaitingEstimateMs: number | null;
+  landingWaitingMemoryBytes: number;
 };
 type RankedHost = {
   host: Host;
@@ -1209,32 +1303,48 @@ function rankHost(
   multiWaiterId?: string,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   landingWaiterId?: string,
+  pollMs = 5000,
 ): RankedHost {
   const capacity = hostCapacity(host, probe);
   const ordinaryCapacity = Math.max(0, capacity - 1);
   const gateCapacity = Math.max(0, ordinaryCapacity - 1);
   const hasMultiWaiter = !probe.gateWaiting && probe.multiWaitingSlots > 0;
   const isOldestMultiWaiter = hasMultiWaiter && multiWaiterId !== undefined && probe.multiWaitingId === multiWaiterId;
-  const waitsBehindOlderMulti = hasMultiWaiter && slots > 1 && multiWaiterId !== undefined && !isOldestMultiWaiter;
   const hasLandingWaiter = probe.landingWaitingSlots > 0;
   const isOldestLandingWaiter =
     hasLandingWaiter && landingWaiterId !== undefined && probe.landingWaitingId === landingWaiterId;
-  const waitsBehindLanding = hasLandingWaiter && !gate && !isOldestLandingWaiter;
+  const resourceSlots = probeCapacity(capacity);
+  const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
+  const landingAgeMs =
+    probe.landingWaitingStarted === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - probe.landingWaitingStarted);
+  const landingOpportunityActive =
+    !gate &&
+    !probe.gateWaiting &&
+    hasLandingWaiter &&
+    landingAgeMs < landingOpportunityMs(probe.landingWaitingEstimateMs, pollMs) &&
+    probe.ordinarySlotsUsed <= ordinaryCapacity &&
+    ordinaryCapacity - probe.ordinarySlotsUsed >= probe.landingWaitingSlots &&
+    probe.memoryReserved + probe.landingWaitingMemoryBytes <= memoryMaximum;
+  const waitsBehindOlderMulti =
+    !probe.gateWaiting &&
+    !landingOpportunityActive &&
+    hasMultiWaiter &&
+    slots > 1 &&
+    multiWaiterId !== undefined &&
+    !isOldestMultiWaiter;
   const ordinaryAdmissionLimit = gate
     ? ordinaryCapacity
     : probe.gateWaiting
       ? ordinaryCapacity - gateCapacity
-      : hasLandingWaiter
+      : landingOpportunityActive
         ? isOldestLandingWaiter
           ? ordinaryCapacity
-          : 0
+          : Math.max(0, ordinaryCapacity - probe.landingWaitingSlots)
         : hasMultiWaiter
           ? isOldestMultiWaiter
             ? ordinaryCapacity
             : ordinaryCapacity - probe.multiWaitingSlots
           : ordinaryCapacity;
-  const resourceSlots = probeCapacity(capacity);
-  const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
   const shortRun = priority === undefined && isShortRun(slots, estimateMs, gate);
   let freeSlots: number;
   let slotLimit: number;
@@ -1252,12 +1362,7 @@ function rankHost(
   }
   if (probe.memoryReserved + slots * memoryReservationBytes > memoryMaximum) freeSlots = 0;
   if (waitsBehindOlderMulti) freeSlots = 0;
-  if (
-    (waitsBehindLanding && !shortRun) ||
-    (priority === 'landing' && probe.gateWaiting) ||
-    (priority === 'landing' && hasLandingWaiter && !isOldestLandingWaiter)
-  )
-    freeSlots = 0;
+  if (priority !== undefined && probe.gateWaiting) freeSlots = 0;
   return {
     host,
     capacity,
@@ -1339,6 +1444,12 @@ function parseProbe(output: string): HostProbe | null {
   const landingWaitingSlots = Number(landingWaitingSlotsValue);
   const landingWaitingIdValue = value('LANDING_WAITING_ID');
   const landingWaitingId = landingWaitingIdValue === '-' ? null : landingWaitingIdValue;
+  const landingWaitingStartedValue = value('LANDING_WAITING_STARTED');
+  const landingWaitingStarted = landingWaitingStartedValue === '-' ? null : Number(landingWaitingStartedValue);
+  const landingWaitingEstimateValue = value('LANDING_WAITING_ESTIMATE_MS');
+  const landingWaitingEstimateMs = landingWaitingEstimateValue === '-1' ? null : Number(landingWaitingEstimateValue);
+  const landingWaitingMemoryValue = value('LANDING_WAITING_MEMORY_BYTES');
+  const landingWaitingMemoryBytes = Number(landingWaitingMemoryValue);
   if (
     processorValue === null ||
     sliceProcessorValue === null ||
@@ -1384,6 +1495,14 @@ function parseProbe(output: string): HostProbe | null {
     landingWaitingIdValue === null ||
     (landingWaitingId !== null && !/^[a-zA-Z0-9-]+$/.test(landingWaitingId)) ||
     (landingWaitingSlots === 0) !== (landingWaitingId === null) ||
+    landingWaitingStartedValue === null ||
+    (landingWaitingStarted !== null && (!Number.isSafeInteger(landingWaitingStarted) || landingWaitingStarted < 0)) ||
+    (landingWaitingSlots === 0) !== (landingWaitingStarted === null) ||
+    landingWaitingEstimateValue === null ||
+    (landingWaitingEstimateMs !== null && (!Number.isSafeInteger(landingWaitingEstimateMs) || landingWaitingEstimateMs < 0)) ||
+    landingWaitingMemoryValue === null ||
+    !Number.isSafeInteger(landingWaitingMemoryBytes) ||
+    landingWaitingMemoryBytes < 1 ||
     (!sliceMemory && !memoryFallback)
   )
     return null;
@@ -1404,6 +1523,9 @@ function parseProbe(output: string): HostProbe | null {
     multiWaitingId,
     landingWaitingSlots,
     landingWaitingId,
+    landingWaitingStarted,
+    landingWaitingEstimateMs,
+    landingWaitingMemoryBytes,
   };
 }
 
@@ -1521,6 +1643,7 @@ async function takeSlots(
   memoryReservationBytes: number,
   landingWaiterId: string | undefined,
   signal: AbortSignal,
+  pollMs = 5000,
 ): Promise<Lease | null> {
   return takeSession(
     host,
@@ -1537,6 +1660,7 @@ async function takeSlots(
       multiWaiterId,
       memoryReservationBytes,
       landingWaiterId,
+      pollMs,
     ),
     /^SLOTS? \d+$/m,
     signal,
@@ -1561,9 +1685,16 @@ async function takeLandingMarker(
   id: string,
   slots: number,
   arrivalOrder: string,
+  estimateMs: number | undefined,
+  memoryReservationBytes: number,
   signal: AbortSignal,
 ): Promise<SessionLease | null> {
-  return takeSession(host, landingMarkerScript(id, slots, arrivalOrder), /^LANDING_MARKER$/m, signal);
+  return takeSession(
+    host,
+    landingMarkerScript(id, slots, arrivalOrder, estimateMs, memoryReservationBytes),
+    /^LANDING_MARKER$/m,
+    signal,
+  );
 }
 
 /** Hosts that can admit slots, with the most resource-backed free slots first. */
@@ -1580,6 +1711,7 @@ async function rankedHosts(
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   priority: 'landing' | 'critical' | undefined = undefined,
   landingWaiterId?: string,
+  pollMs = 5000,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
   if (signal.aborted) throw new Aborted();
@@ -1621,6 +1753,7 @@ async function rankedHosts(
           multiWaiterId,
           memoryReservationBytes,
           landingWaiterId,
+          pollMs,
         ),
       )
       // Equal slot counts prefer the host with more measured slice memory headroom.
@@ -1647,6 +1780,7 @@ async function acquireOnce(
   gate = false,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   priority: 'landing' | 'critical' | undefined = undefined,
+  pollMs = 5000,
 ): Promise<Lease | null> {
   const landingWaiterId = priority !== undefined ? randomUUID() : undefined;
   const ranked = await rankedHosts(
@@ -1662,6 +1796,7 @@ async function acquireOnce(
     memoryReservationBytes,
     priority,
     landingWaiterId,
+    pollMs,
   );
   let slots = requestedSlots;
   if (ranked.length > 0) {
@@ -1701,6 +1836,7 @@ async function acquireOnce(
       memoryReservationBytes,
       landingWaiterId,
       signal,
+      pollMs,
     );
     if (lease && signal.aborted) {
       await lease.release();
@@ -1783,6 +1919,7 @@ async function acquire(
         landingMarker = undefined;
         landingMarkerHost = undefined;
       }
+      const currentSkippedHosts = new Map<string, string>();
       const ranked = await rankedHosts(
         hosts,
         signal,
@@ -1791,12 +1928,15 @@ async function acquire(
         gate,
         slots === 1,
         multiWaiterId,
-        skippedHosts,
+        currentSkippedHosts,
         loggedSkipLines,
         memoryReservationBytes,
         priority,
         landingWaiterId,
+        pollMs,
       );
+      skippedHosts.clear();
+      for (const [hostName, reason] of currentSkippedHosts) skippedHosts.set(hostName, reason);
       if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
         if (marker) await marker.release();
         marker = undefined;
@@ -1870,6 +2010,7 @@ async function acquire(
           memoryReservationBytes,
           landingWaiterId,
           signal,
+          pollMs,
         );
         if (lease && signal.aborted) {
           await lease.release();
@@ -1907,10 +2048,26 @@ async function acquire(
           if (landingMarker) await landingMarker.release();
           landingMarkerHost = target.host.name;
           landingMarker =
-            (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
+            (await takeLandingMarker(
+              target.host,
+              landingWaiterId,
+              slots,
+              landingArrivalOrder!,
+              estimateMs,
+              memoryReservationBytes,
+              signal,
+            )) ?? undefined;
         } else if (target && !landingMarker) {
           landingMarker =
-            (await takeLandingMarker(target.host, landingWaiterId, slots, landingArrivalOrder!, signal)) ?? undefined;
+            (await takeLandingMarker(
+              target.host,
+              landingWaiterId,
+              slots,
+              landingArrivalOrder!,
+              estimateMs,
+              memoryReservationBytes,
+              signal,
+            )) ?? undefined;
         }
       }
       if (multiWaiterId && ranked.length > 0) {
@@ -2300,6 +2457,7 @@ async function runWithTransportRetries(
         options.gate ?? false,
         memoryReservationBytes,
         options.priority,
+        options.pollMs ?? 5000,
       );
       if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
         lease = await acquire(
@@ -2371,6 +2529,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       options.gate ?? false,
       memoryReservationBytes,
       options.priority,
+      options.pollMs ?? 5000,
     );
     if (!lease) return { status: 'no-slot' };
     try {

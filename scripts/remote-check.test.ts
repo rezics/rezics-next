@@ -4130,7 +4130,7 @@ test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', asyn
   expect(onRemote.events().some((event) => event.kind === 'run')).toBe(true);
 });
 
-test('landing priority: a waiting landing run starts before ordinary and multi-slot waiters when its slots free', async () => {
+test('landing priority: a waiting landing run reserves its slots while ordinary and multi-slot work backfill surplus', async () => {
   const { env, events } = scenario({
     b: { available: 20e9, slots: 6, cpuQuotaPercent: 1200, ordinaryBusySlots: [0, 1, 2, 3, 4] },
   });
@@ -4185,6 +4185,14 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
         ),
       10_000,
     );
+    await waitFor(() =>
+      events().some(
+        (event) =>
+          event.kind === 'slot' &&
+          event.granted &&
+          String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
+      ),
+    );
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
     const landingGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_PRIORITY landing'));
     const ordinaryGrant = grants.findIndex(
@@ -4193,40 +4201,18 @@ test('landing priority: a waiting landing run starts before ordinary and multi-s
         String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
     );
     const multiGrant = grants.findIndex(
-      (event, index) => index > landingGrant && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
+      (event) => String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
     );
     expect(landingGrant).toBeGreaterThanOrEqual(0);
-    expect(
-      ordinaryGrant,
-      JSON.stringify({
-        landingExit: landing.child.exitCode,
-        landingStderr: landing.child.exitCode === null ? undefined : await landing.stderr,
-        ordinary: grants
-          .filter((event) => String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 999999'))
-          .map(({ actualAdmissionLimit, landingMarkerIds, slotClass }) => ({
-            actualAdmissionLimit,
-            landingMarkerIds,
-            slotClass,
-          })),
-        order: grants.map((event) => ({
-          priority: String(event.script).match(/# REMOTE_CHECK_PRIORITY (\w+)/)?.[1],
-          estimate: String(event.script).match(/# REMOTE_CHECK_ESTIMATE_MS (\w+)/)?.[1],
-        })),
-        timeline: events().map(
-          ({ kind, id, requested, actualAdmissionLimit, landingMarkerIds, arrivalOrder, sequence, reason }) => ({
-            kind,
-            id,
-            requested,
-            actualAdmissionLimit,
-            landingMarkerIds,
-            arrivalOrder,
-            sequence,
-            reason,
-          }),
-        ),
-      }),
-    ).toBeGreaterThan(landingGrant);
-    expect(multiGrant).toBeGreaterThan(landingGrant);
+    expect(ordinaryGrant).toBeGreaterThanOrEqual(0);
+    expect(multiGrant).toBeGreaterThanOrEqual(0);
+    const landingMarkerId = String(events().find((event) => event.kind === 'landing-marker')?.id);
+    for (const index of [ordinaryGrant, multiGrant]) {
+      if (index < landingGrant) {
+        expect(grants[index]!.actualAdmissionLimit).toBe(2);
+        expect(grants[index]!.landingMarkerIds).toContain(landingMarkerId);
+      }
+    }
     await waitFor(
       () => events().some((event) => event.kind === 'run' && String(event.script).includes('echo ordinary')),
       10_000,
@@ -4412,6 +4398,52 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
     }
     rmSync(directory, { recursive: true, force: true });
   }
+
+  const memoryCase = scenario({
+    b: {
+      available: 20e9,
+      slots: 4,
+      memoryMax: 4 * 2 ** 30,
+      memoryMaxGiB: 4,
+      memoryHeadroom: 4 * 2 ** 30,
+      holdLandingGrant: true,
+    },
+  });
+  memoryCase.env.REMOTE_CHECK_POLL_MS = '20';
+  const memoryDirectory = workspace();
+  const memoryHead = startRemote(
+    { ...memoryCase.env, REMOTE_CHECK_PRIORITY: 'landing' },
+    memoryDirectory,
+    ['sh', '-c', 'echo impossible-memory-head'],
+    ['--slots', '2', '--memory-gib', '6'],
+  );
+  let memoryBackfill: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => memoryCase.events().some((event) => event.kind === 'landing-marker'));
+    memoryBackfill = startRemote(
+      memoryCase.env,
+      memoryDirectory,
+      ['sh', '-c', 'echo smaller-memory-backfill'],
+      ['--memory-gib', '4', '--estimate-ms', '120001'],
+    );
+    await waitFor(() => memoryCase.events().some((event) => event.kind === 'run' && String(event.script).includes('echo smaller-memory-backfill')));
+    const grant = memoryCase.events().find(
+      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
+    )!;
+    expect(grant.actualAdmissionLimit).toBe(3);
+    expect(grant.slot).toBe(0);
+    expect(await memoryBackfill.child.exited).toBe(0);
+  } finally {
+    for (const run of [memoryBackfill, memoryHead]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+    rmSync(memoryDirectory, { recursive: true, force: true });
+  }
 });
 
 test('admission backfill: a fitting priority head gets the first opportunity without indefinite exclusion by a stalled head', async () => {
@@ -4453,6 +4485,43 @@ test('admission backfill: a fitting priority head gets the first opportunity wit
       await Promise.all([run.stdout, run.stderr]);
     }
     rmSync(directory, { recursive: true, force: true });
+  }
+
+  const missingEstimate = scenario({ b: { available: 20e9, slots: 2, holdLandingGrant: true } });
+  missingEstimate.env.REMOTE_CHECK_POLL_MS = '100';
+  const missingDirectory = workspace();
+  const unestimatedHead = startRemote(
+    { ...missingEstimate.env, REMOTE_CHECK_PRIORITY: 'critical' },
+    missingDirectory,
+    ['sh', '-c', 'echo unestimated-head'],
+  );
+  let missingEstimateBackfill: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => missingEstimate.events().some((event) => event.kind === 'landing-marker'));
+    missingEstimateBackfill = startRemote(
+      missingEstimate.env,
+      missingDirectory,
+      ['sh', '-c', 'echo finite-default-backfill'],
+      ['--estimate-ms', '120001'],
+    );
+    await waitFor(() => missingEstimate.events().some((event) => event.kind === 'run' && String(event.script).includes('echo finite-default-backfill')));
+    const marker = missingEstimate.events().find((event) => event.kind === 'landing-marker')!;
+    const grant = missingEstimate.events().find(
+      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+    )!;
+    expect(marker.estimateMs).toBeNull();
+    expect(grant.actualAdmissionLimit).toBe(1);
+    expect(await missingEstimateBackfill.child.exited).toBe(0);
+  } finally {
+    for (const run of [missingEstimateBackfill, unestimatedHead]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+    rmSync(missingDirectory, { recursive: true, force: true });
   }
 });
 
@@ -4604,8 +4673,11 @@ test('admission backfill: capacity, memory, gate and express reservations remain
       } catch {}
       await holder.exited;
     }
+    const sentinelLockStatus = spawnSync('/usr/bin/flock', ['-n', sentinel, '-c', 'true']).status;
+    sentinelHolder.kill();
+    await sentinelHolder.exited;
+    expect(sentinelLockStatus).not.toBe(0);
   }
-  expect(spawnSync('/usr/bin/flock', ['-n', sentinel, '-c', 'true']).status).not.toBe(0);
 
   const memoryRoot = join(testRoot, 'memory-host');
   const memoryHolder = Bun.spawn(
@@ -4679,6 +4751,5 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     await express.stdin.end();
     expect(await express.exited).toBe(0);
     for (const blocker of blockers) blocker.kill();
-    sentinelHolder.kill();
   }
 });
