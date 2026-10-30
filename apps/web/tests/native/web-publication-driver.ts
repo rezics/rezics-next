@@ -314,9 +314,42 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       batches.map(async ({ persona, entries: writerEntries }) => {
         for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
           const batch = writerEntries.slice(start, start + fixtureBatchSize);
+          if (batch.length === 1 && batch[0]!.key === 'book') {
+            const author = created.get('person');
+            if (!author) throw new Error('Fixture person must be created before its book');
+            const entry = batch[0]!;
+            const response = await kernel(
+              '/v1/subjects',
+              {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'idempotency-key': JSON.stringify(crypto.randomUUID()),
+                },
+                body: JSON.stringify({
+                  type: entry.type,
+                  labels: entry.labels,
+                  ...(entry.descriptions ? { descriptions: entry.descriptions } : {}),
+                  statements: {
+                    'schema:author': [
+                      {
+                        property: { id: 'schema:author' },
+                        value: { type: 'value', content: author.id },
+                      },
+                    ],
+                  },
+                }),
+              },
+              persona,
+            );
+            if (!response.ok)
+              throw new Error(`Could not create fixture book through kernel API: ${response.status} ${await response.text()}`);
+            const result = (await response.json()) as { subject?: { id: string } };
+            if (!result.subject?.id) throw new Error('Fixture book API response lacked its created identity');
+            created.set(entry.key, { id: result.subject.id, label: entry.label, labels: entry.labels, type: entry.type });
+            continue;
+          }
           const commands = batch.map(({ key, type, labels, descriptions }) => {
-            const author = key === 'book' ? created.get('person') : undefined;
-            if (key === 'book' && !author) throw new Error('Fixture person must be created before its book');
             return {
               op: 'create',
               key,
@@ -332,20 +365,6 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
                 type,
                 labels,
                 ...(descriptions ? { descriptions } : {}),
-                ...(author
-                  ? {
-                      statements: {
-                        'schema:author': [
-                          {
-                            property: { id: 'schema:author' },
-                            value: { type: 'value', content: author.id },
-                            qualifiers: [],
-                            references: [],
-                          },
-                        ],
-                      },
-                    }
-                  : {}),
               },
             };
           });
