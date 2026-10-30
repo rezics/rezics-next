@@ -6,7 +6,8 @@ import { m } from '../src/paraglide/messages.js';
 import { loadExactRevision, type ExactRevisionResponse, type ExactRevisionState } from '../src/threads/exact-revision';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
 import { ExactRevisionView } from '../src/threads/exact-revision-view';
-import { current, identity, later, selected } from '../src/stories/exact-revision/fixture';
+import { loadRevisionDocumentMedia, revisionDocumentImageIds } from '../src/threads/exact-revision-media';
+import { current, id, identity, later, selected } from '../src/stories/exact-revision/fixture';
 
 function client(handler: (request: Request) => Response) {
   return createKernelClient('https://kernel.test', {
@@ -123,4 +124,114 @@ test('current denial replaces readable content without cached body, parent title
   exactStatus = 200;
   post = selected;
   expect(markup(await loadExactRevision(kernel, identity))).toContain('The original edition');
+});
+
+test('Exact revision and history use genuine current derivative images', async () => {
+  // The original shared producer is absent in this checkout. Its admitted outcome is typed
+  // unavailability, never an invented variant, original download or a second media caller.
+  const revision = {
+    ...selected,
+    mediaIds: [id(60), id(61)],
+    body: {
+      ...selected.body,
+      doc: {
+        ...selected.body.doc,
+        content: [
+          ...(selected.body.doc.content ?? []),
+          { type: 'image', attrs: { id: 'native-image', src: id(60), alt: 'A quiet reading room' } },
+          { type: 'image', attrs: { id: 'undeclared-image', src: id(62), alt: 'Unavailable illustration' } },
+          { type: 'image', attrs: { id: 'external-image', src: 'https://images.example/private.jpg', alt: '' } },
+        ],
+      },
+    },
+  };
+  const requests: Request[] = [];
+  let denied = false;
+  const kernel = client((call) => {
+    requests.push(call);
+    const path = new URL(call.url).pathname;
+    if (path === `/v1/posts/${identity.postId}/revisions/${identity.revisionId}`)
+      return denied ? Response.json({ code: 'not_found' }, { status: 404 }) : Response.json({ post: revision });
+    if (path === `/v1/threads/${selected.threadId}`) return Response.json(current);
+    if (path === '/v1/accounts') return Response.json({ accounts: [] });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const page = await loadExactRevision(kernel, identity, 'Bearer reader');
+  expect(page.state).toBe('ready');
+  if (page.state !== 'ready') throw new Error('Expected independently readable exact revision');
+  expect(page.documentMedia).toEqual({ kind: 'unavailable' });
+  expect(revisionDocumentImageIds([page.revision])).toEqual([id(60)]);
+  const html = markup(page);
+  expect(html).toContain('A quiet reading room');
+  expect(html).toContain(m.content_edition_image_unavailable());
+  expect(html).not.toContain('<img');
+  expect(html).not.toContain('<picture');
+  expect(html).not.toContain('https://images.example');
+  expect(html).not.toContain('/original');
+  expect(html).toContain(selected.licence);
+  expect(page.revision.sha256).toBe(selected.sha256);
+  expect(page.thread.differentHead).toBe(true);
+  // History shares this exact absence boundary; it has no per-revision/per-image substitute.
+  expect(
+    await loadRevisionDocumentMedia(kernel, revisionDocumentImageIds([revision, later]), 'Bearer reader'),
+  ).toEqual({ kind: 'unavailable' });
+  expect(requests).toHaveLength(3);
+  expect(
+    requests
+      .filter((request) => !request.url.includes('/accounts'))
+      .every((request) => request.headers.get('authorization') === 'Bearer reader'),
+  ).toBe(true);
+
+  denied = true;
+  requests.length = 0;
+  const withheld = await loadExactRevision(kernel, identity, 'Bearer reader');
+  expect(withheld).toEqual({ state: 'unavailable', status: 404 });
+  expect(requests).toHaveLength(1);
+  expect(markup(withheld)).not.toContain('A quiet reading room');
+  expect(markup(withheld)).not.toContain('data-slot="document-body"');
+});
+
+test('history image references stay within each native page and each available revision declaration', () => {
+  const images = Array.from({ length: 35 }, (_, index) => id(100 + index));
+  const revision = {
+    ...selected,
+    mediaIds: [...images, id(200)],
+    body: {
+      ...selected.body,
+      doc: {
+        type: 'doc',
+        content: images.flatMap((src, index) => [
+          { type: 'image', attrs: { id: `image-${index}`, src, alt: 'Recorded illustration' } },
+          { type: 'image', attrs: { id: `repeated-image-${index}`, src, alt: 'Repeated illustration' } },
+        ]),
+      },
+    },
+  };
+  const firstPage = revisionDocumentImageIds([revision]);
+  expect(firstPage).toEqual(images.slice(0, 32));
+  expect(firstPage).not.toContain(id(200));
+  expect(firstPage).not.toContain(images[32]!);
+
+  const nextPage = {
+    ...revision,
+    revisionId: id(201),
+    mediaIds: [id(202)],
+    body: {
+      ...revision.body,
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'image', attrs: { id: 'current-page-image', src: id(202), alt: 'Next recorded illustration' } },
+          // This was declared on another page; that declaration cannot rescue this reference.
+          { type: 'image', attrs: { id: 'old-page-image', src: images[0]!, alt: 'Unbound reference' } },
+        ],
+      },
+    },
+  };
+  expect(revisionDocumentImageIds([nextPage])).toEqual([id(202)]);
+  for (const availability of ['withheld', 'erased'])
+    expect(revisionDocumentImageIds([{ ...revision, availability }])).toEqual([]);
+  expect(revisionDocumentImageIds([{ ...revision, body: null }])).toEqual([]);
+  // A declaration on a different revision in the same page is also insufficient.
+  expect(revisionDocumentImageIds([{ ...revision, body: selected.body }, { ...nextPage, mediaIds: [] }])).toEqual([]);
 });

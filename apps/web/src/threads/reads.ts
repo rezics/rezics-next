@@ -19,6 +19,11 @@ import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
 import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
+import {
+  loadRevisionDocumentMedia,
+  revisionDocumentImageIds,
+  type RevisionDocumentMedia,
+} from './exact-revision-media';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -209,6 +214,7 @@ export const readPostHistory = createServerFn({ method: 'GET' })
           mentions: DocumentMentions;
           subjects: ThreadSubject[];
           reviewVotes: RevisionVotes;
+          documentMedia: RevisionDocumentMedia;
           now: string;
         }
     > => {
@@ -230,6 +236,11 @@ export const readPostHistory = createServerFn({ method: 'GET' })
         const result = await client.posts({ id: data.postId }).revisions.get(options);
         if (result.error || !result.data) return { available: false };
         const revisions = result.data.revisions;
+        const documentMedia = await loadRevisionDocumentMedia(
+          client,
+          revisionDocumentImageIds(revisions),
+          authorization,
+        );
         const viewerId = sessionSubject(request);
         const [authors, mentions, subjects, reviewVotes] = await Promise.all([
           readPageAuthors(
@@ -255,6 +266,7 @@ export const readPostHistory = createServerFn({ method: 'GET' })
           mentions,
           subjects,
           reviewVotes,
+          documentMedia,
           now: new Date().toISOString(),
         };
       } catch {

@@ -4,6 +4,11 @@ import { readPageAuthors, type PageAuthors } from '../identity/read';
 import { readDocumentMentions } from '../kernel/mentions';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { threadTitle } from './thread-href';
+import {
+  loadRevisionDocumentMedia,
+  revisionDocumentImageIds,
+  type RevisionDocumentMedia,
+} from './exact-revision-media';
 
 type RevisionResource = ReturnType<ReturnType<KernelClient['posts']>['revisions']>;
 export type ExactRevisionResponse = NonNullable<Awaited<ReturnType<RevisionResource['get']>>['data']>;
@@ -19,6 +24,7 @@ export type ExactRevisionState =
       thread: { id: string; title: string | null; differentHead: boolean };
       authors: PageAuthors;
       mentions: DocumentMentions;
+      documentMedia: RevisionDocumentMedia;
       now: string;
     };
 
@@ -57,9 +63,10 @@ export async function loadExactRevision(
     const thread = context.data.thread;
     if (thread.id !== revision.threadId) return { state: 'unavailable', status: 404 };
     const opening = thread.firstPost;
-    const [authors, mentions] = await Promise.all([
+    const [authors, mentions, documentMedia] = await Promise.all([
       readPageAuthors(client, [revision.authorId]),
       readDocumentMentions(client, [revision.body]),
+      loadRevisionDocumentMedia(client, revisionDocumentImageIds([revision]), authorization),
     ]);
     return {
       state: 'ready',
@@ -75,6 +82,7 @@ export async function loadExactRevision(
       },
       authors,
       mentions,
+      documentMedia,
       now: new Date().toISOString(),
     };
   } catch (error) {

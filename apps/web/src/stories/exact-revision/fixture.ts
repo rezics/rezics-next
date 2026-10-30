@@ -82,6 +82,7 @@ export const ready: Extract<ExactRevisionState, { state: 'ready' }> = {
   thread: { id: current.thread.id, title: current.thread.title, differentHead: false },
   authors: {},
   mentions: {},
+  documentMedia: { kind: 'unavailable' },
   now: '2026-10-31T13:00:00Z',
 };
 export const exactRevisionViewports = {

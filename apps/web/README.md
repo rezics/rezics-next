@@ -1556,6 +1556,45 @@ admitted batch-summary transport here, so provenance retains stable recorded IDs
 need no private vote read. `Patterns/Community/Exact revision` and its Page stories share the product reading region;
 constructed native DTO examples do not establish native acceptance. The two focused outcomes live in
 `tests/exact-revision.test.ts`.
+
+#### Document images in exact revisions and history
+
+Exact revision and native history reads expose a consumer-local `documentMedia: { kind: 'unavailable' }`
+boundary in `threads/exact-revision-media.ts`. The original `threads/document-media.ts`, its
+`document-media-image.tsx` re-export and the native `content/media-presentation.ts` source are absent from this
+checkout. This boundary makes no media requests and introduces no renderer, variant list or download URL.
+Both readers retain the actual Web `DocumentBody` wrapper and its localized, accessible unavailable image state.
+An unavailable image says nothing about erasure, permission, copies or the existence of the original.
+
+The consumer needs the original shared exports, without a second adapter or provider API:
+
+- `loadDocumentMedia(client, ids, authorization?)` returning
+  `{ kind: 'ready'; images: ReadonlyMap<string, DocumentImagePresentation> } | { kind: 'unavailable' }`.
+- `NativeDocumentImage({ image: DocumentImagePresentation | null, alt, locale })`, re-exported by that module.
+
+When those exports are delivered, replace the isolated absence boundary with the original import and supply
+`NativeDocumentImage` as the explicit `DocumentBody.renderImage` callback in exact revision and `PostHistory`.
+The canonical native presentation contains only original ID, container ID, digest, dimensions, actual AVIF/WebP
+variants, placeholder, focal point and native credit. Select only returned variants through `coverSrc`; the
+authorized Worker download remains the final media authority. No guessed derivative, original, external URL,
+per-image GET, renderer fetch, retry or refill belongs in these consumers. Paid content and an author's current vote
+do not supply generic post or image authority.
+
+`revisionDocumentImageIds` selects at most 32 distinct original IDs from available bodies on the delivered page,
+intersecting each body's image references with that revision's own declared `mediaIds`. Withheld/erased bodies,
+unused declarations, current-head substitutions and other history pages contribute nothing. Overflow images stay
+unavailable. Each independent history request still asks for 20 revisions with the original cursor and does not
+drain subsequent pages. The existing exact resource and thread reads, native before/final document disclosure,
+immutable provenance and current author/mention disclosure remain independent of media.
+
+The named acceptance journey and focused current-denial/page-bound cases are in `tests/exact-revision.test.ts`;
+execution remains deferred to integration. Web can review the actual unavailable-image Page at
+`pages-community-exact-revision--document-media-unavailable`, from `src/stories/exact-revision.stories.tsx`, using
+the normal phone390/desktop1280 and light/dark globals. Its DTO is constructed; it proves neither native media
+authorization nor visual approval. No external reference-project source was named for this connection. Source
+reads were the shared document wrapper/renderer, exact/history reads, native content schemas/routes/document
+contract, media import credit type and the existing Worker `coverSrc` route.
+
 The reusable [Moderation report queue](src/stories/patterns/board-report-queue/board-report-queue.mdx) is the
 actual report review region. It separates submitted evidence, the exact ordinarily readable revision and the
 current target. Review actions open on demand; one nonempty takedown reason is capped at 1,024 characters, while

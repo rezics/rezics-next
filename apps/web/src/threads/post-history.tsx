@@ -160,7 +160,9 @@ function RevisionEntry({
       </h4>
       <Byline author={authors?.[revision.authorId]} createdAt={revision.createdAt} now={now} showAuthor />
       <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
-      {revision.body ? <DocumentBody document={revision.body} mentions={mentions} locale={getLocale()} /> : null}
+      {revision.availability === 'available' && revision.body ? (
+        <DocumentBody document={revision.body} mentions={mentions} locale={getLocale()} />
+      ) : null}
     </li>
   );
 }
