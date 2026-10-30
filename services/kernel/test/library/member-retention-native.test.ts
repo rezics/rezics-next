@@ -204,10 +204,20 @@ test('restore respects the live 5000 member cap while preserving the retained ep
       owner.bearer = await accountToken(owner.actor);
       owner.actor = await f.access.authenticate(owner.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
     }
-    await collectionCommands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: `filler ${n}` }, entryKey());
+    await collectionCommands.addMember(
+      owner.actor,
+      m.collection.id,
+      { subjectId: m.subjectId, note: `filler ${n}` },
+      entryKey(),
+    );
   }
   const removed = await m.remove();
-  await collectionCommands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: 'replacement at cap' }, entryKey());
+  await collectionCommands.addMember(
+    owner.actor,
+    m.collection.id,
+    { subjectId: m.subjectId, note: 'replacement at cap' },
+    entryKey(),
+  );
   const before = await m.snapshot();
   const response = await f.send(owner.bearer, 'POST', m.path + ':restore', removed);
   expect(response.status).toBe(409);

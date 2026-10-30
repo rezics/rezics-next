@@ -598,9 +598,10 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
     const route = collectionRoute(collectionId);
     const requestKey = typeof revisionOrKey === 'string' ? revisionOrKey : maybeRequestKey;
     if (!requestKey) throw invalid();
-    const expectedRevision = typeof revisionOrKey === 'number'
-      ? revisionOf(revisionOrKey)
-      : (await readCollection(pool, route, collectionId))?.revision;
+    const expectedRevision =
+      typeof revisionOrKey === 'number'
+        ? revisionOf(revisionOrKey)
+        : (await readCollection(pool, route, collectionId))?.revision;
     if (!expectedRevision) throw notFound();
     const deletionId = newId(route);
     return mutate(

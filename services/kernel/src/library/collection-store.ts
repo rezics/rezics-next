@@ -308,12 +308,7 @@ export async function deleteMember(
   };
 }
 
-export async function readMemberDeletion(
-  client: Client,
-  route: number,
-  collectionId: string,
-  memberId: string,
-) {
+export async function readMemberDeletion(client: Client, route: number, collectionId: string, memberId: string) {
   return memberRetentionRead.run(queryClient(client), { route, collection_id: collectionId, member_id: memberId });
 }
 

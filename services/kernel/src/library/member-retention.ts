@@ -24,8 +24,12 @@ export type DueMemberDeletionKey = Readonly<{
 }>;
 
 function checkKey(key: DueMemberDeletionKey): void {
-  if (partitionOf(key.route) < 0 || !/^[0-9a-f-]{36}$/.test(key.collectionId) ||
-      !/^[0-9a-f-]{36}$/.test(key.memberId) || !/^[0-9a-f-]{36}$/.test(key.deletionId))
+  if (
+    partitionOf(key.route) < 0 ||
+    !/^[0-9a-f-]{36}$/.test(key.collectionId) ||
+    !/^[0-9a-f-]{36}$/.test(key.memberId) ||
+    !/^[0-9a-f-]{36}$/.test(key.deletionId)
+  )
     throw new TypeError('Invalid retained member locator');
 }
 
@@ -33,8 +37,14 @@ export async function pageDueMemberDeletions(
   client: Pick<PoolClient, 'query'>,
   input: { partition: number; cutoff: string; after?: DueMemberDeletionKey; limit: number },
 ): Promise<DueMemberDeletionKey[]> {
-  if (!Number.isInteger(input.partition) || input.partition < 0 || input.partition >= 4096 ||
-      !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)
+  if (
+    !Number.isInteger(input.partition) ||
+    input.partition < 0 ||
+    input.partition >= 4096 ||
+    !Number.isInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > 100
+  )
     throw new RangeError('Invalid member retention page bounds');
   if (input.after) {
     checkKey(input.after);
@@ -59,7 +69,8 @@ export async function purgeExpiredMemberDeletion(
 ): Promise<CommandOutcome<{ purged: boolean }>> {
   checkKey(key);
   const { route, collectionId, memberId, deletionId, purgeAfter } = key;
-  if (!Number.isFinite(deadline) || deadline <= Date.now()) throw new CommandUnavailableError('deadline', partitionOf(route));
+  if (!Number.isFinite(deadline) || deadline <= Date.now())
+    throw new CommandUnavailableError('deadline', partitionOf(route));
   const partition = partitionOf(route);
   const curator = await pool.query<{ curator_account_id: string }>(
     'SELECT curator_account_id FROM library.collection WHERE route=$1 AND collection_id=$2',
@@ -98,7 +109,9 @@ export async function purgeExpiredMemberDeletion(
         actorAccountId,
         kind,
         key: normalizeCommandKey({ kind: 'account', id: actorAccountId }, deletionId),
-        digest: createHash('sha256').update(JSON.stringify([kind, route, collectionId, memberId, deletionId, purgeAfter])).digest(),
+        digest: createHash('sha256')
+          .update(JSON.stringify([kind, route, collectionId, memberId, deletionId, purgeAfter]))
+          .digest(),
       },
     },
     async (tx, command) => {
@@ -114,7 +127,13 @@ export async function purgeExpiredMemberDeletion(
       if (!result) return noEffect({ purged: false });
       return {
         value: { purged: true },
-        events: [{ type: 'com.rezics.library.collection.member.purged.v1', subject: collectionId, data: { memberId, deletionId } }],
+        events: [
+          {
+            type: 'com.rezics.library.collection.member.purged.v1',
+            subject: collectionId,
+            data: { memberId, deletionId },
+          },
+        ],
       };
     },
   );

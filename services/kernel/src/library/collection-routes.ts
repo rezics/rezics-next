@@ -93,7 +93,13 @@ const failures = {
 };
 const memberRestoreFailures = {
   ...failures,
-  409: problemSchema('conflict', 'collection_full', 'member_restore_stale', 'member_restore_occupied', 'member_restore_expired'),
+  409: problemSchema(
+    'conflict',
+    'collection_full',
+    'member_restore_stale',
+    'member_restore_occupied',
+    'member_restore_expired',
+  ),
 };
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 function detail(operationId: string, action: string, anonymous = false) {
