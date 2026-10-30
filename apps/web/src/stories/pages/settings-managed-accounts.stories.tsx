@@ -22,19 +22,17 @@ function SettingsExample() {
   });
   return (
     <AppShell>
-      <main id="main-content" tabIndex={-1} className="min-w-0 py-6 outline-none">
-        <SettingsPageView
-          page={{
-            signedIn: true,
-            preferences: { spoilerLevel: 1, suitability: 'blur', version: 1 },
-            notifications: { reply: true, mention: true },
-            csrfToken: 'story-csrf-token',
-            securityHref: 'https://auth.example.test/security',
-          }}
-          csrfToken="story-csrf-token"
-          managedAccountsIO={io}
-        />
-      </main>
+      <SettingsPageView
+        page={{
+          signedIn: true,
+          preferences: { spoilerLevel: 1, suitability: 'blur', version: 1 },
+          notifications: { reply: true, mention: true },
+          csrfToken: 'story-csrf-token',
+          securityHref: 'https://auth.example.test/security',
+        }}
+        csrfToken="story-csrf-token"
+        managedAccountsIO={io}
+      />
     </AppShell>
   );
 }
