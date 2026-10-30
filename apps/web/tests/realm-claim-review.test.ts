@@ -309,10 +309,7 @@ describe('declared native Realm claim review read transport', () => {
         const url = new URL(call.url);
         expect(url.origin).toBe(env.KERNEL_ORIGIN);
         expect(url.pathname).toBe(`/v1/realms/${realmId}/claimRequests`);
-        expect([...url.searchParams]).toEqual([
-          ['limit', '20'],
-          ...(index === 1 ? [['cursor', cursor]] : []),
-        ]);
+        expect([...url.searchParams]).toEqual([['limit', '20'], ...(index === 1 ? [['cursor', cursor]] : [])]);
         expect(call.method).toBe('GET');
         expect(call.headers.get('authorization')).toBe(`Bearer ${index ? 'refreshed-session' : 'current-session'}`);
         expect(call.headers.has('cookie')).toBe(false);
@@ -340,7 +337,9 @@ describe('declared native Realm claim review read transport', () => {
         calls++;
         return Response.json(body, { status });
       }) as typeof fetch;
-      expect(await readRealmClaimReview(request(), env, { realmId, cursor: 'original-signed-cursor' }, fetcher)).toEqual({
+      expect(
+        await readRealmClaimReview(request(), env, { realmId, cursor: 'original-signed-cursor' }, fetcher),
+      ).toEqual({
         kind,
       });
       expect(calls).toBe(1);
@@ -359,7 +358,9 @@ describe('declared native Realm claim review read transport', () => {
       calls++;
       throw new Error('Read response lost');
     }) as typeof fetch;
-    expect(await readRealmClaimReview(new Request('https://site.example.test/action'), env, { realmId }, fetcher)).toEqual({
+    expect(
+      await readRealmClaimReview(new Request('https://site.example.test/action'), env, { realmId }, fetcher),
+    ).toEqual({
       kind: 'signed-out',
     });
     expect(await readRealmClaimReview(request(), {}, { realmId }, fetcher)).toEqual({ kind: 'unavailable' });

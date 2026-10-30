@@ -8,11 +8,7 @@ import {
   validateRealmClaimReviewRead,
   type RealmClaimApprovalInput,
 } from './realm-claim-review';
-import {
-  approveRealmClaimReview,
-  readRealmClaimReview,
-  type RealmClaimReviewEnv,
-} from './realm-claim-review-native';
+import { approveRealmClaimReview, readRealmClaimReview, type RealmClaimReviewEnv } from './realm-claim-review-native';
 
 export const readRealmClaimReviewPage = createServerFn({ method: 'GET' })
   .validator((input: { realmId: string; cursor?: string }) => validateRealmClaimReviewRead(input))
