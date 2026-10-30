@@ -82,7 +82,6 @@ the co-owned admission binding and the original caller's publication-before-comp
 cutover and operation outcome suites remain unchanged downstream proof. This composition grants no Accounts
 authority and supplies no legacy merge fallback.
 
-
 ## Subject page feed
 
 The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).

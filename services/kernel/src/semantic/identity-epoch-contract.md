@@ -761,13 +761,13 @@ be counted as `noData` while missing.
 
 ## Independently landable producer boundaries
 
-| Producer                  | Required surface / evidence                                                                                                  | Present                                                                  |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below           |
-| Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING                                                                  |
-| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Constructor integrated; complete native coverage remains unavailable |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Native Source invalidation integrated; complete ALL-role coverage remains unavailable |
-| Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required |
+| Producer                  | Required surface / evidence                                                                                                  | Present                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below                                                    |
+| Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING                                                                                                           |
+| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | Constructor integrated; complete native coverage remains unavailable                                              |
+| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | Native Source invalidation integrated; complete ALL-role coverage remains unavailable                             |
+| Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required                                          |
 | Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | Composition implemented; mapping/participant completeness, native proof and actual Accounts caller remain missing |
 
 These are real capability dependencies, not task identifiers. Store/native-step acceptance must not require a fake
