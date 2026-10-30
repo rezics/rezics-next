@@ -35,9 +35,15 @@ export const Handleless: Story = {
     const profile = within(
       await within(context.canvasElement).findByRole('region', { name: m.settings_profile_heading() }),
     );
-    await profile.findByText(m.settings_profile_self_unavailable());
-    await expect(profile.queryByRole('textbox')).toBeNull();
-    await profile.findByRole('button', { name: m.settings_profile_reload_current() });
+    const name = await profile.findByRole('textbox', { name: m.settings_profile_display_name() });
+    await expect(name).toHaveValue('Avery Reader');
+    await expect(profile.getByRole('textbox', { name: m.settings_profile_biography() })).not.toHaveValue('');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Handleless Reader');
+    await userEvent.click(profile.getByRole('button', { name: m.settings_profile_save() }));
+    await profile.findByText(m.settings_saved());
+    await userEvent.click(profile.getByRole('button', { name: m.settings_profile_reload_current() }));
+    await expect(name).toHaveValue('Handleless Reader');
   },
 };
 export const Unavailable: Story = {

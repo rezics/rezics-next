@@ -1,5 +1,6 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
+import type { EditableProfile } from '../../settings/editable-profile-source';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 
 export type ProfileScenario =
@@ -34,7 +35,7 @@ export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO
   let failed = false;
   return {
     read: async () => {
-      if (scenario === 'handleless' || (scenario === 'unavailable' && !failed)) {
+      if (scenario === 'unavailable' && !failed) {
         failed = true;
         throw new Error('Profile unavailable');
       }
@@ -121,7 +122,41 @@ const read: NonNullable<FakeRoute['story']> = ({ request }) => {
   return { status: 200, accounts: [recordFor(variant, id)], next: null };
 };
 
+const readEditable: NonNullable<FakeRoute['story']> = ({ match }) => {
+  const variant = storyVariant();
+  if (variant === 'unavailable') return { status: 503, code: 'dependency_unavailable' };
+  const current = recordFor(variant, decodeURIComponent(match?.[1] ?? ''));
+  const profile: EditableProfile = {
+    id: current.id,
+    kind: current.kind,
+    handle: current.handle,
+    displayName: current.displayName,
+    bio: current.bio,
+    links: current.links,
+    avatar: current.avatar
+      ? {
+          media: current.avatar.media,
+          width: current.avatar.width,
+          height: current.avatar.height,
+          placeholder: current.avatar.placeholder,
+          variants: current.avatar.variants,
+          focalPoint: current.avatar.focalPoint,
+          credit: current.avatar.credit,
+        }
+      : null,
+    publicViews: current.publicViews,
+    ...(typeof current.speakersListed === 'boolean' ? { speakersListed: current.speakersListed } : {}),
+  };
+  return { status: 200, profile };
+};
+
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: /^\/v1\/accounts\/([^/]+)\/profile$/,
+    story: readEditable,
+    fixture: readEditable,
+  },
   { method: 'GET', path: '/v1/accounts', story: read, fixture: read },
   {
     method: 'PATCH',

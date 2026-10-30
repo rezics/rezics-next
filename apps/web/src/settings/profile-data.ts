@@ -1,7 +1,10 @@
 import type { KernelClient } from '@rezics/client';
+import {
+  createEditableProfileSource,
+  type EditableProfile,
+  type EditableProfileSource,
+} from './editable-profile-source';
 
-type AccountRead = NonNullable<Awaited<ReturnType<KernelClient['accounts']['get']>>['data']>['accounts'][number];
-type AccountProfile = Extract<AccountRead, { bio: string | null }>;
 export type ProfileLink = { label: string; url: string };
 export type ProfileValues = {
   accountId: string;
@@ -9,7 +12,7 @@ export type ProfileValues = {
   displayName: string | null;
   biography: string | null;
   // Keep Content's summary intact; a newly uploaded avatar initially has only its native media reference.
-  avatar: AccountProfile['avatar'] | { media: string };
+  avatar: EditableProfile['avatar'] | { media: string };
   links: ProfileLink[];
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
   speakersListed?: boolean;
@@ -25,10 +28,7 @@ export type ProfilePatch = {
 /** The PATCH acknowledges a command. Only a subsequent GET confirms the current profile. */
 export type ProfileSaveResult = { ok: true; profile: ProfileValues } | { ok: false; status: number; message: string };
 
-function accountProfile(value: AccountRead): ProfileValues {
-  if (!('bio' in value) || !('avatar' in value) || !('links' in value) || !('publicViews' in value))
-    throw new Error('Profile unavailable');
-  if (value.state === 'deleted') throw new Error('Profile unavailable');
+function accountProfile(value: EditableProfile): ProfileValues {
   return {
     accountId: value.id,
     kind: value.kind,
@@ -37,7 +37,9 @@ function accountProfile(value: AccountRead): ProfileValues {
     avatar: value.avatar,
     links: value.links,
     publicViews: value.publicViews,
-    ...(value.kind === 'organization' ? { speakersListed: value.speakersListed === true } : {}),
+    ...(value.kind === 'organization' && value.speakersListed !== undefined
+      ? { speakersListed: value.speakersListed }
+      : {}),
   };
 }
 
@@ -45,19 +47,11 @@ export async function loadProfileRecord(
   client: KernelClient,
   authorization: string,
   accountId: string,
+  source: EditableProfileSource = createEditableProfileSource(client),
 ): Promise<ProfileValues> {
-  const identity = await client.accounts.get({ query: { ids: accountId }, headers: { authorization } });
-  if (identity.error || !identity.data) throw new Error('Profile unavailable');
-  const ownIdentity = identity.data.accounts.find((item) => item.id === accountId);
-  // Accounts currently exposes compact attribution by ID, with full profiles only by handle.
-  // A handleless/managed identity needs an Accounts-owned private self-profile read contract.
-  const handle = ownIdentity && 'handle' in ownIdentity ? ownIdentity.handle : null;
-  if (!handle) throw new Error('Profile unavailable');
-  const result = await client.accounts.get({ query: { handle }, headers: { authorization } });
-  if (result.error || !result.data) throw new Error('Profile unavailable');
-  const found = result.data.accounts.find((item) => item.id === accountId);
-  if (!found) throw new Error('Profile unavailable');
-  return accountProfile(found);
+  const profile = await source.read(authorization, accountId);
+  if (profile.id !== accountId) throw new Error('Profile unavailable');
+  return accountProfile(profile);
 }
 
 function avatarReference(avatar: object | null): string | null {

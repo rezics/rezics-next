@@ -98,9 +98,10 @@ export const TransportUnavailable: Story = {
 export const Handleless: Story = {
   args: { scenario: 'handleless' },
   play: async ({ canvasElement }) => {
-    const view = profileView(canvasElement);
-    await view.findByText(m.settings_profile_self_unavailable());
-    await expect(view.queryByRole('textbox')).toBeNull();
+    const view = await editName(canvasElement);
+    await view.findByText(m.settings_saved());
+    await userEvent.click(view.getByRole('button', { name: m.settings_profile_reload_current() }));
+    await expect(view.getByRole('textbox', { name: m.settings_profile_display_name() })).toHaveValue('Avery Updated');
   },
 };
 export const LostResponse: Story = {

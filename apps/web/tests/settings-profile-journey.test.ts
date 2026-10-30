@@ -54,33 +54,31 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
         };
         return Response.json({ accountId: current.accountId });
       }
-      reads.push(new URL(request.url).search);
+      const url = new URL(request.url);
+      expect(url.pathname).toBe(`/v1/accounts/${current.accountId}/profile`);
+      expect(url.search).toBe('');
+      reads.push(url.pathname);
       if (options.unavailable) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
       const identity = {
         id: current.accountId,
         kind: current.kind,
-        state: 'active',
         displayName: current.displayName,
         handle: options.handleless ? null : 'avery',
-        automated: false,
-        operatorId: null,
       };
-      return Response.json({
-        accounts: [
-          new URL(request.url).searchParams.has('ids') || options.compactHandle
-            ? identity
-            : {
+      return Response.json(
+        options.compactHandle
+          ? { accounts: [identity], next: null }
+          : {
+              profile: {
                 ...identity,
                 bio: current.biography,
                 avatar: current.avatar,
                 links: current.links,
                 publicViews: current.publicViews,
-                verified: false,
-                subject: null,
               },
-        ],
-        next: null,
-      });
+            },
+        { headers: { 'cache-control': 'private, no-store' } },
+      );
     }) as typeof fetch,
   });
   const io: ProfileEditorIO = {
@@ -173,12 +171,25 @@ test('An unavailable or handleless account is never shown as a fabricated empty 
     const boundary = api(options);
     const editor = new ProfileEditor(boundary.io);
     await editor.reload();
+    if ('handleless' in options) {
+      expect(boundary.reads).toEqual([`/v1/accounts/${initial().accountId}/profile`]);
+      expect(editor.snapshot().known).toEqual(initial());
+      expect(editor.snapshot().draft).toEqual(initial());
+      editor.edit({ displayName: 'Handleless reader', biography: 'Updated native notes' });
+      await editor.submit('profile');
+      expect(editor.snapshot().phase).toBe('saved');
+      expect(boundary.writes[0]?.patch).toEqual({
+        displayName: 'Handleless reader',
+        biography: 'Updated native notes',
+      });
+      expect(editor.snapshot().known).toEqual(boundary.current());
+      continue;
+    }
     expect(editor.snapshot().phase).toBe('unavailable');
     expect(editor.snapshot().draft).toBeNull();
     expect(editor.snapshot().known).toBeNull();
     await editor.submit('profile');
     expect(boundary.writes).toHaveLength(0);
-    if ('handleless' in options) expect(boundary.reads).toHaveLength(1);
   }
 });
 
