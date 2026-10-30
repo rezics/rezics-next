@@ -9,7 +9,9 @@ test('the correction BFF accepts a native statement object rather than a selecte
       property: { id: 'schema:url' },
       value: { type: 'value', content: 'https://example.org/correction' },
       references: [
-        { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } }] },
+        {
+          parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } }],
+        },
       ],
     },
   };
