@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { reactionKinds } from '@rezics/ui/reactions';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ThreadReadingPost } from '../routes/threads/$id_.$slug';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -58,6 +58,12 @@ export function ThreadReading({
   const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = session === 'signed-in' ? personal : undefined;
+  // A private query can temporarily have no data when its post IDs change. Keep the local draft and intent mounted,
+  // but expose no participation controls until current personal data is available again.
+  const composer = useRef<{ viewerId: string | null; initialKey: string } | null>(null);
+  if (currentPersonal && (!composer.current || composer.current.viewerId !== currentPersonal.viewerId)) {
+    composer.current = { viewerId: currentPersonal.viewerId, initialKey: currentPersonal.idempotencyKey };
+  }
   const summary = realm?.summary?.trim();
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
   useEffect(() => setCurrentMentions(mentions), [mentions]);
@@ -153,11 +159,17 @@ export function ThreadReading({
               </nav>
             ) : null}
           </section>
-          {session === 'signed-in' && currentPersonal ? (
-            <section aria-label={m.thread_reply_label()} className="min-w-0">
+          {composer.current ? (
+            <section
+              aria-label={m.thread_reply_label()}
+              className="min-w-0"
+              hidden={!currentPersonal}
+              inert={!currentPersonal}
+            >
               <ThreadReplyComposer
-                key={thread.id}
-                initialKey={currentPersonal.idempotencyKey}
+                key={`${thread.id}:${composer.current.viewerId}`}
+                initialKey={composer.current.initialKey}
+                canSubmit={currentPersonal !== undefined}
                 containerId={thread.id}
                 parentId={replyTarget.parentId}
                 parents={replyParents}
@@ -191,7 +203,8 @@ export function ThreadReading({
                 }}
               />
             </section>
-          ) : session === 'signed-out' ? (
+          ) : null}
+          {currentPersonal ? null : session === 'signed-out' ? (
             <div className="rounded-xl bg-card p-4 sm:p-6">{signedOut}</div>
           ) : (
             <p role="status" className="px-1 text-sm text-muted-foreground">

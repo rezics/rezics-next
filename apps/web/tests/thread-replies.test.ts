@@ -9,6 +9,12 @@ import { replyToThreadRequest } from '../src/threads/reply-context-request';
 import { ReplyContext } from '../src/threads/reply-context';
 import { RemovedPost } from '../src/threads/post-removed';
 import { m } from '../src/paraglide/messages.js';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { chromium } from 'playwright';
+import { documentText, documentVersion, normalizeDocument, type DocumentNode } from '@rezics/document';
+import thread from '../src/kernel/recorded/thread.json';
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const body = fromPlainText('Keep this selected-parent reply.', 'blocks');
@@ -133,3 +139,128 @@ test('reload after parent deletion retains the relationship and tombstone withou
   );
   expect(withheld).toContain(m.thread_reply_parent_unavailable());
 });
+
+test('real composed reading Page and Pattern keep selected parent and keyboard draft until actual cancellation, and cancellation retains the draft through the sole real composer', async () => {
+  const app = join(import.meta.dir, '..');
+  const port = await new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      if (!address || typeof address === 'string') throw new Error('No Storybook test port');
+      probe.close(() => resolve(address.port));
+    });
+  });
+  const child = spawn(
+    join(app, 'node_modules/.bin/storybook'),
+    ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)],
+    { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1' } },
+  );
+  let output = '';
+  const record = (chunk: Buffer) => {
+    output = (output + chunk.toString()).slice(-8000);
+  };
+  child.stdout!.on('data', record);
+  child.stderr!.on('data', record);
+  const origin = `http://127.0.0.1:${port}`;
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  try {
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`Storybook exited (${child.exitCode}): ${output}`);
+      try {
+        if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(1000) })).ok) break;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`Storybook did not start: ${output}`);
+      await Bun.sleep(200);
+    }
+    browser = await chromium.launch();
+    for (const tier of ['pages', 'patterns']) {
+      for (const theme of ['light', 'dark']) {
+        const context = await browser.newContext({
+          viewport: { width: theme === 'light' ? 390 : 1280, height: 900 },
+          reducedMotion: 'reduce',
+        });
+        const page = await context.newPage();
+        try {
+          for (const state of ['selected-parent', 'cancelled-parent']) {
+            const storyId = `${tier}-community-thread-reading--${state}`;
+            await page.goto(`${origin}/iframe.html?id=${storyId}&globals=locale:en;theme:${theme}`);
+            await page.locator('html[data-hydrated]').waitFor();
+            await page.waitForFunction(
+              (id) => {
+                const render = (
+                  globalThis as typeof globalThis & {
+                    __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
+                  }
+                ).__STORYBOOK_PREVIEW__?.currentRender;
+                return render?.id === id && (render.phase === 'finished' || render.phase === 'errored');
+              },
+              storyId,
+              { timeout: 60_000 },
+            );
+            const composer = page.getByRole('region', { name: m.thread_reply_label() });
+            const editor = composer.getByRole('textbox', { name: m.thread_reply_label() });
+            await editor.waitFor();
+            expect(await editor.getAttribute('class'), storyId).toContain('ProseMirror');
+            expect(await page.getByRole('textbox', { name: m.thread_reply_label() }).count()).toBe(1);
+            const editorNode = await editor.elementHandle();
+            const formId = await composer.locator('form').getAttribute('id');
+            const snapshot = async () =>
+              normalizeDocument({
+                version: documentVersion,
+                profile: 'blocks',
+                doc: (await editor.evaluate((element) => {
+                  const node = (
+                    element as HTMLElement & {
+                      pmViewDesc?: { node?: { toJSON: () => unknown } };
+                    }
+                  ).pmViewDesc?.node;
+                  if (!node) throw new Error('The mounted native editor document is missing');
+                  return node.toJSON();
+                })) as DocumentNode,
+              });
+            const before = await snapshot();
+            expect(documentText(before), storyId).toBe('The relationship matters as much as the journey.');
+            const cancel = composer.getByRole('button', { name: m.thread_reply_cancel_target() });
+            const parent = composer.getByRole('link', { name: m.thread_reply_parent() });
+            if (state === 'selected-parent') {
+              expect(await cancel.isVisible(), storyId).toBe(true);
+              expect(await parent.getAttribute('href')).toBe(`#post-${thread.thread.firstPost.id}`);
+            } else {
+              expect(await cancel.count(), storyId).toBe(0);
+              expect(await parent.count()).toBe(0);
+            }
+            // Refetch the ordinary stale personal query, which returns a new initialization key.
+            await page.evaluate(async () => {
+              document.dispatchEvent(new Event('visibilitychange'));
+              await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+            });
+            expect(await snapshot()).toEqual(before);
+            expect(await editor.evaluate((element, original) => element === original, editorNode)).toBe(true);
+            if (state === 'selected-parent') {
+              expect(await parent.getAttribute('href')).toBe(`#post-${thread.thread.firstPost.id}`);
+              await cancel.click();
+              await page.waitForFunction((element) => document.activeElement === element, editorNode);
+            }
+            expect(await cancel.count()).toBe(0);
+            expect(await parent.count()).toBe(0);
+            expect(await snapshot()).toEqual(before);
+            expect(await editor.evaluate((element, original) => element === original, editorNode)).toBe(true);
+            expect(await composer.locator('form').getAttribute('id')).toBe(formId);
+            expect(await page.getByRole('textbox', { name: m.thread_reply_label() }).count()).toBe(1);
+            await editorNode?.dispose();
+          }
+        } finally {
+          await context.close();
+        }
+      }
+    }
+  } finally {
+    await browser?.close();
+    if (child.pid && child.exitCode === null) {
+      process.kill(-child.pid, 'SIGTERM');
+      await new Promise<void>((resolve) => child.once('close', () => resolve()));
+    }
+  }
+}, 900_000);

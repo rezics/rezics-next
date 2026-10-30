@@ -26,6 +26,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function mountedReplyEditor(canvas: ReturnType<typeof within>) {
+  // The accessible fallback is replaced when Tiptap mounts. Requery instead of retaining that detached node.
+  return waitFor(() => {
+    const editor = canvas.getByRole('textbox', { name: m.thread_reply_label() });
+    expect(editor).toHaveClass('ProseMirror');
+    expect(editor).toHaveAttribute('contenteditable', 'true');
+    expect(editor).toBeVisible();
+    return editor;
+  });
+}
+
 async function populatedReading({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: thread.thread.title });
@@ -48,8 +59,7 @@ async function populatedReading({ canvasElement }: { canvasElement: HTMLElement 
 export const Populated: Story = {
   play: async (context) => {
     const canvas = await populatedReading(context);
-    const editor = await canvas.findByRole('textbox', { name: m.thread_reply_label() });
-    await waitFor(() => expect(editor).toHaveClass('ProseMirror'));
+    await mountedReplyEditor(canvas);
   },
 };
 export const SignedOut: Story = {
@@ -75,15 +85,19 @@ const selectedReply = 'The relationship matters as much as the journey.';
 
 async function selectParent({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
-  const editor = await canvas.findByRole('textbox', { name: m.thread_reply_label() });
-  await waitFor(() => expect(editor).toHaveClass('ProseMirror'));
+  const editor = await mountedReplyEditor(canvas);
   const parent = canvasElement.querySelector<HTMLElement>(`#post-${thread.thread.firstPost.id}`);
   if (!parent) throw new Error('The recorded opening post must be loaded before selecting a reply.');
   await userEvent.click(await within(parent).findByRole('button', { name: m.thread_reply_to_post() }));
   await waitFor(() => expect(editor).toHaveFocus());
-  await userEvent.keyboard(selectedReply);
-  await expect(editor).toHaveTextContent(selectedReply);
   const composer = canvas.getByRole('region', { name: m.thread_reply_label() });
+  await within(composer).findByRole('button', { name: m.thread_reply_cancel_target() });
+  await userEvent.keyboard(selectedReply);
+  // Blur flushes the native snapshot before target cancellation or another query render.
+  await userEvent.tab();
+  await waitFor(() => expect(within(composer).getByRole('button', { name: m.thread_write_send() })).toBeEnabled());
+  await expect(await mountedReplyEditor(canvas)).toBe(editor);
+  await expect(editor).toHaveTextContent(selectedReply);
   await expect(within(composer).getByRole('button', { name: m.thread_reply_cancel_target() })).toBeVisible();
   await expect(within(composer).getByRole('link', { name: m.thread_reply_parent() })).toHaveAttribute(
     'href',
@@ -101,7 +115,8 @@ export const CancelledParent: Story = {
   play: async (context) => {
     const { canvas, editor, composer } = await selectParent(context);
     await userEvent.click(canvas.getByRole('button', { name: m.thread_reply_cancel_target() }));
-    await expect(editor).toHaveFocus();
+    await waitFor(() => expect(editor).toHaveFocus());
+    await expect(await mountedReplyEditor(canvas)).toBe(editor);
     await expect(editor).toHaveTextContent(selectedReply);
     await expect(canvas.queryByRole('button', { name: m.thread_reply_cancel_target() })).toBeNull();
     await expect(within(composer).queryByRole('link', { name: m.thread_reply_parent() })).toBeNull();

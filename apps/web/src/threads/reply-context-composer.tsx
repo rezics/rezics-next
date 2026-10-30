@@ -10,6 +10,7 @@ export function ThreadReplyComposer({
   parents,
   pending,
   onCancel,
+  canSubmit = true,
   ...composer
 }: {
   parentId: string | null;
@@ -17,6 +18,7 @@ export function ThreadReplyComposer({
   pending: boolean;
   onCancel: () => void;
   initialKey: string;
+  canSubmit?: boolean;
   containerId: string;
   focusRequest: number;
   onPendingChange: (pending: boolean) => void;
@@ -26,9 +28,10 @@ export function ThreadReplyComposer({
   return (
     <PostComposer<CreatedPost>
       {...composer}
+      canSubmit={canSubmit}
       replyTargetId={parentId}
       replyContext={
-        parentId === null ? null : (
+        parentId === null || !canSubmit ? null : (
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2" role="status" aria-atomic="true">
             <ReplyContext parentId={parentId} parents={parents} />
             <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onCancel}>
