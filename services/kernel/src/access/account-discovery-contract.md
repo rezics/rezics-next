@@ -134,11 +134,21 @@ type KindCountEvidence =
   | { kind: string; value: number; exact: true }
   | { kind: string; value: number; exact: false } // strictly positive
   | { kind: string; unavailable: true };
+type DiscoveryKindMetadata = {
+  id: string;
+  labels: Record<string, string>;
+  icon: string;
+  count?: KindCountEvidence;
+};
 type DiscoveryPage = {
   hits: DiscoveryHit[];
-  kinds: KindCountEvidence[];
+  kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;
   as_of: string;
+};
+type DiscoveryRequest = SearchRequest & {
+  representation: 'discovery-v1';
+  kindCursor?: string;
 };
 ```
 
@@ -158,11 +168,18 @@ supports text and kind; subject relation/Library/Realm/quantity leaves retain Se
 Account facts under NOT never become a broadened complement through a made-up false value.
 
 Search must own a native mixed query/count/summary assembler with verified request/deadline custody, one global
-cursor, comparable native sort/seek, configured kind metadata and final whole-query privacy. No new per-Account
-search endpoint is proposed. Adopt a versioned universal request/response around the existing Search transport;
-retain catalogue endpoint compatibility. `DiscoveryPage` is the proposed output, **not** today's `subjects` wire.
-The exact new wire/version and comparable relevance-key implementation require Root/Search adoption; all other
-population and disclosure choices in this document are selected. No production caller may cast today's result
+cursor, comparable native sort/seek, configured kind metadata and final whole-query privacy. The concrete wire
+proposal is opt-in `representation: 'discovery-v1'` on existing `POST /v1/subjects:search`; omission retains the
+current catalogue response. It uses the same text/filter/sort/limit/cursor/languages/properties fields. Add the
+closed `{kind:{in:string[]}}` leaf to that version's existing Boolean grammar; preserve `{type:{in:string[]}}`
+and every released Subject meaning. The test assembler's `kinds` shorthand builds one designated kind leaf under
+top-level AND, never a second selector authority. `kindCursor` resumes configured metadata only, without hit/count
+re-enumeration. Its fixed page size remains subject to the existing policy's measured metadata bound; it is not a
+new request-controlled allowance. Registry records contain canonical ID, owner source, supported domains,
+localized labels/icon and summary discriminator; unknown entries cannot dispatch an unregistered owner.
+`DiscoveryPage` is the proposed output, **not** today's `subjects` wire. Root/Search must adopt this exact
+versioned wire and implement comparable relevance keys before activation; the native measurement and adoption
+are engineering prerequisites, not unresolved Account product policy. No production caller may cast today's result
 to this type. Account summaries are current native hydration, not an indexed profile copy. Missing summaries
 withhold the hit and require bounded refill; never disclose a shell hit with a null summary.
 
@@ -266,6 +283,10 @@ Their future cases require Search to supply `test/search/support/account-discove
 native test assembly, **not** a production export or a stub implementation supplied here. It must use the actual
 kernel HTTP routes, worker/index, Accounts source/current hydration and actual Access principal/client controls.
 It must never fabricate indexed hits, inject synthetic population arrays or hand-compute production counts.
+Its test `query` result normalizes the adopted wire's kind metadata into a count evidence array; that convenience
+is not the proposed public response. Native error responses normalize to empty hit/count arrays with their actual
+HTTP status, not a successful unavailable page. `physical` returns native counters for the last query and `grow`
+creates ordinary native fixtures for its named independent axis; it cannot return precomputed cost receipts.
 Missing assembly fails explicitly; the native future cases are intentionally red until co-owner delivery.
 
 The assembler controls only infrastructure it starts: pause/resume worker, capture/replay a real producer batch,
@@ -275,8 +296,7 @@ and client scopes independently. It can seed catalogue Person via ordinary Seman
 remain Accounts native writes. Its source read is the adopted native Account source, not `readPublicIdentities`.
 Each case's assertions require useful settled output; a permanently unavailable implementation cannot pass.
 
-Root/Search adoption decisions: shared discriminated registry/source/document/summary/count types; versioned
-universal wire; native comparable sort/seek/rank implementation; whole-query Account/claim/target reduction
+Root/Search adoption decisions: shared discriminated registry/source/document/summary/count types; the proposed `discovery-v1` wire; native comparable sort/seek/rank implementation; whole-query Account/claim/target reduction
 custody; writer/activation/rollback and erasure participation; test assembler plus Web/generated-client migration.
 Accounts selects the population, text, exact-claim guards, version and native key inventory here. There is no
 remaining Accounts product-policy question and no new research prerequisite.

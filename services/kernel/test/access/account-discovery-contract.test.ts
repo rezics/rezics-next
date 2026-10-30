@@ -249,6 +249,7 @@ for (const kind of ['recovery', 'credential-reset', 'consent-reduction', 'sessio
       const receipt = await d.applyFence(a.accountId, kind);
       expect(Number.isFinite(Date.parse(receipt.at))).toBe(true);
       expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
+      expect((await d.source.read(partitionOf(routeOf(a.accountId)!), [a.accountId])).accounts).toEqual([]);
       const current = await d.query({ text: label, limit: 3 });
       expect(ids(current)).not.toContain(a.accountId);
       expect([200, 409, 503]).toContain(current.status);
@@ -423,5 +424,30 @@ test('future native exact-claim guards reject a missing, reserved or foreign-own
       expect(ids(handlePage)).toEqual([]);
       exact(handlePage, 'account', 0);
     }
+  } finally { await d.close(); }
+});
+
+
+test('future native organization discovery includes an active handleless identity through ordinary ownership', async () => {
+  const owner = await person();
+  const organizationId = newId(routeOf(owner.accountId)!);
+  const reservation = await internal.reserveCoordination({ accountId: owner.accountId,
+    relatedAccountId: organizationId, purpose: 'membership', key: key() });
+  await internal.createOrganization({ organizationId, ownerAccountId: owner.accountId,
+    ownerReservationId: reservation.value.reservationId, key: key() });
+  const label = `Organization ${key()}`;
+  await commands.updateAccount(await context(owner.accountId), {
+    accountId: organizationId, patch: { displayName: label }, key: key(),
+  });
+  const d = await native();
+  try {
+    await d.settle();
+    const snapshot = await d.source.read(partitionOf(routeOf(organizationId)!), [organizationId]);
+    expect(snapshot.accounts).toHaveLength(1);
+    expect(snapshot.accounts[0]).toMatchObject({ id: organizationId, accountKind: 'organization', handle: null, displayName: label });
+    const page = await d.query({ text: label, limit: 3 });
+    expect(ids(page)).toEqual([organizationId]);
+    exact(page, 'account', 1);
+    expect(page.hits[0]!.summary.value).toMatchObject({ id: organizationId, handle: null, automated: false, operatorId: null });
   } finally { await d.close(); }
 });
