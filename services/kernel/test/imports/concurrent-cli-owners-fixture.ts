@@ -501,9 +501,7 @@ export async function runConcurrentCliOwnersJourney() {
       if (!authorization) throw new Error('Missing original CLI credential for fence read');
       const path = `/v1/sourceFences:check?${new URLSearchParams({ source, externalId: work.key, fieldGroup: 'facts' })}`;
       // Governance can take down tuples; the ordinary importer holds source_fence:read.
-      const response = await runtime.replay(
-        new Request(`${api}${path}`, { headers: { authorization } }),
-      );
+      const response = await runtime.replay(new Request(`${api}${path}`, { headers: { authorization } }));
       const checked = await response.json();
       publicReads.push({ path, status: response.status, body: checked });
       expect(response.status, JSON.stringify(checked)).toBe(200);
