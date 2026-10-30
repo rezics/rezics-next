@@ -22,7 +22,12 @@ export type RecordHistoryCopy = Readonly<{
 type NativePage = Awaited<
   ReturnType<import('./record-source-set-native.ts').RecordSourceSetProducer['pageSemanticRecordSourceSets']>
 >;
-type PreparedPage = Readonly<{ frontier: string | null; page: NativePage | null; gap: string | null }>;
+type PreparedPage = Readonly<{
+  frontier: string | null;
+  complete: boolean;
+  page: NativePage | null;
+  gap: string | null;
+}>;
 
 /** All producer pool reads finish before the live source verification/History transaction.
  * This never opens another checkout while an original building set is uncommitted. */
@@ -38,7 +43,8 @@ export async function prepareRecordHistorySourceSetPage(
   try {
     producer = nativeRecordSourceSetProducer();
   } catch (error) {
-    if (error instanceof RecordSourceSetUnavailableError) return { frontier: null, page: null, gap: error.code };
+    if (error instanceof RecordSourceSetUnavailableError)
+      return { frontier: null, complete: false, page: null, gap: error.code };
     throw error;
   }
   const progress = await runCommand(
@@ -56,10 +62,11 @@ export async function prepareRecordHistorySourceSetPage(
     },
   );
   const row = progress.value;
-  if (!row) return { frontier: null, page: null, gap: 'record-native-source-set-inventory-unavailable' };
-  if (row.native_set_index_complete) return { frontier: row.native_set_frontier, page: null, gap: null };
+  if (!row)
+    return { frontier: null, complete: false, page: null, gap: 'record-native-source-set-inventory-unavailable' };
   const page = await producer.pageSemanticRecordSourceSets(deps, recordHistoryPurgeSourceReference(source.reference), {
-    frontier: row.native_set_frontier,
+    // Revisit EOF on the next sweep: it cannot exclude later native writers.
+    frontier: row.native_set_index_complete ? null : row.native_set_frontier,
     limit: 1,
     deadline: context.deadline,
   });
@@ -76,7 +83,12 @@ export async function prepareRecordHistorySourceSetPage(
     // The reverse index points to a sealed immutable native row, never a building digest.
     const snapshot = await producer.readSemanticRecordSourceSet(deps, set.locator, context);
     if (!snapshot)
-      return { frontier: row.native_set_frontier, page: null, gap: 'record-native-source-set-snapshot-unavailable' };
+      return {
+        frontier: row.native_set_frontier,
+        complete: row.native_set_index_complete,
+        page: null,
+        gap: 'record-native-source-set-snapshot-unavailable',
+      };
     validateNativeRecordSourceSetSnapshot(snapshot);
     if (
       snapshot.locator.partition !== set.locator.partition ||
@@ -87,7 +99,7 @@ export async function prepareRecordHistorySourceSetPage(
     )
       throw new TypeError('Conflicting native record source set snapshot');
   }
-  return { frontier: row.native_set_frontier, page, gap: null };
+  return { frontier: row.native_set_frontier, complete: row.native_set_index_complete, page, gap: null };
 }
 
 /** Native reverse-index EOF is only index progress, never historical/copy/source-cut proof. */
@@ -105,8 +117,11 @@ export async function enrollRecordHistorySourceSets(
   );
   const row = progress.rows[0];
   if (!row) throw new TypeError('Record history source-set progress missing');
-  if (row.native_set_index_complete) return null;
-  if (!prepared.page || row.native_set_frontier !== prepared.frontier)
+  if (
+    !prepared.page ||
+    row.native_set_frontier !== prepared.frontier ||
+    row.native_set_index_complete !== prepared.complete
+  )
     return 'record-native-source-set-inventory-unsealed';
   const producer = nativeRecordSourceSetProducer();
   for (const set of prepared.page.sets) {

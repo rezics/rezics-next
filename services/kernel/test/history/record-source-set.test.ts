@@ -178,7 +178,7 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     await declareCommandHistory(tx, kind, scope(person));
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
-      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: { source: 'native' } },
+      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: { accounts: [person.accountId], source: 'native' } },
       scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
     });
     const building = await tx.query(
@@ -242,7 +242,7 @@ test('the native seal guard rolls back building source and generated work togeth
     await declareCommandHistory(tx, kind, scope(person));
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
-      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: {} },
+      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: { accounts: [person.accountId] } },
       scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
     });
     await producer.appendSemanticRecordSourceSet(tx, handle, { sources: [source], terms: [] });

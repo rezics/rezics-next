@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
 export type {
   SemanticRecordSourceSet,
   SemanticRecordSourceSetLocator,
@@ -16,13 +19,17 @@ export class RecordSourceSetUnavailableError extends Error {
   }
 }
 
-// A declaration file is not a native implementation. Import errors from an existing owner
-// module propagate. Loading once permits synchronous, source-owned same-command validation.
-const producer = (await Bun.file(new URL('../semantic/record-source-set.ts', import.meta.url)).exists())
-  ? await import('../semantic/record-source-set.ts')
-  : null;
+// Load the exact owner only on first use. A top-level dynamic import would deadlock if
+// Source imports History's declaration port while History is awaiting that import.
+// A declaration file alone is unavailable; failures in an existing module propagate.
+const requireNative = createRequire(import.meta.url);
+let producer: RecordSourceSetProducer | undefined;
 
 export function nativeRecordSourceSetProducer(): RecordSourceSetProducer {
-  if (!producer) throw new RecordSourceSetUnavailableError();
-  return producer;
+  if (producer) return producer;
+  if (!existsSync(new URL('../semantic/record-source-set.ts', import.meta.url)))
+    throw new RecordSourceSetUnavailableError();
+  const native: RecordSourceSetProducer = requireNative('../semantic/record-source-set.ts');
+  producer = native;
+  return native;
 }
