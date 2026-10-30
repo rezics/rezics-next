@@ -1,5 +1,4 @@
 import { acknowledgeErasure } from '../access/erasure.ts';
-import type { Effect } from '../events/effects.ts';
 import type { WorkModule } from '../work/registry.ts';
 
 export const importsWorkModule: WorkModule = {

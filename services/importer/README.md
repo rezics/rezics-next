@@ -177,9 +177,24 @@ provider. It point-reads the configured alias and native relation keys through
 `run_reference_signatures(source,record_key)` table stores one bounded signature per
 acknowledged record; an unchanged record is replanned only when the exact own-reference
 outcomes change. Prepared bootstrap bytes, keys and receipts remain immutable across reopen.
-During a dependency refresh, proposals whose complete semantic statement is unchanged are
-retained, while changed relation bodies are proposed with new keys. This avoids duplicate
+During a dependency refresh, proposals whose producing converter revision and complete semantic statement
+are unchanged are retained, while changed relation bodies are proposed with new keys. This avoids duplicate
 candidate effects for unrelated fields such as an unchanged unknown author.
+
+A trusted converter revision change reconciles every unfenced field even when its semantic values match.
+The bounded current owned-candidate comparison reads the producing revision from each immutable saved proposal;
+an old revision cannot supply provenance for the new converter. Ordinary retractions and fresh proposals use
+stable run-specific operation keys while preserving the source digest, native revision, bound subject and prior
+request/receipt bytes. Exact source/record/field fences are checked before the unchanged shortcut and again at
+dispatch. Same-run recovery can retain candidates already acknowledged from the current converter. VNDB's
+statistic-only completion still requires a successful statistic write and exhaustive semantic retention; it
+cannot stand in for new-converter proposals. See the [focused verification record](../../docs/research/imports-audit/revision-fence-refresh.md).
+
+### Reconcile a new converter revision with current fences
+
+- Touches: the bounded current owned candidates and their immutable proposal source fields, exact run/member/acknowledgement keys and ordinary public bulk commands.
+- Bound: at most 300 current candidates per record, 100 commands and 65,536 bytes per envelope; existing O((1+q) log R) writes and O(q) retained data at the existing q caps. The revision comparison adds no SQL, history scan, source pass or privilege; existing proposal matching work is unchanged.
+- Growth check: existing local/canonical PostgreSQL/derived units and bounds remain unchanged. Focused refresh acceptance proves proposal provenance and fences, not new growth measurements; native growth remains with the shared producer's full acceptance.
 
 The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
 default handoff and unchanged dependency refresh. Original implementation locator:

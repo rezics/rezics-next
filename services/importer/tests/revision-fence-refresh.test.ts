@@ -71,8 +71,9 @@ function fixture() {
       const commands = body.commands as BatchCommand[];
       calls.push(commands);
       // Recheck the exact tuple at the ordinary write boundary too.
-      expect(commands.some((c) => fences.has(tupleKey(c.source.source, c.source.external_id, c.source.field_group))))
-        .toBe(false);
+      expect(
+        commands.some((c) => fences.has(tupleKey(c.source.source, c.source.external_id, c.source.field_group))),
+      ).toBe(false);
       if (fault === 'denied' && commands.some((c) => c.source.external_id === '2' && c.op === 'propose'))
         return Response.json({ code: 'forbidden' }, { status: 403 });
       return Response.json({
@@ -99,54 +100,90 @@ function fixture() {
       });
     }) as typeof fetch,
   });
-  const open = () => new Importer({
-    path: resolve(directory, 'journal.sqlite'),
-    recordConcurrency: 1,
-    transport: {
-      batchWrite: (request) => transport.batch(request),
-      readFence: (tuple) => transport.fence({
-        source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group,
-      }),
-      writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
-    },
-    afterBulkSuccess(request) {
-      if (fault === 'interrupted' && request.commands.some((c) => c.op === 'propose' && c.source.external_id === '2')) {
-        fault = null;
-        throw new Error('Local crash after server receipt before acknowledgement');
-      }
-    },
-  });
+  const open = () =>
+    new Importer({
+      path: resolve(directory, 'journal.sqlite'),
+      recordConcurrency: 1,
+      transport: {
+        batchWrite: (request) => transport.batch(request),
+        readFence: (tuple) =>
+          transport.fence({
+            source: tuple.source,
+            externalId: tuple.external_id,
+            fieldGroup: tuple.field_group,
+          }),
+        writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
+      },
+      afterBulkSuccess(request) {
+        if (
+          fault === 'interrupted' &&
+          request.commands.some((c) => c.op === 'propose' && c.source.external_id === '2')
+        ) {
+          fault = null;
+          throw new Error('Local crash after server receipt before acknowledgement');
+        }
+      },
+    });
   let importer = open();
   return {
-    calls, fences, lookups, receipts, statistics,
-    get importer() { return importer; },
-    fail(value: typeof fault) { fault = value; },
+    calls,
+    fences,
+    lookups,
+    receipts,
+    statistics,
+    get importer() {
+      return importer;
+    },
+    fail(value: typeof fault) {
+      fault = value;
+    },
     run(source = 'refresh', revision = 'conversion-v1', rows = records()) {
-      return importer.runRecords(createSourceRegistration('bangumi', { source, converterRevision: revision }),
-        (async function* () { yield* rows; })());
+      return importer.runRecords(
+        createSourceRegistration('bangumi', { source, converterRevision: revision }),
+        (async function* () {
+          yield* rows;
+        })(),
+      );
     },
     runVndb(average: number, converterRevision = 'conversion-v1') {
-      return importer.runRecords(createSourceRegistration('vndb', { converterRevision }), (async function* () {
-        yield {
-          source: 'vndb', key: 'v123', revision: '7', payload: {
-            vn: { id: 'v123', olang: 'en', c_average: average, c_votecount: 20, c_rating: 900 },
-            entry_meta: { id: 'v123', revision: 7 },
-            vn_titles: [{ id: 'v123', lang: 'en', official: true, title: 'Test visual novel', latin: null }],
-            vn_extlinks: [], extlinks: [],
-          },
-        };
-      })());
+      return importer.runRecords(
+        createSourceRegistration('vndb', { converterRevision }),
+        (async function* () {
+          yield {
+            source: 'vndb',
+            key: 'v123',
+            revision: '7',
+            payload: {
+              vn: { id: 'v123', olang: 'en', c_average: average, c_votecount: 20, c_rating: 900 },
+              entry_meta: { id: 'v123', revision: 7 },
+              vn_titles: [{ id: 'v123', lang: 'en', official: true, title: 'Test visual novel', latin: null }],
+              vn_extlinks: [],
+              extlinks: [],
+            },
+          };
+        })(),
+      );
     },
     candidates(source = 'refresh', external_id = '1') {
-      return FIELD_GROUPS.flatMap((group) => importer.session.bindings.candidates({ source, external_id }, group, { limit: 100 }));
+      return FIELD_GROUPS.flatMap((group) =>
+        importer.session.bindings.candidates({ source, external_id }, group, { limit: 100 }),
+      );
     },
     journals(source = 'refresh') {
-      return importer.session.store.database.query(
-        'SELECT external_id, key, bytes, signature, acknowledgement FROM binding_journal WHERE source=? ORDER BY external_id,key',
-      ).all(source);
+      return importer.session.store.database
+        .query(
+          'SELECT external_id, key, bytes, signature, acknowledgement FROM binding_journal WHERE source=? ORDER BY external_id,key',
+        )
+        .all(source);
     },
-    async reopen() { await importer.close(); importer = open(); },
-    async close() { await importer.close(); rmSync(directory, { recursive: true, force: true }); },
+    async reopen() {
+      await importer.close();
+      importer = open();
+    },
+    async close() {
+      await importer.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
   };
 }
 
@@ -173,14 +210,26 @@ test('a new converter produces fresh same-value proposals for every record with 
         const command = JSON.parse(candidate.bytes).commands[0] as BatchCommand;
         expect(command.op).toBe('propose');
         expect(command.source).toMatchObject({
-          source: 'refresh', external_id, digest: rows[i]!.digest,
-          record_revision: rows[i]!.recordRevision, converter_revision: 'conversion-v2',
+          source: 'refresh',
+          external_id,
+          digest: rows[i]!.digest,
+          record_revision: rows[i]!.recordRevision,
+          converter_revision: 'conversion-v2',
         });
-        expect(old[i]!.some((prior) => prior.key === candidate.key || prior.candidate === candidate.candidate)).toBe(false);
-        expect(old[i]!.some((prior) => prior.subject === candidate.subject &&
-          JSON.stringify(JSON.parse(prior.bytes).commands[0].statement) === JSON.stringify('statement' in command ? command.statement : null))).toBe(true);
+        expect(old[i]!.some((prior) => prior.key === candidate.key || prior.candidate === candidate.candidate)).toBe(
+          false,
+        );
+        expect(
+          old[i]!.some(
+            (prior) =>
+              prior.subject === candidate.subject &&
+              JSON.stringify(JSON.parse(prior.bytes).commands[0].statement) ===
+                JSON.stringify('statement' in command ? command.statement : null),
+          ),
+        ).toBe(true);
       }
-      for (const prior of old[i]!) expect(fresh.some((c) => c.op === 'retract' && c.candidate === prior.candidate)).toBe(true);
+      for (const prior of old[i]!)
+        expect(fresh.some((c) => c.op === 'retract' && c.candidate === prior.candidate)).toBe(true);
     }
     expect(f.journals()).toEqual(expect.arrayContaining(journals));
     for (const [key, receipt] of receipts) expect(f.receipts.get(key)).toEqual(receipt);
@@ -188,7 +237,9 @@ test('a new converter produces fresh same-value proposals for every record with 
     const count = f.calls.length;
     expect((await f.run('refresh', 'conversion-v2')).status).toBe('committed');
     expect(f.calls).toHaveLength(count);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });
 
 test('unchanged, changed and reconverted inputs obey exact field, record and source fences', async () => {
@@ -202,24 +253,36 @@ test('unchanged, changed and reconverted inputs obey exact field, record and sou
     f.lookups.length = 0;
     expect((await f.run()).status).toBe('committed');
     expect(f.calls).toHaveLength(start);
-    for (const id of ['1', '2']) for (const group of FIELD_GROUPS)
-      expect(f.lookups).toContain(tupleKey('refresh', id, group));
+    for (const id of ['1', '2'])
+      for (const group of FIELD_GROUPS) expect(f.lookups).toContain(tupleKey('refresh', id, group));
     await f.reopen();
     expect((await f.run('refresh', 'conversion-v2')).status).toBe('committed');
     let writes = f.calls.slice(start).flat();
-    expect(writes.some((c) => c.op === 'propose' && c.source.external_id === '1' && c.source.field_group === 'facts')).toBe(true);
-    expect(writes.some((c) => c.op === 'propose' && c.source.external_id === '2' && c.source.field_group === 'summary')).toBe(true);
+    expect(
+      writes.some((c) => c.op === 'propose' && c.source.external_id === '1' && c.source.field_group === 'facts'),
+    ).toBe(true);
+    expect(
+      writes.some((c) => c.op === 'propose' && c.source.external_id === '2' && c.source.field_group === 'summary'),
+    ).toBe(true);
     start = f.calls.length;
     expect((await f.run('refresh', 'conversion-v3', records(true))).status).toBe('committed');
     writes = f.calls.slice(start).flat();
     expect(writes.length).toBeGreaterThan(0);
-    expect(writes.some((c) => f.fences.has(tupleKey(c.source.source, c.source.external_id, c.source.field_group)))).toBe(false);
+    expect(
+      writes.some((c) => f.fences.has(tupleKey(c.source.source, c.source.external_id, c.source.field_group))),
+    ).toBe(false);
     start = f.calls.length;
     expect((await f.run('adjacent', 'conversion-v2')).status).toBe('committed');
-    const adjacent = f.calls.slice(start).flat().filter((c) => c.op === 'propose');
-    for (const id of ['1', '2']) for (const group of ['facts', 'summary'])
-      expect(adjacent.some((c) => c.source.external_id === id && c.source.field_group === group)).toBe(true);
-  } finally { await f.close(); }
+    const adjacent = f.calls
+      .slice(start)
+      .flat()
+      .filter((c) => c.op === 'propose');
+    for (const id of ['1', '2'])
+      for (const group of ['facts', 'summary'])
+        expect(adjacent.some((c) => c.source.external_id === id && c.source.field_group === group)).toBe(true);
+  } finally {
+    await f.close();
+  }
 });
 
 for (const fault of ['denied', 'interrupted'] as const) {
@@ -235,8 +298,12 @@ for (const fault of ['denied', 'interrupted'] as const) {
       expect((await f.run('refresh', 'conversion-v2')).status).toBe(fault === 'denied' ? 'bulk-failed' : 'interrupted');
       expect(f.importer.session.store.source('refresh')).toEqual(baseline);
       const attempted = f.calls.slice(start);
-      expect(attempted.some((commands) => commands.some((c) => c.op === 'propose' && c.source.external_id === '1'))).toBe(true);
-      const unresolved = attempted.find((commands) => commands.some((c) => c.op === 'propose' && c.source.external_id === '2'))!;
+      expect(
+        attempted.some((commands) => commands.some((c) => c.op === 'propose' && c.source.external_id === '1')),
+      ).toBe(true);
+      const unresolved = attempted.find((commands) =>
+        commands.some((c) => c.op === 'propose' && c.source.external_id === '2'),
+      )!;
       expect(unresolved).toBeDefined();
       const retained = f.candidates();
       await f.reopen();
@@ -248,11 +315,14 @@ for (const fault of ['denied', 'interrupted'] as const) {
       expect(f.candidates()).toEqual(retained);
       expect(f.journals()).toEqual(expect.arrayContaining(journals));
       for (const [key, receipt] of receipts) expect(f.receipts.get(key)).toEqual(receipt);
-      for (const id of ['1', '2']) expect(f.importer.session.store.key('refresh', id).baseline?.converter_revision).toBe('conversion-v2');
+      for (const id of ['1', '2'])
+        expect(f.importer.session.store.key('refresh', id).baseline?.converter_revision).toBe('conversion-v2');
       const count = f.calls.length;
       expect((await f.run('refresh', 'conversion-v2')).status).toBe('committed');
       expect(f.calls).toHaveLength(count);
-    } finally { await f.close(); }
+    } finally {
+      await f.close();
+    }
   });
 }
 
@@ -281,7 +351,17 @@ test('same-revision VNDB statistic-only retention requires success and never sub
     expect(refreshedRow.recordRevision).toBe(row.recordRevision);
     expect(refreshedRow.digest).not.toBe(row.digest);
     expect((await f.runVndb(810, 'conversion-v2')).status).toBe('committed');
-    expect(f.calls.slice(count).flat().some((c) => c.op === 'propose' && c.source.converter_revision === 'conversion-v2')).toBe(true);
-    expect(f.importer.session.store.key('vndb', 'v123').baseline).toEqual({ ...refreshedRow, converter_revision: 'conversion-v2' });
-  } finally { await f.close(); }
+    expect(
+      f.calls
+        .slice(count)
+        .flat()
+        .some((c) => c.op === 'propose' && c.source.converter_revision === 'conversion-v2'),
+    ).toBe(true);
+    expect(f.importer.session.store.key('vndb', 'v123').baseline).toEqual({
+      ...refreshedRow,
+      converter_revision: 'conversion-v2',
+    });
+  } finally {
+    await f.close();
+  }
 });

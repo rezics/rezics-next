@@ -644,6 +644,9 @@ export class Importer {
       const unchanged = conversion?.proposals.find(
         (command) =>
           command.op === 'propose' &&
+          // Equal facts from another converter revision still need fresh public
+          // provenance. Only the producing revision can justify retention.
+          command.source.converter_revision === prior.source.converter_revision &&
           command.source.field_group === candidate.field_group &&
           command.subject === candidate.subject &&
           isDeepStrictEqual(command.statement, prior.statement) &&
