@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { authPost } from './api';
+import { readConsent } from './consent';
 
 // Closed public DTOs from Auth's security inventory. Never keep native metadata.
 export type OwnedClient = { client_id: string; display_name: string | null; disabled: boolean; scopes: string[] };
@@ -60,7 +61,7 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
         return { kind: 'unavailable' };
       rows.push({
         ...label,
-        granted: entry.granted,
+        granted: [...entry.granted],
         status: entry.status as GrantedConsent['status'],
         reducible: entry.reducible,
         pending_reduction: entry.pending_reduction,
@@ -171,20 +172,82 @@ export async function loadPasskeyInventory() {
 export type ConsentReductionResult = {
   kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'unknown' | 'unavailable';
 };
-export async function removeConsent(consent: GrantedConsent): Promise<ConsentReductionResult> {
-  if (!consent.reducible || consent.pending_reduction || consent.status !== 'current' || !consent.granted.length)
+/** Closed, memory-only target. Native Auth remains the sole consent/barrier authority. */
+export type ConsentReduction = Readonly<{
+  clientId: string;
+  current: readonly string[];
+  retained: readonly string[];
+}>;
+
+function scopeSet(value: unknown): value is string[] {
+  return strings(value) && value.every((scope) => scope.length > 0) && new Set(value).size === value.length;
+}
+function sameScopes(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((scope) => right.includes(scope));
+}
+export function createConsentReduction(consent: GrantedConsent, retained: readonly string[]): ConsentReduction | null {
+  if (
+    !consent.client_id ||
+    !consent.reducible ||
+    consent.pending_reduction ||
+    consent.status !== 'current' ||
+    !scopeSet(consent.granted) ||
+    !scopeSet(retained) ||
+    retained.length >= consent.granted.length ||
+    retained.some((scope) => !consent.granted.includes(scope))
+  )
+    return null;
+  return Object.freeze({
+    clientId: consent.client_id,
+    current: Object.freeze([...consent.granted]),
+    retained: Object.freeze([...retained]),
+  });
+}
+
+/** One native current read followed by the existing exact consent replacement.
+ * No tokens, receipts or returned scopes become a local grant or replay queue.
+ */
+export async function reduceConsent(consent: GrantedConsent, retained: readonly string[]): Promise<ConsentReductionResult> {
+  // Snapshot before the first await: caller edits cannot retarget an in-flight write.
+  const target = createConsentReduction(consent, retained);
+  if (!target) return { kind: 'denied' };
+  const current = await readConsent(target.clientId);
+  if (!current.ok) {
+    return {
+      kind: current.status === 401 ? 'signed-out' : current.status === 403 || current.status === 404 ? 'denied' : 'unavailable',
+    };
+  }
+  // This exact native read also refuses first-party, disabled/unready clients.
+  // Do not turn a stale reduction into a consent expansion or unchanged write.
+  if (
+    !scopeSet(current.body.granted) ||
+    !scopeSet(current.body.scopes) ||
+    !sameScopes(current.body.granted, target.current) ||
+    target.retained.some((scope) => !current.body.scopes.includes(scope))
+  )
     return { kind: 'denied' };
-  const response = await authPost<{ client_id?: unknown; scope?: unknown }>('/consent', {
-    client_id: consent.client_id,
-    scope: [],
+  const response = await authPost<unknown>('/consent', {
+    client_id: target.clientId,
+    scope: target.retained,
   });
   if (!response.ok) {
     if (response.status === 401) return { kind: 'signed-out' };
     if (response.status === 403 || response.status === 409) return { kind: 'denied' };
-    // A lost write response is not confirmation that permission was removed.
-    return { kind: response.code === 'unavailable' ? 'unknown' : 'unavailable' };
+    // Once sent, an outage/ambiguous acknowledgement may have applied the barrier.
+    return { kind: 'unknown' };
   }
-  if (response.body.client_id !== consent.client_id || !strings(response.body.scope) || response.body.scope.length)
+  if (
+    !record(response.body) ||
+    Object.keys(response.body).sort().join(',') !== 'client_id,scope' ||
+    response.body.client_id !== target.clientId ||
+    !scopeSet(response.body.scope) ||
+    !sameScopes(response.body.scope, target.retained)
+  )
     return { kind: 'unknown' };
   return { kind: 'accepted' };
+}
+
+// Backwards-compatible remove-all entry point, using the identical native barrier.
+export async function removeConsent(consent: GrantedConsent): Promise<ConsentReductionResult> {
+  return reduceConsent(consent, []);
 }
