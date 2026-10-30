@@ -57,6 +57,9 @@ export async function eraseAccountUploadItem(
       return 'erased';
     }
     if (source.collection_pending) return 'pending';
+    // A native permanent Realm claim uses the existing retained-upload disposition.
+    // The locator remains available to the ordinary account-erasure proof pass.
+    if (source.claimed_realm_id) return 'retained';
     if (source.claimed_item_id) {
       const post = await withConnection(deps.pool, async (client) => {
         const anchor = await readPartition(client, partitionOf(sourceRoute));

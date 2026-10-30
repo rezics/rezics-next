@@ -490,6 +490,10 @@ export const MediaReservationInputSchema = t.Union([
     closed,
   ),
 ]);
+export const RealmMediaReservationInputSchema = t.Object(
+  { purpose: t.Union([t.Literal('realm-icon'), t.Literal('realm-banner')]), ...mediaReservationFields },
+  closed,
+);
 export const MediaCompletionInputSchema = t.Object(
   {
     containerId: ContentIdSchema,
@@ -523,7 +527,13 @@ export const MediaReservationResponseSchema = t.Object(
   {
     media: t.Union([
       mediaReservationMetadata,
-      t.Object({ ...mediaReservationMetadata.properties, purpose: t.Literal('avatar') }, closed),
+      t.Object(
+        {
+          ...mediaReservationMetadata.properties,
+          purpose: t.Union([t.Literal('avatar'), t.Literal('realm-icon'), t.Literal('realm-banner')]),
+        },
+        closed,
+      ),
     ]),
   },
   closed,

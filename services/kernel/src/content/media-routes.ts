@@ -21,6 +21,7 @@ import {
 } from './media.ts';
 import {
   MediaReservationInputSchema,
+  RealmMediaReservationInputSchema,
   MediaCompletionInputSchema,
   MediaReservationResponseSchema,
   MediaCompletionResponseSchema,
@@ -84,7 +85,7 @@ async function mutation<T>(work: () => Promise<T>) {
   }
 }
 function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>>) {
-  if (media.purpose !== 'post-image' && media.purpose !== 'avatar') throw new ProblemError('not_found');
+  if (media.purpose === 'cover') throw new ProblemError('not_found');
   return {
     id: media.id,
     state: media.erased ? ('erased' as const) : media.state,
@@ -95,7 +96,7 @@ function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>
     uploaderId: media.uploaderId,
     key: media.key,
     reservationRequestId: media.reservationRequestId,
-    ...(media.purpose === 'avatar' ? { purpose: media.purpose } : {}),
+    ...(media.purpose !== 'post-image' ? { purpose: media.purpose } : {}),
   };
 }
 
@@ -135,6 +136,48 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
                   }
                 : undefined;
             const result = await reserveMedia(dependencies, actor, body, context(request, job.deadline), target);
+            session.record(result);
+            const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
+            if (!media) throw new ProblemError('not_found');
+            set.headers.location = `/v1/media/${media.id}`;
+            set.headers['cache-control'] = 'private, no-store';
+            return status(201, { media: metadata(media) });
+          }),
+        ),
+    )
+    .post(
+      '/v1/realms/:id/media',
+      {
+        params,
+        body: strictContentSchema(RealmMediaReservationInputSchema),
+        headers: commandHeaders,
+        response: {
+          201: withHeaders(strictContentSchema(MediaReservationResponseSchema), {
+            ...sessionHeader,
+            location: t.String(),
+          }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.media.create',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['content.media'],
+          'x-rate-limit': upload,
+          security: secured,
+        },
+      },
+      async ({ params: { id }, actor, body, request, admission, job, session, set, status }) =>
+        mutation(() =>
+          admission.run('normal', job, async () => {
+            existing(id);
+            if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+            const result = await reserveMedia(
+              dependencies,
+              actor,
+              { ...body, containerId: id },
+              context(request, job.deadline),
+            );
             session.record(result);
             const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
             if (!media) throw new ProblemError('not_found');

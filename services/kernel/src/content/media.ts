@@ -13,7 +13,7 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
+import { initializeResourceGrants, parentCreationAuthorization, commandAccessContext } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -21,6 +21,7 @@ import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readThreadTarget from './read-new-thread-target.sql';
 import readAccount from '../access/account-read.sql';
+import readRealmHead from '../community/realm-read.sql';
 import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
@@ -41,7 +42,7 @@ import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId
 import { downloadMedia, type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 
-export type MediaPurpose = 'post-image' | 'cover' | 'avatar';
+export type MediaPurpose = 'post-image' | 'cover' | 'avatar' | 'realm-icon' | 'realm-banner';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
   format: 'webp' | 'avif';
@@ -74,7 +75,12 @@ type MediaMetadataBase = Readonly<{
 /** Browser reservations describe post images and avatars with measured-size inputs. Imported covers
  * remain unmeasured until the trusted fetch and processing path observes the bytes. */
 export type MediaMetadata =
-  | (MediaMetadataBase & Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number }>)
+  | (MediaMetadataBase &
+      Readonly<{
+        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        mediaType: string;
+        byteCount: number;
+      }>)
   | (MediaMetadataBase &
       Readonly<{
         purpose: 'cover';
@@ -84,7 +90,7 @@ export type MediaMetadata =
         source: ImportedSource;
       }>);
 type MediaReservationFields = Readonly<{
-  purpose: 'post-image' | 'avatar';
+  purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
   mediaType: string;
   byteCount: number;
   sha256?: string;
@@ -228,9 +234,11 @@ export async function reserveMedia(
   const r = route(containerId);
   if (newThreadTarget && newThreadTarget.thread.route !== r) throw new TypeError('Invalid media target route');
   const avatar = input.purpose === 'avatar';
+  const realm = input.purpose === 'realm-icon' || input.purpose === 'realm-banner';
+  if (realm && newThreadTarget) throw new GrantDeniedError();
   if (avatar && (containerId !== owner.accountId || owner.clientId !== 'rezics-website' || newThreadTarget))
     throw new GrantDeniedError();
-  if ((input.purpose !== 'post-image' && !avatar) || !imageTypes.has(input.mediaType))
+  if ((input.purpose !== 'post-image' && !avatar && !realm) || !imageTypes.has(input.mediaType))
     throw new TypeError('Invalid media purpose or type');
   length(input.byteCount);
   if (input.sha256 !== undefined) digest(input.sha256);
@@ -262,10 +270,14 @@ export async function reserveMedia(
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: 'media:create',
+    action: realm ? 'realm:manage' : 'media:create',
     parent: {
       resource: board ?? { route: r, id: containerId },
       async validate(client, time) {
+        if (realm)
+          return (
+            (await readRealmHead.run(client, { route: r, id: containerId, at: authoritativeTimeValue(time) })) !== null
+          );
         if (avatar) {
           const current = await readAccount.run(client, { route: r, account_id: containerId });
           return current !== null && current.state === 'active';
@@ -327,7 +339,7 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      if (avatar) return base.prepare!(attempt);
+      if (avatar || realm) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
           pool: dependencies.pool,
@@ -475,14 +487,33 @@ export async function completeMedia(
     { pool: dependencies.pool, deadline: context.deadline },
     () => new GrantDeniedError(),
   );
+  let realmManagement: AccessCheck | null = null;
   const authorization: CommandAuthorization = {
     ...base,
+    async prepare(attempt) {
+      const evidence = await base.prepare?.(attempt);
+      const initial = await read(dependencies.pool, mediaId);
+      realmManagement =
+        initial?.purpose === 'realm-icon' || initial?.purpose === 'realm-banner'
+          ? await accessCheck(
+              dependencies.access,
+              actor,
+              'realm:manage',
+              { route: r, id: body.containerId },
+              commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+            )
+          : null;
+      return evidence;
+    },
     async authorize(tx, attempt, evidence) {
       const mode = await base.authorize(tx, attempt, evidence);
       const row = await read(tx, mediaId);
       if (
         !row ||
-        (row.purpose !== 'post-image' && row.purpose !== 'avatar') ||
+        (row.purpose !== 'post-image' &&
+          row.purpose !== 'avatar' &&
+          row.purpose !== 'realm-icon' &&
+          row.purpose !== 'realm-banner') ||
         (row.purpose === 'avatar' && row.container_id !== owner.accountId) ||
         row.uploader_id !== owner.accountId ||
         row.container_id !== body.containerId ||
@@ -494,6 +525,14 @@ export async function completeMedia(
         row.collection_pending
       )
         throw new GrantDeniedError();
+      if (row.purpose === 'realm-icon' || row.purpose === 'realm-banner') {
+        const current = await readRealmHead.run(tx, {
+          route: r,
+          id: body.containerId,
+          at: authoritativeTimeValue(attempt.time),
+        });
+        if (!current || !realmManagement || !(await realmManagement(tx, attempt.time))) throw new GrantDeniedError();
+      }
       return mode;
     },
   };
@@ -580,7 +619,14 @@ export async function readReservation(
     decision: row.decision,
     variants,
   };
-  if ((row.purpose === 'post-image' || row.purpose === 'avatar') && row.media_type !== null && row.byte_count !== null)
+  if (
+    (row.purpose === 'post-image' ||
+      row.purpose === 'avatar' ||
+      row.purpose === 'realm-icon' ||
+      row.purpose === 'realm-banner') &&
+    row.media_type !== null &&
+    row.byte_count !== null
+  )
     return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount: Number(row.byte_count) };
   if (row.purpose !== 'cover') return null;
   const source = {

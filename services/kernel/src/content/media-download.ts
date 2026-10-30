@@ -17,6 +17,7 @@ import readPostAuthor from './read-post-author.sql';
 import readThreadAuthor from './read-thread-author.sql';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql';
+import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
@@ -111,6 +112,28 @@ export async function downloadMedia(
     const initial = await snapshot(r, (client) => point(client, mediaId, slot));
     if (!initial || !usable(initial) || routeOf(initial.container_id) !== r) return denied;
     const original = variant === 'original';
+    if (initial.purpose === 'realm-icon' || initial.purpose === 'realm-banner') {
+      if (original || initial.state !== 'available') return denied;
+      const authorized = await authorizedRealmMedia(dependencies, initial.container_id, [mediaId], {
+        actor,
+        deadline: context.deadline,
+      });
+      const current = authorized.get(mediaId);
+      if (!current) return denied;
+      const selected = realmMediaVariants(current).find(
+        (entry) => entry.format === slot.format && entry.width === slot.width,
+      );
+      if (!selected || Date.now() >= context.deadline) return denied;
+      return {
+        allowed: true,
+        key: selected.key,
+        sha256: selected.sha256,
+        mediaType: selected.mediaType,
+        byteCount: selected.byteCount,
+        publicCache: false,
+        cacheControl: 'private, no-store',
+      };
+    }
     if (initial.purpose === 'avatar') {
       if (original || initial.state !== 'available' || initial.container_id !== initial.uploader_id) return denied;
       const resource = { route: r, id: mediaId };

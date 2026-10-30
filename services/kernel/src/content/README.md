@@ -512,6 +512,90 @@ Cover variants are served by the website's media route like every other media ob
 
 Every imported cover carries its rights holder, the source it came through and its licence, and is credited where it is shown. A cover comes down on a valid complaint through the media takedown path, and its subject then shows its placeholder. The takedown also fences the source record's cover field, so a later import refresh cannot bring the same cover back.
 
+## Realm presentation media
+
+Content adopts the native Realm asset slice of the [community presentation research](../../../../docs/research/content-community-presentation-contract.md).
+This section owns assets; Realm settings/revisions and presentation enrichment belong to Community and its consumers.
+Space assets, board overrides, rules and member counts are outside this producer.
+
+`realm-icon` and `realm-banner` are native media purposes with the actual Realm as `containerId`.
+`POST /v1/realms/{id}/media` accepts only `{ purpose, mediaType, byteCount, sha256? }`, with no undeclared fields.
+It uses `parentCreationAuthorization` with current `realm:manage` on the active `community.realm` at authoritative T,
+then the existing uploader/new-media initializer, reservation receipt and reserved event. The media and Realm share
+an exact route/home. It adds no `media:create` grant on a Realm and no account-avatar reuse.
+Reservation status includes the native purpose. The existing `/v1/media` request schema remains unchanged.
+
+Completion uses the existing website uploader BFF, uploader/media:complete authorization, reservation identity,
+20 MiB measured-byte limit and declared digest checks. For Realm purposes it also checks the active Realm and current
+`realm:manage` at each command attempt's T, before receipt replay. No client scope is widened. Accounts owns scope
+mapping; an unavailable or missing mapping denies admission. The existing image job publishes reencoded AVIF/WebP,
+with its 40-million-pixel ceiling, width ladder, at most twelve variants and normal rejected outcome. Unclaimed
+media follows the existing 24-hour collector.
+
+`claimRealmPresentationMedia(tx, { realmId, author, avatarMediaId, bannerMediaId })` is called by the native Realm
+settings command **after** appending its revision and moving the head with CAS, in the same transaction. It requires
+the live command's execute authorization for exact `realm:manage`, home and account/client/requested-by binding;
+the supplied Actor grants nothing. The exact current Realm head and revision must be written by that transaction,
+with the same author and a predecessor. An arbitrary command or a copied query executor cannot claim.
+Each non-null slot claims one available, unfenced same-route/same-Realm image uploaded by that actor, with matching
+purpose. A mismatch throws `MediaUnavailableError`, for the settings consumer's uniform 409 `media_unavailable`.
+The permanent `claimed_realm_id` and `claimed_at` cannot move or clear. Null slots clear selection only; immutable
+prior revision claims survive. No separate claim HTTP route or generic claim constructor exists.
+
+`readRealmPresentationImages` returns the exact optional image types exported by `realm-media.ts`. Unset, erased,
+concealed, unclaimed or mismatched images produce `{state:'none',value:null}` without identifying reasons.
+Optional dependency failures produce `unavailable` with no cached value. Available summaries contain only native
+media/container IDs, digest, actual largest derivative dimensions and at most twelve derivative format/width/height
+facts. Missing stored placeholder/focal-point metadata is null; uploaded native assets have null credit. No storage
+key, original, account identity or source URL is disclosed.
+
+The helper checks the current Realm, its independently anchored active Space host, native Access and exact media
+availability/security fences at fixed source/final anchors. It preserves the Realm's Context binding and has no
+removed-container Global fallback. The existing media-id/variant download transport repeats that native chain for
+every request, including conditional requests. It permits only available derivatives of permanently claimed Realm
+assets and uses `private, no-store`; originals are never served. A summary is never download permission.
+
+Collection already excludes `claimed_at` media. Account upload erasure recognizes actual permanent Realm claims
+through the existing retained-upload disposition, retaining the locator for its ordinary proof pass and the objects
+with their Realm revision owner. Explicitly erased media still requires prefix deletion before locator removal.
+There is no new cleanup coordinator, acknowledgement or custody proof; later native/physical evidence remains due.
+
+### Cost: Realm asset reservation
+
+- Touches: current Realm parent/head/Access, one media insert, uploader initializer, receipt and existing reserved event.
+- Bound: constant rows/statements, O(log R) indexed work; no account-image or revision-history search.
+- Growth check: later reuse `test/content/growth-media.test.ts` with the Realm parent.
+
+### Cost: Realm asset completion
+
+- Touches: exact reservation/uploader, current media:complete and Realm management, one update/receipt/event.
+- Bound: constant rows/statements, O(log R), existing 20 MiB byte bound; authorization repeats before replay.
+- Growth check: later reuse `test/content/growth-media.test.ts` with current Realm management.
+
+### Cost: Realm presentation claim
+
+- Touches: authorized Realm settings head/revision, at most two exact media rows and permanent claim updates.
+- Bound: O(changes log R), at most two changes in stable lock order; no history walk or reference scan.
+- Growth check: later reuse `test/community/growth-realm.test.ts` with two matching assets.
+
+### Cost: Realm image summary and download
+
+- Touches: fixed source/final Realm/media anchors, independent host anchors and Access; at most two media and twelve derivatives each (one selected slot for bytes).
+- Bound: constant rows/statements, O(log R) per exact probe, fixed anchors and no retry/discovery loop.
+- Growth check: later reuse `test/content/growth-media-realm-download.test.ts` with native assets and conditional requests.
+
+### Cost: Realm asset publication
+
+- Touches: existing image job, one source object/media row, at most twelve derivative objects/rows.
+- Bound: constant indexed statements, O(log R); existing 20 MiB and 40-million-pixel decode bounds.
+- Growth check: later reuse the image publication case in `test/content/growth-media.test.ts`.
+
+### Cost: Realm asset collection and account erasure
+
+- Touches: existing fixed collection/upload pages; each media disposition reads the exact permanent claim marker.
+- Bound: O(p log R) for existing page size p; no extra owner fanout, coordinator or historical revision walk.
+- Growth check: later reuse `test/content/growth-media-native-collection.test.ts` and `test/content/account-erasure-uploads.test.ts`.
+
 ## Avatars
 
 An avatar is an image media object with purpose `avatar`. Its container and uploader are the same account,
@@ -655,7 +739,7 @@ The retention inventory is:
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `content.post` and `content.revision`                   | Erase every available post not both available and published; clear its title when it opens a thread. Erase every non-head revision body and search text for retained posts. | A published, available post, its current revision and author id remain public; Accounts renders the author as `{ id, state, kind }`.  | Authored-items page under the closed fence.                    |
 | `content.thread`                                        | Clear the title and review-live state when its opening post is erased.                                                                                                      | A thread whose opening post remains published and available is retained with that post.                                               | Authored-items page under the closed fence.                    |
-| `content.media` and stored objects                      | Erase uploader media not attached to retained public content and delete every stored object before removing its upload locator.                                             | Media on an available, published post stays with that post.                                                                           | Uploads page; object deletion is the delivery proof.           |
+| `content.media` and stored objects                      | Erase uploader media not attached to retained public content and delete every stored object before removing its upload locator.                                             | Media on an available, published post stays with that post; a permanent native Realm claim stays with its Realm revisions.            | Uploads page; object deletion is the delivery proof.           |
 | Authored fields                                         | Clear body and mark erased unless the anonymous reader is served the field.                                                                                                 | Fields served to anonymous readers remain as public contributions.                                                                    | Uploads page.                                                  |
 | `content.report`                                        | Clear reporter identity and evidence text; keep the report and its decision.                                                                                                | No account attribution or evidence text is retained.                                                                                  | Reporter-locator page.                                         |
 | `content.moderation_decision`                           | Clear the decider. Clear statements outside the exception window.                                                                                                           | Statements of reasons from the previous 183 days remain for the affected person's complaint and are purged at each decision's expiry. | Moderation-locator page and expiry purge.                      |
@@ -668,7 +752,7 @@ every bounded phase found no data; otherwise it is `erased`. A recent moderation
 `content.moderation_decision.statement` exception with the complaint purpose and exact expiry. Retained statements
 move from the party locator to `content.account_erasure_statement`, an account-partition expiry key that also handles
 late effects without recreating an erasure locator. The participant proves its author, report, party, reaction and
-source-version seeks empty, verifies remaining upload entries are retained public media or fields, then acknowledges.
+source-version seeks empty, verifies remaining upload entries are retained public media, permanent Realm assets or fields, then acknowledges.
 One phase step adds constant progress reads and writes beyond the phase's own work; retaining a statement adds one
 account-partition expiry-key write.
 
@@ -679,7 +763,7 @@ make a content decision on every request, so no shared cache holds a platform co
 platform's custody. `content.account_upload` is the storage-deletion proof: an erased media locator remains until
 `purgeObject` returns, including for already-erased media and late uploads. Delivery acknowledges `none` when no
 media locator was found and `erased` after every erased media object's stored prefix is deleted. Retained public
-media and its objects stay. The uploads page touches at most 50 locators; each already-erased media key adds one
+media and permanently claimed Realm assets keep their objects. The uploads page touches at most 50 locators; each already-erased media key adds one
 idempotent prefix delete, plus one acknowledgement command per account.
 
 ## Cost

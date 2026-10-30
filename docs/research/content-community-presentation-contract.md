@@ -64,14 +64,10 @@ Read each container before enrichment and recheck its current head/state/read si
 A removed/unreadable Realm or Space never becomes Global or another container; only a genuinely null board
 `realmId` denotes Global. Preserve the independent `contextId` pointer; classification supplies no editorial grant.
 
-**Assets.** Content adds `realm-icon | realm-banner` purposes, Realm `containerId`, and a same-home permanent
-Realm claim. Reserve through proposed `POST /v1/realms/{id}/media` using `parentCreationAuthorization` with
-existing `realm:manage` at T and normal new-resource/uploader initialization. Completion retains uploader and
-`media:complete` checks and rechecks Realm management. Selection claims only matching-purpose, available,
-same-Realm/same-route media uploaded by this actor, inside the Realm settings transaction; claims cannot move.
-Reuse reserved → uploaded → reencoded available, existing image limits/variants, erasure and collection.
-Downloads, including conditional requests, check current Realm/container and media fences; serve derivatives
-through the existing private/no-cache media route. Never borrow account avatars, serve originals or store hotlinks.
+**Assets.** The native Realm icon/banner slice is adopted in the owning
+[Content contract](../../services/kernel/src/content/README.md#realm-presentation-media).
+That contract owns reservation, same-home claims, derivative summaries, current download gates and retention;
+this report remains evidence for the other proposed producers.
 
 **Rules.** Select a published native post in a board of this Realm and pin its exact immutable revision.
 Its body stays in `content.post`/`content.revision`, validated by `@rezics/document` and Content's SPDX validator;
