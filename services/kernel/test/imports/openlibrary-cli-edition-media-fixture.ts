@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { MediaImportAccepted, MediaImportRequest } from '@rezics/definitions/media-import';
 import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { converter_revision } from '../../../../packages/conversion/src/open-library.ts';

@@ -484,8 +484,9 @@ test('subject summaries for a page use two bounded reads per partition, not one 
     },
   });
   logGrowthSeeding(report);
-  // costOf excludes SET LOCAL controls, so removing the planner control does not reduce semantic statement totals.
-  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([11, 11, 11]);
+  // One distinct selected tuple in one home adds its native partition anchor and fence read (B = 1).
+  // All existing row, block, population and deadline bounds still apply.
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([13, 13, 13]);
 }, 900_000);
 
 test('a representative cover read stays flat as the work gains editions', async () => {
@@ -532,6 +533,7 @@ test('a representative cover read stays flat as the work gains editions', async 
     },
   });
   logGrowthSeeding(report);
-  // costOf excludes SET LOCAL controls, so removing the planner control does not reduce semantic statement totals.
-  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([5, 5, 5]);
+  // One distinct selected tuple in one home adds its native partition anchor and fence read (B = 1).
+  // All existing row, block, population and deadline bounds still apply.
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([7, 7, 7]);
 }, 900_000);

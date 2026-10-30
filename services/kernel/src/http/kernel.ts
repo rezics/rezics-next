@@ -416,7 +416,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
   const collections = collectionRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
-    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     tokens,
