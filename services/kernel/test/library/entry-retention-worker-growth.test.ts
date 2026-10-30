@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { PoolClient } from 'pg';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -20,6 +21,7 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 let db: GrowthDatabase, f: NativeProfileFixture;
 let work: Awaited<ReturnType<typeof composeWork>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
+let historyWorkflow: () => Promise<null>;
 let actor: NativeProfileFixture['owner']['actor'];
 let time = Date.now();
 const origin = time;
@@ -48,13 +50,19 @@ beforeAll(async () => {
   subjects = [];
   for (let n = 0; n < 101; n++) subjects.push(await f.createSubject('game'));
   client = await createWorkClient(db.url, db.openPool());
-  work = await composeWork([libraryWorkModule], {
-    pool: db.pool,
-    client,
-    databaseUrl: db.url,
-    clock: () => new Date(time),
-    env: {},
-  });
+  work = await composeWork(
+    [
+      libraryWorkModule,
+      {
+        name: 'entry-retention-growth-history',
+        register() {
+          const step = DBOS.registerStep(async () => null, { name: 'retention.history.step' });
+          historyWorkflow = DBOS.registerWorkflow(async () => step(), { name: 'retention.history.workflow' });
+        },
+      },
+    ],
+    { pool: db.pool, client, databaseUrl: db.url, clock: () => new Date(time), env: {} },
+  );
   // Isolate the explicitly queued native cost operation from wall-clock cron dispatch.
   await client.pauseSchedule(ENTRY_RETENTION_SCHEDULE);
   await work.launch();
@@ -111,10 +119,13 @@ async function runSegment(cutoff: string, start = partition) {
   return pages;
 }
 
-async function prepare() {
-  time = origin;
+async function renewActor() {
   await renewRetentionIdentities(f);
   actor = await f.access.authenticate(await accountToken(actor), { pool: db.pool, deadline: deadlineFor(30000) });
+}
+async function prepare() {
+  time = origin;
+  await renewActor();
   targets = [];
   for (const subject of subjects) targets.push(await archive(f, subject, actor));
   time = Date.parse(targets[0]!.restoreUntil);
@@ -138,25 +149,22 @@ test('default registered worker pages charge actual native discovery, core comma
     async grow(_db, scale, previous) {
       time = origin + 86400000;
       await growRetentionPopulation(f, partition, noise, previous, scale);
-      const handles = [];
+      const ids = [];
       for (let n = previous; n < scale; n++) {
         const root = `retention-unrelated:${n}`;
-        handles.push(
-          await client.enqueue(
-            { workflowName: 'library.entryRetentionSegment', workflowID: root, queueName: 'maintenance' },
-            { root, sequence: 0, cutoff: new Date(origin - 1).toISOString(), cursor: { partition: 4095 } },
-          ),
-        );
+        ids.push(root);
+        // Unrelated history uses real SDK execution without consuming the maintenance queue's two slots.
+        // The measured retention segment still enters through that actual default queue.
+        await (await DBOS.startWorkflow(historyWorkflow, { workflowID: root })()).getResult();
       }
-      // Real completed empty sweeps grow status, input, output and step history together.
-      await client.waitAll(handles);
+      // Native completed workflows grow status, input, output and step history together.
       const history = await db.admin.query(
         `SELECT count(*)::integer AS count FROM dbos.workflow_status AS status
          JOIN dbos.workflow_output AS output USING (workflow_uuid)
          JOIN dbos.operation_outputs AS step USING (workflow_uuid)
          WHERE status.workflow_uuid = ANY($1::text[]) AND status.status='SUCCESS'
-           AND step.function_name='library.entryRetentionPage'`,
-        [handles.map((handle) => handle.workflowID)],
+           AND step.function_name='retention.history.step'`,
+        [ids],
       );
       expect(history.rows).toEqual([{ count: scale - previous }]);
     },
@@ -183,6 +191,7 @@ test('default registered worker pages charge actual native discovery, core comma
 
 test('fenced and moved partition discovery reports pending and a fresh worker sweep resumes without permanent highwater', async () => {
   time = origin;
+  await renewActor();
   const target = await archive(f, subjects[0]!, actor);
   time = Date.parse(target.restoreUntil);
   for (const state of ['fenced', 'moved']) {
@@ -206,6 +215,7 @@ test('fenced and moved partition discovery reports pending and a fresh worker sw
 
 test('one finite page deadline survives partial native commits and retries the unfinished cursor without dropping admitted keys', async () => {
   time = origin;
+  await renewActor();
   const keys = [];
   for (const subject of subjects.slice(0, 3)) keys.push(await archive(f, subject, actor));
   time = Date.parse(keys[0]!.restoreUntil);
