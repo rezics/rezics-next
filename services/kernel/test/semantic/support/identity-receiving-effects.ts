@@ -10,7 +10,7 @@ import { libraryCutoverInput } from './identity-epoch-cutover.ts';
 let nextRoute = 0x8a10;
 
 /** Real Library commands and native admission; no proof, gate, receipt or ACK rows are fixture-written. */
-export async function admittedReceivingJob(f: EpochFixture) {
+export async function admittedReceivingJob(f: EpochFixture, options: { pending?: boolean } = {}) {
   const route = nextRoute;
   nextRoute += 0x20;
   const original = (await f.create('Receiving effect original', route)).subject.id;
@@ -28,12 +28,12 @@ export async function admittedReceivingJob(f: EpochFixture) {
       command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
     },
   });
-  for (let step = 0; step < 16; step++) {
+  for (let step = 0; options.pending !== false && step < 16; step++) {
     const progress = await stepIdentityEpochAdmission(f.pool, job);
     if (progress.state === 'pending') break;
     expect(progress.state).toBe('preparing');
   }
-  expect((await store.readJob(f.pool, job))?.state).toBe('pending');
+  expect((await store.readJob(f.pool, job))?.state).toBe(options.pending === false ? 'preparing' : 'pending');
   const members = async () => (await f.admin.query(
     'SELECT * FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY member_id',
     [routeOf(library.collection.id), library.collection.id],

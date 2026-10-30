@@ -1,3 +1,4 @@
+import { admitIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import {
   identityBindingData,
   identityBindingDigest,
@@ -117,8 +118,17 @@ function control(tx: CommandTransaction, platform = false) {
 /** Use the real executor-minted transaction ID and the component its event fence will commit.
  * The row and the outbox share the same database transaction. This is not a noEffect receipt producer.
  */
+const nativeCommitPurposes = new WeakMap<CommandTransaction, string>();
 export function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void {
   const command = currentCommand(tx);
+  // A participant frontier and its scope effects share ONE executor-native commit.
+  // This only coalesces callback registration on the live transaction; it grants no admission.
+  const prior = nativeCommitPurposes.get(tx);
+  if (prior) {
+    if (prior !== purpose) throw new TypeError('Conflicting identity native commit purposes');
+    return;
+  }
+  nativeCommitPurposes.set(tx, purpose);
   registerCommandCallback(tx, async (transactionId) => {
     const result = await tx.query(storeInsertNativeCommit.sql, [command.partition, transactionId, purpose]);
     if (result.rowCount !== 1) throw unavailable();
@@ -479,9 +489,7 @@ export const identityEpochStore: IdentityEpochStore = {
   },
   async admitHomeEffect(tx, effect) {
     const command = currentCommand(tx);
-    // A receiving locator needs its own committed source/owner proof. It must never
-    // fall through to original-home structural admission while that producer is absent.
-    if (effect.kind !== 'structural' && effect.kind !== 'follow-count') throw stale();
+    if (effect.kind === 'receiving') return admitIdentityReceivingEffect(tx, effect);
     const destination = effect.kind === 'follow-count' ? effect.terminal : effect.original;
     const destinationRoute = route(destination);
     if (command.partition !== partitionOf(destinationRoute)) throw stale();

@@ -96,13 +96,14 @@ test('a committed source-specific receiving record admits only its exact home jo
     effectKey: 'library-owner-rekey', disposition: 'NEW',
   });
   const before = await input.members();
-  await runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
+  const rollback = new Error('roll back after genuine receiving admission');
+  await expect(runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
     const record = await lookupIdentityReceivingEffect(tx, effect);
     expect(record?.owner).toBe(input.library.collection.id);
     expect(record?.source.id).toBe(input.library.collection.id);
     await store.admitHomeEffect(tx, effect);
-    return noEffect(null);
-  });
+    throw rollback;
+  })).rejects.toBe(rollback);
   for (const invalid of [
     { ...effect, effectKey: 'wrong-effect' },
     { ...effect, original: input.terminal },
@@ -139,4 +140,93 @@ test('receiving source selection cannot be replaced with a different owner sourc
   ]) await expect(prepareIdentityReceivingEffect(f.pool, invalid)).rejects.toMatchObject({
     code: 'identity_effect_stale',
   });
+});
+
+test('preparing and cancelled native jobs cannot create a receiving record or open a pending gate', async () => {
+  const { prepareIdentityReceivingEffect } = await import('../../src/semantic/identity-receiving-effects.ts');
+  const { cancelIdentityEpochAdmission, stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
+  const input = await admittedReceivingJob(f, { pending: false });
+  const selection = {
+    job: input.job, original: input.original, owner: input.library.collection.id,
+    sourceId: input.library.collection.id, scope: input.original,
+    effectKey: 'library-owner-rekey', disposition: 'NEW' as const,
+  };
+  await expect(prepareIdentityReceivingEffect(f.pool, selection)).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  await cancelIdentityEpochAdmission(f.pool, input.job);
+  for (let step = 0; step < 8; step++) {
+    if ((await stepIdentityEpochAdmission(f.pool, input.job)).state === 'cancelled') break;
+  }
+  expect((await store.readJob(f.pool, input.job))?.state).toBe('cancelled');
+  await expect(prepareIdentityReceivingEffect(f.pool, selection)).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  expect((await f.admin.query(`SELECT 1 FROM semantic.identity_epoch_receiving_record
+    WHERE partition_no=$1 AND job_id=$2`, [home(input.library.collection.id), input.job.jobId])).rows).toEqual([]);
+});
+
+test('an uncommitted receiving record cannot be observed and an interrupted delivery retains its exact native plan', async () => {
+  const { prepareIdentityReceivingEffect } = await import('../../src/semantic/identity-receiving-effects.ts');
+  const { duringNativeSQL, interruptNativeStatement } = await import('./support/identity-epoch-cutover.ts');
+  const input = await admittedReceivingJob(f);
+  const selection = {
+    job: input.job, original: input.original, owner: input.library.collection.id,
+    sourceId: input.library.collection.id, scope: input.original,
+    effectKey: 'library-owner-rekey', disposition: 'NEW' as const,
+  };
+  await interruptNativeStatement(f, /INSERT INTO semantic.identity_epoch_receiving_record/, () =>
+    prepareIdentityReceivingEffect(f.pool, selection));
+  const plans = async () => (await f.admin.query(`SELECT binding_digest,transaction_id FROM semantic.identity_epoch_receiving_plan
+    WHERE partition_no=$1 AND job_id=$2 AND effect_key=$3`, [home(input.job.jobId), input.job.jobId, selection.effectKey])).rows;
+  const retained = await plans();
+  expect(retained).toHaveLength(1);
+  const effect = await duringNativeSQL(f, /INSERT INTO semantic.identity_epoch_receiving_record/, () =>
+    prepareIdentityReceivingEffect(f.pool, selection), async () => {
+      expect((await f.admin.query(`SELECT 1 FROM semantic.identity_epoch_receiving_record
+        WHERE partition_no=$1 AND job_id=$2 AND effect_key=$3`,
+        [home(input.library.collection.id), input.job.jobId, selection.effectKey])).rows).toEqual([]);
+      await expect(runCommand(f.pool, { partition: home(input.job.jobId) }, tx => store.publish(tx, input.job)))
+        .rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+    });
+  expect(await plans()).toEqual(retained);
+  expect(await prepareIdentityReceivingEffect(f.pool, selection)).toEqual(effect);
+});
+
+test('a moved receiving owner and a different admitted job cannot reuse the same native gate', async () => {
+  const { prepareIdentityReceivingEffect } = await import('../../src/semantic/identity-receiving-effects.ts');
+  const input = await admittedReceivingJob(f);
+  const other = await admittedReceivingJob(f);
+  const effect = await prepareIdentityReceivingEffect(f.pool, {
+    job: input.job, original: input.original, owner: input.library.collection.id,
+    sourceId: input.library.collection.id, scope: input.original,
+    effectKey: 'library-owner-rekey', disposition: 'NEW',
+  });
+  await expect(runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
+    await store.admitHomeEffect(tx, { ...effect, job: other.job });
+    return noEffect(null);
+  })).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  await f.admin.query("UPDATE core.partition SET write_state='moved',moved_to='receiving-test' WHERE partition_no=$1", [effect.receipt.partition]);
+  try {
+    await expect(runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
+      await store.admitHomeEffect(tx, effect);
+      return noEffect(null);
+    })).rejects.toThrow();
+  } finally {
+    await f.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [effect.receipt.partition]);
+  }
+  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+});
+
+test('a crash after the physical receiving effect and before control custody never publishes early', async () => {
+  const { interruptNativeStatement } = await import('./support/identity-epoch-cutover.ts');
+  const input = await admittedReceivingJob(f);
+  const before = await input.members();
+  await interruptNativeStatement(f, /UPDATE semantic.identity_epoch_effect_receipt SET native_partition/, () =>
+    completeReceivingParticipant(f, input.job));
+  expect((await f.admin.query(`SELECT 1 FROM semantic.identity_epoch_receiving_effect
+    WHERE partition_no=$1 AND job_id=$2 LIMIT 1`, [home(input.library.collection.id), input.job.jobId])).rows).toHaveLength(1);
+  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  await expect(runCommand(f.pool, { partition: home(input.job.jobId) }, tx => store.publish(tx, input.job)))
+    .rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+  const progress = await completeReceivingParticipant(f, input.job);
+  expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
+  expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
+  expect(await input.members()).toEqual(before);
 });

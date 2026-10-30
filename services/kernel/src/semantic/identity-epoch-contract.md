@@ -482,43 +482,68 @@ fence. A stale old-destination delivery rereads CURRENT source, account eligibil
 than relabelling a saved positive. Source-account terminal fencing is separate and still required. No amount of
 identity epoch bookkeeping alone proves current source-account eligibility across released reads.
 
-### Receiving-effect interface gap
+### Receiving effects and local custody
 
-The installed `IdentityEffect` union represents original-home structural work and published-destination follow
-work. It has no receiving-effect key or committed receiving-record locator. Its structural branch supplies only
-`job` and `original`; its follow branch supplies only `original`, `terminal` and `epoch`, without a job. Neither
-branch selects an exact Library owner/source incarnation, generation, step/version or effect manifest entry when
-multiple owner sources in one receiving partition depend on the same original. The live command partition and a
-null command basis cannot select that missing source scope or establish receipt custody.
+`IdentityEffect` has the adopted additive receiving alternative
+`{kind: 'receiving', job, original, effectKey, receipt: IdentityNativeReceipt}`. The existing structural and
+follow alternatives retain their original-home and published-destination semantics. A matching pending gate
+can advance only its admitted job through the receiving alternative; ordinary follow calls acquire no new power.
 
-The current `identity_epoch_admission_handoff`, attempt and receipt records reserve input GROUP homes. They do
-not authorize participant effects in independent Library owner homes. `identity_epoch_effect_receipt` retains
-job-home expected-effect/custody entries; it is not a receiving-home ledger. `identity_epoch_step` stores producer
-progress and its native commit; it has no owner/source receiving admission descriptor. Reusing any of these as a
-blanket foreign-original allow would bypass the adopted same-effect gate.
+`identity-receiving-effects-types.ts` owns the closed selection, Source provenance, binding, record and producer
+shapes. `identity-receiving-effects.ts` exports:
 
-The smallest proposed extension for owner adoption is one additional receiving-effect alternative, preserving
-both existing alternatives: `{kind: 'receiving', job, original, effectKey, native}`. Here `native` is the existing
-`IdentityNativeReceipt` locator for a COMMITTED local planned/accepted receiving record, and `effectKey` selects
-one exact manifest entry within that transaction. This is a proposal, not an implemented or callable ABI. Its
-producer must bind the fixed participant/version, job/epoch/scope, source incarnation/generation, owner and
-receiving-home owner epoch, exact effect and gate. The effect transaction must lock and revalidate those local
-records and atomically retain its effect/frontier receipt and source obligation. Released reconciliation must
-still take control custody before ACK/publication. The locator grants no permission by itself.
+- `prepareIdentityReceivingEffect(pool, selection)` verifies a real pending native job, its immutable input
+  original at each input's own released home, and the sole Source owner's committed provenance. It registers
+  the exact binding and expected effect at control BEFORE taking the Source hold and committing an accepted
+  receiving record/gate. Repeated identical preparation returns the same locator. Conflicting scope, incarnation,
+  generation, owner, disposition or effect rejects. New scopes cannot register after the Library complete ACK.
+- `lookupIdentityReceivingEffect(tx, effect)` resolves the exact committed local record by job, epoch, effect
+  key, original, transaction ID AND native component. It checks the current native owner epoch and locks the
+  owner/original gate. Its record binds the full job scope, fixed version-1 Library participant, Source identity,
+  incarnation, generation, scope and OLD/NEW/first-apply/handoff disposition. `applied` is the exact persisted
+  effect receipt/frontier or null. It is a scope receipt, never participant completeness or Access.
+- The existing `identityEpochStore.admitHomeEffect(tx, effect)` receiving branch additionally invokes the
+  fixed Source owner's native local hold/currentness validator. It rejects an already applied effect; consumers
+  recover its persisted `applied` receipt before attempting another mutation. Admission installs a fixed native
+  callback check: a successful command cannot commit without its SAME-transaction scope effect receipt.
+- `recordIdentityReceivingEffect(tx, effect, {frontier})` commits the scope effect/frontier with the owner's
+  actual mutation and Source hold. It uses the fixed Library native commit, shared with the participant's native
+  step record; repeated registration of that same native commit is coalesced on the live transaction. A different
+  purpose in that transaction rejects. There is no caller complete flag or second participant.
+- `reconcileIdentityReceivingEffect(pool, effect)` resolves the actual receiving effect commit, releases it,
+  and takes exact control custody under the persisted job/plan/scope before acknowledging the Source hold.
+  Lost control/Source ACK replies replay those retained receipts, including after publication. It creates no
+  job-wide participant ACK. Existing `reconcileStepReceipt` and `publish` continue to require all expected
+  effect custody and the separate mapping, Search and Library completion observations.
+- `releaseIdentityReceivingEffect(pool, effect)` releases this job's owner/original gate only after a separately
+  released control read proves real publication. The owner invokes this exact-key handoff before later work at
+  that gate; one scope ACK cannot clear a pending sibling's OLD/NEW/first-apply obligation.
 
-No callable native Library owner/source receiving-record producer is currently installed. The sole specified
-Library participant is `library/identity-epoch-participant.ts:stepLibraryIdentityEpoch`; that module is absent.
-The existing `canonical-source-store.ts` exports `observeCanonicalSource`, `beginCanonicalSourceRepair`,
-`repairCanonicalSourceStep` and `publishCanonicalSourceRepair` currently throw `dependency_unavailable`.
-Their registration/readiness cannot substitute for receiving-effect admission. Owner adoption must supply the
-actual receiving-record producer and bind its exact locator before this extension can be implemented safely.
+Native cancellation closes PREPARING jobs; receiving registration accepts only PENDING jobs. Cancellation and
+registration serialize on the actual job record. A cancelled/cancelling/preparing job therefore cannot have a
+receiving gate opened by this producer. Pending publication cannot overtake a newly registered expected effect.
+No native Source hold is discarded on crash, timeout or failed transport. A moved source or receiving owner is
+unavailable/stale until its native ownership protocol resolves; there is no relabelling to a new owner epoch.
 
-`test/semantic/identity-epoch-receiving-effects.test.ts` retains a native positive through the sole specified
-Library participant, actual Library source commands and real admitted job, with receipt reconciliation/replay
-and immutable stored-member checks. The growth companion measures actual receipt-custody replay at
-64/512/4096 unrelated native births. These are deferred regression inputs, not executed evidence or complete
-coverage of wrong source/version/owner, cancellation or interrupted receipt delivery. Those schedules require
-the missing receiving-record producer; no fixture manufactures its rows, gates or acknowledgements.
+All SQL/FKs are home-local. The ledger is additive in a new UTC migration; landed migrations are unchanged.
+It retains control plans/custody, receiving records/gates and actual effect/frontier receipts, including native
+transaction/component and existing native erasure-role locator capture for the retained transaction records.
+Original-home gates, P=1 reservations, group cap 4096, raw-key limits and ordinary follow authorization do not change.
+
+#### Receiving preparation, effect and reconciliation Cost
+
+- Touches: one exact job, at most two retained input-generation original points at separately released homes,
+  one selected Source/owner/scope/disposition, its native provenance/hold, one control plan/expected effect,
+  one receiving owner/original gate, record and effect/frontier, and one control custody/native receipt.
+- Bound: partition-leading full keys on every local query/FK; no history walk, foreign join, source-wide scan,
+  permission mirror, extra engine or fanout. Each preparation/receipt operation selects one effect; descriptors
+  are at most 3072 serialized bytes (4096 stored JSON bytes), effect keys/scopes at most 256 bytes, frontiers at
+  most eight scalar keys and 2048 bytes. Source-owned read/hold/lock/ACK, native fences, callbacks, erasure
+  locator writes and failed/replayed attempts are charged under the existing shared SQL/row/point/byte/deadline
+  allowances. These APIs do not grant another allowance or certify their owner's work as free.
+- Growth check: retain the existing native64/512/4096 receiving-custody companion and changed-neighborhood,
+  original-store/key/RLS/cap/privacy/replay controls. Run after integration; minimal delivery uses only the
+  changed workspace's local compiler database typecheck. No native/growth result is claimed here.
 
 ## Bounded native mapping and fixed participants
 
@@ -1503,31 +1528,25 @@ separate obligations.
 
 ### Receiving effect interface and missing Source validation seam
 
-`IdentityEffect` additionally represents the adopted receiving alternative exactly as
-`{kind: 'receiving', job, original, effectKey, receipt: IdentityNativeReceipt}`. Structural and ordinary follow
-alternatives keep their existing meanings. The receiving receipt locates an effect-specific committed native
-record; it is not a step ACK or authorization based on an arbitrary native command. Until the native producer
-can validate the actual Source provenance, Store rejects receiving effects, including at the original home.
-This declaration is interface delivery only; receiving admission and control custody are not implemented.
+The closed native producer/lookup and Store correction are implemented in
+`identity-receiving-effects.ts`; the [receiving protocol](#receiving-effects-and-local-custody) owns their use.
+The sole Source-owned runtime expected at `library/identity-receiving-source.ts` is absent in this checkout.
+Its exact exports are `readIdentityReceivingSource`, `holdIdentityReceivingSource`,
+`lockIdentityReceivingSource` and `acknowledgeIdentityReceivingSource`, with declarations in
+`identity-receiving-effects-types.ts:IdentityReceivingSourceProducer`. This provisional adapter throws
+`identity_epoch_unavailable` when the module/export is absent. It returns no successful record, ready state or ACK.
 
-The available Library Source module `library/collection-source-native.ts` supplies metadata, raw pages and
-original probes. `library/canonical-source-store.ts` supplies unavailable canonical operations. Neither exposes
-an exact committed identity receiving-effect provenance reader or a source-hold writer. The fixed
-`library/identity-epoch-participant.ts:stepLibraryIdentityEpoch` is also absent. Ordinary source metadata and a
-job-wide participant receipt cannot establish a source-specific receiving effect. The Store must not interpret
-either as permission to create a successful receiving record.
+The reader must select an actual committed Source manifest entry, reject arbitrary effect keys/caller JSON,
+and return its native identity/incarnation/generation/scope/current owner and receiving epoch/disposition.
+The hold must be idempotent for that full immutable binding, verify its real committed provenance, and retain
+its obligation across source mutation/move until the exact receiving effect AND control custody exist.
+The local validator must lock/revalidate the actual receiving owner/scope, first-apply fence and held native
+source obligation inside the effect transaction, attaching native Source erasure roles there. It cannot open a
+foreign home or infer authority from an ordinary metadata read. The ACK must independently resolve actual
+control custody for that exact binding before releasing the hold; a job-wide ACK is insufficient.
 
-The indispensable co-owned validation seam requested from the Library Source owner is one exact native
-source-record read/hold in its actual source command, addressed by the admitted job, original, effect key and
-source receipt. It must return persisted provenance binding the Source identity, incarnation, source generation,
-full scope, fixed participant/version, current owner, receiving home/owner epoch, and OLD/NEW/first-apply/handoff
-disposition to that effect. It must lock or retain the source obligation until receiving and subsequent control
-custody exist. Its receipt must identify the actual committed native transaction and component. Missing, moved,
-uncommitted, changed or cancelled source evidence must reject; returning a caller descriptor or an `allowed` flag
-is insufficient. The Source owner must select the actual table/transaction seam and closed callable; Semantic
-must not clone the six Library business drivers or select their truth from metadata.
-
-After that seam is delivered, Semantic can produce the planned/accepted receiving ledger at released homes,
-validate it locally in `admitHomeEffect`, and commit the effect/frontier receipt atomically before the existing
-released reconciliation takes control custody. No receiving ledger, successful proof row or native ACK is
-fabricated in the meantime. The existing positive receiving acceptance remains required after integration.
+`library/collection-source-native.ts` provides metadata/raw ranges/probes; `library/canonical-source-store.ts`
+provides unavailable canonical operations. Neither is that Source read/hold producer. The sole specified
+`library/identity-epoch-participant.ts:stepLibraryIdentityEpoch` is also absent. Source, follow and output
+producers remain with their existing owners; Semantic does not clone their business truth or make registration
+stand in for native receiving readiness. The native receiving regressions remain required after integration.

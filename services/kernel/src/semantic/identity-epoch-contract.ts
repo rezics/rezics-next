@@ -184,6 +184,8 @@ export type IdentityEpochStore = Readonly<{
     }>
   >;
   /** Native home-local compare/lock in the SAME effect transaction; throws on stale admission.
+   * Receiving effects additionally resolve the committed exact local Source/owner record and native hold;
+   * their successful command must atomically record its scope effect/frontier. See identity-receiving-effects.ts.
    * Returns no reusable capability. A global pre-read is insufficient.
    */
   admitHomeEffect(tx: CommandTransaction, effect: IdentityEffect): Promise<void>;

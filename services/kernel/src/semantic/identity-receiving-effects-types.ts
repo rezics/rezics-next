@@ -44,6 +44,7 @@ export type IdentityReceivingRecord = IdentityReceivingBinding & Readonly<{
   plan: IdentityNativeReceipt;
   sourceHold: IdentityNativeReceipt;
   receipt: IdentityNativeReceipt;
+  applied: Readonly<{ receipt: IdentityNativeReceipt; frontier: IdentityFrontier }> | null;
 }>;
 export type IdentityReceivingProgress = Readonly<{
   frontier: IdentityFrontier;

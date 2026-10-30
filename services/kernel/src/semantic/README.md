@@ -144,11 +144,15 @@ authorization still checks the current native snapshot within the original reque
 
 ## Identity epoch status
 
-The adopted receiving `IdentityEffect` alternative is declared in `identity-epoch-contract.ts`. Its native
-source-to-owner provenance producer is still missing, so Store rejects it before the structural branch.
-The [receiving validation seam](identity-epoch-contract.md#receiving-effect-interface-and-missing-source-validation-seam)
-names the exact Source-owner dependency and the remaining implementation boundary. This is not admission readiness.
-
+The adopted receiving `IdentityEffect` alternative is implemented by the existing Store through
+[the native receiving producer](identity-receiving-effects.ts). Its closed records and Source-owner operations
+are declared in [identity-receiving-effects-types.ts](identity-receiving-effects-types.ts).
+[Receiving custody](identity-epoch-contract.md#receiving-effects-and-local-custody) binds the exact admitted
+job/step/version/scope, Source incarnation/generation, owner epoch and OLD/NEW/first-apply/handoff effect.
+Original structural and ordinary follow branches retain their semantics. The
+[Source validation seam](identity-epoch-contract.md#receiving-effect-interface-and-missing-source-validation-seam)
+still requires the real `library/identity-receiving-source.ts` operations; the absent-module adapter is explicitly
+unavailable. Native acceptance and growth run after integration; declarations alone are not admission readiness.
 
 `identityEpochStore.readMapping` is bound to the Library subject resolver. Revision-1 births store a self mapping in
 their source command, including unnamed account-agent births. `stepIdentityEpochBootstrap(pool, partition)` exports
