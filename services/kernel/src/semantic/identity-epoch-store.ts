@@ -1,6 +1,9 @@
+import { bindSemanticProducerRoles } from './erasure-producer.ts';
+import { readAccountIdentitySource } from '../access/agent-verification-identity.ts';
 import { admitIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import {
   identityBindingData,
+  assertIdentityBindingSource,
   identityBindingDigest,
   identityReceiptPartition,
   readIdentityBinding,
@@ -160,14 +163,22 @@ function decodeReceipt(value: ReturnType<typeof identityReceiptValue> | { kind: 
     : value;
 }
 
-export function authorizeIdentityAdmission(tx: CommandTransaction, receipt: IdentityReceipt): void {
+export async function authorizeIdentityAdmission(
+  tx: CommandTransaction,
+  receipt: IdentityReceipt,
+  binding?: import('./identity-epoch-binding.ts').IdentityReceiptBinding,
+  intent?: IdentityIntent,
+) {
   const command = currentCommand(tx);
   if (receipt.kind !== 'subject.merge') {
     if (command.basis !== null) throw new TypeError('Accounts identity admission requires native platform intent');
-    throw new IdentityEpochStoreError(
-      'identity_epoch_unavailable',
-      'Missing Accounts persisted decision to identity intent owner hook',
-    );
+    if (binding) {
+      assertIdentityBindingSource(binding, receipt);
+      // The native bridge proof was read under current source-home T before releasing that home.
+      // Raw platform work alone never reaches this branch.
+      return;
+    }
+    return readAccountIdentitySource(tx, receipt, intent);
   }
   const authorization = command.authorization;
   if (
@@ -246,7 +257,7 @@ export const identityEpochStore: IdentityEpochStore = {
   readJob,
   async findJob(tx, receipt, binding) {
     const command = currentCommand(tx);
-    authorizeIdentityAdmission(tx, receipt);
+    await authorizeIdentityAdmission(tx, receipt, binding);
     if (binding) {
       const data = identityBindingData(binding);
       if (data.key !== receiptKey(receipt) || canonicalize(data.receipt) !== canonicalize(receiptValue(receipt)))
@@ -268,11 +279,11 @@ export const identityEpochStore: IdentityEpochStore = {
   async admit(tx, { intent, receipt, binding }) {
     if (binding) return admitBoundIdentityEpoch(tx, { intent, receipt, binding }, true);
     if (currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
-      authorizeIdentityAdmission(tx, receipt);
+      await authorizeIdentityAdmission(tx, receipt);
       throw new TypeError('Cross-home receipt admission requires a released native binding proof');
     }
     const command = control(tx);
-    authorizeIdentityAdmission(tx, receipt);
+    const accountSource = await authorizeIdentityAdmission(tx, receipt, undefined, intent);
     const claimed = await readIdentityBinding(tx, { intent, receipt });
     if (claimed) return admitBoundIdentityEpoch(tx, { intent, receipt, binding: claimed }, true);
     const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt), command.partition])).rows[0];
@@ -341,6 +352,7 @@ export const identityEpochStore: IdentityEpochStore = {
     const scope = createHash('sha256')
       .update(json([intent, inputs.map((g) => [g.terminal, g.generation, g.version, g.observed_count])]))
       .digest('hex');
+    if (accountSource) bindSemanticProducerRoles(tx,accountSource.roles);
     recordIdentityEpochNativeCommit(tx, 'admission');
     registerCommandCallback(tx, async (transactionId) => {
       await tx.query(bindingInsert.sql, [

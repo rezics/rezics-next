@@ -1037,7 +1037,12 @@ source owner epoch, native transactionId/component, normalized digest and delive
 disposition, native reversal locator and prior published undoJob. Source intent custody precedes admission and
 must survive pending state replacement. Existing `mergeVerifiedAgent` forwards exact native Semantic inputs;
 `unmergeVerifiedAgent` compares pending receipt/catalogue to avoid undoing newer review. Those checks remain, but
-are not immutable old-delivery custody. Actual source record/delivery binding is still missing.
+are not immutable old-delivery custody. `access.agent_identity_intent` now preserves that source independently
+of the pending marker. Its native verifier runs under the account-home command and current account fence before
+receipt lookup; the released binding carries private WeakMap custody into group admission. Native Global
+`subject.merge` authorization is unchanged. A source owner epoch change, missing original decision/pending proof
+or digest mismatch remains retryable with the exact Accounts source locator; current pending fields never repair
+historical proof.
 
 The SAME Accounts workflow performs bounded delivery/admission steps, then bounded indexed native published-state
 probes and durable `DBOS.sleep` OUTSIDE a step, before existing approval/page write/finish or removal/reversal finish/
@@ -1045,7 +1050,19 @@ pending clear. No worker or transaction is held through an outage, and no new qu
 protocol is introduced. DBOS callback-before-result journalling requires same-receipt replay after effects commit.
 Busy/overlap, local capacity, guarded handoff or source unavailability retry the SAME intent/receipt with backoff;
 they never become denied review or AccountAgentVerificationError. Success requires actual publication, not a
-redirect revision or fake readiness. The exact owner-native polling/sleep composition remains required delivery.
+redirect revision or fake readiness. The original workflows now redrive bounded source/admission/publication
+steps with durable sleep and independently probe mapping and both fixed participant completions before each
+success stage. A separate publication step also covers an old journalled merge/unmerge result. The narrow typed
+adapter resolves only the delivered coordinator module's `resumeIdentityEpochJob` and
+`waitIdentityEpochPublished` exports. That module is absent in this checkout: delivery remains retryable, retaining
+the original intent and workflow, with no publication or undo substitute. Actual positive native delivery,
+historical recovery from complete original custody, crash schedules and inclusive Cost remain integration debt.
+
+The three source roles are registered in Access's existing indexed erasure inventory. Source roles also travel
+through the existing Semantic receiving-role binder when claims, reservations and accepted pointers commit.
+The source minimizer and consumer-aware discharge/transfer into shared receipt/outbox/DBOS custody are not
+implemented by this source table. Enumeration does not certify erasure or authorize removal of live delivery proof;
+these copies remain unfinished obligations until the physical owner supplies that custody.
 
 Core OP is the delivered `command/operational.ts:runOperationalTransaction` and `enqueueIntent` (5b5c3be17ea1).
 Use that actual live transaction, fenced account set and DBOS enqueueInTransaction; no invented Core intent table,

@@ -3,6 +3,7 @@ import {
   claimIdentityBinding,
   lookupIdentityBinding,
   identityBindingData,
+  identityBindingAccountRoles,
   identityBindingDigest,
   identityBindingJob,
   acceptIdentityBinding,
@@ -325,7 +326,7 @@ async function lookupLocalBinding(
   input: IdentityAdmissionInput,
   binding: IdentityReceiptBinding,
 ) {
-  authorizeIdentityAdmission(tx, input.receipt);
+  await authorizeIdentityAdmission(tx, input.receipt, binding, input.intent);
   const data = identityBindingData(binding);
   if (currentCommand(tx).partition !== data.partition || data.digest !== identityBindingDigest(input))
     throw new IdempotencyConflictError(currentCommand(tx).partition);
@@ -338,7 +339,7 @@ export async function admitBoundIdentityEpoch(
   input: IdentityAdmissionInput & { binding: IdentityReceiptBinding },
   immediate = false,
 ) {
-  authorizeIdentityAdmission(tx, input.receipt);
+  await authorizeIdentityAdmission(tx, input.receipt, input.binding, input.intent);
   const data = identityBindingData(input.binding),
     home = currentCommand(tx).partition;
   if (data.digest !== identityBindingDigest(input)) throw new IdempotencyConflictError(home);
@@ -397,6 +398,8 @@ export async function admitBoundIdentityEpoch(
     )
   )
     throw stale();
+  const roles = identityBindingAccountRoles(input.binding);
+  if (roles.length) bindSemanticProducerRoles(tx,roles);
   recordIdentityEpochNativeCommit(tx, 'admission');
   registerCommandCallback(tx, async (transactionId) => {
     await tx.query(insertJob.sql, [

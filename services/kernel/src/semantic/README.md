@@ -467,8 +467,12 @@ Kernel suspended-account 403 is defensive, not a reachable valid-suspended-beare
 Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
 uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
 before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
-same intent, never denies review. Accounts owns the missing immutable account-home decision/reversal intent and
-delivery boundary in the original native transaction/receipt; exact keys and custody are in the owning contract.
+same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
+original native transaction/receipt and verifies them before releasing the home for admission. The original
+wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
+The coordinator module is absent in this checkout, so its absence retains retryable work without a successful DTO.
+Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
+delivered guards and integration debt are in the owning contract.
 No queue, public pending DTO, permission change or second operation protocol is introduced.
 
 ### Lists, point reads and personal references

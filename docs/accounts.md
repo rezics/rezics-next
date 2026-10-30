@@ -563,6 +563,12 @@ released by the account or revoked by governance; evidence remains private. See
 [Agent verification policy][access-verification]. An account may claim multiple subjects for its pen names;
 the base stores a single current verified subject on the account and does not yet implement that multiplicity.
 
+Access records immutable verification and reversal source intents in those original account-home commands.
+The original workflows now require native identity publication, including both fixed participants, before their
+success stages. A missing coordinator or original historical custody retains the same retryable work and receipt;
+it does not establish verification. The [Semantic source boundary](../services/kernel/src/semantic/identity-epoch-contract.md#accounts-source-intent-and-workflow-boundary)
+records the delivered verifier and the remaining native delivery, historical recovery and erasure-custody gaps.
+
 ## 8. Platform gates
 
 Every mounted route declares `x-exposure: public` or `gate:<group>`; composition refuses missing or invalid
