@@ -357,3 +357,114 @@ export const CleanNavigation: Story = {
     await expect(within(canvasElement.ownerDocument.body).queryByRole('alertdialog')).toBeNull();
   },
 };
+
+export const LinkRows: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async ({ canvasElement }) => {
+    const view = await profileView(canvasElement);
+    const name = await view.findByRole('textbox', { name: m.settings_profile_display_name() });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Unsaved link draft');
+    const row = (number: number, label = 'Duplicate') =>
+      view.getByRole('group', { name: m.settings_profile_link_named_row({ number, label }) });
+    const labelIn = (group: HTMLElement) =>
+      within(group).getByRole('textbox', { name: m.settings_profile_link_label() });
+    const urlIn = (group: HTMLElement) => within(group).getByRole('textbox', { name: m.settings_profile_link_url() });
+    const removeIn = (group: HTMLElement) => within(group).getByRole('button');
+    const add = view.getByRole('button', { name: m.settings_profile_add_link() });
+    const first = row(1, 'Website');
+    const firstLabel = labelIn(first);
+    const firstUrl = urlIn(first);
+    const longUrl = `https://example.test/${'reading-notes-'.repeat(25)}`;
+    await userEvent.clear(firstLabel);
+    await userEvent.type(firstLabel, 'Duplicate');
+    await userEvent.clear(firstUrl);
+    await userEvent.type(firstUrl, longUrl);
+    await userEvent.tab();
+    await expect(removeIn(first)).toHaveFocus();
+    await userEvent.tab();
+    await expect(add).toHaveFocus();
+    for (let number = 2; number <= 5; number++) {
+      await userEvent.keyboard('{Enter}');
+      const added = view.getByRole('group', { name: m.settings_profile_link_row({ number }) });
+      await expect(labelIn(added)).toHaveFocus();
+      await userEvent.keyboard('Duplicate');
+      await userEvent.tab();
+      await expect(urlIn(added)).toHaveFocus();
+      await userEvent.keyboard(longUrl);
+      if (number < 5) {
+        await userEvent.tab();
+        await userEvent.tab();
+        await expect(add).toHaveFocus();
+      }
+    }
+    await expect(add).toBeDisabled();
+    const middle = row(3);
+    const next = row(4);
+    const nextLabel = labelIn(next);
+    // Keyboard removal moves to the same next input node, with its new current ordinal/ID.
+    await userEvent.click(urlIn(middle));
+    await userEvent.tab();
+    await expect(removeIn(middle)).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(nextLabel).toHaveFocus();
+    await expect(row(3)).toBe(next);
+    await expect(nextLabel.id).toMatch(/-label-2$/);
+    await expect(labelIn(row(1))).toBe(firstLabel);
+    await expect(firstUrl).toHaveValue(longUrl);
+    await expect(view.getByRole('status')).toHaveTextContent(
+      m.settings_profile_link_removed({ link: m.settings_profile_link_named_row({ number: 3, label: 'Duplicate' }) }),
+    );
+    await expect(add).toBeEnabled();
+    await expect(name).toHaveValue('Unsaved link draft');
+    const reload = view.getByRole('button', { name: m.settings_profile_reload_current() });
+    await userEvent.click(reload);
+    await view.findByText(m.settings_profile_review_needed());
+    await expect(labelIn(row(3))).toBe(nextLabel);
+    await expect(firstUrl).toHaveValue(longUrl);
+    await expect(name).toHaveValue('Unsaved link draft');
+    await expect(nextLabel).not.toHaveFocus();
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+  },
+};
+
+export const LinkRowsPhone: Story = {
+  ...LinkRows,
+  globals: { viewport: { value: 'phone390' } },
+};
+
+export const LinkRemovalEdges: Story = {
+  play: async ({ canvasElement }) => {
+    const view = await profileView(canvasElement);
+    const original = await view.findByRole('textbox', { name: m.settings_profile_link_label() });
+    const originalUrl = view.getByRole('textbox', { name: m.settings_profile_link_url() });
+    const add = view.getByRole('button', { name: m.settings_profile_add_link() });
+    await userEvent.click(originalUrl);
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect(add).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    const last = view.getByRole('group', { name: m.settings_profile_link_row({ number: 2 }) });
+    const lastLabel = within(last).getByRole('textbox', { name: m.settings_profile_link_label() });
+    await expect(lastLabel).toHaveFocus();
+    await userEvent.keyboard('Second');
+    await userEvent.tab();
+    await userEvent.keyboard('https://example.test/second');
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    await expect(original).toHaveFocus();
+    await expect(original).toHaveValue('Website');
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    await expect(add).toHaveFocus();
+    await expect(view.getByRole('status')).toHaveTextContent(
+      m.settings_profile_link_removed({ link: m.settings_profile_link_named_row({ number: 1, label: 'Website' }) }),
+    );
+    await userEvent.keyboard('{Enter}');
+    const replacement = view.getByRole('textbox', { name: m.settings_profile_link_label() });
+    await expect(replacement).toHaveFocus();
+    await expect(replacement).not.toBe(original);
+    await expect(replacement).toHaveValue('');
+  },
+};

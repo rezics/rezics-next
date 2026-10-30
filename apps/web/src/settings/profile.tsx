@@ -12,6 +12,7 @@ import { profileChanges } from './profile-data';
 import { ProfileEditor, profileFieldErrors, type ProfileScope } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
+import { ProfileLinks } from './profile-links';
 import type { AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 
@@ -109,7 +110,7 @@ export function ProfileCard({
   useEffect(() => {
     const field = pendingFocus.current;
     pendingFocus.current = undefined;
-    if (field) controls.current[field]?.focus();
+    if (field) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
   }, [validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.phase === 'unavailable';
@@ -199,7 +200,7 @@ export function ProfileCard({
                           className="block min-h-11 content-center rounded-sm py-2 break-words underline focus-visible:outline-2 focus-visible:outline-offset-2"
                           onClick={(event) => {
                             event.preventDefault();
-                            controls.current[field]?.focus();
+                            (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
                           }}
                         >
                           {fieldLabel(field)}: {errorMessage(field)}
@@ -259,77 +260,20 @@ export function ProfileCard({
               aria-labelledby={`${ids}-links-heading`}
               aria-invalid={!!errors.links}
               aria-describedby={errors.links ? `${ids}-links-error` : undefined}
-              className="space-y-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="min-w-0 space-y-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <h3 id={`${ids}-links-heading`} className="font-medium">
                 {m.settings_profile_links()}
               </h3>
               {fieldError('links')}
-              {profile.links.map((link, index) => (
-                <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]" key={index}>
-                  <div className="space-y-1">
-                    <Input
-                      id={`${ids}-label-${index}`}
-                      ref={(control) => {
-                        controls.current[`label-${index}`] = control;
-                      }}
-                      aria-label={m.settings_profile_link_label()}
-                      value={link.label}
-                      required
-                      disabled={closed}
-                      aria-invalid={!!errors[`label-${index}`]}
-                      aria-describedby={errors[`label-${index}`] ? `${ids}-label-${index}-error` : undefined}
-                      onChange={(event) =>
-                        editor.edit({
-                          links: profile.links.map((item, at) =>
-                            at === index ? { ...item, label: event.target.value } : item,
-                          ),
-                        })
-                      }
-                    />
-                    {fieldError(`label-${index}`)}
-                  </div>
-                  <div className="space-y-1">
-                    <Input
-                      id={`${ids}-url-${index}`}
-                      ref={(control) => {
-                        controls.current[`url-${index}`] = control;
-                      }}
-                      aria-label={m.settings_profile_link_url()}
-                      type="url"
-                      value={link.url}
-                      required
-                      disabled={closed}
-                      aria-invalid={!!errors[`url-${index}`]}
-                      aria-describedby={errors[`url-${index}`] ? `${ids}-url-${index}-error` : undefined}
-                      onChange={(event) =>
-                        editor.edit({
-                          links: profile.links.map((item, at) =>
-                            at === index ? { ...item, url: event.target.value } : item,
-                          ),
-                        })
-                      }
-                    />
-                    {fieldError(`url-${index}`)}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={closed}
-                    onClick={() => editor.edit({ links: profile.links.filter((_, at) => at !== index) })}
-                  >
-                    {m.settings_profile_remove_link()}
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={closed || profile.links.length >= 5}
-                onClick={() => editor.edit({ links: [...profile.links, { label: '', url: '' }] })}
-              >
-                {m.settings_profile_add_link()}
-              </Button>
+              <ProfileLinks
+                links={profile.links}
+                disabled={closed}
+                onChange={(links) => editor.edit({ links })}
+                ids={ids}
+                errors={errors}
+                fieldError={fieldError}
+              />
             </div>
             <div className="flex flex-wrap gap-3">
               <Button type="submit" disabled={closed || busy || uploading || !!state.attempt || !changed}>
