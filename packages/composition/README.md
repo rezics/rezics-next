@@ -556,9 +556,10 @@ bundled type uses `generic`.
 
 ## Dependent document bodies
 
-`documentRead(document, subject, availableProperties)` is the closed internal descriptor
-`{ kind: 'documents', id, properties }`. `Statements` selects its named properties;
+`documentRead(document, subject, availableProperties, context?)` is the closed internal descriptor
+`{ kind: 'documents', id, context?, properties }`. `Statements` selects its named properties;
 `MoreStatements` adds the other properties in the already disclosed subject observation.
+The optional Context stays bound to the same selected subject observation; it never falls back to Global.
 The descriptor is orchestration, with the ordinary subject read as a shared dependency.
 It is neither another public endpoint nor another document producer.
 
@@ -566,7 +567,8 @@ After that one bounded subject observation, `pageDocumentReferences` selects the
 and reader/original language as the generic renderer. The executor admits the entire effective
 plan before reading bodies or other planned lists. Its published maximum is fifteen distinct
 bodies (`MAX_PAGE_DOCUMENTS`): one subject operation plus fifteen `document.get` operations exhausts
-sixteen native reads. Account probes, redirect hops and other reads reduce that allowance. Each
+sixteen native reads. Account probes, redirect hops, final selected-Context guards and other reads reduce that allowance.
+The final guard reserves its native read and slot before dependent execution. Each
 body costs one of the same 128 requested slots; orchestration grants no free native calls.
 A configuration whose currently selected values exceed either remaining allowance is rejected
 with `/reads: out_of_range`; values are never truncated to fit. Selection examines only the

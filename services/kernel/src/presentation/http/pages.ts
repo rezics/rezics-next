@@ -301,9 +301,12 @@ export function pageRoutes<App>(
       let probeSession: string | null = null;
       // Run one probe read; its non-200 answer is the page's answer.
       const probe = async (descriptor: PageRead): Promise<ReadResult> => {
+        const incoming = new Request(request.url, { headers: request.headers, signal: request.signal });
+        const forwarded = mergedSession(tokens, scope, incoming.headers.get(SESSION_HEADER), probeSession);
+        if (forwarded !== null) incoming.headers.set(SESSION_HEADER, forwarded);
         const probed = await readPage({
           dispatch,
-          incoming: request,
+          incoming,
           reads: { probe: descriptor },
           session,
           budget,
@@ -534,7 +537,9 @@ async function pageAnswer(input: {
   const forwarded = mergedSession(input.session.ring, input.session.scope, incoming.headers.get(SESSION_HEADER), input.probeSession);
   if (forwarded !== null) incoming.headers.set(SESSION_HEADER, forwarded);
   let page;
+  let releaseGuard: (() => void) | undefined;
   try {
+    releaseGuard = input.finalGuard ? input.budget.reserve(1, 1) : undefined;
     page = await readPage({
       dispatch: input.dispatch,
       incoming,
@@ -548,6 +553,8 @@ async function pageAnswer(input: {
   } catch (error) {
     if (error instanceof PageReadError) reject(error.errors);
     throw error;
+  } finally {
+    releaseGuard?.();
   }
   let readSession = mergedSession(input.session.ring, input.session.scope, input.probeSession, page.session);
 

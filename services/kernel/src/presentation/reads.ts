@@ -39,8 +39,19 @@ export class PageReadError extends Error {
 export class PageReadBudget {
   reads = 0;
   cost = 0;
+  private heldReads = 0;
+  private heldCost = 0;
+  reserve(reads: number, cost: number): () => void {
+    this.admit(reads, cost);
+    this.heldReads += reads;
+    this.heldCost += cost;
+    return () => {
+      this.heldReads -= reads;
+      this.heldCost -= cost;
+    };
+  }
   admit(reads: number, cost: number): void {
-    if (this.reads + reads > MAX_PAGE_READS || this.cost + cost > MAX_PAGE_COST)
+    if (this.reads + this.heldReads + reads > MAX_PAGE_READS || this.cost + this.heldCost + cost > MAX_PAGE_COST)
       throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
   }
   charge(cost: number): void {
@@ -506,12 +517,21 @@ export async function readPage(options: {
     language: options.languages?.join(',') ?? options.incoming.headers.get('accept-language'),
   };
   const tokens: string[] = [];
+  const forwardToken = (token: string | null) => {
+    if (token === null) return;
+    tokens.push(token);
+    let components = credentials.session === null ? [] : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
+    for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
+      components = mergeSession(components, component);
+    credentials.session = encodeSession(options.session.ring, options.session.scope, components);
+  };
   const execute = async (read: PreparedRead): Promise<DispatchResult> => {
     const result = await executeRead(read, origin, credentials, async (request) => {
       budget.charge(nativeCost(read));
-      return options.dispatch(new Request(request, { signal: options.incoming.signal }));
+      const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
+      forwardToken(response.headers.get(SESSION_HEADER));
+      return response;
     });
-    tokens.push(...result.tokens);
     return result;
   };
   // Resolve the dependency first and release its owner connection before document.get.
@@ -564,15 +584,6 @@ export async function readPage(options: {
     byCanonical.set(distinctReads[index]!.canonical, completed[index]!.result);
   }
 
-  let forwarded =
-    credentials.session === null
-      ? []
-      : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
-  for (const token of tokens) {
-    for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
-      forwarded = mergeSession(forwarded, component);
-  }
-  if (tokens.length) credentials.session = encodeSession(options.session.ring, options.session.scope, forwarded);
   const documents: Record<string, unknown> = {};
   // Requests are deduplicated by effective native key, then admitted separately against every exact binding.
   for (const id of documentIds) {
@@ -587,13 +598,7 @@ export async function readPage(options: {
         redirect: 'manual',
       }),
     );
-    const token = response.headers.get(SESSION_HEADER);
-    if (token !== null) {
-      tokens.push(token);
-      for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
-        forwarded = mergeSession(forwarded, component);
-      credentials.session = encodeSession(options.session.ring, options.session.scope, forwarded);
-    }
+    forwardToken(response.headers.get(SESSION_HEADER));
     if (response.status === 404) {
       await response.body?.cancel();
       continue;
