@@ -216,13 +216,7 @@ export async function createSameRouteThread(
   desiredRoute: number,
   namespace: string,
 ): Promise<ContentThread> {
-  const key = routeIndependentThreadKey(
-    system,
-    author.actor.accountId,
-    board.route,
-    namespace,
-    desiredRoute,
-  );
+  const key = routeIndependentThreadKey(system, author.actor.accountId, board.route, namespace, desiredRoute);
   const created = await call<ThreadResponse>(
     kernel,
     author,
