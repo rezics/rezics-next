@@ -550,10 +550,17 @@ export function createCopyCommands(config: Dependencies) {
             : { ...before.fact.copy, presentation: prepared.presentation };
           const finalTime = await time();
           try {
-            await prepared.verify(finalTime);
+            let sourceFailure: { error: unknown } | null = null;
+            try {
+              await prepared.verify(finalTime);
+            } catch (error) {
+              sourceFailure = { error };
+            }
+            // Recheck native owner authority even when a foreign source fence failed.
             const after = await observed(finalTime);
             if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
               throw new CopyConflictError();
+            if (sourceFailure) throw sourceFailure.error;
           } finally {
             releaseOperationalTime(finalTime);
           }

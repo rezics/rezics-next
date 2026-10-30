@@ -522,9 +522,10 @@ test('owner detail resolves the actual stored pin, keeps accepted labels through
   const subjectId = await native.createSubject('game');
   const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
   const saved = await fact(created.value.id);
-  const currentProfile = { id: 'fixture.game-holdings', copies: { kinds: [
-    { id: 'installation', statuses: [{ id: 'licensed' }] },
-  ] } };
+  const currentProfile = {
+    id: 'fixture.game-holdings',
+    copies: { kinds: [{ id: 'installation', statuses: [{ id: 'licensed' }] }] },
+  };
   const data = fixture(currentProfile);
   for (const [key, text] of Object.entries(data.presentation)) {
     const labels = JSON.parse(text);
@@ -539,22 +540,40 @@ test('owner detail resolves the actual stored pin, keeps accepted labels through
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   const body = await json(response, 200);
   expect(body.copy).toEqual({
-    id: created.value.id, subjectId, kind: 'installation', status: 'licensed', revision: 1,
-    location: null, source: null, acquiredOn: null, disposedOn: null, note: 'Private licence',
+    id: created.value.id,
+    subjectId,
+    kind: 'installation',
+    status: 'licensed',
+    revision: 1,
+    location: null,
+    source: null,
+    acquiredOn: null,
+    disposedOn: null,
+    note: 'Private licence',
     presentation: {
-      meaning: 'known', kindLabel: 'installation', kindLabelLanguage: 'en',
-      statusLabel: 'licensed', statusLabelLanguage: 'en',
-      statusEditing: { state: 'supported', statuses: [{ id: 'licensed', label: 'Current licence', labelLanguage: 'en' }] },
+      meaning: 'known',
+      kindLabel: 'installation',
+      kindLabelLanguage: 'en',
+      statusLabel: 'licensed',
+      statusLabelLanguage: 'en',
+      statusEditing: {
+        state: 'supported',
+        statuses: [{ id: 'licensed', label: 'Current licence', labelLanguage: 'en' }],
+      },
     },
   });
   const direct = await commands.readPresentedCopy(owner.actor, created.value.id, ['de']);
   expect(direct.presentation).toMatchObject({ meaning: 'known', kindLabelLanguage: 'de', statusLabelLanguage: 'de' });
   privateFree(direct);
-  const full = await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`), 200);
+  const full = await json(
+    await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`),
+    200,
+  );
   expect(full.copy.presentation).toEqual(body.copy.presentation);
   expect(full.copy.subject?.id).toBe(subjectId);
   for (const suffix of ['', '?view=FULL']) {
-    const ordinary = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}${suffix}`), 200)).copy;
+    const ordinary = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}${suffix}`), 200))
+      .copy;
     expect(ordinary).not.toHaveProperty('presentation');
   }
   expect(await fact(created.value.id)).toEqual(saved);
@@ -562,7 +581,10 @@ test('owner detail resolves the actual stored pin, keeps accepted labels through
   await native.activate(replacementDigest);
   const retired = await commands.readPresentedCopy(owner.actor, created.value.id);
   expect(retired.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusLabel: 'licensed' });
-  expect(retired.presentation.statusEditing).toEqual({ state: 'supported', statuses: [{ id: 'archived', label: 'archived', labelLanguage: 'en' }] });
+  expect(retired.presentation.statusEditing).toEqual({
+    state: 'supported',
+    statuses: [{ id: 'archived', label: 'archived', labelLanguage: 'en' }],
+  });
   // Advisory follows the native explicit-status validator; it is never a permission or historical conversion.
   expect(await fact(created.value.id)).toEqual(saved);
 });
@@ -572,14 +594,28 @@ test('owner detail distinguishes retired profile from hidden current source with
   const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
   await native.activate(replacementDigest);
   const before = await inspect();
-  const retired = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200)).copy;
-  expect(retired.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unsupported' } });
+  const retired = (
+    await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200)
+  ).copy;
+  expect(retired.presentation).toMatchObject({
+    meaning: 'known',
+    kindLabel: 'installation',
+    statusEditing: { state: 'unsupported' },
+  });
   expect(await inspect()).toEqual(before);
-  expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'private-detail-test' })).status).toBe(200);
+  expect(
+    (await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'private-detail-test' })).status,
+  ).toBe(200);
   const hiddenBefore = await inspect();
-  const hidden = (await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`), 200)).copy;
+  const hidden = (
+    await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`), 200)
+  ).copy;
   expect(hidden.subject).toBeNull();
-  expect(hidden.presentation).toMatchObject({ meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unavailable' } });
+  expect(hidden.presentation).toMatchObject({
+    meaning: 'known',
+    kindLabel: 'installation',
+    statusEditing: { state: 'unavailable' },
+  });
   expect(await inspect()).toEqual(hiddenBefore);
 });
 
@@ -588,14 +624,21 @@ test('same-route foreign owner, missing scope and revoked principal cannot expos
   const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
   const sameRoute = await native.identity(scopes, undefined, routeOf(owner.actor.accountId)!);
   expect(routeOf(sameRoute.actor.accountId)).toBe(routeOf(created.value.id));
-  const noScope = await accountToken({ accountId: owner.actor.accountId, clientId: owner.actor.clientId, scopes: ['subject:read'] });
+  const noScope = await accountToken({
+    accountId: owner.actor.accountId,
+    clientId: owner.actor.clientId,
+    scopes: ['subject:read'],
+  });
   const before = await inspect();
-  await expect(commands.readPresentedCopy(sameRoute.actor, created.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  await expect(commands.readPresentedCopy(sameRoute.actor, created.value.id)).rejects.toBeInstanceOf(
+    LibraryNotFoundError,
+  );
   for (const bearer of [sameRoute.bearer, noScope, 'anonymous']) {
     const response = await native.send(bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`);
     expect([401, 403, 404]).toContain(response.status);
     const raw = await response.text();
-    for (const secret of ['Private licence', 'installation', 'licensed', originalDigest, 'presentation', '"copy":']) expect(raw).not.toContain(secret);
+    for (const secret of ['Private licence', 'installation', 'licensed', originalDigest, 'presentation', '"copy":'])
+      expect(raw).not.toContain(secret);
   }
   expect(await inspect()).toEqual(before);
   const own = await native.identity(scopes);
@@ -612,8 +655,13 @@ test('detail final fence refuses a changed copy, a changed source or a revoked o
     const subjectId = await native.createSubject('game');
     const created = await commands.createCopy(who.actor, input(subjectId), entryKey());
     const read = commands.readPresentedCopy(who.actor, created.value.id, [], async () => {
-      if (change === 'copy') await commands.updateCopy(who.actor, created.value.id, { revision: 1, note: 'Changed' }, entryKey());
-      if (change === 'source') expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'detail-final-fence' })).status).toBe(200);
+      if (change === 'copy')
+        await commands.updateCopy(who.actor, created.value.id, { revision: 1, note: 'Changed' }, entryKey());
+      if (change === 'source')
+        expect(
+          (await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, { reason: 'detail-final-fence' }))
+            .status,
+        ).toBe(200);
       if (change === 'owner') await native.revokeIdentity(who.actor.accountId);
       return 'must not escape';
     });
@@ -651,7 +699,9 @@ test('missing exact immutable Copy release never borrows current labels and tran
   });
   const unavailable = createCopyCommands({ pool: native.pool, tokens: native.tokens, access });
   expect((await unavailable.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
-    meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unavailable' },
+    meaning: 'known',
+    kindLabel: 'installation',
+    statusEditing: { state: 'unavailable' },
   });
   expect(await inspect()).toEqual(before);
 });
