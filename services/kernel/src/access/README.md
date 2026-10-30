@@ -505,8 +505,9 @@ epoch. The source guard currently refuses updates and deletion while consumer-aw
 The existing DBOS workflows redrive source/admission/publication with durable sleep outside steps, preserving their
 original ids and receipts through retryable failures. Page writes, approval completion, reversal page removal and
 pending cleanup require indexed native mapping and both fixed participant completions. The typed adapter accepts
-only the actual coordinator's resume/wait exports. Its module is absent here, so delivery stays pending rather than
-returning success. Missing historical source custody reports its original locator and also stays pending.
+only the delivered coordinator's resume/wait exports. Success requires native publication; unavailable source,
+coordinator or participant custody remains retryable. Missing historical source custody reports its original locator
+and also stays pending.
 Original DBOS step positions remain unchanged; the extra final publication step verifies recovery even when the
 old merge/unmerge and subsequent stages were already journalled. Uncached original stages probe before acting.
 
