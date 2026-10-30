@@ -5,6 +5,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import sourceStatisticUpsert from '../../src/rating/source-statistic-upsert.sql';
+import sourceStatisticList from '../../src/rating/source-statistic-list.sql';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { createSourceStatisticLifecycleFixture } from './source-statistic-lifecycle-fixture.ts';
 
@@ -625,4 +626,27 @@ test('a configured tuple home unavailable503 does not use the provider tuple as 
     ]);
   }
   expect(await sourceStatistics(subjectId)).toEqual([{ source, ...value }]);
+});
+
+test('a rebind during GET cannot serialize either alias under the earlier binding', async () => {
+  const subjectId = await fixture.createSubject();
+  const sourceRecordId = 'alias-final-binding-race';
+  const first = { ...baseStatistic(sourceRecordId), sourceAlias: 'feed-one' };
+  const second = { ...baseStatistic(sourceRecordId), sourceAlias: 'feed-two' };
+  expect((await fixture.request('PUT', writePath(subjectId), { body: first })).status).toBe(200);
+  const barrier = observer.hold({ statement: sourceStatisticList.sql }, 'after');
+  const pending = fixture.request('GET', statisticPath(subjectId), { anonymous: true });
+  await barrier.entered;
+  try {
+    const replaced = await fixture.request('PUT', writePath(subjectId), { body: second });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual({ source, ...second });
+  } finally {
+    barrier.release();
+  }
+  const failure = await problem(await pending, 404);
+  expect(JSON.stringify(failure)).not.toContain(sourceRecordId);
+  expect(JSON.stringify(failure)).not.toContain('feed-one');
+  expect(JSON.stringify(failure)).not.toContain('feed-two');
+  expect(await sourceStatistics(subjectId)).toEqual([{ source, ...second }]);
 });
