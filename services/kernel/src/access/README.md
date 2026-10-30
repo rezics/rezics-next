@@ -2759,6 +2759,29 @@ sealed original inventory or a finite source cut; unconverted older producers re
 implementation does not seal enrollment or claim late-copy exclusion: later real enrolled copies remain visible
 through the pending index rather than disappearing behind a completed cursor.
 
+Commands with a genuine complete compact native set use the mutually exclusive alternative
+`declareCommandRecordSourceSet(tx: CommandTransaction, sourceSet: SemanticRecordSourceSet): void`, also
+from `history/record-source.ts`, once before serialization. The sixteen-reference port keeps its original bound.
+The native set has at most the original command limit of 512 exact members, including old/current revisions
+actually copied and native terms without candidate IDs. No array, truncation, repeated declaration, fabricated
+candidate or per-fact callback supplies this set. The set is an ownership locator, never purge authority or a
+claim about older writers.
+
+History stores one owner-issued binary set locator and revision commitment per generated artifact, with the real
+original command transaction, fence position and producer version. Immutable source-set/copy rows and indexed
+receiving associations retain this commitment without expanding members into receipt, outbox or DBOS bytes.
+Native member-to-set discovery and History set-to-copy discovery are distinct bounded indexes; receiving copies
+retain the original commitment. Later native revisions must still resolve sets containing the original revision.
+
+The exact original-module dependency absent at this base is Semantic's native Source-set producer, expected in
+`semantic/record-source-set.ts`. `history/record-source-set-native.ts` publishes the provisional opaque
+`SemanticRecordSourceSet` and required `RecordSourceSetProducer` consumer boundary: native command read, immutable
+revision verification and bounded reverse membership lookup. These are required producer declarations, not a
+Semantic implementation or agreed native locator format. Until Semantic publishes its actual type/adapter,
+`record_history_native_source_set_unavailable` refuses serialization of purported sets. History mints no sets,
+queries no foreign Source SQL and never substitutes a WeakMap for durable membership. Genuine 512-fact and
+term-without-candidate native positive coverage remains producer/integration debt.
+
 Each segment reads at most eight exact locator keys and applies one physical minimizer. Known co-located receipt
 responses with native no-consumer dispositions, the closed Library entry-purged outbox event after actual effect
 consumer closure, and native work already retired with verified SDK absence can make local progress. Other
@@ -2766,8 +2789,21 @@ consumer families remain pending until their actual owner supplies record-compat
 request digest and the existing minimized-result 410/no-reexecution behavior survive. Existing irreversible
 payload/retirement seals still apply, and living accounts acquire no fabricated erasure barrier or receipt proof.
 Active work requires source-bound native retirement before SDK payload changes; this port does not treat a DBOS
-status as authority. Foreign copies remain pending with `record-source-bound-foreign-custody-unavailable`: their
-receiving home needs durable source-bound custody that serializes current hold/restore/generation through mutation.
+status as authority. Foreign copies consume the unchanged Source-owned prepare/read/lock/completion/release
+receiving-hold declarations from `semantic/record-purge-custody.ts`. That module is absent at this base;
+`history/record-native-custody.ts` is a typed unavailable dependency adapter, never a hold/cut issuer. Missing
+custody retains `record-source-bound-foreign-custody-unavailable` and cannot mutate foreign bytes. When supplied,
+Source preparation/read ends before receiving checkout; native receiving lock, physical minimization, copy progress
+and native completion commit together. The existing empty `history.minimized` event gives completion callbacks a
+real command position. Restart rereads the native hold at the deterministic receiving locator. A minimized copy
+with `record-source-native-release-pending` remains discoverable until Source verifies actual native completion
+and releases its hold; no returned flag, lease or timeout releases it. Hold/current generation/home/version and
+restore exclusion remain the Source module's responsibility under that same native lock.
+
+Source inventory sealing and verification consume the same native custody module. A valid Source cut, native
+member-to-set inventory, History original/receiving copy closure and actual consumer closure are separate
+requirements. No Source cut or known EOF seals History's historical copy inventory. Older unsupported writers
+and genuine term purge authority remain explicit pending scopes.
 
 The existing default history worker redrives one outstanding native record job per unit from its durable source
 locator and reissues Semantic authority after restart. It adds no DBOS purge queue, account/global/participant ACK,

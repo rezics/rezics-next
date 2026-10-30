@@ -1,3 +1,4 @@
+import { hasCommandRecordSourceSet } from './record-source-set.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
@@ -105,7 +106,7 @@ export function validateCommandHistoryScope(
 ): void {
   beginRecordHistorySerialization(tx);
   const declaration = declarations.get(tx);
-  if (!declaration && commandRecordSources(tx).length)
+  if (!declaration && (commandRecordSources(tx).length || hasCommandRecordSourceSet(tx)))
     throw new TypeError('Record sources require native command history serialization');
   if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
@@ -120,7 +121,7 @@ export function validateCommandHistory(
   events: readonly unknown[],
 ): void {
   const declaration = declarations.get(tx);
-  if (!declaration && commandRecordSources(tx).length)
+  if (!declaration && (commandRecordSources(tx).length || hasCommandRecordSourceSet(tx)))
     throw new TypeError('Record sources require native command history serialization');
   if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)

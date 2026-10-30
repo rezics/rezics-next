@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import {
@@ -6,12 +7,19 @@ import {
   type RecordPurgeAuthority,
   type RecordPurgeSource,
 } from '../semantic/record-purge-authority.ts';
-import { purgeSourceKey } from './record-source-lock.ts';
+import { purgeSourceKey, sameRecordPurgeSource, type RecordHistoryLocalJob } from './record-source-lock.ts';
 import { recordHistoryPurgeLocator } from './record-resource-adapter.ts';
 import { minimizeHistoryReceipt } from './receipt.ts';
 import { minimizeHistoryOutbox } from './outbox.ts';
 import { minimizeRecordHistoryWork } from './durable.ts';
 import type { HistoryArtifactType } from './contracts.ts';
+import { nativeRecordPurgeCustody } from './record-native-custody.ts';
+import {
+  enrollRecordHistorySourceSets,
+  readRecordHistorySourceSetCopies,
+  recordRecordHistoryCopyProgress,
+  type RecordHistoryCopy,
+} from './record-source-set-inventory.ts';
 
 export type RecordHistoryPurgeDependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
 export type RecordHistoryPurgeContext = Readonly<{ deadline: number }>;
@@ -32,20 +40,6 @@ type Binding = Readonly<{
 }>;
 const issued = new WeakMap<PreparedRecordHistoryPurge, Binding>();
 
-function sameSource(a: RecordPurgeSource, b: RecordPurgeSource): boolean {
-  const x = a.reference,
-    y = b.reference;
-  return (
-    a.disposition === b.disposition &&
-    a.sourceVersion === b.sourceVersion &&
-    a.deletionTransactionId === b.deletionTransactionId &&
-    a.deletionCommittedAt === b.deletionCommittedAt &&
-    a.purgeAfter === b.purgeAfter &&
-    x.deletionGeneration === y.deletionGeneration &&
-    purgeSourceKey(a) === purgeSourceKey(b)
-  );
-}
-
 export async function prepareRecordHistoryPurge(
   deps: RecordHistoryPurgeDependencies,
   authority: RecordPurgeAuthority,
@@ -60,7 +54,7 @@ export async function prepareRecordHistoryPurge(
   const key = locator.source_key;
   const saved = await runCommand(deps.pool, { partition, deadline, clock: deps.clock }, async (tx) => {
     const current = await lockRecordPurgeAuthoritySource(tx, authority);
-    if (!current || !sameSource(current, source)) return noEffect(false);
+    if (!current || !sameRecordPurgeSource(current, source)) return noEffect(false);
     await tx.query(
       `INSERT INTO core.record_history_purge
        (source_key,deletion_generation,partition_no,reference_kind,resource_id,subject_id,candidate_id,revision,document_id)
@@ -85,8 +79,97 @@ export async function prepareRecordHistoryPurge(
   return handle;
 }
 
-/** One real physical effect and its local progress share the source transaction. Partial producer
- * coverage and foreign custody never prevent independent known local copies from progressing. */
+async function minimizeCopy(
+  tx: import('../command/command.ts').CommandTransaction,
+  job: RecordHistoryLocalJob,
+  copy: RecordHistoryCopy,
+): Promise<string | null> {
+  return copy.artifact_type === 'command-receipt/v1'
+    ? minimizeHistoryReceipt(tx, job, copy.locator)
+    : copy.artifact_type === 'outbox-event/v1'
+      ? minimizeHistoryOutbox(tx, job, copy.locator)
+      : minimizeRecordHistoryWork(tx, job, copy.locator);
+}
+
+/** Stable receiver locator, not an invented native source ID or authority. Restart recomputes
+ * it from immutable native source disposition and exact generated artifact identity. */
+function receivingTarget(saved: Binding, copy: RecordHistoryCopy) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify([
+    saved.key, saved.source.reference.deletionGeneration, saved.source.sourceVersion,
+    saved.source.deletionTransactionId, copy.partition_no, copy.artifact_type,
+    copy.locator.toString('hex'), copy.sourceSet?.sourcePartition ?? null,
+    copy.sourceSet ? Buffer.from(copy.sourceSet.locator).toString('hex') : null,
+    copy.sourceSet ? Buffer.from(copy.sourceSet.revision).toString('hex') : null,
+  ]));
+  return { partition: copy.partition_no, receivingId: hash.digest('hex') };
+}
+
+/** Release requires Source's verified native receiving completion. Neither the returned
+ * minimizer result nor a local 'minimized' association can release a Source hold. */
+async function releaseReceiving(
+  deps: RecordHistoryPurgeDependencies, saved: Binding, copy: RecordHistoryCopy,
+  context: RecordHistoryPurgeContext,
+): Promise<boolean> {
+  const custody = await nativeRecordPurgeCustody();
+  if (!custody) return false;
+  const released = await custody.releaseRecordPurgeReceivingHold(
+    deps, saved.source.reference, receivingTarget(saved, copy), context,
+  );
+  if (released.state !== 'released') return false;
+  await runCommand(deps.pool, { partition: copy.partition_no, deadline: context.deadline, clock: deps.clock },
+    async (tx) => {
+      await recordRecordHistoryCopyProgress(tx, saved.key, copy, null);
+      return noEffect(undefined);
+    });
+  return true;
+}
+
+async function minimizeReceiving(
+  deps: RecordHistoryPurgeDependencies, saved: Binding, copy: RecordHistoryCopy,
+  context: RecordHistoryPurgeContext,
+): Promise<RecordHistoryPurgeResult> {
+  const custody = await nativeRecordPurgeCustody();
+  if (!custody) return { state: 'pending', examined: 0, minimized: 0 };
+  // This branch also repairs a crash after native release but before local release progress.
+  if (copy.gap === 'record-source-native-release-pending') {
+    await releaseReceiving(deps, saved, copy, context);
+    return { state: 'pending', examined: 0, minimized: 0 };
+  }
+  const target = receivingTarget(saved, copy);
+  const hold = await custody.readRecordPurgeReceivingHold(deps, saved.source.reference, target, context)
+    ?? await custody.prepareRecordPurgeReceivingHold(deps, saved.authority, target, context);
+  if (!hold) return { state: 'pending', examined: 0, minimized: 0 };
+  // All source checkouts have ended. The target lock must validate durable accepted Source
+  // custody/current receiver epoch, not use the released source transaction or authority.
+  const receiving = await runCommand(deps.pool,
+    { partition: copy.partition_no, deadline: context.deadline, clock: deps.clock }, async (tx) => {
+      const source = await custody.lockRecordPurgeReceivingHold(tx, hold);
+      if (!source || !sameRecordPurgeSource(source, saved.source))
+        return noEffect({ state: 'pending' as const, examined: 0, minimized: 0 });
+      const pending = await minimizeCopy(tx, {
+        partition_no: copy.partition_no, authority: saved.authority, receivingHold: hold,
+        expectedSource: saved.source, ...(copy.sourceSet ? { sourceSet: copy.sourceSet } : {}),
+      }, copy);
+      if (pending !== null) {
+        await recordRecordHistoryCopyProgress(tx, saved.key, copy, pending);
+        return noEffect({ state: 'pending' as const, examined: 0, minimized: 0 });
+      }
+      await recordRecordHistoryCopyProgress(tx, saved.key, copy, 'record-source-native-release-pending', true);
+      custody.recordRecordPurgeReceivingCompletion(tx, hold);
+      // The existing native maintenance event supplies a real committed command position for
+      // Source's completion callback. No payload or source-member vector is copied into it.
+      return {
+        value: { state: 'progress' as const, examined: 0, minimized: 1 },
+        events: [{ type: 'com.rezics.history.minimized.v1', data: {} }],
+      };
+    });
+  if (receiving.value.minimized) await releaseReceiving(deps, saved, copy, context);
+  return receiving.value;
+}
+
+/** One bounded source selection and at most one physical effect. Source and receiving homes
+ * never retain checkouts together. Partial inventories still permit useful local cleanup. */
 export async function minimizeRecordHistoryPurge(
   deps: RecordHistoryPurgeDependencies,
   preparation: PreparedRecordHistoryPurge,
@@ -94,69 +177,57 @@ export async function minimizeRecordHistoryPurge(
 ): Promise<RecordHistoryPurgeResult> {
   const saved = issued.get(preparation);
   if (!saved || saved.pool !== deps.pool) throw new TypeError('Record history preparation was not issued here');
-  const outcome = await runCommand(
-    deps.pool,
-    {
-      partition: saved.partition,
-      deadline: Math.min(context.deadline, saved.deadline),
-      clock: deps.clock,
-    },
-    async (tx) => {
+  const boundedContext = { deadline: Math.min(context.deadline, saved.deadline) };
+  const custody = await nativeRecordPurgeCustody();
+  const inventory = await custody?.sealRecordPurgeSourceInventory(deps, saved.authority, boundedContext);
+  const outcome = await runCommand(deps.pool,
+    { partition: saved.partition, deadline: boundedContext.deadline, clock: deps.clock }, async (tx) => {
       const source = await lockRecordPurgeAuthoritySource(tx, saved.authority);
-      if (!source || !sameSource(source, saved.source))
-        return noEffect({ state: 'pending' as const, examined: 0, minimized: 0 });
+      if (!source || !sameRecordPurgeSource(source, saved.source))
+        return noEffect({ result: { state: 'pending' as const, examined: 0, minimized: 0 }, foreign: null });
       await tx.query(
         `SELECT source_key FROM core.record_history_purge WHERE source_key=$1 AND deletion_generation=$2 FOR UPDATE`,
         [saved.key, source.reference.deletionGeneration],
       );
-      const page = await tx.query<{ partition_no: number; artifact_type: HistoryArtifactType; locator: Buffer }>(
-        `SELECT partition_no,artifact_type,locator FROM core.record_history_locator
-       WHERE source_key=$1 AND state='pending' AND next_attempt<=now()
-       ORDER BY next_attempt,partition_no,artifact_type,locator LIMIT 8 FOR UPDATE`,
-        [saved.key],
+      const setGap = await enrollRecordHistorySourceSets(tx, saved.authority, saved.key, source.reference.deletionGeneration);
+      const page = await tx.query<RecordHistoryCopy>(
+        `SELECT partition_no,artifact_type,locator,gap FROM core.record_history_locator
+         WHERE source_key=$1 AND (state='pending' OR gap='record-source-native-release-pending') AND next_attempt<=now()
+         ORDER BY next_attempt,partition_no,artifact_type,locator LIMIT 8`, [saved.key],
       );
-      // Prefer an available co-located copy within this bounded page.
-      const copy = page.rows.find((row) => row.partition_no === saved.partition) ?? page.rows[0];
-      let gap = 'record-original-producer-coverage-unsealed';
+      const sets = await readRecordHistorySourceSetCopies(tx, saved.key, source.reference.deletionGeneration, 8-page.rows.length);
+      const copies = [...page.rows, ...sets];
+      const copy = copies.find((row) => row.partition_no === saved.partition) ?? copies[0];
+      let gap = setGap ?? 'record-original-producer-coverage-unsealed';
+      if (inventory?.state === 'sealed') {
+        if (!custody || !(await custody.verifyRecordPurgeSourceInventory(tx, saved.authority, inventory.cut)))
+          gap = 'record-native-source-inventory-cut-unproven';
+        else gap = setGap ?? 'record-history-copy-inventory-unsealed';
+      } else if (custody) gap = 'record-native-source-inventory-unsealed';
       let minimized = 0;
-      if (copy) {
-        let pending: string | null = 'record-source-bound-foreign-custody-unavailable';
-        if (copy.partition_no === saved.partition) {
-          const job = { partition_no: saved.partition, authority: saved.authority };
-          pending =
-            copy.artifact_type === 'command-receipt/v1'
-              ? await minimizeHistoryReceipt(tx, job, copy.locator)
-              : copy.artifact_type === 'outbox-event/v1'
-                ? await minimizeHistoryOutbox(tx, job, copy.locator)
-                : await minimizeRecordHistoryWork(tx, job, copy.locator);
-        }
+      if (copy && copy.partition_no === saved.partition) {
+        const pending = await minimizeCopy(tx, {
+          partition_no: saved.partition, authority: saved.authority,
+          ...(copy.sourceSet ? { sourceSet: copy.sourceSet } : {}),
+        }, copy);
         gap = pending ?? gap;
         minimized = pending === null ? 1 : 0;
-        await tx.query(
-          `UPDATE core.record_history_locator SET state=$5,gap=$6,next_attempt=now()+interval '30 seconds'
-         WHERE source_key=$1 AND partition_no=$2 AND artifact_type=$3 AND locator=$4`,
-          [
-            saved.key,
-            copy.partition_no,
-            copy.artifact_type,
-            copy.locator,
-            minimized ? 'minimized' : 'pending',
-            pending,
-          ],
-        );
-      }
+        await recordRecordHistoryCopyProgress(tx, saved.key, copy, pending);
+      } else if (copy && !custody) gap = 'record-source-bound-foreign-custody-unavailable';
       await tx.query(
         `UPDATE core.record_history_purge SET gap=$3,next_run=now()+interval '30 seconds'
-       WHERE source_key=$1 AND deletion_generation=$2`,
+         WHERE source_key=$1 AND deletion_generation=$2`,
         [saved.key, source.reference.deletionGeneration, gap],
       );
-      // No writer has sealed historical coverage/finite source cut yet. EOF is not absence.
+      // A native Source cut is distinct from sealed all-copy/receiving inventory and native
+      // consumer closure. Unconverted historical writers and genuine term authority stay pending.
       return noEffect({
-        state: minimized ? ('progress' as const) : ('pending' as const),
-        examined: page.rows.length,
-        minimized,
+        result: { state: minimized ? ('progress' as const) : ('pending' as const),
+          examined: copies.length + (inventory?.examined ?? 0), minimized },
+        foreign: copy && copy.partition_no !== saved.partition ? copy : null,
       });
-    },
-  );
-  return outcome.value;
+    });
+  if (!outcome.value.foreign) return outcome.value.result;
+  const receiving = await minimizeReceiving(deps, saved, outcome.value.foreign, boundedContext);
+  return { ...receiving, examined: outcome.value.result.examined + receiving.examined };
 }

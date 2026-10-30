@@ -1,3 +1,11 @@
+import {
+  finalizeCommandRecordSourceSet,
+  hasCommandRecordSourceSet,
+  recordCommandRecordSourceSetCopy,
+  releaseCommandRecordSourceSet,
+  rememberCommandRecordSourceSet,
+  type SemanticRecordSourceSet,
+} from './record-source-set.ts';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 
@@ -47,12 +55,21 @@ export function declareCommandRecordSources(
   sources: readonly RecordHistorySourceReference[],
 ): void {
   currentCommand(tx);
-  if (declarations.has(tx) || serializing.has(tx) || sources.length < 1 || sources.length > MAX_COMMAND_RECORD_SOURCES)
+  if (declarations.has(tx) || hasCommandRecordSourceSet(tx) || serializing.has(tx) || sources.length < 1 || sources.length > MAX_COMMAND_RECORD_SOURCES)
     throw new TypeError('Invalid or repeated command record source declaration');
   const copied = sources.map((source) => Object.freeze({ ...source }));
   const keys = copied.map(recordHistorySourceKey);
   if (new Set(keys).size !== sources.length) throw new TypeError('Repeated original record source');
   declarations.set(tx, Object.freeze(copied));
+}
+
+/** Mutually exclusive alternative for one native immutable complete set, not a larger small
+ * reference cap. Semantic owns issuance and exact term/old/current membership. */
+export function declareCommandRecordSourceSet(tx: CommandTransaction, sourceSet: SemanticRecordSourceSet): void {
+  currentCommand(tx);
+  if (declarations.has(tx) || hasCommandRecordSourceSet(tx) || serializing.has(tx))
+    throw new TypeError('Invalid or repeated command record source declaration');
+  rememberCommandRecordSourceSet(tx, sourceSet);
 }
 
 export function commandRecordSources(tx: CommandTransaction): readonly RecordHistorySourceReference[] {
@@ -61,6 +78,7 @@ export function commandRecordSources(tx: CommandTransaction): readonly RecordHis
 
 export function releaseCommandRecordSources(tx: CommandTransaction): void {
   declarations.delete(tx);
+  releaseCommandRecordSourceSet(tx);
   serializing.delete(tx);
 }
 
@@ -76,6 +94,8 @@ export async function recordRecordHistoryCopy(
   locator: import('./locator.ts').HistoryLocator,
   position: bigint | null = null,
 ): Promise<void> {
+  beginRecordHistorySerialization(tx);
+  await recordCommandRecordSourceSetCopy(tx, locator, position);
   const command = currentCommand(tx);
   const { encodeLocator } = await import('./locator.ts');
   const encoded = Buffer.from(encodeLocator(locator));
@@ -97,6 +117,7 @@ export async function recordRecordHistoryCopy(
 
 /** The fence closes native provenance for work staged before the generated log position existed. */
 export async function finalizeCommandRecordSources(tx: CommandTransaction, position: bigint): Promise<void> {
+  await finalizeCommandRecordSourceSet(tx, position);
   if (!commandRecordSources(tx).length) return;
   const command = currentCommand(tx);
   await tx.query(

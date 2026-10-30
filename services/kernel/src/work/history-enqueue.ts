@@ -111,7 +111,18 @@ export async function receiveHistoryWork(
       [sourcePartition, locator],
     );
     if (copies.rows.length > 16) throw new TypeError('Too many original work record sources');
-    return { ...row, recordCopies: copies.rows, recordLocator: locator };
+    const sets = await tx.query(
+      `SELECT source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
+       FROM core.record_history_source_set_copy
+       WHERE partition_no=$1 AND artifact_type='durable-work/v1' AND locator=$2 LIMIT 2`,
+      [sourcePartition, locator],
+    );
+    if (sets.rows.length > 1 || (sets.rows.length && copies.rows.length))
+      throw new TypeError('Conflicting original work record source declarations');
+    if (sets.rows.some((set) => set.original_position === null || set.producer_version !== 1 ||
+      set.source_partition !== sourcePartition || set.original_transaction !== row.source_transaction))
+      throw new TypeError('Uncommitted original work record source set');
+    return { ...row, recordCopies: copies.rows, recordSets: sets.rows, recordLocator: locator };
   });
   if (source.state === 'retired') return 'retired';
   const request: ScopedWorkRequest = { owner: source.owner, intent: source.request, scope: source.scope };
@@ -147,6 +158,29 @@ export async function receiveHistoryWork(
             copy.producer_version,
           ],
         );
+      for (const set of source.recordSets) {
+        await tx.query(
+          `INSERT INTO core.record_history_source_set_copy
+           (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,
+            original_transaction,original_position,producer_version)
+           VALUES($1,$2,$3,0,'durable-work/v1',$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+          [set.source_partition, set.set_locator, set.set_revision, source.recordLocator,
+            set.original_transaction, set.original_position, set.producer_version],
+        );
+        const accepted = await tx.query(
+          `SELECT source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
+           FROM core.record_history_source_set_copy
+           WHERE partition_no=0 AND artifact_type='durable-work/v1' AND locator=$1 FOR SHARE`,
+          [source.recordLocator],
+        );
+        const row = accepted.rows[0];
+        if (!row || row.source_partition !== set.source_partition ||
+            !Buffer.from(row.set_locator).equals(Buffer.from(set.set_locator)) ||
+            !Buffer.from(row.set_revision).equals(Buffer.from(set.set_revision)) ||
+            row.original_transaction !== set.original_transaction ||
+            row.original_position !== set.original_position || row.producer_version !== set.producer_version)
+          throw new TypeError('Conflicting received work record source set');
+      }
       if (!stored.retired && !stored.admitted) {
         await enqueueWorkIntent(work, tx, request.intent);
         await tx.query('UPDATE core.history_work SET admitted=true WHERE partition_no=0 AND work_id=$1', [workId]);
