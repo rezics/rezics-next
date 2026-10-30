@@ -1556,8 +1556,10 @@ does not establish either outcome.
 
 The thread page follows the adopted [targeted reply slice](../../docs/research/content-threads-boards-design.md).
 Reply to this post selects its identity and focuses the existing composer. Cancel clears the target and keeps the
-draft. Selecting a different target, cancelling, or changing an attempted draft starts a new command intent; retrying
-an unchanged draft preserves its parent, body, media and idempotency key. Controls cannot change a pending intent.
+draft. After a known refusal, selecting a different target, cancelling, or changing an attempted draft starts a new
+command intent; retrying an unchanged draft preserves its parent, body, media and idempotency key. An uncertain post
+retains the original command and key. A changed draft, session or target must be restored before that command can be
+retried; only a known refusal permits a different intent. Controls cannot change a pending intent.
 The returned post identity is rendered once, with neutral reply context. A loaded parent links to its local slot,
 including its tombstone; an unloaded parent has no link or copied text. Deleted and withheld parents never supply
 preview text. Removed replies retain their own parent context too.
@@ -1755,6 +1757,33 @@ and `--error`. These are interface review inputs; native proof and visual approv
 - **Growth check:** `tests/post-editing-cost.test.ts`: `post deletions keep K/D/R/A fixed as post data grows`
 
 ### Reply image
+
+The existing Editor upload callback uses `media-upload-recovery.ts` for both the composer and inline revision editor.
+Its mounted, at-most-32-entry map retains only the original File, immutable thread/container or future board/key,
+actual signed-in subject/session CSRF identity and the reservation ID returned by `UploadRefusal.mediaId`. Editor Retry
+uses the original producer's declared `resumeReplyImageUpload(mediaId, file, signal)`, never another reservation or
+byte upload. This checkout lacks that export and the original post uploader does not yet return its known reservation
+on failure: the isolated consumer returns unavailable until those original producer declarations arrive. It does not
+guess an ID or reserve again when a failure supplies none. A target/session change invalidates the old upload and asks
+for removal/reselection; native abandoned-object collection retains its original 24-hour ownership. Rejection requires
+a deliberate fresh file selection. Success, Editor dismissal/abort and unmount release pending entries and abort work.
+
+After native `media_unavailable`, the draft keeps its text, alternative text, title, subject/citation selections, target
+and command key. Processing, rejected, erased, missing/inaccessible, already-used and unknown statuses remain distinct.
+Unknown status retains the actual draft ID and blocks Send/Save. Check again calls one private server function for at
+most 32 unique actual draft IDs through the existing uploader-only native metadata reader; it sends no post command.
+Reading available metadata never grants claimability. Publishing still requires a separate action and the current
+native validator. Denied/closed writes do not trigger metadata reads. No presentation DTO, media catalogue, document
+reader fallback, persisted draft, bearer cache or new Editor implementation participates in recovery.
+
+The focused integration acceptance is `tests/thread-media-recovery.test.ts`. Review the actual Page ID
+`pages-community-thread--reply-media-unknown` and existing `pages-community-thread--reply-media-unavailable`.
+The existing target lifetime Patterns remain `patterns-community-thread-replies--selected`, `--cancelled` and `--retry`.
+Web owns ordinary phone390/desktop1280 light/dark review and screenshots through the existing globals. This delivery
+runs local Web typing only; acceptance, native, browser and visual evidence remain deferred to integration.
+Source read: the existing native media claim contract, Web reservation/state/upload boundaries, Editor upload manager,
+reply intent/target composer, current document image contract and thread recordings/stories. No reference project is
+named for this recovery surface, and none was needed.
 
 - **Touches:** Per image, one site `POST /media`, one `PUT /media/<id>` and at most 32 `GET /media/<id>` state reads
   (the backoff reaches 2 s within 2 s of starting, over 60 s at most); each is a single kernel call behind the

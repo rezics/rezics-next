@@ -209,3 +209,38 @@ export const ReplyMediaUnavailable: Story = {
     </main>
   ),
 };
+
+export const ReplyMediaUnknown: Story = {
+  name: 'Reply draft with unknown image status',
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.thread_edit_save() }));
+    await expect(await canvas.findByText(m.thread_media_state_unavailable())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.thread_edit_save() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.thread_media_check_again() })).toBeEnabled();
+    await expect(canvas.getByRole('textbox', { name: m.thread_reply_body_label() })).toHaveTextContent(
+      'Keep this reply draft.',
+    );
+    await expect(canvas.getByRole('img', { name: 'Processing image' })).toBeVisible();
+  },
+  render: () => (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <InlinePostEditor
+          initialBody={{ ...initialBody, doc: { ...initialBody.doc, content: initialBody.doc.content!.slice(0, 2) } }}
+          initialMediaIds={[processingId]}
+          revisionId="revision-1"
+          idempotencyKey="0192f3a0-6c1e-7b2a-9d4e-000000000004"
+          containerId={recordedThread.thread.id}
+          onSubmit={async () => ({
+            ok: false,
+            reason: 'media-unavailable',
+            media: [{ id: processingId, state: 'unavailable' }],
+          })}
+          onCancel={() => undefined}
+          onSuccess={() => undefined}
+        />
+      </AppShell>
+    </PatternStory>
+  ),
+};

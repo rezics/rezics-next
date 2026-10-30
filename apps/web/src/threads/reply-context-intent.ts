@@ -8,10 +8,13 @@ export class ReplyIntent {
   private parentId: string | null = null;
   private attempt: ReplyCommand | undefined;
   private fingerprint: string | undefined;
+  private uncertain = false;
+  private context = '';
 
   constructor(private key: string) {}
 
   selectParent(parentId: string | null): string {
+    if (this.uncertain) return this.key;
     if (parentId !== this.parentId) {
       this.parentId = parentId;
       this.reset(crypto.randomUUID());
@@ -19,11 +22,25 @@ export class ReplyIntent {
     return this.key;
   }
 
-  prepare(draft: ReplyDraft, parentId: string | null): ReplyCommand {
+  canPrepare(draft: ReplyDraft, parentId: string | null, context = ''): boolean {
+    return (
+      !this.uncertain ||
+      (parentId === this.parentId && context === this.context && JSON.stringify(draft) === this.fingerprint)
+    );
+  }
+
+  /** A transport failure cannot establish that the original native command was not applied. */
+  settle(knownNotApplied: boolean): void {
+    this.uncertain = !knownNotApplied && Boolean(this.attempt);
+  }
+
+  prepare(draft: ReplyDraft, parentId: string | null, context = ''): ReplyCommand {
+    if (!this.canPrepare(draft, parentId, context)) throw new Error('The original command outcome is unknown');
     this.selectParent(parentId);
     const fingerprint = JSON.stringify(draft);
-    if (this.attempt && fingerprint === this.fingerprint) return this.attempt;
+    if (this.attempt && fingerprint === this.fingerprint && context === this.context) return this.attempt;
     if (this.attempt) this.reset(crypto.randomUUID());
+    this.context = context;
     this.fingerprint = fingerprint;
     this.attempt = {
       ...structuredClone(draft),
@@ -37,6 +54,7 @@ export class ReplyIntent {
     this.key = key;
     this.attempt = undefined;
     this.fingerprint = undefined;
+    this.uncertain = false;
   }
 }
 
