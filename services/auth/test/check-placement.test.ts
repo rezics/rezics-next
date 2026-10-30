@@ -125,7 +125,11 @@ test('a normal child exit also ends descendants before returning its lane', asyn
 test('direct unplaced and foreign-owner database access stay refused before any Docker call', async () => {
   const databaseModule = new URL('../scripts/database.ts', import.meta.url).href;
   for (const owner of [undefined, 'foreign-owner']) {
-    const env = { ...process.env, AUTH_CHECK_CONTAINER: 'foreign-container', DATABASE_URL: 'postgres://foreign/db' };
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      AUTH_CHECK_CONTAINER: 'foreign-container',
+      DATABASE_URL: 'postgres://foreign/db',
+    };
     delete env.AUTH_CHECK_LANE_OWNER;
     if (owner) env.AUTH_CHECK_LANE_OWNER = owner;
     const child = Bun.spawn(
