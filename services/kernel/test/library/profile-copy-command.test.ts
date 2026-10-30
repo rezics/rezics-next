@@ -85,6 +85,10 @@ function privateFree(value: unknown) {
       'pin',
       'library_profile_pin',
       'libraryProfilePin',
+      'kind_profile_pin',
+      'status_profile_pin',
+      'kindProfilePin',
+      'statusProfilePin',
       'profileId',
       'releaseDigest',
       'acceptingType',
@@ -184,6 +188,8 @@ test('native holdings accept declared data kind status pairs pin fresh facts and
     const sibling = await fact(second.id);
     for (const id of [first.value.id, second.id]) {
       expect((await fact(id)).library_profile_pin).toEqual(pin(originalDigest, vertical));
+      expect((await fact(id)).kind_profile_pin).toEqual(pin(originalDigest, vertical));
+      expect((await fact(id)).status_profile_pin).toEqual(pin(originalDigest, vertical));
       const view = (await json(await native.send(owner.bearer, 'GET', path(id)), 200)).copy;
       publicCopy(view);
       expect(view).toMatchObject({ id, subjectId, ...pair });
@@ -336,7 +342,9 @@ test('fresh status updates store the observed pin while retired kind status fact
     status: 'archived',
     revision: 2,
   });
-  expect(updated.library_profile_pin).toEqual(pin(replacementDigest, 'game'));
+  expect(updated.status_profile_pin).toEqual(pin(replacementDigest, 'game'));
+  expect(updated.kind_profile_pin).toEqual(pin(originalDigest, 'game'));
+  expect(updated.library_profile_pin).toEqual(pin(originalDigest, 'game'));
   expect(await fact(sibling.value.id)).toEqual(savedSibling);
   const after = await inspect();
   await native.activate(originalDigest);
@@ -704,4 +712,65 @@ test('missing exact immutable Copy release never borrows current labels and tran
     statusEditing: { state: 'unavailable' },
   });
   expect(await inspect()).toEqual(before);
+});
+
+test('metadata preserves both meanings and an explicit newer status survives delete and Undo with original kind labels', async () => {
+  const subjectId = await native.createSubject('game');
+  const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+  const creation = await fact(created.value.id);
+  const currentProfile = {
+    id: 'fixture.game-holdings',
+    copies: { kinds: [{ id: 'installation', statuses: [{ id: 'licensed' }, { id: 'archived' }] }] },
+  };
+  const data = fixture(currentProfile);
+  for (const [key, text] of Object.entries(data.presentation)) {
+    const labels = JSON.parse(text);
+    labels.libraryProfiles[currentProfile.id].copyKinds.installation = 'Current installation';
+    labels.libraryProfiles[currentProfile.id].copyStatuses.installation.licensed = 'Current licence';
+    labels.libraryProfiles[currentProfile.id].copyStatuses.installation.archived = 'Archived now';
+    data.presentation[key] = JSON.stringify(labels);
+  }
+  const currentDigest = await native.publish(await compileCatalogue(data));
+  await native.activate(currentDigest);
+  await commands.updateCopy(owner.actor, created.value.id, { revision: 1, location: 'Study' }, entryKey());
+  const metadata = await fact(created.value.id);
+  for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin'])
+    expect(metadata[field]).toEqual(creation[field]);
+  expect((await commands.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
+    meaning: 'known', kindLabel: 'installation', statusLabel: 'licensed',
+  });
+  await json(
+    await native.send(owner.bearer, 'PATCH', path(created.value.id), { revision: 2, status: 'archived' }), 200,
+  );
+  const updated = await fact(created.value.id);
+  expect(updated.status_profile_pin).toEqual(pin(currentDigest, 'game'));
+  expect(updated.kind_profile_pin).toEqual(creation.kind_profile_pin);
+  expect(updated.library_profile_pin).toEqual(creation.library_profile_pin);
+  const before = await inspect();
+  const presented = (await json(
+    await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200,
+  )).copy;
+  expect(presented).toMatchObject({
+    id: created.value.id, subjectId, revision: 3, kind: 'installation', status: 'archived', location: 'Study',
+    presentation: { meaning: 'known', kindLabel: 'installation', statusLabel: 'Archived now' },
+  });
+  expect(await inspect()).toEqual(before);
+  await commands.deleteCopy(owner.actor, created.value.id, 3, entryKey());
+  const deleted = await fact(created.value.id);
+  expect(new Date(deleted.restore_until).getTime() - new Date(deleted.deleted_at).getTime()).toBe(720 * 60 * 60 * 1000);
+  for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin'])
+    expect(deleted[field]).toEqual(updated[field]);
+  // Undo accepts the actual historic status, even when today's profile no longer offers it.
+  await native.activate(originalDigest);
+  const restored = await json(await native.send(owner.bearer, 'POST', `${path(created.value.id)}:restore`, {
+    deletionId: deleted.deletion_id, revision: deleted.revision,
+  }), 200);
+  expect(restored.copy).toMatchObject({ id: created.value.id, revision: 5, status: 'archived', location: 'Study' });
+  const final = await fact(created.value.id);
+  for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin', 'created_at', 'updated_at'])
+    expect(final[field]).toEqual(updated[field]);
+  expect((await commands.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
+    meaning: 'known', kindLabel: 'installation', statusLabel: 'Archived now',
+    statusEditing: { state: 'supported', statuses: [{ id: 'licensed', label: 'licensed', labelLanguage: 'en' }] },
+  });
 });

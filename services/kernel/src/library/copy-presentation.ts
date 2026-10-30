@@ -14,7 +14,11 @@ import {
   type LibraryProfileSourceDependencies,
 } from './profile-source.ts';
 
-export type CopyPresentationFact = { copy: Copy; pin: LibraryProfilePin | null };
+export type CopyPresentationFact = {
+  copy: Copy;
+  kindPin: LibraryProfilePin | null;
+  statusPin: LibraryProfilePin | null;
+};
 type Snapshot = { digest: string; release: Release } | null;
 
 /** Accepted vocabulary and current native status choices are independent observations. */
@@ -23,18 +27,24 @@ export function presentCopy(
   snapshot: Snapshot,
   source: LibraryProfileSource,
   languages: readonly string[] = [],
+  statusSnapshot: Snapshot = snapshot,
 ): CopyPresentation {
   const unavailable = { state: 'unavailable' } as const;
-  if (!fact.pin) return { meaning: 'unknown', statusEditing: unavailable };
-  const profile = snapshot && resolveLibraryProfilePin(snapshot, fact.pin);
-  if (!profile) return { meaning: 'unavailable', statusEditing: unavailable };
+  const kindProfile = fact.kindPin && snapshot && resolveLibraryProfilePin(snapshot, fact.kindPin);
+  const statusProfile = fact.statusPin && statusSnapshot && resolveLibraryProfilePin(statusSnapshot, fact.statusPin);
+  // Missing provenance is unknown. A required exact release that cannot resolve is unavailable.
+  if ((fact.kindPin && !kindProfile) || (fact.statusPin && !statusProfile))
+    return { meaning: 'unavailable', statusEditing: unavailable };
+  if (!kindProfile || !statusProfile) return { meaning: 'unknown', statusEditing: unavailable };
   const { kind, status } = fact.copy;
   // Raw historical IDs, including migrated unspecified holdings, are never inferred from a Type.
   const original =
     kind && kind !== 'legacy-unspecified'
-      ? profile.copies?.kinds.find((candidate) => candidate.id === kind)
+      ? kindProfile.copies?.kinds.find((candidate) => candidate.id === kind)
       : undefined;
-  const acceptedStatus = original?.statuses.find((candidate) => candidate.id === status);
+  const acceptedStatus = statusProfile.copies?.kinds
+    .find((candidate) => candidate.id === kind)
+    ?.statuses.find((candidate) => candidate.id === status);
   const current =
     source?.kind === 'supported' && kind
       ? source.profile.copies?.kinds.find((candidate) => candidate.id === kind)
@@ -67,16 +77,20 @@ export async function prepareCopyPresentation(
   fact: CopyPresentationFact,
   languages: readonly string[],
 ) {
-  let snapshot: Snapshot = null;
+  const snapshots = new Map<string, Snapshot>();
   let source: LibraryProfileSource = null;
   let anchor: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
-  if (fact.pin) {
+  // At most two exact immutable lookups, deduplicated for fresh copies; never a history walk.
+  for (const pin of [fact.kindPin, fact.statusPin]) {
+    if (!pin || snapshots.has(pin.releaseDigest)) continue;
+    let snapshot: Snapshot = null;
     try {
-      const release = await readRelease(deps.pool, fact.pin.releaseDigest, { composed: false });
-      if (release) snapshot = { digest: fact.pin.releaseDigest, release };
+      const release = await readRelease(deps.pool, pin.releaseDigest, { composed: false });
+      if (release) snapshot = { digest: pin.releaseDigest, release };
     } catch {
       // Optional display dependency failure cannot select another release.
     }
+    snapshots.set(pin.releaseDigest, snapshot);
   }
   try {
     const observed = await readLibraryProfileSourceObservation(deps, fact.copy.subjectId);
@@ -91,7 +105,13 @@ export async function prepareCopyPresentation(
     }
   }
   return {
-    presentation: presentCopy(fact, snapshot, source, languages),
+    presentation: presentCopy(
+      fact,
+      fact.kindPin ? (snapshots.get(fact.kindPin.releaseDigest) ?? null) : null,
+      source,
+      languages,
+      fact.statusPin ? (snapshots.get(fact.statusPin.releaseDigest) ?? null) : null,
+    ),
     disclosure: { subject: anchor !== null },
     async verify(at: AuthoritativeTime) {
       if (

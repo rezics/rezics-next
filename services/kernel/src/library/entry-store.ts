@@ -38,7 +38,7 @@ type CopyResult = Omit<
   NonNullable<Awaited<ReturnType<typeof copyRead.run>>>,
   'status' | 'kind' | 'libraryProfilePin'
 > & { status: string; kind?: string | null };
-type CopyAcceptance = Readonly<{ pin: LibraryProfilePin; kind: string }>;
+type CopyAcceptance = Readonly<{ pin: LibraryProfilePin; kind: string; statusSupplied?: boolean }>;
 
 const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
 const COPY_STATUSES = new Set<string>(['ordered', 'owned', 'lent', 'disposed']);
@@ -297,6 +297,8 @@ export async function updateCopy(
     disposed_on: changes.disposedOn,
     note: changes.note,
     ...acceptance,
+    // Only an explicit status accepts new meaning; metadata preserves every pin.
+    library_profile_pin: accepted?.statusSupplied === false ? null : acceptance.library_profile_pin,
     ...write(context),
   });
   return row ? asCopy(row) : null;

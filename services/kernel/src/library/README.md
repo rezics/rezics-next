@@ -831,7 +831,7 @@ minimizer custody remain explicitly pending under the existing shared-history ow
 account-erasure claim follows from local purge. Current dev has no `erasure-participant.ts`, `erasure-copy.sql`,
 `erasure-collection-member.sql` or installed terminal acknowledgement callback. The native source purger's current
 terminal-owner transaction is the available local disposition; no alternate participant or guessed binding is added.
-The complete copy row, including subject/owner references, pin, private values and episode metadata, is personal
+The complete copy row, including subject/owner references, all three profile pins, private values and episode metadata, is personal
 in every state and is removed whole. Existing safe public Collection references contain no copy values.
 
 Native acceptance covers independent identity, authorization, strict JSON/CAS, original pins/times, hidden-source replay,
@@ -1657,23 +1657,28 @@ remain deferred. `test/library/progress-presentation.test.ts` and additional nat
 
 Owner detail alone additionally accepts `presentation=FULL`, independent of summary `view=FULL`.
 [Profile consumers](../../../../docs/library-profile-consumers.md#owner-copy-detail-and-current-status-advice)
-owns the exact DTO, qualified current status advice and unresolved original-kind/update-pin inconsistency.
-`copy-presentation.ts` resolves the actual stored accepted release by digest; no current source labels enter
-historic display. `copy-store-read.sql` selects one live row and its private pin by full copy key and actual owner.
+owns the exact DTO, qualified current status advice and adopted kind/status provenance split.
+`copy-presentation.ts` resolves each actual kind/status accepting release by exact digest; no current source labels enter
+historic display. `copy-store-read.sql` selects one live row and its private pins by full copy key and actual owner.
 `readPresentedCopy` has a typed default caller and a rendering callback held inside its before/final owner,
 principal/denial, partition, copy/pin and source-version checks. Snapshots are released between owner and foreign
 homes. Unknown raw and legacy-unspecified kinds stay unknown. Current release failures do not decide retirement
 or prevent independently readable subject summaries. No read writes or returns accepting metadata.
 
-The detail adds two exact owner copy reads plus fixed account/Access/partition observations, one accepted release
-lookup, one current profile lookup and bounded current source/final probes. Work is constant in unrelated facts
+The detail adds two exact owner copy reads plus fixed account/Access/partition observations, at most two deduplicated
+exact accepted release lookups, one current profile lookup and bounded current source/final probes. Work is constant in unrelated facts
 and historical releases; it never walks history or adds per-row release reads to lists. Existing default wire
 assertions remain unchanged. Focused pure presentation and additive actual native fixture cases cover accepted
 labels versus current rename/retirement, unknown versus unavailable, disclosure and final fences. Native and
 promoted-main proof remain pending; local typing is not that proof. Metadata update/delete/Undo contracts and the
-720-hour restoration window remain unchanged. Foreground local kernel typing, including route construction,
-and client typing passed. Native, unit and acceptance suites were not run; the update-pin conflict above
-remains unresolved.
+720-hour restoration window remain unchanged. Fresh creation captures `kind_profile_pin` and `status_profile_pin`
+from actual native acceptance. Explicit status updates replace only the latter; metadata-only edits preserve both,
+and the compatibility `library_profile_pin` stays original. Existing mutable pins are not creation proof: the new
+migration deliberately leaves old rows unknown, with no current-profile backfill. The native fixed-contract migration
+and pre-profile retained Undo capture only their explicit legacy destination. Restore resolves accepted status and
+kind separately, so a newer status cannot relabel the original kind. Both columns remain private whole-row data:
+`copy-retention-purge.sql` and `account-fact-purge-copy.sql` already erase them with their owning row, with no orphan
+store or additional participant. Local compiler validation is separate from all pending native and promoted-main proof.
 
 ### Copy page
 

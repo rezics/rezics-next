@@ -41,8 +41,8 @@ worker and owner cutover; native outcome proof remains a separate integration ga
 
 ## Pinned fact semantics
 
-Every accepted entry state, progress session, and copy has one private, immutable pin identifying the exact profile
-that accepted its value. The pin is the accepted discriminated union:
+Every accepted entry state and progress session has one private pin identifying the exact profile that accepted
+its value. A copy captures kind and status acceptance separately, as specified below. The pin is the accepted discriminated union:
 
 ```ts
 type LibraryProfilePin =
@@ -63,7 +63,7 @@ subject, a source ID, or an observed source position is not enough to label that
 read or expose a hidden current type while migrating.
 
 Store the pin on the fact row (`library.entry`, `library.progress_session`, and `library.copy`), not in a side table
-that has to be scanned at read time. A single bounded `library_profile_pin` JSONB column per row can encode exactly
+that has to be scanned at read time. Each bounded pin JSONB column encodes exactly
 this small closed union; validate the tag, exact member set, digest, nullable legacy type, and profile ID before use.
 Keep it private and absent from route response schemas, public events, public Collection membership, and published-log
 snapshots. Do not create a numeric revision column, mutable current-profile pointer per owner, per-account definition
@@ -95,8 +95,8 @@ is serialized. Lists retain their raw fallback and historical notice; editing or
 instead of issuing a release read for every row. Generic visual fixtures without actual accepted metadata remain
 unknown; no subject Type, location or source implies a physical/digital holding.
 
-Meaning is `known` only when the exact stored private pin resolves its immutable release and declares the stored
-kind/status pair. Unknown IDs, unpinned facts and `legacy-unspecified` retain their raw provenance with `unknown`
+Meaning is `known` only when the exact private `kind_profile_pin` resolves the stored kind in its immutable
+release and `status_profile_pin` independently resolves the stored status for that raw kind in its accepting release. Unknown IDs, unpinned facts and `legacy-unspecified` retain their raw provenance with `unknown`
 meaning and no fabricated labels. A missing required release or mismatched reference is `unavailable`; no current
 head or legacy fallback supplies historical meaning. `Accept-Language` uses the existing request language-range
 and label-selection helpers. Every displayed label reports its genuine selected or fallback language.
@@ -110,7 +110,7 @@ or unavailable advice has no fabricated empty choices. Explicit status writes in
 the submitted value at native command time. Metadata-only edits, delete, receipts and the exact 720-hour Undo
 remain under their native contracts; the detail read creates no write, migration, activation or preparation.
 
-The reader captures one actual copy and pin under current owner scope, principal, account and denial checks,
+The reader captures one actual copy and its private pins under current owner scope, principal, account and denial checks,
 releases the owner snapshot, resolves the exact release and current source, then rechecks source identity/version,
 account authorization, owner partition epoch and exact copy/pin after optional summary rendering. Each foreign
 home is released before another is visited. Current subject disclosure is independent of historical labels and
@@ -119,16 +119,27 @@ The existing Copy read action declares its actual own-account authority through 
 this supplies native owner permission while retaining principal and denial checks. Missing credential scope is
 refused by that admission with `403`, and another owner's copy remains indistinguishable from a missing copy.
 
-There is an unresolved native update inconsistency: `copies.ts` currently replaces the entire pin with the
-current source pin on a successful update, including metadata-only updates. The existing acceptance case
-`fresh status updates store the observed pin while retired kind status facts survive activation and rollback unchanged`
-in `profile-copy-command.test.ts` explicitly requires a transition from original `licensed` to current-only
-`archived` and the replacement release pin. That contradicts immutable accepted-kind meaning when the current
-release renames the same kind. One pin cannot simultaneously preserve original kind labels and declare a
-current-only status. This detail seam resolves the actual stored pin honestly; it cannot recover an overwritten
-original pin. The existing command acceptance is retained, and no conversion, second profile store or silent
-repinning repair is introduced. Original-kind preservation across that write requires reconciliation of that
-acceptance with the immutable-pin rule before it can be claimed complete.
+Copy creation captures both pins from the actual current native acceptance. Kind is immutable. An explicit status
+update validates the submitted pair against the current native profile and updates **only** `status_profile_pin`,
+even when the submitted status equals the stored value. Neither `kind_profile_pin` nor the original compatibility
+`library_profile_pin` changes. Metadata-only edits change neither meaning and retain their existing native current
+pair validation, CAS, source, denial and receipt rules. This split preserves the successful `licensed` to current-only
+`archived` transition without relabelling the original kind. Status display uses its own accepted release; current
+status advice remains independently selected from the current profile rather than the kind's original status list.
+
+Existing rows receive NULL new pins: the old shared pin was mutable and cannot establish original creation meaning.
+No active-head, revision-number or subject-Type backfill is permitted. The old compatibility pin may supply status
+provenance only after exact immutable resolution verifies the stored status for the raw kind. Missing creation proof
+keeps aggregate meaning unknown; a missing required exact release is unavailable. The explicit native
+`legacy-fixed-v1` migration captures its known unspecified kind/status without inventing physical or digital meaning.
+No ordinary read migrates or fills pins. There is no second profile store or history inference.
+
+Delete retains all three private columns on the same copy row. Undo verifies the exact accepted status and kind
+independently and preserves their pins, identity, values and original 720-hour deadline. Restoring genuinely
+pre-profile retained data may use only the owner's existing explicit fixed-contract migration destination, never
+today's profile. The existing whole-row due purge and terminal account fact purger erase both new columns along
+with the copy; no extra store, child graph or cleanup participant is introduced. Native/full privacy, growth,
+regression and promoted-main evidence remain required; local compiler success does not establish them.
 
 ### Owner session display and current recording
 

@@ -360,7 +360,7 @@ export function createCopyCommands(config: Dependencies) {
             transactionId: command.transactionId,
             time: authoritativeTimeValue(command.time),
           },
-          { kind: fact.kind, pin: source.pin },
+          { kind: fact.kind, pin: source.pin, statusSupplied: Object.hasOwn(patch, 'status') },
         );
         if (!copy) throw new CopyConflictError();
         return { value: copy, events: [event(UPDATED_EVENT, owner.accountId, copy.id)] };
@@ -428,19 +428,28 @@ export function createCopyCommands(config: Dependencies) {
                 kind: string | null;
                 status: string;
                 library_profile_pin: unknown;
+                kind_profile_pin: unknown;
+                status_profile_pin: unknown;
               }>(
-                'SELECT subject_id, kind, status, library_profile_pin FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3',
+                'SELECT subject_id, kind, status, library_profile_pin, kind_profile_pin, status_profile_pin FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3',
                 [route, copyId, owner.accountId],
               );
               return result.rows[0];
             });
             if (!row) throw new LibraryNotFoundError();
-            const pin = decodeLibraryProfilePin(row.library_profile_pin);
+            const pin = decodeLibraryProfilePin(row.status_profile_pin ?? row.library_profile_pin);
             if (pin) {
               const release = await readRelease(pool, pin.releaseDigest);
               const profile = release ? resolveLibraryProfilePin({ digest: pin.releaseDigest, release }, pin) : null;
               if (!profile || row.kind === null || !hasCopyStatus(profile, row.kind, row.status))
                 throw new Error('Retained copy accepted profile is unavailable');
+            }
+            const kindPin = decodeLibraryProfilePin(row.kind_profile_pin);
+            if (kindPin) {
+              const release = await readRelease(pool, kindPin.releaseDigest, { composed: false });
+              const profile = release ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin) : null;
+              if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
+                throw new Error('Retained copy accepted kind profile is unavailable');
             }
             if (!(await resolveSubject(config, owner, row.subject_id, attempt.time))) throw new LibraryNotFoundError();
             return { error: null };
@@ -528,13 +537,22 @@ export function createCopyCommands(config: Dependencies) {
             const partition = await readPartition(bounded, partitionOf(route));
             const row = await copyDetailRead.run(bounded, { route, copy_id: copyId, account_id: owner.accountId });
             if (!partition || !row) throw new LibraryNotFoundError();
-            const { libraryProfilePin, ...value } = row;
+            const { libraryProfilePin, kindProfilePin, statusProfilePin, ...value } = row;
             const copy: Copy = {
               ...value,
               createdAt: new Date(value.createdAt).toISOString(),
               updatedAt: new Date(value.updatedAt).toISOString(),
             };
-            return { fact: { copy, pin: decodeLibraryProfilePin(libraryProfilePin) }, epoch: partition.epoch };
+            return {
+              fact: {
+                copy,
+                compatibilityPin: decodeLibraryProfilePin(libraryProfilePin),
+                // The old mutable pin proves status only, never original kind.
+                kindPin: decodeLibraryProfilePin(kindProfilePin),
+                statusPin: decodeLibraryProfilePin(statusProfilePin ?? libraryProfilePin),
+              },
+              epoch: partition.epoch,
+            };
           });
         }
         const at = await time();

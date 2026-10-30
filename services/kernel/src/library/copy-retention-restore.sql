@@ -10,6 +10,10 @@ WITH input AS NOT MATERIALIZED (
 UPDATE library.copy
 SET deletion_id = NULL, deleted_at = NULL, restore_until = NULL,
     library_profile_pin = COALESCE(library_profile_pin, (SELECT pin FROM destination)),
+    kind_profile_pin = CASE WHEN library_profile_pin IS NULL
+      THEN COALESCE(kind_profile_pin, (SELECT pin FROM destination)) ELSE kind_profile_pin END,
+    status_profile_pin = CASE WHEN library_profile_pin IS NULL
+      THEN COALESCE(status_profile_pin, (SELECT pin FROM destination)) ELSE status_profile_pin END,
     kind = CASE WHEN library_profile_pin IS NULL AND EXISTS (SELECT 1 FROM destination)
       THEN COALESCE(kind, 'legacy-unspecified') ELSE kind END,
     revision = revision + 1, transaction_id = :transaction_id::uuid
