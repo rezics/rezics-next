@@ -17,7 +17,10 @@ export const SignedIn: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_continue_unavailable());
     const region = canvas.getByRole('region', { name: m.home_continue_heading() });
-    await expect(within(region).getByRole('link', { name: m.library_more() })).toHaveAttribute('href', `/${getLocale()}/library/continue`);
+    await expect(within(region).getByRole('link', { name: m.library_more() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/continue`,
+    );
     await expect(canvas.queryByText(m.library_continue_empty())).toBeNull();
   },
 };

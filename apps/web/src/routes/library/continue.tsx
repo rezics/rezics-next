@@ -23,10 +23,8 @@ export const Route = createFileRoute('/library/continue')({
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   loader: ({ deps }) => readContinueEntries({ data: { ...(deps.cursor ? { cursor: deps.cursor } : {}) } }),
-  head: ({ match }) => pageHead(
-    { title: m.library_continue(), robots: 'noindex, nofollow' },
-    pageHeadContext(match.pathname),
-  ),
+  head: ({ match }) =>
+    pageHead({ title: m.library_continue(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ContinuePage,
 });
 

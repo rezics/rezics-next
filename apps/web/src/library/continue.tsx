@@ -160,7 +160,11 @@ export function useContinuePreparation(
 }
 
 /** A loader result stays current across navigation; retry discards old personal data immediately. */
-export function useContinueRefresh(initial: ContinueView | undefined, read: () => Promise<ContinueResult>, scope: string) {
+export function useContinueRefresh(
+  initial: ContinueView | undefined,
+  read: () => Promise<ContinueResult>,
+  scope: string,
+) {
   const [snapshot, setSnapshot] = useState({ initial, scope, result: initial, busy: false });
   const current = snapshot.initial === initial && snapshot.scope === scope;
   const result = (current ? snapshot.result : initial) ?? { state: 'unknown' as const };
@@ -203,15 +207,16 @@ export function ContinueSection({
   if (result.state === 'signed-out') return null;
   const options = { locale: locale as Locale };
   const title = m.home_continue_heading({}, options);
-  const message = result.state === 'loaded'
-    ? m.library_continue_empty({}, options)
-    : result.state === 'preparing'
-      ? m.library_continue_preparing({}, options)
-      : result.state === 'unknown'
-        ? m.library_continue_loading({}, options)
-        : result.state === 'denied'
-          ? m.library_continue_denied({}, options)
-          : m.library_continue_unavailable({}, options);
+  const message =
+    result.state === 'loaded'
+      ? m.library_continue_empty({}, options)
+      : result.state === 'preparing'
+        ? m.library_continue_preparing({}, options)
+        : result.state === 'unknown'
+          ? m.library_continue_loading({}, options)
+          : result.state === 'denied'
+            ? m.library_continue_denied({}, options)
+            : m.library_continue_unavailable({}, options);
   return (
     <section aria-label={title} data-continue-state={result.state} className="min-w-0 space-y-4">
       {!destination ? (

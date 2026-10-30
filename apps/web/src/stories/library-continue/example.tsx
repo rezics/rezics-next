@@ -14,7 +14,8 @@ export const continueExamples: ContinueEntry[] = sessions.progressSessions.slice
   summary: session.subject,
   progress: (() => {
     const mode = session.mode;
-    if (mode !== 'scalar_amount' && mode !== 'cursor_position' && mode !== 'completed_units') throw new Error('Unrecognized recorded progress mode');
+    if (mode !== 'scalar_amount' && mode !== 'cursor_position' && mode !== 'completed_units')
+      throw new Error('Unrecognized recorded progress mode');
     return continueProgress({ ...session, mode });
   })(),
 }));
@@ -24,7 +25,9 @@ export function ContinueExample({ state, navigation = false }: { state: Continue
   const locale = getLocale();
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-8">
-      {navigation ? <LibraryNavigation current="continue" pins={{ state: 'closed' }} collections={[]} locale={locale} /> : null}
+      {navigation ? (
+        <LibraryNavigation current="continue" pins={{ state: 'closed' }} collections={[]} locale={locale} />
+      ) : null}
       <ContinueSection
         state={current}
         locale={locale}

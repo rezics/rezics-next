@@ -177,8 +177,7 @@ export const Route = createFileRoute('/library/')({
 function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   const data = Route.useLoaderData();
-  if (!('page' in data))
-    return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
+  if (!('page' in data)) return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
   return (
     <PersonalLibraryPage
       page={data.page}

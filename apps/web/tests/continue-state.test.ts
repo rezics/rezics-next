@@ -5,7 +5,8 @@ import { continueFailure, continueRetryDelay, type ContinueSource } from '../src
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadContinueState } = await import('../src/library/continue-read');
 const client = createKernelClient('https://kernel.example.test');
-const request = () => new Request('https://site.example.test/en/library/continue', { headers: { authorization: 'Bearer owner' } });
+const request = () =>
+  new Request('https://site.example.test/en/library/continue', { headers: { authorization: 'Bearer owner' } });
 
 test('the private consumer preserves empty, preparation and native failure separately', async () => {
   for (const result of [
@@ -28,8 +29,12 @@ test('the private consumer preserves empty, preparation and native failure separ
 
 test('the missing generated caller is explicit unavailable and signed-out makes no source read', async () => {
   expect(await loadContinueState(client, request(), {})).toEqual({ state: 'unavailable', reason: 'missing-binding' });
-  const source: ContinueSource = async () => { throw new Error('must not read'); };
-  expect(await loadContinueState(client, new Request('https://site.example.test/en'), {}, {}, source)).toEqual({ state: 'signed-out' });
+  const source: ContinueSource = async () => {
+    throw new Error('must not read');
+  };
+  expect(await loadContinueState(client, new Request('https://site.example.test/en'), {}, {}, source)).toEqual({
+    state: 'signed-out',
+  });
 });
 
 test('only preparation retries, with a capped delay and two automatic attempts', () => {
