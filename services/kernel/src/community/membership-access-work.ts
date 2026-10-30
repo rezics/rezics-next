@@ -104,7 +104,11 @@ export function roleWorkReceipt(
   if (!bound) return;
   if (rows.some((row) => typeof row.valid !== 'string' || typeof row.member !== 'boolean')) return;
   const member = rows.find((row) => row.role === 'member');
-  return Object.freeze({ ...bound, bytes: bytes(parameters) + bytes(rows), emptySeeks: member ? emptyMember(member) : 1 });
+  return Object.freeze({
+    ...bound,
+    bytes: bytes(parameters) + bytes(rows),
+    emptySeeks: member ? emptyMember(member) : 1,
+  });
 }
 
 export function roleBatchWorkReceipt(

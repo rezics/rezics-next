@@ -23,10 +23,7 @@ const input = () => ({ realmId: newId(42), accountId: newId(43), at });
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const negative = { role: 'owner' as const, member: false, valid: `["${at}",)` };
 function rows(member: boolean, until?: string): { role: 'owner' | 'member'; member: boolean; valid: string }[] {
-  return [
-    { role: 'member', member, valid: member ? '(,)' : `["${at}",${until ? `"${until}"` : ''})` },
-    negative,
-  ];
+  return [{ role: 'member', member, valid: member ? '(,)' : `["${at}",${until ? `"${until}"` : ''})` }, negative];
 }
 function reader() {
   return membershipModule.createRealmMembership({ pool, access: {} as Access }).roleReader;
@@ -100,11 +97,12 @@ test('native batch receipts include mixed missing anchors and the empty batch di
       const second = { ...input(), accountId: first.accountId };
       const pairs = state === 'empty' ? [] : [first, second].map(({ realmId, accountId }) => ({ realmId, accountId }));
       const context = { at, pairs };
-      const projection = state === 'missing' || state === 'empty'
-        ? []
-        : (state === 'partial' ? [first] : [first, second]).flatMap(({ realmId, accountId }) =>
-            rows(false).map((row) => ({ realmId, accountId, ...row })),
-          );
+      const projection =
+        state === 'missing' || state === 'empty'
+          ? []
+          : (state === 'partial' ? [first] : [first, second]).flatMap(({ realmId, accountId }) =>
+              rows(false).map((row) => ({ realmId, accountId, ...row })),
+            );
       native.mockReset();
       native.mockResolvedValue(projection);
       const meter = accounting();
@@ -127,7 +125,14 @@ test('native batch receipts include mixed missing anchors and the empty batch di
       if (state === 'empty') expect(meter.work.usage()).toEqual(EMPTY_ACCESS_WORK);
       else {
         expect(meter.work.usage().bytes).toBe(
-          bytes({ at, pairs: pairs.map(({ realmId, accountId }) => ({ route: routeOf(realmId), realm_id: realmId, account_id: accountId })) }) + bytes(projection),
+          bytes({
+            at,
+            pairs: pairs.map(({ realmId, accountId }) => ({
+              route: routeOf(realmId),
+              realm_id: realmId,
+              account_id: accountId,
+            })),
+          }) + bytes(projection),
         );
       }
     }
@@ -150,7 +155,11 @@ test('unknown native shapes and refused parent budgets stop before role callback
           return role(client, context);
         }),
       );
-      expect(result).toEqual({ state: 'unavailable', dependency: 'Content AccessRealmRoleReader', usage: EMPTY_ACCESS_WORK });
+      expect(result).toEqual({
+        state: 'unavailable',
+        dependency: 'Content AccessRealmRoleReader',
+        usage: EMPTY_ACCESS_WORK,
+      });
       expect(called).toBe(false);
     }
     const first = input();
@@ -164,7 +173,9 @@ test('unknown native shapes and refused parent budgets stop before role callback
       const meter = accounting();
       const context = { pairs, at };
       const result = await meter.work.capture(() =>
-        accessOwnerWork(meter.work, 'Content AccessRealmRoleReader.batch', role.batchWork, context, () => role.batch!(client, context)),
+        accessOwnerWork(meter.work, 'Content AccessRealmRoleReader.batch', role.batchWork, context, () =>
+          role.batch!(client, context),
+        ),
       );
       expect(result.state).toBe('unavailable');
       expect(meter.admitted).toEqual([]);
@@ -229,7 +240,9 @@ test('one live window accounts each fresh native invocation without reusing a ro
     const meter = accounting();
     native.mockResolvedValueOnce(rows(true)).mockResolvedValueOnce(rows(false));
     for (const context of [first, { ...first }]) {
-      await accessOwnerWork(meter.work, 'Content AccessRealmRoleReader', role.work, context, () => role(client, context));
+      await accessOwnerWork(meter.work, 'Content AccessRealmRoleReader', role.work, context, () =>
+        role(client, context),
+      );
     }
     expect(native).toHaveBeenCalledTimes(2);
     for (const axis of ACCESS_WORK_AXES)
