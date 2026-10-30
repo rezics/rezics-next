@@ -138,3 +138,33 @@ receive instantaneous push revocation; the next read must observe current author
   measures native statements, examined rows and shared blocks at three geometric scales, growing each axis
   independently while fixing the selected batch. It includes allowed, denied, empty and unavailable paths, mixed
   types and distinct physical authority partitions, and observes formula-page and shared-preparation bounds.
+
+### Subject and TypeList personal actions
+
+The four mounted personal operations (`follow.put`, `follow.delete`, `library_entry.put`, and
+`library_entry.delete`) declare `x-authority-anchor: own-account` alongside
+`x-authority-resource-types`, whose displayed types come from the bundled semantic catalogue. This trusted
+metadata selects the verified Actor's account, never an ID or actor supplied in the batch body. These operations
+keep their existing native Collection and Space follow-target behaviour.
+
+Own-account authority is the verified acting account's native owner authority, the same basis as `runner.ownAccount`.
+The mounted declaration contributes that self-account authority to Access's existing formula; the operation keeps
+its own exact action and consented scope, current actor, assignment, principal, membership and denials. A subject mutation grant cannot supply
+this authority. Public subject visibility supplies only the subject read floor. Anonymous readers receive no
+personal mutation operations. The ordinary commands still enforce their current owner checks and domain state.
+
+Preparation includes `access.account` and the four personal actions. Each operation's own-account decision is made once
+per request and reused across displayed subjects; subject existence, released primary type and public visibility
+come from Semantic's native public-evidence reader, also used by ordinary subject read eligibility. Hidden,
+taken-down and unknown subjects are all concealed even when an independent subject read grant exists.
+
+- Touches: At most 100 subject full keys, one shared account/principal preparation and gate preparation, then one
+  account-anchored formula page per personal action and per-type subject read pages. Connections are released before
+  another authority connection is acquired.
+- Bound: O(N) assembly for N ≤ 100; the existing 64-action and 256-binding caps apply per displayed type. No subject
+  search, ACL enumeration or revision history read is needed. At fixed selected neighbourhood, native statements
+  and examined rows stay constant under unrelated subjects, same-partition grants and history; indexed blocks grow
+  logarithmically. Evidence is never reused between requests.
+- Growth check: `services/kernel/test/access/growth-viewer-actions-surfaces.test.ts` fixes 20 displayed rows and
+  measures anonymous, permitted, missing-scope and concealed outcomes at three geometric scales independently for
+  each growth axis. The complete frozen surface suite binds through native Auth, Access, Semantic and Library HTTP.

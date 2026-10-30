@@ -183,10 +183,10 @@ test("a suspended account's bearer gets its normal refusal and never an old posi
   expect(await read(bearer, rows)).toEqual(rows.map((row) => offered(row)));
   await native().suspend(f.alice);
   for (const credential of [bearer, f.suspended.credential]) {
-    for (const refs of [[rows[0]!], rows]) await problem(await send(credential, refs), 401, 'invalid_token');
+    for (const refs of [[rows[0]!], rows]) await problem(await send(credential, refs), 401, 'invalid_credentials');
   }
   expect(await read(null, [rows[0]!])).toEqual([offered(rows[0]!, [])]);
-  await problem(await send(bearer, [rows[0]!]), 401, 'invalid_token');
+  await problem(await send(bearer, [rows[0]!]), 401, 'invalid_credentials');
 });
 
 test("two personas reading the same subject never see each other's answers", async () => {

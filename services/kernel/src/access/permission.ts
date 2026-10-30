@@ -87,6 +87,7 @@ type RoleEvidence = {
 };
 
 type Prepared = {
+  ownAccount: boolean;
   binding: string;
   deadline: number;
   databaseDeadline: string;
@@ -250,6 +251,7 @@ async function checkPreparedPermission(
       include_explicit: includeExplicit && !facts.anonymous && facts.scope,
       include_global: isGlobalReachAction(action),
       action,
+      own_account: facts.ownAccount,
       actor_id: actor.kind === 'account' ? actor.accountId : '',
       principal_id: facts.principalId ?? '',
       assignment_route: facts.assignmentRoute,
@@ -323,6 +325,9 @@ export function createAccess(config: PermissionConfig): Access {
         !Number.isFinite(context.deadline)
       )
         return evidence;
+      if (metadata.authority === 'own-account' && (actor.kind !== 'account' || resource.id !== actor.accountId || page))
+        return evidence;
+      const ownAccount = metadata.authority === 'own-account';
       const binding = bind(actor, action, resource, page);
       let account: Account | null | undefined;
       if (actor.kind === 'anonymous') {
@@ -519,6 +524,7 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        ownAccount,
         binding,
         deadline,
         databaseDeadline,
@@ -711,13 +717,22 @@ export function createAccess(config: PermissionConfig): Access {
           )
             throw new RangeError('Invalid read decision batch');
           const ids = Object.freeze([...batch.ids]);
+          const ownAccount = !gate && actions.get(batch.action)?.authority === 'own-account';
+          if (
+            ownAccount &&
+            (identity.kind !== 'account' ||
+              batch.resourceType !== 'access.account' ||
+              batch.ids.length !== 1 ||
+              batch.ids[0] !== identity.accountId)
+          )
+            throw new RangeError('Invalid own-account authority');
           const action = batch.action;
           const eligibility = batch.eligibility;
           try {
             requireAccessDeadline(deadline);
             return await within(deadline, async () => {
               const bounded = deadlineClient(client, deadline);
-              const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? action);
+              const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? batch.action);
               const rows = await permissionRead.run(bounded, {
                 route: 0,
                 resource_ids: [...ids],
@@ -726,6 +741,7 @@ export function createAccess(config: PermissionConfig): Access {
                 include_public: !gate && actions.get(action)!.anonymous,
                 include_global: isGlobalReachAction(action),
                 action,
+                own_account: ownAccount,
                 actor_id: identity.kind === 'account' ? identity.accountId : '',
                 principal_id: principalId ?? '',
                 assignment_route: assignmentRoute,

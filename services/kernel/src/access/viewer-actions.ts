@@ -22,7 +22,12 @@ export type ViewerActionResource = Readonly<{
   read(client: AccessClient, ids: readonly string[], at: string): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;
-export type ViewerActionBinding = Readonly<{ action: string; operationId: string; exposure: Exposure }>;
+export type ViewerActionBinding = Readonly<{
+  action: string;
+  operationId: string;
+  exposure: Exposure;
+  authority: 'resource' | 'own-account';
+}>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
 
 /** No module-maintained operation list: only mounted direct declarations and
@@ -35,11 +40,16 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
     const direct = detail['x-resource-types'];
     const anchor = detail['x-authority-resource-types'];
     const types = anchor ?? direct;
+    const authority = detail['x-authority-anchor'] ?? 'resource';
+    if (authority !== 'resource' && authority !== 'own-account')
+      throw new Error(`${route.method} ${route.path}: invalid x-authority-anchor`);
+    if (authority === 'own-account' && anchor === undefined)
+      throw new Error(`${route.method} ${route.path}: own-account requires x-authority-resource-types`);
     if (types === undefined) continue;
     if (
       !Array.isArray(types) ||
       !types.length ||
-      types.some((v) => typeof v !== 'string' || !/^[a-z][a-z0-9_.-]*$/.test(v)) ||
+      types.some((v) => typeof v !== 'string' || !/^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/.test(v)) ||
       new Set(types).size !== types.length
     )
       throw new Error(`${route.method} ${route.path}: invalid x-authority-resource-types`);
@@ -47,7 +57,9 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
     if (typeof detail.operationId !== 'string') throw new Error(`${route.method} ${route.path}: missing operationId`);
     for (const type of types as string[]) {
       const bindings = result.get(type) ?? [];
-      bindings.push(Object.freeze({ action, operationId: detail.operationId, exposure: parseExposure(detail) }));
+      bindings.push(
+        Object.freeze({ action, operationId: detail.operationId, exposure: parseExposure(detail), authority }),
+      );
       if (bindings.length > 256 || new Set(bindings.map((binding) => binding.action)).size > 64)
         throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);
       result.set(type, bindings);
@@ -114,15 +126,18 @@ export async function readViewerActions(
     throw new ProblemError('invalid_request');
   const selected = new Map<string, string[]>();
   for (const ref of refs) selected.set(ref.type, [...(selected.get(ref.type) ?? []), ref.id]);
-  const typeActions = new Map<string, ReadonlySet<string>>();
-  for (const type of selected.keys())
-    typeActions.set(
-      type,
-      new Set([
-        deps.resources.get(type)!.readAction,
-        ...(deps.bindings.get(type) ?? []).map((binding) => binding.action),
-      ]),
-    );
+  const typeActions = new Map<string, Set<string>>();
+  const admit = (type: string, action: string) => {
+    const actions = typeActions.get(type) ?? new Set<string>();
+    actions.add(action);
+    typeActions.set(type, actions);
+  };
+  for (const type of selected.keys()) {
+    admit(type, deps.resources.get(type)!.readAction);
+    for (const binding of deps.bindings.get(type) ?? []) {
+      admit(binding.authority === 'own-account' ? 'access.account' : type, binding.action);
+    }
+  }
   const actions = new Set([...typeActions.values()].flatMap((values) => [...values]));
   try {
     const context = { pool: deps.pool, deadline };
@@ -166,11 +181,38 @@ export async function readViewerActions(
           string,
           { error: 'not_found' } | { viewerActions: { action: string; operations: string[] }[] }
         >();
+        // Own-account decisions are shared across all displayed types and subjects,
+        // and are never retained past this request's authoritative instant.
+        const ownAllowed = new Map<string, boolean>();
+        if (actor.kind === 'account')
+          for (const action of new Set(
+            [...selected.keys()].flatMap((type) =>
+              (deps.bindings.get(type) ?? [])
+                .filter((binding) => binding.authority === 'own-account')
+                .map((binding) => binding.action),
+            ),
+          )) {
+            const answer = await decisions.decide(
+              client,
+              {
+                action,
+                resourceType: 'access.account',
+                ids: [actor.accountId],
+              },
+              time,
+            );
+            ownAllowed.set(action, answer[actor.accountId]?.allowed === true);
+          }
         for (const [type, ids] of selected) {
           const owner = deps.resources.get(type)!;
           const eligibility = await owner.read(client, ids, at);
           const candidates = [
-            ...new Set([owner.readAction, ...(deps.bindings.get(type) ?? []).map(({ action }) => action)]),
+            ...new Set([
+              owner.readAction,
+              ...(deps.bindings.get(type) ?? [])
+                .filter(({ authority }) => authority === 'resource')
+                .map(({ action }) => action),
+            ]),
           ].sort();
           const allowed = new Map<string, Readonly<Record<string, { allowed: boolean }>>>();
           for (const action of candidates)
@@ -197,7 +239,9 @@ export async function readViewerActions(
             const entries = new Map<string, Set<string>>();
             for (const binding of deps.bindings.get(type) ?? []) {
               if (
-                !allowed.get(binding.action)?.[id]?.allowed ||
+                !(binding.authority === 'own-account'
+                  ? ownAllowed.get(binding.action)
+                  : allowed.get(binding.action)?.[id]?.allowed) ||
                 (binding.exposure.kind === 'gate' &&
                   !open.has(binding.exposure.group) &&
                   (actor.kind !== 'account' ||

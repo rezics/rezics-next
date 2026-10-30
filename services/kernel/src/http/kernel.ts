@@ -14,6 +14,7 @@ import {
   type ViewerActionResources,
   type ViewerActionBindings,
 } from '../access/viewer-actions.ts';
+import { subjectViewerActionResources } from '../semantic/viewer-actions.ts';
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
 import { realmViewerActionResource } from '../community/realm.ts';
 import { spaceViewerActionResource } from '../community/space.ts';
@@ -444,6 +445,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
   const viewerResources = new Map([
+    ...subjectViewerActionResources,
     ['library.collection', collectionViewerActionResource],
     ['community.realm', realmViewerActionResource],
     ['community.space', spaceViewerActionResource],

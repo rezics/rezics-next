@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -122,6 +123,13 @@ function detail(operationId: string, action: string, write = false) {
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
+  };
+}
+function personalDetail(operationId: string, action: string) {
+  return {
+    ...detail(operationId, action, true),
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': Object.keys(bundledRelease.types),
   };
 }
 function account(actor: Actor) {
@@ -333,7 +341,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             'deadline_exceeded',
           ),
         },
-        detail: detail('library_entry.put', 'library_entry:update', true),
+        detail: personalDetail('library_entry.put', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
@@ -355,7 +363,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object({ revision: t.Optional(revision), incarnationId: t.Optional(incarnationId) }, closed),
         response: { 204: t.Void(), ...failures },
         detail: {
-          ...detail('library_entry.delete', 'library_entry:delete', true),
+          ...personalDetail('library_entry.delete', 'library_entry:delete'),
           responses: {
             204: {
               description: 'Entry cleared',
@@ -548,7 +556,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         headers,
         body: t.Optional(t.Never()),
         response: { 200: followResponse, ...failures },
-        detail: detail('follow.put', 'follow:create', true),
+        detail: personalDetail('follow.put', 'follow:create'),
       },
       async ({ actor, params, headers, admission, job, session }) => {
         account(actor);
@@ -566,7 +574,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ targetId: id }),
         headers,
         response: { 200: followResponse, ...failures },
-        detail: detail('follow.delete', 'follow:delete', true),
+        detail: personalDetail('follow.delete', 'follow:delete'),
       },
       async ({ actor, params, headers, admission, job, session }) => {
         account(actor);

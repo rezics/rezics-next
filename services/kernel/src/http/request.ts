@@ -65,7 +65,7 @@ export function anonymousRequestDigest(operation: string, input: { semantic: unk
 
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
-const RESOURCE_TYPE_PATTERN = /^[a-z][a-z0-9_.-]*$/;
+const RESOURCE_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/;
 
 export type MountedRoute = {
   method: string;
@@ -84,6 +84,7 @@ type RouteDeclaration = {
   anonymous: boolean;
   replay?: 'self-account-read';
   resourceTypes?: readonly string[];
+  authority?: 'own-account';
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -119,12 +120,16 @@ function declaration(route: MountedRoute): RouteDeclaration {
   if (replay !== undefined && replay !== 'self-account-read')
     throw new Error(`${label}: unsupported x-replay-authorization`);
 
+  const authority = detail['x-authority-anchor'];
+  if (authority !== undefined && authority !== 'own-account')
+    throw new Error(`${label}: unsupported x-authority-anchor`);
   const resourceTypes = resourceTypesOf(route, detail);
   return {
     action,
     anonymous: security.some((requirement) => isRecord(requirement) && Object.keys(requirement).length === 0),
     ...(replay === undefined ? {} : { replay }),
     ...(resourceTypes === undefined ? {} : { resourceTypes }),
+    ...(authority === undefined ? {} : { authority }),
   };
 }
 
@@ -138,13 +143,18 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
   if (cached) return cached;
   const catalogue = new Map<
     string,
-    { anonymous: boolean; replay?: 'self-account-read'; 'x-resource-types'?: readonly string[] }
+    {
+      anonymous: boolean;
+      replay?: 'self-account-read';
+      authority?: 'own-account';
+      'x-resource-types'?: readonly string[];
+    }
   >();
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
     if (detail.hide === true) continue;
 
-    const { action, anonymous, replay, resourceTypes } = declaration(route);
+    const { action, anonymous, replay, resourceTypes, authority } = declaration(route);
     const previous = catalogue.get(action);
     const label = `${route.method.toUpperCase()} ${route.path}`;
     if (previous && previous.anonymous !== anonymous)
@@ -152,8 +162,10 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
     if (previous && previous.replay !== replay)
       throw new Error(`${label}: ${action} is declared with different replay authorization`);
     const declaredTypes = [...new Set([...(previous?.['x-resource-types'] ?? []), ...(resourceTypes ?? [])])].sort();
+    const mountedAuthority = authority ?? previous?.authority;
     catalogue.set(action, {
       anonymous,
+      ...(mountedAuthority === undefined ? {} : { authority: mountedAuthority }),
       ...(replay === undefined ? {} : { replay }),
       ...(declaredTypes.length ? { 'x-resource-types': declaredTypes } : {}),
     });
