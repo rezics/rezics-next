@@ -1,3 +1,4 @@
+import { requireDiscoverySourceLock } from './discovery-mutation.ts';
 import { creationDeclares } from '../access/parent-creation.ts';
 import {
   authoritativeTimeValue,
@@ -87,6 +88,7 @@ export async function retractDiscoveryStart(
     const thread = await target.run(tx, { route, thread_id: input.threadId });
     if (thread?.first_post_id !== input.postId) return [];
   }
+  requireDiscoverySourceLock(tx, input.threadId);
   const row = await retract.run(tx, { route, thread_id: input.threadId });
   return row ? [event(row)] : [];
 }

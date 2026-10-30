@@ -384,16 +384,39 @@ The exact source read/apply preparation contract is exported by Content's `disco
 It supplies source version/state, not current rank eligibility. The aggregate must independently validate the current
 Realm/Space binding and epoch; original-public evidence alone cannot authorize current disclosure.
 
-The missing lifecycle hook is a native durable operation stage before source mutation, rather than an asynchronous
-notification after it. It must fence the exact `(realmId, realmEpoch)` generation in the Realm home before board,
-thread/opening, Realm or Space invalidation; include durable source operation identity; and resolve that operation
-before clearing its own pending fence after ordered verified application. Pending or mismatched generations cannot
-serve. There is currently no such stage in point moderation/appeal restoration, so no exported fence-clear function
-or always-unavailable rank facade claims to implement it. Container removal/restoration writers must use the eventual
-same operation stage, preserve the Context pointer, check lifecycle/publication before and at final disclosure, and
-never fall back to Global for removed containers. Readable orphan resources remain distinct from removed resources.
+Content's `discovery-mutation.ts` now supplies the outer native preparation/fence/acknowledgement/effect/outcome
+phases for point deletion/takedown, the existing bounded author-erasure page, post restoration and appeal reversal.
+`DiscoveryOperationReference` is exactly `(route, intent, generation)`; `readDiscoveryOperation` and
+`readDiscoveryOutcome` read the committed source preparation and guarded native outcome. `commitDiscoveryFence`
+accepts only that reference and reads its actual preparation before entering Realm home. `projectDiscoveryOutcome`
+reads actual terminal source evidence, assigns absolute versioned contribution or board state and resolves just its
+exact fence. It accepts no success assertion. Outbox envelopes are verified by the registered Content effect.
 
-Source qualification and epoch changes touch exact routed keys with constant rows/statements plus bounded native
-Access work. Later aggregation must use at most 31 day-bucket keys per affected board, durable bounded pages for
-multi-board changes, and at most 50 indexed due keys per recovery step, with O(changes log R) rank maintenance.
-No new queue, authority or recovery scheduler is introduced here. Existing growth evidence remains for integration.
+`readRealmDiscoveryGate(client, realmId)` supplies `{realm_epoch, generation, settled}` for one exact routed key.
+Pending or mismatched generations are unavailable. The later aggregate consumer must apply the native facts to its
+bounded day buckets before advancing its aggregate generation, and check that generation plus current Realm/Space
+binding, board publication and lifecycle before and at final disclosure. `realm_discovery_source` is keyed by
+Realm/epoch/source route/thread, and `realm_discovery_board` by Realm/epoch/board; both guard monotonically increasing
+native versions. They contain no person identity, bodies or public count. The native Community changed event names
+an exact Realm/epoch for that later consumer. Initial/delayed deltas project absolute current source state and never
+clear an operation fence. Projected generations do not authorize disclosure by themselves.
+
+Same-home container lifecycle writers are covered by database guards in the forward discovery migration:
+Realm visibility/state/host changes advance its epoch and discovery generation atomically; Space state changes
+advance the epoch/generation of its one exact native Realm slot through `(route, space_id)`. Metadata edits retain
+them. `readRealmDiscoveryEpoch(tx, realmId)` is the exported same-home binding read and rejects another partition.
+The container lifecycle owner must retain the Context pointer and original Space binding, use these ordinary native
+state writers, and check lifecycle/publication before and at final disclosure. No new container-lifecycle files are
+changed here, and no removed-container Global fallback is introduced. Readable orphan resources remain distinct
+from removed resources. A restored container starts a new epoch; old contributions do not revive.
+
+Preparation, fences and outcome acknowledgements each release their connection before the next home. Source
+application and ABORTED recovery compete on the same source operation row, so an aborted generation cannot later
+apply and an applied winner cannot clear as abort. Terminal fence tombstones survive delayed installation. Only
+terminal unprojected source operations are recovered, 50 indexed due keys per route in the existing native collection
+step. Unknown/live source outcomes remain pending; there is no timeout-based fence clearance or new scheduler.
+
+Source qualification, epoch changes and source invalidation touch exact routed keys with constant rows/statements
+plus bounded native Access work. Later aggregation must use at most 31 day-bucket keys per affected board, durable
+bounded pages for multi-board changes, and O(changes log R) rank maintenance. Existing growth evidence remains for
+integration. Public aggregate/endpoint delivery is still a separate consumer task.

@@ -21,3 +21,18 @@ export const DISCOVERY_EVENTS = {
   ),
 } as const;
 export type DiscoveryDelta = Static<(typeof DISCOVERY_EVENTS)[typeof DISCOVERY_DELTA]>;
+
+export const DISCOVERY_PREPARED = 'com.rezics.content.realm-discovery.prepared.v1';
+export const DISCOVERY_OUTCOME = 'com.rezics.content.realm-discovery.outcome.v1';
+const operation = Type.Object(
+  {
+    route: Type.Integer({ minimum: 0, maximum: 65535 }),
+    intent: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+    generation: version,
+  },
+  { additionalProperties: false },
+);
+export const DISCOVERY_OPERATION_EVENTS = {
+  [DISCOVERY_PREPARED]: operation,
+  [DISCOVERY_OUTCOME]: operation,
+} as const;

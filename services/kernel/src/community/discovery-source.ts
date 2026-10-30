@@ -66,3 +66,157 @@ export async function prepareRealmDiscoverySource(
   );
   return readable ? Object.freeze({ realmId, spaceId: current.space_id, realmEpoch: current.realm_epoch }) : null;
 }
+
+// These operations consume committed Content evidence. They never authorize a
+// content mutation and never hold a source connection while entering Realm home.
+import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  readDiscoveryOperation,
+  readDiscoveryOutcome,
+  type DiscoveryOperationReference,
+} from '../content/discovery-mutation.ts';
+import { readDiscoverySource, prepareDiscoverySourceApply } from '../content/discovery.ts';
+import type { DiscoveryDelta } from '../content/discovery-events.ts';
+import epoch from './discovery-source-epoch.sql';
+import gate from './discovery-source-gate.sql';
+import fence from './discovery-source-fence.sql';
+import advance from './discovery-source-generation.sql';
+import project from './discovery-source-project.sql';
+import projectBoard from './discovery-source-board.sql';
+
+/** Same-home container writers can read this exact binding in their own command.
+ * Space/Realm lifecycle owners must advance the epoch/generation atomically with
+ * removal/restoration, retaining Context. This API never opens another home.
+ */
+export async function readRealmDiscoveryEpoch(tx: CommandTransaction, realmId: string) {
+  const route = routeOf(realmId);
+  if (route === null || currentCommand(tx).partition !== partitionOf(route))
+    throw new Error('Discovery epoch requires the Realm home');
+  return epoch.run(tx, { route, realm_id: realmId });
+}
+
+export type RealmDiscoveryGate = Readonly<{ realm_epoch: string; generation: string; settled: boolean }>;
+/** Later disclosure also requires matching aggregate generation, original epoch,
+ * active explicit-public Realm and independent anonymous-readable active Space.
+ */
+export async function readRealmDiscoveryGate(
+  client: import('../request/access.ts').AccessClient,
+  realmId: string,
+): Promise<RealmDiscoveryGate | null> {
+  const route = routeOf(realmId);
+  return route === null ? null : gate.run(client, { route, realm_id: realmId });
+}
+function sourceEvent(realmId: string, realmEpoch: string) {
+  return { type: 'com.rezics.community.realm-discovery.changed.v1', subject: realmId, data: { realmId, realmEpoch } };
+}
+
+/** Commits precisely one fence, using only a committed source preparation.
+ * A terminal tombstone wins over any delayed installation of the same fence.
+ */
+export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationReference): Promise<string> {
+  const source = await readDiscoveryOperation(pool, ref);
+  if (!source) throw new Error('Discovery preparation unavailable');
+  const route = routeOf(source.realm_id)!;
+  const result = await runCommand(
+    pool,
+    { partition: partitionOf(route), deadline: Date.now() + 30_000 },
+    async (tx) => {
+      const installed = await fence.run(tx, {
+        route,
+        realm_id: source.realm_id,
+        realm_epoch: source.realm_epoch,
+        source_route: ref.route,
+        intent: ref.intent,
+        generation: ref.generation,
+        outcome: null,
+        transaction_id: null,
+      });
+      if (!installed) throw new Error('Discovery Realm fence unavailable');
+      await advance.run(tx, { route, realm_id: source.realm_id, generation: installed.fence_generation });
+      return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
+    },
+  );
+  return result.value;
+}
+
+/** Projects absolute, version-guarded native source state and resolves only its
+ * exact terminal generation in the SAME Realm command. There is no caller-supplied
+ * success flag. APPLIED evidence is read from the source journal and native rows.
+ */
+export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperationReference): Promise<void> {
+  const { operation: source, current, source: contribution } = await readDiscoveryOutcome(pool, ref);
+  const route = routeOf(source.realm_id)!;
+  await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+    if (source.phase === 'applied') {
+      if (contribution)
+        await project.run(tx, {
+          route,
+          realm_id: contribution.realmId,
+          realm_epoch: contribution.realmEpoch,
+          source_route: contribution.sourceRoute,
+          thread_id: contribution.threadId,
+          board_id: contribution.boardId,
+          creation_day: contribution.creationDay,
+          source_version: contribution.sourceVersion,
+          contributing: contribution.contributing,
+        });
+      else if (source.target_kind === 'board')
+        await projectBoard.run(tx, {
+          route,
+          realm_id: source.realm_id,
+          realm_epoch: source.realm_epoch,
+          board_id: source.board_id,
+          source_version: current.native_version,
+          published: current.visibility === 'published',
+        });
+      else throw new Error('Discovery contribution unavailable');
+    }
+    const resolved = await fence.run(tx, {
+      route,
+      realm_id: source.realm_id,
+      realm_epoch: source.realm_epoch,
+      source_route: ref.route,
+      intent: ref.intent,
+      generation: ref.generation,
+      outcome: source.phase,
+      transaction_id: source.outcome_transaction_id,
+    });
+    if (
+      !resolved ||
+      resolved.outcome !== source.phase ||
+      resolved.outcome_transaction_id !== source.outcome_transaction_id
+    )
+      throw new Error('Discovery fence outcome conflict');
+    await advance.run(tx, { route, realm_id: source.realm_id, generation: resolved.fence_generation });
+    return { value: null, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
+  });
+}
+
+/** Genuine initial/delayed deltas assign current source state; they cannot restore
+ * stale positive state or clear an operation fence. Later aggregate maintenance
+ * consumes these native facts and advances its own generation after bucket work.
+ */
+export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta): Promise<void> {
+  const prepared = prepareDiscoverySourceApply(delta, await readDiscoverySource(pool, delta.threadId), null);
+  if (!prepared) throw new Error('Discovery source delta unavailable');
+  const source = prepared.source;
+  const route = routeOf(source.realmId)!;
+  await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+    const changed = await project.run(tx, {
+      route,
+      realm_id: source.realmId,
+      realm_epoch: source.realmEpoch,
+      source_route: source.sourceRoute,
+      thread_id: source.threadId,
+      board_id: source.boardId,
+      creation_day: source.creationDay,
+      source_version: source.sourceVersion,
+      contributing: source.contributing,
+    });
+    if (!changed) return noEffect(null);
+    const current = await epoch.run(tx, { route, realm_id: source.realmId });
+    if (!current) throw new Error('Discovery Realm unavailable');
+    await advance.run(tx, { route, realm_id: source.realmId, generation: String(BigInt(current.generation) + 1n) });
+    return { value: null, events: [sourceEvent(source.realmId, source.realmEpoch)] };
+  });
+}

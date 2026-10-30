@@ -49,6 +49,10 @@ function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
 
 /** Closed community event catalogue. Envelope identity and ordering belong to the kernel. */
 export const COMMUNITY_EVENTS = {
+  'com.rezics.community.realm-discovery.changed.v1': Type.Object(
+    { realmId: id, realmEpoch: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.community.realm.membership.cancelled.v1': Type.Object(
     { ...membershipProof, at: instant },
     { additionalProperties: false },

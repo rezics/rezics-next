@@ -1,3 +1,4 @@
+import { assertDiscoveryMutationLocked } from './discovery-mutation.ts';
 import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import type { ModerationEventData } from './moderation-events.ts';
@@ -22,6 +23,7 @@ export async function liftTakedown(
   const { kind, id } = input.target;
   const route = routeOf(id);
   if (route === null || (kind !== 'thread' && kind !== 'post')) throw new RangeError('Invalid lift takedown target');
+  await assertDiscoveryMutationLocked(client, input.target);
   const parameters = { kind, route, id };
   const result = await client.query<(typeof lift)['~reylo']['element']>(
     lift.sql,

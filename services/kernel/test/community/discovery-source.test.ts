@@ -1,10 +1,25 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import { Pool } from 'pg';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { principalCommandIdentity, runCommand } from '../../src/command/command.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { softDeletePost } from '../../src/content/erase-post.ts';
+import { resolveAppeal } from '../../src/content/appeals.ts';
+import { readRealmDiscoveryGate } from '../../src/community/discovery-source.ts';
+import {
+  prepareDiscoveryMutation,
+  abortDiscoveryMutation,
+  lockDiscoveryMutation,
+  projectDiscoveryMutation,
+  readDiscoveryOperation,
+} from '../../src/content/discovery-mutation.ts';
 import { fromPlainText } from '@rezics/document';
 import { readDiscoverySource, prepareDiscoverySourceApply } from '../../src/content/discovery.ts';
 import { DISCOVERY_DELTA, type DiscoveryDelta } from '../../src/content/discovery-events.ts';
 import { lookupEventType } from '../../src/events/catalogue.ts';
-import { partitionOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createReactionRelayBase } from '../content/reaction-relay-convergence-fixture.ts';
 
 let f: Awaited<ReturnType<typeof createReactionRelayBase>>;
@@ -116,4 +131,150 @@ test('native opening deletion retracts once, delayed positive source facts canno
   await visibility(target.realmId, 'protected');
   await f.command('POST', `/v1/posts/${target.postId}:restore`, undefined, { expectedStatus: 204 });
   expect(await source(target.threadId)).toEqual(retracted);
+}, 120_000);
+
+test('a terminal source CAS excludes late application, retries retain their own fence, and an applied winner cannot abort', async () => {
+  const target = await f.createRealmTarget('Guarded discovery outcome', 'public');
+  const original = (await source(target.threadId))!;
+  const actor = f.system.actors.author.actor;
+  const identity = principalCommandIdentity(actor);
+  const key = randomUUID();
+  const point = {
+    action: 'post:erase',
+    kind: 'post',
+    id: target.postId,
+    reason: 'Deleted by author',
+    softDelete: true,
+  };
+  const receipt = {
+    kind: 'content.post:erase',
+    key,
+    digest: createHash('sha256')
+      .update(canonicalize([identity, point])!)
+      .digest(),
+  };
+  const deps = { pool: f.system.database.pool, access: f.system.access, routeKey: f.system.routeKey };
+  const authorization = await accessCommandAuthorization(
+    deps.access,
+    actor,
+    'post:erase',
+    { route: original.sourceRoute, id: target.postId },
+    { pool: deps.pool, deadline: Date.now() + 30_000 },
+    () => new Error('Denied'),
+  );
+  const first = (await prepareDiscoveryMutation(deps, {
+    identity,
+    authorization,
+    receipt,
+    deadline: Date.now() + 30_000,
+    target: { kind: 'post', id: target.postId },
+    effect: 'retract',
+  }))!;
+  expect((await readRealmDiscoveryGate(deps.pool, target.realmId))!.settled).toBe(false);
+  await abortDiscoveryMutation(deps.pool, first);
+  await expect(
+    runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition: partitionOf(original.sourceRoute),
+        authorization,
+        receipt,
+        deadline: Date.now() + 30_000,
+      },
+      async (tx) => {
+        await lockDiscoveryMutation(tx, first);
+        throw new Error('Late native effect reached mutation');
+      },
+    ),
+  ).rejects.toBeInstanceOf(GrantDeniedError);
+  expect(await source(target.threadId)).toEqual(original);
+  await softDeletePost(
+    deps,
+    actor,
+    { postId: target.postId, reason: point.reason },
+    {
+      idempotencyKey: key,
+      deadline: Date.now() + 30_000,
+      requestId: randomUUID(),
+    },
+  );
+  const rows = await deps.pool.query<{ route: number; intent: string; generation: string }>(
+    'SELECT route,intent,generation::text FROM content.realm_discovery_operation WHERE route=$1 AND intent=$2 ORDER BY generation',
+    [first.route, first.intent],
+  );
+  expect(rows.rows.map((row) => row.generation)).toEqual(['1', '2']);
+  const second = rows.rows[1]!;
+  await projectDiscoveryMutation(deps.pool, first);
+  expect((await readRealmDiscoveryGate(deps.pool, target.realmId))!.settled).toBe(false);
+  await abortDiscoveryMutation(deps.pool, second);
+  expect((await readDiscoveryOperation(deps.pool, second))!.phase).toBe('applied');
+  await projectDiscoveryMutation(deps.pool, second);
+  expect((await readRealmDiscoveryGate(deps.pool, target.realmId))!.settled).toBe(true);
+  expect((await source(target.threadId))!.contributing).toBe(false);
+  await f.command('POST', `/v1/posts/${target.postId}:restore`, undefined, { expectedStatus: 204 });
+  expect(await source(target.threadId)).toEqual({ ...original, sourceVersion: '3' });
+}, 120_000);
+
+test('appeal reversal prepares its Realm fence outside the target transaction and preserves independent review before receipts', async () => {
+  const target = await f.createRealmTarget('Appeal discovery restoration', 'public');
+  await f.command(
+    'POST',
+    `/v1/threads/${target.threadId}:takeDown`,
+    { reason: 'Review this decision' },
+    { expectedStatus: 200 },
+  );
+  expect((await source(target.threadId))!.contributing).toBe(false);
+  const decision = (
+    await f.system.database.pool.query<{ decision_id: string }>(
+      'SELECT decision_id FROM content.moderation_decision WHERE route=$1 AND target_id=$2 ORDER BY decided_at DESC LIMIT 1',
+      [routeOf(target.threadId), target.threadId],
+    )
+  ).rows[0]!;
+  const appeal = await f.command<{ id: string }>('POST', `/v1/moderation-decisions/${decision.decision_id}:appeal`, {
+    statement: 'Please reconsider',
+  });
+  const before = await f.system.database.pool.query(
+    'SELECT intent,generation FROM content.realm_discovery_operation WHERE route=$1 ORDER BY intent,generation',
+    [routeOf(target.threadId)],
+  );
+  await f.command(
+    'POST',
+    `/v1/moderation-appeals/${appeal.id}:resolve`,
+    {
+      outcome: 'reverse',
+      statement: 'Same decider cannot resolve',
+    },
+    { expectedStatus: 403 },
+  );
+  expect(
+    (
+      await f.system.database.pool.query(
+        'SELECT intent,generation FROM content.realm_discovery_operation WHERE route=$1 ORDER BY intent,generation',
+        [routeOf(target.threadId)],
+      )
+    ).rows,
+  ).toEqual(before.rows);
+  const credential = await f.system.auth.issue({
+    accountId: f.governance.accountId,
+    clientId: f.system.auth.ordinaryClient.id,
+    scopes: f.system.auth.ordinaryScopes,
+  });
+  // One connection makes an accidental nested source/Realm checkout observable.
+  const single = new Pool({ ...f.system.database.pool.options, max: 1 });
+  try {
+    const input = { outcome: 'reverse' as const, statement: 'Independent review' };
+    const context = { idempotencyKey: randomUUID(), deadline: Date.now() + 30_000, requestId: randomUUID() };
+    const deps = { pool: single, access: f.system.access };
+    const resolved = await resolveAppeal(deps, credential.actor, appeal.id, input, context);
+    expect(resolved.value).toEqual({ id: appeal.id });
+    const replay = await resolveAppeal(deps, credential.actor, appeal.id, input, {
+      ...context,
+      deadline: Date.now() + 30_000,
+    });
+    expect(replay.replayed).toBe(true);
+    expect((await source(target.threadId))!).toMatchObject({ contributing: true, sourceVersion: '3' });
+  } finally {
+    await single.end();
+  }
 }, 120_000);

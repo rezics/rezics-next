@@ -944,16 +944,46 @@ absolute source state only above the consumer's stored version. A delayed positi
 source fact rather than resurrecting it. The native envelope supplies causality and deduplication; this preparation
 is not a fence acknowledgement or permission to disclose a rank.
 
-Strict pre-invalidation fencing and positive restoration remain undelivered. Ordinary point moderation currently
-mutates directly in `prepareAuthorizedPoint().mutate`; appeal `liftTakedown` composes inside an already-open source
-transaction. Neither has a durable discovery operation spanning a prior Realm-home fence and source outcome. The
-existing author-erasure operation/relay covers author erasure only. Adding independent callbacks here would hold two
-homes or invent a second coordinator. A future native operation stage must commit the Realm fence before the point
-mutation, resolve the source operation on failure, and clear only its own fence after verified ordered application.
-`restorePost`, `liftTakedown`, board invalidation and container lifecycle need that same stage; restoration currently
-leaves a retracted discovery source retracted. No aggregate or endpoint is exposed by this source delivery.
+The outer native command boundary in `discovery-mutation.ts` commits preparation using the exact requested
+actor/action/receipt intent before entering any source mutation. The opaque intent hashes the native identity,
+command kind/key/digest and exact source; the journal stores no actor, credentials or submitted body. Preparation
+checks the original command's completion only after current authorization, so an authorized replay adds no fence.
+Each generation binds the native security revision, contribution version and original Realm epoch. Board takedown
+binds the current same-home Realm epoch and emits an exact board-version fact, never scans its threads.
 
-Cost: one exact board/Realm/Space neighborhood with native bounded Access preparation, one source INSERT and one
-bounded outbox delta for qualifying creation; one exact source UPDATE and at most one thread identity read for a
-point invalidation. Erasure pages retain their existing maximum of 100 posts, with constant point work per post.
-There is no thread, membership, revision-history or descendant scan, cross-home SQL join or held transaction.
+`prepareDiscoveryMutation` releases source preparation before `commitDiscoveryFence` enters Realm home, then
+separately commits the exact fence acknowledgement in source home. The actual point, author page, restoration or
+appeal command still authorizes at its fresh T before its original receipt lookup and preserves the synchronous
+response/receipt. `lockDiscoveryMutation` checks READY, exact generation and both native/source versions in that
+original source transaction. `applyDiscoveryMutation` verifies the actual native version change, applies the source
+delta and records APPLIED with the executor's transaction binding atomically. No callback may assert success.
+Appeal reviewer independence runs in both preparation and effect; `liftTakedown` stays inside the appeal transaction
+and refuses counted targets without that outer lock. Author pages restore their existing initiator in both commands,
+retain the exact page/step receipt identity and the maximum of 100 posts. Physical cleanup is unchanged.
+
+Restoration checks the independently anonymous-readable active Space, explicit-public active Realm and original
+epoch again at the actual command T, plus the published board and current available/published thread/opening.
+Only originally qualified contributions can regain a positive state. Epochs never change on the contribution itself.
+Protected creation, a protected interval, removed containers and delayed positive deltas cannot upgrade old input.
+
+The registered native effect verifies the real outbox envelope and reads the committed operation/source outcome,
+then assigns absolute versioned state in Realm home and resolves only that exact fence. Terminal fence tombstones
+prevent delayed preparation from reopening it. A failed source executor is resolved by a locked ABORTED CAS before
+its fence can clear; an APPLIED winner projects its actual outcome. The same source lock prohibits any late effect
+once abortion wins. The existing collection step recovers at most 50 terminal unprojected keys per route; it never
+infers abortion from time, missing process, unavailable evidence or an exception alone. A crash leaving an unknown
+live generation stays pending until a native attempt resolves it. A new authorized retry uses a new generation after
+ABORTED; old cleanup cannot erase its fence. No new workflow API, scheduler, queue or erasure coordinator is added.
+
+Community's exported `readRealmDiscoveryGate` returns the exact current epoch/generation and whether it is settled.
+Later aggregate disclosure must match that generation after bounded bucket application, check current board state,
+Realm/host eligibility and final disclosure again. `realm_discovery_source` and `realm_discovery_board` contain
+versioned native facts, not public counts. No aggregate or endpoint is exposed by this source delivery.
+
+Cost: qualifying creation retains one exact board/Realm/Space neighborhood and one source INSERT/outbox delta.
+A source change adds one source preparation, one exact Realm fence, one source acknowledgement, the original source
+effect and terminal projection/acknowledgement, each a separate bounded native command. Source/receipt/fence reads
+are exact indexed keys. A board change touches one board fact; the later bucket consumer must use at most 31 day
+keys per board, durable bounded pages for multiple boards, and O(changes log R) rank updates. Erasure pages retain
+100 posts and one opening contribution; recovery reads at most 50 terminal keys per route. There is no thread,
+membership, revision-history or descendant scan, cross-home SQL join or held cross-home transaction.

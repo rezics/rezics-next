@@ -30,7 +30,7 @@ export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
     ((client, input) => roles()(client, input)) as AccessRealmRoleReader,
     { batch: ((client, input) => roles().batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },
   );
-  const publicReads = new Set(['subject:read', 'board:read', 'thread:read', 'post:read', 'realm:read']);
+  const publicReads = new Set(['subject:read', 'board:read', 'thread:read', 'post:read', 'realm:read', 'space:read']);
   const access = createAccess({
     actions: new Map(
       Object.values(resourceRoles.roles)

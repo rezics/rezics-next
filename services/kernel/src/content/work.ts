@@ -1,3 +1,4 @@
+import { createDiscoveryMutationEffect, recoverDiscoveryMutations } from './discovery-mutation.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
@@ -251,6 +252,8 @@ async function registerWork(
 
   const collect = DBOS.registerStep(
     async (partition: number) => {
+      for (let offset = 0; offset < 16; offset++)
+        await recoverDiscoveryMutations(context.pool, partition * 16 + offset);
       const outcome = await createCollectionJob(context.pool, storage, { clock: context.clock }).collectPartition(
         partition,
         BATCH_SIZE,
@@ -440,6 +443,7 @@ async function registerWork(
   ]);
   // Projections consume the source events after the source read has been released.
   context.addEffects([
+    createDiscoveryMutationEffect(context.pool),
     createReactionCountEffect(context.pool),
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),

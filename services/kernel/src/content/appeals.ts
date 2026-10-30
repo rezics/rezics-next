@@ -1,3 +1,10 @@
+import {
+  prepareDiscoveryMutation,
+  discoveryMutationAuthorization,
+  lockDiscoveryMutation,
+  applyDiscoveryMutation,
+  abortDiscoveryMutation,
+} from './discovery-mutation.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -173,45 +180,67 @@ export async function resolveAppeal(
     ...admission,
     async authorize(tx, attempt, proof) {
       await admission.authorize(tx, attempt, proof);
-      if (reference.value!.decider_account_id === actor.accountId) throw new ProblemError('forbidden');
+      const current = await read.run(tx, { route, appeal_id: id });
+      if (!current || current.target_id !== reference.value!.target_id) throw missing();
+      if (current.decider_account_id === actor.accountId) throw new ProblemError('forbidden');
       return 'execute';
     },
   };
-  return runCommand(
-    deps.pool,
-    {
-      ...principalCommandIdentity(actor),
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization,
-      receipt: {
-        kind: 'content.resolve-appeal',
-        key: context.idempotencyKey,
-        digest: requestDigest('content.resolve-appeal', actor, { id, ...input }),
+  const identity = principalCommandIdentity(actor);
+  const receipt = {
+    kind: 'content.resolve-appeal',
+    key: context.idempotencyKey,
+    digest: requestDigest('content.resolve-appeal', actor, { id, ...input }),
+  };
+  const discovery =
+    input.outcome === 'reverse'
+      ? await prepareDiscoveryMutation(deps, {
+          identity,
+          authorization,
+          receipt,
+          deadline: context.deadline,
+          target: { kind: reference.value.target_kind as 'thread' | 'post', id: reference.value.target_id },
+          effect: 'restore',
+        })
+      : null;
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization: discoveryMutationAuthorization(deps, authorization, discovery),
       },
-    },
-    async (tx, command) => {
-      const changed = await resolve.run(tx, {
-        route,
-        appeal_id: id,
-        outcome: input.outcome === 'uphold' ? 'upheld' : 'reversed',
-        resolver: actor.accountId,
-        statement: input.statement,
-        resolved_at: authoritativeTimeValue(command.time),
-      });
-      if (!changed) throw new ProblemError('conflict');
-      const events: CommandEvent[] = [];
-      if (input.outcome === 'reverse')
-        await liftTakedown(
-          tx,
-          { target: { kind: reference.value!.target_kind as 'thread' | 'post', id: reference.value!.target_id } },
-          { events },
-        );
-      events.push({ type: resolvedType, subject: id, data: { appealId: id } });
-      return { value: { id }, events };
-    },
-  );
+      async (tx, command) => {
+        await lockDiscoveryMutation(tx, discovery);
+        const changed = await resolve.run(tx, {
+          route,
+          appeal_id: id,
+          outcome: input.outcome === 'uphold' ? 'upheld' : 'reversed',
+          resolver: actor.accountId,
+          statement: input.statement,
+          resolved_at: authoritativeTimeValue(command.time),
+        });
+        if (!changed) throw new ProblemError('conflict');
+        const events: CommandEvent[] = [];
+        if (input.outcome === 'reverse')
+          await liftTakedown(
+            tx,
+            { target: { kind: reference.value!.target_kind as 'thread' | 'post', id: reference.value!.target_id } },
+            { events },
+          );
+        events.push(...(await applyDiscoveryMutation(tx, discovery)));
+        events.push({ type: resolvedType, subject: id, data: { appealId: id } });
+        return { value: { id }, events };
+      },
+    );
+  } catch (error) {
+    await abortDiscoveryMutation(deps.pool, discovery);
+    throw error;
+  }
 }
 
 async function canAct(

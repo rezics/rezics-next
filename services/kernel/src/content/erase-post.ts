@@ -1,4 +1,11 @@
-import { retractDiscoveryStart } from './discovery.ts';
+import {
+  prepareDiscoveryMutation,
+  discoveryMutationAuthorization,
+  lockDiscoveryMutation,
+  applyDiscoveryMutation,
+  abortDiscoveryMutation,
+} from './discovery-mutation.ts';
+import discoveryOpening from './discovery-target.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -233,12 +240,6 @@ async function prepareAuthorizedPoint(
       // A different key cannot turn an already erased object into a new effect.
       // Same-key retries have already returned from the native receipt phase.
       if (!changed) throw new GrantDeniedError();
-      const discoveryEvents =
-        point.kind === 'thread'
-          ? await retractDiscoveryStart(tx, { threadId: point.id })
-          : point.kind === 'post' && scope.container_id
-            ? await retractDiscoveryStart(tx, { threadId: scope.container_id, postId: point.id })
-            : [];
       const securityRevision = changed.security_revision;
       const value = { targetId: point.id, securityRevision };
       if (point.action === 'moderation:takedown') {
@@ -263,7 +264,6 @@ async function prepareAuthorizedPoint(
                 securityRevision,
               },
             },
-            ...discoveryEvents,
           ],
         };
       }
@@ -276,7 +276,6 @@ async function prepareAuthorizedPoint(
               subject: point.id,
               data: { postId: point.id, securityRevision },
             },
-            ...discoveryEvents,
           ],
         };
       // The media purge consumer resolves this ID and purges only m/<id>/.
@@ -304,24 +303,45 @@ async function mutateAuthorizedPoint(
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
   const prepared = await prepareAuthorizedPoint(deps, actor, requested, context);
-  return runCommand(
-    deps.pool,
-    {
-      ...prepared.identity,
-      partition: partitionOf(prepared.route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization: prepared.authorization,
-      receipt: {
-        kind: `content.${prepared.point.action}`,
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(canonicalize([prepared.identity, prepared.point])!)
-          .digest(),
+  const receipt = {
+    kind: `content.${prepared.point.action}`,
+    key: context.idempotencyKey,
+    digest: createHash('sha256')
+      .update(canonicalize([prepared.identity, prepared.point])!)
+      .digest(),
+  };
+  const discovery =
+    prepared.point.kind === 'media'
+      ? null
+      : await prepareDiscoveryMutation(deps, {
+          identity: prepared.identity,
+          authorization: prepared.authorization,
+          receipt,
+          deadline: context.deadline,
+          target: { kind: prepared.point.kind, id: prepared.point.id },
+          effect: 'retract',
+        });
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...prepared.identity,
+        partition: partitionOf(prepared.route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization: discoveryMutationAuthorization(deps, prepared.authorization, discovery),
       },
-    },
-    (tx) => prepared.mutate(tx),
-  );
+      async (tx) => {
+        await lockDiscoveryMutation(tx, discovery);
+        const result = await prepared.mutate(tx);
+        return { ...result, events: [...result.events, ...(await applyDiscoveryMutation(tx, discovery))] };
+      },
+    );
+  } catch (error) {
+    await abortDiscoveryMutation(deps.pool, discovery);
+    throw error;
+  }
 }
 
 /** Ordinary point callers retain the original authenticated-actor boundary. */
@@ -475,49 +495,68 @@ export async function erasePostLogicalPageAsInitiator(
       return 'execute';
     },
   };
-  return runCommand(
-    deps.pool,
-    {
-      ...identity,
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization,
-      receipt: {
-        kind: 'content.author-erasure.page',
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(
-            canonicalize([
-              identity,
-              postIds.map((id) => ({ action: 'post:erase', kind: 'post', id, reason: input.reason })),
-            ])!,
-          )
-          .digest(),
+  const receipt = {
+    kind: 'content.author-erasure.page',
+    key: context.idempotencyKey,
+    digest: createHash('sha256')
+      .update(
+        canonicalize([
+          identity,
+          postIds.map((id) => ({ action: 'post:erase', kind: 'post', id, reason: input.reason })),
+        ])!,
+      )
+      .digest(),
+  };
+  const opening = await discoveryOpening.run(deps.pool, { route, thread_id: input.threadId });
+  const discovery =
+    opening && postIds.includes(opening.first_post_id)
+      ? await prepareDiscoveryMutation(deps, {
+          identity,
+          authorization,
+          receipt,
+          deadline: context.deadline,
+          target: { kind: 'post', id: opening.first_post_id },
+          effect: 'retract',
+        })
+      : null;
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization: discoveryMutationAuthorization(deps, authorization, discovery),
       },
-    },
-    async (tx) => {
-      let erasedRevisions = 0;
-      const events = [];
-      for (const id of postIds) {
-        const parameters = { route, id, kind: 'post', deleted_at: null };
-        const args = (statement: { params: readonly string[] }) =>
-          statement.params.map((name) => parameters[name as keyof typeof parameters]);
-        const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));
-        erasedRevisions += Number(counted.rows[0]!.revisions);
-        if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
-          throw new RangeError('Operation counter overflow');
-        const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
-        // An already erased post cannot become a new effect on a different key.
-        if (!changed) throw new GrantDeniedError();
-        events.push(...(await retractDiscoveryStart(tx, { threadId: input.threadId, postId: id })));
-        events.push({
-          type: 'com.rezics.content.post.erased.v1',
-          subject: id,
-          data: { postId: id, securityRevision: changed.security_revision },
-        });
-      }
-      return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
-    },
-  );
+      async (tx) => {
+        await lockDiscoveryMutation(tx, discovery);
+        let erasedRevisions = 0;
+        const events = [];
+        for (const id of postIds) {
+          const parameters = { route, id, kind: 'post', deleted_at: null };
+          const args = (statement: { params: readonly string[] }) =>
+            statement.params.map((name) => parameters[name as keyof typeof parameters]);
+          const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));
+          erasedRevisions += Number(counted.rows[0]!.revisions);
+          if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
+            throw new RangeError('Operation counter overflow');
+          const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
+          // An already erased post cannot become a new effect on a different key.
+          if (!changed) throw new GrantDeniedError();
+          events.push({
+            type: 'com.rezics.content.post.erased.v1',
+            subject: id,
+            data: { postId: id, securityRevision: changed.security_revision },
+          });
+        }
+        events.push(...(await applyDiscoveryMutation(tx, discovery)));
+        return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
+      },
+    );
+  } catch (error) {
+    await abortDiscoveryMutation(deps.pool, discovery);
+    throw error;
+  }
 }
