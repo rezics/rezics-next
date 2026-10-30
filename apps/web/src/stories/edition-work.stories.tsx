@@ -27,11 +27,11 @@ export const Work: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: traversalSubjects.work.label })).toBeVisible();
-    const lastEdition = await canvas.findByRole('link', { name: 'Edition 12', exact: true });
+    const lastEdition = await canvas.findByRole('link', { name: 'Edition 12' });
     await expect(lastEdition).toBeVisible();
     const preview = lastEdition.closest('section') as HTMLElement;
     await expect(within(preview).getAllByRole('article')).toHaveLength(12);
-    await expect(within(preview).queryByRole('link', { name: 'Edition 13', exact: true })).toBeNull();
+    await expect(within(preview).queryByRole('link', { name: 'Edition 13' })).toBeNull();
     await expect(within(preview).getByRole('link', { name: m.home_see_all() })).toHaveAttribute(
       'href',
       expect.stringContaining(`/subjects/${traversalSubjects.work.id}/the-harbour/editions?realm=${traversalRealm}`),
