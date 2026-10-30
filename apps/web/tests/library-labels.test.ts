@@ -138,6 +138,28 @@ test("the labels page lists the owner's labels from one catalogue read of up to 
   }
 });
 
+test('rename buttons compose only outline styling before and after a revision conflict', async () => {
+  const { fake, client } = setup();
+  const initial = markup(await loadLabelsPage(client, request(), env));
+  fake.labels[0] = { id: 'label-0', name: 'Changed elsewhere', revision: 20 };
+  const conflict = markup(await postForm(client, form(initial, 'rename', 'label-0')));
+  for (const html of [initial, conflict]) {
+    const renames = (html.match(/<form\b[^>]*>[\s\S]*?<\/form>/g) ?? []).filter((part) =>
+      part.includes('value="rename"'),
+    );
+    expect(renames).toHaveLength(3);
+    for (const rename of renames) {
+      const classes = /<button\b[^>]*class="([^"]*)"/.exec(rename)?.[1]?.split(/\s+/) ?? [];
+      expect(classes).toContain('border-border');
+      expect(classes).toContain('bg-background');
+      expect(classes).toContain('dark:bg-transparent');
+      expect(classes).not.toContain('bg-primary');
+      expect(classes).not.toContain('text-primary-foreground');
+      expect(classes).not.toContain('hover:bg-primary/80');
+    }
+  }
+});
+
 test("creating, renaming and deleting a label each send one request with an Idempotency-Key, and rename and delete send the label's revision", async () => {
   const { fake, client } = setup();
   const inputs = [

@@ -242,7 +242,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                 aria-invalid={fieldError('create') || undefined}
                 aria-describedby={fieldError('create') ? 'create-error' : undefined}
               />
-              <Button type="submit" disabled={busy} className={buttonVariants({ variant: 'default', size: 'lg' })}>
+              <Button type="submit" variant="default" size="lg" disabled={busy}>
                 {m.library_label_create()}
               </Button>
             </div>
@@ -279,7 +279,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                         aria-describedby={fieldError('rename', label.id) ? `rename-error-${label.id}` : undefined}
                       />
                       {fieldError('rename', label.id) ? error(`rename-error-${label.id}`) : null}
-                      <Button type="submit" disabled={busy} className={buttonVariants({ variant: 'outline' })}>
+                      <Button type="submit" variant="outline" disabled={busy}>
                         {m.library_label_rename()}
                       </Button>
                     </Field>
@@ -291,7 +291,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                   <form method="post" action={mutationPath} onSubmit={onSubmit}>
                     {hidden('delete', label.deleteKey, label.id, label.revision)}
                     <input type="hidden" name="name" value={label.name} />
-                    <Button type="submit" disabled={busy} className={buttonVariants({ variant: 'destructive' })}>
+                    <Button type="submit" variant="destructive" disabled={busy}>
                       {m.library_label_delete()}
                     </Button>
                   </form>
