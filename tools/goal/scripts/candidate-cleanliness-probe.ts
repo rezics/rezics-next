@@ -440,13 +440,15 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     const expected = gitText(candidateRoot, 'rev-parse', 'HEAD');
     if (expected !== sourceHead) throw new Error(`Isolated candidate HEAD ${expected} did not match source ${sourceHead}`);
 
-    const base = gitText(candidateRoot, 'rev-parse', '--verify', `refs/heads/${sourceSettings.mainBranch}`);
+    const mainHead = gitText(candidateRoot, 'rev-parse', '--verify', `refs/heads/${sourceSettings.mainBranch}`);
+    const base = gitText(candidateRoot, 'merge-base', mainHead, expected);
+    if (!base) throw new Error(`Candidate ${expected} and ${sourceSettings.mainBranch} ${mainHead} have no common base`);
     const ancestor = git(candidateRoot, ['merge-base', '--is-ancestor', base, expected]);
     if (ancestor.status !== 0 || ancestor.signal || ancestor.error)
-      throw new Error(`Candidate is not based on ${sourceSettings.mainBranch} ${base}: ${gitDetails(ancestor)}`);
+      throw new Error(`Candidate base ${base} is not an ancestor of ${expected}: ${gitDetails(ancestor)}`);
     installIsolatedLocalConfig(sourceRoot, candidateRoot, isolatedState);
     boundary(candidateRoot, expected, 'candidate initial checkout', evidencePath);
-    logEvent(evidencePath, { type: 'candidate-ready', expectedHead: expected, base, candidateRoot, isolatedState });
+    logEvent(evidencePath, { type: 'candidate-ready', expectedHead: expected, mainHead, base, candidateRoot, isolatedState });
 
     const installRunner = instrumentedGate(
       gateRunner(600_000, isolatedState),
