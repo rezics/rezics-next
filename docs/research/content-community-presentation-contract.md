@@ -1,7 +1,9 @@
 # Native community presentation metadata
 
-Research recommendation, 2026-10-31; pending adoption by the Community, Content and Accounts owners.
-This proposes one small producer, not delivered APIs, runtime evidence or completion.
+Research evidence, 2026-10-31. The Web interface consumption is adopted in
+[the Web owner contract](../../apps/web/README.md#realm-appearance-and-rules). Native producer recommendations
+below remain pending adoption by the Community, Content and Accounts owners. This report is not an interface
+authority or evidence of delivered APIs, runtime behaviour or completion.
 
 ## Primary evidence
 

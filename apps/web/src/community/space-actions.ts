@@ -29,6 +29,12 @@ import {
 } from './space';
 import { changePublication, type PublicationChange, type PublicationOutcome } from './publication-controls';
 import { loadRealmBans, validateBanRead, validateBanWrite, writeRealmBan } from './realm-bans';
+import {
+  realmAppearanceReadSchema,
+  realmAppearanceCommandSchema,
+  realmAppearanceChoiceSchema,
+} from './realm-presentation';
+import { readRealmAppearance, changeRealmAppearance, selectRealmAppearance } from './realm-presentation-native';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -236,4 +242,27 @@ export const changeRealmBan = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return writeRealmBan(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const readRealmAppearanceSettings = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(realmAppearanceReadSchema, input))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    return readRealmAppearance(kernelClient(), viewerCredential(request), data.realmId);
+  });
+
+export const changeRealmAppearanceSettings = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(realmAppearanceCommandSchema, input))
+  .handler(async ({ data }) => {
+    await setupCredential();
+    return changeRealmAppearance(data);
+  });
+
+export const resolveRealmAppearanceChoice = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(realmAppearanceChoiceSchema, input))
+  .handler(async ({ data }) => {
+    await setupCredential();
+    return selectRealmAppearance(data);
   });

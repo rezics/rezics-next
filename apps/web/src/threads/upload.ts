@@ -24,6 +24,8 @@ export type UploadRefusalReason = 'closed' | 'type' | 'too-large' | 'rejected' |
 export class UploadRefusal extends Error {
   readonly reason: UploadRefusalReason;
   readonly retryAfter?: number;
+  /** Retain a known reservation when completion or processing has an uncertain outcome. */
+  mediaId?: string;
   constructor(reason: UploadRefusalReason, retryAfter?: number) {
     super(reason);
     this.name = 'UploadRefusal';
@@ -34,7 +36,9 @@ export class UploadRefusal extends Error {
 
 type ReservedMedia = { id: string; state: string; mediaType: string; byteCount: number };
 type FutureThread = { boardId: string; idempotencyKey: string };
-type ReserveTarget = string | { containerId: string } | { newThread: FutureThread };
+type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
+type ReserveTarget = PostReserveTarget | { realmId: string };
+type ImagePurpose = 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
 
 // A 409 names no thread, and the site has no route key to derive one. Keep the id the reservation already returned.
 const futureThreadIds = new Map<string, string>();
@@ -191,10 +195,11 @@ async function naturalSize(file: Blob, signal: AbortSignal): Promise<{ width: nu
   return size;
 }
 
-function reserveBody(target: ReserveTarget, file: File, purpose: 'post-image' | 'avatar') {
+function reserveBody(target: ReserveTarget, file: File, purpose: ImagePurpose) {
   const image = { purpose, mediaType: file.type, byteCount: file.size };
   if (typeof target === 'string') return { containerId: target, ...image };
   if ('containerId' in target) return { containerId: target.containerId, ...image };
+  if ('realmId' in target) return { realmId: target.realmId, ...image };
   return { newThread: target.newThread, ...image };
 }
 
@@ -202,7 +207,7 @@ async function reserve(
   target: ReserveTarget,
   file: File,
   signal: AbortSignal,
-  purpose: 'post-image' | 'avatar',
+  purpose: ImagePurpose,
 ): Promise<ReservedMedia> {
   const response = await siteFetch('/media', {
     method: 'POST',
@@ -267,7 +272,7 @@ async function uploadImage(
   target: ReserveTarget,
   file: File,
   signal: AbortSignal,
-  purpose: 'post-image' | 'avatar',
+  purpose: ImagePurpose,
 ): Promise<UploadedImage> {
   try {
     throwIfAborted(signal);
@@ -287,12 +292,45 @@ async function uploadImage(
   }
 }
 
-export function uploadReplyImage(target: ReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
+export function uploadReplyImage(target: PostReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
   return uploadImage(target, file, signal, 'post-image');
 }
 
 export function uploadAvatar(accountId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
   return uploadImage({ containerId: accountId }, file, signal, 'avatar');
+}
+
+/** Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary. */
+export async function uploadRealmImage(
+  realmId: string,
+  purpose: 'realm-icon' | 'realm-banner',
+  file: File,
+  signal: AbortSignal,
+): Promise<{ id: string }> {
+  let mediaId: string | undefined;
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    const reserved = await reserve({ realmId }, file, signal, purpose);
+    mediaId = reserved.id;
+    throwIfAborted(signal);
+    await putBytes(reserved, file, signal);
+    return await resumeRealmImageUpload(mediaId, signal);
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    if (mediaId) failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
+/** Check the original reservation on manual retry instead of creating another upload. */
+export async function resumeRealmImageUpload(mediaId: string, signal: AbortSignal): Promise<{ id: string }> {
+  const settled = await poll(mediaId, signal);
+  if (settled.state !== 'available') throw new UploadRefusal('rejected');
+  return { id: mediaId };
 }
 
 /** Distinct image sources in document order. */

@@ -27,6 +27,7 @@ import type { ShelfPage } from './space';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { ContainerLifecyclePanel } from './container-lifecycle-controls';
 import type { ContainerLifecycleAdapter } from './container-lifecycle';
+import { RealmAppearancePanel } from './realm-presentation-panel';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -284,10 +285,12 @@ function Home({ realm, management, frozen }: { realm: RealmHome; management: Rea
 export function SpacePage({
   page,
   realmManagement,
+  realmAppearance,
   lifecycleAdapter,
 }: {
   page: SpacePageData;
   realmManagement?: ReactNode;
+  realmAppearance?: ReactNode;
   lifecycleAdapter?: ContainerLifecycleAdapter;
 }) {
   const location = useLocation();
@@ -357,7 +360,12 @@ export function SpacePage({
         <Home
           realm={page.realm}
           frozen={frozen}
-          management={realmManagement ?? <RealmBansPanel realmId={page.realm.id} />}
+          management={
+            <>
+              {realmAppearance ?? <RealmAppearancePanel realmId={page.realm.id} />}
+              {realmManagement ?? <RealmBansPanel realmId={page.realm.id} />}
+            </>
+          }
         />
       ) : null}
       <ContainerLifecyclePanel
