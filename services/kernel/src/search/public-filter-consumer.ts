@@ -709,7 +709,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       cost.statements++;
       cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
       const request: import('pg').QueryConfig & { query_timeout: number } = {
-        text, values: parameters, query_timeout: remaining(context),
+        text, values: parameters, query_timeout: cleanup ? 1000 : remaining(context),
       };
       const result = await db.query(request);
       cost.rows += result.rows.length;
