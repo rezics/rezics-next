@@ -53,6 +53,14 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
       return { bytes: Buffer.byteLength(JSON.stringify(result.value)) };
     };
     for (const axis of ['catalogue', 'known-history-and-relations'] as const) {
+      if (axis === 'known-history-and-relations' && !selected)
+        await world.checked('POST', `/v1/subjects/${id}/candidates`, {
+          statement: {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://example.test/native-history' },
+            references: [],
+          },
+        });
       const route = routeOf(id)!;
       const membershipSlot = statementSlotId(id, 'skos:inScheme');
       const baseRevision = Number(
@@ -95,6 +103,7 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
                   rank: 'normal',
                 };
                 const rows: Record<string, readonly Record<string, unknown>[]> = {
+                  'semantic.subject': [],
                   'semantic.revision': [
                     {
                       route,

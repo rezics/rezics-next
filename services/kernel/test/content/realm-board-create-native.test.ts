@@ -208,7 +208,10 @@ test.serial('a reached native Concept visibility change invalidates the prepared
     const effects = await world.effects();
     barrier.release();
     const result = await pending;
-    expect(result.response.status).toBe(503);
+    // The executor retries the changed observation; the current hidden source
+    // then receives the ordinary concealed denial before any board effect.
+    expect(result.response.status).toBe(403);
+    expect(result.value.code).toBe('forbidden');
     expect(await world.effects()).toEqual(effects);
   } finally {
     barrier.release();

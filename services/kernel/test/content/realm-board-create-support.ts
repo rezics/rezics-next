@@ -162,7 +162,20 @@ export async function realmBoardWorld() {
   async function propose(id: string, value: unknown = { type: 'value', content: schemeId }) {
     return (
       await checked('POST', `/v1/subjects/${id}/candidates`, {
-        statement: { property: { id: 'skos:inScheme' }, value },
+        statement: {
+          property: { id: 'skos:inScheme' },
+          value,
+          references: [
+            {
+              parts: [
+                {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value', content: 'https://example.test/native-membership' },
+                },
+              ],
+            },
+          ],
+        },
       })
     ).candidate as string;
   }
