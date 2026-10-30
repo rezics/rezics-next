@@ -21,17 +21,26 @@ const { installResourceRoleCatalogue, resolveResourceRoles } = await import('../
 const { installStandingParentGrant } = await import('../../src/access/standing-parent.ts');
 const { createExposureCommands } = await import('../../src/access/gates/catalogue.ts');
 const { sweepWorkflowApprovals } = await import('../../src/access/workflow-approvals.ts');
+const { createOrganizationCloseRunner } = await import('../../src/access/organization-close-work.ts');
+const {
+  createAgentVerificationCommands,
+  failAgentVerification,
+  finishAgentVerification,
+  finishAgentVerificationReversal,
+} = await import('../../src/access/agent-verification.ts');
 const { createAccess } = await import('../../src/access/index.ts');
-const { createAccess: createPermissionAccess } = await import('../../src/access/permission.ts');
 const { accessCommandAuthorization } = await import('../../src/request/access.ts');
-const { cookies, issuer, nativeFixture, password, scopes } = await import('./native-account-bindings-fixture.ts');
+const { actionDeclarations, cookies, issuer, nativeFixture, password, scopes } =
+  await import('./native-account-bindings-fixture.ts');
 
 const url = process.env.DATABASE_URL!;
 const pool = createPool(url);
 const catalogueScopes = [
   ...scopes,
+  'account:read',
   'account:update',
   'account:delete',
+  'account:verify_agent',
   'organization:create',
   'organization:membership',
   'account:suspend',
@@ -63,7 +72,7 @@ beforeAll(async () => {
   f = await nativeFixture(pool, undefined, {
     database: { url, container: '', close() {} },
     privateKey: { ...(await exportJWK(pair.privateKey)), kid: 'access-event-catalogue' },
-    actions: new Map(catalogueScopes.map((action) => [action, { anonymous: false }])),
+    actions: actionDeclarations(catalogueScopes),
   });
   await f.host.service.internal.registerClient({
     clientId: 'catalogue-client',
@@ -218,10 +227,7 @@ test('real access commands cover every registered event and the log reader accep
   );
 
   await step('bootstrap', () => bootstrapGovernance(pool, governor.accountId));
-  const mounted = new Map([
-    ...LIFECYCLE_ACTIONS,
-    ...catalogueScopes.map((scope) => [scope, { anonymous: false }] as const),
-  ]);
+  const mounted = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(catalogueScopes)]);
   installResourceRoleCatalogue(
     f.access,
     resolveResourceRoles(mounted, {
@@ -625,30 +631,176 @@ test('real access commands cover every registered event and the log reader accep
     operators.fenceOperatedSubject({ ...linked.value, key: key() }),
   );
   expect(operatedFence.value).toMatchObject({ accountId: robotId, fenced: true });
+  const reinstater = await step('register reinstater', () => f.person('catalogue_reinstater'));
+  const reinstaterSignin = await f.request('/signin', {
+    email: 'catalogue_reinstater@ordinary.test',
+    password,
+    client_id: 'catalogue-client',
+    scope: catalogueScopes,
+  });
+  expect(reinstaterSignin.status).toBe(200);
+  const reinstaterTokenResponse = await f.request('/token', {}, cookies(reinstaterSignin));
+  expect(reinstaterTokenResponse.status).toBe(200);
+  const reinstaterToken = ((await reinstaterTokenResponse.json()) as { access_token: string }).access_token;
+  await step('grant reinstatement', async () =>
+    f.bindings.grants.create(await grantContext(), {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: reinstater.accountId },
+      actions: ['account:reinstate'],
+      valid: '(,)',
+      key: key(),
+    }),
+  );
+  const suspendedGovernor = await step('suspend operated governor', async () =>
+    createSuspensionCommands({ pool, access: f.access, clock: () => new Date() }).suspend(await grantContext(), {
+      accountId: governor.accountId,
+      key: key(),
+    }),
+  );
+  const suspensionRoot = await f.bindings.continuations.read(
+    suspendedGovernor.value.continuationOperationKey!,
+    governor.accountId,
+  );
+  expect(suspensionRoot).not.toBeNull();
+  await step('fence responsibility page', () => f.bindings.continuations.continueCommitted(suspensionRoot!.reference));
+  const reinstatedGovernor = await step('reinstate operated governor', async () => {
+    const deadline = Date.now() + 20_000;
+    const actor = await f.access.authenticate(reinstaterToken, { pool, deadline });
+    return createReinstatementCommands({ pool, access: f.access, clock: () => new Date() }).reinstate(
+      { actor, pool, deadline },
+      { accountId: governor.accountId, key: key() },
+    );
+  });
+  const reinstatementRoot = await f.bindings.continuations.read(
+    `reinstate:${reinstatedGovernor.value.receiptId}`,
+    governor.accountId,
+  );
+  expect(reinstatementRoot).not.toBeNull();
+  await step('unfence responsibility page', () =>
+    f.bindings.continuations.continueCommitted(reinstatementRoot!.reference),
+  );
+  const governorSignin = await f.request('/signin', {
+    email: 'catalogue_governor@ordinary.test',
+    password,
+    client_id: 'catalogue-client',
+    scope: catalogueScopes,
+  });
+  expect(governorSignin.status).toBe(200);
+  headers = cookies(governorSignin);
+  const governorToken = await f.request('/token', {}, headers);
+  expect(governorToken.status).toBe(200);
+  bearer = ((await governorToken.json()) as { access_token: string }).access_token;
   await step('redirect departed', () =>
     internal.redirectHandle({ handle: departed.handle, accountId: departed.accountId, key: key() }),
   );
-  const tombstoneAccess = createPermissionAccess({
-    actions: LIFECYCLE_ACTIONS,
-    accountEvidence: (_actor, context) => context.account,
-  });
-  await step('tombstone', async () =>
-    createLifecycleCommands({ pool, access: tombstoneAccess }).tombstone(
-      {
-        actor: {
-          kind: 'account',
-          accountId: departed.accountId,
-          clientId: 'catalogue-client',
-          requestedBy: null,
-          authnEpoch: 1,
-          scopes: ['account:delete'],
-        },
-        account: await accountOf(departed.accountId),
-        deadline: Date.now() + 20_000,
-      },
-      { accountId: departed.accountId, key: key() },
-    ),
+
+  const closingOrganization = newId(routeOf(governor.accountId)!);
+  const closingOwner = await step('close owner hold', () =>
+    internal.reserveCoordination({
+      accountId: governor.accountId,
+      relatedAccountId: closingOrganization,
+      purpose: 'membership',
+      key: key(),
+    }),
   );
+  await step('close organization create', () =>
+    internal.createOrganization({
+      organizationId: closingOrganization,
+      ownerAccountId: governor.accountId,
+      ownerReservationId: closingOwner.value.reservationId,
+      key: key(),
+    }),
+  );
+  const closingMember = await step('close member hold', () =>
+    internal.reserveCoordination({
+      accountId: victim.accountId,
+      relatedAccountId: closingOrganization,
+      purpose: 'membership',
+      key: key(),
+    }),
+  );
+  await step('close member add', async () =>
+    f.bindings.lifecycle.setMembership(await governorRequest(), {
+      organizationId: closingOrganization,
+      memberAccountId: victim.accountId,
+      reservationId: closingMember.value.reservationId,
+      role: 'member',
+      key: key(),
+    }),
+  );
+  await step('close tombstone', async () =>
+    f.bindings.lifecycle.tombstone(await governorRequest(), { accountId: closingOrganization, key: key() }),
+  );
+  await step('close workflow', () => createOrganizationCloseRunner({ pool }).continueCommitted(closingOrganization));
+
+  await step('grant verification review', async () =>
+    f.bindings.grants.create(await grantContext(), {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: governor.accountId },
+      actions: ['account:verify_agent'],
+      valid: '(,)',
+      key: key(),
+    }),
+  );
+  const verification = createAgentVerificationCommands({ pool, access: f.access, clock: () => new Date() });
+  const verificationContext = await grantContext();
+  const catalogueSubject = newId(routeOf(governor.accountId)!);
+  const verificationRequest = (label: string) =>
+    verification.request(verificationContext, {
+      accountId: governor.accountId,
+      subject: catalogueSubject,
+      statement: `Catalogue event ${label}`,
+      links: [],
+      key: key(),
+    });
+  await step('verification request and withdraw', async () => {
+    await verificationRequest('withdrawn');
+    await verification.withdraw(verificationContext, { accountId: governor.accountId, key: key() });
+  });
+  await step('verification reject', async () => {
+    const pending = await verificationRequest('rejected');
+    await verification.reject(verificationContext, { requestId: pending.value.id, key: key() });
+  });
+  await step('verification approve and complete', async () => {
+    const pending = await verificationRequest('verified');
+    const decision = await verification.approve(verificationContext, { requestId: pending.value.id, key: key() });
+    const workflow = {
+      id: pending.value.id,
+      accountId: pending.value.accountId,
+      accountKind: pending.value.accountKind,
+      requestedBy: pending.value.requestedBy,
+      catalogueSubjectId: pending.value.catalogueSubjectId,
+      state: 'approving' as const,
+      decisionReceiptId: decision.value.decisionReceiptId,
+      receiptId: decision.value.decisionReceiptId!,
+    };
+    await finishAgentVerification(pool, workflow, () => new Date());
+  });
+  await step('verification failed workflow', async () => {
+    const pending = await verificationRequest('failed');
+    const decision = await verification.approve(verificationContext, { requestId: pending.value.id, key: key() });
+    return failAgentVerification(
+      pool,
+      {
+        ...pending.value,
+        state: 'approving',
+        decisionReceiptId: decision.value.decisionReceiptId,
+        receiptId: decision.value.decisionReceiptId!,
+        problem: { type: 'catalogue_test_failure', detail: 'Expected fixture failure.' },
+      },
+      () => new Date(),
+    );
+  });
+  await step('verification reversal workflow', async () => {
+    const verificationReceiptId = newId(0);
+    await pool.query(
+      `UPDATE access.account SET agent_verified = true, agent_subject_id = $1,
+       agent_verification_receipt_id = $2 WHERE route = $3 AND account_id = $4`,
+      [catalogueSubject, verificationReceiptId, routeOf(governor.accountId), governor.accountId],
+    );
+    const reversal = await verification.release(verificationContext, { accountId: governor.accountId, key: key() });
+    await finishAgentVerificationReversal(pool, reversal.value, () => new Date());
+  });
 
   const publicJwk = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).publicKey)),
@@ -686,6 +838,27 @@ test('real access commands cover every registered event and the log reader accep
   await step('add key', () => credential({ kind: 'key', kid: publicJwk.kid, publicJwk }));
   await step('remove key', () => credential({ kind: 'key', kid: publicJwk.kid, remove: true }));
   await step('sweep', () => sweepWorkflowApprovals(pool, routeOf(governor.accountId)!, 1000));
+
+  const catalogueLeaver = await step('register catalogue leaver', () => f.person('catalogue_leaver'));
+  const leaverSignin = await f.request('/signin', {
+    email: 'catalogue_leaver@ordinary.test',
+    password,
+    client_id: 'catalogue-client',
+    scope: catalogueScopes,
+  });
+  expect(leaverSignin.status).toBe(200);
+  const leaverCookies = cookies(leaverSignin);
+  const leaverToken = await f.request('/token', {}, leaverCookies);
+  expect(leaverToken.status).toBe(200);
+  const leaverBearer = ((await leaverToken.json()) as { access_token: string }).access_token;
+  await step('tombstone self', async () => {
+    const deadline = Date.now() + 20_000;
+    const actor = await f.access.authenticate(leaverBearer, { pool, deadline });
+    return createLifecycleCommands({ pool, access: f.access }).tombstone(
+      { actor, deadline },
+      { accountId: catalogueLeaver.accountId, key: key() },
+    );
+  });
 
   const seen = new Set<string>();
   const partitions = await pool.query<{ partition_no: number }>(
