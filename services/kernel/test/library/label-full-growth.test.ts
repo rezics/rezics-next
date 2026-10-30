@@ -309,6 +309,7 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
       );
     },
     async warmup(_database, scale) {
+      for (let i = 0; i < 6; i++) await operation();
       const measured = await capture(db, operation),
         raw = measured.capture;
       const catalogue = catalogStatementBound(raw);
