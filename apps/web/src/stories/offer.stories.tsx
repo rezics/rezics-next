@@ -50,14 +50,13 @@ export const KernelUnavailable: Story = {
   name: 'Kernel Unavailable',
   play: async ({ canvasElement }) => {
     const originalFetch = window.fetch;
-    window.fetch = async (input, init) => {
-      const request = input instanceof Request ? input : undefined;
-      const target = request?.url ?? (input instanceof URL ? input.href : input);
+    window.fetch = (async (input: Parameters<typeof window.fetch>[0], init?: Parameters<typeof window.fetch>[1]) => {
+      const target = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(target, window.location.href);
-      const method = init?.method ?? request?.method ?? 'GET';
+      const method = init?.method ?? (typeof input === 'string' || input instanceof URL ? 'GET' : input.method);
       if (url.pathname === '/checkout' && method === 'POST') return new Response(null, { status: 503 });
       return originalFetch(input, init);
-    };
+    }) as typeof window.fetch;
     try {
       const main = await within(canvasElement).findByRole('main');
       const view = within(main);
