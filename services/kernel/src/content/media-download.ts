@@ -401,7 +401,11 @@ async function authorizeDownload(
           ...mediaEligibilityCallbacks({
             evidence: initial,
             media: {
-              kind: 'download', route: r, id: mediaId, ...slot, ancestors: chain,
+              kind: 'download', route: r, id: mediaId, ...slot,
+              ancestors: chain.map(({ id, kind }) => {
+                if (kind === 'board') throw new GrantDeniedError();
+                return { id, kind };
+              }),
               credit: initial.credit !== null, provenance: initial.provenance !== null,
             },
             async verify({ client }, reads) {

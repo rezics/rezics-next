@@ -185,7 +185,9 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
   const author = plan?.author ? authorWork(plan) : undefined;
   const mediaPlan = options.media && Object.freeze({
     ...options.media,
-    ancestors: options.media.ancestors?.map((node) => Object.freeze({ ...node })),
+    ...(options.media.ancestors === undefined ? {} : {
+      ancestors: options.media.ancestors.map((node) => Object.freeze({ ...node })),
+    }),
   });
   const media = mediaPlan && mediaWork(mediaPlan);
   const ancestors = mediaPlan?.ancestors?.map((node, index) => {
