@@ -5,11 +5,16 @@ import { acknowledgeErasure, readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
+import { createKernel } from '../http/kernel.ts';
+import { createKernelRuntimeDefaults } from '../server.ts';
+import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
+import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
+import { PUBLIC_PREPARATION_WORKFLOW } from './public-preparation-store.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkModule } from '../work/registry.ts';
-import { createOpenSearch } from './opensearch.ts';
+import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 
@@ -216,16 +221,99 @@ export const searchWorkModule: WorkModule = {
     const config = readSearchConfig(context.env);
     if (!config) return;
     const routeKey = readMembershipRouteKey(context.env);
-    context.addService(() =>
-      startSearchIndexing({
-        pool: context.pool,
-        search: createOpenSearch(config.url),
-        source: createRatedSubjectSource(context.pool, routeKey).source,
-        listing: subjectListingSource(context.pool),
-        prefix: config.prefix,
-        concurrency: 2,
-        discovery: { routeKey },
-      }),
+    const search = createOpenSearch(config.url);
+    const source = createRatedSubjectSource(context.pool, routeKey).source;
+    const listing = subjectListingSource(context.pool);
+    let active: PublicPreparation | undefined;
+    const step = DBOS.registerStep(
+      async (id: string, revision: string) => {
+        const preparation = active;
+        if (!preparation) throw new SearchUnavailableError('Search preparation service is not running');
+        await preparation.run(id, revision);
+      },
+      { name: 'search.publicPreparationStep', retriesAllowed: true, maxAttempts: 3, intervalSeconds: 1 },
     );
+    DBOS.registerWorkflow(
+      async (input: { id: string; revision: string; notBefore: number }) => {
+        const delay = input.notBefore - Date.now();
+        if (delay > 0) await DBOS.sleep(delay);
+        await step(input.id, input.revision);
+      },
+      { name: PUBLIC_PREPARATION_WORKFLOW },
+    );
+    context.addService(async () => {
+      const defaults = createKernelRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+      let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
+      createKernel({
+        pool: context.pool,
+        routeKey,
+        ...defaults,
+        workClient: context.client,
+        onAccessReady(access) {
+          runtime = createDefaultPublicFilterRuntime({
+            pool: context.pool,
+            routeKey,
+            access,
+            search,
+            prefix: config.prefix,
+            clock: context.clock,
+          });
+        },
+      });
+      if (!runtime) throw new Error('Search worker Access composition is incomplete');
+      const publicRuntime = runtime;
+      const preparation = createPublicPreparation({
+        pool: context.pool,
+        work: context.client,
+        search,
+        source,
+        listing,
+        runtime,
+        prefix: config.prefix,
+      });
+      if (active) {
+        await publicRuntime.close();
+        throw new Error('Search preparation service is already running');
+      }
+      active = preparation;
+      let runner: Awaited<ReturnType<typeof startSearchIndexing>>;
+      try {
+        runner = await startSearchIndexing({
+          pool: context.pool,
+          search,
+          source,
+          listing,
+          prefix: config.prefix,
+          concurrency: 2,
+          discovery: { routeKey },
+          publicPreparation: preparation,
+        });
+      } catch (error) {
+        if (active === preparation) active = undefined;
+        try {
+          await preparation.stop();
+        } finally {
+          await publicRuntime.close();
+        }
+        throw error;
+      }
+      return {
+        pause: runner.pause,
+        resume: runner.resume,
+        refresh: runner.refresh,
+        async stop() {
+          if (active === preparation) active = undefined;
+          try {
+            await runner.stop();
+          } finally {
+            try {
+              await preparation.stop();
+            } finally {
+              await publicRuntime.close();
+            }
+          }
+        },
+      };
+    });
   },
 };

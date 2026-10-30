@@ -314,6 +314,27 @@ ALTER TABLE ONLY search.identity_writer
 
 
 --
+-- Name: public_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_preparation (
+    partition_no integer NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    id uuid NOT NULL,
+    kind text NOT NULL,
+    locator jsonb NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    due_at bigint NOT NULL,
+    lease_until bigint DEFAULT 0 NOT NULL,
+    expires_at bigint NOT NULL,
+    CONSTRAINT public_preparation_kind_check CHECK ((kind = ANY (ARRAY['population'::text, 'repair'::text]))),
+    CONSTRAINT public_preparation_locator_check CHECK ((octet_length((locator)::text) <= 131072)),
+    CONSTRAINT public_preparation_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT public_preparation_revision_check CHECK ((revision > 0))
+);
+
+
+--
 -- Name: index_home_coverage index_home_coverage_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -426,6 +447,14 @@ ALTER TABLE ONLY search.recent_search_state
 
 
 --
+-- Name: public_preparation public_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_preparation
+    ADD CONSTRAINT public_preparation_pkey PRIMARY KEY (partition_no, id);
+
+
+--
 -- Name: index_home_coverage_retire; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -458,6 +487,20 @@ CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition
 --
 
 CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
+
+
+--
+-- Name: public_preparation_due; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_preparation_due ON search.public_preparation USING btree (partition_no, prefix, due_at, id);
+
+
+--
+-- Name: public_preparation_locator; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_preparation_locator ON search.public_preparation USING btree (partition_no, prefix, kind, ((locator ->> 'key'::text)));
 
 
 --

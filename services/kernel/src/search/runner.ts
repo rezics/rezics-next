@@ -9,6 +9,7 @@ import {
 import { advanceDiscovery, discoveryGenerations, discoveryConsumer, type DiscoveryGeneration } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
+import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
@@ -42,6 +43,7 @@ export async function startSearchIndexing(options: {
   concurrency?: number;
   retireAfterMs?: number;
   discovery?: { routeKey: Uint8Array };
+  publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
   if (!Number.isInteger(discoverMs) || discoverMs < 1) throw new RangeError('discoverMs must be a positive integer');
@@ -74,19 +76,28 @@ export async function startSearchIndexing(options: {
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
         if (stopped) return;
-        const format = await readSubjectSortFormat(options.search, options.prefix, 1);
-        if (stopped) return;
-        await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
-          _meta: { ...(format === null ? {} : { name_sort_format: format }), activated_at: new Date().toISOString() },
-        });
-        if (stopped) return;
-        await options.search.request('POST', '/_aliases', {
-          actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
-        });
-        if (stopped) return;
-        state = { generations: [1], active: 1 };
+        if (!options.publicPreparation) {
+          const format = await readSubjectSortFormat(options.search, options.prefix, 1);
+          if (stopped) return;
+          await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
+            _meta: { ...(format === null ? {} : { name_sort_format: format }), activated_at: new Date().toISOString() },
+          });
+          if (stopped) return;
+          await options.search.request('POST', '/_aliases', {
+            actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
+          });
+          if (stopped) return;
+          state = { generations: [1], active: 1 };
+        } else {
+          state = { generations: [1], active: null };
+        }
       }
 
+      if (options.publicPreparation) {
+        for (const generation of state.generations)
+          if (state.active === null || generation > state.active) await options.publicPreparation.initialize(generation);
+        await options.publicPreparation.discover();
+      }
       let activatedAt: number | undefined;
       if (state.active !== null) {
         const index = subjectIndexName(options.prefix, state.active);
@@ -141,6 +152,7 @@ export async function startSearchIndexing(options: {
               listing: options.listing,
               index: subjectIndexName(options.prefix, generation),
             }),
+            ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
           }),
         );
         const next = startRelays(options.pool, relays, {
@@ -153,6 +165,8 @@ export async function startSearchIndexing(options: {
         currentGenerations = liveGenerations;
       }
 
+      // Native retained-copy custody must drain before default retirement can delete an exact target.
+      if (options.publicPreparation) return;
       for (const generation of pendingRetirements) {
         if (stopped) return;
         try {
@@ -195,9 +209,10 @@ export async function startSearchIndexing(options: {
       resumeAfter = undefined;
       clearSchedule();
       const projection = Promise.all([current?.pause(), mixed?.pause()]);
+      const preparing = options.publicPreparation?.pause();
       // Discovery owns any relay set being replaced. Its successor is born paused;
       // drain both that admitted chain and the current projection before resuming.
-      pauseDrain = Promise.all([discovery, projection]).then(async () => {
+      pauseDrain = Promise.all([discovery, projection, preparing]).then(async () => {
         await current?.pause();
       });
       return pauseDrain;
@@ -211,6 +226,7 @@ export async function startSearchIndexing(options: {
           if (stopped || resumeAfter !== after) return;
           resumeAfter = undefined;
           paused = false;
+          options.publicPreparation?.resume();
           current?.resume();
           mixed?.resume();
           schedule();
@@ -229,7 +245,8 @@ export async function startSearchIndexing(options: {
       clearSchedule();
       const previous = current;
       const projection = Promise.all([previous?.stop(), mixed?.stop()]);
-      closing = Promise.all([discovery, projection]).then(async () => {
+      const preparing = options.publicPreparation?.stop();
+      closing = Promise.all([discovery, projection, preparing]).then(async () => {
         if (current && current !== previous) await current.stop();
         current = undefined;
         currentGenerations = undefined;

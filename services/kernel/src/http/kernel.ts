@@ -70,6 +70,8 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  /** Trusted post-catalogue binding; runs before the host admits any request. */
+  onAccessReady?: (access: Access) => void;
   /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
   receiptKeys?: KeyRing;
   /** Trusted modules mount declarations before composition validation. */
@@ -576,6 +578,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   composedActions = actions;
   assertInternalActionDeclarations(actions);
   assertDeclaredResourceTypes(zones, dependencies.resourceRoles, actions);
+  dependencies.onAccessReady?.(resolveAccess({ actions, realmRoleReader }));
   return zones as Kernel;
 }
 

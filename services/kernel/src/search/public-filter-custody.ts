@@ -8,9 +8,10 @@ import compositeReference from '../semantic/composite-read.sql';
 import { withConnection } from '../database/pool.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
+import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
-import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import type { PublicCanonicalCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type {
   CustodyCost,
   CustodyDefinition,
@@ -212,7 +213,7 @@ async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string)
   if (await compositeReference.run(db, { digest })) return;
   throw new Failure('definition_missing');
 }
-async function retainedDefinition(pool: Pool, meter: Meter, definition: CustodyDefinition) {
+async function retainedDefinition(pool: Pool, meter: Meter, definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   let retained: CustodyRetainedDefinition = definition;
   let encoded = encode({ digest: digest(retained), data: retained });
   if (Buffer.byteLength(encoded) > 1048576) {
@@ -269,7 +270,7 @@ async function native(
     throw new Failure('binding_mismatch');
   return metadata[target]!.settings.index.uuid;
 }
-function validateDefinition(definition: CustodyDefinition) {
+function validateDefinition(definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
   home(definition.source.partition);
   requireValue(Number.isInteger(definition.source.epoch) && definition.source.epoch > 0);
   text(definition.source.id);
@@ -278,6 +279,11 @@ function validateDefinition(definition: CustodyDefinition) {
   requireValue(definition.meaning.digest === releaseDigest(definition.meaning.release));
   const input = definition.capture;
   requireValue(Object.hasOwn(input, 'filterDocument') && Object.hasOwn(input, 'text'));
+  if ('purpose' in input) {
+    validatePublicSuggestionInput(input);
+    // Source resolves complete prefix/order/name dependencies; custody does not invent callback keys.
+    return;
+  }
   requireValue(Number.isInteger(input.size) && input.size >= 1 && input.size <= 200);
   requireValue(['id', 'name', 'relevance', 'collections', 'rating'].includes(input.sort));
   if (input.filterDocument) {

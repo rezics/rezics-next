@@ -7,6 +7,10 @@ import type { Persona } from '../../../../../specs/semantic-driver.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { systemClock } from '../../../src/clock.ts';
+import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
+import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from '../../../src/search/public-runtime.ts';
+import { createPublicPreparationStore } from '../../../src/search/public-preparation-store.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
 import { createSearchService } from '../../../src/search/service.ts';
@@ -119,6 +123,8 @@ function supervise(parent: OutcomeRpc) {
     workerOutput: '',
   };
   let semantic: SemanticOutcomeDriver | undefined;
+  let publicFilters: DefaultPublicFilterRuntime | undefined;
+  let preparationClient: Promise<WorkClient> | undefined;
   let releasedBook: ReturnType<typeof createReleasedBookImport> | undefined;
   let proxy: Awaited<ReturnType<typeof searchProxy>> | undefined;
   let worker: ChildProcess | undefined;
@@ -185,6 +191,8 @@ function supervise(parent: OutcomeRpc) {
       await attempt(() => phase('worker', stopWorker));
       // Never release bindings or pools while a process could still be accessing them.
       if (worker && !exited) throw new Error('Worker exit was not confirmed');
+      await attempt(async () => publicFilters?.close());
+      await attempt(async () => (await preparationClient)?.close());
       await attempt(() => phase('auth', closeOwnedSemanticAuth));
     })());
   }
@@ -221,7 +229,7 @@ function supervise(parent: OutcomeRpc) {
               }
             });
             // Stored scripts also carry this factory's exact prefix.
-            for (const name of [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE]) {
+            for (const name of [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2', FACET_TEMPLATE]) {
               await deleting(async () => {
                 try {
                   await search.request('DELETE', `/_scripts/${prefix}${name}`);
@@ -268,6 +276,13 @@ function supervise(parent: OutcomeRpc) {
           const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
           return createKernel({
             ...config,
+            onAccessReady(access) {
+              config.onAccessReady?.(access);
+              publicFilters = createDefaultPublicFilterRuntime({
+                pool: config.pool, routeKey: config.routeKey, access, search: client, prefix,
+                clock: config.clock ?? systemClock,
+              });
+            },
             search: createSearchService({
               pool: config.pool,
               client,
@@ -275,6 +290,17 @@ function supervise(parent: OutcomeRpc) {
               source,
               ratings,
               cursors: config.tokens,
+              clock: config.clock ?? systemClock,
+              publicFilters: () => {
+                if (!publicFilters) throw new Error('Default public Search has not composed Access');
+                return publicFilters;
+              },
+              async preparePublic(job) {
+                preparationClient ??= createWorkClient(semantic!.fixtures.runtime.databaseUrl, config.pool);
+                await createPublicPreparationStore(config.pool, await preparationClient, prefix).retain(
+                  { kind: 'repair', key: JSON.stringify(job), job }, Date.now() + 24 * 60 * 60 * 1000,
+                );
+              },
             }),
           });
         },

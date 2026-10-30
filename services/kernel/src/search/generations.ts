@@ -192,6 +192,8 @@ export async function rebuildSubjects(options: {
   source: SubjectSource;
   prefix: string;
   runner: { refresh(): Promise<void> };
+  /** The real default worker owns identified reconciliation and alias activation. */
+  publication?: 'native';
   pollMs?: number;
   rounds?: number;
   timeoutMs?: number;
@@ -239,6 +241,17 @@ export async function rebuildSubjects(options: {
     if (format !== SUBJECT_SORT_FORMAT)
       throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
     await options.runner.refresh();
+
+    if (options.publication === 'native') {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const published = await subjectGenerations(options.search, options.prefix);
+        if (published.active === generation) return { generation, previous };
+        if (published.active !== previous) throw new RebuildError('running', generation);
+        if (Date.now() >= deadline) throw new RebuildError('timeout', generation);
+        await sleep(pollMs);
+      }
+    }
 
     const consumer = subjectConsumer(options.prefix, generation);
     const deadline = Date.now() + timeoutMs;

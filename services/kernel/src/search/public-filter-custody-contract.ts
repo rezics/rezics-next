@@ -1,4 +1,5 @@
 import type {
+  PublicCanonicalCaptureInput,
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterQueriedObservation,
@@ -13,11 +14,11 @@ import type {
 import type { OpenSearch } from './opensearch.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
-export type CustodyDefinition = Readonly<{
+export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> = Readonly<{
   source: Readonly<{ id: string; partition: number; epoch: number; configuration: string }>;
   readDefinition: string;
   meaning: PublicFilterProjectionMeaning;
-  capture: PublicFilterConsumerCaptureInput;
+  capture: Capture;
   dependencyKeys: readonly PublicFilterDependencyKey[];
 }>;
 /** Exact immutable authority consumed through semantic.readRelease, including registered composites.
@@ -28,7 +29,7 @@ export type CustodyReleaseReference = Readonly<{
   digest: string;
 }>;
 /** Wide meanings retain their immutable authority instead of copying a four-MiB release into one MiB. */
-export type CustodyRetainedDefinition = Omit<CustodyDefinition, 'meaning'> &
+export type CustodyRetainedDefinition = Omit<CustodyDefinition<PublicCanonicalCaptureInput>, 'meaning'> &
   Readonly<{
     meaning: Omit<PublicFilterProjectionMeaning, 'release'> &
       Readonly<{
@@ -76,7 +77,7 @@ export type CustodyRead = Readonly<{ queried: PublicFilterQueriedObservation; ex
 export interface PublicFilterCustody {
   register(
     request: Readonly<{
-      definition: CustodyDefinition;
+      definition: CustodyDefinition<PublicCanonicalCaptureInput>;
       physicalTarget: string;
       consumerGeneration: string;
       projectionGeneration: string;

@@ -1112,3 +1112,73 @@ when that scope is unavailable. Its destination keeps both the scoped route and 
 checked on the ordinary create operation.
 The shared Web input and `/search/history` use the typed BFF and account-separated queues, discard pending changes
 only on explicit conflict reload, never upload anonymous history, omit persisted scope display and clear on logout.
+
+## Default public runtime composition
+
+`server.startServer` installs `createDefaultPublicFilterRuntime` after the full Kernel action/resource catalogue
+has produced its actual native Access. The worker obtains that same binding through a headless Kernel composition,
+with the installed domain clock, canonical route key and existing WorkClient. The default service sends admitted,
+expanded filter/text/order/keyset inputs to the consumer factory, completes generic facts, figures and HTTP summaries
+before the execution-joined final observation, and closes the exact transient observation in `finally`. Sparse
+unexhausted pages yield readiness and the producer's retained prepared job rather than an advancing empty response.
+Confidential continuations continue to contain only the existing generation/comparator/keyset guards. Public kind
+metadata carries no inferred counts. Aggregate facets retain readiness until their native aggregate proof exists.
+
+`PublicSuggestionCaptureInput` adds the canonical `{purpose:'suggest', prefix, size, generation?,
+filterDocument:undefined, text:undefined}` variant to `PublicCanonicalCaptureInput`, retained by custody and
+resolved by `PublicFilterNativeSource.resolvePublicFilterDefinition`. Prefix is a distinct semantic input;
+it is never coerced to a term/phrase or accepted as caller DSL. Source derives the full prefix, excluded,
+order and name dependencies from that variant. Bounds retain the existing 1–64 Unicode scalars/128 UTF-16
+units and 1–50 native candidates; the public route retains at most ten results and twenty candidates.
+`createPublicSuggestionOperations` uses the same capture factory, native custody registry and Source binding.
+Its PIT-only versioned `subjects-suggest-v2` template keeps the released v1 bool-prefix behavior and fields.
+Actual engine completion, incarnation, retained plan, execution start and original/terminal own rows are checked;
+current disclosure and summary hydration precede the final execution-joined status. Neither totals nor an
+arbitrary continuation are exposed. Missing native binding prepares or fails unavailable before engine execution.
+
+`public-preparation.ts` runs locator-only maintenance workflows under the existing Search WorkModule and DBOS owner.
+It retains one scalar population frontier and at most one interrupted key page, charges a 64-key owner page, chunks
+ordinary Source reads at 256, and invokes the ordinary indexer's serializer and actual versions. The delivered
+`SearchWriterGuard` caps its native write chunks at 100 keys for both cold population and replay. Replay remains on
+the ordinary log/checkpoint path, at most one envelope per preparation step. Claims advance their native revision,
+so an expired attempt cannot overwrite a successor frontier. Maintenance locators expire after 24 hours; this does
+not allocate a public output slot or extend its native quota grant. Only the consumer producer owns current/building
+public output reservations. First-start discovery no longer aliases an empty generation in this composition.
+
+`createSearchGenerationPublication` is the selected publication-owner factory. Its closed handoff is:
+
+- `prepare({generation}, context)` resolves native generation state and returns a retained `locator`, the sole
+  publication `SubjectApplyGuard` admission hook as `writer`, and actual cost, or typed unavailable. It takes no completion assertion.
+- `step(locator, context)` performs the producer's bounded identified reconciliation, returning progress or
+  reconciled with actual cost, or typed unavailable. Population never substitutes query status or a count census.
+- `activate(locator, context)` resolves all native completion, incarnation, accepted meaning, refresh and old-writer
+  evidence itself, returning active generation/previous generation with cost, or typed unavailable.
+- `close()` drains this factory without closing supplied resources.
+
+The same returned publication admission hook brackets cold writes and ordinary replay through the existing
+indexer hook. Inside that hook, both use the delivered `createSearchWriterGuard` and its native enrollment,
+version, refresh and drain custody; the publication hook cannot replace it. The adapter adds no lock, writer
+registry, Source mirror, acknowledgement or reconciliation implementation. Population
+waits for actual `prepare` before writing. After the finite scan/replay it invokes `step` and then `activate`, always
+with the retained locator. Default CLI rebuild waits for that worker-owned alias publication; the legacy Subject
+reconciliation path remains available to its existing callers. Retirement still requires the native retained-copy
+and writer barrier, independently of population diagnostics. Live physical generations remain capped at three.
+
+Producer availability was inspected before editing. The existing `public-filter-consumer.ts`,
+`semantic/public-filter-source.ts` and `semantic/subject-source-key-pages.ts` are explicitly provisional adapters.
+`generation-publication.ts` now declares the publication handoff and returns typed unavailable until its owner
+implementation arrives. Integration must preserve actual producer code and replace/deduplicate provisional shims.
+The other exact handoffs remain `PublicFilterConsumerOperationsFactory`, `PublicFilterNativeSource` and
+`SubjectSourceKeyPages`. These adapters create no Source identity, permission, coverage, ACK, grant or ready output.
+
+The adopted runtime plan and end-to-end research distinguish immutable engine observations from current disclosure,
+retain request-owned PIT lifetime, and place summaries inside the last privacy boundary. Reference source reads
+covered Open Library's worksearch query/enrichment and bounded autocomplete, Discourse's Guardian-bound search,
+and OpenSearch's external-version and delete-tombstone pruning paths. They support explicit prefix admission and
+owner hydration; engine versions alone do not establish the permanent old-writer barrier.
+
+The existing real outcome driver now binds the actual trusted public runtime through the completed Kernel Access
+hook and enqueues its admitted repair locators through the real WorkClient. Its default worker rebuild selects
+native publication. The focused `default-public-runtime.test.ts` retains the finite preparation, sparse privacy-lag,
+full/exhausted pages and generation-recovery case and adds a prefix/current-summary/privacy-repair journey.
+Native acceptance remains deferred to integration; local compilation supplies no native readiness evidence.

@@ -1,3 +1,4 @@
+import type { SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import type { Pool } from 'pg';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ConfigError } from '../commerce/config.ts';
@@ -12,12 +13,13 @@ import type { SubjectSource } from './source.ts';
 export function createRatedSubjectSource(
   pool: Pool,
   routeKey: Uint8Array,
-): { source: SubjectSource; ratings: PublicRatingSource } {
+): { source: SubjectSource & SubjectSourceKeyPages; ratings: PublicRatingSource } {
   if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
   const ratings = createPublicRatingSource(pool);
-  const source = withPublicRatings(subjectSource(pool, routeKey), ratings, {
+  const native = subjectSource(pool, routeKey);
+  const rated = withPublicRatings(native, ratings, {
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
   });
-  return { source, ratings };
+  return { source: { ...rated, readSubjectKeyPage: native.readSubjectKeyPage.bind(native) }, ratings };
 }

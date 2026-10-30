@@ -1,0 +1,6 @@
+{
+  "script": {
+    "lang": "mustache",
+    "source": "{\n  \"query\": {{#toJson}}query{{/toJson}},\n  \"size\": {{#toJson}}size{{/toJson}},\n  \"pit\": {\"id\": {{#toJson}}pit{{/toJson}}, \"keep_alive\": \"1m\"},\n  \"track_total_hits\": false,\n  \"_source\": [\"partition\", \"security_revision\"]\n}"
+  }
+}

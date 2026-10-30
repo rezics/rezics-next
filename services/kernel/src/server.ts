@@ -25,6 +25,8 @@ import { createSearchService } from './search/service.ts';
 import { readSearchConfig, type SearchConfig } from './search/work.ts';
 import { createAccess, type AccessConfig } from './access/index.ts';
 import type { AuthenticationConfig } from './access/authenticate.ts';
+import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from './search/public-runtime.ts';
+import { createPublicPreparationStore } from './search/public-preparation-store.ts';
 import type { AccessFactory } from './request/access.ts';
 import { MAX_BODY_LIMIT } from './http/body.ts';
 
@@ -208,6 +210,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   // One client for the process. The server enqueues no index work and runs no relay.
   const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
   let app: ReturnType<typeof createKernel> | undefined;
+  let publicFilters: DefaultPublicFilterRuntime | undefined;
   let workClient: ReturnType<typeof createWorkClient> | undefined;
   let contentWorkflows: Promise<NativeAuthorErasureWorkflows> | undefined;
   const workflows = (): Promise<NativeAuthorErasureWorkflows> =>
@@ -246,6 +249,17 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       rateAttribution: defaults.rateAttribution,
       clock: defaults.clock,
       access: defaults.access,
+      onAccessReady(access) {
+        if (openSearch && searchConfig)
+          publicFilters = createDefaultPublicFilterRuntime({
+            pool,
+            routeKey: config.routeKey,
+            access,
+            search: openSearch,
+            prefix: searchConfig.prefix,
+            clock: defaults.clock,
+          });
+      },
       content: { ...config.content, workflows: operationWorkflows },
       ratePeer: (request) => peers.get(request),
       ...(openSearch === undefined || searchConfig === undefined || rated === undefined
@@ -258,6 +272,21 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               source: rated.source,
               ratings: rated.ratings,
               cursors: config.tokens,
+              clock: defaults.clock,
+              publicFilters: () => {
+                if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
+                return publicFilters;
+              },
+              async preparePublic(job) {
+                await createPublicPreparationStore(pool, await client, searchConfig.prefix).retain(
+                  {
+                    kind: 'repair',
+                    key: JSON.stringify(job),
+                    job,
+                  },
+                  Date.now() + 24 * 60 * 60 * 1000,
+                );
+              },
             }),
           }),
       ...(commerce === null
@@ -325,6 +354,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         } finally {
           try {
             await boot.catch(() => {});
+            await publicFilters?.close();
             if (workClient) await (await workClient).close();
           } finally {
             await pool.end();

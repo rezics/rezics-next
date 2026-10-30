@@ -26,7 +26,7 @@ export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
 
-const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE].map((name) => ({
+const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2'].map((name) => ({
   name,
   body: JSON.parse(readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8')) as unknown,
 }));

@@ -40,6 +40,7 @@ export function createSubjectIndexer(options: {
   aroundApply?: SubjectApplyGuard;
   /** Trusted native runner composition; independent of aroundApply/privacy repair. */
   writer?: SearchWriterGuard;
+  envelopes?: number;
 }): Relay {
   return {
     consumer: options.consumer,
@@ -47,6 +48,7 @@ export function createSubjectIndexer(options: {
       return projectBatch(options.pool, {
         consumer: options.consumer,
         partition,
+        ...(options.envelopes === undefined ? {} : { envelopes: options.envelopes }),
         apply: async (envelopes) => {
           const apply = async () => {
             const ids: string[] = [];
@@ -90,47 +92,10 @@ export function createSubjectIndexer(options: {
 
             // Every chunk must cover the entire captured batch that this apply will acknowledge.
             const obligation = envelopes.at(-1)!.position;
-            const chunkSize = options.writer ? SEARCH_IDENTITY_WRITER_CHUNK : 256;
-            for (let offset = 0; offset < ids.length; offset += chunkSize) {
-              const chunk = ids.slice(offset, offset + chunkSize);
-              if (options.writer) {
-                await options.writer.write(partition, chunk, obligation);
-                continue;
-              }
-              const snapshot = await options.source.read(partition, chunk);
-              const subjects = validateIndexObservation(snapshot, partition, chunk, obligation);
-              const indexIds = chunk.filter((id) => {
-                const subject = subjects.get(id);
-                return subject?.visibility === 'visible' && subject.redirect === null;
-              });
-              const counts = indexIds.length === 0 ? undefined : await options.listing.read(partition, indexIds);
-              const actions = await prepareBoundedSortKeys(
-                options.search,
-                options.index,
-                documentActions(snapshot, chunk, counts),
-              );
-              await writeIndexActions(options.search, options.index, actions);
-            }
+            for (let offset = 0; offset < ids.length; offset += 1000)
+              await applySubjectKeys(options, partition, ids.slice(offset, offset + 1000), obligation);
           };
-          if (!options.aroundApply) return apply();
-          let applied: Promise<void> | undefined;
-          let duplicate = false;
-          let open = true;
-          try {
-            await options.aroundApply(partition, envelopes, () => {
-              if (!open) throw new Error('Subject apply guard has already returned');
-              if (applied) {
-                duplicate = true;
-                throw new Error('Subject apply may only run once');
-              }
-              applied = apply();
-              return applied;
-            });
-          } finally {
-            open = false;
-          }
-          if (duplicate || !applied) throw new Error('Subject apply guard must run apply exactly once');
-          await applied;
+          await guardedApply(options.aroundApply, partition, envelopes, apply);
         },
       });
     },
@@ -206,4 +171,66 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
       });
     },
   };
+}
+
+/** Invoke the supplied native writer guard exactly once; this wrapper creates no authority. */
+async function guardedApply(
+  guard: SubjectApplyGuard | undefined,
+  partition: number,
+  envelopes: readonly Envelope[],
+  apply: () => Promise<void>,
+): Promise<void> {
+  if (!guard) return apply();
+  let applied: Promise<void> | undefined;
+  let duplicate = false;
+  let open = true;
+  try {
+    await guard(partition, envelopes, () => {
+      if (!open) throw new Error('Subject apply guard has already returned');
+      if (applied) {
+        duplicate = true;
+        throw new Error('Subject apply may only run once');
+      }
+      applied = apply();
+      return applied;
+    });
+  } finally {
+    open = false;
+  }
+  if (duplicate || !applied) throw new Error('Subject apply guard must run apply exactly once');
+  await applied;
+}
+
+/** The sole ordinary writer path, shared by finite cold population and event replay. */
+export async function applySubjectKeys(
+  options: Pick<Parameters<typeof createSubjectIndexer>[0], 'search' | 'source' | 'listing' | 'index' | 'writer'>,
+  partition: number,
+  ids: readonly string[],
+  obligation: bigint,
+  guard?: SubjectApplyGuard,
+): Promise<void> {
+  if (ids.length > 1000) throw new RangeError('A public population step accepts at most 1000 keys');
+  await guardedApply(guard, partition, [], async () => {
+    const chunkSize = options.writer ? SEARCH_IDENTITY_WRITER_CHUNK : 256;
+    for (let offset = 0; offset < ids.length; offset += chunkSize) {
+      const chunk = ids.slice(offset, offset + chunkSize);
+      if (options.writer) {
+        await options.writer.write(partition, chunk, obligation);
+        continue;
+      }
+      const snapshot = await options.source.read(partition, chunk);
+      const subjects = validateIndexObservation(snapshot, partition, chunk, obligation);
+      const indexIds = chunk.filter((id) => {
+        const subject = subjects.get(id);
+        return subject?.visibility === 'visible' && subject.redirect === null;
+      });
+      const counts = indexIds.length === 0 ? undefined : await options.listing.read(partition, indexIds);
+      const actions = await prepareBoundedSortKeys(
+        options.search,
+        options.index,
+        documentActions(snapshot, chunk, counts),
+      );
+      await writeIndexActions(options.search, options.index, actions);
+    }
+  });
 }

@@ -165,6 +165,7 @@ async function rebuild(): Promise<void> {
   const pool = createPool(databaseUrl);
   try {
     const result = await rebuildSubjects({
+      publication: 'native',
       pool,
       search: createOpenSearch(config.url),
       source: createRatedSubjectSource(pool, routeKey).source,

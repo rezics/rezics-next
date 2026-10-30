@@ -11,7 +11,7 @@ import type {
   PrivacyReductionStart,
 } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import type { SearchPlan, SearchResult } from './query.ts';
+import type { SearchPlan, SearchResult, SubjectHit } from './query.ts';
 
 /** The ONE queried-observation type. Internal native locators, never public transport fields.
  * Each locator resolves to retained native execution/registration state; its shape proves nothing.
@@ -33,6 +33,25 @@ export type PublicFilterConsumerCaptureInput = Readonly<
     text: TextNode | undefined;
   }
 >;
+
+/** Prefix is its own canonical semantic input, never a TextNode or caller DSL. */
+export type PublicSuggestionCaptureInput = Readonly<{
+  purpose: 'suggest';
+  prefix: string;
+  size: number;
+  generation?: number;
+  filterDocument: undefined;
+  text: undefined;
+}>;
+
+/** Retained by the same custody registry and resolved by the same native Source definition. */
+export type PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput |
+  (PublicSuggestionCaptureInput & Readonly<{ after?: never }>);
+
+export type PublicSuggestionQuery =
+  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> &
+      Readonly<{ result: readonly SubjectHit[] }>)
+  | Exclude<PublicFilterConsumerQuery, { status: 'queried' }>;
 
 /** Actual caller request/worker deadline. Domain clock is installed once at the trusted factory. */
 export type PublicFilterConsumerContext = Readonly<{ deadline: number }>;
@@ -106,7 +125,7 @@ export type PublicFilterConsumerRepair =
 /** Closed native boundary; there is no ACK setter, caller repair input or Boolean evaluator. */
 export interface PublicFilterConsumerOperations {
   capture(
-    request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
+    request: Readonly<{ plan: PublicCanonicalCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerCapture>;
   query(

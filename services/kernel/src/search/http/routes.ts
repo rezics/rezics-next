@@ -19,7 +19,7 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { admitGroup } from '../../access/gates/admission.ts';
-import { createSearchService, requiresAdvancedSearch } from '../service.ts';
+import { createSearchService, requiresAdvancedSearch, type PublicSearchPage } from '../service.ts';
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
@@ -109,8 +109,14 @@ const searchResponse = t.Object(
   },
   object,
 );
-type SearchHttpResponse = Static<typeof searchResponse>;
 type SearchHttpBase = Static<typeof genericBase>;
+type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
+  subjects: (PublicSearchPage['subjects'][number] & {
+    summary: SubjectSummary | null;
+    kind: string;
+    base: SearchHttpBase;
+  })[];
+};
 const facetResponse = t.Object(
   {
     facets: t.Array(
@@ -339,19 +345,26 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const active = await activeRelease(pool);
-          const page = await fill(
-            await search.search(
-              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-              body,
-              clock().getTime(),
-              active,
-            ),
-            authorize,
-            body.languages,
+          let completed: SearchHttpResponse | undefined;
+          await search.search(
+            actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+            body,
+            clock().getTime(),
             active,
+            {
+              deadline: job.deadline,
+              async complete(page) {
+                completed = publicBases(
+                  await fill(page, authorize, body.languages, active),
+                  body.languages ?? [],
+                  active,
+                );
+              },
+            },
           );
+          if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           await trending.submitted(actor, body);
-          return publicBases(page, body.languages ?? [], active) satisfies SearchHttpResponse;
+          return completed;
         });
       },
     )
@@ -446,7 +459,15 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return fill(await search.suggest(query.q, query.limit, query.languages), authorize, query.languages);
+          let completed: Static<typeof suggestResponse> | undefined;
+          await search.suggest(query.q, query.limit, query.languages, {
+            deadline: job.deadline,
+            async complete(page) {
+              completed = await fill(page, authorize, query.languages);
+            },
+          });
+          if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+          return completed;
         });
       },
     );

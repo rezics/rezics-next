@@ -1,3 +1,4 @@
+import { readSubjectKeyPage, type SubjectSourceKeyPages } from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
 import { readRelease } from './definitions.ts';
 import type { Pool, PoolClient } from 'pg';
@@ -180,8 +181,9 @@ async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T
   });
 }
 
-export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource {
+export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages {
   return {
+    readSubjectKeyPage,
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
       if (ids.length > 256) throw new TypeError('A subject snapshot accepts at most 256 ids');
