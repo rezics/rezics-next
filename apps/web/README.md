@@ -822,10 +822,10 @@ Space response at 390 and 1280 pixels.
 - **Touches:** One session read, then one kernel write: `POST /v1/collections`, `PATCH` or `DELETE
   /v1/collections/<id>?revision=…`, `POST …/members/<memberId>:move`, `PATCH` or `DELETE …/members/<memberId>`, or
   `PUT`/`DELETE /v1/follows/<id>`. A move sends only the member and its `after` neighbour and never reads the member
-  list. The collection page of a signed-in person who is not the curator of a public collection adds one
+  list. The collection page of a signed-in person who is not the curator of a public or unlisted collection adds one
   `GET /v1/follows/<id>?view=FULL` after its own two reads, with the session credential it already holds.
 - **Bound:** 1 D, 1 K, 0 R and 0 A for each change, independent of the collection's size. The follow state is one more
-  kernel read, and the curator's page has none.
+  kernel read. The curator's collection loader has none; its browser control reads the own edge separately.
 - **Growth check:** `tests/library-collection-editing-cost.test.ts`: `collection editing stays within its bound as the collection grows`
 
 ### Collection page
@@ -842,6 +842,29 @@ Space response at 390 and 1280 pixels.
 - **Bound:** Each page uses 1 K, 1 D, 0 R and 0 A and returns at most 100 entries. Unfollow uses at most 1 K and 1 D;
   no page does one read per collection or followed target.
 - **Growth check:** `tests/library-mine-cost.test.ts`: `my collections and following stay within their bound as list size grows`
+
+### Follow controls
+
+The control placement from [follow research](../../docs/research/accounts-design-follows.md) is adopted for existing
+Subject, linked agent Subject, Space, curated/dynamic Collection and private Following pages. An agent page uses its
+actual catalogue Subject ID; there is no Account target or required handle navigation. Removal uses `follow.delete`
+independently of `follow.put`, edge-read or target-read availability. It retains the stored original edge ID,
+including when Following's embedded target is unavailable. Native own-edge removal corrections belong to Commerce;
+the interface preserves a refused removal and never bypasses the native command.
+
+Controls mount after browser session preparation. A new target control shares one keyed private BASIC edge read;
+Collections and Following reuse their existing private read, with no read per row or per button. A Collection
+curator gets one browser BASIC read. Missing edges and failed reads remain distinct. Each write uses one prepared
+session and one native PUT/DELETE with CSRF and an idempotency key retained across ambiguous retries. Conflicts and
+permission failures stay visible. Follows convey no read grant, membership, Library fact or entitlement, and these
+controls read no follower counts.
+
+`Patterns/Following/Follow control` uses the real presenter in `Pages`, with IDs
+`patterns-following-follow-control--follow-and-remove`, `--delete-only`, `--unavailable-target`, `--loading`,
+`--pending`, `--ambiguous-retry`, `--conflict` and `--revoked`. Review the same IDs at 390/1280 through locale and
+theme globals. `Pages/Library/Following` adds `--remove-unavailable-target` using the recorded list plus its existing
+contract-shaped DELETE fake. Root screenshot review and postintegration acceptance remain pending; typing alone
+does not establish either outcome.
 
 ### Settings page
 

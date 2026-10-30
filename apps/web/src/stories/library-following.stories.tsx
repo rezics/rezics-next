@@ -119,6 +119,31 @@ export const ListRowBehavior: Story = {
   render: () => FollowingStory(),
 };
 
+export const RemoveUnavailableTarget: Story = {
+  render: () => FollowingStory('hidden'),
+  play: async ({ canvasElement, ...context }) => {
+    await pageReady({ canvasElement, ...context });
+    const canvas = within(canvasElement);
+    const unavailable = await canvas.findAllByText(m.library_subject_unavailable(), { exact: true });
+    const row = unavailable[0]!.closest<HTMLElement>('[data-slot="list-row"]');
+    if (!row) throw new globalThis.Error('Unavailable follow row is missing');
+    await expect(within(row).queryByRole('link')).toBeNull();
+    await userEvent.click(
+      within(row).getByRole('button', {
+        name: m.library_follow_more_actions({ title: m.library_subject_unavailable() }),
+      }),
+    );
+    const body = within(canvasElement.ownerDocument.body);
+    const remove =
+      body.queryByRole('menuitem', { name: m.library_follow_unfollow() }) ??
+      body.getByRole('button', { name: m.library_follow_unfollow() });
+    await userEvent.click(remove);
+    await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
+    await expect(row).not.toBeInTheDocument();
+    await expect(canvas.getAllByText(m.library_subject_unavailable(), { exact: true })).toHaveLength(1);
+  },
+};
+
 export const UnfollowMenuDesktop: Story = {
   parameters: {
     viewport: {

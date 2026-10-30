@@ -24,7 +24,6 @@ import {
   moveCollectionMember,
   removeCollectionMember,
   restoreCollectionMember,
-  setCollectionFollow,
   updateCollection,
   updateMemberNote,
   type CollectionWriteResult,
@@ -43,6 +42,7 @@ import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { EllipsisIcon, Share2Icon } from 'lucide-react';
 import { collectionMemberRatio, reorderCollectionMembers } from './collection-presentation';
+import { FollowTargetControl } from './follow-target-control';
 import {
   CollectionMemberList,
   CollectionPresentationFields,
@@ -233,7 +233,6 @@ export function CollectionPage({
   const queryClient = useQueryClient();
   const updateAdmitted = useOperation('collection.update');
   const owner = page.visibility !== null && updateAdmitted;
-  const canFollow = useOperation('follow.put');
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
   const navigationCollections = navigation.data?.collections ?? [];
@@ -252,7 +251,6 @@ export function CollectionPage({
   const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'public');
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState('');
-  const [following, setFollowing] = useState(page.following);
   const [pending, setPending] = useState(false);
   const snapshot = [
     page.id,
@@ -279,7 +277,6 @@ export function CollectionPage({
     setCoverMediaId(page.coverMediaId ?? null);
     setDescription(page.description ?? '');
     setVisibility(page.visibility ?? 'public');
-    setFollowing(page.following);
     setSelectedIds(new Set());
     setConflict(false);
   }, [snapshot]);
@@ -465,24 +462,6 @@ export function CollectionPage({
     window.location.assign(`/${getLocale()}/library/collections`);
   }
 
-  async function toggleFollow() {
-    if (!hydrated || pending || following === null) return;
-    setPending(true);
-    setFailure('');
-    try {
-      const result = await setCollectionFollow({
-        data: { collectionId: page.id, follow: !following, idempotencyKey: crypto.randomUUID() },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) setFollowing(!following);
-      else setFailure(writeMessage(result));
-    } catch {
-      setFailure(m.error_message());
-    } finally {
-      setPending(false);
-    }
-  }
-
   function setMemberOrder(memberId: string, after: string | null) {
     setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
@@ -593,16 +572,10 @@ export function CollectionPage({
               {m.library_collection_copy()}
             </Button>
             {owner ? <PinControlNotice notice={pinActions.notice} /> : null}
-            {canFollow && following !== null ? (
-              <Exposure operation="follow.put">
-                {following ? (
-                  <span className="self-center text-sm text-muted-foreground">{m.library_following()}</span>
-                ) : null}
-                <Button variant="outline" disabled={!hydrated || pending} onClick={() => void toggleFollow()}>
-                  {following ? m.library_follow_unfollow() : m.library_follow()}
-                </Button>
-              </Exposure>
-            ) : null}
+            <FollowTargetControl
+              targetId={page.id}
+              {...(page.visibility === null ? { following: page.following } : {})}
+            />
           </div>
         </header>
 

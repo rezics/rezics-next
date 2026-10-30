@@ -12,10 +12,7 @@ import { PinControl } from './pin-control';
 import { LibraryNavigation } from './library-nav';
 import { libraryNavigationQuery } from './pins-read';
 import { useQuery } from '@tanstack/react-query';
-import { Exposure, useOperation } from '../kernel/exposure';
-import { useSession } from '../session/query';
-import { setCollectionFollow } from './collection-edit';
-import { csrfHeaders } from '../threads/composer';
+import { FollowTargetControl } from './follow-target-control';
 import { CollectionSubjectList } from './collection-editor';
 import { AccountRef } from './account-ref';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -32,21 +29,14 @@ export function DynamicCollectionPage({
   const [current, setCurrent] = useState(page);
   const [retries, setRetries] = useState(0);
   const [retrying, setRetrying] = useState(false);
-  const [following, setFollowing] = useState(page.following ?? null);
-  const [followPending, setFollowPending] = useState(false);
-  const [followFailure, setFollowFailure] = useState(false);
   const [copyFailure, setCopyFailure] = useState(false);
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = current.pins ?? navigation.data?.pins ?? { state: 'closed' as const };
   const collections = current.navigationCollections ?? navigation.data?.collections ?? [];
-  const canFollow = useOperation('follow.put');
-  const { csrfToken } = useSession();
   useEffect(() => {
     setCurrent(page);
     setRetries(0);
     setRetrying(false);
-    setFollowing(page.following ?? null);
-    setFollowFailure(false);
     setCopyFailure(false);
   }, [page]);
   useEffect(() => {
@@ -82,23 +72,6 @@ export function DynamicCollectionPage({
       : current.builtinKind === 'liked'
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
-  async function toggleFollow() {
-    if (!csrfToken || following === null || followPending) return;
-    setFollowPending(true);
-    setFollowFailure(false);
-    try {
-      const result = await setCollectionFollow({
-        data: { collectionId: current.id, follow: !following, idempotencyKey: crypto.randomUUID() },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) setFollowing(!following);
-      else setFollowFailure(true);
-    } catch {
-      setFollowFailure(true);
-    } finally {
-      setFollowPending(false);
-    }
-  }
   async function copyLink(href: string) {
     setCopyFailure(false);
     try {
@@ -148,22 +121,7 @@ export function DynamicCollectionPage({
             </div>
           ) : null}
           {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
-          {canFollow && following !== null ? (
-            <Exposure operation="follow.put">
-              <div className="flex flex-wrap items-center gap-3">
-                {following ? <p>{m.library_following()}</p> : null}
-                <button
-                  className="inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!csrfToken || followPending}
-                  onClick={() => void toggleFollow()}
-                  type="button"
-                >
-                  {following ? m.library_follow_unfollow() : m.library_follow()}
-                </button>
-                {followFailure ? <p role="alert">{m.error_message()}</p> : null}
-              </div>
-            </Exposure>
-          ) : null}
+          <FollowTargetControl targetId={current.id} following={current.following ?? null} />
         </header>
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
         <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>

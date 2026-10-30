@@ -15,9 +15,9 @@ type RawFollow = FollowRead['follows'][number];
 
 export type MineFollow = {
   targetId: string;
-  targetType: 'subject' | 'collection' | 'space';
-  state: 'following' | 'unfollowed';
-  reason: 'explicit' | 'library' | 'membership';
+  targetType: RawFollow['targetType'];
+  state: RawFollow['state'];
+  reason: RawFollow['reason'];
   target: LibrarySubject | null;
   idempotencyKey: string;
 };

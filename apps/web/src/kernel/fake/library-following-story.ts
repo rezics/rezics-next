@@ -48,9 +48,15 @@ export const routes: FakeRoute[] = [
   {
     method: 'DELETE',
     path: /^\/v1\/follows\/[^/]+$/,
-    story: () =>
-      mode === 'unfollow-failure'
-        ? { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' }
-        : { status: 204 },
+    story: ({ request }) => {
+      if (mode === 'unfollow-failure')
+        return { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' };
+      const page = list();
+      const targetId = decodeURIComponent(new URL(request.url).pathname.split('/').at(-1)!);
+      const found = 'follows' in page ? page.follows.find((follow) => follow.targetId === targetId) : undefined;
+      if (!found) return { status: 404, code: 'not_found' };
+      const { target: _target, ...follow } = found;
+      return { status: 200, follow: { ...follow, state: 'unfollowed' } };
+    },
   },
 ];

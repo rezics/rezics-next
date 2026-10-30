@@ -50,6 +50,16 @@ const removed = new Map<
   { member: (typeof members)[number]; index: number; deletionId: string; revision: number; deadline: number }
 >();
 let following = false;
+const followResponse = () => ({
+  status: 200,
+  follow: {
+    targetId: baseCollection.id,
+    targetType: 'collection',
+    state: following ? 'following' : 'unfollowed',
+    reason: 'explicit',
+    updatedAt: baseCollection.updatedAt,
+  },
+});
 const receipts = new Map<string, KernelRecording>();
 let finishPendingSave: (() => void) | undefined;
 const itemIds = members.map((member) => member.id);
@@ -186,23 +196,23 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET',
-    path: /^\/v1\/follows\/[^/]+$/,
-    story: () => ({ status: 200, follow: { state: following ? 'following' : 'not_following' } }),
+    path: new RegExp(`^/v1/follows/${baseCollection.id}$`),
+    story: followResponse,
   },
   {
     method: 'PUT',
-    path: /^\/v1\/follows\/[^/]+$/,
+    path: new RegExp(`^/v1/follows/${baseCollection.id}$`),
     story: () => {
       following = true;
-      return { status: 204 };
+      return followResponse();
     },
   },
   {
     method: 'DELETE',
-    path: /^\/v1\/follows\/[^/]+$/,
+    path: new RegExp(`^/v1/follows/${baseCollection.id}$`),
     story: () => {
       following = false;
-      return { status: 204 };
+      return followResponse();
     },
   },
   {

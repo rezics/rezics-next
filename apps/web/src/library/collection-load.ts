@@ -340,7 +340,7 @@ export async function loadEditableCollectionPage(
   );
   const owner = viewer !== undefined && viewer === curatedCollection.curatorAccountId;
   const following =
-    authorization && viewer !== undefined && !owner && curatedCollection.visibility === 'public'
+    authorization && !owner && curatedCollection.visibility !== 'private'
       ? await readCollectionFollow(client, input.id, authorization)
       : null;
   const visibleMembers = owner ? members.members : members.members.filter((member) => member.subject != null);

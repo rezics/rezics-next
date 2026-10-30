@@ -383,11 +383,10 @@ export async function readCollectionFollow(
     });
     const status = typeof result.status === 'number' ? result.status : result.error?.status;
     if (status === 404) return false;
-    if (result.error) return null;
-    const follow = isRecord(result.data) ? result.data.follow : undefined;
-    return isRecord(follow) && follow.state === 'following';
+    if (result.error || !result.data?.follow || !['following', 'unfollowed'].includes(result.data.follow.state))
+      return null;
+    return result.data.follow.state === 'following';
   } catch {
-    // A closed or failing follow read hides the button without hiding the collection.
     return null;
   }
 }

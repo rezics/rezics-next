@@ -4,6 +4,7 @@ import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { ThreadReactions } from '../../threads/thread-reactions';
 import type { SubjectReactions } from './subject-reactions';
+import { FollowTargetControl } from '../../library/follow-target-control';
 
 /**
  * The reaction cluster and the overflow menu in the subject header's action area, with any other action (the
@@ -56,14 +57,13 @@ export function SubjectHeaderActions({
           <PostActions target={{ kind: 'subject', id }} verification={verification} />
         </div>
       </div>
-      {children ? (
-        <div
-          className="flex min-w-0 flex-wrap items-center gap-2 sm:col-start-1 sm:row-start-2"
-          data-slot="subject-library-actions"
-        >
-          {children}
-        </div>
-      ) : null}
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-2 sm:col-start-1 sm:row-start-2"
+        data-slot="subject-library-actions"
+      >
+        {children}
+        <FollowTargetControl targetId={id} />
+      </div>
     </>
   );
 }
