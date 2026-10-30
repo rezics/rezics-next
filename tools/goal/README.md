@@ -699,6 +699,32 @@ the train.
 
 ## Commands and managers
 
+### Roles and delegation
+
+The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
+
+- **Managers talk to each other first.** Any manager may message any other with
+  `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
+  to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
+  exchange and record it in the owner document.
+- **Managers decide inside their Goal.** Contract details, frozen expectations the Goal owns, design choices within the
+  maintainer's references, and which slices to run are the manager's decisions. When unsure, research primary sources
+  first, then decide.
+- **Escalate rarely and once.** A manager sends the supermanager only a deadlock that one exchange between owners did
+  not settle, a change to the maintainer's direction or scope, or something only the maintainer can provide, with the
+  options and a recommendation.
+- **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
+  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal, promotion and the hourly
+  efficiency report are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  that owns the check scripts. System alerts go to those owners.
+- **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
+  visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
+  product Goal owns its user journeys end to end, pages included.
+- **The supermanager keeps direction.** Direction, priorities and scope with the maintainer, the allowance runway,
+  critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
+  every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
+
+
 ### Check result reuse
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
