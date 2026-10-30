@@ -618,6 +618,28 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   default worker/native vote composition, the current disclosed total, PIT/live top-N behavior, or constant engine
   postings, sort or latency work.
 
+### Ordinary native hit receipt admission
+
+- Touches: `query-payload.ts` admits the complete bounded ordinary hit page before `query.ts` returns candidates
+  to current Source disclosure or continuation signing. Every root has an exact canonical physical index name,
+  a positive safe generation matching the requested generation when supplied, and a unique UUID aligned with its
+  final sort field. Invalid receipts throw `SearchUnavailableError`; the service returns `503 index_not_ready`
+  without a page or cursor. Direct malformed `after` tuples reject before engine I/O.
+- Ordering uses the actual native fields: relevance score descending then id ascending; name ascending then id;
+  collections count descending (missing zero), name ascending then id; or id ascending. Keyword comparison uses
+  unsigned UTF-8 bytes, with missing names last. Each adjacent tuple strictly increases and the first strictly
+  advances beyond a supplied frontier. Normalized-name ties, null-name ties resolved by id, and empty pages remain
+  valid. Rating phases and cursor encoding retain their separate existing contracts.
+- Bound: One identity set and adjacent tuple comparisons over `k <= 200` existing hits, `O(k)` identities and work
+  linear in returned tuple bytes. No extra engine, SQL or Source request, per-hit I/O, refill round or fetch limit.
+  Native sorting/counting work remains match-dependent; admission does not establish whole-index privacy.
+- Evidence: `test/search/keyset-receipts.test.ts` retains the direct duplicate-root rejection.
+  `test/search/query.test.ts` executes native ordinary keysets and corrupts only clones of their actual receipts;
+  `test/search/service.test.ts` proves rejection before current Source or signing, valid keysets/refills/empty pages,
+  and fixed returned-hit bytes, calls and Source rows at 64/512/4096 unrelated roots and overwritten native versions.
+  Requests, original replies, mutations and counters are recorded in check output. Controlled Source counters prove
+  this admission boundary only; native permission, Source privacy, physical population and erasure remain separate.
+
 ### Bounded native name sort
 
 - Touches: The helper deduplicates distinct nonnull raw names and sends one `_analyze` request per name before bulk;

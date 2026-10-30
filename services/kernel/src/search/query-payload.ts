@@ -17,8 +17,47 @@ function safeCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER): value is 
 
 function uuid(value: unknown): value is string {
   return (
-    typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+    typeof value === 'string' &&
+    value.length === 36 &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
   );
+}
+
+type Sort = 'relevance' | 'name' | 'id' | 'collections' | 'rating';
+type SortValue = string | number | null;
+type KeysetPlan = { sort: Sort; after?: readonly SortValue[] };
+
+function sortTuple(value: unknown, sort: Sort): value is SortValue[] {
+  if (!Array.isArray(value) || !uuid(value.at(-1))) return false;
+  if (sort === 'id') return value.length === 1;
+  if (sort === 'name') return value.length === 2 && (value[0] === null || typeof value[0] === 'string');
+  if (sort === 'collections')
+    return value.length === 3 && safeCount(value[0]) && (value[1] === null || typeof value[1] === 'string');
+  if (sort === 'relevance') return value.length === 2 && typeof value[0] === 'number' && Number.isFinite(value[0]);
+  return false;
+}
+
+/** Ordinary native search_after has exactly the same field layout as its hit tuples. */
+export function validateSearchAfter(plan: KeysetPlan): void {
+  if (plan.after !== undefined && !sortTuple(plan.after, plan.sort)) throw new RangeError('Invalid Search after tuple');
+}
+
+function compareValue(left: SortValue, right: SortValue): number {
+  if (left === right) return 0;
+  // Ascending keyword sorts use missing-last and Lucene's unsigned UTF-8 term order.
+  if (left === null) return 1;
+  if (right === null) return -1;
+  if (typeof left === 'string' && typeof right === 'string')
+    return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
+  return left < right ? -1 : 1;
+}
+
+function compareTuple(left: readonly SortValue[], right: readonly SortValue[], sort: Sort): number {
+  for (let field = 0; field < left.length; field++) {
+    const order = compareValue(left[field]!, right[field]!);
+    if (order !== 0) return field === 0 && (sort === 'relevance' || sort === 'collections') ? -order : order;
+  }
+  return 0;
 }
 
 function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
@@ -52,39 +91,36 @@ function hitsOf(body: unknown, maximum: number, total: boolean): RecordValue[] {
 
 export function admitSearchPayload(
   body: unknown,
-  plan: { size: number; sort: 'relevance' | 'name' | 'id' | 'collections' | 'rating'; generation?: number },
+  plan: KeysetPlan & { size: number; generation?: number },
   prefix: string,
 ): asserts body is RecordValue {
   const hits = hitsOf(body, plan.size, true);
-  const physicalIndex = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
+  if (plan.after !== undefined && !sortTuple(plan.after, plan.sort)) fail();
+  if (plan.generation !== undefined && (!safeCount(plan.generation) || plan.generation === 0)) fail();
+  const physicalPrefix = `${prefix}subjects-g`;
+  const ids = new Set<string>();
+  let previous = plan.after;
   for (const hit of hits) {
-    const index = physicalIndex.exec(hit._index as string);
-    if (!index || (plan.generation !== undefined && Number(index[1]) !== plan.generation)) fail();
+    const index = hit._index as string;
+    const generation = Number(index.slice(physicalPrefix.length));
     if (
-      !Array.isArray(hit.sort) ||
+      !safeCount(generation) ||
+      generation === 0 ||
+      index !== `${physicalPrefix}${generation}` ||
+      (plan.generation !== undefined && generation !== plan.generation)
+    )
+      fail();
+    if (
+      !sortTuple(hit.sort, plan.sort) ||
       ('matched_queries' in hit &&
         (!Array.isArray(hit.matched_queries) || !hit.matched_queries.every((item) => typeof item === 'string')))
     )
       fail();
-    const tuple = hit.sort as unknown[];
-    const id = tuple[plan.sort === 'id' ? 0 : tuple.length - 1];
-    if (!uuid(id)) fail();
-    if (plan.sort === 'id') {
-      if (tuple.length !== 1 || tuple[0] !== hit._id) fail();
-    } else if (plan.sort === 'name') {
-      if (tuple.length !== 2 || (tuple[0] !== null && typeof tuple[0] !== 'string') || tuple[1] !== hit._id) fail();
-    } else if (plan.sort === 'collections') {
-      if (
-        tuple.length !== 3 ||
-        !safeCount(tuple[0]) ||
-        (tuple[1] !== null && typeof tuple[1] !== 'string') ||
-        tuple[2] !== hit._id
-      )
-        fail();
-    } else if (plan.sort === 'relevance') {
-      if (tuple.length !== 2 || typeof tuple[0] !== 'number' || !Number.isFinite(tuple[0]) || tuple[1] !== hit._id)
-        fail();
-    } else fail();
+    const tuple = hit.sort as SortValue[];
+    if (tuple.at(-1) !== hit._id || ids.has(hit._id as string)) fail();
+    if (previous !== undefined && compareTuple(previous, tuple, plan.sort) >= 0) fail();
+    ids.add(hit._id as string);
+    previous = tuple;
   }
 }
 

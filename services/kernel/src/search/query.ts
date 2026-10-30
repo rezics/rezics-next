@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
-import { admitFacetPayload, admitSearchPayload, admitSuggestPayload, requireSearchOverflow } from './query-payload.ts';
+import {
+  admitFacetPayload,
+  admitSearchPayload,
+  admitSuggestPayload,
+  requireSearchOverflow,
+  validateSearchAfter,
+} from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
@@ -111,6 +117,7 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
   validateSize(plan.size, 200);
   if (plan.sort === 'rating')
     return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
+  validateSearchAfter(plan);
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
   const sort =
