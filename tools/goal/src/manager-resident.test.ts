@@ -379,8 +379,12 @@ test('resident recovery, watcher dispatch, limits and lifecycle commands never m
       limits: { turns: 1, turnsWithoutDecision: 1, wallMs: 1000 },
     };
     await expect(s.managers.stop('supermanager')).rejects.toThrow('external session');
-    await expect(s.managers.renew('supermanager', managerSpec)).rejects.toThrow('external session');
-    await expect(s.managers.completeCommand('supermanager')).rejects.toThrow('external session');
+    await expect(Promise.resolve().then(() => s.managers.renew('supermanager', managerSpec))).rejects.toThrow(
+      'external session',
+    );
+    await expect(Promise.resolve().then(() => s.managers.completeCommand('supermanager'))).rejects.toThrow(
+      'external session',
+    );
     await expect(Promise.resolve().then(() => s.managers.complete('supermanager'))).rejects.toThrow('external session');
     await expect(s.managers.claudeTurn('supermanager', true)).rejects.toThrow('external session');
     await s.managers.wake('supermanager');
