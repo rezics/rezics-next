@@ -55,7 +55,12 @@ test('the curated compatibility reader distinguishes a preparing response from a
           : Response.json(recording);
       },
     });
-    const page = loadCollectionPage(client, new Request('https://web.test/collection'), {}, { id: recording.collection.id });
+    const page = loadCollectionPage(
+      client,
+      new Request('https://web.test/collection'),
+      {},
+      { id: recording.collection.id },
+    );
     if (status === 202) {
       await expect(page).rejects.toThrow('Collection preparation requires the dedicated membership reader');
     } else {

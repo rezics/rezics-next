@@ -114,8 +114,8 @@ export const Reordering: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     const row = within(firstRow(canvasElement));
-    const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map(
-      (name) => row.getByRole('button', { name }),
+    const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map((name) =>
+      row.getByRole('button', { name }),
     );
     const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
     for (const control of controls) {
@@ -126,11 +126,7 @@ export const Reordering: Story = {
     for (let index = 1; index < controls.length; index++) {
       const previous = controls[index - 1]!.getBoundingClientRect();
       const current = controls[index]!.getBoundingClientRect();
-      const gap = Math.max(
-        current.left - previous.right,
-        previous.left - current.right,
-        current.top - previous.bottom,
-      );
+      const gap = Math.max(current.left - previous.right, previous.left - current.right, current.top - previous.bottom);
       await expect(gap).toBeGreaterThanOrEqual(index === 2 && current.top < previous.bottom ? 16 : 8);
     }
     const down = within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_move_down() });
