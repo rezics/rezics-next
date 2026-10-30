@@ -276,7 +276,7 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     if (wireStatement) wireStatement.parsed = true;
     const record = wireStatement?.record;
     const result = parse(statement, more);
-    if (record) record.requestBytes += Buffer.byteLength(statement.text, 'utf8');
+    if (record && typeof statement.text === 'string') record.requestBytes += Buffer.byteLength(statement.text, 'utf8');
     return result;
   }) as typeof connection.parse;
 

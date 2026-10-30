@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import type { Capture } from './growth-cost.ts';
@@ -254,20 +254,22 @@ test('name-only prepared reuse reserves its own occurrence before the first queu
   const database = db!;
   const query = 'SELECT id FROM growth_capture_test.binding_rows WHERE id <= $1::integer ORDER BY id';
   const name = `growth_capture_name_only_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  // Installed pg accepts a name-only config; @types/pg still requires text even for an already prepared name.
+  const reuse = (values: number[]) => ({ name, values }) as QueryConfig<number[]>;
   const result = await capture(database, () =>
     withConnection(database.pool, async (client) => {
       // Hold dispatch so all three occurrences are recorded before the first named Parse reaches the server.
       const holding = client.query('SELECT pg_sleep(0.01)');
       const first = client.query<{ id: number }>({ name, text: query, values: [1] });
-      const second = client.query<{ id: number }>({ name, values: [2] });
+      const second = client.query<{ id: number }>(reuse([2]));
       const third = new Promise<number[]>((resolve, reject) => {
-        client.query<{ id: number }>({ name, values: [1] }, (error, response) => {
+        client.query<{ id: number }>(reuse([1]), (error, response) => {
           if (error) reject(error);
           else resolve(response!.rows.map(({ id }) => id));
         });
       });
       const [, one, two, three] = await Promise.all([holding, first, second, third]);
-      const later = await client.query<{ id: number }>({ name, values: [2] });
+      const later = await client.query<{ id: number }>(reuse([2]));
       return [one.rows.map(({ id }) => id), two.rows.map(({ id }) => id), three, later.rows.map(({ id }) => id)];
     }),
   );
