@@ -21,16 +21,7 @@ export type ContributionTransport = {
   read: (address: ContributionAddress) => Promise<ContributionAvailability>;
 };
 
-type Options = { headers: Record<string, string> };
-type DeclaredReply = { status: number; headers: HeadersInit };
-/** Temporary declared port over Eden's existing runtime proxy, until the producer generates these methods.
- * Bodies remain opaque: the contract specifies no published deadline/eligibility DTO yet.
- * This is owner deletion, never the existing moderation $restore method.
- */
-type DeclaredContributionPort = {
-  delete: (body: undefined, options: Options) => Promise<DeclaredReply>;
-  $restoreDeleted: { post: (body: Record<string, never>, options: Options) => Promise<DeclaredReply> };
-};
+type ContributionEndpoint = ReturnType<ReturnType<KernelClient['subjects']>['candidates']>;
 
 export function contributionAddressInput(value: unknown): ContributionAddress {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid contribution command');
@@ -110,11 +101,9 @@ export async function changeContribution(
   authorization: string,
   command: ContributionCommand,
 ): Promise<ContributionResult> {
-  let response: DeclaredReply;
+  let response: Awaited<ReturnType<ContributionEndpoint['delete']>>;
   try {
-    const endpoint = client
-      .subjects({ id: command.id })
-      .candidates({ candidate: command.candidate }) as unknown as DeclaredContributionPort;
+    const endpoint = client.subjects({ id: command.id }).candidates({ candidate: command.candidate });
     const options = {
       headers: {
         authorization,
@@ -144,6 +133,18 @@ export async function changeContribution(
               ? 'invalid'
               : 'unavailable',
     };
+  const result = response.data;
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    Array.isArray(result) ||
+    Object.keys(result).length !== 3 ||
+    result.subject !== command.id ||
+    result.candidate !== command.candidate ||
+    result.deleted !== (command.operation === 'delete')
+  )
+    // The effect is uncertain. Keep the original command/key retryable without claiming a local change.
+    return { ok: false, reason: 'unavailable' };
   let session = new Headers(response.headers).get('rezics-session-token') ?? command.session;
   const current = await readContributionAvailability(client, authorization, {
     ...command,

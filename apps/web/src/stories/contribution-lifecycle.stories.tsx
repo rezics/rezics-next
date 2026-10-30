@@ -72,7 +72,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Declared-interface examples on the existing subject page. Native lifecycle binding and Web/Root visual review remain pending. Use phone390/desktop1280, light/dark and locale globals.',
+          'Generated-client lifecycle examples on the existing subject page. Native outcome proof and Web/Root visual review remain pending. Use phone390/desktop1280, light/dark and locale globals.',
       },
     },
   },

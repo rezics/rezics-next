@@ -356,8 +356,12 @@ binds this read in the existing Changes browser and selected-value explanation, 
 session BFF. Runtime validation rejects mismatched identities, unknown tags, extra fields, nonpositive heads and
 selection beyond 32. Candidate and decision readings describe the current native Context; adoption mode and selection
 describe only the recorded adoption. The existing terms presentation sample is not a served native tag. Native
-outcome checks and complete term/deletion write-adapter integration remain separate; type checking alone does not
-prove those outcomes.
+outcome checks and complete term write-adapter integration remain separate. Own-contribution withdrawal and restore
+now bind the generated candidate `delete` and `$restoreDeleted.post` methods. Their closed
+`{subject, candidate, deleted}` result must match both requested UUIDs and the requested deletion state before
+success and a current read. Current availability comes only from that read; an absent bounded candidate row proves
+neither deletion nor ownership, grants or a restore deadline. Native outcome checks and promotion to main remain
+separate; type checking alone does not prove those outcomes.
 
 Web owns the normal next visual review using the unchanged `pages-catalogue-changes--` IDs: `revisions`,
 `continue-and-explain`, `proposal`, `limited-safe-detail`, `loading`, `empty`, `denied`, `invalid`, `conflict`,
@@ -365,5 +369,5 @@ Web owns the normal next visual review using the unchanged `pages-catalogue-chan
 `pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
 there is no capture restart.
 the native selection bounds. No second history or personal-payload store is introduced. Native outcome checks,
-generated client/OpenAPI refresh and complete mutation integration remain deferred; type checking alone does
+generated client/OpenAPI refresh and complete terms mutation integration remain deferred; type checking alone does
 not prove these acceptance outcomes.

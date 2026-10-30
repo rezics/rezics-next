@@ -28,7 +28,7 @@ export function StatementCorrectionLink({
   const href = subjectHref({ id, label: title }, locale).href;
   return (
     <a
-      className="inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
+      className="ms-2 inline-flex min-h-11 items-center text-sm text-primary underline-offset-4 hover:underline"
       href={`${href}/edit?${new URLSearchParams({ property, statement })}`}
     >
       {m.correction_title({}, { locale: locale as never })}

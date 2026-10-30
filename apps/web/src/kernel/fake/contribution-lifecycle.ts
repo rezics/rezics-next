@@ -18,7 +18,7 @@ export type ContributionScenario =
   | 'withheld'
   | 'uncertain';
 
-/** Isolated declared-interface story/request seam. Never mounted in the development kernel fake. */
+/** Isolated native-interface story/request seam. Never mounted in the development kernel fake. */
 export function contributionFixture(scenario: ContributionScenario = 'ready', locale = 'en') {
   const base = candidateFixture('ready', locale);
   // This is a just-submitted native proposal in the story, not a provenance-based ownership decision.
@@ -75,12 +75,11 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
         deleted = operation === 'delete';
         receipts.set(key, operation);
       }
-      // The response schema is not published yet. Do not invent deadlines or grant fields in samples.
       if (scenario === 'uncertain' && !lost) {
         lost = true;
         throw new Error('Lost lifecycle response');
       }
-      return json({});
+      return json({ subject: base.id, candidate: base.candidate.id, deleted: operation === 'delete' });
     }
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${base.id}/candidates`) {
       if (scenario === 'withheld' && !deleted) return json({ code: 'not_found' }, 404);

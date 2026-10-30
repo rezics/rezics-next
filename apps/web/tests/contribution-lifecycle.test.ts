@@ -132,7 +132,7 @@ test('missing native binding stays unavailable, and a restore acknowledgement ca
       calls.push(native.method);
       return Response.json(
         native.method === 'POST' && bound
-          ? { statement: fixture.candidate.statement, selected: true }
+          ? { subject: input.id, candidate: input.candidate, deleted: false }
           : { code: 'not_found' },
         { status: native.method === 'POST' && bound ? 200 : 404 },
       );
@@ -151,3 +151,65 @@ test('missing native binding stays unavailable, and a restore acknowledgement ca
   expect(JSON.stringify(restored)).not.toContain('1946');
   expect(JSON.stringify(restored)).not.toContain('statement');
 });
+
+test.each(['delete', 'restore'] as const)(
+  'The existing own contribution UI consumes generated native delete and restore responses with exact identity and current availability, never treating an unrelated or contradictory 200 as success: %s',
+  async (operation) => {
+    const fixture = contributionFixture();
+    const input = command(fixture, operation);
+    const matched = { subject: input.id, candidate: input.candidate, deleted: operation === 'delete' };
+    const unexpected: unknown[] = [
+      { ...matched, subject: crypto.randomUUID() },
+      { ...matched, candidate: crypto.randomUUID() },
+      { ...matched, deleted: !matched.deleted },
+      { ...matched, deleted: String(matched.deleted) },
+      { subject: input.id, candidate: input.candidate },
+      { ...matched, statement: fixture.candidate.statement },
+      {},
+      null,
+      [],
+      'acknowledged',
+    ];
+    for (const body of unexpected) {
+      let reply = body;
+      const calls: { method: string; path: string; key: string | null; session: string | null }[] = [];
+      const client = createKernelClient('https://native-contribution.test', {
+        fetch: (async (request, init) => {
+          const native = request instanceof Request ? request : new Request(String(request), init);
+          calls.push({
+            method: native.method,
+            path: new URL(native.url).pathname,
+            key: native.headers.get('idempotency-key'),
+            session: native.headers.get('rezics-session-token'),
+          });
+          if (native.method === 'GET') return fixture.fetcher(native);
+          return Response.json(reply, { headers: { 'rezics-session-token': 'native-session' } });
+        }) as typeof fetch,
+      });
+      const snapshot = structuredClone(input);
+      expect(await changeContribution(client, 'Bearer fixture', input)).toEqual({ ok: false, reason: 'unavailable' });
+      expect(calls).toEqual([
+        {
+          method: operation === 'delete' ? 'DELETE' : 'POST',
+          path: `/v1/subjects/${input.id}/candidates/${input.candidate}${operation === 'restore' ? ':restoreDeleted' : ''}`,
+          key: input.key,
+          session: input.session!,
+        },
+      ]);
+
+      reply = matched;
+      // A validated receipt permits a fresh read; its deleted bit never supplies current availability.
+      expect(await changeContribution(client, 'Bearer fixture', input)).toMatchObject({
+        ok: true,
+        operation,
+        current: { subject: 'available', candidate: 'available', selected: false },
+      });
+      expect(input).toEqual(snapshot);
+      expect(calls[1]).toEqual(calls[0]);
+      expect(calls.slice(2).map(({ method, session }) => ({ method, session }))).toEqual([
+        { method: 'GET', session: 'native-session' },
+        { method: 'GET', session: 'native-session' },
+      ]);
+    }
+  },
+);
