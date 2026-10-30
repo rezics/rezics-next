@@ -32,7 +32,11 @@ type Credentials = { bearer: string; accountId: string };
 const publicationPositions = new Map<string, SessionComponent>();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
-const backgroundServices: (WorkService & { pause?: () => Promise<void> })[] = [];
+const backgroundServices: {
+  module: string;
+  index: number;
+  service: WorkService & { pause?: () => Promise<void> };
+}[] = [];
 
 async function refreshBearer() {
   // Native access tokens last five minutes. Issuance belongs to fixture preparation,
@@ -45,7 +49,12 @@ async function refreshBearer() {
 async function pauseBackgroundRelays() {
   // Keep the default workflow registrations and executor live. Quiesce only our
   // unrelated periodic relays so their lag heartbeats cannot race harness VACUUM.
-  for (const service of backgroundServices) {
+  // semanticWorkModule registers its one-time identity bootstrap first, then
+  // startRelays. The bootstrap stays live and completes normally during launch.
+  if (backgroundServices.filter(({ module }) => module === 'semantic').length !== 2)
+    throw new Error('Semantic startup service registration changed');
+  for (const { module, index, service } of backgroundServices) {
+    if (module === 'semantic' && index === 0) continue;
     if (!service.pause) throw new Error('Background service does not expose its native pause lifecycle');
     await service.pause();
   }
@@ -236,12 +245,14 @@ beforeAll(async () => {
   const modules = KERNEL_WORK_MODULES.map((module) => ({
     name: module.name,
     register(context: Parameters<typeof module.register>[0]) {
+      let serviceIndex = 0;
       return module.register({
         ...context,
         addService(start) {
+          const index = serviceIndex++;
           context.addService(async () => {
             const service = await start();
-            backgroundServices.push(service);
+            backgroundServices.push({ module: module.name, index, service });
             return service;
           });
         },

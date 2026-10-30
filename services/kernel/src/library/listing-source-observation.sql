@@ -16,6 +16,6 @@ SELECT CASE WHEN currently_public THEN
             AND member.subject_id = truth.subject_id)
        ELSE 0 END AS multiplicity,
        currently_public AS "currentlyPublic",
-       ever_public OR currently_public AS "everPublic"
+       coalesce(ever_public OR currently_public, false) AS "everPublic"
 FROM truth
 LIMIT 1;

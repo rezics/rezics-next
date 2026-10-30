@@ -93,7 +93,7 @@ export async function applySubjectListing({ pool, clock, client }: Dependencies,
           kind: 'library.listing.order',
           accounts: [],
           workClient: work,
-          clock,
+          ...(clock === undefined ? {} : { clock }),
           deadline,
         },
         async (tx) => {
