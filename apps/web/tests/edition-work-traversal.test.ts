@@ -306,7 +306,9 @@ test('the editions-over-twelve story transport reaches its canonical frame, prev
   expect(initial).toContain('Edition 12');
   expect(initial).not.toContain('Edition 15');
   expect(initial).toContain(`node=editions&amp;cursor=fixture-editions-next&amp;realm=${traversalRealm}`);
-  expect(initial).toContain(`/subjects/${traversalSubjects.edition.id}/the-harbour-first-edition?realm=${traversalRealm}`);
+  expect(initial).toContain(
+    `/subjects/${traversalSubjects.edition.id}/the-harbour-first-edition?realm=${traversalRealm}`,
+  );
 
   const continued = await loadSubjectPage(client, canonical.value.id, 'editions', 'en', {
     realm: traversalRealm,
@@ -348,7 +350,11 @@ test('the independent-role story transport loads both native groups and continue
     const html = render(continued.page, 'creator', 'works');
     expect(html).toContain(last);
     expect(html).toContain('Start again');
-    const plan = planReads(platformRegistry, continued.page.document as CompositionDocument, pageContext(continued.page));
+    const plan = planReads(
+      platformRegistry,
+      continued.page.document as CompositionDocument,
+      pageContext(continued.page),
+    );
     expect(Object.keys(plan.reads).length).toBeLessThanOrEqual(16);
     expect(Object.values(plan.reads).reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(128);
   }
