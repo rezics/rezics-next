@@ -309,7 +309,9 @@ async function minimize(
     );
     if (eligible.rowCount) return;
     await minimizeSemanticRecordPayload(tx, 'candidate', {
-      low: candidate.route, high: candidate.route, recordKey: key,
+      low: candidate.route,
+      high: candidate.route,
+      recordKey: key,
     });
   } else if (store === 'fact') {
     // Historical values are removed; a private latest slot keeps an empty retract marker so older values cannot reappear.

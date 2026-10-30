@@ -64,12 +64,24 @@ export async function readSemanticLifecycle(
     if (!row) return null;
     if (row.account_id !== null) owner = { kind: 'write_basis', accountId };
     const lifecycle = await client.query<{
-      state: 'active' | 'deleted' | 'purging' | 'purged'; deleted_at: string; purge_after: string; held: boolean;
-    }>(`SELECT state,deleted_at::text,purge_after::text,held FROM semantic.record_lifecycle
-      WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`, [route,target.subject,target.candidate]);
+      state: 'active' | 'deleted' | 'purging' | 'purged';
+      deleted_at: string;
+      purge_after: string;
+      held: boolean;
+    }>(
+      `SELECT state,deleted_at::text,purge_after::text,held FROM semantic.record_lifecycle
+      WHERE route=$1 AND subject_id=$2 AND candidate_id=$3`,
+      [route, target.subject, target.candidate],
+    );
     const stored = lifecycle.rows[0];
-    return { target, owner, state: stored?.state === 'purging' ? 'deleted' : stored?.state ?? 'active',
-      deletedAt: stored?.deleted_at ?? null, purgeAfter: stored?.purge_after ?? null, held: stored?.held ?? false };
+    return {
+      target,
+      owner,
+      state: stored?.state === 'purging' ? 'deleted' : (stored?.state ?? 'active'),
+      deletedAt: stored?.deleted_at ?? null,
+      purgeAfter: stored?.purge_after ?? null,
+      held: stored?.held ?? false,
+    };
   } else {
     const route = routeOf(target.context)!;
     const row = await readContext.run(client, { route, context_id: target.context });

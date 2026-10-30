@@ -4,7 +4,8 @@ import type { CommandTransaction } from '../command/command.ts';
  * immutable table guards independently enforce the permitted fields. No account-T is manufactured here.
  */
 export async function minimizeSemanticRecordPayload(
-  tx: CommandTransaction, store: 'candidate' | 'revision' | 'retraction' | 'moderation',
+  tx: CommandTransaction,
+  store: 'candidate' | 'revision' | 'retraction' | 'moderation',
   key: Readonly<{ low: number; high: number; recordKey: string }>,
 ): Promise<void> {
   const assignments = {
@@ -13,6 +14,9 @@ export async function minimizeSemanticRecordPayload(
     retraction: '"references"=\'[]\'',
     moderation: "body='{}',actor=NULL",
   };
-  await tx.query(`UPDATE semantic.${store} SET ${assignments[store]}
-    WHERE route BETWEEN $1 AND $2 AND erasure_key=$3`, [key.low,key.high,key.recordKey]);
+  await tx.query(
+    `UPDATE semantic.${store} SET ${assignments[store]}
+    WHERE route BETWEEN $1 AND $2 AND erasure_key=$3`,
+    [key.low, key.high, key.recordKey],
+  );
 }
