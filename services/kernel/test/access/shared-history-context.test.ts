@@ -146,7 +146,7 @@ test('native pending partial index redrive examines eight exact inputs, wraps af
     await holder.query('SELECT 1 FROM access.resource_role_provenance WHERE route=$1 AND occurrence=$2 FOR UPDATE',
       [route, before[0]!.occurrence]);
     const first = await drive(partitionOf(route));
-    expect(first).toEqual({ attempted: 8, pending: 8, after: before[8] });
+    expect(first).toEqual({ attempted: 8, pending: 8, after: before[8]! });
     expect(await drive(partitionOf(route), first.after!)).toEqual({ attempted: 1, pending: 1, after: null });
     await holder.query('COMMIT');
   } finally {
@@ -154,7 +154,7 @@ test('native pending partial index redrive examines eight exact inputs, wraps af
     holder.release();
   }
   const restarted = await drive(partitionOf(route));
-  expect(restarted).toEqual({ attempted: 8, pending: 8, after: before[7] });
+  expect(restarted).toEqual({ attempted: 8, pending: 8, after: before[7]! });
   expect(await drive(partitionOf(route), restarted.after!)).toEqual({ attempted: 2, pending: 2, after: null });
   const firstPage = await rows(resource);
   const lastPage = await readContextRoleProvenance(f.admin, {
