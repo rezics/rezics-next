@@ -433,9 +433,9 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
   const queryWithoutAttribution = (statement: string): unknown => {
     suppressAttribution = true;
     try {
-      // Measurement controls are not application statements. Use the captured driver entry
-      // point so a later application observer does not count this SET as application SQL.
-      return query(statement);
+      // Controls need their own neutral wire occurrence so dispatch cannot consume an application's owner.
+      // Keep this entry point stable when a later application observer wraps client.query.
+      return interceptedQuery(statement);
     } finally {
       suppressAttribution = false;
     }
@@ -456,7 +456,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     void task.then(() => state.setupTasks.delete(task));
   };
 
-  client.query = ((...args: Parameters<PoolClient['query']>) => {
+  const interceptedQuery = ((...args: Parameters<PoolClient['query']>) => {
+    const applicationQuery = !suppressAttribution;
     const name = preparedStatementName(args[0]);
     const text = statementText(args[0]) ?? (name === undefined ? undefined : preparedStatementText(client, name));
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
@@ -499,7 +500,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       queueNode: undefined,
     };
     queueWireStatement(client, wireStatement);
-    pendingQueries++;
+    if (applicationQuery) pendingQueries++;
 
     let completed = false;
     const done = (failed: boolean, result?: unknown, error?: unknown): void => {
@@ -515,7 +516,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       }
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
-      pendingQueries--;
+      if (applicationQuery) pendingQueries--;
     };
     const callback = args.at(-1);
     const track = (task: Promise<void>): void => {
@@ -580,6 +581,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     }
     return outcome;
   }) as PoolClient['query'];
+  client.query = interceptedQuery;
 
   return queryWithoutAttribution;
 }
