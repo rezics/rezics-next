@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { WorkerStore } from './store.ts';
 import { temporaryDirectory, repository } from './test-support.ts';
 
 const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -86,11 +87,19 @@ test('authenticated managers read cross-recipient filtered pages and threads wit
   const t = temporaryDirectory();
   const db = openDb(join(t.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, t.path);
+  new WorkerStore(db);
   db.run('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run('reader', JSON.stringify({
     id: 'reader', kind: 'managed', status: 'running', threadId: 'reader-thread', goal: 'reader-goal',
   }));
   inbox.deliver({ managerId: 'recipient-a', from: 'manager-a', kind: 'question', summary: 'Which signed ID?', goalId: 'goal-a', taskId: 'task-a' });
+  db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
+    'valid-worker-task', 1, 1, JSON.stringify({ id: 'valid-worker-task', currentAttempt: 1, state: 'running',
+      brief: { goal: 'worker-goal', manager: 'worker-manager' } }),
+  );
+  db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
+    'valid-worker-task', 1, JSON.stringify({ taskId: 'valid-worker-task', attempt: 1, state: 'running' }),
+  );
   const rootId = (db.query("SELECT id FROM manager_inbox WHERE summary = 'Which signed ID?'").get() as { id: number }).id;
   inbox.deliver({ managerId: 'manager-a', from: 'recipient-a', kind: 'info', summary: 'Use v2 signed IDs', goalId: 'goal-a', taskId: 'task-a', replyToId: rootId });
   inbox.deliver({ managerId: 'recipient-a', from: 'manager-a', kind: 'info', summary: 'Second matching signed detail', goalId: 'goal-a', taskId: 'task-a' });
@@ -136,7 +145,7 @@ test('authenticated managers read cross-recipient filtered pages and threads wit
 
     const claimedByNameOnly = await invoke({ ...env, CODEX_THREAD_ID: undefined }, 'inbox', 'log', '--json');
     expect(claimedByNameOnly.code).not.toBe(0);
-    const worker = await invoke({ ...env, GOAL_TASK_ID: 'task-a' }, 'inbox', 'log', '--json');
+    const worker = await invoke({ ...env, GOAL_TASK_ID: 'valid-worker-task', GOAL_ATTEMPT: '1' }, 'inbox', 'log', '--json');
     expect(worker.code).not.toBe(0);
   } finally { db.close(); t.close(); }
 });

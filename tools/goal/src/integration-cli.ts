@@ -751,25 +751,38 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         throw new Error(
           `manager ${id} has completed its Goal and reads no inbox; send to ${runtime.supermanager || 'supermanager'}`,
         );
-      const sender = resolveInboxSender(runtime);
-      await recordManagerCommand(runtime);
-      inbox.deliver({
-        managerId: id,
-        kind: kind as ManagerEventKind,
-        summary,
-        from: sender || runtime.supermanager || 'supermanager',
-        ...(taskId ? { taskId } : {}),
-        ...(values.get('--evidence')?.[0] ? { evidencePath: values.get('--evidence')![0] } : {}),
-        ...(replyToId !== undefined ? { replyToId } : {}),
-        ...(documentRefs.length ? { documentRefs } : {}),
-        ...(escalation ? { escalation } : {}),
-      });
+      const deliver = (sender: ResolvedInboxSender): ResolvedInboxSender => {
+        if (sender.worker && !['instruction', 'question', 'blocker', 'handoff', 'info'].includes(kind))
+          throw new Error('workers may send only instruction, question, blocker, handoff, or info inbox messages');
+        inbox.deliver({
+          managerId: id,
+          kind: kind as ManagerEventKind,
+          summary,
+          from: sender.from,
+          ...(sender.worker ? { senderProvenance: sender.worker } : {}),
+          ...(taskId ? { taskId } : sender.worker ? { taskId: sender.worker.taskId } : {}),
+          ...(values.get('--evidence')?.[0] ? { evidencePath: values.get('--evidence')![0] } : {}),
+          ...(replyToId !== undefined ? { replyToId } : {}),
+          ...(documentRefs.length ? { documentRefs } : {}),
+          ...(escalation ? { escalation } : {}),
+        });
+        return sender;
+      };
+      let sender: ResolvedInboxSender;
+      if (hasWorkerIdentityMarkers(process.env)) {
+        // Keep the attempt fence valid through insert so a concurrent retry cannot race source attribution.
+        sender = runtime.db.transaction(() => deliver(resolveInboxSender(runtime))).immediate();
+      } else {
+        sender = resolveInboxSender(runtime);
+        await recordManagerCommand(runtime);
+        deliver(sender);
+      }
       if (
-        sender &&
+        !sender.worker &&
         /continuation written/i.test(summary) &&
         runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()
       ) {
-        const source = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender) as {
+        const source = runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(sender.managerId) as {
           state: string;
         } | null;
         const state = source
@@ -789,12 +802,12 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           await ensureHost(runtime);
           // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
           // isolated delivery attempt; its failure must not change the inbox-send or continuation result.
-          await hostRequest(runtime.managerSocket, { command: 'decision', manager: sender }, 500).catch((error) =>
+          await hostRequest(runtime.managerSocket, { command: 'decision', manager: sender.managerId }, 500).catch((error) =>
             console.error(`manager decision audit delivery failed: ${String(error)}`),
           );
           await hostRequest(runtime.managerSocket, {
             command: 'outgoing-message',
-            manager: sender,
+            manager: sender.managerId,
             recipient: id,
             summary,
           });
@@ -805,7 +818,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       const options = parseInboxQueryOptions(args);
       if (subcommand !== 'thread' && options.reference !== undefined)
         throw new Error(`unexpected inbox argument: ${options.reference}`);
-      if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+      if (hasWorkerIdentityMarkers(process.env))
         throw new Error('workers cannot read the shared manager inbox');
       if (!authenticatedCallingManager(runtime))
         throw new Error('shared inbox reads require an authenticated manager session');
@@ -956,25 +969,72 @@ function parseInboxQueryOptions(args: string[]): InboxCliOptions {
   return options;
 }
 
-function resolveInboxSender(runtime: IntegrationRuntime): string | undefined {
+type ResolvedInboxSender = {
+  from: string;
+  managerId: string;
+  worker?: { kind: 'worker'; taskId: string; attempt: number; ownerManager: string };
+};
+
+function hasWorkerIdentityMarkers(env: NodeJS.ProcessEnv): boolean {
+  return env.GOAL_TASK_ID !== undefined || env.GOAL_ATTEMPT !== undefined;
+}
+
+function resolveInboxSender(runtime: IntegrationRuntime): ResolvedInboxSender {
   const env = process.env;
-  if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT) throw new Error('workers cannot send manager inbox messages');
+  if (hasWorkerIdentityMarkers(env)) return resolveWorkerInboxSender(runtime, env);
   const hasProviderIdentity = Boolean(env.CODEX_THREAD_ID || env.CLAUDE_CODE_SESSION_ID);
   const authenticated = authenticatedCallingManager(runtime, env);
-  if (authenticated) return authenticated.id;
+  if (authenticated) return { from: authenticated.id, managerId: authenticated.id };
   if (hasProviderIdentity) throw new Error('inbox sender identity does not match an authenticated manager session');
-  if (runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) {
-    const active = (runtime.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).some(({ state }) => {
-      try {
-        const parsed = JSON.parse(state) as { status?: unknown; threadId?: unknown; kind?: unknown };
-        return parsed.status === 'running' && typeof parsed.threadId === 'string' &&
-          (parsed.kind === undefined || parsed.kind === 'managed' || parsed.kind === 'resident-supermanager');
-      } catch { return false; }
-    });
-    if (active) throw new Error('inbox sender identity requires an authenticated manager session');
+  throw new Error('inbox send requires an authenticated manager session');
+}
+
+function resolveWorkerInboxSender(runtime: IntegrationRuntime, env: NodeJS.ProcessEnv): ResolvedInboxSender {
+  const taskId = env.GOAL_TASK_ID;
+  const attemptText = env.GOAL_ATTEMPT;
+  if (!taskId || taskId.trim() !== taskId || !attemptText || !/^[1-9]\d*$/.test(attemptText))
+    throw new Error('worker inbox sender requires a valid task and attempt identity');
+  const attempt = Number(attemptText);
+  if (!Number.isSafeInteger(attempt)) throw new Error('worker inbox sender requires a valid task and attempt identity');
+
+  const taskTables = runtime.db.query(
+    "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('worker_tasks', 'worker_attempts')",
+  ).get() as { count: number };
+  if (taskTables.count !== 2) throw new Error('worker inbox sender has no persisted task fence');
+
+  // Apply the control plane's current-attempt and cancellation fence before reading source ownership.
+  runtime.fence.assertCurrent({ taskId, attempt });
+  const row = runtime.db.query(`SELECT task.current_attempt, task.body AS task_body, attempt.body AS attempt_body
+      FROM worker_tasks AS task JOIN worker_attempts AS attempt
+        ON attempt.task_id = task.id AND attempt.attempt = ?
+      WHERE task.id = ?`).get(attempt, taskId) as {
+    current_attempt: number;
+    task_body: string;
+    attempt_body: string;
+  } | null;
+  if (!row) throw new Error('worker inbox sender is not a persisted task attempt');
+
+  let task: { id?: unknown; currentAttempt?: unknown; state?: unknown; brief?: { manager?: unknown } };
+  let sourceAttempt: { taskId?: unknown; attempt?: unknown; state?: unknown };
+  try {
+    task = JSON.parse(row.task_body) as typeof task;
+    sourceAttempt = JSON.parse(row.attempt_body) as typeof sourceAttempt;
+  } catch {
+    throw new Error('worker inbox sender has malformed persisted task data');
   }
-  // Compatibility for standalone control-plane fixtures and pre-session administrative invocations.
-  return callingManager(runtime);
+  const ownerManager = task.brief?.manager;
+  if (
+    task.id !== taskId || task.currentAttempt !== attempt || row.current_attempt !== attempt ||
+    sourceAttempt.taskId !== taskId || sourceAttempt.attempt !== attempt || sourceAttempt.state !== 'running' ||
+    (task.state !== 'running' && task.state !== 'held') || typeof ownerManager !== 'string' || !ownerManager.trim()
+  )
+    throw new Error('worker inbox sender is not the current running task attempt');
+
+  return {
+    from: `worker:${taskId}/${attempt}`,
+    managerId: ownerManager,
+    worker: { kind: 'worker', taskId, attempt, ownerManager },
+  };
 }
 
 function parseDocumentReference(value: string): InboxDocumentReference {

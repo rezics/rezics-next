@@ -128,6 +128,8 @@ export type ManagerEvent = {
   managerId: string;
   kind: ManagerEventKind;
   from?: string;
+  /** Persisted source fence when a worker sends through the manager inbox CLI. */
+  senderProvenance?: { kind: 'worker'; taskId: string; attempt: number; ownerManager: string };
   taskId?: string;
   /** Goal identity is written only when it comes from persisted manager or task metadata. */
   goalId?: string;

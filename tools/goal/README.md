@@ -758,7 +758,10 @@ reference such as `'{"path":"docs/contract.md","change":"Added the retry rule"}'
 one-line reason or JSON such as `'{"target":"supermanager","reason":"Owner deadlock after one exchange"}'`.
 Only explicit escalation metadata is reported as an escalation; historical system kinds are retained as-is rather than
 reinterpreted. Existing instruction and internal system events continue using the same durable per-recipient wake/read/
-ack columns.
+ack columns. A worker with a current persisted task attempt may send instruction, question, blocker, handoff or info
+messages; the sender is recorded as `worker:<source-task>/<attempt>` with the source owner in structured provenance.
+`--task` still selects the conversation task, so a cross-owner handoff can retain its target task separately. Worker
+messages keep the recipient's existing delivery behavior and do not authorize shared reads or manager actions.
 
 The digest groups known events by their stored Goal and includes decisions and their document references, blockers,
 explicit escalations, open questions older than 30 minutes, and blockers older than one hour. A linked direct `info` or
