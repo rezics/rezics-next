@@ -368,13 +368,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       {},
       checkResultOptions,
     );
-  // The dev verifier gates promotion, so its checks are admitted with landing checks, before workers' checks.
+  // The dev verifier checks after integration at ordinary priority: at landing priority its checks held every host's
+  // ordinary admission at zero, and workers waited an hour behind one run (2026-10-30).
   const verifierGate: GateRunner =
     options.runGate ??
     gateRunner(
       Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
       undefined,
-      LANDING_CHECK_ENVIRONMENT,
+      {},
       checkResultOptions,
     );
   let train!: MergeTrain;
