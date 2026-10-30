@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { createPool } from '../../src/database/pool.ts';
+import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
@@ -12,6 +14,9 @@ import {
   SUGGEST_TEMPLATE,
 } from '../../src/search/query.ts';
 import { type IndexedSubject, subjectPartition } from '../../src/search/source.ts';
+import { createSearchService } from '../../src/search/service.ts';
+import { createFakeSource } from './support/fake-source.ts';
+import { captureMetadata, mappingControls, resolveControls } from './support/native-metadata.ts';
 
 const url = process.env.OPENSEARCH_URL;
 if (!url) throw new Error("OPENSEARCH_URL must name the check's OpenSearch node");
@@ -233,3 +238,143 @@ test('generation selection uses the unchanged released stored template', async (
   const { body } = await engine.request<{ script: unknown }>('GET', `/_scripts/${prefix}${SEARCH_TEMPLATE}`);
   expect(body.script).toEqual(released.script);
 });
+
+const metadataPool = createPool(process.env.DATABASE_URL!);
+afterAll(() => metadataPool.end());
+
+function metadataService(client: OpenSearch) {
+  const fake = createFakeSource();
+  for (const [offset, id] of ids.entries()) fake.put({
+    id,
+    type: 'schema:Book',
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 17,
+    labels: [{ language: 'en', value: `Amber lantern ${offset}` }],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  });
+  let sourceWork = 0;
+  const service = createSearchService({
+    pool: metadataPool,
+    client,
+    prefix,
+    source: {
+      read: (...args) => { sourceWork++; return fake.read(...args); },
+      count: (...args) => { sourceWork++; return fake.count(...args); },
+    },
+    cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+  });
+  return { service, sourceWork: () => sourceWork };
+}
+
+async function metadataProblem(promise: Promise<unknown>, code = 'index_not_ready') {
+  const error: unknown = await promise.then(() => undefined, (error: unknown) => error);
+  expect(error).toBeInstanceOf(ProblemError);
+  expect(error).toMatchObject({ code });
+  const response = problemResponse(error as ProblemError, { method: 'POST', id: 'native-metadata' });
+  expect(response.status).toBe(code === 'index_not_ready' ? 503 : 409);
+  const body: unknown = await response.json();
+  for (const field of ['subjects', 'next', 'as_of', 'total']) expect(body).not.toHaveProperty(field);
+}
+
+test('actual query callers refuse malformed native start and final resolve metadata, including empty hits and would-be cursors', async () => {
+  await switchAlias(2, 1);
+  try {
+    for (const control of resolveControls(prefix)) {
+      for (const boundary of ['start', 'populated final', 'empty final'] as const) {
+        const start = boundary === 'start';
+        const empty = boundary === 'empty final';
+        const { client, calls } = captureMetadata(engine, 'resolve', control, start ? 1 : 2);
+        const { service, sourceWork } = metadataService(client);
+        await metadataProblem(service.search('anonymous', { text: empty ? 'nohit' : 'lantern', sort: 'name', limit: 1 }));
+        const resolves = calls.filter(({ path }) => path.startsWith('/_resolve/index/'));
+        const mappings = calls.filter(({ path }) => path.endsWith('/_mapping'));
+        const queries = calls.filter(({ path }) => path.endsWith('/_search/template'));
+        expect(resolves, control.name).toHaveLength(start ? 1 : 2);
+        expect(mappings.map(({ path }) => path), control.name).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_mapping`]);
+        expect(queries.map(({ path }) => path), control.name).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_search/template`]);
+        expect(resolves.at(-1)!.changed, control.name).toBeDefined();
+        if (start || empty) expect(sourceWork(), control.name).toBe(0);
+        else expect(sourceWork(), control.name).toBeGreaterThan(0);
+        if (!start) {
+          const receipt = queries[0]!.raw!.body as NativeResponse;
+          expect(receipt.hits.hits.length, control.name).toBe(empty ? 0 : 2);
+          expect(receipt.hits.total).toEqual({ value: empty ? 0 : 2, relation: 'eq' });
+        }
+      }
+    }
+  } finally {
+    await switchAlias(1, 2);
+  }
+}, 120_000);
+
+test('actual query callers refuse malformed concrete mapping receipts before native search or Source reads', async () => {
+  await switchAlias(2, 1);
+  try {
+    for (const control of mappingControls(subjectIndexName(prefix, 1))) {
+      const { client, calls } = captureMetadata(engine, 'mapping', control);
+      const { service, sourceWork } = metadataService(client);
+      await metadataProblem(service.search('anonymous', { text: 'lantern', sort: 'name', limit: 1 }));
+      expect(calls.filter(({ path }) => path.startsWith('/_resolve/index/')), control.name).toHaveLength(1);
+      expect(calls.filter(({ path }) => path.endsWith('/_mapping')), control.name).toHaveLength(1);
+      expect(calls.filter(({ path }) => path.endsWith('/_search/template')), control.name).toEqual([]);
+      expect(sourceWork(), control.name).toBe(0);
+    }
+  } finally {
+    await switchAlias(1, 2);
+  }
+}, 120_000);
+
+test('native caller generation switches preserve pinned requests and restart409 for populated, empty and continuation pages', async () => {
+  await switchAlias(2, 1);
+  try {
+    const { client: baseline, calls: baselineCalls } = captureMetadata(engine, 'resolve');
+    const { service } = metadataService(baseline);
+    const request = { text: 'lantern', sort: 'name', limit: 1 } as const;
+    const first = await service.search('anonymous', request);
+    expect(first.subjects).toHaveLength(1);
+    expect(first.next).toBeString();
+    expect(baselineCalls.filter(({ path }) => path.startsWith('/_resolve/index/'))).toHaveLength(2);
+    expect(baselineCalls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+    console.info('native query metadata baseline', JSON.stringify(baselineCalls));
+    for (const scenario of [request, { ...request, text: 'nohit' }, { ...request, cursor: first.next! }]) {
+      let switched = false;
+      const { client, calls } = captureMetadata(engine, 'resolve');
+      const racing: OpenSearch = {
+        bulk: (...args) => client.bulk(...args),
+        async request<T>(...args: Parameters<OpenSearch['request']>) {
+          const receipt = await client.request<T>(...args);
+          if (args[1].endsWith('/_mapping') && !switched) {
+            await switchAlias(1, 2);
+            switched = true;
+          }
+          return receipt;
+        },
+      };
+      try {
+        await metadataProblem(metadataService(racing).service.search('anonymous', scenario), 'search_restart_required');
+        expect(switched).toBe(true);
+        expect(calls.filter(({ path }) => path.startsWith('/_resolve/index/'))).toHaveLength(2);
+        expect(calls.filter(({ path }) => path.endsWith('/_search/template')).map(({ path }) => path)).toEqual([
+          `/${subjectIndexName(prefix, 1)}/_search/template`,
+        ]);
+        const old = calls.find(({ path }) => path.startsWith('/_resolve/index/'))!.raw!.body;
+        const current = calls.findLast(({ path }) => path.startsWith('/_resolve/index/'))!.raw!.body;
+        expect(old).toMatchObject({ aliases: [{ name: alias, indices: [subjectIndexName(prefix, 1)] }] });
+        expect(current).toMatchObject({ aliases: [{ name: alias, indices: [subjectIndexName(prefix, 2)] }] });
+      } finally {
+        if (switched) await switchAlias(2, 1);
+      }
+    }
+    await switchAlias(1, 2);
+    try {
+      await metadataProblem(service.search('anonymous', { ...request, cursor: first.next! }), 'search_restart_required');
+    } finally {
+      await switchAlias(2, 1);
+    }
+  } finally {
+    await switchAlias(1, 2);
+  }
+}, 120_000);

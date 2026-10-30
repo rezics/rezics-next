@@ -597,13 +597,39 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 - Touches: Runner resolves `subjects*` at startup and by default every 5 s, reads active mapping activation time,
   and restarts partition relays when the live generation set changes. Empty deployment: PUT index, PUT mapping, POST
-  alias. Service resolves generation only for empty hits, cached/coalesced 1 s. Grow N/P with generation set fixed.
+  alias. Each listing resolves and pins the active generation, reads its bounded-sort mapping format, and resolves
+  the alias afresh after all query, Source, cursor and freshness work, including empty results. Only concurrent start
+  observations coalesce; the final observation belongs to that request. Grow N/P with generation set fixed.
 - Bound: One resolve plus <= 1 mapping read per discovery; bootstrap adds three requests; zero SQL except
   separately listed retirement. At most three generations per prefix, so discovery enumerates at most three; no
   subject-document enumeration. Definition uses one shard/zero replicas; that does not prove kernel locality.
 - Growth check: [test/search/indexing.test.ts](../../test/search/indexing.test.ts): “the runner creates the first
   generation, feeds every generation and follows pause and new generations”; no new SQL check for metadata-only
   requests.
+
+Native metadata admission requires HTTP 200 and complete object/collection shapes. Resolve accepts at most three
+unique exact `subjects-g<positive safe integer>` physical names, at most one exact `subjects` alias with one target
+in that observed set, and no data streams. Physical attributes must describe an open index, optionally hidden;
+closed, frozen and data-stream indices are unavailable. Native omission of an empty per-index `aliases` field is
+valid. A present alias must agree in both the physical index's aliases and the alias receipt. Foreign names,
+duplicate records (even identical ones), contradictory memberships, malformed or missing fields and oversized sets
+raise `SearchUnavailableError` before admitting a query or rebuild. Empty namespaces and bounded initial,
+rebuilding and retained older sets without an active alias remain valid discovery observations. Read helpers issue
+no creation requests.
+
+A concrete mapping response must contain exactly the requested physical name, an object mapping and object
+properties. Missing legacy `_meta`/format or a well-formed unsupported nonnegative integer format yields no supported
+format; malformed metadata is unavailable. The existing supported format check remains mandatory before queries and
+rebuild publication. Mapping admission inspects metadata structure, not every field's schema or document population.
+
+The native controls in [generation tests](../../test/search/generations.test.ts) and
+[query generation tests](../../test/search/query-generation.test.ts) clone actual executed responses and retain raw
+and corrupted receipts in the check log. They cover refused query starts with no native search or Source work,
+refused final observations with populated and empty native hits, rebuild refusal, valid lifecycle states, physical
+query pinning and restart409 after alias switches. Metadata observation uses one resolve, or one concrete mapping
+request, with work linear in returned bounded metadata; unrelated index populations of 1, 4 and 16 add no requests.
+This structural proof does not establish complete physical incarnation population, same-name/new-UUID safety,
+source key equality, copy completeness, late-write pruning or erasure. No name/UUID cache supplies that proof.
 
 ### Rebuild replay and activation
 

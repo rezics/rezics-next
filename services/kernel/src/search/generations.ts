@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { discardConnection } from '../database/pool.ts';
 import {
   createSubjectIndex,
+  MAX_SUBJECT_GENERATIONS,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
   subjectAlias,
@@ -17,7 +18,7 @@ import unlockRebuild from './rebuild-unlock.sql';
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer } from './runner.ts';
 
-export const MAX_SUBJECT_GENERATIONS = 3;
+export { MAX_SUBJECT_GENERATIONS } from './indices.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
 export type PartitionCount = { partition: number; indexed: number; source: number };
 

@@ -5,12 +5,13 @@ const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
 export const SUBJECT_SORT_FORMAT = 1;
+export const MAX_SUBJECT_GENERATIONS = 3;
 
 type SubjectIndexDefinition = Record<string, unknown>;
-type ResolveIndexResponse = {
-  indices: { name: string }[];
-  aliases: { name: string; indices: string[] }[];
-};
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 let definition: SubjectIndexDefinition | undefined;
 
@@ -66,17 +67,21 @@ export async function readSubjectSortFormat(
     throw error;
   }
 
-  const record = (value: unknown): value is Record<string, unknown> =>
-    value !== null && typeof value === 'object' && !Array.isArray(value);
   const unavailable = () => new SearchUnavailableError('Subject generation mapping is missing or malformed');
-  if (response.status !== 200 || !record(response.body)) throw unavailable();
+  if (!record(response) || response.status !== 200 || !record(response.body)) throw unavailable();
+  // A concrete mapping request must describe exactly that physical generation.
+  const names = Object.keys(response.body);
+  if (names.length !== 1 || names[0] !== index) throw unavailable();
   const indexMapping = response.body[index];
-  if (!record(indexMapping) || !record(indexMapping.mappings)) throw unavailable();
+  if (!record(indexMapping) || !record(indexMapping.mappings) || !record(indexMapping.mappings.properties))
+    throw unavailable();
   const mappings = indexMapping.mappings;
   if (!Object.hasOwn(mappings, '_meta')) return null;
   const meta = mappings._meta;
   if (!record(meta)) throw unavailable();
+  if (!Object.hasOwn(meta, 'name_sort_format')) return null;
   const format = meta.name_sort_format;
+  if (typeof format !== 'number' || !Number.isSafeInteger(format) || format < 0) throw unavailable();
   return format === SUBJECT_SORT_FORMAT ? SUBJECT_SORT_FORMAT : null;
 }
 
@@ -101,25 +106,84 @@ export async function subjectGenerations(
 ): Promise<{ generations: number[]; active: number | null }> {
   validatePrefix(prefix);
   const alias = subjectAlias(prefix);
-  const response = await search.request<ResolveIndexResponse>('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
-    query: { expand_wildcards: 'all' },
-  });
+  const unavailable = () => new SearchUnavailableError('Subject generation metadata is missing or malformed');
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
+      query: { expand_wildcards: 'all' },
+    });
+  } catch (error) {
+    if (error instanceof OpenSearchError)
+      throw new SearchUnavailableError('Subject generation metadata is unavailable', { cause: error });
+    throw error;
+  }
+  if (!record(response) || response.status !== 200 || !record(response.body)) throw unavailable();
+  if (Object.hasOwn(response.body, 'error')) throw unavailable();
+  const { indices, aliases, data_streams: streams } = response.body;
+  // Check cardinality before visiting records. The generation limit also bounds
+  // duplicate/foreign receipts; deduplication must never hide an oversized set.
+  if (
+    !Array.isArray(indices) ||
+    indices.length > MAX_SUBJECT_GENERATIONS ||
+    !Array.isArray(aliases) ||
+    aliases.length > 1 ||
+    !Array.isArray(streams) ||
+    streams.length !== 0
+  )
+    throw unavailable();
   const generationPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
-  const generations = new Set<number>();
-  for (const index of response.body.indices) {
-    const match = generationPattern.exec(index.name);
-    if (!match?.[1]) continue;
+  function generationOf(name: unknown): number {
+    if (typeof name !== 'string' || name.length > alias.length + 2 + 16) throw unavailable();
+    const match = generationPattern.exec(name);
+    if (!match?.[1]) throw unavailable();
     const generation = Number(match[1]);
-    if (Number.isSafeInteger(generation)) generations.add(generation);
+    if (!Number.isSafeInteger(generation) || generation <= 0) throw unavailable();
+    return generation;
+  }
+  const generations = new Map<string, number>();
+  const aliased = new Set<string>();
+  for (const index of indices) {
+    if (!record(index)) throw unavailable();
+    const generation = generationOf(index.name);
+    const name = index.name as string;
+    if (generations.has(name)) throw unavailable();
+    generations.set(name, generation);
+    // OpenSearch emits attributes even when it omits an empty aliases field.
+    // Hidden open indices remain readable; closed/frozen/data-stream indices
+    // are not subject generations supported by this writer/query lifecycle.
+    const attributes = index.attributes;
+    if (
+      !Array.isArray(attributes) ||
+      attributes.length < 1 ||
+      attributes.length > 2 ||
+      !attributes.includes('open') ||
+      attributes.some((value) => value !== 'open' && value !== 'hidden') ||
+      new Set(attributes).size !== attributes.length ||
+      Object.hasOwn(index, 'data_stream')
+    )
+      throw unavailable();
+    if (Object.hasOwn(index, 'aliases')) {
+      if (!Array.isArray(index.aliases) || index.aliases.length > 1) throw unavailable();
+      if (index.aliases.length === 1) {
+        if (index.aliases[0] !== alias) throw unavailable();
+        aliased.add(name);
+      }
+    }
   }
 
-  const activeAlias = response.body.aliases.find((item) => item.name === alias);
   let active: number | null = null;
-  if (activeAlias?.indices.length === 1) {
-    const match = generationPattern.exec(activeAlias.indices[0] ?? '');
-    const generation = match?.[1] ? Number(match[1]) : NaN;
-    if (Number.isSafeInteger(generation)) active = generation;
+  if (aliases.length === 1) {
+    const entry: unknown = aliases[0];
+    if (!record(entry) || entry.name !== alias || !Array.isArray(entry.indices) || entry.indices.length !== 1)
+      throw unavailable();
+    const target: unknown = entry.indices[0];
+    const generation = generationOf(target);
+    if (typeof target !== 'string' || !generations.has(target) || aliased.size !== 1 || !aliased.has(target))
+      throw unavailable();
+    active = generation;
+  } else if (aliased.size !== 0) {
+    throw unavailable();
   }
 
-  return { generations: [...generations].sort((a, b) => a - b), active };
+  return { generations: [...generations.values()].sort((a, b) => a - b), active };
 }
