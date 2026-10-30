@@ -1543,7 +1543,16 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             execution: work.execution, frontier: state.frontier,
             inputLimit: Math.min(256, Math.max(1, 1000 - m.cost.inputKeys)) }, context));
           if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete') return m.unavailable('source_pending');
-          const intent: RetainedRepairPage = { predecessor: state.frontier, frontier: sourcePage.frontier,
+          // The final callback has no frontier. Locate its actual durable owner step by the same
+          // bootstrap/execution/predecessor, rather than manufacturing a receipt from its Boolean.
+          const sourceStep = (await m.sql<{ step: string; complete: boolean }>(`SELECT step::text,complete
+            FROM semantic.public_filter_repair_step WHERE partition_no=0 AND bootstrap=$1 AND execution=$2
+              AND predecessor IS NOT DISTINCT FROM $3::uuid`,
+            [state.bootstrap.slice(2), work.execution, state.frontier])).rows[0];
+          if (!sourceStep || sourceStep.complete !== (sourcePage.status === 'complete') ||
+            (!sourceStep.complete && sourcePage.frontier !== sourceStep.step)) return m.unavailable('source_pending');
+          const intent: RetainedRepairPage = { sourceStep: sourceStep.step,
+            predecessor: state.frontier, frontier: sourcePage.frontier,
             complete: sourcePage.status === 'complete',
             repairs: sourcePage.repairs.map(({ kind, locator, source, projection }) => ({ kind, locator, source, projection })) };
           const body = encodeNative(intent);

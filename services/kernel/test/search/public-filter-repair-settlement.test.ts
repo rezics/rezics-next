@@ -7,6 +7,7 @@ import { createPublicFilterSourceBinding } from '../../src/semantic/public-filte
 import {
   readPublicFilterConsumerCustody,
   readPublicFilterRepairSettlement,
+  decodePublicFilterNativeState,
 } from '../../src/search/public-filter-custody.ts';
 import type {
   PublicFilterConsumerJob,
@@ -172,6 +173,14 @@ test('zero repair effects require a retained complete Source window and native f
     expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
     const settled = await finish(n, captured.repair, query.queried, query.execution);
     expect(settled.execution).toEqual(retained.execution!);
+    const last = (await n.f.db.pool.query(`SELECT intent FROM search.public_filter_repair_page
+      WHERE partition_no=$1 AND observation=$2 AND execution=$3 ORDER BY ordinal DESC LIMIT 1`,
+      [Number(query.queried.snapshot.observation.split(':')[0]), query.queried.snapshot.observation, query.execution])).rows[0];
+    const intent = decodePublicFilterNativeState<{ sourceStep: string; predecessor: string | null }>(last.intent);
+    const step = (await n.f.db.pool.query(`SELECT complete,predecessor::text FROM semantic.public_filter_repair_step
+      WHERE partition_no=0 AND bootstrap=$1 AND execution=$2 AND step=$3`,
+      [retained.covered.observation.slice(2), query.execution, intent.sourceStep])).rows[0];
+    expect(step).toEqual({ complete: true, predecessor: intent.predecessor });
     const second = await n.read(query.queried, query.execution);
     expect(second.status).toBe('settled');
     if (second.status === 'settled') expect(second.settlement.id).toBe(settled.settlement.id);

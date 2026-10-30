@@ -89,6 +89,8 @@ export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
 }>;
 /** Internal native storage shapes. Source's in-process receipt is deliberately never persisted as authority. */
 export type RetainedRepairPage = Readonly<{
+  /** Actual owner-native step locator, including the final step whose public frontier is null. */
+  sourceStep: string;
   predecessor: string | null;
   frontier: string | null;
   complete: boolean;

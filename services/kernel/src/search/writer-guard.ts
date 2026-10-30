@@ -23,7 +23,7 @@ import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './
 import enroll from './identity-epoch-participant-enroll.sql';
 import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
-import type { OpenSearch } from './opensearch.ts';
+import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
@@ -74,12 +74,13 @@ export function validateSearchRepairWriterEvidence(index: string, receipt: Searc
     receipt.enrollment.epoch !== receipt.epoch || receipt.completion.epoch !== receipt.epoch ||
     receipt.completion.position <= receipt.enrollment.position) fail();
   const nativeEvidence = receipt.native as { evidence?: { kind?: string; bulk?: unknown; current?: {
-    _version?: number; _source?: unknown }; refresh?: unknown }; winner?: unknown };
+    _version?: number; _source?: unknown; _id?: string; _index?: string; found?: boolean }; refresh?: unknown }; winner?: unknown };
   const evidence = nativeEvidence?.evidence;
   if (evidence?.kind === 'bulk') validateIndexWriteReceipt(evidence.bulk, index, [receipt.action]);
   else if (evidence?.kind === 'recovered' && receipt.action.op === 'index') {
     validateRefreshResponse(200, evidence.refresh);
-    if (!Number.isSafeInteger(evidence.current?._version) ||
+    if (evidence.current?._id !== receipt.subject || evidence.current?._index !== index ||
+      evidence.current?.found !== true || !Number.isSafeInteger(evidence.current?._version) ||
       BigInt(evidence.current!._version!) !== receipt.action.version ||
       !isDeepStrictEqual(evidence.current?._source, receipt.action.document)) fail();
   } else fail();
@@ -843,12 +844,22 @@ export function createSearchWriterGuard(options: {
         evidence = { kind: 'bulk', bulk };
       } else {
         if (action.op === 'delete') throw unavailable('An uncertain delete has no exact native item receipt');
-        const current = await options.search.request<{ _version?: number; _source?: unknown }>('GET',
-          `/${options.index}/_doc/${subject}`);
-        if (current.status !== 200 || !Number.isSafeInteger(current.body._version))
+        let current: { status: number; body: { _version?: number; _source?: unknown;
+          _id?: string; _index?: string; found?: boolean } };
+        try {
+          current = await options.search.request('GET', `/${options.index}/_doc/${subject}`);
+        } catch (error) {
+          if (!(error instanceof OpenSearchError) || error.status !== 404) throw error;
+          current = { status: 404, body: {} };
+        }
+        if (current.status !== 404 && (current.status !== 200 || current.body._id !== subject ||
+          current.body._index !== options.index || current.body.found !== true ||
+          !Number.isSafeInteger(current.body._version)))
           throw unavailable('Repair response recovery has no current native winner');
-        const version = BigInt(current.body._version!);
-        if (version < action.version) {
+        const version = current.status === 404 ? null : BigInt(current.body._version!);
+        if (version === null || version < action.version) {
+          // Absence authorizes only replay of the retained external-version action. A newer native
+          // delete tombstone still rejects it; absence itself is never a successful item receipt.
           let bulk: unknown;
           const transport: OpenSearch = { ...options.search, async bulk(lines, opts) {
             const response = await options.search.bulk(lines, opts); bulk = response; return response as never;

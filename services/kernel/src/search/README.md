@@ -1554,7 +1554,7 @@ recreation and lost alias response recovery; existing generation growth bounds r
 Native consumer repair settlement is retained under the existing custody execution. The exact storage is:
 `public_filter_execution.repair_settlement` holds `{id, bootstrap, covered, execution, pages, frontier, closed, fence}`;
 `public_filter_repair_page`, keyed by `(partition_no, observation, execution, ordinal)`, holds immutable
-`{predecessor, frontier, complete, repairs}` (each repair retains kind, locator, own-home Source observation
+`{sourceStep, predecessor, frontier, complete, repairs}` (each repair retains kind, locator, own-home Source observation
 and projection, without serializing Source's private receipt brand). `public_filter_repair_effect`, keyed by the same execution plus page/item, retains each actual native
 writer receipt before advancing the scalar page frontier. The existing `identity_writer` row
 holds `repair_locator`, `repair_action` and `repair_receipt` beside its ordinary enrollment, dispatch,
@@ -1567,7 +1567,8 @@ returns `PublicFilterRepairSettlementResult`; its settled value contains the ret
 observation, original `CustodyExecution`, opaque `NativePublicFilterRepairSettlement` locator and actual
 `CustodyCost`. Its private producer brand lives only in the canonical custody type module. The reader
 uses the configured native `OPENSEARCH_URL`, never a process receipt cache. It verifies the immutable
-page chain from the original bootstrap cut, finished retained-copy work, every actual writer receipt and
+native page advancement from the original bootstrap cut, the actual final/effectful Source step locators,
+finished retained-copy work, every actual writer receipt and
 current searchable winner, physical allocation and final locked writer/owner state before returning.
 This proves Search dispatch closure only. FAA must join its own durable Source step/window verifier,
 creation/change bridge and original/start/final checks; the Account owner remains independent.

@@ -444,18 +444,18 @@ export async function readPublicFilterRepairSettlement(
       return result as never;
     }, bulk() { throw new TypeError('Settlement reader never dispatches writes'); } };
     return await withConnection(pool, async (client) => {
-      const query = async (statement: string, values: unknown[] = []) => {
+      const db = { query: async (text: string, parameters: unknown[]) => {
         admit();
-        const result = await sql({ query: (text: string, parameters: unknown[]) => {
-          const request: import('pg').QueryConfig & { query_timeout: number } = {
-            text, values: parameters, query_timeout: Math.max(1, context.deadline - Date.now()),
-          };
-          return client.query(request);
-        } } as Pool, meter, statement, values);
+        const request: import('pg').QueryConfig & { query_timeout: number } = {
+          text, values: parameters, query_timeout: Math.max(1, context.deadline - Date.now()),
+        };
+        return client.query(request);
+      } } as Pool;
+      const query = async (statement: string, values: unknown[] = []) => {
+        const result = await sql(db, meter, statement, values);
         admit();
         return result;
       };
-      const db = { query } as Pool;
       await query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       try {
         const q = input.queried;
@@ -519,6 +519,18 @@ export async function readPublicFilterRepairSettlement(
         if (!last) throw new Failure('owner_unavailable');
         const finalPage = decode<RetainedRepairPage>(last.intent);
         if (!finalPage.complete || finalPage.frontier !== null) throw new Failure('owner_unavailable');
+        const verifyStep = async (page: RetainedRepairPage) => {
+          if (!page.sourceStep) throw new Failure('owner_unavailable');
+          const step = (await query(`SELECT predecessor::text,complete FROM semantic.public_filter_repair_step
+            WHERE partition_no=0 AND bootstrap=$1 AND execution=$2 AND step=$3 FOR SHARE`,
+            [state.bootstrap.slice(2), input.execution, page.sourceStep])).rows[0];
+          if (!step || step.complete !== page.complete || step.predecessor !== page.predecessor ||
+            (page.complete ? page.frontier !== null : page.frontier !== page.sourceStep))
+            throw new Failure('owner_unavailable');
+        };
+        // Source owns the step body's durable receipt/verifier and creation/change closure. This
+        // native binding cannot replace those proofs, or accept a callback alone as a closed cut.
+        await verifyStep(finalPage);
         const pages = (await query(repairPagesSql, keys)).rows;
         if (pages.length > 1000) throw new Failure('owner_unavailable');
         const copies = new Map<string, string>();
@@ -526,6 +538,7 @@ export async function readPublicFilterRepairSettlement(
         for (const row of pages) {
           if (row.ordinal >= state.pages) throw new Failure('owner_unavailable');
           const page = decode<RetainedRepairPage>(row.intent);
+          await verifyStep(page);
           if (page.repairs.length > 256) throw new Failure('binding_mismatch');
           for (const [item, repair] of page.repairs.entries()) {
             meter.candidates++;
@@ -568,6 +581,17 @@ export async function readPublicFilterRepairSettlement(
         if (physical.incarnation !== q.consumer.incarnation) throw new Failure('binding_mismatch');
         // Final writer-key locks include original/terminal rows even when the retained window had no repair effects.
         const own = [...new Set(retained.execution.ownRows.flatMap((row) => [row.original, row.terminal]))].sort();
+        // Lock every existing home gate before any writer/owner key, in the ordinary writer's order.
+        const homes = [...new Set([...own.map(subjectPartition), ...[...latest.values()].map((row) => row.partition)])]
+          .sort((a, b) => a - b);
+        const gateEpochs = new Map<number, number>();
+        for (const partition of homes) {
+          const gate = (await query(`SELECT incarnation,owner_epoch,write_alias,closed_token FROM search.identity_writer_gate
+            WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`, [partition, q.consumer.physicalTarget])).rows[0];
+          if (gate && (gate.incarnation !== physical.incarnation || gate.write_alias !== physical.writeAlias ||
+            gate.closed_token)) throw new Failure('identity_pending');
+          if (gate) gateEpochs.set(partition, gate.owner_epoch);
+        }
         for (const original of own) {
           meter.inputKeys++;
           meter.candidates++;
@@ -576,12 +600,14 @@ export async function readPublicFilterRepairSettlement(
             FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
             [partition, q.consumer.physicalTarget, original])).rows[0];
           const homeOwner = (await query(`SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE`, [partition])).rows[0];
-          if (homeOwner?.write_state !== 'active' || (current && (current.writer_token || current.closed_job ||
+          if (homeOwner?.write_state !== 'active' ||
+            (gateEpochs.has(partition) && gateEpochs.get(partition) !== homeOwner.epoch) ||
+            (current && (current.writer_token || current.closed_job ||
             current.dispatch_state !== 'settled' || current.incarnation !== physical.incarnation ||
             current.owner_epoch !== homeOwner.epoch))) throw new Failure('identity_pending');
         }
         for (const receipt of [...latest.values()].sort((a, b) => a.partition - b.partition || a.subject.localeCompare(b.subject)))
-          await verifySearchRepairWriterReceipt(db, search, q.consumer.physicalTarget, receipt);
+          await verifySearchRepairWriterReceipt({ query } as Pool, search, q.consumer.physicalTarget, receipt);
         for (const partition of [...new Set([home, definition.source.partition])].sort((a, b) => a - b)) {
           const finalOwner = (await query(`SELECT epoch,write_state FROM core.partition
             WHERE partition_no=$1 FOR SHARE`, [partition])).rows[0];
