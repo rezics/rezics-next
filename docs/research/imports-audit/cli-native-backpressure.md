@@ -11,7 +11,9 @@ on close; diagnostics contain no private JWK, assertion, cookie or bearer.
 The supplied input contains seventeen synthetic supported Bangumi metadata records, one with a native cover
 intent. The real registration retains `bangumi@3`, the native `unversioned` revision and data-only SHA-256 digests.
 The emitted evidence contains the actual registration/module observations and bundled definition digest.
-Acquisition reaches EOF and sealing before application requests. No provider posts or recipe text are supplied.
+Acquisition reaches EOF and sealing before initial application requests. Fresh invocation resumes the already
+sealed durable generation before consuming newer stdin; its application requests verify that exact persisted
+ready generation, supplied count and validation state. No provider posts or recipe text are supplied.
 
 The first CLI invocation crosses multiple real public envelopes and recovers under the default transport and
 coordinator policy. During the second invocation, only metadata records without the cover change. Before each

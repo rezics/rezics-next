@@ -124,6 +124,8 @@ export async function runCliNativeBackpressureJourney() {
 
     async function invoke(leg: Leg, records: typeof rows) {
       let consumed = false;
+      // Reopening sealed durable work precedes reading a newer dump in the ordinary coordinator.
+      const sealedAtStart = leg === 'resumed' ? sealedGeneration() : null;
       const text = feed(records);
       const result = await runImportCli(
         [
@@ -152,7 +154,7 @@ export async function runCliNativeBackpressureJourney() {
           clock: {
             now: Date.now,
             async sleep(ms) {
-              const wait = { leg, atMs: Date.now(), durationMs: ms, finishedAtMs: undefined as number | undefined };
+              const wait: (typeof actualScheduledWaits)[number] = { leg, atMs: Date.now(), durationMs: ms };
               actualScheduledWaits.push(wait);
               await Bun.sleep(ms);
               wait.finishedAtMs = Date.now();
@@ -196,7 +198,13 @@ export async function runCliNativeBackpressureJourney() {
               return support.host.service.handler(request);
             }
             expect(url.origin).toBe(api);
-            expect(consumed).toBe(true); // Complete acquisition precedes every application effect/read.
+            if (!consumed) {
+              expect(sealedAtStart).not.toBeNull();
+              expect(sealedAtStart!.status).toBe('ready');
+              expect(sealedAtStart!.supplied).toBe(rows.length);
+              expect(sealedAtStart!.invalid).toBe(0);
+              expect(sealedGeneration()).toEqual(sealedAtStart);
+            }
             expect(request.headers.has('cookie')).toBe(false);
             if (url.pathname.startsWith('/v1/media/') && url.pathname.endsWith(':importStatus')) {
               const id = url.pathname.split('/')[3]!.split(':')[0]!;
@@ -263,6 +271,18 @@ export async function runCliNativeBackpressureJourney() {
           }) as typeof fetch,
         },
       );
+      if (result.code !== (leg === 'exhausted' ? 1 : 0))
+        console.log(
+          'CLI native backpressure failure witness',
+          JSON.stringify({
+            leg,
+            result,
+            sealedAtStart,
+            exchanges: exchanges.filter((e) => e.leg === leg),
+            logicalCalls: logicalCalls.filter((c) => c.leg === leg),
+            actualScheduledWaits: actualScheduledWaits.filter((wait) => wait.leg === leg),
+          }),
+        );
       expect(result.openHandles).toBe(0);
       expect(activeCalls.size).toBe(0);
       expect((await stat(state)).mode & 0o777).toBe(0o600);
@@ -276,6 +296,16 @@ export async function runCliNativeBackpressureJourney() {
       } finally {
         db.close();
       }
+    }
+    function sealedGeneration() {
+      return local(
+        (db) =>
+          db
+            .query(
+              'SELECT g.id,g.status,g.supplied,g.invalid FROM run_sources s JOIN run_generations g ON g.source=s.source AND g.id=s.lease_run WHERE s.source=?',
+            )
+            .get(source) as { id: string; status: string; supplied: number; invalid: number } | null,
+      );
     }
     function baseline() {
       const session = new ImportSession(state);
@@ -401,8 +431,14 @@ export async function runCliNativeBackpressureJourney() {
       text: 'Independent accepted community title',
     });
     const cover = [...knownCommands.values()].find((c) => c.op === 'propose' && c.source.field_group === 'cover');
-    if (!cover || cover.op !== 'propose') throw new Error('Missing actual CLI cover proposal');
-    const mediaId = cover.statement.value.content as string;
+    if (
+      !cover ||
+      cover.op !== 'propose' ||
+      cover.statement.value.type !== 'value' ||
+      typeof cover.statement.value.content !== 'string'
+    )
+      throw new Error('Missing actual CLI cover proposal');
+    const mediaId = cover.statement.value.content;
     const mediaBefore = await runtime.mediaBoundary.observe(mediaId);
     expect(mediaBefore.row.state).toBe('available');
     expect(mediaBefore.variants.length).toBeGreaterThan(0);
