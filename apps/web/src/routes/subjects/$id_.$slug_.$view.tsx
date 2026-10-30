@@ -134,7 +134,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};
     const nextHref =
       loaded.next !== undefined
-        ? `${canonical.href}/${encodeURIComponent(params.view)}?node=${encodeURIComponent(loaded.node ?? '')}&cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}`
+        ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}`
         : undefined;
     return {
       ...canonical,

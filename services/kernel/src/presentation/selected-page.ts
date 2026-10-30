@@ -6,8 +6,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { readContext } from '../semantic/context.ts';
-import { publicContextEligibility } from '../semantic/eligibility.ts';
+import { readContext, publicContextEligibility } from '../semantic/context.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 

@@ -319,7 +319,7 @@ function statementItems(
         return [
           {
             id: row.target,
-            label: { text: typeof row.label === 'string' ? row.label : '' },
+            label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
             ...(typeof row.type === 'string' ? { type: row.type } : {}),
             notes: qualifiers.flatMap((qualifier) => {
               if (!isRecord(qualifier.value) || qualifier.value.type !== 'value') return [];

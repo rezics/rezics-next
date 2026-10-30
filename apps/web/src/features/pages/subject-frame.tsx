@@ -99,7 +99,7 @@ export async function loadViewPages(
   view: View,
   locale = 'en',
   cursor?: string,
-  options: { realm?: string; node?: string; authorization?: string } = {},
+  options: { realm?: string | undefined; node?: string | undefined; authorization?: string | undefined } = {},
 ): Promise<ViewPagesLoad> {
   // Resolve a node from the current template; the continued request independently resolves and guards it again.
   const first = await loadSubjectPage(client, id, view, locale, {
@@ -112,18 +112,28 @@ export async function loadViewPages(
     const read = plan.reads[key];
     return (
       (!options.node || options.node === node) &&
-      (read?.kind === 'links' || read?.kind === 'relations' || read?.kind === 'subjectThreads')
+      (read?.kind === 'links' || read?.kind === 'relations' || read?.kind === 'subjectThreads' || read?.kind === 'collections')
     );
   });
   let result = first;
   if (cursor !== undefined && !options.node) {
     if (!primary) return { kind: 'missing' };
+    const primaryRead = plan.reads[primary[1]];
+    if (primaryRead?.kind === 'collections') {
+      const response = await client.subjects({ id }).collections.get({
+        query: { limit: primaryRead.limit, cursor },
+        ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+      });
+      if (response.status === 400) return { kind: 'missing' };
+      first.page.reads[primary[1]] = { status: response.status, body: response.error ? {} : response.data };
+    } else {
     const continued = await loadSubjectPage(client, id, view, locale, {
       ...options,
       continuation: { node: primary[0], cursor },
     });
     if (continued.kind !== 'page') return continued;
     result = continued;
+    }
   }
   const overview = await loadSubjectPage(client, id, undefined, locale, options);
   if (overview.kind !== 'page') return overview;
@@ -140,7 +150,7 @@ export async function loadViewPages(
     page: result.page,
     overview: overview.page,
     ...(next ? { next } : {}),
-    ...(primary ? { node: primary[0] } : {}),
+    ...(primary && currentPlan.reads[primary[1]]?.kind !== 'collections' ? { node: primary[0] } : {}),
   };
 }
 
@@ -183,7 +193,7 @@ export function SubjectFrame({
   view: View;
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
-  realm?: string;
+  realm?: string | undefined;
 }) {
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;

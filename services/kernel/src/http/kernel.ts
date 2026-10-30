@@ -315,7 +315,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
-  profileRoutes(app, { ...dependencies, tokens });
+  profileRoutes(app, { ...dependencies, tokens, access: (config) => resolveAccess({ ...config, realmRoleReader }) });
   payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),

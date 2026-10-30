@@ -9,16 +9,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 
 export { MAX_PAGE_READS } from '@rezics/composition';
 
-export type PageRead =
-  | { kind: 'subject'; id: string }
-  | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
-  | { kind: 'collections'; id: string; limit: number }
-  | { kind: 'reactions'; id: string }
-  | { kind: 'account'; handle: string }
-  | { kind: 'accountThreads'; id: string; threadKind: 'discussion' | 'review'; limit: number }
-  | { kind: 'accountPosts'; id: string; limit: number }
-  | { kind: 'accountCollections'; id: string; limit: number }
-  | { kind: 'search'; body: object };
+export type PageRead = Exclude<import('@rezics/composition').PageRead, { kind: 'search' }> | { kind: 'search'; body: object };
 
 export class PageReadError extends Error {
   readonly errors: FieldError[];

@@ -28,7 +28,7 @@ export function ViewTabs({
   /** The overview's address; a view lives under it. */
   base: string;
   labels: ViewTabLabels;
-  realm?: string;
+  realm?: string | undefined;
 }) {
   const bar = useRef<HTMLDivElement>(null);
   useEffect(() => {

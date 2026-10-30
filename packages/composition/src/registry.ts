@@ -45,7 +45,17 @@ type InferredStatementRead = {
 export type PageRead =
   | { kind: 'subject'; id: string; context?: string }
   | {
-      kind: 'links' | 'relations';
+      kind: 'links';
+      id: string;
+      context?: string;
+      property: string;
+      filter?: string;
+      type?: string;
+      limit: number;
+      cursor?: string;
+    }
+  | {
+      kind: 'relations';
       id: string;
       context?: string;
       property: string;

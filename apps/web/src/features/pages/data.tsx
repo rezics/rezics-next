@@ -648,8 +648,8 @@ export function PageData({
   locale: string;
   subject?: string | null;
   subjectLabel?: string;
-  context?: SelectedContext;
-  continuation?: PageContinuation;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
   operator?: { id: string; handle: string | null; displayName: string | null };

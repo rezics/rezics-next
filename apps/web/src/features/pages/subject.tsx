@@ -33,8 +33,8 @@ export type SubjectPageData = {
   subject: string | null;
   /** The account an agent page is for, as the page read named it. */
   account?: { id: string; handle: string };
-  context?: SelectedContext;
-  continuation?: PageContinuation;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: PageDocument;
@@ -120,7 +120,7 @@ export async function loadSubjectPage(
   id: string,
   view?: View,
   locale = 'en',
-  options: { realm?: string; continuation?: PageContinuation; authorization?: string } = {},
+  options: { realm?: string | undefined; continuation?: PageContinuation | undefined; authorization?: string | undefined } = {},
 ): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
   const result = await client.pages.$read.post(

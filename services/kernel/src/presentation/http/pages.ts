@@ -27,6 +27,8 @@ import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
 import { customMethod, customMethodPath } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
+import { createAccess } from '../../access/index.ts';
+import { actionCatalogue } from '../../http/request.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
@@ -261,7 +263,7 @@ export function pageRoutes<App>(
         security: [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body, request, authorize, admission, job, actor, access: currentAccess, session: requestSession }) => {
+    async ({ body, request, authorize, admission, job, actor, session: requestSession }) => {
       // A 308 preserves the POST body; its Location supplies the replacement page target.
       const encodedTarget = new URL(request.url).searchParams.get('target');
       let redirectedTarget: unknown;
@@ -302,7 +304,7 @@ export function pageRoutes<App>(
       };
       let selected: SelectedPage | undefined;
       const authority = {
-        deps: { pool, access: currentAccess(), routeKey },
+        deps: { pool, access: typeof access === 'function' ? access({ actions: actionCatalogue(app) }) : access ?? createAccess({ actions: actionCatalogue(app) }), routeKey },
         actor,
         deadline: job.deadline,
         run: <T>(work: () => Promise<T>) => admission.run('normal', job, work),

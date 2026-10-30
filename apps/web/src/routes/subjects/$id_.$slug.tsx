@@ -168,7 +168,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   validateSearch: (
     search: Record<string, unknown>,
   ): {
-    realm?: string;
+    realm?: string | undefined;
     slot?: 'collections';
     slotResult?: string;
     ratingFailure?: true;
