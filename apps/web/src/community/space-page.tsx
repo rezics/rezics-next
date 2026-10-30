@@ -11,6 +11,17 @@ import { RealmMembership } from './realm-membership';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
+import { useSession } from '../session/query';
+import { useShelfList } from './space-queries';
+import { changeRealmPublication, readRealmBoards, readRealmPublications } from './space-actions';
+import {
+  PublicationControls,
+  ShelfContinuation,
+  usePublicationControls,
+  type PublicationSend,
+} from './publication-controls-view';
+import type { ShelfPage } from './space';
+import type { ReadCredentialMode } from '../kernel/credential';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -26,7 +37,17 @@ function purposeLabel(purpose: RealmBoard['purpose']): string {
   return purpose === 'reviews' ? m.realm_board_purpose_reviews() : m.realm_board_purpose_discussion();
 }
 
-function Boards({ boards, unavailable }: { boards: RealmBoard[]; unavailable: number }) {
+function Boards({
+  boards,
+  unavailable,
+  continuation,
+  complete,
+}: {
+  boards: RealmBoard[];
+  unavailable: number;
+  continuation: React.ReactNode;
+  complete: boolean;
+}) {
   return (
     <section className="space-y-4" aria-labelledby="realm-boards-heading">
       <h2 id="realm-boards-heading" className="text-xl font-semibold">
@@ -59,10 +80,11 @@ function Boards({ boards, unavailable }: { boards: RealmBoard[]; unavailable: nu
             </ListRow>
           ))}
         </ul>
-      ) : unavailable === 0 ? (
+      ) : unavailable === 0 && complete ? (
         <p className="text-muted-foreground">{m.realm_boards_empty()}</p>
       ) : null}
       {unavailable > 0 ? <p className="text-muted-foreground">{m.realm_boards_unavailable()}</p> : null}
+      {continuation}
     </section>
   );
 }
@@ -93,7 +115,21 @@ function CarriedRealm({ realm }: { realm: RealmHome }) {
   );
 }
 
-function Published({ realm }: { realm: RealmHome }) {
+function Published({
+  realm,
+  control,
+  editable,
+  continuation,
+  complete,
+  refresh,
+}: {
+  realm: RealmHome;
+  control: ReturnType<typeof usePublicationControls>;
+  editable: boolean;
+  continuation: React.ReactNode;
+  complete: boolean;
+  refresh: () => Promise<void>;
+}) {
   const locale = getLocale();
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
     subject,
@@ -105,6 +141,8 @@ function Published({ realm }: { realm: RealmHome }) {
       <h2 id="realm-published-heading" className="text-xl font-semibold">
         {m.realm_published_heading()}
       </h2>
+      <p className="text-sm text-muted-foreground">{m.realm_publication_global_fallback()}</p>
+      {editable ? <PublicationControls control={control} refresh={refresh} /> : null}
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
@@ -114,16 +152,108 @@ function Published({ realm }: { realm: RealmHome }) {
               cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
               title={cover.title}
               secondary={subject.typeName}
+              menuLabel={m.realm_publication_actions({ title: cover.title })}
+              {...(editable
+                ? {
+                    menuEntries: [
+                      {
+                        type: 'item' as const,
+                        label: m.realm_publication_withdraw(),
+                        disabled: control.locked || !subject.publicationId,
+                        onSelect: () => void control.change('withdraw', { ...subject, title: cover.title }),
+                      },
+                      {
+                        type: 'destructive' as const,
+                        label: m.realm_publication_reject(),
+                        disabled: control.locked || !subject.publicationId,
+                        onSelect: () => void control.change('reject', { ...subject, title: cover.title }),
+                      },
+                    ],
+                  }
+                : {})}
             />
           ))}
         </CoverRow>
       ) : null}
       {(realm.unavailablePublished ?? 0) > 0 ? (
         <p className="text-muted-foreground">{m.realm_published_unavailable()}</p>
-      ) : !titled.length ? (
+      ) : !titled.length && complete ? (
         <p className="text-muted-foreground">{m.realm_published_empty()}</p>
       ) : null}
+      {continuation}
     </section>
+  );
+}
+
+export type RealmShelfTransport = {
+  boards: (input: { cursor?: string; credentialMode: ReadCredentialMode }) => Promise<ShelfPage<RealmBoard>>;
+  publications: (input: {
+    cursor?: string;
+    credentialMode: ReadCredentialMode;
+  }) => Promise<ShelfPage<PublishedSubject>>;
+  change: PublicationSend;
+};
+
+/** One reusable shelf region; its stories exercise the same controls used on Space and Realm pages. */
+export function RealmShelf({ realm, transport }: { realm: RealmHome; transport?: RealmShelfTransport }) {
+  const { state, csrfToken } = useSession();
+  const boards = useShelfList(
+    {
+      items: realm.boards,
+      next: realm.boardNext ?? null,
+      unavailable: realm.unavailableBoards ?? 0,
+      credentialMode: realm.credentialMode ?? 'anonymous',
+    },
+    transport?.boards ?? ((input) => readRealmBoards({ data: { realmId: realm.id, ...input } })),
+  );
+  const publications = useShelfList(
+    {
+      items: realm.published,
+      next: realm.publicationNext ?? null,
+      unavailable: realm.unavailablePublished ?? 0,
+      credentialMode: realm.credentialMode ?? 'anonymous',
+    },
+    transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
+  );
+  const control = usePublicationControls(
+    realm.id,
+    transport?.change ??
+      ((input) =>
+        csrfToken
+          ? changeRealmPublication({ data: input, headers: { 'X-CSRF-Token': csrfToken } })
+          : Promise.resolve({ kind: 'denied' })),
+    (input, target, head) =>
+      publications.update((previous) => ({
+        ...previous,
+        items:
+          input.action === 'publish'
+            ? [{ ...target, publicationId: head }, ...previous.items.filter((subject) => subject.id !== target.id)]
+            : previous.items.filter((subject) => subject.id !== target.id),
+      })),
+    publications.items,
+  );
+  return (
+    <>
+      <Boards
+        boards={boards.items}
+        unavailable={boards.unavailable}
+        complete={!boards.next && !boards.failure}
+        continuation={<ShelfContinuation {...boards} label={m.realm_boards_more()} />}
+      />
+      <Published
+        realm={{
+          ...realm,
+          published: publications.items,
+          publicationNext: publications.next,
+          unavailablePublished: publications.unavailable,
+        }}
+        control={control}
+        editable={state === 'signed-in' && Boolean(csrfToken)}
+        complete={!publications.next && !publications.failure}
+        refresh={() => publications.load(true)}
+        continuation={<ShelfContinuation {...publications} label={m.realm_publications_more()} />}
+      />
+    </>
   );
 }
 
@@ -131,8 +261,7 @@ function Home({ realm }: { realm: RealmHome }) {
   return (
     <>
       <CarriedRealm realm={realm} />
-      <Boards boards={realm.boards} unavailable={realm.unavailableBoards ?? 0} />
-      <Published realm={realm} />
+      <RealmShelf key={realm.id} realm={realm} />
     </>
   );
 }

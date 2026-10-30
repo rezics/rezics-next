@@ -23,6 +23,8 @@ export type RealmBoard = {
 
 export type PublishedSubject = {
   id: string;
+  /** Native publication head; used only for Realm shelf decisions. */
+  publicationId?: string;
   types: string[];
   typeName?: string;
   labels: Record<string, string>;
@@ -42,6 +44,10 @@ export type RealmHome = {
   published: PublishedSubject[];
   /** Published IDs among this page's twelve-row cover window whose public subject read was hidden or missing. */
   unavailablePublished?: number;
+  boardNext?: string | null;
+  publicationNext?: string | null;
+  /** Native cursors are bound to the reader that obtained them. */
+  credentialMode?: ReadCredentialMode;
   /** Null when signed out. */
   viewer: { state: MemberState; idempotencyKey: string } | null;
 };
@@ -164,14 +170,17 @@ async function readHome(
   client: KernelClient,
   realm: { realmId: string; visibility: 'public' | 'protected'; title?: string },
   auth: Auth,
+  credentialMode: ReadCredentialMode,
 ): Promise<RealmHome> {
   const realmId = realm.realmId;
   const [boards, publications] = await Promise.all([
     client.realms({ realmId }).boards.get({ query: { limit: BOARD_ROW_LIMIT }, ...auth }),
     client.realms({ realmId }).publications.get({ query: { limit: COVER_ROW_LIMIT }, ...auth }),
   ]);
-  const boardItems = readCommunity(boards).items;
-  const publicationItems = readCommunity(publications).items;
+  const boardPage = readCommunity(boards);
+  const publicationPage = readCommunity(publications);
+  const boardItems = boardPage.items;
+  const publicationItems = publicationPage.items;
   const unavailableBoards = boardItems.filter(
     (board) => board.availability !== 'available' && board.visibility !== 'taken_down',
   ).length;
@@ -191,10 +200,94 @@ async function readHome(
         visibility: board.visibility,
       })),
     unavailableBoards,
-    published,
+    published: attachPublicationHeads(published, publicationItems),
+    boardNext: boardPage.next,
+    publicationNext: publicationPage.next,
+    credentialMode,
     unavailablePublished: publishedIds.length - published.length,
     viewer: null,
   };
+}
+
+function attachPublicationHeads(subjects: PublishedSubject[], items: { subjectId: string; publicationId: string }[]) {
+  const heads = new Map(items.map((item) => [item.subjectId, item.publicationId]));
+  return subjects.map((subject) => {
+    const publicationId = heads.get(subject.id);
+    return { ...subject, ...(publicationId ? { publicationId } : {}) };
+  });
+}
+
+export type ShelfPage<T> =
+  | { kind: 'page'; items: T[]; next: string | null; unavailable: number }
+  | { kind: 'denied' | 'unavailable' | 'stale' };
+
+function shelfFailure(result: Result<unknown>): { kind: 'denied' | 'unavailable' | 'stale' } | null {
+  const status = statusOf(result);
+  if (status === 409 || status === 400) return { kind: 'stale' };
+  if (status === 401 || status === 403 || status === 404) return { kind: 'denied' };
+  return result.error || status === undefined || status >= 400 || !result.data ? { kind: 'unavailable' } : null;
+}
+
+export type ShelfReadInput = { realmId: string; cursor?: string; credentialMode: ReadCredentialMode };
+
+export function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' },
+): Promise<ShelfPage<RealmBoard>>;
+export function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'publications' },
+): Promise<ShelfPage<PublishedSubject>>;
+/** Continue exactly one native list, retaining its own reader-bound cursor and fixed page size. */
+export async function loadRealmShelfPage(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: ShelfReadInput & { list: 'boards' | 'publications' },
+): Promise<ShelfPage<RealmBoard> | ShelfPage<PublishedSubject>> {
+  try {
+    const { auth } = await session(request, sessionEnv, input.credentialMode);
+    const realm = client.realms({ realmId: input.realmId });
+    const cursor = input.cursor ? { cursor: input.cursor } : {};
+    if (input.list === 'boards') {
+      const result = await realm.boards.get({ query: { limit: BOARD_ROW_LIMIT, ...cursor }, ...auth });
+      const failure = shelfFailure(result);
+      if (failure) return failure;
+      const page = readCommunity(result);
+      const items = page.items
+        .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
+        .map((board) => ({ id: board.id, title: board.title, purpose: board.purpose, visibility: board.visibility }));
+      return {
+        kind: 'page',
+        items,
+        next: page.next,
+        unavailable: page.items.filter(
+          (board) => board.availability !== 'available' && board.visibility !== 'taken_down',
+        ).length,
+      };
+    }
+    const result = await realm.publications.get({ query: { limit: COVER_ROW_LIMIT, ...cursor }, ...auth });
+    const failure = shelfFailure(result);
+    if (failure) return failure;
+    const page = readCommunity(result);
+    const subjects = await readPublished(
+      client,
+      page.items.map((item) => item.subjectId),
+      auth,
+    );
+    return {
+      kind: 'page',
+      items: attachPublicationHeads(subjects, page.items),
+      next: page.next,
+      unavailable: page.items.length - subjects.length,
+    };
+  } catch {
+    return { kind: 'unavailable' };
+  }
 }
 
 /** The signed-in reader's membership state, loaded only by a browser personal query. */
@@ -227,7 +320,7 @@ export async function loadSpacePage(
   const realmId = space.realmId;
   const realm = await readOptional(client.realms({ realmId }).get(auth));
   if (!realm) return { space: base, realm: null };
-  const home = await readHome(client, realm.realm, auth);
+  const home = await readHome(client, realm.realm, auth, credentialMode);
   return {
     space: base,
     realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
@@ -249,7 +342,7 @@ export async function locateRealm(
   const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
   if (space.address) return { kind: 'redirect', address: space.address };
-  const home = await readHome(client, realm, auth);
+  const home = await readHome(client, realm, auth, credentialMode);
   return {
     kind: 'page',
     page: {

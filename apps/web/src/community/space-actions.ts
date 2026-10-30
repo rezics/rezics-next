@@ -21,11 +21,13 @@ import {
   loadSpacePage,
   locateRealm,
   namePublishedTypes,
+  loadRealmShelfPage,
   type Located,
   type MembershipResult,
   type MyRealmsPage,
   type SpacePageData,
 } from './space';
+import { changePublication, type PublicationChange, type PublicationOutcome } from './publication-controls';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -149,3 +151,74 @@ export const resolveSpaceSetupChoice = createServerFn({ method: 'GET' })
 export const changeSpaceSetup = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(setupCommandSchema, input))
   .handler(async ({ data }) => commandSetup(kernelClient(), await setupCredential(), data));
+
+function validateShelf(input: unknown) {
+  return { ...validateRealm(input), ...validateCursor(input) };
+}
+
+export const readRealmBoards = createServerFn({ method: 'GET' })
+  .validator(validateShelf)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadRealmShelfPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, { ...data, list: 'boards' });
+  });
+
+export const readRealmPublications = createServerFn({ method: 'GET' })
+  .validator(validateShelf)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const result = await loadRealmShelfPage(kernelClient(), request, env as Partial<SessionEnv>, {
+      ...data,
+      list: 'publications',
+    });
+    if (result.kind !== 'page') return result;
+    const { typeNames } = await import('../subject/definitions');
+    const names = await typeNames(
+      [...new Set(result.items.flatMap((subject) => subject.types.slice(0, 1)))],
+      requestLocale(request) ?? 'en',
+    );
+    return {
+      ...result,
+      items: result.items.map((subject) => {
+        const typeName = names.get(subject.types[0] ?? '');
+        return { ...subject, ...(typeName ? { typeName } : {}) };
+      }),
+    };
+  });
+
+export const changeRealmPublication = createServerFn({ method: 'POST' })
+  .validator((input: unknown): PublicationChange => {
+    const { realmId } = validateRealm(input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('subjectId' in input) ||
+      typeof input.subjectId !== 'string' ||
+      !idempotencyKeyPattern.test(input.subjectId) ||
+      !('action' in input) ||
+      (input.action !== 'publish' && input.action !== 'withdraw' && input.action !== 'reject') ||
+      !('idempotencyKey' in input) ||
+      typeof input.idempotencyKey !== 'string' ||
+      !idempotencyKeyPattern.test(input.idempotencyKey) ||
+      ('expectedHead' in input &&
+        input.expectedHead !== undefined &&
+        (typeof input.expectedHead !== 'string' || !idempotencyKeyPattern.test(input.expectedHead)))
+    )
+      throw new Error('Invalid Realm publication request');
+    return {
+      realmId,
+      subjectId: input.subjectId,
+      action: input.action,
+      idempotencyKey: input.idempotencyKey,
+      ...('expectedHead' in input && typeof input.expectedHead === 'string'
+        ? { expectedHead: input.expectedHead }
+        : {}),
+    };
+  })
+  .handler(async ({ data }): Promise<PublicationOutcome> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    return changePublication(kernelClient(), viewerCredential(request), data);
+  });

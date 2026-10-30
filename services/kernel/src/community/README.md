@@ -234,6 +234,30 @@ earliest remaining expiry as `nextDueAt`.
 - Fence cost: each party-locator effect adds one locked account-key read, or one first-account insert; closing is
   one statement. Rows and statements stay constant per effect, with logarithmic blocks in accounts per partition.
 
+## Realm home shelf
+
+The Space and Realm home adopts the reach-every-item and curate-existing-subject slices from
+[the community design](../../../../docs/research/content-realms-spaces-design.md). Boards and publications retain
+separate native cursors and explicit Load more actions, with fixed windows of 20 boards and 12 publications.
+An empty window with a continuation is not an empty directory. Continuation denial, dependency failure and expired
+cursors have distinct visible states; only an explicit reload restarts a list. Cursors retain their original
+credential mode and native viewer binding. The existing bounded subject-summary reads are reused without an
+additional publication-head read per card.
+
+Curation uses `POST /v1/realms/{realmId}/publications` with `{subjectId}`, or the existing `:withdraw` and `:reject`
+commands. Native `realm:publish` and subject readability authorize each command, including receipt replay.
+Membership, `realm:manage`, ownership elsewhere and Context editorial authority never substitute for that check.
+Loaded publication IDs supply current-head CAS; returned decision heads permit an explicit republish during the
+visit. An uncertain reply retains the exact action, subject, expected head and request key for retry. A native
+409/412 reads that subject's currently adopted head once and requires an explicit decision before retry with a new
+key. A withdrawn, rejected or unreadable head is not exposed by the existing point read; the interface offers a
+truthful reload state instead of inventing a head or silently overwriting another curator's decision.
+
+A confirmed decision updates the same subject on this Realm shelf. It never changes Global identity, ownership,
+facts or Context grants. Subject links retain their canonical Global destination and explain that fallback until
+the actual [Semantic Realm-page binding](../../../../docs/subject-pages.md#realm-context) is delivered. A Realm query
+parameter or a raw Context override is not a substitute for that binding.
+
 ## Sitemap feeds
 
 `GET /v1/sitemap/realms` returns public Realms as `{ id, lastModified }`. `GET /v1/sitemap/spaces`
