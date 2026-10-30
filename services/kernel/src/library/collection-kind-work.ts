@@ -267,13 +267,15 @@ export async function retireCollectionKindPage(
 }
 
 export function registerCollectionKindWork(context: WorkContext) {
-  const native = createCollectionKindNative(collectionKindSourceBindings({
-    pool: context.pool,
-    clock: context.clock,
-    access: context.getAuthorization().access,
-    routeKey: readMembershipRouteKey(context.env),
-    workClient: context.client,
-  }));
+  const native = createCollectionKindNative(
+    collectionKindSourceBindings({
+      pool: context.pool,
+      clock: context.clock,
+      access: context.getAuthorization().access,
+      routeKey: readMembershipRouteKey(context.env),
+      workClient: context.client,
+    }),
+  );
   const step = DBOS.registerStep(
     async (input: CollectionKindWork) => {
       try {
