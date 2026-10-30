@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 import { CandidateValue, pageText } from '../pages/data';
 import { isRecord } from '../pages/shared';
 import { m } from '../../paraglide/messages.js';
+import { DefinitionGuideLink } from './definition-guide-view';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
 import { ContributionLifecycle } from './contribution-lifecycle-view';
@@ -373,6 +374,10 @@ export function StatementEditor({
   const label = subject ? pageText(subject.labels, locale).text : '';
   const href = subject ? subjectHref({ id: subject.id, label }, locale).href : undefined;
   const definition = draft && current ? current.release.properties[draft.property.id] : undefined;
+  const guideReturn =
+    href && draft
+      ? `${href}/edit?${new URLSearchParams({ property: draft.property.id, ...(current?.source ? { statement: current.source.id } : {}) })}`
+      : undefined;
   const change = (next: StatementInput) => {
     if (!pending.current) {
       setDraft(next);
@@ -451,6 +456,7 @@ export function StatementEditor({
         )}
         <p className="text-sm text-muted-foreground">{m.correction_intro({}, o)}</p>
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
+        {subject && <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: guideReturn }} />}
       </header>
       {!read.ok && !result && <EditorFailure reason={read.reason} locale={locale} />}
       {failure && (
@@ -551,6 +557,16 @@ export function StatementEditor({
           <fieldset disabled={busy || !!pending.current} className="space-y-6">
             <section className="space-y-3 rounded-xl border border-border bg-card p-4">
               <h2 className="font-semibold">{m.correction_replacement({}, o)}</h2>
+              <DefinitionGuideLink
+                locale={locale}
+                field
+                address={{
+                  type: current.public.subject.type,
+                  property: draft.property.id,
+                  release: current.source?.rezics.release,
+                  returnTo: guideReturn,
+                }}
+              />
               {definition?.descriptions && (
                 <p className="text-sm text-muted-foreground">{pageText(definition.descriptions, locale).text}</p>
               )}

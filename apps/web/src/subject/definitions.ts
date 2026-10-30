@@ -5,6 +5,8 @@ import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { env } from 'cloudflare:workers';
 import { requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
+import type { KernelClient } from '@rezics/client';
+import { fetchGuideRelease, type GuideRelease } from '../features/catalogue/definition-guide';
 
 export type Release = FilterRelease & {
   digest?: string;
@@ -102,6 +104,15 @@ function kernelOrigin(): string {
   if (origin) return origin;
   if (import.meta.env.DEV) return 'http://kernel.local';
   throw new Error('KERNEL_ORIGIN is required to read definitions');
+}
+
+/** Caller-aware release reads retain native failures and bypass the anonymous display cache. */
+export async function readReleaseForCaller(options: {
+  client: KernelClient;
+  digest?: string;
+  headers?: Record<string, string>;
+}): Promise<GuideRelease> {
+  return fetchGuideRelease(options.client, options.digest, options.headers);
 }
 
 export async function readRelease(): Promise<Release> {

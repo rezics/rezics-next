@@ -7,6 +7,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
+import { DefinitionGuideLink } from './definition-guide-view';
 import {
   initialTerms,
   type CreateFailure,
@@ -223,6 +224,7 @@ export function CreateSubjectForm({
                 <FieldDescription id="create-type-help">
                   {types.find((entry) => entry.id === type)?.description}
                 </FieldDescription>
+                <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
                 {invalid('create-type') && <FieldError>{m.catalogue_create_invalid_field({}, options)}</FieldError>}
               </Field>
               {rows.map((row, index) => (

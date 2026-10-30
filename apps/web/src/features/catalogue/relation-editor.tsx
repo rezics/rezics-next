@@ -12,6 +12,7 @@ import { EntityPicker, type EntityPickerSubject, type EntityPickerSearch } from 
 import { CandidateValue } from '../pages/data';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
+import { DefinitionGuideLink } from './definition-guide-view';
 import { subjectHref } from '../../subject/subject-href';
 import { candidateContext, type Candidate, type CandidateFailure } from '../../subject/candidates';
 import {
@@ -276,6 +277,15 @@ export function RelationEditor({
                   <legend className="px-1 font-semibold">{m.relation_draft({}, options)}</legend>
                   <Field>
                     <FieldLabel htmlFor="relation-property">{m.relation_property({}, options)}</FieldLabel>
+                    <DefinitionGuideLink
+                      locale={locale}
+                      field={!!field}
+                      address={{
+                        type: current.public.subject.type,
+                        property: field?.id,
+                        returnTo: `${subjectHref({ id, label: pickText(current.public.subject.labels, locale).text }, locale).href}/relation-edit`,
+                      }}
+                    />
                     <NativeSelect
                       id="relation-property"
                       value={draft.property.id}

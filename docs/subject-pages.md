@@ -89,6 +89,18 @@ locale fallback and remain distinct from a value's data language.
 
 ## Canonical public reading
 
+`/{locale}/catalogue/definitions` is the read-only Type and field guide linked from catalogue creation and
+native scalar/relation contribution forms. It reads the actual active pointer and immutable release through
+the generated client and shared release helper, or exactly the requested `release` digest for a pinned
+assertion; it never substitutes the active bundle for a missing pin. Released labels and descriptions use
+explicit language fallback, independently of authored value languages. Only effective emitted fields,
+datatypes, qualifiers, units, multiplicity, targets and native reference or `sourceOrConsent` rules are
+explained. Missing meaning, empty metadata, loading, invalid addresses, concealed definitions and unavailable
+reads remain distinct. Help opens in a separate tab to retain the original draft and uncertain request; Return
+to contribution permits only the existing localized creation or canonical subject editor address, including
+its selected field and statement. Current authority, validation and writes remain with those editors and their
+private session BFF; the guide has no mutation or publication controls.
+
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
 discovery or a collection → current canonical identity → public facts and text → traversable relations, editions
 and credits → original evidence and current rights. Work, edition and agent identities remain separate until their
