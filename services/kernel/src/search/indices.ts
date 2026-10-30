@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import { mixedDiscoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -92,8 +92,8 @@ export function discoveryAlias(prefix: string): string {
   return `${prefix}discovery`;
 }
 
-export async function discoveryIndexUuid(search: OpenSearch, index: string): Promise<string> {
-  const response = await search.request<unknown>('GET', `/${index}/_settings`);
+export async function discoveryIndexUuid(search: OpenSearch, index: string, work?: SearchRequestWork): Promise<string> {
+  const response = await search.request<unknown>('GET', `/${index}/_settings`, undefined, work ? { work } : undefined);
   const entry = record(response.body) ? response.body[index] : undefined;
   const settings = record(entry) ? entry.settings : undefined;
   const native = record(settings) ? settings.index : undefined;
@@ -171,6 +171,7 @@ export async function ensureSubjectRatingMapping(
 export async function subjectGenerations(
   search: OpenSearch,
   prefix: string,
+  work?: SearchRequestWork,
 ): Promise<{ generations: number[]; active: number | null }> {
   validatePrefix(prefix);
   const alias = subjectAlias(prefix);
@@ -179,6 +180,7 @@ export async function subjectGenerations(
   try {
     response = await search.request('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
       query: { expand_wildcards: 'all' },
+      ...(work ? { work } : {}),
     });
   } catch (error) {
     if (error instanceof OpenSearchError)

@@ -14,7 +14,7 @@ import {
   validateSearchAfter,
 } from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
-import { type OpenSearch, SearchUnavailableError } from './opensearch.ts';
+import { type OpenSearch, type SearchRequestWork, SearchUnavailableError } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import { searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
@@ -62,6 +62,8 @@ export type SearchPlan = {
   after?: readonly SortValue[];
   /** Distinct statement properties in the admitted filter. */
   overflowProperties?: readonly string[];
+  /** Internal native request allowance; never a public query or sort. */
+  work?: SearchRequestWork;
 };
 
 export type SubjectHit = {
@@ -193,7 +195,7 @@ function executeSubjects(
           overflow_properties: plan.overflowProperties,
         },
       },
-      { query: { allow_partial_search_results: false } },
+      { query: { allow_partial_search_results: false }, ...(plan.work ? { work: plan.work } : {}) },
     )
     .then(({ body }) => {
       assertCompleteSearch(body);

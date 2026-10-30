@@ -1,6 +1,6 @@
 import { ProblemError } from '../http/problem.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import type { createSearchScopeSource } from './scope-source.ts';
+import { createSearchScopeSource } from './scope-source.ts';
 import type { createSearchService } from './service.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
@@ -20,15 +20,14 @@ export function registerSearchScopeRuntime(service: SearchService, runtime: Scop
 }
 
 /**
- * Service-bound scope contract. Constructor wiring and native execution follow separately.
- * The eventual handoff passes options unchanged as evidence to createSearchScopeSource using
- * the registered runtime; it must not create another client or reconstruct Actor or native time.
+ * Reuse the constructor's runtime and the caller's actual reader context. Runtime ownership
+ * permits admission, not native readiness; the Source owns capability checks during preparation.
  */
 export function createSearchScopeForService(
   service: SearchService,
-  _options: LeafOptions,
+  options: LeafOptions,
 ): ReturnType<typeof createSearchScopeSource> {
-  if (!runtimes.has(service)) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-  // Owning a runtime is not proof that native canonical preparation is implemented.
-  throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+  const runtime = runtimes.get(service);
+  if (!runtime) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+  return createSearchScopeSource({ ...runtime, evidence: options });
 }

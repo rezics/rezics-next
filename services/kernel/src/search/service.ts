@@ -43,6 +43,7 @@ import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan }
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
+import { registerSearchScopeRuntime } from './service-scope.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
@@ -393,7 +394,7 @@ export function createSearchService({
     return admitted;
   }
 
-  return {
+  const service = {
     async search(
       principal: 'anonymous' | `account:${string}`,
       request: SearchRequest,
@@ -835,6 +836,8 @@ export function createSearchService({
       return response;
     },
   };
+  registerSearchScopeRuntime(service, { pool, client, prefix, source, release, clock });
+  return service;
 }
 
 const bindingFor = (binding: SearchCursorBinding) => ({ ...binding, operation: 'subjects.search.kinds' });

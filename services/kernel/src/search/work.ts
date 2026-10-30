@@ -9,6 +9,8 @@ import { createKernel } from '../http/kernel.ts';
 import { createKernelRuntimeDefaults } from '../server.ts';
 import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
 import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
+import { createScopePreparation } from './scope-preparation.ts';
+import { createScopePreparationStore, SCOPE_PREPARATION_WORKFLOW } from './scope-preparation-store.ts';
 import { PUBLIC_PREPARATION_WORKFLOW } from './public-preparation-store.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
@@ -225,6 +227,21 @@ export const searchWorkModule: WorkModule = {
     const source = createRatedSubjectSource(context.pool, routeKey).source;
     const listing = subjectListingSource(context.pool);
     let active: PublicPreparation | undefined;
+    let scoped: ReturnType<typeof createScopePreparation> | undefined;
+    const scopeStore = createScopePreparationStore(context.pool, config.prefix, context.client);
+    const scopeStep = DBOS.registerStep(
+      async (scopeId: string, revision: string) => {
+        if (!scoped) throw new SearchUnavailableError('Search scope preparation service is not running');
+        await scoped.run(scopeId, revision);
+      },
+      { name: 'search.scopePreparationStep', ...COMMAND_STEP_RETRIES },
+    );
+    DBOS.registerWorkflow(
+      async (input: { scopeId: string; revision: string }) => {
+        await scopeStep(input.scopeId, input.revision);
+      },
+      { name: SCOPE_PREPARATION_WORKFLOW },
+    );
     const step = DBOS.registerStep(
       async (id: string, revision: string) => {
         const preparation = active;
@@ -250,6 +267,13 @@ export const searchWorkModule: WorkModule = {
         ...defaults,
         workClient: context.client,
         onAccessReady(access) {
+          scoped = createScopePreparation({
+            pool: context.pool,
+            prefix: config.prefix,
+            routeKey,
+            access,
+            clock: context.clock,
+          });
           runtime = createDefaultPublicFilterRuntime({
             pool: context.pool,
             routeKey,
@@ -262,6 +286,23 @@ export const searchWorkModule: WorkModule = {
       });
       if (!runtime) throw new Error('Search worker Access composition is incomplete');
       const publicRuntime = runtime;
+      if (active) {
+        await publicRuntime.close();
+        throw new Error('Search preparation service is already running');
+      }
+      let scopeTick: Promise<void> | undefined;
+      let scopeStopped = false;
+      const scopeTimer = setInterval(() => {
+        if (scopeStopped || scopeTick) return;
+        scopeTick = scopeStore
+          .due()
+          .catch(() => {
+            /* the next bounded discovery retries */
+          })
+          .finally(() => {
+            scopeTick = undefined;
+          });
+      }, 1000);
       const preparation = createPublicPreparation({
         pool: context.pool,
         work: context.client,
@@ -271,10 +312,6 @@ export const searchWorkModule: WorkModule = {
         runtime,
         prefix: config.prefix,
       });
-      if (active) {
-        await publicRuntime.close();
-        throw new Error('Search preparation service is already running');
-      }
       active = preparation;
       let runner: Awaited<ReturnType<typeof startSearchIndexing>>;
       try {
@@ -290,6 +327,9 @@ export const searchWorkModule: WorkModule = {
         });
       } catch (error) {
         if (active === preparation) active = undefined;
+        scopeStopped = true;
+        clearInterval(scopeTimer);
+        await scopeTick;
         try {
           await preparation.stop();
         } finally {
@@ -302,6 +342,9 @@ export const searchWorkModule: WorkModule = {
         resume: runner.resume,
         refresh: runner.refresh,
         async stop() {
+          scopeStopped = true;
+          clearInterval(scopeTimer);
+          await scopeTick;
           if (active === preparation) active = undefined;
           try {
             await runner.stop();

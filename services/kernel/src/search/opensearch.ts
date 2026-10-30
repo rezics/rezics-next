@@ -1,11 +1,15 @@
 export type SearchQuery = Record<string, string | number | boolean>;
 
+/** Internal physical byte reservation and absolute caller deadline. The meter returns no verdict. */
+export type SearchRequestWork = Readonly<{ bytes: number; deadline: number; settle(bytes: number): void }>;
+export type SearchRequestOptions = { query?: SearchQuery; timeoutMs?: number; work?: SearchRequestWork };
+
 export type OpenSearch = {
   request<T = unknown>(
     method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
     path: string,
     body?: unknown,
-    options?: { query?: SearchQuery; timeoutMs?: number },
+    options?: SearchRequestOptions,
   ): Promise<{ status: number; body: T }>;
   bulk<T = unknown>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number }): Promise<T>;
   /** Exact native bigint NDJSON; optional only for historical Subject-only test transports. */
@@ -43,7 +47,12 @@ export class SearchUnavailableError extends Error {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
-async function readResponse(response: Response, controller: AbortController, limit: number): Promise<string> {
+async function readResponse(
+  response: Response,
+  controller: AbortController,
+  limit: number,
+  work?: SearchRequestWork,
+): Promise<string> {
   // HEAD may advertise the GET representation's length without containing any response bytes.
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -64,6 +73,7 @@ async function readResponse(response: Response, controller: AbortController, lim
       bytes.set(value, used);
       used += value.byteLength;
     }
+    work?.settle(used);
     return bytes ? new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, used)) : '';
   } catch (error) {
     // Abort the native producer as well as cancelling the stream before relinquishing reader ownership.
@@ -98,8 +108,24 @@ export function createOpenSearch(
     path: string,
     body: string | undefined,
     contentType: string | undefined,
-    requestOptions: { query?: SearchQuery; timeoutMs?: number } = {},
+    requestOptions: SearchRequestOptions = {},
   ): Promise<{ status: number; body: T }> {
+    const work = requestOptions.work;
+    const inputBytes = Buffer.byteLength(body ?? '', 'utf8');
+    if (
+      work &&
+      (!Number.isSafeInteger(work.bytes) ||
+        work.bytes <= inputBytes ||
+        !Number.isFinite(work.deadline) ||
+        work.deadline <= Date.now())
+    )
+      throw new SearchUnavailableError();
+    work?.settle(inputBytes);
+    const limit = work ? Math.min(responseLimit, work.bytes - inputBytes) : responseLimit;
+    const timeoutMs = Math.min(
+      requestOptions.timeoutMs ?? defaultTimeoutMs,
+      work ? Math.max(1, work.deadline - Date.now()) : Infinity,
+    );
     const target = new URL(path.replace(/^\/+/, ''), base);
     if (requestOptions.query) {
       for (const [key, value] of Object.entries(requestOptions.query)) target.searchParams.set(key, String(value));
@@ -110,7 +136,7 @@ export function createOpenSearch(
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(new DOMException('OpenSearch request timed out', 'TimeoutError')),
-      requestOptions.timeoutMs ?? defaultTimeoutMs,
+      timeoutMs,
     );
     const request: RequestInit = {
       method,
@@ -122,7 +148,7 @@ export function createOpenSearch(
     let responseText: string;
     try {
       response = await fetch(target, request);
-      responseText = await readResponse(response, controller, responseLimit);
+      responseText = await readResponse(response, controller, limit, work);
     } catch (error) {
       // Fetch/parser errors can carry configured credentials or response excerpts. Do not retain them as causes.
       throw new SearchUnavailableError(unavailableMessage(error));
@@ -159,7 +185,7 @@ export function createOpenSearch(
       method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
       path: string,
       body?: unknown,
-      requestOptions?: { query?: SearchQuery; timeoutMs?: number },
+      requestOptions?: SearchRequestOptions,
     ): Promise<{ status: number; body: T }> {
       let json: string | undefined;
       if (body !== undefined) json = JSON.stringify(body);

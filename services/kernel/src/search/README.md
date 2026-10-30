@@ -309,9 +309,60 @@ settled work after crash/replay; an essential unknown cannot become false, EOF o
 
 The service-bound Scope runtime must use the same real Search service/compiler and immutable released meaning,
 including pin A after activation of B. Collection candidates are not fabricated Search Hits and Commerce does not
-supply a second interpreter. Full native execution/default composition/growth remain required. Current
-`scope-source.ts`, `service-scope.ts`, `scope-progress.ts` and leaf/final-replay exports are superseded unavailable
-scaffolding, not evidence of indexed/prepared capability. Existing code and frozen tests remain until replacement
+supply a second interpreter. `createSearchService` registers only its own returned object with the resolved pool,
+client, prefix, Source and release reader. `createSearchScopeForService(service, options)` reuses that runtime and
+passes the actual `LeafOptions` unchanged to `createSearchScopeSource`. Clones and injected services cannot bind.
+This enables released-filter admission; constructor ownership does not establish native readiness.
+
+`service-scope-order.ts:createSearchScopeOrder({pool, options: LeafOptions, clock})` is the internal ordered
+Source adapter. `SearchScopeOrder` is `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal',
+source: NativeSourceIdentity}`. These are native locators; they confer no authority. `prepare(order, allowance)`
+returns `{collection, work}` with the complete `CollectionSourceObservation` and native prepared Source.
+`rawOrdinal(collection, after: NativeOrdinalKey|null, limit, allowance)` returns the canonical Library
+`RawOrdinalCollectionPrefix`; `prefix` and `contains` preserve the native ID APIs and actual work receipts.
+`contains` also accepts the native optional `CollectionAliasProgress` as its fourth argument.
+The adapter adds no public Search sort and manufactures no Search Hits from Collection rows.
+
+`createSearchScopeForService(service, options)` remains the sole resolved-service boundary with the original two
+arguments. `prepare(filter, {releaseDigest?, order?, allowance?, type?})`, `prefix` and `evaluate` retain their
+existing calls. `sourcePrefix` returns actual canonical Collection candidates; `ordinalPrefix` returns canonical
+subject/order locators with a native ordinal frontier. The exact requested/saved-expanded filter, immutable release,
+projection profile, full native source/sort, authenticated reader, physical name/UUID/generation and full committed
+scoped observation bind each factory-local handle. A clone or a handle from another factory cannot execute.
+
+`scope-preparation.ts` advances complete public structural capture or Library native custody and the agreed
+`createIdentityScopedObservations(pool)` registration/revalidation protocol. The existing Search WorkModule runs
+bounded capture steps and discovers sixteen due locators per tick. A request can advance one step with its actual
+deadline and shared allowance. Capture progress is durable; neither raw count, allocated epoch nor an empty prefix
+makes it ready. Expired work retains unknown native custody instead of disposing it; a later reader renews the
+retained locator and resumes its native frontier. No consumer arms identity
+attempts or constructs receiving receipts. A current native scoped observation is checked before and finally
+around prefix, evidence evaluation and ready preparation, including empty/exhausted results.
+
+Curated ordinal input includes deleted and excluded rows. Current reader steps retain a finite raw frontier and
+canonical DISTINCT order keys before output selection. Every original and terminal is resolved through native
+membership/current evidence; the one shared current-filter matcher/interpreter handles catalogue leaves. Output
+uses the retained ordinal index before LIMIT, then repeats native current membership/evidence and the complete
+scope guard. A sparse unfinished scan returns readiness, not a short successful page. Reader authority is never
+serialized into work; background capture work holds only native structural locators.
+
+`scope-execution.ts` shares one root allowance across source, alias, metadata, leaf, refusal, replay and lookahead
+work. Candidate keys and native dimensions remain independent; leaf calls use at most 101 remaining keys, and
+witness revalidation uses the original `LeafOptions`. Partial facts never prove absence. Native progress keeps the
+exact subject, leaf ordinal, composite basis and separate retained native leaf basis; unfinished native membership
+keeps its own `CollectionAliasProgress`. Both resume through their original producers. The resolved engine transport
+also consumes actual UTF-8 request/response bytes and the same absolute deadline from this root. There is no copied private fact store,
+second interpreter, replacement client or Boolean authorization callback.
+
+The agreed Semantic scoped observation/public capture declarations are installed with typed unavailable producers
+until their native bodies integrate. `readScopeLeafEvidence` still reports native not-ready; the complete Collection
+Source body and Library current owner-leaf authorization/evidence remain integration dependencies. Owner filters
+cannot obtain a ready handle while that authorization boundary is absent, including under true OR/NOT. Public
+Source binding also remains typed unavailable. These dependencies do not certify public catalogue capture through
+Library metadata or point mappings. Native outcome/growth verification remains integration work; compilation alone
+asserts no native readiness.
+
+Existing code and frozen tests remain until replacement
 native acceptance permits removal. The old universal 256 raw-key ledger, whole-selected-slot observation,
 one-pending-leaf final replay and bans on derived query/index state or typed SQL are removed as list rules.
 Unrelated native batch/string/byte/cursor limits remain in force.
