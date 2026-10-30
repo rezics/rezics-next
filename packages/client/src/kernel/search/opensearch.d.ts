@@ -11,6 +11,11 @@ export type OpenSearch = {
         query?: SearchQuery;
         timeoutMs?: number;
     }): Promise<T>;
+    /** Exact native bigint NDJSON; optional only for historical Subject-only test transports. */
+    bulkRaw?<T = unknown>(body: string, options?: {
+        query?: SearchQuery;
+        timeoutMs?: number;
+    }): Promise<T>;
 };
 export declare class OpenSearchError extends Error {
     status: number;
