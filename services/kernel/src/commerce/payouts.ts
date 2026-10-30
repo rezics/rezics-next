@@ -19,7 +19,6 @@ import type { TransactionKind } from './model.ts';
 import { statementPeriod, royaltyLines, type RoyaltyLine, type StatementTotal } from './royalty.ts';
 import { readOrder, readNamedOrderTransactions } from './store.ts';
 import record from './payout-record.sql';
-import retainedLines from './payout-record-retained.sql';
 import { assertTransactionBound, MovementIntegrityError } from './settlement.ts';
 import statementRead from './payout-statement-read.sql';
 import statementList from './payout-statement-list.sql';
@@ -237,30 +236,6 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           },
         },
         async (tx, command) => {
-          // Re-read exact keys on every native serialization retry, before any creator effects.
-          // Raw source/fee/FX evidence is immutable in the buyer partition; these are its captured lines.
-          const retained = new Map((await retainedLines.run(tx, { route, ids })).map((line) => [line.id, line]));
-          const fresh = lines.filter((line) => {
-            const previous = retained.get(line.balanceTransactionId);
-            if (!previous) return true;
-            if (
-              previous.creatorAccountId !== order.creatorAccountId ||
-              previous.orderId !== order.id ||
-              previous.offerId !== order.offerId ||
-              previous.royaltyBasisPoints !== order.royaltyBasisPoints ||
-              previous.kind !== line.kind ||
-              previous.currency !== line.currency ||
-              new Date(previous.created).toISOString() !== new Date(line.created).toISOString() ||
-              money(previous.grossMinor) !== line.grossMinor ||
-              money(previous.taxMinor) !== line.taxMinor ||
-              money(previous.feeMinor) !== line.feeMinor ||
-              money(previous.disputeFeeMinor) !== line.disputeFeeMinor ||
-              money(previous.netReceiptsMinor) !== line.netReceiptsMinor
-            )
-              throw new MovementIntegrityError();
-            return false;
-          });
-          if (!fresh.length) throw new Unchanged();
           const at = authoritativeTimeValue(command.time),
             period = statementPeriod(at);
           const rows = await record.run(tx, {
@@ -271,7 +246,7 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
             basis_points: order.royaltyBasisPoints,
             period,
             at,
-            lines: fresh.map((line) => ({
+            lines: lines.map((line) => ({
               id: line.balanceTransactionId,
               kind: line.kind,
               currency: line.currency,
@@ -302,6 +277,15 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       );
     } catch (error) {
       if (error instanceof Unchanged) return { changed: false };
+      // The exact-key conflict branch reaches the existing immutable-row guard, never an overwrite.
+      // Serialization errors remain native retry signals; unrelated constraint failures propagate.
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === '23514' &&
+        error.message === 'Recorded Stripe transactions are immutable'
+      )
+        throw new MovementIntegrityError();
       throw error;
     }
   }

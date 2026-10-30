@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route
 ), inserted AS (
-  INSERT INTO commerce.royalty_line
+  INSERT INTO commerce.royalty_line AS retained
     (route, balance_transaction_id, creator_account_id, order_id, offer_id, kind, currency,
      gross_minor, tax_minor, fee_minor, dispute_fee_minor, net_receipts_minor, royalty_basis_points,
      period, statement_id, stripe_created, recorded_at)
@@ -10,7 +10,20 @@ WITH input AS NOT MATERIALIZED (
          :period, l.statement_id, l.created, :at
   FROM input, jsonb_to_recordset(:lines::jsonb) AS l(id text, kind text, currency text, gross bigint, tax bigint,
     fee bigint, dispute_fee bigint, net bigint, statement_id uuid, created timestamptz)
-  ON CONFLICT (route, balance_transaction_id) DO NOTHING RETURNING *
+  -- The unique-key probe compares only named movements, including their captured attribution.
+  -- Exact replay skips UPDATE. A differing tuple reaches the existing immutable-row guard,
+  -- which raises before any UPDATE; the entire command aborts, including other inserted lines.
+  -- Under SERIALIZABLE, concurrent conflicts retry the native command and re-read this evidence.
+  ON CONFLICT (route, balance_transaction_id) DO UPDATE
+    SET balance_transaction_id = EXCLUDED.balance_transaction_id
+    WHERE (retained.creator_account_id, retained.order_id, retained.offer_id, retained.kind, retained.currency,
+           retained.gross_minor, retained.tax_minor, retained.fee_minor, retained.dispute_fee_minor,
+           retained.net_receipts_minor, retained.royalty_basis_points, retained.stripe_created)
+      IS DISTINCT FROM
+          (EXCLUDED.creator_account_id, EXCLUDED.order_id, EXCLUDED.offer_id, EXCLUDED.kind, EXCLUDED.currency,
+           EXCLUDED.gross_minor, EXCLUDED.tax_minor, EXCLUDED.fee_minor, EXCLUDED.dispute_fee_minor,
+           EXCLUDED.net_receipts_minor, EXCLUDED.royalty_basis_points, EXCLUDED.stripe_created)
+  RETURNING retained.*
 ), totals AS (
   SELECT route, statement_id, creator_account_id, period, currency, sum(gross_minor) AS gross,
          sum(tax_minor) AS tax, sum(fee_minor) AS fee, sum(dispute_fee_minor) AS dispute_fee,
