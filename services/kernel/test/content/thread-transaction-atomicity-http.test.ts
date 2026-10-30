@@ -42,7 +42,7 @@ type Problem = {
 let world: ThreadAtomicityWorld;
 
 beforeAll(async () => {
-  world = await createThreadAtomicityWorld(`thread-transaction-http-${randomUUID().replaceAll('-', '')}`);
+  world = await createThreadAtomicityWorld(`thread_transaction_http_${randomUUID().replaceAll('-', '')}`);
 }, 90_000);
 
 afterAll(async () => {

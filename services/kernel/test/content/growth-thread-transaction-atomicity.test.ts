@@ -45,7 +45,7 @@ let world: ThreadAtomicityWorld;
 let growthDb: GrowthDatabase;
 
 beforeAll(async () => {
-  world = await createThreadAtomicityWorld(`thread-transaction-growth-${randomUUID().replaceAll('-', '')}`);
+  world = await createThreadAtomicityWorld(`thread_transaction_growth_${randomUUID().replaceAll('-', '')}`);
   growthDb = await openGrowthDatabase(world.system.database.pool.options.connectionString);
 }, 120_000);
 
