@@ -161,7 +161,7 @@ function installArchiveGuard() {
   net.Socket.prototype.connect = deny;
   tls.connect = deny;
   dgram.createSocket = deny;
-  globalThis.fetch = deny;
+  globalThis.fetch = Object.assign(deny, { preconnect: deny });
   globalThis.WebSocket = deny as unknown as typeof WebSocket;
   Bun.connect = deny;
   Bun.listen = deny;
