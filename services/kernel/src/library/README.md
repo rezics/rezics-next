@@ -17,14 +17,6 @@ Missing/incomplete evidence returns typed retryable
 `dependency_unavailable`, including for an apparently empty owner. It never becomes ready zero counts. No native
 readiness, source-currentness, full shelf outcome or growth proof is claimed by these callable readers or source typing.
 
-Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
-Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
-recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
-same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
-scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
-existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
-See [the operational contract](shelf-maintenance-ops-contract.md).
-
 ## Scope and implementation boundary
 
 [Library and Collections](../../../../docs/library-and-collections.md) owns the capability. This README adopts its
@@ -180,14 +172,44 @@ observe complete excluded/order/population dependencies, retain a scoped reader 
 into the fixed Library participant. The current canonical ABI still requires the superseded whole-identity
 `basis.identity.digest`; `readIdentityBasis` and `readSealedSubjectIdentity` named in its old handoff have no
 current native exports, and the owner contract forbids reinstating their global home sweeps. The adopted scoped
-register/arm/finish/revalidate producer has no callable export/interface in this checkout. Its binding must come
+register/arm/finish/revalidate factory is callable but its native producer returns unavailable in this checkout. Its binding must come
 from Semantic; this slice supplies neither a replacement identity protocol nor a third participant.
 `semantic/identity-epoch-mapping.ts:stepIdentityEpochMapping`, the fixed Library participant's concrete export,
-`semantic/public-filter-source.ts:publicFilterSource` and the shared destination-disposition producer also remain
+`semantic/public-filter-source.ts:publicFilterSource` is callable but unavailable; the shared destination-disposition producer also remains
 unavailable here. Core's real `runOperationalTransaction` and `enqueueIntent` exist; a default canonical worker
 must bind them to the actual shared scoped Source/admission producer before it can publish or expose readiness.
 The added runtime/growth suites require successful real store/factory behavior; they intentionally do not turn
 missing coverage into successful empty or preparing assertions. They have not been run in minimal mode.
+
+### Default owner-query composition
+
+The kernel passes its registered Search service, real Access, pool, clock and trusted route key through the
+Collection and Continue factories. `builtin-runtime-query.ts` opens the actual native Collection Source with a
+Core-minted read time and one transferred direct-owner reservation. Everything, state and Liked members consume
+that Source's canonical prefixes and current membership; reaction-only Liked uses the Content source version,
+independently of Library's fact head. Empty native Everything/Liked and Continue unions remain pure logical reads.
+Raw metadata and retained scope identity discovery never execute a built-in members query recursively.
+
+Admitted built-in filters use `createSearchScopeForService`, native id/source order, `sourcePrefix` and current
+`evaluate` on that same service. Search's additive `work(result)` returns the actual preparation/evaluation receipt
+without changing its existing opaque result shapes. The read-only option requires an already published scope and
+never retains a definition, prepares a scope or saves evaluation progress. All refill, negative, lookahead and final-disclosure work shares
+one reservation. Final reads mint a fresh native time and compare source, identity and exact source-version fences.
+Continue consumes native chronological original seeks and complete Source groups, completes timestamp ties before
+canonical ordering, and evaluates the existing accepted-state/session supports after releasing the owner snapshot.
+It creates no preparation, header, grant, touch, receipt or work intent.
+
+This is default caller composition, not native readiness or main proof. In this checkout the actual
+`identity-scoped-observations.ts` factory returns `source_unready` and `public-filter-source.ts` returns
+`source_pending`/`dependency_unavailable`. The coordinator and mapping runtime modules are absent. The native
+Collection Source still lacks logical headerless and Content reaction group bindings; those admitted logical
+Collections return dependency unavailability rather than a false missing/empty page. Search also still refuses
+owner leaves and requires the public index even for native source orders. Commerce has been asked to close that
+exact native-owner interface with Search. Existing Source statement/row/byte ceilings are preserved: missing
+readiness or insufficient complete work never becomes a successful partial page. No identity ACK, synthetic actor,
+private Boolean evaluator, replacement index, global identity sweep or shared custody completion is supplied here.
+The existing nonempty/session-only/reaction-only native user cases and the added current-source-unavailable case
+remain integration evidence to run; local typing does not establish those outcomes.
 
 ### Scoped subject-search status
 
@@ -1105,6 +1127,14 @@ and response-byte budgets. See [the shelf contract](shelf-contract.md) for the r
 Ordering keys are fractional-indexing keys. Keys are generated within 32 characters and stored within 48. They are stored with `COLLATE "C"` and are unique on `(route, collection_id, ordinal_key)`. That unique constraint is deferrable. A respace happens when no generated key fits. A respacing in the same command increments `orderEpoch`, which makes earlier cursors stale. A new Collection starts at epoch 0. Member cursors seal `orderEpoch + 1` because the seal rejects epoch 0. A mismatch is `stale_cursor`.
 
 ## Shelf reads
+
+Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
+Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
+recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
+same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
+scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
+existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
+See [the operational contract](shelf-maintenance-ops-contract.md).
 
 These entry/shelf requirements are a compatibility surface, not the Everything or Continue implementation. State
 filters are not mandatory navigation tabs. The shared Collection page replaces this surface only at an explicit

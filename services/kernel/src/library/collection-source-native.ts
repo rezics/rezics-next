@@ -10,6 +10,8 @@ import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
+import { nativeSourceFence } from './canonical-source-store.ts';
+import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { grantCapable } from './collection-reads.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
@@ -59,9 +61,19 @@ export type NativeCollectionWitness = Readonly<{
   factFence: string | null;
 }>;
 type ProbeEvidence =
-  | { result: 'present'; key: CanonicalRangeKey; progress: null; witness: NativeCollectionWitness }
+  | {
+      result: 'present';
+      key: CanonicalRangeKey;
+      progress: null;
+      witness: NativeCollectionWitness;
+    }
   | { result: 'absent'; key: null; progress: null; witness: null }
-  | { result: 'not_proven'; key: null; progress: CanonicalRangeKey | null; witness: null };
+  | {
+      result: 'not_proven';
+      key: null;
+      progress: CanonicalRangeKey | null;
+      witness: null;
+    };
 export type NativeCollectionProbe = ProbeEvidence & { work: WorkReceipt };
 import headerQuery from './collection-source-native-header.sql';
 const headerSQL = headerQuery.sql;
@@ -80,6 +92,8 @@ const partitionSizeSQL =
 const fenceSQL = 'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2';
 const referenceSQL =
   'SELECT collection_id FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2';
+const scopeIdentitySQL =
+  'SELECT identity FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3';
 const accountSQL =
   'SELECT route, account_id AS "accountId", kind, state, authn_fenced AS fenced, minimum_authn_epoch::text AS "minimumAuthnEpoch" FROM access.account WHERE route=$1 AND account_id=$2';
 const entrySQL =
@@ -108,6 +122,8 @@ const fixed = (rows: number, points: number, bytes: number) => () => ({
 // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
 // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
 for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
+// The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
+register(scopeIdentitySQL, fixed(4, 1, 4608));
 register(partitionSizeSQL, fixed(4, 1, 128));
 register(outputHead.sql, fixed(8, 2, 256));
 register(outputProbe.sql, () => ({
@@ -129,14 +145,37 @@ register(ordinalPage.sql, (v) => ({
   candidateKeys: Number(v[4]),
   bytes: 512 * Number(v[4]),
 }));
-register(entrySQL, () => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: 256 }));
-register(pinSQL, (v) => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: Number(v[3]) }));
+register(entrySQL, () => ({
+  nativeRows: 4,
+  nativePoints: 1,
+  candidateKeys: 1,
+  witnessKeys: 1,
+  bytes: 256,
+}));
+register(pinSQL, (v) => ({
+  nativeRows: 4,
+  nativePoints: 1,
+  candidateKeys: 1,
+  witnessKeys: 1,
+  bytes: Number(v[3]),
+}));
 for (const sql of [probeSQL, copySQL, sessionSQL])
-  register(sql, () => ({ nativeRows: 6, nativePoints: 1, witnessKeys: 1, candidateKeys: 1, bytes: 256 }));
+  register(sql, () => ({
+    nativeRows: 6,
+    nativePoints: 1,
+    witnessKeys: 1,
+    candidateKeys: 1,
+    bytes: 256,
+  }));
 for (const query of [membersQuery, factsQuery])
   register(query.sql, (values) => {
     const limit = Number(values[query.params.indexOf('limit')]);
-    return { nativeRows: 8 * limit + 8, nativePoints: 1, candidateKeys: limit, bytes: 256 * limit };
+    return {
+      nativeRows: 8 * limit + 8,
+      nativePoints: 1,
+      candidateKeys: limit,
+      bytes: 256 * limit,
+    };
   });
 register(labelSQL, (v) => ({
   nativeRows: 12 * Number(v[4]) + 8,
@@ -173,7 +212,11 @@ for (const query of [candidates, permissions])
     // Each target/key probes one exclusion-constrained grant, <=3 denial reasons and each installed role.
     const keys = roles.length + 4,
       points = targets * branches * keys * (grantRoles + 4) + 1;
-    return { nativeRows: 32 * points + 64, nativePoints: points, bytes: 256 * keys };
+    return {
+      nativeRows: 32 * points + 64,
+      nativePoints: points,
+      bytes: 256 * keys,
+    };
   });
 function footprint(sql: string, values: readonly unknown[], work: NativeCollectionWork): WorkDimensions | undefined {
   // The existing shared native capture sends these two session SETs. They access no relation, but still cost
@@ -291,12 +334,34 @@ async function observe(
     authority,
     outputGeneration,
     factFence,
-    stamp: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    stamp: {
+      partition: partition.partitionNo,
+      epoch: partition.epoch,
+      position: partition.position,
+    },
   });
 }
 export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Options) {
   return call(pool, options, async (work) => ({
     metadata: await readOnly(pool, options.deadline, (client) => observe(client, ref, work)),
+  }));
+}
+/** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
+export function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options) {
+  return call(pool, input, async (work) => ({
+    identity: await readOnly(pool, input.deadline, async (client) => {
+      const metadata = await observe(client, input, work);
+      if (!metadata || metadata.state !== 'active') return null;
+      return (
+        (
+          await client.query<{ identity: NativeSourceIdentity }>(scopeIdentitySQL, [
+            input.route,
+            input.collectionId,
+            nativeSourceFence(metadata),
+          ])
+        ).rows[0]?.identity ?? null
+      );
+    }),
   }));
 }
 export function authorizeNativeCollectionMetadata(
@@ -373,7 +438,13 @@ export function authorizeNativeCollectionMetadata(
       return {
         authorized:
           account !== undefined &&
-          grantCapable({ ...account, minimumAuthnEpoch: BigInt(account.minimumAuthnEpoch) }, actor),
+          grantCapable(
+            {
+              ...account,
+              minimumAuthnEpoch: BigInt(account.minimumAuthnEpoch),
+            },
+            actor,
+          ),
       };
     });
   });
@@ -450,7 +521,11 @@ export function readNativeCollectionRawOrdinalPage(
 export function readNativeCollectionRawPage(
   pool: Pool,
   metadata: NativeCollectionMetadata,
-  input: Options & { driver: CanonicalRangeKey['driver']; after: CanonicalRangeKey | null; limit: number },
+  input: Options & {
+    driver: CanonicalRangeKey['driver'];
+    after: CanonicalRangeKey | null;
+    limit: number;
+  },
 ) {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new RangeError('Native source limit must be 1..100');
@@ -477,7 +552,11 @@ export function readNativeCollectionRawPage(
             input.limit,
           ])
         ).rows.map((row) => ({ key: { driver: 'output' as const, ...row } }));
-        return { rows, after: rows.at(-1)?.key ?? input.after, exhausted: rows.length < input.limit };
+        return {
+          rows,
+          after: rows.at(-1)?.key ?? input.after,
+          exhausted: rows.length < input.limit,
+        };
       }
       const query = input.driver === 'member' ? membersQuery : factsQuery;
       const rows = (
@@ -494,7 +573,11 @@ export function readNativeCollectionRawPage(
           }),
         )
       ).rows.map((row) => ({ key: { driver: input.driver, ...row } }));
-      return { rows, after: rows.at(-1)?.key ?? input.after, exhausted: rows.length < input.limit };
+      return {
+        rows,
+        after: rows.at(-1)?.key ?? input.after,
+        exhausted: rows.length < input.limit,
+      };
     }),
   );
 }
@@ -502,7 +585,11 @@ export function readNativeCollectionRawPage(
 export async function probeNativeCollectionOriginal(
   pool: Pool,
   metadata: NativeCollectionMetadata,
-  input: Options & { originalId: string; keyHint?: CanonicalRangeKey; after?: CanonicalRangeKey | null },
+  input: Options & {
+    originalId: string;
+    keyHint?: CanonicalRangeKey;
+    after?: CanonicalRangeKey | null;
+  },
 ): Promise<NativeCollectionProbe> {
   if (routeOf(input.originalId) === null) throw new TypeError('Invalid original subject');
   keyInput(input.keyHint);
@@ -574,14 +661,22 @@ export async function probeNativeCollectionOriginal(
             }>(entrySQL, [...params, current.stateId])
           ).rows[0];
           if (row?.present && current.builtinKind === 'everything')
-            return done('present', { driver: 'entry', storedSubjectId: input.originalId, factId: input.originalId });
+            return done('present', {
+              driver: 'entry',
+              storedSubjectId: input.originalId,
+              factId: input.originalId,
+            });
           if (row?.matches && current.builtinKind === 'state') {
             // A compressed datum's wire expansion has no small bound. Admit the native maximum, rather than cap type IDs.
             const bytes = 6 * (row.compressed ? 1024 * 1024 * 1024 : (row.bytes ?? 0)) + 256;
             {
               const pin = (
                 await client.query<{
-                  library_profile_pin: { provenance?: string; releaseDigest?: string; profileId?: string } | null;
+                  library_profile_pin: {
+                    provenance?: string;
+                    releaseDigest?: string;
+                    profileId?: string;
+                  } | null;
                 }>(pinSQL, [...params, bytes])
               ).rows[0]?.library_profile_pin;
               if (
@@ -591,7 +686,11 @@ export async function probeNativeCollectionOriginal(
                 pin.profileId !== current.profileId
               )
                 return done('not_proven');
-              return done('present', { driver: 'entry', storedSubjectId: input.originalId, factId: input.originalId });
+              return done('present', {
+                driver: 'entry',
+                storedSubjectId: input.originalId,
+                factId: input.originalId,
+              });
             }
           }
           if (current.builtinKind === 'state') return done('absent');
@@ -603,7 +702,12 @@ export async function probeNativeCollectionOriginal(
             ['session', sessionSQL],
           ] as const) {
             const row = (await client.query<{ factId: string }>(sql, params)).rows[0];
-            if (row) return done('present', { driver, storedSubjectId: input.originalId, factId: row.factId });
+            if (row)
+              return done('present', {
+                driver,
+                storedSubjectId: input.originalId,
+                factId: row.factId,
+              });
           }
         }
         const limit = Math.min(
@@ -623,7 +727,11 @@ export async function probeNativeCollectionOriginal(
           ])
         ).rows;
         for (const row of rows) {
-          progress = { driver: 'label', storedSubjectId: input.originalId, factId: row.factId };
+          progress = {
+            driver: 'label',
+            storedSubjectId: input.originalId,
+            factId: row.factId,
+          };
           if (row.present) return done('present', progress);
         }
         // There are at most 32 reserved labels per subject; a full page is a complete materialized reservation set.
@@ -633,7 +741,13 @@ export async function probeNativeCollectionOriginal(
   } catch (error) {
     const receipt = error instanceof Error && 'work' in error ? (error as Error & { work: WorkReceipt }).work : null;
     if (error instanceof ProblemError && error.code === 'dependency_unavailable' && receipt)
-      return { result: 'not_proven', key: null, progress, witness: null, work: receipt };
+      return {
+        result: 'not_proven',
+        key: null,
+        progress,
+        witness: null,
+        work: receipt,
+      };
     throw error;
   }
 }

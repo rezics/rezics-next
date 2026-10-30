@@ -15,6 +15,7 @@ import { FactSchema } from '../search/http/routes.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { SearchService } from '../search/service-scope.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
@@ -30,6 +31,7 @@ type Dependencies = {
   tokens: KeyRing;
   clock: KernelClock;
   routeKey: Uint8Array;
+  search?: SearchService;
   workClient?: () => Promise<WorkClient>;
 };
 const closed = { additionalProperties: false } as const;
@@ -74,7 +76,12 @@ const dynamicCollectionSchema = t.Object(
       t.Object({ kind: t.Literal('everything') }, closed),
       t.Object({ kind: t.Literal('liked') }, closed),
       t.Object(
-        { kind: t.Literal('state'), profileId: t.String(), stateSetId: t.String(), stateId: t.String() },
+        {
+          kind: t.Literal('state'),
+          profileId: t.String(),
+          stateSetId: t.String(),
+          stateId: t.String(),
+        },
         closed,
       ),
     ]),
@@ -94,7 +101,11 @@ export const collectionReadSchema = t.Union([
   embedded(collectionSchema, curatorFields),
   embedded(dynamicCollectionSchema, curatorFields),
 ]);
-const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
+const memberIds = t.Array(t.String(), {
+  minItems: 1,
+  maxItems: 100,
+  uniqueItems: true,
+});
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const previewFields = {
   previewMembers: t.Optional(
@@ -125,7 +136,10 @@ const embeddedCollectionSchema = t.Union([
 ]);
 const previewCollectionSchema = t.Union([
   embedded(collectionSchema, { ...curatorFields, ...previewFields }),
-  embedded(savedDynamicCollectionSchema, { ...curatorFields, ...previewFields }),
+  embedded(savedDynamicCollectionSchema, {
+    ...curatorFields,
+    ...previewFields,
+  }),
   embedded(dynamicCollectionSchema, { ...curatorFields, ...previewFields }),
 ]);
 const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
@@ -165,7 +179,9 @@ const fullSubjectPage = t.Object(
 );
 const collectionParams = t.Object({ collectionId: id }, closed);
 const memberParams = t.Object({ collectionId: id, memberId: id }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+const headers = t.Object({
+  [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
+});
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
@@ -226,7 +242,9 @@ export function strict<S extends TSchema>(schema: S) {
       validate(value: unknown) {
         return validator.Check(value)
           ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the Collection schema' }] };
+          : {
+              issues: [{ message: 'Value does not match the Collection schema' }],
+            };
       },
       jsonSchema: { input: () => schema, output: () => schema },
     },
@@ -292,7 +310,10 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   const { pool, tokens, clock } = dependencies;
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
-  const viewDependencies = () => ({ ...dependencies, access: dependencies.access() });
+  const viewDependencies = () => ({
+    ...dependencies,
+    access: dependencies.access(),
+  });
   const write = () =>
     (commands ??= createCollectionCommands({
       pool,
@@ -308,6 +329,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       clock,
       routeKey: dependencies.routeKey,
       ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
+      ...(dependencies.search ? { search: dependencies.search } : {}),
     }));
   async function written(value: Collection, actor: Actor) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
@@ -321,7 +343,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
         ? current.cover
         : null;
-    return { ...collectionView(value), ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId };
+    return {
+      ...collectionView(value),
+      ...collectionPresentation(value, cover),
+      coverMediaId: value.coverMediaId,
+    };
   }
   async function writtenCurated(value: Collection, actor: Actor) {
     const view = await written(value, actor);
@@ -361,13 +387,20 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           t.Union([
             t.Object(createMetadata, closed),
             t.Object(
-              { ...createMetadata, membershipKind: t.Literal('dynamic'), rule: t.Object(ruleBody, closed) },
+              {
+                ...createMetadata,
+                membershipKind: t.Literal('dynamic'),
+                rule: t.Object(ruleBody, closed),
+              },
               closed,
             ),
           ]),
         ),
         response: { 201: collectionResponse, ...failures },
-        detail: { ...detail('collection.create', 'collection:create'), 'x-resource-types': ['library.collection'] },
+        detail: {
+          ...detail('collection.create', 'collection:create'),
+          'x-resource-types': ['library.collection'],
+        },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
@@ -384,7 +417,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             'forbidden',
           ),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         set.status = 201;
         return { collection: await written(result.value, actor) };
       },
@@ -401,7 +438,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: {
-          200: t.Object({ collections: t.Array(previewCollectionSchema), next: nullableString }, closed),
+          200: t.Object(
+            {
+              collections: t.Array(previewCollectionSchema),
+              next: nullableString,
+            },
+            closed,
+          ),
           ...failures,
         },
         detail: detail('collection.list', 'collection:read', true),
@@ -431,7 +474,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: t.Object({ accountId: id }, closed),
         query: t.Object(pageQuery, closed),
         response: {
-          200: t.Object({ collections: t.Array(embeddedCollectionSchema), next: nullableString }, closed),
+          200: t.Object(
+            {
+              collections: t.Array(embeddedCollectionSchema),
+              next: nullableString,
+            },
+            closed,
+          ),
           ...failures,
         },
         detail: detail('account.collections', 'collection:read', true),
@@ -453,7 +502,10 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         query: t.Object(viewQuery, closed),
         params: collectionParams,
-        response: { 200: t.Object({ collection: embeddedCollectionSchema }, closed), ...failures },
+        response: {
+          200: t.Object({ collection: embeddedCollectionSchema }, closed),
+          ...failures,
+        },
         detail: detail('collection.get', 'collection:read', true),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
@@ -472,7 +524,16 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: collectionParams,
         headers,
         body: strict(
-          t.Object({ revision: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }), ...ruleBody }, closed),
+          t.Object(
+            {
+              revision: t.Integer({
+                minimum: 0,
+                maximum: Number.MAX_SAFE_INTEGER,
+              }),
+              ...ruleBody,
+            },
+            closed,
+          ),
         ),
         response: { 200: collectionResponse, ...batchFailures },
         detail: detail('collection_rule.update', 'collection:update'),
@@ -484,7 +545,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().updateCollectionRule(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { collection: await written(result.value, actor) };
       },
     )
@@ -515,7 +580,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().updateCollection(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { collection: await written(result.value, actor) };
       },
     )
@@ -525,7 +594,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: collectionParams,
         headers,
         query: t.Object(
-          { revision: t.Numeric({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER, multipleOf: 1 }) },
+          {
+            revision: t.Numeric({
+              minimum: 1,
+              maximum: Number.MAX_SAFE_INTEGER,
+              multipleOf: 1,
+            }),
+          },
           closed,
         ),
         response: { 204: t.Void(), ...failures },
@@ -535,8 +610,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             204: {
               description: 'Collection deleted',
               headers: {
-                'Library-Collection-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
-                'Library-Collection-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+                'Library-Collection-Deletion-Id': {
+                  schema: { type: 'string', format: 'uuid' },
+                },
+                'Library-Collection-Deletion-Revision': {
+                  schema: { type: 'string', pattern: '^[1-9][0-9]*$' },
+                },
               },
             },
           },
@@ -548,7 +627,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().deleteCollection(actor, params.collectionId, query.revision, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         set.headers['cache-control'] = 'private, no-store';
         set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
         set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
@@ -580,7 +663,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().restoreCollection(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { collection: await written(result.value, actor) };
       },
     )
@@ -588,7 +675,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       '/v1/collections/:collectionId/members',
       {
         params: collectionParams,
-        query: t.Object({ ...pageQuery, filter: t.Optional(t.String()), sort: t.Optional(t.String()) }, closed),
+        query: t.Object(
+          {
+            ...pageQuery,
+            filter: t.Optional(t.String()),
+            sort: t.Optional(t.String()),
+          },
+          closed,
+        ),
         response: {
           200: t.Object(
             {
@@ -643,7 +737,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: collectionParams,
         headers,
         body: strict(
-          t.Object({ subjectId: id, note: t.Optional(nullableString), after: t.Optional(nullableString) }, closed),
+          t.Object(
+            {
+              subjectId: id,
+              note: t.Optional(nullableString),
+              after: t.Optional(nullableString),
+            },
+            closed,
+          ),
         ),
         response: { 201: memberResponse, ...failures },
         detail: detail('collection_member.create', 'collection:update'),
@@ -654,7 +755,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().addMember(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         set.status = 201;
         return { member: memberView(result.value) };
       },
@@ -683,8 +788,15 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().batchRemoveMembers(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { collection: await writtenCurated(result.value.collection, actor), removed: result.value.removed };
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
+        return {
+          collection: await writtenCurated(result.value.collection, actor),
+          removed: result.value.removed,
+        };
       },
     )
     .post(
@@ -694,13 +806,23 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         headers,
         body: strict(
           t.Object(
-            { revision, memberIds, destinationCollectionId: id, destinationRevision: revision, after: nullableString },
+            {
+              revision,
+              memberIds,
+              destinationCollectionId: id,
+              destinationRevision: revision,
+              after: nullableString,
+            },
             closed,
           ),
         ),
         response: {
           200: t.Object(
-            { source: collectionSchema, destination: collectionSchema, members: t.Array(memberSchema) },
+            {
+              source: collectionSchema,
+              destination: collectionSchema,
+              members: t.Array(memberSchema),
+            },
             closed,
           ),
           ...batchFailures,
@@ -713,7 +835,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().transferMembers(actor, params.collectionId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return {
           source: await writtenCurated(result.value.source, actor),
           destination: await writtenCurated(result.value.destination, actor),
@@ -736,7 +862,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().updateMemberNote(actor, params.collectionId, params.memberId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { member: memberView(result.value) };
       },
     )
@@ -755,7 +885,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().removeMember(actor, params.collectionId, params.memberId, query.revision, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         set.headers['Library-Collection-Member-Deletion-Id'] = result.value.deletionId;
         set.headers['Library-Collection-Member-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
@@ -776,7 +910,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().restoreMember(actor, params.collectionId, params.memberId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { member: memberView(result.value) };
       },
     )
@@ -795,7 +933,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         const result = await admission.run('normal', job, () =>
           mapped(() => write().moveMember(actor, params.collectionId, params.memberId, body, key)),
         );
-        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        session.record({
+          partition: result.partition,
+          epoch: result.epoch,
+          position: result.position,
+        });
         return { member: memberView(result.value) };
       },
     )

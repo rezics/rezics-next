@@ -8,6 +8,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createContinueReads } from './continue-reads.ts';
 import { sessionSchema } from './progress-routes.ts';
+import type { SearchService } from '../search/service-scope.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullableString = t.Union([t.String(), t.Null()]);
@@ -33,9 +34,16 @@ export const continuePageSchema = t.Object(
 /** Pure Continue transport, using the same native owner/source runtime as common Collections. */
 export function continueRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  deps: { pool: Pool; access: () => Access; clock: KernelClock; tokens: KeyRing },
+  deps: {
+    pool: Pool;
+    access: () => Access;
+    clock: KernelClock;
+    tokens: KeyRing;
+    routeKey?: Uint8Array;
+    search?: SearchService;
+  },
 ) {
-  const reads = createContinueReads(deps);
+  let reads: ReturnType<typeof createContinueReads> | undefined;
   return app.get(
     '/v1/libraryContinue',
     {
@@ -88,6 +96,7 @@ export function continueRoutes(
           clientAction: 'progress_session:list',
           deadline: job.deadline,
         });
+        reads ??= createContinueReads({ ...deps, access: deps.access() });
         return reads.list(actor, query, job.deadline);
       });
     },

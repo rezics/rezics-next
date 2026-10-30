@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { systemClock, type KernelClock } from '../clock.ts';
-import type { WorkAllowance } from '../library/collection-source.ts';
+import type { WorkAllowance, WorkReceipt } from '../library/collection-source.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { readRelease } from '../semantic/definitions.ts';
@@ -77,6 +77,8 @@ export type ScopePrepareOptions = Readonly<{
   order?: SearchScopeOrder;
   /** Native caller's shared root; omitted legacy calls retain the bounded compatibility ceilings. */
   allowance?: WorkAllowance;
+  /** Read an already published scope without retaining, preparing or saving reader progress. */
+  readOnly?: boolean;
   /** Exact released projection type, when the source requires a selected catalogue profile. */
   type?: string;
 }>;
@@ -95,7 +97,10 @@ export type SearchScopePrefix = {
   /** Last covered raw key, excluding unused lookahead; null only at the beginning. */
   coveredThrough: string | null;
   exhausted: boolean;
-  usage: { candidates: number; work?: import('../library/collection-source.ts').WorkReceipt };
+  usage: {
+    candidates: number;
+    work?: import('../library/collection-source.ts').WorkReceipt;
+  };
 };
 
 export type SearchScopeEvaluation = {
@@ -108,7 +113,9 @@ export type SearchScopeEvaluation = {
 };
 
 function unavailable(): never {
-  throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+  throw new ProblemError('semantic_not_ready', {
+    headers: { 'retry-after': '1' },
+  });
 }
 
 function bounded(value: number, maximum: number, minimum = 0): void {
@@ -127,7 +134,10 @@ function digest(value: unknown): string {
   return createHash('sha256').update(canonicalize(value)!).digest('hex');
 }
 function observationDigest(observation: IdentityScopeObservation): string {
-  return digest({ ...observation, committedRevision: observation.committedRevision.toString() });
+  return digest({
+    ...observation,
+    committedRevision: observation.committedRevision.toString(),
+  });
 }
 type ScopeState = {
   filter: FilterDocument;
@@ -137,6 +147,7 @@ type ScopeState = {
   uuid: string;
   observation: IdentityScopeObservation;
   collection: SearchScopeCollection | null;
+  readOnly: boolean;
 };
 
 /** Native service runtime, immutable admission and factory-local handles. Native producers
@@ -160,6 +171,11 @@ export function createSearchScopeSource({
   clock?: KernelClock;
 }) {
   const states = new WeakMap<PreparedSearchScope, ScopeState>();
+  const receipts = new WeakMap<object, WorkReceipt>();
+  function measured<T extends object>(value: T, work: ScopeWork): T {
+    receipts.set(value, work.receipt());
+    return value;
+  }
   const observations = createIdentityScopedObservations(pool);
   const store = createScopePreparationStore(pool, prefix);
   const order = evidence ? createSearchScopeOrder({ pool, options: evidence, clock }) : null;
@@ -200,10 +216,22 @@ export function createSearchScopeSource({
     if ((await discoveryIndexUuid(client, value.basis.index, engineWork(work))) !== value.uuid) unavailable();
   }
   return {
+    /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
+    work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt {
+      const receipt = receipts.get(result);
+      if (!receipt) throw new TypeError('Foreign Search scope result');
+      return receipt;
+    },
     async prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope> {
       const work = new ScopeWork(options?.allowance ?? scopeAllowance(256, 'scope.prepare'));
       function releaseWork() {
-        work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, nativePoints: 1, bytes: 262144 });
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 1,
+          nativeRows: 1,
+          nativePoints: 1,
+          bytes: 262144,
+        });
       }
       async function selectRelease() {
         releaseWork();
@@ -233,7 +261,10 @@ export function createSearchScopeSource({
       } catch (error) {
         if (error instanceof FilterError)
           throw new ProblemError(error.problem, {
-            errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
+            errors: error.errors.map(({ pointer, code }) => ({
+              pointer: `/filter${pointer}`,
+              code,
+            })),
           });
         throw error;
       }
@@ -278,7 +309,10 @@ export function createSearchScopeSource({
         definition = { kind: 'library', identity: sort.source };
         nativeBasis = {
           ...collection.observation,
-          stamp: { ...collection.observation.stamp, position: collection.observation.stamp.position.toString() },
+          stamp: {
+            ...collection.observation.stamp,
+            position: collection.observation.stamp.position.toString(),
+          },
         };
       } else {
         if (hasOwner || !compiled) unavailable();
@@ -289,9 +323,18 @@ export function createSearchScopeSource({
         );
         const type = options?.type ?? (types.size === 1 ? [...types][0] : undefined);
         if (!type || !Object.hasOwn(nativeRelease.types, type)) unavailable();
-        const meaning = { digest: selected.digest, release: nativeRelease, type };
+        const meaning = {
+          digest: selected.digest,
+          release: nativeRelease,
+          type,
+        };
         const binding = createPublicFilterSourceBinding(pool, reader.routeKey, reader.access);
-        const native = publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock });
+        const native = publicFilterSource({
+          pool,
+          routeKey: reader.routeKey,
+          access: reader.access,
+          clock,
+        });
         const resolved = await binding.resolve(
           {
             source: native,
@@ -329,14 +372,28 @@ export function createSearchScopeSource({
         index,
         uuid,
       });
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
-      await store.retain(identity, definition);
-      await createScopePreparation({ pool, prefix, routeKey: reader.routeKey, access: reader.access, clock }).prepare(
-        identity,
-        reader.deadline,
-        work,
-      );
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
+      if (!options?.readOnly) {
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 1,
+          nativeRows: 1,
+          bytes: 262144,
+        });
+        await store.retain(identity, definition);
+        await createScopePreparation({
+          pool,
+          prefix,
+          routeKey: reader.routeKey,
+          access: reader.access,
+          clock,
+        }).prepare(identity, reader.deadline, work);
+      }
+      work.consume({
+        ...zeroScopeWork(),
+        statements: 1,
+        nativeRows: 1,
+        bytes: 262144,
+      });
       const observation = await readPreparedScopeObservation(pool, prefix, identity);
       if (
         !observation ||
@@ -357,7 +414,16 @@ export function createSearchScopeSource({
         generation,
         index,
       });
-      const value: ScopeState = { filter: admitted, plan, compiled, basis, uuid, observation, collection };
+      const value: ScopeState = {
+        filter: admitted,
+        plan,
+        compiled,
+        basis,
+        uuid,
+        observation,
+        collection,
+        readOnly: options?.readOnly === true,
+      };
       await current(value, work);
       await current(value, work);
       const prepared: PreparedSearchScope = Object.freeze({
@@ -366,7 +432,7 @@ export function createSearchScopeSource({
         basis,
       });
       states.set(prepared, value);
-      return prepared;
+      return measured(prepared, work);
     },
     async prefix(
       prepared: PreparedSearchScope,
@@ -387,7 +453,10 @@ export function createSearchScopeSource({
       const root = request.allowance ?? scopeAllowance(budget, value.basis.query);
       const work = new ScopeWork({
         ...root,
-        remaining: { ...root.remaining, candidateKeys: Math.min(budget, root.remaining.candidateKeys) },
+        remaining: {
+          ...root.remaining,
+          candidateKeys: Math.min(budget, root.remaining.candidateKeys),
+        },
       });
       await current(value, work);
       if (work.remaining().remaining.candidateKeys < quota + 1) unavailable();
@@ -436,7 +505,9 @@ export function createSearchScopeSource({
         if (!subjects.includes(pending.subject)) throw new RangeError('Pending subject was not requested');
         if (typeof pending.basis !== 'string' || !/^[0-9a-f]{64}$/.test(pending.basis))
           throw new RangeError('Invalid owner basis');
-        packScopeLeafProgress(pending, { valueCounts: Array.from({ length: 32 }, () => 64) });
+        packScopeLeafProgress(pending, {
+          valueCounts: Array.from({ length: 32 }, () => 64),
+        });
       }
       const value = state(prepared);
       if (reservation.progress && reservation.progress.basis !== value.basis.query)
@@ -467,21 +538,39 @@ export function createSearchScopeSource({
         },
       });
       if (!work.leafBudget())
-        return {
-          values: subjects.map(() => 'not_proven'),
-          basis: value.basis,
-          usage: { keys: 0, native: { points: 0, witnesses: 0, rows: 0, bytes: 0, emptySeeks: 0 } },
-          evidence: [],
-          progress: null,
-        };
+        return measured(
+          {
+            values: subjects.map(() => 'not_proven'),
+            basis: value.basis,
+            usage: {
+              keys: 0,
+              native: {
+                points: 0,
+                witnesses: 0,
+                rows: 0,
+                bytes: 0,
+                emptySeeks: 0,
+              },
+            },
+            evidence: [],
+            progress: null,
+          },
+          work,
+        );
       await current(value, work);
       packScopeLeafProgress(reservation.progress ?? null, {
         valueCounts: value.plan.leaves.map((leaf) =>
           leaf.kind === 'catalogue' && 'values' in leaf.clause ? leaf.clause.values.length : 1,
         ),
       });
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
-      const resume = await store.readLeafProgress(value.basis.query);
+      if (!value.readOnly)
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 1,
+          nativeRows: 1,
+          bytes: 4096,
+        });
+      const resume = value.readOnly ? null : await store.readLeafProgress(value.basis.query);
       const { resume: nextResume, ...checked } = await evaluateScopeSubjects({
         pool,
         options: context(),
@@ -492,24 +581,34 @@ export function createSearchScopeSource({
         resume,
         work,
       });
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
-      await store.saveLeafProgress(value.basis.query, nextResume);
+      if (!value.readOnly) {
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 1,
+          nativeRows: 1,
+          bytes: 4096,
+        });
+        await store.saveLeafProgress(value.basis.query, nextResume);
+      }
       await current(value, work);
       const used = work.receipt().used;
-      return {
-        ...checked,
-        basis: value.basis,
-        usage: {
-          keys: used.candidateKeys,
-          native: {
-            points: used.nativePoints,
-            witnesses: used.witnessKeys,
-            rows: used.nativeRows,
-            bytes: used.bytes,
-            emptySeeks: used.emptySeeks,
+      return measured(
+        {
+          ...checked,
+          basis: value.basis,
+          usage: {
+            keys: used.candidateKeys,
+            native: {
+              points: used.nativePoints,
+              witnesses: used.witnessKeys,
+              rows: used.nativeRows,
+              bytes: used.bytes,
+              emptySeeks: used.emptySeeks,
+            },
           },
         },
-      };
+        work,
+      );
     },
     async sourcePrefix(
       prepared: PreparedSearchScope,
@@ -552,10 +651,15 @@ export function createSearchScopeSource({
         routeOf(request.after.memberId) !== value.collection.order.source.route
       )
         throw new RangeError('Foreign native ordinal member');
-      if (!value.collection || value.collection.order.kind !== 'ordinal') unavailable();
+      if (!value.collection || value.collection.order.kind !== 'ordinal' || value.readOnly) unavailable();
       const work = new ScopeWork(request.allowance);
       await current(value, work);
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 16384 });
+      work.consume({
+        ...zeroScopeWork(),
+        statements: 1,
+        nativeRows: 1,
+        bytes: 16384,
+      });
       const retained = await store.ordinalState(value.basis.query, value.observation);
       if (!retained.complete) {
         // Each retry advances a retained, finite native frontier. No request scans the
@@ -580,7 +684,10 @@ export function createSearchScopeSource({
           const [mapping] = await readIdentityMappings(pool, [row.subjectId]);
           if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') unavailable();
           if (mapping.state === 'absent') continue;
-          const position = { ordinalKey: row.ordinalKey, memberId: row.memberId };
+          const position = {
+            ordinalKey: row.ordinalKey,
+            memberId: row.memberId,
+          };
           const progress =
             retained.membership && isDeepStrictEqual(retained.membership.row, position)
               ? retained.membership.value
@@ -588,7 +695,12 @@ export function createSearchScopeSource({
           const membership = await order!.contains(value.collection, mapping.terminal, work.remaining(), progress);
           work.native(membership.work);
           if (membership.result === 'not_proven') {
-            work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
+            work.consume({
+              ...zeroScopeWork(),
+              statements: 1,
+              nativeRows: 1,
+              bytes: 8192,
+            });
             await store.saveOrdinalMembership(
               value.basis.query,
               value.observation,
@@ -600,7 +712,12 @@ export function createSearchScopeSource({
           // Resolve BOTH the occurrence's actual original and terminal through the
           // same native leaf producer. Hidden/partial evidence is never an exclusion.
           const originals = row.subjectId === mapping.terminal ? [mapping.terminal] : [row.subjectId, mapping.terminal];
-          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
+          work.consume({
+            ...zeroScopeWork(),
+            statements: 1,
+            nativeRows: 1,
+            bytes: 4096,
+          });
           const resume = await store.readLeafProgress(value.basis.query);
           const checked = await evaluateScopeSubjects({
             pool,
@@ -622,11 +739,19 @@ export function createSearchScopeSource({
             },
             work,
           });
-          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
+          work.consume({
+            ...zeroScopeWork(),
+            statements: 1,
+            nativeRows: 1,
+            bytes: 4096,
+          });
           await store.saveLeafProgress(value.basis.query, checked.resume);
           if (checked.values.includes('not_proven')) unavailable();
           if (checked.values.every((match) => match === true))
-            rows.push({ subject: mapping.terminal, after: { ordinalKey: row.ordinalKey, memberId: row.memberId } });
+            rows.push({
+              subject: mapping.terminal,
+              after: { ordinalKey: row.ordinalKey, memberId: row.memberId },
+            });
         }
         if (!raw.exhausted && isDeepStrictEqual(raw.frontier.after, retained.frontier)) unavailable();
         await current(value, work);
@@ -658,7 +783,11 @@ export function createSearchScopeSource({
         work.remaining().remaining.bytes < (request.quota + 1) * 512
       )
         unavailable();
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: request.quota + 1 });
+      work.consume({
+        ...zeroScopeWork(),
+        statements: 1,
+        nativeRows: request.quota + 1,
+      });
       const page = await store.ordinalPage(value.basis.query, value.basis.canonical, request.after, request.quota + 1);
       work.consume({
         ...zeroScopeWork(),
@@ -674,7 +803,12 @@ export function createSearchScopeSource({
         const membership = await order!.contains(value.collection, row.subject, work.remaining(), progress);
         work.native(membership.work);
         if (membership.result === 'not_proven') {
-          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
+          work.consume({
+            ...zeroScopeWork(),
+            statements: 1,
+            nativeRows: 1,
+            bytes: 8192,
+          });
           await store.saveOrdinalMembership(
             value.basis.query,
             value.observation,
@@ -684,7 +818,12 @@ export function createSearchScopeSource({
         }
         if (membership.result !== true) unavailable();
       }
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
+      work.consume({
+        ...zeroScopeWork(),
+        statements: 1,
+        nativeRows: 1,
+        bytes: 4096,
+      });
       const resume = await store.readLeafProgress(value.basis.query);
       const checked = await evaluateScopeSubjects({
         pool,
@@ -706,7 +845,12 @@ export function createSearchScopeSource({
         },
         work,
       });
-      work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
+      work.consume({
+        ...zeroScopeWork(),
+        statements: 1,
+        nativeRows: 1,
+        bytes: 4096,
+      });
       await store.saveLeafProgress(value.basis.query, checked.resume);
       if (checked.values.some((match) => match !== true)) unavailable();
       await current(value, work);

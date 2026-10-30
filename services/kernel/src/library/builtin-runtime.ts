@@ -17,6 +17,8 @@ import { readBuiltinStateReference } from './builtin-reference-store.ts';
 import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from './owner-index.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import type { CollectionKind } from './collection-kind.ts';
+import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
+import type { FilterDocument } from '@rezics/filter';
 
 export type BuiltinCollectionView = {
   id: string;
@@ -36,12 +38,6 @@ export type BuiltinCollectionView = {
 };
 export type DynamicMemberView = { kind: 'dynamic'; subjectId: string };
 
-/** Missing shared canonical execution must remain unavailable, including for nonempty native input. */
-export function requireBuiltinQueryRuntime(): never {
-  throw new ProblemError('dependency_unavailable', {
-    detail: 'The shared canonical owner source, scoped identity observation and useful-page execution are unavailable.',
-  });
-}
 function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollectionView {
   return {
     id: builtinCollectionId(accountId, key),
@@ -84,7 +80,12 @@ async function admitted(
   return actor;
 }
 async function nativePresence(client: Client, actor: AccountActor) {
-  const { rows } = await client.query<{ entry: boolean; session: boolean; copy: boolean; label: boolean }>(
+  const { rows } = await client.query<{
+    entry: boolean;
+    session: boolean;
+    copy: boolean;
+    label: boolean;
+  }>(
     `SELECT
     EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
     EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2) AS session,
@@ -96,7 +97,12 @@ async function nativePresence(client: Client, actor: AccountActor) {
 }
 
 /** Logical owner reads share the native account/scopes boundary. They create no header, grant, receipt or work. */
-export function createBuiltinRuntime(config: { pool: Pool; access?: Access; tokens?: KeyRing; clock?: KernelClock }) {
+export function createBuiltinRuntime(
+  config: Omit<OwnerQueryDependencies, 'access'> & {
+    access?: Access;
+    tokens?: KeyRing;
+  },
+) {
   async function snapshot<T>(operation: (client: Client) => Promise<T>, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
     return withConnection(config.pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
@@ -121,13 +127,18 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
     return snapshot(async (client) => {
       const owner = await admitted(client, actor, scope);
       if (!owner) return null;
-      const ownEverything = builtinCollectionId(owner.accountId, { kind: 'everything' });
+      const ownEverything = builtinCollectionId(owner.accountId, {
+        kind: 'everything',
+      });
       let key: BuiltinCollectionKey;
       if (id === ownEverything) key = { kind: 'everything' };
       else if (id === builtinCollectionId(owner.accountId, { kind: 'liked' })) key = { kind: 'liked' };
       else {
         // Exactly the delivered native reference point, with no tuple hint or historical-release walk.
-        const reference = await readBuiltinStateReference(client, { route: routeOf(id)!, collectionId: id });
+        const reference = await readBuiltinStateReference(client, {
+          route: routeOf(id)!,
+          collectionId: id,
+        });
         if (!reference || reference.accountId !== owner.accountId) return null;
         const coverage = await readOwnerIndexFrontier(client, owner.accountId);
         if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
@@ -181,7 +192,9 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
       if (stored.state !== 'active') throw new ProblemError('not_found');
       // Published output and configured covers use their owning current readers, never a private fallback.
       if (stored.visibility !== 'private' || stored.presentationKind !== null || stored.coverMediaId !== null)
-        return requireBuiltinQueryRuntime();
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'The configured built-in presentation reader is unavailable.',
+        });
       return {
         ...value,
         title: stored.title,
@@ -190,7 +203,10 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
         ...(labels === undefined ? {} : { builtinLabels: labels }),
       };
     }
-    return { ...value, ...(labels === undefined ? {} : { builtinLabels: labels }) };
+    return {
+      ...value,
+      ...(labels === undefined ? {} : { builtinLabels: labels }),
+    };
   }
   async function discover(actor: Actor, after: string | null = null, limit = 100): Promise<BuiltinCollectionView[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 101)
@@ -243,7 +259,12 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
   async function members(
     actor: Actor,
     id: string,
-    options: { limit?: number; cursor?: string | null; deadline?: number } = {},
+    options: {
+      limit?: number;
+      cursor?: string | null;
+      deadline?: number;
+      query?: { filter: FilterDocument; releaseDigest: string };
+    } = {},
   ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
     if (!Number.isInteger(options.limit ?? 20) || (options.limit ?? 20) < 1 || (options.limit ?? 20) > 100)
       throw new ProblemError('invalid_request');
@@ -255,7 +276,10 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
       const owner = await admitted(client, actor);
       if (!owner) throw new ProblemError('not_found');
       if (source.builtinKind === 'liked') {
-        const page = await readLikedOriginalPage(client, { actorAccountId: owner.accountId, limit: 1 });
+        const page = await readLikedOriginalPage(client, {
+          actorAccountId: owner.accountId,
+          limit: 1,
+        });
         return page.subjects.length === 0 && page.next === null;
       }
       if (source.builtinKind !== 'everything') return false;
@@ -265,15 +289,19 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
     if (empty && options.cursor == null) return { members: [], next: null };
     if (actor.kind !== 'account') throw new ProblemError('not_found');
     const { access, tokens } = config;
-    if (!access || !tokens) return requireBuiltinQueryRuntime();
+    if (!access || !tokens)
+      throw new ProblemError('dependency_unavailable', {
+        detail: 'Built-in members require current Access and cursor keys.',
+      });
     return readOwnerMembers(
-      { pool: config.pool, access, tokens, ...(config.clock === undefined ? {} : { clock: config.clock }) },
+      { ...config, access, tokens },
       {
         actor,
         collectionId: id,
         limit: options.limit ?? 20,
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
         deadline,
+        ...(options.query ? { query: options.query } : {}),
         async revalidateOwner() {
           if (!(await read(actor, id, 'collection:read', deadline))) throw new ProblemError('not_found');
         },

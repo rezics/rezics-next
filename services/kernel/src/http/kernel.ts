@@ -93,7 +93,10 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   clock?: () => Date;
   commerce?: CommerceDependencies;
   moneyPolicy?: CommerceMoneyPolicy;
-  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & { readConsent?: CurrentConsentReader };
+  content?: ContentRuntime &
+    Pick<ContentBoardDependencies, 'cursorNow'> & {
+      readConsent?: CurrentConsentReader;
+    };
   search?: SearchService;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
   shelves?: ShelfNativeReadBindings;
@@ -161,7 +164,10 @@ function realmAwareContentAccess(access: Access): Access {
             const preparedResource: Resource = {
               route: realmRoute,
               id: association.realmId,
-              eligibility: realmReadEligibility({ route: realmRoute, id: association.realmId }),
+              eligibility: realmReadEligibility({
+                route: realmRoute,
+                id: association.realmId,
+              }),
             };
             realmResource = preparedResource;
             realmEvidence = access.prepare
@@ -247,7 +253,10 @@ export function createKernelAccessResolver(options: {
   realmRoleReader?: AccessRealmRoleReader;
   /** Undefined until the kernel has mounted its last route. */
   composedActions?: () => AccessConfig['actions'] | undefined;
-}): { resolveAccess: (config: AccessConfig) => Access; realmRoleReader: AccessRealmRoleReader } {
+}): {
+  resolveAccess: (config: AccessConfig) => Access;
+  realmRoleReader: AccessRealmRoleReader;
+} {
   const factory = options.access ?? createAccess;
   const contentEditionBuyerFactReader = createContentEditionBuyerFactReader({
     pool: options.pool,
@@ -304,7 +313,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');
     return instant;
   };
-  const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  const tokens = dependencies.tokens ?? {
+    current: 1,
+    keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
+  };
   const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
   assertReceiptKeyRing(receiptKeys, tokens);
   configureReceiptKeys(dependencies.pool, receiptKeys);
@@ -353,12 +365,19 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     if (publication) return publication;
     const publicationConfig = {
       pool: dependencies.pool,
-      access: resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+      access: resolveAccess({
+        actions: actionCatalogue(subjects),
+        realmRoleReader,
+      }),
       clock: sourceClock,
       routeKey: dependencies.routeKey,
     };
     publication = createSubjectPagePublication(publicationConfig);
-    subjectPageFeed = createSubjectPageFeed({ ...publicationConfig, tokens, publication });
+    subjectPageFeed = createSubjectPageFeed({
+      ...publicationConfig,
+      tokens,
+      publication,
+    });
     return publication;
   }
   subjectPageRoutes(subjects, {
@@ -392,7 +411,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
-  profileRoutes(app, { ...dependencies, tokens, access: (config) => resolveAccess({ ...config, realmRoleReader }) });
+  profileRoutes(app, {
+    ...dependencies,
+    tokens,
+    access: (config) => resolveAccess({ ...config, realmRoleReader }),
+  });
   payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
@@ -417,13 +440,19 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     pool: dependencies.pool,
     clock,
+    routeKey: dependencies.routeKey,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
   const contextual = contextRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(contextual), realmRoleReader }),
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(contextual),
+        realmRoleReader,
+      }),
   });
   let searched: ReturnType<typeof searchRoutes>;
   searched = searchRoutes(contextual, {
@@ -439,7 +468,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
     realmParticipation ??= createRealmParticipationCheck({
       pool: dependencies.pool,
-      access: resolveAccess({ actions: actionCatalogue(content), realmRoleReader }),
+      access: resolveAccess({
+        actions: actionCatalogue(content),
+        realmRoleReader,
+      }),
     });
     return realmParticipation(client, input, time);
   };
@@ -475,7 +507,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     realmParticipation: checkRealmParticipation,
     get access() {
-      return resolveAccess({ actions: actionCatalogue(granted), realmRoleReader });
+      return resolveAccess({
+        actions: actionCatalogue(granted),
+        realmRoleReader,
+      });
     },
   });
   const granted = accessRoutes(media as unknown as ReturnType<typeof definitionRoutes>, {
@@ -517,7 +552,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         pool: dependencies.pool,
         tokens,
         clock,
-        access: resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+        access: resolveAccess({
+          actions: actionCatalogue(personal),
+          realmRoleReader,
+        }),
         ...dependencies.shelves,
       }),
   });
@@ -535,7 +573,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     routeKey: dependencies.routeKey,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(collections),
+        realmRoleReader,
+      }),
   });
   const pins = pinRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
@@ -549,14 +592,22 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(sourceStatistics),
+        realmRoleReader,
+      }),
   });
   declareKernelWriteRates(ratings);
   sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(sourceStatistics),
+        realmRoleReader,
+      }),
   });
   const zones = zoneRoutes(sourceStatistics, {
     pool: dependencies.pool,
@@ -610,7 +661,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
             `${first.method.toUpperCase()} ${first.path} and ${route.method.toUpperCase()} ${route.path}: inconsistent path parameter name at position ${position}`,
           );
         }
-        if (!first) parameterNames.set(key, { name, method: route.method, path: route.path });
+        if (!first)
+          parameterNames.set(key, {
+            name,
+            method: route.method,
+            path: route.path,
+          });
       }
     }
     if (route.hooks.detail?.hide === true) continue;
@@ -637,7 +693,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
 // The module inherits definition routes. Keep their existing schemas only once: intersecting
 // another copy expands their response unions beyond the compiler's representable type size.
 type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
-  '~Routes': { v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'> };
+  '~Routes': {
+    v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
+  };
 };
 
 type KernelComposition = ZoneComposition &

@@ -30,17 +30,26 @@ import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
 import { requireCollectionRuleExecution } from './collection-rules.ts';
-import type { CollectionMemberQuery } from './owner-filter.ts';
+import { admitCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
+import type { SearchService } from '../search/service-scope.ts';
 import { readOwnerFilterPage } from './owner-filter-plan.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
 
-type CuratorPageOptions = { curatorAccountId: string | null; cursor?: string | null; limit?: number };
+type CuratorPageOptions = {
+  curatorAccountId: string | null;
+  cursor?: string | null;
+  limit?: number;
+};
 
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
-type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
+type Sink = {
+  seen: boolean;
+  row: StoredCollection | null;
+  failure?: { error: unknown };
+};
 export type CollectionView = CollectionPresentation &
   Partial<CollectionPreview> & {
     // Older internal callers may construct the curated presentation without wire-only fields.
@@ -57,7 +66,10 @@ export type CollectionView = CollectionPresentation &
     updatedAt: string;
   };
 
-export type CuratedCollectionView = CollectionView & { membershipKind: 'curated'; orderEpoch: number };
+export type CuratedCollectionView = CollectionView & {
+  membershipKind: 'curated';
+  orderEpoch: number;
+};
 
 export type SavedDynamicCollectionView = Omit<
   CollectionView,
@@ -163,7 +175,12 @@ function collectionView(row: {
 
 function memberView(row: MemberRow): MemberView {
   if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
-  return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: iso(row.addedAt) };
+  return {
+    id: row.id,
+    subjectId: row.subjectId,
+    note: row.note,
+    addedAt: iso(row.addedAt),
+  };
 }
 
 function actor(viewer: Actor): viewer is AccountActor {
@@ -259,14 +276,26 @@ function readEligibility(route: number, id: string, sink: Sink) {
   });
 }
 
-export function createCollectionReads(dependencies: PreviewPreparationDependencies & { tokens: KeyRing }) {
+export function createCollectionReads(
+  dependencies: PreviewPreparationDependencies & {
+    tokens: KeyRing;
+    search?: SearchService;
+  },
+) {
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
   const readKind = createCollectionKindReads(dependencies);
   const builtins = createBuiltinRuntime(dependencies);
 
-  return { readCollection, listCollections, listAccountCollections, listMembers, readMembers, listSubjectCollections };
+  return {
+    readCollection,
+    listCollections,
+    listAccountCollections,
+    listMembers,
+    readMembers,
+    listSubjectCollections,
+  };
 
   async function loadCollection(
     viewer: Actor,
@@ -454,7 +483,10 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
         collections: shown,
         next:
           logical.length > shownLogical.length && partition
-            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: ['builtin', shownLogical.at(-1)!.id] })
+            ? encodeCursor(tokens, binding, {
+                epoch: partition.epoch,
+                after: ['builtin', shownLogical.at(-1)!.id],
+              })
             : hasMore && partition
               ? encodeCursor(tokens, binding, {
                   epoch: partition.epoch,
@@ -484,7 +516,13 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
         (previews) => retainPreview(viewer, result.collections, previews, preview.deadline),
       );
       for (const collection of collections)
-        Object.assign(collection, previews.get(collection.id) ?? { previewMembers: [], previewStatus: 'pending' });
+        Object.assign(
+          collection,
+          previews.get(collection.id) ?? {
+            previewMembers: [],
+            previewStatus: 'pending',
+          },
+        );
     }
     return { ...result, collections };
   }
@@ -500,6 +538,22 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
     if (options.filter !== undefined || options.sort !== undefined) {
       if (!logical && !(await loadCollection(viewer, collectionId, deadline))) throw notFound();
+      if (logical) {
+        const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
+        if (!admission.filter || !admission.releaseDigest)
+          return builtins.members(viewer, collectionId, {
+            ...options,
+            deadline,
+          });
+        return builtins.members(viewer, collectionId, {
+          ...options,
+          deadline,
+          query: {
+            filter: admission.filter,
+            releaseDigest: admission.releaseDigest,
+          },
+        });
+      }
       return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
     }
     const page = {
@@ -522,7 +576,10 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     if (!collection) throw notFound();
     if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
     const route = routeOf(collectionId)!;
-    const binding: CursorBinding = { operation: 'library.collection.members', parameters: { collectionId } };
+    const binding: CursorBinding = {
+      operation: 'library.collection.members',
+      parameters: { collectionId },
+    };
     const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);
     const rows = await readOnly(pool, (client) =>
       memberPage.run(queryOf(client), {
@@ -563,13 +620,23 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     viewer: Actor,
     subjectId: string,
     options: { cursor?: string | null; limit?: number } = {},
-  ): Promise<{ collections: PublicCollectionView[]; count: { value: number; exact: true }; next: string | null }> {
+  ): Promise<{
+    collections: PublicCollectionView[];
+    count: { value: number; exact: true };
+    next: string | null;
+  }> {
     const page = pageRequest(options, ['cursor', 'limit']);
     if (typeof subjectId !== 'string' || (await resolveSubject(anchors, viewer, subjectId)) === null) throw notFound();
     const route = routeOf(subjectId)!;
-    const counts = await listingCounts.run(pool, { partition_no: partitionOf(route), subject_ids: [subjectId] });
+    const counts = await listingCounts.run(pool, {
+      partition_no: partitionOf(route),
+      subject_ids: [subjectId],
+    });
     const count = counts[0]?.publicCollectionCount ?? 0;
-    const binding: CursorBinding = { operation: 'library.subject.collections', parameters: { subjectId } };
+    const binding: CursorBinding = {
+      operation: 'library.subject.collections',
+      parameters: { subjectId },
+    };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);
     const partition = await withConnection(pool, (client) => readPartition(client, partitionOf(route)));
@@ -583,7 +650,10 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     if (considered.length > 0) {
       await readOnly(pool, async (client) => {
         for (const pair of considered) {
-          const row = await collectionRead.run(queryOf(client), { route: pair.collectionRoute, id: pair.collectionId });
+          const row = await collectionRead.run(queryOf(client), {
+            route: pair.collectionRoute,
+            id: pair.collectionId,
+          });
           // Publication is eventual. A detected withdrawn positive cannot certify an exact count.
           if (!row || row.state !== 'active' || row.visibility !== 'public')
             throw new ProblemError('dependency_unavailable');
@@ -608,7 +678,10 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       count: { value: count, exact: true },
       next:
         hasMore && last && partition
-          ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.collectionId] })
+          ? encodeCursor(tokens, binding, {
+              epoch: partition.epoch,
+              after: [last.collectionId],
+            })
           : null,
     };
   }

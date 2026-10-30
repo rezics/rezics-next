@@ -1,20 +1,16 @@
-import type { Pool } from 'pg';
-import type { KernelClock } from '../clock.ts';
+import type { FilterDocument } from '@rezics/filter';
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import { systemClock } from '../clock.ts';
-import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
+import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { Access, AccountActor } from '../request/access.ts';
+import type { AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  createCollectionSource,
-  type CollectionSourceObservation,
-  type PreparedCollectionSource,
-  type WorkAllowance,
-  type WorkReceipt,
-} from './collection-source.ts';
+import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { DynamicMemberView } from './builtin-runtime.ts';
 
 /** Structural/source compatibility is not disclosure. Each positive is checked by the native Source again. */
@@ -30,54 +26,19 @@ function sameSource(left: CollectionSourceObservation, right: CollectionSourceOb
   );
 }
 
-/** One common caller ledger; native owners return actual charged work, including rejected/empty reads. */
-function pageWork(limit: number) {
-  const candidates = Math.min(600, 6 * limit + 3);
-  const id = crypto.randomUUID();
-  let remaining: WorkAllowance['remaining'] = {
-    candidateKeys: candidates,
-    nativeRows: 64 + 16 * candidates,
-    nativePoints: 16 + 8 * candidates,
-    witnessKeys: 16 + 8 * candidates,
-    statements: 12,
-    bytes: 80 * 1024 + 5120 * candidates,
-    emptySeeks: 3,
-    identityMetadataRows: 0,
-  };
-  return {
-    allowance(candidateKeys = remaining.candidateKeys): WorkAllowance {
-      return {
-        reservationId: id,
-        remaining: { ...remaining, candidateKeys: Math.min(candidateKeys, remaining.candidateKeys) },
-      };
-    },
-    settle(receipt: WorkReceipt) {
-      if (receipt.reservationId !== id) throw new TypeError('Foreign owner source work receipt');
-      const next = { ...remaining };
-      for (const key of Object.keys(next) as (keyof typeof next)[]) {
-        const used = receipt.used[key];
-        if (!Number.isSafeInteger(used) || used < 0 || used > next[key])
-          throw new ProblemError('dependency_unavailable');
-        next[key] -= used;
-      }
-      remaining = next;
-    },
-  };
-}
-
 /**
  * Common canonical member caller. The delivered Source owns candidate order, alias completion,
  * original+terminal disclosure and source-scoped identity currentness. No raw-ID page is normalized here.
- * The provisional createCollectionSource body fails unavailable until that producer executes these operations.
  */
 export async function readOwnerMembers(
-  deps: { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock },
+  deps: OwnerQueryDependencies & { tokens: KeyRing },
   input: {
     actor: AccountActor;
     collectionId: string;
     limit: number;
     cursor?: string | null;
     deadline: number;
+    query?: { filter: FilterDocument; releaseDigest: string };
     /** Actual owner-home reread after releasing all foreign source homes. */
     revalidateOwner: () => Promise<void>;
     /** Actual native source version, independent of identity and permission. */
@@ -88,7 +49,18 @@ export async function readOwnerMembers(
   const binding = {
     route: 'GET /v1/collections/:collectionId/members',
     viewer: input.actor.accountId,
-    query: { collectionId: input.collectionId, limit: input.limit, order: 'id', source: 'private_builtin' },
+    query: {
+      collectionId: input.collectionId,
+      limit: input.limit,
+      order: 'id',
+      source: 'private_builtin',
+      ...(input.query
+        ? {
+            filter: createHash('sha256').update(canonicalize(input.query.filter)!).digest('hex'),
+            release: input.query.releaseDigest,
+          }
+        : {}),
+    },
   };
   const position = input.cursor == null ? null : await decodeListCursor(deps.tokens, binding, input.cursor, clock());
   if (
@@ -99,23 +71,35 @@ export async function readOwnerMembers(
       routeOf(String(position.after[3])) === null)
   )
     throw new ProblemError('invalid_cursor');
-  const work = pageWork(input.limit);
-  const source = createCollectionSource(deps);
+  const ledger = ownerQueryWork(input.limit);
+  const work = {
+    allowance: (keys = ledger.remaining().remaining.candidateKeys) => {
+      const a = ledger.remaining();
+      return {
+        ...a,
+        remaining: {
+          ...a.remaining,
+          candidateKeys: Math.min(keys, a.remaining.candidateKeys),
+        },
+      };
+    },
+    settle: (receipt: WorkReceipt) => ledger.native(receipt),
+  };
   const version = await input.readSourceVersion();
   const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
   try {
     const context = { actor: input.actor, at, deadline: input.deadline };
-    async function prepare(time: AuthoritativeTime = at): Promise<PreparedCollectionSource> {
-      const result = await source.prepare({
-        ...context,
-        at: time,
-        collectionId: input.collectionId,
-        allowance: work.allowance(),
-      });
-      work.settle(result.work);
-      return result.source;
-    }
-    const prepared = await prepare();
+    const runtime = await openOwnerQuery(deps, {
+      actor: input.actor,
+      collectionId: input.collectionId,
+      deadline: input.deadline,
+      work: ledger,
+      logical: true,
+      at,
+    });
+    const prepared = runtime.source;
+    const source = runtime.native;
+    const filtered = input.query ? await runtime.filter(input.query.filter, input.query.releaseDigest) : null;
     const observed = prepared.observation;
     if (observed.authority.kind !== 'private_builtin' || observed.authority.curatorAccountId !== input.actor.accountId)
       throw new ProblemError('not_found');
@@ -134,12 +118,17 @@ export async function readOwnerMembers(
     let exhausted = false;
     for (let round = 0; round < 3 && members.length <= input.limit && !exhausted; round++) {
       const quota = Math.min(600, 2 * (input.limit - members.length) + 1);
-      const prefix = await source.prefix({
-        ...context,
-        source: prepared,
-        allowance: work.allowance(quota),
-        afterSubjectId: after,
-      });
+      const prefix = filtered
+        ? await filtered.scope.sourcePrefix(filtered.prepared, {
+            afterSubjectId: after,
+            allowance: work.allowance(quota),
+          })
+        : await source.prefix({
+            ...context,
+            source: prepared,
+            allowance: work.allowance(quota),
+            afterSubjectId: after,
+          });
       work.settle(prefix.work);
       if (prefix.candidates.length > quota) throw new ProblemError('dependency_unavailable');
       if (!sameSource(observed, prefix.observation)) throw new ProblemError('semantic_not_ready');
@@ -157,7 +146,26 @@ export async function readOwnerMembers(
         if (!sameSource(observed, membership.observation)) throw new ProblemError('semantic_not_ready');
         if (membership.result === 'not_proven') throw new ProblemError('dependency_unavailable');
         after = candidate.subjectId;
-        if (membership.result) members.push({ kind: 'dynamic', subjectId: candidate.subjectId });
+        if (membership.result) {
+          if (filtered) {
+            const a = ledger.remaining();
+            const result = await filtered.scope.evaluate(filtered.prepared, [candidate.subjectId], {
+              rawKeys: Math.min(256, a.remaining.candidateKeys),
+              native: {
+                points: a.remaining.nativePoints,
+                witnesses: a.remaining.witnessKeys,
+                rows: a.remaining.nativeRows,
+                bytes: a.remaining.bytes,
+                emptySeeks: a.remaining.emptySeeks,
+              },
+              allowance: a,
+            });
+            ledger.native(filtered.scope.work(result));
+            if (result.values[0] === 'not_proven') throw new ProblemError('dependency_unavailable');
+            if (result.values[0] !== true) continue;
+          }
+          members.push({ kind: 'dynamic', subjectId: candidate.subjectId });
+        }
         if (members.length > input.limit) break;
       }
       if (members.length > input.limit) break;
@@ -171,10 +179,25 @@ export async function readOwnerMembers(
     // A wait or foreign-home read cannot reuse the old T for final disclosure.
     const finalAt = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
     try {
-      const current = await prepare(finalAt);
+      const finalRuntime = await openOwnerQuery(deps, {
+        actor: input.actor,
+        collectionId: input.collectionId,
+        deadline: input.deadline,
+        work: ledger,
+        logical: true,
+        at: finalAt,
+      });
+      const current = finalRuntime.source;
+      const finalFilter = input.query ? await finalRuntime.filter(input.query.filter, input.query.releaseDigest) : null;
+      if (
+        filtered &&
+        finalFilter &&
+        JSON.stringify(filtered.prepared.basis) !== JSON.stringify(finalFilter.prepared.basis)
+      )
+        throw new ProblemError('semantic_not_ready');
       if (!sameSource(observed, current.observation)) throw new ProblemError('semantic_not_ready');
       for (const member of shown) {
-        const checked = await source.containsSubject({
+        const checked = await finalRuntime.native.containsSubject({
           ...context,
           at: finalAt,
           source: current,
@@ -183,6 +206,27 @@ export async function readOwnerMembers(
         });
         work.settle(checked.work);
         if (!sameSource(observed, checked.observation) || checked.result !== true)
+          throw new ProblemError('semantic_not_ready');
+      }
+      if (finalFilter) {
+        const a = ledger.remaining();
+        const checked = await finalFilter.scope.evaluate(
+          finalFilter.prepared,
+          shown.map((member) => member.subjectId),
+          {
+            rawKeys: Math.min(256, a.remaining.candidateKeys),
+            native: {
+              points: a.remaining.nativePoints,
+              witnesses: a.remaining.witnessKeys,
+              rows: a.remaining.nativeRows,
+              bytes: a.remaining.bytes,
+              emptySeeks: a.remaining.emptySeeks,
+            },
+            allowance: a,
+          },
+        );
+        ledger.native(finalFilter.scope.work(checked));
+        if (checked.values.length !== shown.length || checked.values.some((value) => value !== true))
           throw new ProblemError('semantic_not_ready');
       }
       await input.revalidateOwner();

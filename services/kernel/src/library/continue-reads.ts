@@ -8,7 +8,8 @@ import { routeOf } from '../route/route.ts';
 import { decodeListCursor } from '../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { requireBuiltinQueryRuntime } from './builtin-runtime.ts';
+import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
+import { readContinueOwnerPage } from './continue-query.ts';
 import type { ContinueActiveSession } from './continue-source.ts';
 
 export type ContinueSubject = Readonly<{
@@ -20,64 +21,101 @@ export type ContinueSubject = Readonly<{
 export type ContinuePage = { subjects: ContinueSubject[]; next: string | null };
 
 /** Pure default reader. Admission precedes native owner/cursor reads; GET never starts retained work. */
-export function createContinueReads(deps: { pool: Pool; tokens: KeyRing; clock?: KernelClock }) {
+export function createContinueReads(
+  deps: Omit<OwnerQueryDependencies, 'access'> & {
+    tokens: KeyRing;
+    access?: OwnerQueryDependencies['access'];
+  },
+) {
   return {
     async list(actor: Actor, query: { limit?: number; cursor?: string }, deadline: number): Promise<ContinuePage> {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       if (!actor.scopes.includes('library_entry:list') || !actor.scopes.includes('progress_session:list'))
-        throw new ProblemError('forbidden', { headers: { 'www-authenticate': 'Bearer error="insufficient_scope"' } });
+        throw new ProblemError('forbidden', {
+          headers: { 'www-authenticate': 'Bearer error="insufficient_scope"' },
+        });
       const limit = query.limit ?? 20;
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
-      const route = routeOf(actor.accountId);
+      const accountActor = actor;
+      const route = routeOf(accountActor.accountId);
       if (route === null) throw new ProblemError('forbidden');
-      return withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const owner = await readAccount(client, route, actor.accountId);
-          if (
-            !owner ||
-            owner.kind !== 'actor' ||
-            owner.state !== 'active' ||
-            owner.fenced ||
-            !Number.isSafeInteger(actor.authnEpoch) ||
-            actor.authnEpoch < 1 ||
-            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-          )
-            throw new ProblemError('forbidden');
-          if (query.cursor !== undefined) {
-            if (query.cursor.length === 0 || query.cursor.length > 4096) throw new ProblemError('invalid_cursor');
-            const cursor = await decodeListCursor(
-              deps.tokens,
-              {
-                route: 'GET /v1/libraryContinue',
-                viewer: actor.accountId,
-                query: { limit, source: 'owner-active-state-session' },
-              },
-              query.cursor,
-              (deps.clock ?? systemClock)(),
-            );
-            if (!cursor.ok) throw new ProblemError('invalid_cursor');
-            // No mapping point, fabricated epoch or native source version can replace
-            // the shared source-scoped query basis needed to authorize this continuation.
-            requireBuiltinQueryRuntime();
+      async function snapshot<T>(read: (client: ReturnType<typeof deadlineClient>) => Promise<T>) {
+        return withConnection(deps.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          try {
+            const owner = await readAccount(client, route!, accountActor.accountId);
+            if (
+              !owner ||
+              owner.kind !== 'actor' ||
+              owner.state !== 'active' ||
+              owner.fenced ||
+              !Number.isSafeInteger(accountActor.authnEpoch) ||
+              accountActor.authnEpoch < 1 ||
+              owner.minimumAuthnEpoch > BigInt(accountActor.authnEpoch)
+            )
+              throw new ProblemError('forbidden');
+            const result = await read(client);
+            await client.query('COMMIT');
+            return result;
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
           }
-          const presence = (
+        });
+      }
+      const presence = await snapshot(
+        async (client) =>
+          (
             await client.query<{ entry: boolean; session: boolean }>(
               `SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
-              EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state='active') AS session`,
-              [route, actor.accountId],
+          EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state='active') AS session`,
+              [route, accountActor.accountId],
             )
-          ).rows[0]!;
-          if (presence.entry || presence.session) requireBuiltinQueryRuntime();
-          // Native absence, not missing index metadata, proves this genuine empty union.
-          await client.query('COMMIT');
-          return { subjects: [], next: null };
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        }
-      });
+          ).rows[0]!,
+      );
+      if (query.cursor !== undefined && (query.cursor.length === 0 || query.cursor.length > 4096))
+        throw new ProblemError('invalid_cursor');
+      // Native absence is a complete empty union. A continuation still needs the actual Source/cursor basis.
+      if (!presence.entry && !presence.session && query.cursor === undefined) return { subjects: [], next: null };
+      if (query.cursor !== undefined) {
+        const decoded = await decodeListCursor(
+          deps.tokens,
+          {
+            route: 'GET /v1/libraryContinue',
+            viewer: accountActor.accountId,
+            query: { limit, source: 'owner-active-state-session' },
+          },
+          query.cursor,
+          (deps.clock ?? systemClock)(),
+        );
+        if (!decoded.ok) throw new ProblemError('invalid_cursor');
+      }
+      if (!deps.access)
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'Continue requires the current Access binding.',
+        });
+      return readContinueOwnerPage(
+        { ...deps, access: deps.access },
+        {
+          actor,
+          limit,
+          ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          deadline,
+          snapshot,
+          readVersion: () =>
+            snapshot(async (client) => {
+              const head = (
+                await client.query<{ generation: string }>(
+                  'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
+                  [route, accountActor.accountId],
+                )
+              ).rows[0];
+              if (!head) throw new ProblemError('semantic_not_ready');
+              return head.generation;
+            }),
+        },
+      );
     },
   };
 }
