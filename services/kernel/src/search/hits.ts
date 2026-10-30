@@ -120,7 +120,10 @@ export function projectHit(subject: IndexedSubject, { descriptions, languages }:
 type Pending = Exclude<Fact, { kind: 'item' }> | { kind: 'item'; id: string };
 
 /** The first distinct values of each requested property, in statement order. */
-function pending(subject: IndexedSubject, properties: readonly string[]): Map<string, Pending[]> {
+export function pendingFacts(
+  subject: Pick<IndexedSubject, 'statements'>,
+  properties: readonly string[],
+): Map<string, Pending[]> {
   const kept = new Map<string, { values: Pending[]; seen: Set<string> }>(
     properties.map((property) => [property, { values: [], seen: new Set() }]),
   );
@@ -153,7 +156,7 @@ export async function projectFacts(
   properties: readonly string[],
   languages: readonly string[] | undefined,
 ): Promise<Record<string, Fact[]>[]> {
-  const lists = subjects.map((subject) => pending(subject, properties));
+  const lists = subjects.map((subject) => pendingFacts(subject, properties));
   const targets = new Set<string>();
   for (const list of lists)
     for (const values of list.values()) for (const value of values) if (value.kind === 'item') targets.add(value.id);

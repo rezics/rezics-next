@@ -1072,6 +1072,59 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
   The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
 
+### Current list presentation facts
+
+`readListPresentationFacts({pool,access,actor,routeKey,deadline}, originals, {languages}?)`, exported
+from `semantic/list-presentation.ts` and `semantic/index.ts`, returns an original-keyed Map of
+`{id, facts: Record<string, Fact[]>} | null`. `Fact` is the existing `search/hits.ts` union. The server
+supplies the trusted 32-byte route key. More than 100 **raw** originals, including duplicates, is
+rejected before I/O. Invalid/unknown originals and independently undisclosed originals or terminals
+produce null. A visible subject with complete evidence and no selected representable values produces
+`facts: {}`. Missing or changed native identity/source proof produces `semantic_not_ready` (503);
+the existing deadline classification remains `deadline_exceeded` at HTTP boundaries.
+
+The active immutable release is resolved once, with its current activation rechecked before return.
+Only the actual terminal Type's effective `listPresentation.keyFacts` is used: at most four properties,
+three distinct actual values per property, and no vertical fallback for old releases without hints.
+`effectiveGlobalSlotFacts` supplies current compact or adopted Global authority under the public
+statement audience. The existing Search statement and Fact formatters supply item, time, quantity
+and patterned-code values. Unsafe integer or lossy decimal amounts are omitted, without rounding.
+Items independently resolve and authorize both original and terminal; unavailable items supply no
+ID or label and are not replaced by later values. Only actual current label facts are filled.
+
+Relation prefixes use the existing ordered outbound index solely as bounded locators. Their native
+checkpoint must cover the source revision's own write position, and each locator must match the
+source revision/security and current selected slot. Unrelated later partition positions do not make
+a finite unaffected source wait. Each exact original/terminal, selection, provenance, consent,
+account and source-fence observation is freshly collected again before disclosure. Source tuple
+fences retain the native security revision, including an absent fence observation. There is no
+reusable authorization verdict, cached native time, whole-subject hydration or all-home sweep.
+Each source, control, account, tuple and related home is released before preparing another home.
+
+Commerce still owns attaching these facts **beside** `subject` on FULL members and checking the
+returned terminal against its selected member. This helper adds no summary fields or HTTP endpoint.
+Web consumes the existing exact Fact shape. Unpublished identity changes remain honest readiness
+failures until the identity owner's native mapping/publication work completes; no fixture seeds a
+successful mapping or participant receipt.
+
+- Touches: at most 100 raw originals, native current identity/control points, original and terminal
+  Access/source headers, active Type metadata, at most four selected slots and three output values
+  per property, exact candidate/revision/author/consent/account/tuple points, bounded related
+  identity/label fills and the same finite dependencies at final currentness. Compact slot logs and
+  expanded selections retain their existing native 33-log/32-selection limits; these reads and any
+  withheld or unrepresentable candidates are charged, not free hydration.
+- Bound: O(k log N) point and ordered-prefix work in the admitted page/slot/value neighborhood;
+  no subject-history, unrelated population or full-degree scan, no cross-partition join and at most
+  one held native backend. Existing point, byte, row, statement and caller deadline limits remain.
+- Growth check: `test/semantic/growth-list-presentation-facts.test.ts` uses the shared inclusive
+  native capture at unrelated subject/statement/history/account/tuple populations 64/512/4096 and
+  requested widths 1/8/100. It charges Access, identity, selection, related, fence, reread, failed
+  attempts and native race restoration/relay work; every observed relation uses the actual strict
+  greater-than-eight-pages access-path guard. Native privacy cases are in
+  `list-presentation-privacy.test.ts`; released book/film/recipe and withholding cases remain in
+  the frozen `list-presentation-facts.test.ts`. Native execution and quantitative fit receipts are
+  deferred to post-integration acceptance under the current minimal verification instruction.
+
 ## Deletion and retention
 
 The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,

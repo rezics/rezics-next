@@ -226,8 +226,9 @@ export async function effectiveGlobalSlotFacts(
   tx: CommandTransaction,
   subject: string,
   property: string,
+  slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; basis: unknown }> {
-  const state = await resolveSlot(tx, subject, property);
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
   const facts = state.expanded
     ? await selectionFacts(tx, subject, property, selection)

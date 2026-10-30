@@ -100,7 +100,7 @@ function timeYear(time: string): number | null {
   return Number.isSafeInteger(year) ? year : null;
 }
 
-function indexedStatement(row: StatementRow, release: Release): IndexedStatement | null {
+export function indexedStatement(row: StatementRow, release: Release): IndexedStatement | null {
   const body = row.body;
   if (!object(body)) return null;
   const definition = release.properties[row.property];
