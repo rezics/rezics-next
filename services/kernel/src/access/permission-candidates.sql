@@ -37,11 +37,20 @@ WITH input AS NOT MATERIALIZED (
           AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
           AND g.valid @> (SELECT at FROM authority)) > 0
     END) OR (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
-      WHERE (SELECT count(*) FROM access.resource_role_grant g
-        WHERE g.route = i.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
-          AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-          AND g.valid @> (SELECT at FROM authority)
-      ) > 0
+      WHERE (SELECT count(*) FROM (
+        SELECT g.valid FROM access.resource_role_grant g
+        WHERE ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role,
+                  COALESCE(lower(g.valid), '-infinity'::timestamptz))
+            >= ROW(i.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, role.grant_role,
+                   '-infinity'::timestamptz)
+          AND ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role,
+                  COALESCE(lower(g.valid), '-infinity'::timestamptz))
+            <= ROW(i.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, role.grant_role,
+                   (SELECT at FROM authority))
+        ORDER BY g.route DESC, g.resource_id DESC, g.subject_kind DESC, g.subject_id DESC,
+                 g.subject_role DESC, g.grant_role DESC,
+                 COALESCE(lower(g.valid), '-infinity'::timestamptz) DESC LIMIT 1
+      ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
     ) > 0) AS granted,
     (k.subject_kind = 'identity' AND (SELECT count(*) FROM access.resource_denial d
       WHERE d.route = i.route AND d.resource_id = target.resource_id AND d.action = i.action

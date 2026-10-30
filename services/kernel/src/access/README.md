@@ -1058,9 +1058,119 @@ probe is used in `permission-candidates.sql` and `governance-reach-candidates.sq
 continues to enforce integrity. `test/access/grant-key-lookup.test.ts` checks all three plans and temporal
 boundaries against unrelated and exact-key history at 1/8/64. The partial index retains the Global branch.
 Other resource grants use `resource_grant_point_lookup` with the complete resource/subject/action key and the
-same single predecessor lookup. Role grants use `resource_role_grant_point_lookup` with the corresponding exact
-resource/subject/grant-role key. Both temporal primary keys retain their non-overlap integrity checks. These
-lookups bound native viewer-action batch probes independently of unrelated resources and closed history.
+same single predecessor lookup. Role permission probes in `permission-candidates.sql` and `permission-check.sql`
+use `resource_role_grant_predecessor`, ordered by the complete route/resource/subject-kind/id/role/grant-role key
+and `COALESCE(lower(valid), '-infinity')`, with `valid` included. Both lexicographic seek bounds bind that identical
+full key; the upper bound is the shared evaluator T itself. The descending seek returns at most one actual
+interval before containment is tested. This is a bound on the actual lower boundary, rather than a range-order
+surrogate whose residual containment work could grow. The Access constraint already requires nonempty intervals,
+inclusive finite lower bounds and exclusive upper bounds. It remains unchanged, as does the temporal primary key's
+non-overlap constraint. Future starts cannot hide a current interval; a predecessor ending before/at T denies;
+gaps, unbounded starts/ends and timestamp infinities keep their native range meaning.
+
+For one exact role key, the physical path examines zero or one source interval, with one B-tree descent of height
+h(N), one leaf candidate and at most one heap visibility fetch (a covering index-only read can avoid that fetch).
+No interval-history rows are traversed. Let S be the actual admitted subject keys (direct identity and active-account
+keys for actor/principal, plus admitted group keys), R the requested grant roles, V the targets and B the evaluated
+non-explicit branches. The upper bound is V*S*R probes for candidates and V*S*R*B for the final formula; empty,
+denied and gap probes use the same bounded seek. Each formula is still one client statement. Short-circuiting can
+reduce actual probes; it never grants a source-derived allowance. A denied command's preparation/final checks,
+reauthorization before replay, repeated attempts and nested callers each contribute their actual probes. Summing
+those executed probes gives at most one source candidate per probe and O(sum h(N)) native index-page touches.
+Ordinary grants, denials, group/principal evidence, scopes and authorization-before-receipt are unchanged.
+The retained native physical result remains red/pending: no source/type result establishes its buffer bound.
+`test/access/permission-role-predecessor.test.ts` adds the focused real history case at 256/1024/4608 and boundary
+cases using the existing growth harness. Its integrated native nested-statement attribution and inclusive buffer
+accounting (`test/support/growth-capture.ts`, `growth-cost.ts`, including the native nested cost case) are used as-is;
+no allowance, calibration or original native outcome has been changed.
+
+### Current resource role keys
+
+`current-resource-roles.ts` is the internal Access directory consumed on the caller's authorized native writer
+client. It enumerates role keys, including group and active-account subjects; it does not establish Account
+liveness, permission, ownership or a successor. Its complete public declarations are:
+
+```ts
+type CurrentResourceRoleKey = Readonly<{
+  grantRole: string;
+  subjectKind: 'identity' | 'active_accounts';
+  subjectId: string;
+  subjectRole: '' | 'owner' | 'member';
+  intervalKey: string; // decimal native resource_role_grant.erasure_key
+}>;
+type CurrentResourceRoleFrontier = Readonly<{
+  resource: Readonly<{ route: number; id: string }>;
+  version: string; // decimal native resource writer/transition version
+  validFrom: string; // native timestamptz text, inclusive
+  validUntil: string | null; // next native boundary, exclusive; null means no queued boundary
+  roles: readonly string[]; // deduplicated, sorted requested role names
+}>;
+type CurrentResourceRoleAfter = Readonly<{
+  frontier: CurrentResourceRoleFrontier;
+  key: CurrentResourceRoleKey;
+}>;
+type CurrentResourceRoleUnavailable = Readonly<{ status: 'unavailable' }>;
+type CurrentResourceRolePage = CurrentResourceRoleUnavailable | Readonly<{
+  status: 'ready';
+  rows: readonly Readonly<CurrentResourceRoleKey & { valid: string }>[];
+  frontier: CurrentResourceRoleFrontier;
+  after: CurrentResourceRoleAfter | null;
+}>;
+type CurrentResourceRolePageInput = Readonly<{
+  resource: Resource; roles: readonly string[]; at: AuthoritativeTime;
+  after: CurrentResourceRoleAfter | null; limit: number;
+}>;
+type CurrentResourceRoleVerificationInput = Readonly<{
+  resource: Resource; frontier: CurrentResourceRoleFrontier; at: AuthoritativeTime;
+}>;
+type CurrentResourceRoleVerification = Readonly<{ status: 'ready' }> | CurrentResourceRoleUnavailable;
+readCurrentResourceRolePage(client: AccessClient, input: CurrentResourceRolePageInput): Promise<CurrentResourceRolePage>;
+verifyCurrentResourceRoleFrontier(client: AccessClient, input: CurrentResourceRoleVerificationInput): Promise<CurrentResourceRoleVerification>;
+```
+
+The input accepts 1..1000 role names and a page limit of 1..100. An initial page passes `after: null`. Order is
+`grantRole, subjectKind, subjectId, subjectRole, intervalKey`, using native database ordering. A non-null `after`
+carries the last returned key and original frontier; null ends traversal. A writer-version, role-set or temporal
+horizon change returns unavailable: discard the old traversal and restart. Invalid input throws TypeError.
+An absent resource frontier, incomplete installation, T before its processed frontier or a boundary due by T
+returns unavailable, including an unknown resource with no source roles. A known initialized resource whose roles
+were all removed can return a ready empty page. Readiness is for the role directory only. Every page row is checked
+against its exact authoritative source interval at T; missing/mismatched source rows return unavailable.
+
+The native source remains `access.resource_role_grant`. A migration locks its writers, captures a finite erasure-key
+high water and installation time, and installs an AFTER INSERT/UPDATE/DELETE hook before releasing that cut. The
+same hook covers grant commands, initialization, direct-role writers and erasure in their own transaction. It
+serializes the resource frontier, increments its native version, installs just the interval valid at the processed
+time and queues its actual later start/end boundaries. The directory contains only current full-key/interval
+references; the temporal queue contains only resource/interval references. Neither stores policy or allowed flags.
+FK cascades remove derived principal keys and boundary work when their source interval is erased.
+
+Default Accounts work always registers `current-resource-roles-work.ts`. Each atomic maintenance call processes at
+most 100 source rows during finite installation, then at most 100 due boundaries through the due-time B-tree.
+Installation alone traverses the captured history by unique erasure-key cursor; requests never traverse it. All
+resources stay unavailable until that cut is complete. New writes are captured throughout installation. Afterward
+the directory is complete at `processed_at`; the first queued resource boundary is its exclusive validity horizon.
+A due boundary invalidates readiness immediately even if maintenance is late. Bounded default catch-up removes
+one exact boundary, checks the source, updates its current reference and advances the resource version/time in the
+same transaction. Other boundaries at the same time still block readiness until processed. Work resumes from the
+durable cursor/queue after restart. No installer option, membership coordinator or acknowledgement is added.
+
+One page is one statement/snapshot: two exact frontier/install reads, two resource due-key probes (next horizon and
+T readiness), at most R*(limit+1) indexed current keys before the bounded merge and at most limit+1 unique source
+interval seeks. It returns at most limit rows plus one bounded lookahead. Cost is O(R*(limit+1)*log D +
+(limit+1)*log N), independent of expired role history except the source B-tree height; D is directory size and N is
+native source size. Verification is one exact resource frontier lock/read plus the same readiness probes. Upkeep
+is separate measured native work: source hooks touch a single resource version, one current reference and at most
+two boundary references per inserted interval; each maintenance call performs at most 100 such indexed units.
+Native trigger/nested statements and index maintenance remain part of measured Cost, never a free allowance.
+
+Realm continuity must hold its own actual Realm writer serialization, verify the frontier on that same writer
+transaction before concluding traversal/applying a choice, and restart after invalidation. Verification holds the
+native resource frontier `FOR SHARE` through commit, fencing role mutation and temporal upkeep. A selected direct
+identity candidate must additionally pass the existing `account-share.ts` `shareAccount(real CommandTransaction,id)`
+or `fenceOperationalAccount(real OperationalTransaction,id)` on that same native writer client. Its Account
+`FOR SHARE` is held through commit. A denied/unknown Account admission remains pending; it does not prove structural
+no-candidate. No separate snapshot or mutable transaction-id surrogate is provided by this directory.
 
 ### Generic / parent creation authorization
 
@@ -2049,6 +2159,12 @@ as required by the participant contract, while subject/account-resource grants a
 - `access.resource_role_grant`, identity/member/organization subject: [the schema](../../db/access/schema.sql) retains
   role/validity payload outside selected role mutations; no all-history account-erasure sweep.
 - `access.resource_role_grant`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
+- `access.current_resource_role_key`: derived current subject/resource/role and source interval key only. Native
+  source deletion cascades the current key; it adds no independent subject-erasure traversal or history retention.
+- `access.current_resource_role_due`: resource, source interval key and future boundary only, with the same source
+  cascade. No principal payload. `access.current_resource_role_frontier` retains resource id, technical version and
+  processed time under the same account-resource inventory as the authoritative roles; it carries no subject keys.
+  `access.current_resource_role_install` contains only the finite technical install cut/cursor/time.
 - `access.resource_denial`, subject: [the schema](../../db/access/schema.sql) retains private reasons, scope and
   temporal ban/suspension history, without an account-erasure deadline or adopted moderation exception.
 - `access.resource_denial`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.

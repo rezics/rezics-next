@@ -1,3 +1,4 @@
+import { registerCurrentResourceRolesWork } from './current-resource-roles-work.ts';
 import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
 import { registerRealmMembershipReconciliation } from './realm-membership-transition-legacy.ts';
 import { registerOrganizationCloseWork } from './organization-close-work.ts';
@@ -237,6 +238,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
       const { registerAgentVerificationWork } = await import('./agent-verification-work.ts');
       registerAgentVerificationWork(context);
       registerAccountDiscoveryWork(context);
+      registerCurrentResourceRolesWork(context);
       registerAccounts(context, membershipWorkPorts(context, options, config));
       if (options.realm && config) registerRealmMembershipReconciliation(context, options.realm, config.referenceKeys);
       context.addEffects([createAccountAgentEffect(context.pool)]);
