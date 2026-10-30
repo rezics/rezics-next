@@ -8,7 +8,8 @@ import { createSourceRegistration } from '../src/source-registry.ts';
 test('ordinary Bangumi registration discards ignored fields without visiting them across serialized transitions', () => {
   const registration = createSourceRegistration('bangumi');
   const context = { source: 'bangumi', subjectId: '00000000-0000-4000-8000-000000000001' };
-  const convert = (record: unknown) => registration.convert({ external_id: '71001', record }, context);
+  const convert = (record: unknown) =>
+    registration.convert({ external_id: '71001', record_revision: null, record }, context);
   const initial = convert({ id: 71001, type: 1, name: 'The Cartographer’s Book' });
   const seen: string[] = [];
   for (const type of [3, 6]) {

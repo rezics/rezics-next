@@ -348,7 +348,11 @@ export async function runJourney() {
       statement: {
         property: { id: 'schema:name' },
         value: { type: 'value', content: { language: 'en', text: 'An independent editor title' } },
-        references: oldNative.find((c) => c.statement.property.id === 'schema:name')!.statement.references,
+        references: oldNative
+          .find((c) => c.statement.property.id === 'schema:name')!
+          .statement.references.map((reference) => ({
+            parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
+          })),
       },
     });
     expect(independent.status, JSON.stringify(independent.body)).toBe(201);
