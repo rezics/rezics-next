@@ -53,7 +53,13 @@ function commit(root: string, path: string, content: string, message: string): s
   return git(root, 'rev-parse', 'HEAD');
 }
 
-function task(id: string, base: string, commitHead: string, paths = ['services/kernel/**']): Task {
+function task(
+  id: string,
+  base: string,
+  commitHead: string,
+  paths = ['services/kernel/**'],
+  acceptance = ['bun', '-e', 'process.exit(0)'],
+): Task {
   const value = {
     id,
     sequence: 1,
@@ -74,7 +80,7 @@ function task(id: string, base: string, commitHead: string, paths = ['services/k
       kind: 'implementation',
       paths,
       riskAreas: [],
-      acceptance: { command: ['bun', '-e', 'process.exit(0)'], tests: [], failing: true },
+      acceptance: { command: acceptance, tests: [], failing: true },
       estimate: { lines: 1, files: 1 },
       criticalPath: false,
       waiting: [],
@@ -209,10 +215,7 @@ test('baseline equivalence never creates a task verification receipt for a faile
   const base = git(root, 'rev-parse', 'dev-verified');
   const landing = commit(root, 'services/kernel/acceptance-owner.ts', 'export const landed = true;\n', 'landing');
   git(root, 'update-ref', 'refs/heads/dev', landing, base);
-  const ctx = context(root, [task('acceptance-owner', base, landing)]);
-  ctx.store.updateTask({ taskId: 'acceptance-owner', attempt: 0 }, (item) => {
-    item.brief.acceptance.command = ['bun', 'scripts/legacy-failure.ts'];
-  });
+  const ctx = context(root, [task('acceptance-owner', base, landing, ['services/kernel/**'], ['bun', 'scripts/legacy-failure.ts'])], ['true']);
   const runGate = gateRunner(10_000, ctx.stateDirectory);
 
   try {
@@ -341,12 +344,10 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
     'add acceptance command',
   );
   git(missingRoot, 'update-ref', 'refs/heads/dev', missingHead, missingBase);
-  const missingContext = context(missingRoot, [task('new-acceptance', missingBase, missingHead)]);
-  const missingTask = missingContext.store.task('new-acceptance');
-  missingTask.brief.acceptance.command = ['bun', 'test', 'services/kernel/new.test.ts'];
-  missingContext.store.updateTask({ taskId: missingTask.id, attempt: 0 }, (item) => {
-    item.brief.acceptance.command = ['bun', 'test', 'services/kernel/new.test.ts'];
-  });
+  const missingContext = context(
+    missingRoot,
+    [task('new-acceptance', missingBase, missingHead, ['services/kernel/**'], ['bun', 'test', 'services/kernel/new.test.ts'])],
+  );
   const missingCalls: string[] = [];
   const missingRunner = runner(async (command) => {
     missingCalls.push(command.join(' '));
@@ -456,6 +457,7 @@ test('concurrent dev and verified ref moves win their compare-and-swap', async (
         } else {
           const tree = join(ctx.stateDirectory, 'concurrent-verified');
           git(root, 'worktree', 'add', '--detach', tree, base);
+          mkdirSync(join(tree, 'docs'), { recursive: true });
           writeFileSync(join(tree, 'docs/concurrent.md'), 'concurrent verifier update\n');
           git(tree, 'add', 'docs/concurrent.md');
           git(tree, 'commit', '-m', 'concurrent verified update');
@@ -483,8 +485,8 @@ test('a new assertion without a task in the verified range remains unowned and u
   const head = commit(root, 'services/kernel/unowned.ts', 'export const unowned = true;\n', 'unowned change');
   git(root, 'update-ref', 'refs/heads/dev', head, base);
   const ctx = context(root);
-  const runGate = runner(async (command) =>
-    command.includes('affected-check')
+  const runGate = runner(async (command, cwd) =>
+    command.includes('affected-check') && git(cwd, 'ls-files').includes('services/kernel/unowned.ts')
       ? { passed: false, output: 'AssertionError: unowned new assertion\n', timedOut: false }
       : { passed: true, output: '', timedOut: false },
   );

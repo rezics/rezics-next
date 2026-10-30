@@ -46,8 +46,8 @@ test('a stale verifier ref thousands of commits behind cannot pin promotion or b
     const gated: { command: string; candidate: string }[] = [];
     await h.promote(async (command, cwd) => {
       gated.push({ command: command.join(' '), candidate: git(cwd, 'rev-parse', 'HEAD') });
-      return command[0] === 'root-gate'
-        ? { passed: false, output: 'AssertionError: fresh candidate gate required', timedOut: false }
+      return command[0] === 'true'
+        ? { passed: false, output: 'AssertionError: fresh task acceptance gate required', timedOut: false }
         : { passed: true, output: '', timedOut: false };
     });
 
