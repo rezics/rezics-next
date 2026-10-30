@@ -655,7 +655,8 @@ thread-page read alone supplies body, title, author, media and placement. Pre-co
 before that read, so navigation cannot reuse their old bodies after a failed refresh. A failed read after 204 offers a read retry;
 it does not repeat the confirmed write or reveal an earlier local body. An uncertain restore retains its original
 key and checks the current native tombstone before a deliberate retry. Session, actor or target changes retire the
-local intent and any pending disclosure. Delete immediately substitutes a byte-free placeholder, then reads the
+local intent and any pending disclosure. A private refresh must identify the current session actor; missing or
+mismatched actor data stays unavailable. Delete immediately substitutes a byte-free placeholder, then reads the
 current owner tombstone for its actual deadline. Until that read succeeds, the deadline is explicitly unknown;
 the browser clock never creates it. Native author, permission, expiry, purge and takedown rules remain authoritative.
 A restore conflict links to an existing review only when the native optional `existingThreadId` is supplied; other
