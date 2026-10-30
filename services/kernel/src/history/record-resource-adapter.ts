@@ -44,9 +44,7 @@ export function recordHistoryPurgeSourceReference(ref: NativeRecordPurgeReferenc
       revision: ref.revision,
       documentId: ref.documentId,
     };
-  return ref.kind === 'context'
-    ? { kind: 'context', contextId: ref.contextId }
-    : { kind: 'zone', zoneId: ref.zoneId };
+  return ref.kind === 'context' ? { kind: 'context', contextId: ref.contextId } : { kind: 'zone', zoneId: ref.zoneId };
 }
 
 /** Storage is a restart locator, never authority. The typed original anchor determines its home. */

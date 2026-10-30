@@ -2716,8 +2716,8 @@ references; Context/Zone source authority remains the Semantic owner's dependenc
 
 ```ts
 type ResourceRecordPurgeReference =
-  | Readonly<{kind:'context';contextId:string;deletionGeneration:string}>
-  | Readonly<{kind:'zone';zoneId:string;deletionGeneration:string}>;
+  | Readonly<{ kind: 'context'; contextId: string; deletionGeneration: string }>
+  | Readonly<{ kind: 'zone'; zoneId: string; deletionGeneration: string }>;
 type NativeRecordPurgeReference = RecordPurgeReference | ResourceRecordPurgeReference;
 ```
 
