@@ -19,6 +19,10 @@ type SourceStatistic = {
   attribution: string;
 };
 
+function envelope(value: Omit<SourceStatistic, 'source'>): SourceStatistic {
+  return { source: 'vndb', ...value };
+}
+
 async function readJson(response: Response, status = 200): Promise<unknown> {
   const body = await response.clone().text();
   if (response.status !== status) throw new Error(`Expected HTTP ${status}, received ${response.status}: ${body}`);
@@ -164,6 +168,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     licence: 'CC BY 4.0 - independent record',
     attribution: 'Independent subject attribution.',
   };
+  const otherEnvelope = envelope(otherSubjectValue);
 
   const otherBeforeRefresh = await fixture.request('PUT', `/v1/subjects/${otherSubjectId}/source-statistics/vndb`, {
     actor: fixture.actors.secondImporter,
@@ -178,7 +183,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     body: firstValue,
     key: originalKey,
   });
-  const firstEnvelope = { source: 'vndb', ...firstValue };
+  const firstEnvelope = envelope(firstValue);
   expect(await readJson(firstWrite)).toEqual(firstEnvelope);
   const replay = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
@@ -194,12 +199,10 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     body: refreshedValue,
     key: refreshKey,
   });
-  const refreshedEnvelope = { source: 'vndb', ...refreshedValue };
+  const refreshedEnvelope = envelope(refreshedValue);
   expect(await readJson(refresh)).toEqual(refreshedEnvelope);
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([refreshedEnvelope]);
-  expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([
-    { source: 'vndb', ...otherSubjectValue },
-  ]);
+  expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([otherEnvelope]);
 
   const changedIntent = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
@@ -251,9 +254,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     key: randomUUID(),
   });
   expect(secondImporterWrite.status).toBe(200);
-  expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([
-    { source: 'vndb', ...otherSubjectValue },
-  ]);
+  expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([otherEnvelope]);
 
   const hide = await fixture.request('POST', `/v1/subjects/${hiddenSubjectId}:hide`, {
     actor: fixture.actors.governance,

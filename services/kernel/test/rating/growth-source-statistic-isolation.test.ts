@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { partitionOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import {
   createSourceStatisticIsolationFixture,
