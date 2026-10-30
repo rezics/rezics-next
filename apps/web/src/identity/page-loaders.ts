@@ -4,6 +4,7 @@ import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { boardRealmId, readBoardRealm, type BoardRealm } from '../threads/board-context';
+import { boardCommunitySource, type BoardCommunitySource } from '../threads/board-community-source';
 import { readThreadSubjects, type ThreadSubject } from '../threads/subjects';
 import { loadThreadPage, type LoadedThreadPage, type ThreadSlugRedirect } from '../threads/thread-page';
 import { readPageAuthors, type PageAuthors } from './read';
@@ -25,7 +26,14 @@ export async function loadBoardPageWithAuthors(
   client: KernelClient,
   data: PageInput,
   authorization?: string | null,
-): Promise<{ board: Board['board']; realm?: BoardRealm; threads: ThreadPage; authors: PageAuthors; now: string }> {
+): Promise<{
+  board: Board['board'];
+  community: BoardCommunitySource;
+  realm?: BoardRealm;
+  threads: ThreadPage;
+  authors: PageAuthors;
+  now: string;
+}> {
   const now = new Date().toISOString();
   // Active is the default; New is the kernel's own order and sends no sort.
   const sort: 'active' | 'hot' | undefined = data.sort === 'new' ? undefined : (data.sort ?? 'active');
@@ -57,7 +65,14 @@ export async function loadBoardPageWithAuthors(
     client,
     threads.threads.map((thread) => thread.authorId),
   );
-  return { board: board.board, ...(realm ? { realm } : {}), threads, authors, now };
+  return {
+    board: board.board,
+    community: boardCommunitySource(board.board),
+    ...(realm ? { realm } : {}),
+    threads,
+    authors,
+    now,
+  };
 }
 
 type ThreadPageInput = PageInput & { expectedSlug?: string };

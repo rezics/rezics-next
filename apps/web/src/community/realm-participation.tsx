@@ -17,6 +17,7 @@ export function RealmParticipationView({
   onChange,
   onRetry,
   memberLabel,
+  admittedAction,
 }: {
   state: MemberState | 'loading' | 'unavailable';
   visibility: RealmHome['visibility'];
@@ -27,6 +28,7 @@ export function RealmParticipationView({
   onChange: (action: 'join' | 'leave') => void;
   onRetry: () => void;
   memberLabel?: string | undefined;
+  admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
 }) {
   const pending = state === 'pending';
   return (
@@ -39,19 +41,21 @@ export function RealmParticipationView({
         {state === 'member' ? (
           <>
             <Badge>{memberLabel ?? m.realm_state_member()}</Badge>
-            <Button
-              size="lg"
-              type="button"
-              variant="outline"
-              className="h-11 px-6 text-base text-foreground"
-              disabled={!ready || busy}
-              onClick={() => onChange('leave')}
-            >
-              {m.realm_leave()}
-            </Button>
+            {admittedAction === undefined || admittedAction === 'leave' ? (
+              <Button
+                size="lg"
+                type="button"
+                variant="outline"
+                className="h-11 px-6 text-base text-foreground"
+                disabled={!ready || busy}
+                onClick={() => onChange('leave')}
+              >
+                {m.realm_leave()}
+              </Button>
+            ) : null}
           </>
         ) : null}
-        {state === 'none' && visibility === 'public' ? (
+        {state === 'none' && visibility === 'public' && (admittedAction === undefined || admittedAction === 'join') ? (
           <Button
             size="lg"
             type="button"

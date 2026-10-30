@@ -100,3 +100,28 @@ export const SourceUnavailable: Story = { render: () => <CommunityFixture state=
 export const Loading: Story = { render: () => <BoardCommunityStatus state="loading" /> };
 export const Error: Story = { render: () => <BoardCommunityStatus state="error" /> };
 export const Closed: Story = { render: () => <BoardCommunityStatus state="closed" /> };
+
+export const Presentation: Story = {
+  render: () => <CommunityFixture state="presentation" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByText(m.board_community_members({ count: 128 }))).toBeVisible();
+    await expect(view.getByText('Discuss the book with care. Mark spoilers before sharing them.')).toBeVisible();
+    await expect(view.getByRole('link', { name: m.board_community_rules_revision() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/revisions/'),
+    );
+    await expect(view.queryByText(m.board_community_members_unknown())).toBeNull();
+  },
+};
+
+export const NoOptionals: Story = {
+  render: () => <CommunityFixture state="no-optionals" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByText(m.board_community_members_unknown())).toBeVisible();
+    await expect(view.getByText(m.board_community_rules_none())).toBeVisible();
+    await expect(view.queryByRole('link', { name: m.board_community_rules_revision() })).toBeNull();
+    await expect(view.queryByText(m.board_community_global())).toBeNull();
+  },
+};

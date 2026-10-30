@@ -776,17 +776,32 @@ method is guessed. Navigation/review owners can link to `/boards?purpose=reviews
 #### Community presentation
 
 `BoardCommunity` is the actual route region and the reusable Community Feed pattern. Its token-surface banner and
-initials are explicit image fallbacks. The header uses the board title and, when available, the containing Realm's
-summary. The About column sits beside the feed on desktop and follows it on phones. Cards use the existing byline,
+initials are explicit image fallbacks. The header retains the board title and uses the containing Realm's actual
+name and description from supplied community presentation, otherwise its readable title and summary. An authored
+empty description stays empty. The About column sits beside the feed on desktop and follows it on phones. Cards use the existing byline,
 adaptive Menu and ListRow, with a two-line preview drawn only from the returned, available opening document's text
 nodes (at most 128 nodes and 280 characters). Erased or withheld openings retain their returned slot without a body
 preview. Reactions and reply counts appear only when supplied; omitted aggregates make no zero claim. Optional rank
 freshness now lives in the expandable order help, retaining the exact supplied timestamp.
 
-`GET /v1/boards/:id` (`BoardView` in `services/kernel/src/content/model.ts`) supplies no community member count,
-description, banner, avatar or rules. `GET /v1/realms/:realmId` supplies the optional summary, state and visibility,
-but no member count, images or rules either. These are producer seams; the page does not substitute an owner's image,
-invent rules or query for a count. The existing `threadActivity` adapter accepts supplied reply counts, while the
+The existing board source boundary consumes the adopted `BoardView.community: CommunityPresentation | null`
+when supplied by Content's presentation producer. `threads/board-community-source.ts` isolates the exact closed
+consumer declarations and runtime validation until the native model and generated client exports are installed.
+Only a genuinely null `realmId` yields null/Global. An absent, invalid or unavailable Realm presentation produces an
+explicit unavailable adapter, without a cached positive value. The existing optional Realm read supplies only
+readable active Realm labels, state and visibility; a failed read never changes board identity.
+
+The supplied DTO names the Realm independently of its carrying Space, classification Context and account owner.
+Selected Realm icon/banner summaries use only their available derivatives through the current-authorized site media
+route; none/unavailable and failed bytes use token surfaces or initials. No original URL or owner avatar is used.
+Only `members.state: current` renders a supplied count; unknown explains that the count is unavailable, never zero.
+The actual current-membership aggregate remains unknown until its Accounts source/version/removal coverage producer
+is installed. Available rules render the exact supplied native Text revision and link to the existing revision
+reader; none and unavailable have distinct explanations. An empty rules document remains empty. There is no rules
+store, detail lookup or guessed metadata endpoint in Web. These consumer declarations are a temporary seam for
+`services/kernel/src/content/community-presentation-model.ts` and `realm-media.ts`, not delivered native APIs.
+
+The existing `threadActivity` adapter accepts supplied reply counts, while the
 current native `ThreadView` has no reply-count field. The feed never derives a count by reading replies. Opening
 `mediaIds` are references without safe preview summaries, so they do not become thumbnail URLs or extra media reads.
 
@@ -798,7 +813,9 @@ for a real batch producer; the page never requests individual profiles to fill t
 
 Join/Joined reuses `RealmMembership` and its native command/standing-refresh behavior. The creation entry shares its
 existing browser-only membership and participation query: a refused, pending or unavailable current read offers no
-Start action. A successful public participation read can allow a nonmember to enter the existing composer; the
+Start action. Supplied presentation admission also restricts the existing Join/Leave controls; it never overrides
+the fresh personal standing or authorizes a command. No cached success is actionable during a standing refresh.
+A successful public participation read can allow a nonmember to enter the existing composer; the
 native command still authorizes submission. A Global board has no Join and retains the existing signed-in composer
 entry. Missing Realm metadata never converts a Realm board into Global Context. The public read cost remains the
 existing board, page and batched identities, plus one optional Realm read; current personal participation uses the
@@ -811,6 +828,17 @@ same phone390/desktop1280, locale and theme globals. Actual Pages are `pages-com
 `--realm` and `--continue-hot`; `pages-community-board-continuation--continue-hot` also uses this component.
 The two focused cases in `tests/board-community.test.ts` cover disclosed previews/counts, sort/cursor continuation,
 removed slots and primary/optional source failures. Recorded responses do not prove native authority or signing.
+The additional `--presentation` and `--no-optionals` states pass explicit producer-contract fixtures through the
+actual loader, covering current/unknown counts, exact rules, authored empty description and none/unavailable images.
+They are review inputs while the native producer is pending. Web/Root review uses the same IDs at 390/1280 in light
+and dark; no screenshot approval or acceptance pass is claimed by local typing.
+
+- **Touches:** Existing board and bounded thread-page reads, optional current Realm labels and one author batch.
+  Presentation enrichment arrives in the existing board response; participation keeps its existing personal reads.
+- **Bound:** O(returned page size) feed rendering plus at most one supplied Text rules revision of 64 KiB and two
+  image summaries of at most twelve variants each. No per-card HTTP, count query, hidden-body read or ancestry scan.
+- **Growth check:** Existing board request-cost, native cursor/privacy and membership suites remain the integration
+  proof; this consumer adds no growth harness or allowance.
 
 ### New-thread page (`/<locale>/boards/<id>/new`)
 

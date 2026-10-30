@@ -2195,5 +2195,11 @@
   "board_feed_replies": "답글 {count}개",
   "board_feed_link_copied": "링크 복사됨",
   "board_feed_copy_failed": "링크를 복사할 수 없습니다. 스레드를 열어 주소를 확인하세요.",
-  "board_feed_order_help": "이 정렬에 관하여"
+  "board_feed_order_help": "이 정렬에 관하여",
+  "board_community_members": "멤버 {count}명",
+  "board_community_members_unknown": "멤버 수를 확인할 수 없습니다",
+  "board_community_rules": "커뮤니티 규칙",
+  "board_community_rules_none": "등록된 커뮤니티 규칙이 없습니다.",
+  "board_community_rules_unavailable": "커뮤니티 규칙을 불러올 수 없습니다.",
+  "board_community_rules_revision": "채택된 버전 읽기"
 }

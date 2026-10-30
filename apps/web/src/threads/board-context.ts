@@ -10,12 +10,10 @@ export type BoardRealm = {
 };
 
 /**
- * The Realm identifier a board view carries: `null` for a board outside every Realm. It is read structurally, because
- * the generated client declarations are refreshed on their own schedule.
+ * Only an explicitly Global board has no Realm. A failed optional Realm read does not change this identity.
  */
-export function boardRealmId(board: object): string | null {
-  const realmId = (board as { realmId?: unknown }).realmId;
-  return typeof realmId === 'string' ? realmId : null;
+export function boardRealmId(board: { realmId: string | null }): string | null {
+  return board.realmId;
 }
 
 /**
@@ -31,7 +29,7 @@ export async function readBoardRealm(
   try {
     const result = await client.realms({ realmId }).get(authorization ? { headers: { authorization } } : {});
     const realm = result.error ? undefined : result.data?.realm;
-    return realm && realm.realmId === realmId && realm.title
+    return realm && realm.realmId === realmId && realm.state === 'active' && realm.title
       ? {
           id: realm.realmId,
           title: realm.title,

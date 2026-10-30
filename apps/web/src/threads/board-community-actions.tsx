@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardRealm } from './board-context';
+import type { BoardCommunitySource } from './board-community-source';
 import { SignInPrompt } from './write-prompts';
 
 type Board = CommunityBoardPage['board'];
@@ -54,13 +55,24 @@ export function BoardStartThread({
   );
 }
 
-export function BoardParticipation({ realm, returnTo }: { realm?: BoardRealm | undefined; returnTo: string }) {
+export function BoardParticipation({
+  realm,
+  community,
+  returnTo,
+}: {
+  realm?: BoardRealm | undefined;
+  community: BoardCommunitySource;
+  returnTo: string;
+}) {
+  const { state: session } = useSession();
   if (!realm || realm.state !== 'active' || !realm.visibility) return null;
+  if (session === 'unknown' || session === 'unavailable') return null;
   return (
     <RealmMembership
       realm={{ id: realm.id, visibility: realm.visibility, viewer: null }}
       returnTo={returnTo}
       memberLabel={m.board_community_joined()}
+      admittedAction={community?.state === 'available' ? community.value.join.action : undefined}
     />
   );
 }

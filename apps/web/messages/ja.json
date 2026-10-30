@@ -2195,5 +2195,11 @@
   "board_feed_replies": "返信 {count} 件",
   "board_feed_link_copied": "リンクをコピーしました",
   "board_feed_copy_failed": "リンクをコピーできません。スレッドを開いてアドレスを取得してください。",
-  "board_feed_order_help": "この並び順について"
+  "board_feed_order_help": "この並び順について",
+  "board_community_members": "メンバー {count} 人",
+  "board_community_members_unknown": "メンバー数を取得できません",
+  "board_community_rules": "コミュニティのルール",
+  "board_community_rules_none": "コミュニティのルールは設定されていません。",
+  "board_community_rules_unavailable": "コミュニティのルールを取得できません。",
+  "board_community_rules_revision": "採用された版を読む"
 }

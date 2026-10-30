@@ -51,7 +51,7 @@ function BoardPage() {
     <BoardCommunity
       page={page}
       sort={sort ?? 'active'}
-      participation={<BoardParticipation realm={page.realm} returnTo={returnTo} />}
+      participation={<BoardParticipation realm={page.realm} community={page.community} returnTo={returnTo} />}
       start={<BoardStartThread board={page.board} realm={page.realm} returnTo={returnTo} />}
       overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
     />

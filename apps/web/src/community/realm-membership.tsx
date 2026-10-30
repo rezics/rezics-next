@@ -16,14 +16,17 @@ export function RealmMembership({
   returnTo,
   spaceId,
   memberLabel,
+  admittedAction,
 }: {
   realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
   returnTo: string;
   spaceId?: string;
   memberLabel?: string;
+  admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
 }) {
   const { state: session, csrfToken } = useSession();
   if (session !== 'signed-in') {
+    if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
     if (realm.visibility === 'protected')
       return (
         <section aria-label={m.realm_membership_label()}>
@@ -56,6 +59,7 @@ export function RealmMembership({
       realm={realm}
       csrfToken={csrfToken}
       memberLabel={memberLabel}
+      admittedAction={admittedAction}
       {...(spaceId ? { spaceId } : {})}
     />
   );
@@ -66,11 +70,13 @@ function PersonalMembership({
   csrfToken,
   spaceId,
   memberLabel,
+  admittedAction,
 }: {
   realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
   csrfToken: string | null;
   spaceId?: string;
   memberLabel?: string | undefined;
+  admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
 }) {
   const client = useQueryClient();
   const router = useRouter();
@@ -115,7 +121,17 @@ function PersonalMembership({
   }, [pending, client, realm.id, router, spaceId]);
 
   async function change(action: 'join' | 'leave') {
-    if (!viewer || !csrfToken || inFlight.current || pending || (action === 'join' && realm.visibility === 'protected'))
+    if (
+      !viewer ||
+      !csrfToken ||
+      inFlight.current ||
+      pending ||
+      query.isFetching ||
+      query.isError ||
+      query.isPending ||
+      (action === 'join' && realm.visibility === 'protected') ||
+      (admittedAction !== undefined && admittedAction !== action)
+    )
       return;
     inFlight.current = true;
     setBusy(true);
@@ -143,8 +159,15 @@ function PersonalMembership({
   return (
     <RealmParticipationView
       memberLabel={memberLabel}
+      admittedAction={admittedAction}
       state={
-        pending ? 'pending' : query.isPending ? 'loading' : query.isError || !viewer ? 'unavailable' : viewer.state
+        pending
+          ? 'pending'
+          : query.isPending || query.isFetching
+            ? 'loading'
+            : query.isError || !viewer
+              ? 'unavailable'
+              : viewer.state
       }
       visibility={realm.visibility}
       busy={busy}

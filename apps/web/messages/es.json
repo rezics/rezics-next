@@ -2195,5 +2195,11 @@
   "board_feed_replies": "{count} respuestas",
   "board_feed_link_copied": "Enlace copiado",
   "board_feed_copy_failed": "No se pudo copiar el enlace. Abre el hilo para usar su dirección.",
-  "board_feed_order_help": "Acerca de este orden"
+  "board_feed_order_help": "Acerca de este orden",
+  "board_community_members": "{count} miembros",
+  "board_community_members_unknown": "Número de miembros no disponible",
+  "board_community_rules": "Reglas de la comunidad",
+  "board_community_rules_none": "No se han proporcionado reglas de la comunidad.",
+  "board_community_rules_unavailable": "Las reglas de la comunidad no están disponibles.",
+  "board_community_rules_revision": "Leer la revisión adoptada"
 }

@@ -2195,5 +2195,11 @@
   "board_feed_replies": "{count} 則回覆",
   "board_feed_link_copied": "連結已複製",
   "board_feed_copy_failed": "無法複製連結。請開啟討論串以取得其網址。",
-  "board_feed_order_help": "關於此排序"
+  "board_feed_order_help": "關於此排序",
+  "board_community_members": "{count} 位成員",
+  "board_community_members_unknown": "成員人數暫不可用",
+  "board_community_rules": "社群規則",
+  "board_community_rules_none": "尚未提供社群規則。",
+  "board_community_rules_unavailable": "社群規則暫不可用。",
+  "board_community_rules_revision": "閱讀採用的修訂版本"
 }

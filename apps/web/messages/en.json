@@ -2196,5 +2196,11 @@
   "board_feed_replies": "{count} replies",
   "board_feed_link_copied": "Link copied",
   "board_feed_copy_failed": "Could not copy the link. Open the thread to use its address.",
-  "board_feed_order_help": "About this order"
+  "board_feed_order_help": "About this order",
+  "board_community_members": "{count} members",
+  "board_community_members_unknown": "Member count unavailable",
+  "board_community_rules": "Community rules",
+  "board_community_rules_none": "No community rules are provided.",
+  "board_community_rules_unavailable": "Community rules are unavailable.",
+  "board_community_rules_revision": "Read the adopted revision"
 }

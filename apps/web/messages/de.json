@@ -2195,5 +2195,11 @@
   "board_feed_replies": "{count} Antworten",
   "board_feed_link_copied": "Link kopiert",
   "board_feed_copy_failed": "Der Link konnte nicht kopiert werden. Öffne den Thread, um seine Adresse zu verwenden.",
-  "board_feed_order_help": "Über diese Reihenfolge"
+  "board_feed_order_help": "Über diese Reihenfolge",
+  "board_community_members": "{count} Mitglieder",
+  "board_community_members_unknown": "Mitgliederzahl nicht verfügbar",
+  "board_community_rules": "Community-Regeln",
+  "board_community_rules_none": "Es sind keine Community-Regeln hinterlegt.",
+  "board_community_rules_unavailable": "Community-Regeln sind nicht verfügbar.",
+  "board_community_rules_revision": "Ausgewählte Version lesen"
 }

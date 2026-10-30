@@ -20,9 +20,15 @@ existing private membership/participation query. A refused or unavailable read o
 accepted membership commands still wait for the native standing refresh. The composer retains native refusal,
 CSRF and unchanged-intent retry behavior.
 
-Board DTOs currently supply no board description, member count, banner, avatar or rules. The optional Realm summary
-is the one-line description. Decorative token surfaces and initials are image fallbacks; no owner image stands in
-for a community. The identity batch currently supplies no avatar summary. No media thumbnail is guessed from a
+The board source consumes the adopted closed community presentation when supplied, with an isolated unavailable
+adapter until the native producer is installed. Realm name/description are independent of Space and account owners;
+an authored empty description stays empty. Current counts, selected Realm derivatives and exact native rules use
+only supplied data. Unknown counts and unavailable rules have helpful explanations; none rules have separate copy.
+Decorative token surfaces and initials are image fallbacks; no owner image stands in for a community.
+Presentation and NoOptionals use explicit producer-contract fixtures through the actual loader; they do not claim
+that the pending native producer or member aggregate is installed. Join/Leave keeps fresh native personal standing,
+bounded settlement and command refusal, with supplied presentation admission restricting actions when available.
+The identity batch currently supplies no avatar summary. No media thumbnail is guessed from a
 post's media ids, and no per-card detail/profile/media request is added. Counts absent from a response stay absent.
 Ranking time lives in the optional order help, with no invented freshness claim when missing.
 
@@ -36,6 +42,8 @@ Ranking time lives in the optional order help, with no invented freshness claim 
 <Canvas of={Community.Empty} />
 <Canvas of={Community.Protected} />
 <Canvas of={Community.SourceUnavailable} />
+<Canvas of={Community.Presentation} />
+<Canvas of={Community.NoOptionals} />
 <Canvas of={Community.Loading} />
 <Canvas of={Community.Error} />
 <Canvas of={Community.Closed} />
