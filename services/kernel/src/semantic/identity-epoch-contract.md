@@ -482,6 +482,44 @@ fence. A stale old-destination delivery rereads CURRENT source, account eligibil
 than relabelling a saved positive. Source-account terminal fencing is separate and still required. No amount of
 identity epoch bookkeeping alone proves current source-account eligibility across released reads.
 
+### Receiving-effect interface gap
+
+The installed `IdentityEffect` union represents original-home structural work and published-destination follow
+work. It has no receiving-effect key or committed receiving-record locator. Its structural branch supplies only
+`job` and `original`; its follow branch supplies only `original`, `terminal` and `epoch`, without a job. Neither
+branch selects an exact Library owner/source incarnation, generation, step/version or effect manifest entry when
+multiple owner sources in one receiving partition depend on the same original. The live command partition and a
+null command basis cannot select that missing source scope or establish receipt custody.
+
+The current `identity_epoch_admission_handoff`, attempt and receipt records reserve input GROUP homes. They do
+not authorize participant effects in independent Library owner homes. `identity_epoch_effect_receipt` retains
+job-home expected-effect/custody entries; it is not a receiving-home ledger. `identity_epoch_step` stores producer
+progress and its native commit; it has no owner/source receiving admission descriptor. Reusing any of these as a
+blanket foreign-original allow would bypass the adopted same-effect gate.
+
+The smallest proposed extension for owner adoption is one additional receiving-effect alternative, preserving
+both existing alternatives: `{kind: 'receiving', job, original, effectKey, native}`. Here `native` is the existing
+`IdentityNativeReceipt` locator for a COMMITTED local planned/accepted receiving record, and `effectKey` selects
+one exact manifest entry within that transaction. This is a proposal, not an implemented or callable ABI. Its
+producer must bind the fixed participant/version, job/epoch/scope, source incarnation/generation, owner and
+receiving-home owner epoch, exact effect and gate. The effect transaction must lock and revalidate those local
+records and atomically retain its effect/frontier receipt and source obligation. Released reconciliation must
+still take control custody before ACK/publication. The locator grants no permission by itself.
+
+No callable native Library owner/source receiving-record producer is currently installed. The sole specified
+Library participant is `library/identity-epoch-participant.ts:stepLibraryIdentityEpoch`; that module is absent.
+The existing `canonical-source-store.ts` exports `observeCanonicalSource`, `beginCanonicalSourceRepair`,
+`repairCanonicalSourceStep` and `publishCanonicalSourceRepair` currently throw `dependency_unavailable`.
+Their registration/readiness cannot substitute for receiving-effect admission. Owner adoption must supply the
+actual receiving-record producer and bind its exact locator before this extension can be implemented safely.
+
+`test/semantic/identity-epoch-receiving-effects.test.ts` retains a native positive through the sole specified
+Library participant, actual Library source commands and real admitted job, with receipt reconciliation/replay
+and immutable stored-member checks. The growth companion measures actual receipt-custody replay at
+64/512/4096 unrelated native births. These are deferred regression inputs, not executed evidence or complete
+coverage of wrong source/version/owner, cancellation or interrupted receipt delivery. Those schedules require
+the missing receiving-record producer; no fixture manufactures its rows, gates or acknowledgements.
+
 ## Bounded native mapping and fixed participants
 
 Required `semantic/identity-epoch-mapping.ts` export `stepIdentityEpochMapping: IdentityEpochStep` receives only
