@@ -54,7 +54,7 @@ for (const failure of ['truncated row', 'mismatched identity', 'invalid ISBN'] a
             yield new TextEncoder().encode(row(edition));
             yield new TextEncoder().encode(suffix);
           })(),
-          fetch: (async (input: Request | string | URL) => {
+          fetch: (async (input: Request | string | URL): Promise<Response> => {
             requests.push(input instanceof Request ? input.url : String(input));
             throw new Error('Unexpected effect before complete source admission');
           }) as typeof fetch,
