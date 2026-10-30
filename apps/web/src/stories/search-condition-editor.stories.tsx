@@ -26,12 +26,6 @@ const meta = {
   title: 'Patterns/Discovery/Search Condition Editor',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
     docs: {
       description: {
         component:
@@ -83,13 +77,7 @@ async function editAndSubmit(context: { canvasElement: HTMLElement }) {
   await expect(submitted?.getAll('language')).toEqual(['ja']);
 }
 
-export const NestedDesktop1280: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
-  render: () => <NestedPage />,
-  play: editAndSubmit,
-};
-export const NestedPhone390: Story = {
-  globals: { viewport: { value: 'phone390' } },
+export const Nested: Story = {
   render: () => <NestedPage />,
   play: editAndSubmit,
 };
