@@ -80,7 +80,7 @@ const profile = (id: string, kind: 'actor' | 'organization', variant = '') => ({
         width: 80,
         height: 80,
         placeholder: { thumbhash: '', color: '#d7c8ad' },
-        variants: [{ format: 'webp' as const, width: 240 }],
+        variants: [{ format: 'webp' as const, width: 80 }],
         focalPoint: null,
         credit: null,
       }

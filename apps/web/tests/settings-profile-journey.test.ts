@@ -20,7 +20,7 @@ function initial(): ProfileValues {
       width: 80,
       height: 80,
       placeholder: { thumbhash: 'hash', color: '#123456' },
-      variants: [{ format: 'webp', width: 240 }],
+      variants: [{ format: 'webp', width: 80 }],
       focalPoint: null,
       credit: null,
     },

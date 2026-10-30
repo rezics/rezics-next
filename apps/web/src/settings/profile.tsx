@@ -3,6 +3,8 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Input } from '@rezics/ui/shadcn/input';
+import { MediaImage } from '@rezics/ui/media-image';
+import { coverSrc } from '../media/cover-src';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { uploadAvatar } from '../threads/upload';
@@ -178,11 +180,18 @@ export function ProfileCard({ editor, writable = true }: { editor: ProfileEditor
             <div className="space-y-2">
               <p className="text-sm font-medium">{m.settings_profile_avatar()}</p>
               {profile.avatar ? (
-                <img
-                  className="size-20 rounded-full object-cover"
-                  src={`/media/${encodeURIComponent(profile.avatar.media)}/webp-240`}
-                  alt=""
-                />
+                <div className="size-20 overflow-hidden rounded-full bg-muted">
+                  {'variants' in profile.avatar ? (
+                    <MediaImage
+                      {...profile.avatar}
+                      className="rounded-full"
+                      frame={1}
+                      sizes="80px"
+                      alt=""
+                      src={({ media, format, width }) => coverSrc(media, format, width)}
+                    />
+                  ) : null}
+                </div>
               ) : null}
               <div className="flex flex-wrap items-center gap-3">
                 <label className="inline-flex cursor-pointer items-center rounded-md border px-4 py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
