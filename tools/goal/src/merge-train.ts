@@ -1953,9 +1953,9 @@ export class MergeTrain {
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
       if (request.managerLanding) return;
-      const row = o.queue.db.query('SELECT request FROM landing_queue WHERE id=?').get(entry.id) as
-        | { request: string }
-        | null;
+      const row = o.queue.db.query('SELECT request FROM landing_queue WHERE id=?').get(entry.id) as {
+        request: string;
+      } | null;
       if (!row) return;
       const latest = JSON.parse(row.request) as LandingRequest;
       if (!latest.managerLanding) return;

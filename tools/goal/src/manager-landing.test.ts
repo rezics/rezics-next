@@ -128,7 +128,11 @@ function createAcceptedTask(
     git(worktree, 'commit', '-m', `accepted ${options.id}`);
   }
   const task = fixture.store.createTask(
-    brief(goal, options.manager, options.file.includes('/') ? options.file.slice(0, options.file.lastIndexOf('/') + 1) + '**' : options.file),
+    brief(
+      goal,
+      options.manager,
+      options.file.includes('/') ? options.file.slice(0, options.file.lastIndexOf('/') + 1) + '**' : options.file,
+    ),
     { briefPath: join(fixture.stateDirectory, `${options.id}.md`), worktree, branch, base },
     'implementation',
     options.id,
@@ -198,7 +202,9 @@ function runtime(fixture: Fixture, counts: { handoffs: number; pumps: number }):
     sink: { onGateOutcome: () => {} },
     queue: fixture.queue,
     landing: (taskId) => landing(fixture, taskId),
-    manager: () => { throw new Error('manager creation is not part of land'); },
+    manager: () => {
+      throw new Error('manager creation is not part of land');
+    },
     managerServices: {} as IntegrationRuntime['managerServices'],
     managerLand: (taskId, managerId) =>
       requestManagerLanding(taskId, managerId, fixture.store, fixture.queue, (id) => landing(fixture, id)),
@@ -227,9 +233,13 @@ async function withEnvironment<T>(values: Record<string, string | undefined>, ru
   }
 }
 
-function train(fixture: Fixture, runGate: (command: readonly string[], cwd: string) => Promise<boolean>, options: {
-  promote?: () => Promise<void>;
-} = {}) {
+function train(
+  fixture: Fixture,
+  runGate: (command: readonly string[], cwd: string) => Promise<boolean>,
+  options: {
+    promote?: () => Promise<void>;
+  } = {},
+) {
   return new MergeTrain({
     mainCheckout: fixture.main,
     stateDirectory: fixture.stateDirectory,
@@ -262,27 +272,33 @@ test('Owning manager land command integrates its ready accepted work without acc
   });
   const counts = { handoffs: 0, pumps: 0 };
   const integrationRuntime = runtime(fixture, counts);
-  await withEnvironment({ GOAL_MANAGER: 'foreign-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined }, async () => {
-    await expect(runIntegration(['land', task.id], integrationRuntime)).rejects.toThrow('does not own task');
-  });
+  await withEnvironment(
+    { GOAL_MANAGER: 'foreign-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined },
+    async () => {
+      await expect(runIntegration(['land', task.id], integrationRuntime)).rejects.toThrow('does not own task');
+    },
+  );
   await withEnvironment({ GOAL_MANAGER: 'owner-manager', GOAL_TASK_ID: 'worker-task', GOAL_ATTEMPT: '1' }, async () => {
     await expect(runIntegration(['land', task.id], integrationRuntime)).rejects.toThrow('Workers cannot');
   });
-  await withEnvironment({ GOAL_MANAGER: 'owner-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined }, async () => {
-    await expect(runIntegration(['land', task.id, '--evidence', 'fake.log'], integrationRuntime)).rejects.toThrow(
-      'usage: land <task>',
-    );
-    expect(await runIntegration(['land', task.id], integrationRuntime)).toBe(0);
-    const queued = fixture.queue.next();
-    expect(queued?.request.managerLanding).toEqual({
-      managerId: 'owner-manager',
-      acceptedCommit: git(task.worktree, 'rev-parse', 'HEAD'),
-      acceptanceCommand: task.brief.acceptance.command,
-    });
-    expect(counts).toEqual({ handoffs: 1, pumps: 0 });
-    await expect(runIntegration(['land', task.id], integrationRuntime)).resolves.toBe(0);
-    expect(counts).toEqual({ handoffs: 1, pumps: 0 });
-  });
+  await withEnvironment(
+    { GOAL_MANAGER: 'owner-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined },
+    async () => {
+      await expect(runIntegration(['land', task.id, '--evidence', 'fake.log'], integrationRuntime)).rejects.toThrow(
+        'usage: land <task>',
+      );
+      expect(await runIntegration(['land', task.id], integrationRuntime)).toBe(0);
+      const queued = fixture.queue.next();
+      expect(queued?.request.managerLanding).toEqual({
+        managerId: 'owner-manager',
+        acceptedCommit: git(task.worktree, 'rev-parse', 'HEAD'),
+        acceptanceCommand: task.brief.acceptance.command,
+      });
+      expect(counts).toEqual({ handoffs: 1, pumps: 0 });
+      await expect(runIntegration(['land', task.id], integrationRuntime)).resolves.toBe(0);
+      expect(counts).toEqual({ handoffs: 1, pumps: 0 });
+    },
+  );
 
   const acceptanceRuns: string[] = [];
   await train(fixture, async (command) => {
@@ -335,9 +351,9 @@ test('manager landing refuses unfinished attempts, stale work, missing commits a
     attempt.endedAt = null;
     attempt.exitCode = null;
   });
-  expect(() => requestManagerLanding(unfinished.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id))).toThrow(
-    'completed accepted current attempt',
-  );
+  expect(() =>
+    requestManagerLanding(unfinished.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id)),
+  ).toThrow('completed accepted current attempt');
 
   const noCommit = createAcceptedTask(fixture, {
     id: 'no-commit',
@@ -346,9 +362,9 @@ test('manager landing refuses unfinished attempts, stale work, missing commits a
     committed: false,
     request: false,
   });
-  expect(() => requestManagerLanding(noCommit.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id))).toThrow(
-    'no committed work',
-  );
+  expect(() =>
+    requestManagerLanding(noCommit.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id)),
+  ).toThrow('no committed work');
 
   const accepted = createAcceptedTask(fixture, {
     id: 'dirty',
@@ -357,9 +373,9 @@ test('manager landing refuses unfinished attempts, stale work, missing commits a
     request: false,
   });
   writeFileSync(join(accepted.worktree, 'untracked.txt'), 'not accepted\n');
-  expect(() => requestManagerLanding(accepted.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id))).toThrow(
-    'clean worktree',
-  );
+  expect(() =>
+    requestManagerLanding(accepted.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id)),
+  ).toThrow('clean worktree');
 
   const stale = createAcceptedTask(fixture, {
     id: 'stale',
@@ -377,9 +393,9 @@ test('manager landing refuses unfinished attempts, stale work, missing commits a
   };
   fixture.store.nextAttempt({ taskId: stale.id, attempt: 1 }, (attempt) => successfulAttempt(stale.id, attempt));
   expect(() => assertManagerLandingEvidence(staleEvidence, fixture.store)).toThrow('stale');
-  expect(() => requestManagerLanding(stale.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id))).toThrow(
-    'not ready to land',
-  );
+  expect(() =>
+    requestManagerLanding(stale.id, 'owner-manager', fixture.store, fixture.queue, (id) => landing(fixture, id)),
+  ).toThrow('not ready to land');
 });
 
 test('Main/control-plane landing retains mandatory lifecycle gate and promotion discipline', async () => {

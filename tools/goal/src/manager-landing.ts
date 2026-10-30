@@ -104,9 +104,7 @@ export function requestManagerLanding(
       .query('SELECT request, outcome, delivered FROM landing_queue WHERE task=? AND attempt=?')
       .get(taskId, ref.attempt) as { request: string; outcome: string | null; delivered: number } | null;
     if (!row) {
-      const alreadyRequested = store
-        .events(taskId, ref.attempt)
-        .some((event) => event.kind === 'landing-requested');
+      const alreadyRequested = store.events(taskId, ref.attempt).some((event) => event.kind === 'landing-requested');
       if (alreadyRequested) queue.enqueue(request);
       else store.landing(request, (queued) => queue.enqueue(queued));
       store.event(ref, 'manager-landing-authorized', request.managerLanding);
