@@ -12,6 +12,7 @@ export async function authPost<Body = unknown>(path: string, body: unknown): Pro
       method: 'POST',
       credentials: 'same-origin',
       redirect: 'error',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
