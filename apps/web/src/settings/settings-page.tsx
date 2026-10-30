@@ -305,7 +305,11 @@ export function SettingsPageView({
   const location = useLocation();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    subscribeHydration,
+    () => true,
+    () => false,
+  );
   const browserSession = useSession();
   // Match the server snapshot on first hydration; later renders require the live browser identity.
   // A loader page or a seeded cache alone never establishes this route-bound session.

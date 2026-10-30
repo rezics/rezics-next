@@ -20,7 +20,5 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsRoute() {
   const { page, requestSession } = Route.useLoaderData();
-  return (
-    <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />
-  );
+  return <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />;
 }
