@@ -471,7 +471,9 @@ test('warning_needs_response inquiry preserves an active entitlement', async () 
 test('delisting prevents new checkout but preserves an existing entitlement', async () => {
   const fixture = await paid();
   await driver.reviseOffer(fixture.offer.id, { state: 'delisted' });
-  expect(await body(await create('buyer', fixture.offer.id, fixture.offer.revision), 409)).toMatchObject({ code: 'offer_unavailable' });
+  expect(await body(await create('buyer', fixture.offer.id, fixture.offer.revision), 409)).toMatchObject({
+    code: 'offer_unavailable',
+  });
   expect(await entitlement(fixture.entitlement.id)).toEqual(fixture.entitlement);
   expect((await listing()).entitlements).toEqual([fixture.entitlement]);
   expect((await driver.inspect()).orders).toHaveLength(1);
@@ -512,7 +514,10 @@ test('lost Stripe create records unknown then same-key retry recovers the single
   expect(await order(rows[0]!.id)).toMatchObject({ settlement: 'unknown', checkoutUrl: null, entitlementId: null });
   const sessions = await driver.stripe.sessions();
   expect(sessions).toHaveLength(1);
-  const recovered = await body<{ order: OrderView }>(await create('buyer', offer.id, offer.revision, idempotencyKey), 201);
+  const recovered = await body<{ order: OrderView }>(
+    await create('buyer', offer.id, offer.revision, idempotencyKey),
+    201,
+  );
   expect(recovered.order).toMatchObject({ id: rows[0]!.id, settlement: 'pending' });
   expect(recovered.order.checkoutUrl).toBeTruthy();
   expect((await driver.inspect()).orders[0]!.checkoutSessionId).toBe(sessions[0]!.id);
