@@ -46,7 +46,8 @@ export async function initializeResourceGrants(
     `INSERT INTO access.resource_role_provenance
      (route,resource_id,resource_type,original_creator,account_id,grant_role,side,source_transaction,delivery)
      VALUES($1,$2,$3,$4,$4,'','creator',$5,'not-applicable')`,
-    [resource.route, resource.id, type, creator, currentCommand(tx).transactionId]);
+    [resource.route, resource.id, type, creator, currentCommand(tx).transactionId],
+  );
   // Data-modifying CTE siblings share a snapshot: an INSERT trigger on the grant can miss
   // the initialization inserted by the sibling CTE. Read both native rows in this next statement.
   await tx.query(
@@ -58,6 +59,7 @@ export async function initializeResourceGrants(
        AND g.transaction_id=$3 AND NOT EXISTS(SELECT 1 FROM access.resource_role_provenance p
          WHERE p.route=g.route AND p.resource_id=g.resource_id AND p.account_id=g.subject_id
            AND p.grant_role=g.grant_role AND p.side='new' AND p.source_transaction=$3)`,
-    [resource.route,resource.id,currentCommand(tx).transactionId]);
+    [resource.route, resource.id, currentCommand(tx).transactionId],
+  );
   capability.complete();
 }

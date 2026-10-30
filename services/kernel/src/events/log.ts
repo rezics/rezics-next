@@ -102,9 +102,16 @@ function parseRows(
         break;
       }
       const minimized = row.payload_state === 'minimized';
-      if ((row.payload_state !== 'present' && !minimized) ||
-          (minimized ? row.subject !== null || typeof row.data !== 'object' || row.data === null ||
-            Array.isArray(row.data) || Object.keys(row.data).length !== 0 : !validator.Check(row.data))) {
+      if (
+        (row.payload_state !== 'present' && !minimized) ||
+        (minimized
+          ? row.subject !== null ||
+            typeof row.data !== 'object' ||
+            row.data === null ||
+            Array.isArray(row.data) ||
+            Object.keys(row.data).length !== 0
+          : !validator.Check(row.data))
+      ) {
         reason = 'invalid_data';
         break;
       }

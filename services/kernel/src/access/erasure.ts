@@ -54,7 +54,10 @@ export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>([
   'semantic_erasure_locator',
 ]);
 export class SharedHistoryIncompleteError extends Error {
-  constructor() { super('Shared history native coverage is incomplete'); this.name = 'SharedHistoryIncompleteError'; }
+  constructor() {
+    super('Shared history native coverage is incomplete');
+    this.name = 'SharedHistoryIncompleteError';
+  }
 }
 export type ErasureOutcome = 'erased' | 'none';
 export type RetentionException = {
@@ -143,10 +146,15 @@ export async function acknowledgeErasure(
     {
       partition: partitionOf(route),
       clock: deps.clock,
-      ...(participant === 'shared-history' ? {} : { basis: {
-        actorAccountId: '00000000-0000-8000-8000-000000000001',
-        clientId: 'internal-access', requestedBy: null,
-      } }),
+      ...(participant === 'shared-history'
+        ? {}
+        : {
+            basis: {
+              actorAccountId: '00000000-0000-8000-8000-000000000001',
+              clientId: 'internal-access',
+              requestedBy: null,
+            },
+          }),
     },
     async (tx, { time }) => {
       const key = { route, account_id: accountId };
@@ -155,13 +163,15 @@ export async function acknowledgeErasure(
       if (retained.some((entry) => new Date(entry.expiresAt).getTime() <= new Date(record.at).getTime()))
         throw new LifecycleDeniedError();
       if (participant === 'shared-history') {
-        const proof = await tx.query(`SELECT j.applicable FROM core.preference_history_job j
+        const proof = await tx.query(
+          `SELECT j.applicable FROM core.preference_history_job j
           JOIN core.history_registry r ON r.singleton AND r.digest=j.registry_digest AND r.gaps='[]'::jsonb
           JOIN access.auth_history_proof a ON a.route=j.account_route AND a.account_id=j.account_id
             AND a.phase='copies-erased' AND a.version=j.barrier_version AND a.at::text=j.barrier_at
           WHERE j.account_route=$1 AND j.account_id=$2 AND j.barrier_id=$2 AND j.phase='complete'
             AND j.barrier_version=$3 AND j.barrier_at=$4 FOR SHARE OF j,r,a`,
-          [route,accountId,record.version,record.at]);
+          [route, accountId, record.version, record.at],
+        );
         if (!proof.rows.length || retained.length || outcome !== (proof.rows[0].applicable ? 'erased' : 'none'))
           throw new SharedHistoryIncompleteError();
       }
@@ -184,9 +194,10 @@ export async function acknowledgeErasure(
         });
       return {
         value,
-        events: participant === 'shared-history'
-          ? [{ type: 'com.rezics.history.erasure-acknowledged.v1', data: { version: record.version, outcome } }]
-          : [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
+        events:
+          participant === 'shared-history'
+            ? [{ type: 'com.rezics.history.erasure-acknowledged.v1', data: { version: record.version, outcome } }]
+            : [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
       };
     },
   );

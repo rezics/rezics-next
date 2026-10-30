@@ -70,8 +70,9 @@ export async function purgeExpiredEntryDeletion(
       if (state.present && !state.matches) throw new EntryPurgeStaleError();
       present = state.present;
       // Mechanical maintenance has a native episode principal, never an active Actor.
-      bindCommandHistoryEvidence(tx, [{ accountRoute: route, accountId,
-        roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject }]);
+      bindCommandHistoryEvidence(tx, [
+        { accountRoute: route, accountId, roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject },
+      ]);
       return 'execute';
     },
   };

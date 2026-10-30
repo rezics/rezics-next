@@ -11,7 +11,11 @@ import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
  * receipt kind acquires readiness from age, DBOS state or this registration. */
 export const RECEIPT_OWNER_DISPOSITIONS = Object.freeze({
   'access.account.preferences': Object.freeze({ commandKindId: 1, minimizerVersion: 1, barrierCompletesResult: true }),
-  'library.entry.retention.purge': Object.freeze({ commandKindId: 2, minimizerVersion: 1, barrierCompletesResult: true }),
+  'library.entry.retention.purge': Object.freeze({
+    commandKindId: 2,
+    minimizerVersion: 1,
+    barrierCompletesResult: true,
+  }),
 });
 export type PreferenceHistoryCode = 'more' | 'covered-pending';
 type Job = {
@@ -24,8 +28,11 @@ type Job = {
 };
 
 export async function minimizeHistoryReceipt(
-  tx: CommandTransaction, job: Pick<Job, 'partition_no' | 'account_route' | 'account_id'>, locator: Buffer,
-  registry?: HistoryRegistry, barrier?: HistoryBarrier,
+  tx: CommandTransaction,
+  job: Pick<Job, 'partition_no' | 'account_route' | 'account_id'>,
+  locator: Buffer,
+  registry?: HistoryRegistry,
+  barrier?: HistoryBarrier,
 ): Promise<string | null> {
   const key = decodeLocator('command-receipt/v1', locator);
   if (key.artifactType !== 'command-receipt/v1' || key.partitionNo !== job.partition_no)
@@ -51,8 +58,19 @@ export async function minimizeHistoryReceipt(
   if (registry) {
     const owner = registry.owner('command-receipt/v1', kind);
     if (!owner || !barrier) return 'receipt-consumer-proof-unavailable';
-    const readiness = await owner.readiness(tx, { partition: job.partition_no, locator: key,
-      accounts: associations.rows.map((row) => ({ accountRoute: row.account_route, accountId: row.account_id, roles: row.roles })) }, barrier);
+    const readiness = await owner.readiness(
+      tx,
+      {
+        partition: job.partition_no,
+        locator: key,
+        accounts: associations.rows.map((row) => ({
+          accountRoute: row.account_route,
+          accountId: row.account_id,
+          roles: row.roles,
+        })),
+      },
+      barrier,
+    );
     if (!readiness.ready) return readiness.gap;
   } else if (kind !== 'access.account.preferences') return 'receipt-consumer-proof-unavailable';
   const params = [key.partitionNo, key.principalKind, key.principalId, storageKey, kind];

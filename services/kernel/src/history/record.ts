@@ -14,8 +14,14 @@ export type CommandHistoryKind = string;
 const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KINDS));
 /** Startup-only receiving port. IDs are permanent owner-assigned values, never registration ordinals. */
 export function registerCommandHistoryKind(kind: string, id: number): void {
-  if (!/^[a-z][a-z0-9_.-]{0,95}$/.test(kind) || !Number.isInteger(id) || id < 1000 || id > 0xffffffff ||
-      commandKinds.has(kind) || [...commandKinds.values()].includes(id))
+  if (
+    !/^[a-z][a-z0-9_.-]{0,95}$/.test(kind) ||
+    !Number.isInteger(id) ||
+    id < 1000 ||
+    id > 0xffffffff ||
+    commandKinds.has(kind) ||
+    [...commandKinds.values()].includes(id)
+  )
     throw new TypeError('Invalid or duplicate permanent history command kind');
   commandKinds.set(kind, id);
 }
@@ -44,7 +50,10 @@ export function bindCommandHistoryEvidence(tx: CommandTransaction, accounts: rea
   identities.set(tx, structuredClone(accounts));
 }
 
-export function unionHistoryScope(type: HistoryScope['artifactType'], ...groups: readonly (readonly AccountReference[])[]): HistoryScope {
+export function unionHistoryScope(
+  type: HistoryScope['artifactType'],
+  ...groups: readonly (readonly AccountReference[])[]
+): HistoryScope {
   const accounts = new Map<string, AccountReference>();
   for (const group of groups)
     for (const ref of group) {
@@ -69,7 +78,11 @@ export async function declareCommandHistory(
   const identity = identities.get(tx);
   if (!identity) throw new TypeError('Missing command history evidence: verified actor/principal/human/delegate');
   if (scopes.events.length > 1000) throw new TypeError('Too many history event scopes');
-  const response = unionHistoryScope('command-receipt/v1', validateScope('command-receipt/v1', scopes.response).accounts, identity);
+  const response = unionHistoryScope(
+    'command-receipt/v1',
+    validateScope('command-receipt/v1', scopes.response).accounts,
+    identity,
+  );
   const events = scopes.events.map((scope) =>
     unionHistoryScope('outbox-event/v1', validateScope('outbox-event/v1', scope).accounts, identity),
   );
@@ -80,7 +93,9 @@ export async function declareCommandHistory(
 }
 
 export function validateCommandHistoryScope(
-  tx: CommandTransaction, kind: string | undefined, events: readonly { type: string }[],
+  tx: CommandTransaction,
+  kind: string | undefined,
+  events: readonly { type: string }[],
 ): void {
   const declaration = declarations.get(tx);
   if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;

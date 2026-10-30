@@ -53,11 +53,12 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
     }
   }
   const fanout = new Map<string, number>();
-  for (const effect of effects) for (const type of new Set(effect.types)) {
-    const count = (fanout.get(type) ?? 0) + 1;
-    if (count > 32) throw new TypeError('History effect fanout exceeds 32 consumers');
-    fanout.set(type, count);
-  }
+  for (const effect of effects)
+    for (const type of new Set(effect.types)) {
+      const count = (fanout.get(type) ?? 0) + 1;
+      if (count > 32) throw new TypeError('History effect fanout exceeds 32 consumers');
+      fanout.set(type, count);
+    }
 
   const byName = new Map(effects.map((effect) => [effect.name, effect]));
   const runEffect = DBOS.registerStep(
@@ -66,9 +67,11 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       if (!effect || effect.delivery === 'native') throw new Error('Unknown durable effect');
       await effect.run(event);
       const selected = pool ?? compatibilityPool;
-      if (selected) await selected.query(
-        "UPDATE core.history_event_consumer SET state='completed' WHERE workflow_id=$1 AND state='open'",
-        [DBOS.workflowID]);
+      if (selected)
+        await selected.query(
+          "UPDATE core.history_event_consumer SET state='completed' WHERE workflow_id=$1 AND state='open'",
+          [DBOS.workflowID],
+        );
     },
     { name: 'effect.run', retriesAllowed: true, intervalSeconds: 1, backoffRate: 2, maxAttempts: 10 },
   );
@@ -95,30 +98,39 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
   );
 
   const admit = async (client: PoolClient, envelopes: readonly Envelope[]) => {
-        const orderedEnvelopes = envelopes
-          .map((envelope, index) => ({ envelope, index }))
-          .sort((left, right) => {
-            if (left.envelope.position < right.envelope.position) return -1;
-            if (left.envelope.position > right.envelope.position) return 1;
-            return left.index - right.index;
-          });
-        for (const { envelope } of orderedEnvelopes) {
-          for (const [eventSeq, event] of envelope.events.entries()) {
-            for (const effect of effects) {
-              if (!effect.types.includes(event.type)) continue;
-              await client.query(
-                `INSERT INTO core.history_event_consumer(partition_no,position,event_seq,consumer,workflow_id)
+    const orderedEnvelopes = envelopes
+      .map((envelope, index) => ({ envelope, index }))
+      .sort((left, right) => {
+        if (left.envelope.position < right.envelope.position) return -1;
+        if (left.envelope.position > right.envelope.position) return 1;
+        return left.index - right.index;
+      });
+    for (const { envelope } of orderedEnvelopes) {
+      for (const [eventSeq, event] of envelope.events.entries()) {
+        for (const effect of effects) {
+          if (!effect.types.includes(event.type)) continue;
+          await client.query(
+            `INSERT INTO core.history_event_consumer(partition_no,position,event_seq,consumer,workflow_id)
                  VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-                [envelope.partition,envelope.position.toString(),eventSeq,effect.name,effectWorkflowId(envelope,eventSeq,effect.name)]);
-              if (effect.admit) await effect.admit(client, event);
-              if (effect.delivery === 'native') await client.query(
-                `UPDATE core.history_event_consumer SET state='transferred'
+            [
+              envelope.partition,
+              envelope.position.toString(),
+              eventSeq,
+              effect.name,
+              effectWorkflowId(envelope, eventSeq, effect.name),
+            ],
+          );
+          if (effect.admit) await effect.admit(client, event);
+          if (effect.delivery === 'native')
+            await client.query(
+              `UPDATE core.history_event_consumer SET state='transferred'
                  WHERE partition_no=$1 AND position=$2 AND event_seq=$3 AND consumer=$4 AND state='open'`,
-                [envelope.partition,envelope.position.toString(),eventSeq,effect.name]);
-            }
-          }
+              [envelope.partition, envelope.position.toString(), eventSeq, effect.name],
+            );
         }
-      };
+      }
+    }
+  };
 
   return {
     ...(admit === undefined ? {} : { admit }),

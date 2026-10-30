@@ -17,7 +17,12 @@ import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, encodeReceiptKey, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { recordCommandHistory, releaseCommandHistory, validateCommandHistory, validateCommandHistoryScope } from '../history/record.ts';
+import {
+  recordCommandHistory,
+  releaseCommandHistory,
+  validateCommandHistory,
+  validateCommandHistoryScope,
+} from '../history/record.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -190,7 +195,8 @@ export type CompletedCommandAuthorization = Readonly<{
   resource: Readonly<{ route: number; id: string }>;
   mode: CommandAuthorizationMode;
 }>;
-export type CurrentCommand = CommandAttempt & Readonly<{ transactionId: string; authorization: CompletedCommandAuthorization | null }>;
+export type CurrentCommand = CommandAttempt &
+  Readonly<{ transactionId: string; authorization: CompletedCommandAuthorization | null }>;
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
 const times = new WeakMap<AuthoritativeTime, string>();
 const attempts = new WeakMap<CommandTransaction, CommandAttempt>();

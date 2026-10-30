@@ -9,9 +9,7 @@ export type HistoryArtifact = Readonly<{
   locator: HistoryLocator;
   accounts: readonly AccountReference[];
 }>;
-export type HistoryReadiness =
-  | Readonly<{ ready: true }>
-  | Readonly<{ ready: false; gap: string }>;
+export type HistoryReadiness = Readonly<{ ready: true }> | Readonly<{ ready: false; gap: string }>;
 export type HistoryOwner = Readonly<{
   name: string;
   artifactType: HistoryArtifactType;
@@ -22,7 +20,15 @@ export type HistoryOwner = Readonly<{
 
 /** Required producer families, independently of which ones happen to have artifacts today. */
 export const HISTORY_PRODUCER_FAMILIES = Object.freeze([
-  'access', 'commerce', 'community', 'content', 'library', 'rating', 'semantic', 'zones', 'imports',
+  'access',
+  'commerce',
+  'community',
+  'content',
+  'library',
+  'rating',
+  'semantic',
+  'zones',
+  'imports',
 ] as const);
 export type HistoryProducerFamily = (typeof HISTORY_PRODUCER_FAMILIES)[number];
 
@@ -58,21 +64,26 @@ export class HistoryRegistry {
 
   familyGaps(family: HistoryProducerFamily): readonly string[] {
     if (!HISTORY_PRODUCER_FAMILIES.includes(family)) throw new TypeError('Unknown history producer family');
-    return (
-      (['command-receipt/v1', 'outbox-event/v1', 'durable-work/v1'] as const)
-        .filter((type) => !this.coverage.get(family)?.has(type))
-        .map((type) => `${family}:${type}`)
-    );
+    return (['command-receipt/v1', 'outbox-event/v1', 'durable-work/v1'] as const)
+      .filter((type) => !this.coverage.get(family)?.has(type))
+      .map((type) => `${family}:${type}`);
   }
 
   /** Stable across registration order; a changed owner/version/coverage invalidates old progress. */
   digest(): string {
-    return createHash('sha256').update(JSON.stringify({
-      owners: [...this.owners.values()].map(({ name, artifactType, version }) =>
-        [artifactType, name, version]).sort(),
-      coverage: [...this.coverage].map(([family, types]) => [family, [...types].sort()]).sort(),
-    })).digest('hex');
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          owners: [...this.owners.values()]
+            .map(({ name, artifactType, version }) => [artifactType, name, version])
+            .sort(),
+          coverage: [...this.coverage].map(([family, types]) => [family, [...types].sort()]).sort(),
+        }),
+      )
+      .digest('hex');
   }
 
-  seal(): void { this.closed = true; }
+  seal(): void {
+    this.closed = true;
+  }
 }

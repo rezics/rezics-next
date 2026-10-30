@@ -36,8 +36,12 @@ export async function enqueueWorkIntent(work: WorkClient, client: PoolClient, in
   });
   await work.enqueueInTransaction(
     checked,
-    { queueName: intent.queue, workflowName: intent.workflowName,
-      workflowIDReusePolicy: 'return-existing', workflowID: intent.workflowId },
+    {
+      queueName: intent.queue,
+      workflowName: intent.workflowName,
+      workflowIDReusePolicy: 'return-existing',
+      workflowID: intent.workflowId,
+    },
     intent.input,
   );
 }
