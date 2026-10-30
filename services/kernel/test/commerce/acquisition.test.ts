@@ -307,3 +307,23 @@ test('lost final adverse native evidence releases only after the pending dispute
   expect((await provider.buy(b)).id).not.toBe(old.id);
   expect(provider.calls).toBe(2);
 });
+
+test('retained native cash prevents a later no-charge snapshot from releasing an unresolved acquisition', async () => {
+  const { a, b } = await offerPair();
+  const provider = processor();
+  const old = await provider.buy(a);
+  const snapshot = paid(old);
+  const amount = old.unitAmountMinor + 600;
+  await commands.applyCheckoutSnapshot({
+    ...snapshot, amountSubtotalMinor: amount, amountTotalMinor: amount, chargeAmountMinor: amount,
+    transactions: [{ ...snapshot.transactions[0]!, amountMinor: amount, netMinor: amount }],
+  }, requestKey());
+  expect((await commands.readOrderForAccount(old.buyerAccountId, old.id))?.settlement).toBe('unknown');
+  await commands.applyCheckoutSnapshot({
+    ...snapshot, observedAt: new Date().toISOString(), status: 'expired', paymentStatus: 'unpaid',
+    paymentIntentStatus: 'canceled', chargeId: null, chargeAmountMinor: null, transactions: [],
+  }, requestKey());
+  await expect(provider.buy(b)).rejects.toMatchObject({ code: 'acquisition_pending', locators: { orderId: old.id } });
+  expect((await store.readOrderTransactions(native.database.pool, routeOf(old.id)!, old.id))[0]?.amountMinor).toBe(amount);
+  expect(provider.calls).toBe(1);
+});

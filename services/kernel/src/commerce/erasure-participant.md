@@ -5,8 +5,9 @@ is unconfigured. The effect durably enqueues `commerce.eraseAccount` with identi
 `commerce:erasure:{accountId}:v1`. The existing executor and workflows queue own it. Dispatch is not acknowledgement.
 The native version 1 obligation and current deleted account are required for every page.
 
-A page removes at most 100 entitlement UUIDs (1,600 raw key bytes) using the account ownership index and a keyset
-cursor. Physical child deletion, sticky evidence that data applied, and the next cursor/phase commit in the same
+A page reads at most 100 entitlement UUIDs and 100 acquisition-slot UUIDs from their account-leading indexes,
+then removes at most 100 merged child UUIDs (1,600 raw key bytes) using a shared keyset cursor.
+Physical child deletion, sticky evidence that data applied, and the next cursor/phase commit in the same
 platform command. Progress contains only account/barrier identity, cursor, phase and a fixed blocker. It survives
 DBOS history expiry and is not a second coordinator. Replay cannot reopen a terminal phase or coordinator outcome.
 There is currently no acknowledgement path: local absence cannot attest native no-data. The required unused-actor
@@ -15,7 +16,7 @@ This is an incomplete participant, not a successful replacement of that outcome 
 
 ## Native ownership evidence and unknown custody
 
-Indexed, account-home existence probes establish positive local evidence for offers, buyer orders, entitlements,
+Indexed, account-home existence probes establish positive local evidence for offers, buyer orders, entitlements, acquisition slots,
 creator royalty lines and statements. `had_data` records only this observed evidence, sticky across local purge;
 `false` means no local root was observed, never that all roles or custody were empty. An account with no observed
 local roots finishes the available page work with `COMMERCE_CUSTODY_BLOCKER`, explicitly recording UNKNOWN custody.
@@ -74,9 +75,13 @@ uses actual `grantAccountRole` when permitted. Lifecycle denial suppresses the p
 reconciliation continues. Reconciliation checks the native buyer before another provider creation. No DBOS
 cancellation acts as a commit fence. Old bearers and typed private readers still require the native current fence.
 
-Entitlements are private benefit records, so bounded erasure removes them without inventing a refund/dispute reason.
+Entitlements and acquisition slots are private benefit records, so bounded erasure removes them without inventing
+a refund/dispute reason. Slots have actual `(route, buyer_account_id, slot_id)` custody locators; their incumbent
+order IDs and exact benefit keys are removed together. Terminal financial refreshes do not recreate slots.
+Verified acquisition disposition belongs to the existing `(route, buyer_account_id, order_id)` financial root
+and its retained-field obligation, rather than an additional unlocated copy.
 No financial root is removed by this participant. Observed local data remains pending after this partial cleanup;
-unobserved foreign/shared custody remains UNKNOWN. Exhausting entitlements is not whole-graph erasure.
+unobserved foreign/shared custody remains UNKNOWN. Exhausting private children is not whole-graph erasure.
 
 ## Remaining producer blockers and retained records
 

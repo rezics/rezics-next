@@ -10,6 +10,7 @@ import reserve from './acquisition-reserve.sql';
 import owned from './acquisition-owned.sql';
 import pending from './acquisition-pending.sql';
 import disposition from './acquisition-disposition.sql';
+import cash from './acquisition-cash.sql';
 import orderRead from './store-order-read.sql';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -109,6 +110,8 @@ export function verifiedAcquisitionRelease(order: Order, snapshot: CheckoutSnaps
 /** Native order revision is held by the creation/refresh apply; this metadata never rewrites money/history. */
 export async function recordAcquisitionDisposition(client: Client, order: Order, release: AcquisitionRelease | null) {
   if (!order.contentEdition) return false;
+  if ((release === 'no-creation' || release === 'cancelled-no-charge') &&
+      (await cash.run(client, { route: routeOf(order.id)!, order_id: order.id })).hasCash) release = null;
   return (await disposition.run(client, {
     route: routeOf(order.id)!, order_id: order.id, buyer_account_id: order.buyerAccountId,
     revision: order.revision, disposition: release ?? '',
