@@ -59,7 +59,7 @@ export const Reversed: Story = {
 };
 
 function RetryExample() {
-  const [resolve] = useState<ResolveAppeal>(() => {
+  const [resolve] = useState((): ResolveAppeal => {
     let committedKey: string | undefined;
     return async ({ idempotencyKey, outcome, statement }) => {
       if (!committedKey) {

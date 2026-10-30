@@ -95,7 +95,7 @@ function AppealCard({
       <p className="whitespace-pre-wrap">
         <span className="font-medium">{m.moderation_appeal_reason_label()}:</span> {appeal.statement}
       </p>
-      <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal} />
+      <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal ?? null} />
     </li>
   );
 }
