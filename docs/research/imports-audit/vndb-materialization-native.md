@@ -91,9 +91,8 @@ db.exec('COMMIT'); // SQLITE_BUSY: SQL statements in progress.
 ```
 
 The same witness succeeds when `plan.finalize()` is called immediately after
-`plan.all`. The failing witness was reproduced twice. Frozen acceptance and its
-evidence producer remain unchanged; this slice does not substitute a different
-SQL/EQP validator or close statements behind the validator's back.
+`plan.all`. The failing witness was reproduced twice. At that historical retry, frozen acceptance and its evidence producer remained
+unchanged; no different SQL/EQP validator was substituted.
 
 The exact fourteen child cases and their historical retry outcomes were:
 
@@ -116,11 +115,29 @@ The exact fourteen child cases and their historical retry outcomes were:
 
 ## Subsequent verified completion
 
-The subsequent accepted producer repair at `0710aa933993b00c3c3fa63d6d55006447b68fe7` finalizes observed query-plan
-statements before publication. The supplied completion receipt reports all fourteen portable VNDB cases passing
-and both native materialization cases passing, including the ordinary account-key CLI publication/reopen case.
-This supersedes the incomplete outcome above; the failed attempts and their first reached SQLite error remain
-historical evidence. The completion receipt's raw log path and assertion counts were not supplied with the
-sealed-recovery contract, so none are inferred here. No extra native check was run for this prose update.
-This receipt belongs to the materialization suite, not the new sealed-source CLI recovery caller or native PG
-growth. The latter still requires its own named managed command and receipt.
+The accepted native fixture workaround at `0710aa933993b00c3c3fa63d6d55006447b68fe7`
+finalized observed query-plan statements inside `instrumentDatabase`. Its scoped
+completion receipt remains valid: both native parents passed with 19 assertions,
+and all fourteen portable children passed, without load reruns. That pass did not
+repair callers attaching `sqliteEvidence` directly. The later sealed-generation
+integration at `77a2ef6103` delivered no producer cleanup; its separate 1,686-assertion
+receipt is preserved in the capability manifest. Neither receipt claims native PG
+growth or imports promotion.
+
+## Evidence producer ownership cleanup
+
+The assigned base `d4d6ae8fea` already contains the manager-frozen producer repair:
+`prove` prepares the same bound `EXPLAIN QUERY PLAN`, reads its raw plan with
+`all(...parameters)`, and releases only that temporary statement in `finally`.
+The producer and the four existing local cases remain byte-identical in this
+correction. SQL, bound parameters, plan classification, index/prefix/scan checks,
+counts and limits remain unchanged.
+
+This correction removes only the native fixture's redundant EXPLAIN-specific
+`finally` branch. Its execution/returned-row counters and forwarding remain.
+Production, cached and iterating statements are not finalized by instrumentation.
+The local measured case directly attaches the real evidence producer and exercises
+ordinary publication after measured staging and paging at 2, 4 and 8 titles.
+
+Current local and managed native results are recorded below after execution.
+Historical failures above remain scoped to their recorded revisions.
