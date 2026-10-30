@@ -240,7 +240,11 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new DOMException('Import interrupted', 'AbortError');
 }
 
-function clockSleep(clock: NonNullable<ImportCliOptions['clock']>, ms: number, signal: AbortSignal): Promise<void> {
+async function clockSleep(
+  clock: NonNullable<ImportCliOptions['clock']>,
+  ms: number,
+  signal: AbortSignal,
+): Promise<void> {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
     const cleanup = () => signal.removeEventListener('abort', aborted);
