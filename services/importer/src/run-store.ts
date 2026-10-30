@@ -663,6 +663,17 @@ export class RunStore<Projection = BatchStatement[]> {
       key,
     );
   }
+  private sameProjection(left: string, right: string): boolean {
+    if (left === right) return true;
+    if (this.projectionMode !== 'source-record') return false;
+    // The reviewed descriptor is a separate HTTP intent, never a semantic input
+    // revision or a reason to advance the complete source-generation pointer.
+    const semantic = (bytes: string) => {
+      const projection = JSON.parse(bytes) as SourceProjection;
+      return JSON.stringify([projection.sourceKind, projection.normalizedRecord]);
+    };
+    return semantic(left) === semantic(right);
+  }
   private resolve(run: Run, entry: Entry) {
     if (entry.resolved || entry.remaining || entry.cover_pending) return;
     this.write(
@@ -879,7 +890,7 @@ export class RunStore<Projection = BatchStatement[]> {
             ? 'vanished'
             : !current
               ? 'new'
-              : current.row_json === e.row_json && current.projection_json === e.projection_json
+              : current.row_json === e.row_json && this.sameProjection(current.projection_json, e.projection_json)
                 ? 'unchanged'
                 : 'changed';
         if (multi && !commands.length && !omissions.length && !input.deferredCover && e.kind !== 'unchanged')
@@ -894,7 +905,9 @@ export class RunStore<Projection = BatchStatement[]> {
           key,
         );
         const snapshotChanged =
-          !baseline || baseline.row_json !== e.row_json || baseline.projection_json !== e.projection_json;
+          !baseline ||
+          baseline.row_json !== e.row_json ||
+          !this.sameProjection(baseline.projection_json, e.projection_json);
         const keys: string[] = [];
         // Each original request envelope is stored before this transaction returns to a caller/transport.
         for (let i = 0; i < commands.length; i++) {
