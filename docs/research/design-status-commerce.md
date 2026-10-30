@@ -216,6 +216,30 @@ curated paging cannot deliver it. Common source factories are unavailable; Liked
 Semantic whole-query disclosure/identity and Library preparation/custody remain pending; Accounts' executor exists, not its complete Library consumer.
 **Handoff:** which complete producer coverage makes copy/session-only state siblings and reaction-only Liked ready without false empty results or public leakage?
 
+**Selected saved-dynamic publication interface.** `/collections/{id}/publish` consumes the existing private owner
+Collection/members reader, retaining the actual header revision, original source IDs, disclosed canonical summaries
+and supplied catalogue facts. Only the displayed page is selectable; canonical duplicates select one subject, while
+curated occurrences and notes retain their separate meaning. There is no all-matching-IDs read, hidden-page selection,
+query editor or snapshot-all promise. The maximum explicit selection is 100; zero requires deliberate empty intent.
+The owner-menu integration exports typed `PublicationLink` without conferring authority.
+
+The BFF sends only `{revision,subjectIds}` to the declared native
+`POST /v1/collections/:collectionId:publishSelected`, with current session/CSRF and the original idempotency key.
+The generated native method is absent on this base; the typed exact-route adapter has no positive fallback and
+an unconfigured runtime stays unavailable. The existing real Source reader may also return unavailable or preparing;
+neither is empty. Native source/owner/account/original-and-terminal authorization, consent, source generation and
+atomic two-generation output remain producer authority. The adapter cannot supply these checks or implement Source.
+Only a validated native complete response displays Published. A failed or uncertain new selection retains the
+previous completed response separately; reload makes no stored-output claim. Unknown results lock selection and
+retry the identical payload/key; 409 requires manual reload and reselection. Public viewing still decides current
+per-subject disclosure. Private criteria/reading facts never enter the publication request, and no grant, purchase
+entitlement or source URL is created.
+
+Focused consumer cases and six stories cover explicit empty/nonempty selection, denied, stale, Source unavailable
+and uncertain retry using recorded subject summaries; they provide no positive native publication provider. Actual
+native publication, full snapshot/whole-query privacy and whole-main proof remain pending. Web owns the next ordinary
+390/1280 review; this source delivery does not establish visual, native, protected-use or promoted-main acceptance.
+
 **Follows / private owner counts — shared Accounts ownership.** Edge authority: [Library module](../../services/kernel/src/library/README.md);
 count authority: [private follow counts](../private-follow-counts.md); delivered [simplification research](follow-counts-simplest.md).
 Follower-partition edges, implied/explicit precedence, `/library/following` and `/v1/follows` exist. Counts are designed,

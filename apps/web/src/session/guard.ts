@@ -8,6 +8,7 @@ type GuardContext = {
 };
 
 const signedInPaths = [
+  /^\/collections\/[^/]+\/publish(?:\/|$)/,
   /^\/operations(?:\/|$)/,
   /^\/editions\/?$/,
   /^\/editions\/new(?:\/|$)/,

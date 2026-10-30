@@ -6,13 +6,15 @@ import type { CollectionFilterProperty } from './collection-filters';
 import type { CollectionFilterParams } from './collection-filter-params';
 import type { LibraryPinsRead } from './pins-read';
 import type { MineCollection } from './mine-collections';
+import type { CollectionMember } from './reads';
 
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
 export type DynamicCollectionRead = {
   id: string;
   curatorAccountId?: string;
   membershipKind: 'dynamic';
-  builtinKind: DynamicBuiltinKind;
+  builtinKind?: DynamicBuiltinKind;
+  revision?: number;
   builtinLabels?: Record<string, string>;
   title?: string | null;
   description?: string | null;
@@ -31,15 +33,22 @@ export type CuratedCollectionRead = {
   visibility: 'private' | 'public' | 'unlisted';
   curator?: { handle: string | null; displayName: string | null } | null;
 };
-export type DynamicMemberRead = { kind: 'dynamic'; subjectId: string; subject?: unknown | null };
+export type DynamicMemberRead = {
+  kind: 'dynamic';
+  subjectId: string;
+  subject?: unknown | null;
+  facts?: CollectionMember['facts'];
+};
 export type DynamicMembersPage = { members: DynamicMemberRead[]; next: string | null };
 export type DynamicCollectionPage = {
   id: string;
   title: string;
-  builtinKind: DynamicBuiltinKind;
+  builtinKind: DynamicBuiltinKind | undefined;
+  revision?: number;
+  curatorAccountId?: string;
   description: string | null;
   curator: { handle: string | null; displayName: string | null } | null;
-  members: { subject: LibrarySubject | null }[];
+  members: { subjectId?: string; subject: LibrarySubject | null; facts?: CollectionMember['facts'] }[];
   cursor?: string;
   next: string | null;
   preparing: boolean;

@@ -154,6 +154,8 @@ export async function loadDynamicMembers(
   );
   return {
     members: page.members.map((member) => ({
+      subjectId: member.subjectId,
+      ...(member.facts ? { facts: member.facts } : {}),
       subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
     })),
     next: page.next,
@@ -326,6 +328,8 @@ export async function loadEditableCollectionPage(
   if (collection.membershipKind === 'dynamic') {
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
     const filterFields = {
+      ...(collection.revision === undefined ? {} : { revision: collection.revision }),
+      ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
       ...(input.filter ? { filter: input.filter } : {}),
       ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
       ...(input.filterType ? { filterType: input.filterType } : {}),
@@ -371,6 +375,8 @@ export async function loadEditableCollectionPage(
     );
     const dynamicMembers = {
       members: page.members.map((member) => ({
+        subjectId: member.subjectId,
+        ...(member.facts ? { facts: member.facts } : {}),
         subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
       })),
       next: page.next,
