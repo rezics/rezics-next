@@ -57,12 +57,16 @@ afterAll(async () => {
 
 test('The distinct joined native outcomes and three-scale bounded growth retain the existing owner contracts.', async () => {
   const { system, kernel, conceptId, thread } = world;
-  const growthTarget = await createReply(system, kernel, system.actors.author, thread, {
-    body: fromPlainText('Existing edit target for joined growth.'),
-    licence: 'MIT',
-    subjectIds: [conceptId],
-    parentId: thread.firstPost.id,
-  });
+  const growthTargets: ContentItem[] = [];
+  for (let index = 0; index < 36; index++)
+    growthTargets.push(
+      await createReply(system, kernel, system.actors.author, thread, {
+        body: fromPlainText(`Existing edit target ${index} for joined growth.`),
+        licence: 'MIT',
+        subjectIds: [conceptId],
+        parentId: thread.firstPost.id,
+      }),
+    );
   const unrelatedThread = await createSameRouteThread(
     system,
     kernel,
@@ -114,8 +118,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     const missingMediaId = newId(thread.route);
     const validBody = fromPlainText('A fixed joined growth edit: 東京と雪。');
     const invalidBody = fromPlainText('A fixed joined growth rejection: 限定。');
-    let expectedRevisionId = growthTarget.revisionId;
-    let repetition = 0;
+    const expectedHeads = new Map<string, string>();
 
     const report = await checkGrowth(growthDb, {
       name: 'Content revision edit, replay and media rejection with unrelated same-anchor growth',
@@ -127,13 +130,15 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         countsAtScale.set(scale, await fixtureCounts(database, tag, thread.route, unrelatedPost.id, partition, scale));
       },
       async operation(database, _scale, run) {
-        const key = `${seedName}-operation-${repetition++}-${run}`;
+        const growthTarget = growthTargets[run];
+        if (!growthTarget) throw new Error(`Growth operation index ${run} has no isolated target post`);
+        const key = `${seedName}-operation-${run}`;
         const body = {
           body: validBody,
           licence: 'CC-BY-4.0',
           subjectIds: [conceptId],
         };
-        const previous = expectedRevisionId;
+        const previous = growthTarget.revisionId;
         const edited = await call<RevisionResponse | Problem>(
           measuredKernel,
           system.actors.author,
@@ -146,7 +151,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         expect(edited.response.status).toBe(200);
         const revisionId = (edited.body as RevisionResponse).post.revisionId;
         expect(revisionId).not.toBe(previous);
-        expectedRevisionId = revisionId;
+        expectedHeads.set(growthTarget.id, revisionId);
 
         const replay = await call<RevisionResponse | Problem>(
           measuredKernel,
@@ -223,12 +228,18 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       'access.resource_denial',
     ]);
 
-    const head = await databaseHead(growthDb.admin, growthTarget.id);
+    expect(expectedHeads.size).toBeGreaterThan(0);
+    for (const [postId, revisionId] of expectedHeads)
+      expect(await databaseHead(growthDb.admin, postId)).toBe(revisionId);
+    const firstExpectedHead = expectedHeads.entries().next().value;
+    if (!firstExpectedHead) throw new Error('Growth operations did not commit an edit');
+    const [measuredPostId, expectedRevisionId] = firstExpectedHead;
+    const head = await databaseHead(growthDb.admin, measuredPostId);
     expect(head).toBe(expectedRevisionId);
     const measuredRevision = await growthDb.admin.query<{ body: Buffer; digest: Buffer; media_ids: string[] }>(
       `SELECT body,body_sha256 AS digest,media_ids FROM content.revision
        WHERE route=$1 AND post_id=$2 AND revision_id=$3`,
-      [thread.route, growthTarget.id, head],
+      [thread.route, measuredPostId, head],
     );
     expect(measuredRevision.rows).toHaveLength(1);
     const canonical = canonicalize(validBody);
