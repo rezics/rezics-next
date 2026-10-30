@@ -166,7 +166,7 @@ do not install a future-dated placeholder migration for this specification.
    bytes), `subject_account_id`, and the six native context locators above (`owner`, `actor`, `acting_human`,
    `operator`, `principal`, `source_client`). Use explicit columns, no JSON role list. The row also binds the
    original stable command key/approval locator while its consumer needs them. Bound a client to at most 16
-   current contacts under its existing lock. Contact keys and all service locators are at most 1 KiB. Address
+   current contacts under its existing lock. The encoded composite client/contact locator is at most 1 KiB in total; every other service locator has the same 1 KiB bound. Address
    validation/subject proof belongs to the adopted producer, never to erasure.
 3. For `auth_registration_stage`, add `erasure_actor_id`, `erasure_human_id`, `erasure_principal_id`,
    `erasure_client_id`, `erasure_source_client_id` and a typed original approval locator. Keep existing
