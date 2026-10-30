@@ -23,6 +23,7 @@ export function RemovedPost({
   restoreError,
   existingReviewId,
   deadlineUnknown = false,
+  restored = false,
   onRefresh,
   onCopyLink,
   onRestore,
@@ -39,6 +40,7 @@ export function RemovedPost({
   restoreError?: string | undefined;
   existingReviewId?: string | undefined;
   deadlineUnknown?: boolean;
+  restored?: boolean;
   onRefresh?: () => void;
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;
@@ -84,8 +86,8 @@ export function RemovedPost({
     );
   }
 
-  const reason = deleted ? 'deleted' : 'unavailable';
-  const ownedRestorableUntil = owner && deleted ? restorableUntil : undefined;
+  const reason = deleted && !restored ? 'deleted' : 'unavailable';
+  const ownedRestorableUntil = owner && deleted && !restored ? restorableUntil : undefined;
   return (
     <ListRow {...common}>
       {children}
@@ -119,14 +121,18 @@ export function RemovedPost({
       {deadlineUnknown ? (
         <div className="mt-3 space-y-2 text-sm text-muted-foreground">
           <p>{m.thread_post_restore_deadline_unknown()}</p>
-          {onRestore ? <Button variant="outline" size="sm" onClick={onRestore}>{m.thread_post_restore()}</Button> : null}
+          {onRestore ? (
+            <Button variant="outline" size="sm" onClick={onRestore}>{m.thread_post_restore()}</Button>
+          ) : null}
         </div>
       ) : null}
       {restoreError ? (
         <div className="mt-3 space-y-2 text-sm" role="alert">
           <p className="text-destructive">{restoreError}</p>
           {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
-          {onRefresh ? <Button variant="outline" size="sm" onClick={onRefresh}>{m.thread_post_refresh()}</Button> : null}
+          {onRefresh ? (
+            <Button variant="outline" size="sm" onClick={onRefresh}>{m.thread_post_refresh()}</Button>
+          ) : null}
         </div>
       ) : null}
     </ListRow>

@@ -177,6 +177,14 @@ test('a known restore 204 followed by a failed read retries the read without rep
   expect(reads).toBe(3);
   expect(restore).toHaveBeenCalledTimes(1);
   expect(ui.changes.every((post) => post.body === null)).toBe(true);
+  const html = removedMarkup(tombstone, {
+    restored: true,
+    restoreError: m.thread_post_restore_read_failure(),
+    onRefresh: () => {},
+  });
+  expect(html).toContain(m.thread_post_restore_read_failure());
+  expect(html).toContain(m.thread_post_refresh());
+  expect(html).not.toContain(m.thread_post_deleted());
 });
 
 test('an uncertain restore checks current eligibility and reuses its original key', async () => {

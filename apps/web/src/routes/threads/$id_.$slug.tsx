@@ -108,7 +108,9 @@ function ThreadPage() {
     session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
   const currentRead = useRef({ scope: readScope, sequence: 0 });
   if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
-  useEffect(() => () => { currentRead.current = { scope: {}, sequence: 0 }; }, []);
+  useEffect(() => () => {
+    currentRead.current = { scope: {}, sequence: 0 };
+  }, []);
   useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
 
   useEffect(() => {
@@ -144,12 +146,14 @@ function ThreadPage() {
     return updated;
   }
 
-  if (currentPageUnavailable) return (
-    <div role="alert" className="space-y-3 p-4">
-      <p>{m.thread_post_unavailable()}</p>
-      <Button onClick={() => void refreshThreadPage().catch(() => {})}>{m.thread_post_refresh()}</Button>
-    </div>
-  );
+  if (currentPageUnavailable) {
+    return (
+      <div role="alert" className="space-y-3 p-4">
+        <p>{m.thread_post_unavailable()}</p>
+        <Button onClick={() => void refreshThreadPage().catch(() => {})}>{m.thread_post_refresh()}</Button>
+      </div>
+    );
+  }
 
   return (
     <ThreadReading
@@ -269,9 +273,20 @@ export function ThreadReadingPost({
   const menuButton = useRef<HTMLButtonElement>(null);
   const itemElement = useRef<HTMLLIElement>(null);
   const deleteKey = useRef<string | undefined>(undefined);
-  const scope = useMemo(() => ({}), [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id]);
+  const scope = useMemo(
+    () => ({}),
+    [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id],
+  );
   const feedbackScope = useRef(scope);
-  const intent = useRef({ scope, key: undefined as string | undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 });
+  const intent = useRef({
+    scope,
+    key: undefined as string | undefined,
+    pending: false,
+    applied: false,
+    uncertain: false,
+    deleted: false,
+    read: 0,
+  });
   if (intent.current.scope !== scope) {
     intent.current = { scope, key: undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 };
     deleteKey.current = undefined;
@@ -336,7 +351,11 @@ export function ThreadReadingPost({
       return current;
     } catch {
       if (intent.current === command && command.read === read) {
-        setRestoreError(command.applied ? m.thread_post_restore_read_failure() : command.uncertain ? m.thread_post_restore_unknown() : m.thread_post_delete_read_failure());
+        setRestoreError(
+          command.applied ? m.thread_post_restore_read_failure()
+            : command.uncertain ? m.thread_post_restore_unknown()
+              : m.thread_post_delete_read_failure(),
+        );
       }
       return;
     }
@@ -377,6 +396,7 @@ export function ThreadReadingPost({
         return;
       }
       command.applied = true;
+      command.deleted = false;
       command.uncertain = false;
       command.key = undefined;
       restorePostFocus.current = true;
@@ -431,7 +451,10 @@ export function ThreadReadingPost({
   if (post.availability !== 'available') {
     const canRestore =
       post.availability === 'erased' &&
-      signedIn && personalReady && viewerId !== undefined && !intent.current.applied &&
+      signedIn &&
+      personalReady &&
+      viewerId !== undefined &&
+      !intent.current.applied &&
       (intent.current.deleted || Boolean('restorableUntil' in post && post.restorableUntil));
     return (
       <RemovedPost
@@ -445,6 +468,7 @@ export function ThreadReadingPost({
         {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
         restoreError={feedbackScope.current === scope ? restoreError : ''}
         existingReviewId={feedbackScope.current === scope ? existingReviewId : undefined}
+        restored={intent.current.applied}
         deadlineUnknown={intent.current.deleted && !('restorableUntil' in post && post.restorableUntil)}
         {...(feedbackScope.current === scope && restoreError ? { onRefresh: () => void refreshCurrentPost() } : {})}
         onCopyLink={copyLink}

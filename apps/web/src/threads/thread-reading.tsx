@@ -55,7 +55,9 @@ export function ThreadReading({
   // Replace the complete disclosure together, including bylines, media, placement and title.
   const page = reading.source === sourcePage ? reading.page : sourcePage;
   if (reading.source !== sourcePage) setReading({ source: sourcePage, page: sourcePage });
-  const { thread, realm, posts, authors, provenanceSubjects, verification, mentions: currentMentions, now, documentMedia } = page;
+  const {
+    thread, realm, posts, authors, provenanceSubjects, verification, mentions: currentMentions, now, documentMedia,
+  } = page;
   const displayTitle = thread.title;
   function setPosts(update: (posts: ThreadReadingPage['posts']) => ThreadReadingPage['posts']) {
     setReading((current) => ({ ...current, page: { ...current.page, posts: update(current.page.posts) } }));
@@ -68,10 +70,15 @@ export function ThreadReading({
   const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = session === 'signed-in' ? personal : undefined;
-  const refreshScope = useMemo(() => ({}), [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId]);
+  const refreshScope = useMemo(
+    () => ({}),
+    [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId],
+  );
   const currentRefresh = useRef(refreshScope);
   currentRefresh.current = refreshScope;
-  useEffect(() => () => { currentRefresh.current = {}; }, []);
+  useEffect(() => () => {
+    currentRefresh.current = {};
+  }, []);
   // A private query can temporarily have no data when its post IDs change. Keep the local draft and intent mounted,
   // but expose no participation controls until current personal data is available again.
   const composer = useRef<{ viewerId: string | null; initialKey: string } | null>(null);
