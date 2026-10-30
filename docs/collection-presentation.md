@@ -134,19 +134,19 @@ URLs, or invent source, credit, container or retention claims. The existing serv
 The table separates current dev operations from selected missing runtime. Existing write idempotency, native
 current grants and response envelopes remain; selected additions do not make the current closed schemas accept them.
 
-| Endpoint and body | Existing dev | Missing runtime / selected result |
-| --- | --- | --- |
-| `POST /v1/collections {title,description?,visibility}` | Metadata create, `201 {collection}` | Optional `presentationKind`, `coverMediaId`; dynamic create below |
-| `GET /v1/collections?curatorAccountId=...` and `GET /v1/collections/{collectionId}` | Paged list and detail | Kind/cover projections above |
-| `PATCH /v1/collections/{collectionId} {revision,title?,description?,visibility?}` | `200 {collection}`, required numeric revision | Optional `presentationKind`, `coverMediaId`, same current authorization/CAS |
-| `POST /v1/collections/{collectionId}/members {subjectId,note?,after?}` | `201 {member}` | Current parent revision/lifecycle integration |
-| `PATCH /v1/collections/{collectionId}/members/{memberId} {note}` | `200 {member}` | Current parent revision/lifecycle integration |
-| `DELETE /v1/collections/{collectionId}/members/{memberId}` | `204` | Current parent revision/deletion headers and exact Undo are in-flight, not delivered |
-| `POST /v1/collections/{collectionId}/members/{memberId}:move {after}` | `200 {member}`; intra-Collection reorder | Not cross-Collection transfer; current parent CAS/lifecycle integration remains required |
-| `POST /v1/collections/{collectionId}/members:batchRemove {revision,memberIds}` | Absent | `200 {collection,removed:[{memberId,deletionId,revision}]}` |
-| `POST /v1/collections/{collectionId}/members:move {revision,memberIds,destinationCollectionId,destinationRevision,after}` | Absent | `200 {source,destination,members}` |
-| `POST /v1/collections {membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}` | Absent | Saved-dynamic create, `201 {collection}` |
-| `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}` | Absent | `200 {collection}` |
+| Endpoint and body                                                                                                                   | Existing dev                                  | Missing runtime / selected result                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `POST /v1/collections {title,description?,visibility}`                                                                              | Metadata create, `201 {collection}`           | Optional `presentationKind`, `coverMediaId`; dynamic create below                        |
+| `GET /v1/collections?curatorAccountId=...` and `GET /v1/collections/{collectionId}`                                                 | Paged list and detail                         | Kind/cover projections above                                                             |
+| `PATCH /v1/collections/{collectionId} {revision,title?,description?,visibility?}`                                                   | `200 {collection}`, required numeric revision | Optional `presentationKind`, `coverMediaId`, same current authorization/CAS              |
+| `POST /v1/collections/{collectionId}/members {subjectId,note?,after?}`                                                              | `201 {member}`                                | Current parent revision/lifecycle integration                                            |
+| `PATCH /v1/collections/{collectionId}/members/{memberId} {note}`                                                                    | `200 {member}`                                | Current parent revision/lifecycle integration                                            |
+| `DELETE /v1/collections/{collectionId}/members/{memberId}`                                                                          | `204`                                         | Current parent revision/deletion headers and exact Undo are in-flight, not delivered     |
+| `POST /v1/collections/{collectionId}/members/{memberId}:move {after}`                                                               | `200 {member}`; intra-Collection reorder      | Not cross-Collection transfer; current parent CAS/lifecycle integration remains required |
+| `POST /v1/collections/{collectionId}/members:batchRemove {revision,memberIds}`                                                      | Absent                                        | `200 {collection,removed:[{memberId,deletionId,revision}]}`                              |
+| `POST /v1/collections/{collectionId}/members:move {revision,memberIds,destinationCollectionId,destinationRevision,after}`           | Absent                                        | `200 {source,destination,members}`                                                       |
+| `POST /v1/collections {membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}` | Absent                                        | Saved-dynamic create, `201 {collection}`                                                 |
+| `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}`                                                                   | Absent                                        | `200 {collection}`                                                                       |
 
 All curated editing preserves occurrence IDs, notes, added times and duplicates, existing ordinal bounds,
 parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
