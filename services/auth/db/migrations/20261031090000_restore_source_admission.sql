@@ -3,11 +3,15 @@
 -- from startup time. This record proves neither backup custody nor Source EOF.
 CREATE TABLE auth_restore_generation (
   generation text PRIMARY KEY CHECK(octet_length(generation) BETWEEN 1 AND 1024),
-  inventory jsonb NOT NULL CHECK(octet_length(inventory::text)<=16384)
+  inventory jsonb CHECK(octet_length(inventory::text)<=16384),
+  native_coverage_started boolean NOT NULL DEFAULT false,
+  CHECK(NOT native_coverage_started OR inventory IS NOT NULL)
 );
 CREATE FUNCTION auth_restore_identity_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP='DELETE' OR NEW IS DISTINCT FROM OLD THEN
+  IF TG_OP='DELETE' OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR (OLD.inventory IS NOT NULL AND NEW.inventory IS DISTINCT FROM OLD.inventory)
+    OR (OLD.native_coverage_started AND NOT NEW.native_coverage_started) THEN
     RAISE EXCEPTION 'Auth restore identity is immutable' USING ERRCODE='23514';
   END IF;
   RETURN NEW;

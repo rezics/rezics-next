@@ -26,19 +26,21 @@ function closedOptions(database: Pool): AuthServiceOptions {
   };
 }
 
-// No database is contacted: refusal must precede signer/Better Auth/SDK work.
+// Only the unverified declaration is stored: refusal precedes signer/SDK work.
 // A dependency returning a readiness flag cannot bypass the missing Source API.
 test('An explicitly restored Auth generation remains closed before handler issuer workflow and writer admission until exact independent Source obligations and genuine original native progress are reconciled without renewing consent deadlines or claiming backup custody', async () => {
-  const database = new Pool({
-    connectionString: 'postgres://restore:restore@127.0.0.1:1/closed',
-    connectionTimeoutMillis: 100,
-  });
+  const fixture = testDatabase();
+  const database = new Pool({ connectionString: fixture.url });
   try {
     await expect(createAuthService(closedOptions(database))).rejects.toMatchObject({
       name: 'AuthRestoreAdmissionError',
       code: 'database-owner-unavailable',
     });
-    expect(database.totalCount).toBe(0);
+    expect(
+      (await database.query('SELECT inventory,native_coverage_started FROM auth_restore_generation')).rows,
+    ).toEqual([{ inventory: null, native_coverage_started: false }]);
+    await expect(requireRestoredAuthAdmission(database)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
+    expect((await database.query('SELECT 1 FROM auth_signing_key LIMIT 1')).rowCount).toBe(0);
     await expect(
       createAuthHost({
         ...closedOptions(database),
@@ -51,12 +53,14 @@ test('An explicitly restored Auth generation remains closed before handler issue
     expect(database.ended).toBe(true);
   } finally {
     if (!database.ended) await database.end();
+    fixture.close();
   }
 });
 
 test('missing or ambiguous verified lineage refuses construction without reading or logging native payload', async () => {
   for (const pending of ['restore-lineage-unavailable', 'restore-lineage-mismatch'] as const) {
-    const database = new Pool({ connectionString: 'postgres://restore:restore@127.0.0.1:1/closed' });
+    const fixture = testDatabase();
+    const database = new Pool({ connectionString: fixture.url });
     try {
       const options = closedOptions(database);
       options.restoredGeneration!.databaseOwner = {
@@ -71,9 +75,12 @@ test('missing or ambiguous verified lineage refuses construction without reading
         name: 'AuthRestoreAdmissionError',
         code: pending,
       });
-      expect(database.totalCount).toBe(0);
+      expect((await database.query('SELECT inventory FROM auth_restore_generation')).rows).toEqual([
+        { inventory: null },
+      ]);
     } finally {
       await database.end();
+      fixture.close();
     }
   }
 });
@@ -146,7 +153,7 @@ test('recover original committed Auth progress beyond the snapshot, replay bound
     };
     const inventory: AuthRestoreInventory = {
       generation: 'native-fixture-copy-one',
-      databaseIdentity: copy.url,
+      databaseIdentity: 'native-fixture-auth-database',
       inventoryEntry: 'isolated-native-fixture',
       inventoryVersion: 'one',
       sourceCluster: 'fixture-cluster',
@@ -194,6 +201,11 @@ test('recover original committed Auth progress beyond the snapshot, replay bound
     });
     // Omitting the deployment declaration cannot bypass an already bound image.
     await expect(requireRestoredAuthAdmission(restored)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
+    await replayRestoredAuthPage(restored, restoredGeneration, id);
+    expect(
+      (await restored.query('SELECT store_index FROM auth_native_role_deployment WHERE singleton')).rows[0]!
+        .store_index,
+    ).toBe(0);
     await installNativeRoleCoverage(restored);
     for (let i = 0; i < 100; i++) if (!(await reconcileNativeRoleCoveragePage(restored))) break;
     // The original real deletion consumer must have actually discharged its
@@ -293,7 +305,7 @@ test('missing original Auth tail stays pending even when an old restored image h
         async verifyRestoredDatabase() {
           return {
             generation: 'missing-native-tail',
-            databaseIdentity: fixture.url,
+            databaseIdentity: 'native-fixture-auth-database',
             inventoryEntry: 'fixture',
             inventoryVersion: 'one',
             sourceCluster: 'fixture',

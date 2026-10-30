@@ -27,14 +27,15 @@ loading or Better Auth construction. Consequently `createAuthHost` cannot return
 an active service/handler before `start()`: refusal also precedes workflow SDK
 registration/recovery, maintenance, client registration and mail writers. Host
 refusal closes its owned pools; library refusal leaves the caller's pool owned
-by the caller. A durable restore marker also refuses subsequent construction
-that omits the deployment declaration. Unmarked fresh library/host construction
+by the caller. A durable unverified declaration is retained even when the owner is missing;
+its null inventory proves no backup boundary. The marker refuses subsequent
+construction that omits the deployment declaration. Unmarked fresh library/host construction
 retains its ordinary lifecycle. Physical isolation of unmarked old snapshots and
 old executors remains the deployment owner's responsibility.
 
 `AuthRestoreDatabaseOwner` in [restore-admission.ts](src/restore-admission.ts)
 is the explicit trusted dependency for verifying the connected database against
-its inventory entry/version, original cluster/timeline/source lineage, capture
+its nonsecret database identity, inventory entry/version, original cluster/timeline/source lineage, capture
 point and recoverable committed native tail beyond the snapshot. Its exact
 account recovery returns original native identity, checkpoint, captured floor,
 applicability, first user-deletion/consent cutoff and genuine original consumer
@@ -53,8 +54,8 @@ original progress and per-generation checkpoints beside the existing obligation.
 `replayRestoredAuthPage` reuses the native store/role/client engine and original
 consumer proofs, at most one native unit per call (48 raw keys, 1 KiB per locator,
 64 KiB whole-step ceiling), followed on later calls by existing shared-copy work.
-Each generation revisits reintroduced bytes, including an image carrying older
-completion. Original first consent due evidence is retained, without another
+Each generation restarts the existing native role classification and revisits
+reintroduced bytes, including an image carrying older completion. Original first consent due evidence is retained, without another
 310-second wait; a proved never-established cutoff uses the existing native
 first deletion transaction. Missing original consumer release stays pending.
 No approval, credential effect or 30-minute source authorization is renewed.

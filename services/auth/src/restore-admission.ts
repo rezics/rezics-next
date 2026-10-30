@@ -110,7 +110,21 @@ async function inventoryFor(database: Pool, restored: AuthRestoredGeneration): P
   }
   if (!result || typeof result !== 'object') fail('restore-lineage-unavailable');
   if ('pending' in result) fail(result.pending);
-  if (result.generation !== restored.generation || !Object.values(result).every(key)) fail('restore-lineage-mismatch');
+  if (
+    result.generation !== restored.generation ||
+    ![
+      result.generation,
+      result.databaseIdentity,
+      result.inventoryEntry,
+      result.inventoryVersion,
+      result.sourceCluster,
+      result.sourceTimeline,
+      result.sourceLineage,
+      result.capturePoint,
+      result.committedNativeTail,
+    ].every(key)
+  )
+    fail('restore-lineage-mismatch');
   return result;
 }
 
@@ -118,8 +132,8 @@ async function bindInventory(database: Pool, inventory: AuthRestoreInventory) {
   // A single exact identity; this is NOT a backup catalogue or physical proof.
   const result = await database.query(
     `INSERT INTO auth_restore_generation(generation,inventory) VALUES ($1,$2::jsonb)
-     ON CONFLICT(generation) DO UPDATE SET generation=EXCLUDED.generation
-     WHERE auth_restore_generation.inventory=EXCLUDED.inventory RETURNING generation`,
+     ON CONFLICT(generation) DO UPDATE SET inventory=EXCLUDED.inventory
+     WHERE auth_restore_generation.inventory IS NULL OR auth_restore_generation.inventory=EXCLUDED.inventory RETURNING generation`,
     [inventory.generation, JSON.stringify(inventory)],
   );
   if (!result.rowCount) fail('restore-lineage-mismatch');
@@ -266,12 +280,15 @@ function validateProgress(progress: AuthRestoreNativeProgress, accountId: string
     source.route >= 4096 ||
     !Number.isSafeInteger(source.version) ||
     source.version < 1 ||
+    source.version > 2147483647 ||
     !key(source.at) ||
+    Buffer.byteLength(source.at) > 64 ||
     !timestamp(source.at) ||
     !key(progress.originalNativeId) ||
     !key(progress.checkpoint) ||
     !Number.isSafeInteger(progress.floor) ||
     progress.floor < 0 ||
+    progress.floor > 2147483647 ||
     !timestamp(progress.acceptedAt) ||
     typeof progress.applicable !== 'boolean'
   )
@@ -326,8 +343,36 @@ export async function replayRestoredAuthPage(
       'SELECT armed FROM auth_native_role_deployment WHERE singleton AND version=1',
     )
   ).rows[0];
-  if (!deployment?.armed) {
+  const generation = (
+    await database.query<{ native_coverage_started: boolean }>(
+      'SELECT native_coverage_started FROM auth_restore_generation WHERE generation=$1',
+      [restored.generation],
+    )
+  ).rows[0]!;
+  if (!deployment?.armed || !generation.native_coverage_started) {
     await installNativeRoleCoverage(database);
+    const connection = await database.connect();
+    try {
+      await connection.query('BEGIN');
+      // Same deployment lock order as native role discovery. An older image's
+      // EOF cannot classify reintroduced version-zero rows for a new image.
+      await connection.query('SELECT 1 FROM auth_native_role_deployment WHERE singleton FOR UPDATE');
+      const claimed = await connection.query(
+        `UPDATE auth_restore_generation SET native_coverage_started=true
+         WHERE generation=$1 AND NOT native_coverage_started RETURNING generation`,
+        [restored.generation],
+      );
+      if (claimed.rowCount) {
+        await connection.query('UPDATE auth_native_role_deployment SET store_index=0 WHERE singleton');
+        await connection.query('UPDATE auth_copy_coverage SET native_covered=false WHERE singleton');
+      }
+      await connection.query('COMMIT');
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    } finally {
+      connection.release();
+    }
     return { pending: 'native-replay-pending' };
   }
   if (await reconcileNativeRoleCoveragePage(database)) return { pending: 'native-replay-pending' };
@@ -355,6 +400,13 @@ export async function requireRestoredAuthAdmission(database: Pool, restored?: Au
     if (marked.rowCount) fail('restore-lineage-unavailable');
     return;
   }
+  if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
+  // Record the declaration even when its owner is missing. NULL inventory is
+  // explicitly UNVERIFIED, and can never authorize replay or admission. A later
+  // construction cannot turn this same image into a fresh database by omission.
+  await database.query('INSERT INTO auth_restore_generation(generation) VALUES ($1) ON CONFLICT DO NOTHING', [
+    restored.generation,
+  ]);
   const inventory = await inventoryFor(database, restored);
   await bindInventory(database, inventory);
   fail('source-authority-unavailable');
