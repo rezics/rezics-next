@@ -15,13 +15,14 @@ WITH input AS NOT MATERIALIZED (
       AND m.deletion_revision=input.expected_revision AND m.purge_after > input.time)
     AND NOT EXISTS (SELECT 1 FROM library.collection_member occupied WHERE occupied.route=input.route
       AND occupied.collection_id=input.collection_id AND occupied.deletion_id IS NULL
-      AND occupied.member_id<>input.member_id AND occupied.ordinal_key=(SELECT saved.ordinal_key
+      AND occupied.member_id<>input.member_id AND occupied.ordinal_key=(SELECT saved.deleted_ordinal_key
         FROM library.collection_member saved WHERE saved.route=input.route AND saved.collection_id=input.collection_id
           AND saved.member_id=input.member_id AND saved.deletion_id=input.deletion_id))
   RETURNING collection.route, collection.collection_id
 ), restored AS (
   UPDATE library.collection_member AS member
-  SET deletion_id=NULL, deletion_revision=NULL, deleted_at=NULL, purge_after=NULL,
+  SET ordinal_key=member.deleted_ordinal_key, deleted_ordinal_key=NULL,
+      deletion_id=NULL, deletion_revision=NULL, deleted_at=NULL, purge_after=NULL,
       member_revision=member_revision+1, transaction_id=input.transaction_id
   FROM input JOIN parent USING(route, collection_id)
   WHERE member.route=input.route AND member.collection_id=input.collection_id AND member.member_id=input.member_id

@@ -45,6 +45,7 @@ export type CollectionMemberRow = {
   deletionRevision?: number | null;
   deletedAt?: string | null;
   purgeAfter?: string | null;
+  deletedOrdinalKey?: string | null;
   memberRevision?: number;
 };
 

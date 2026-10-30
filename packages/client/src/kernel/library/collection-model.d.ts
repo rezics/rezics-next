@@ -38,6 +38,12 @@ export type CollectionMemberRow = {
     ordinalKey: string;
     addedAt: string;
     transactionId: string;
+    deletionId?: string | null;
+    deletionRevision?: number | null;
+    deletedAt?: string | null;
+    purgeAfter?: string | null;
+    deletedOrdinalKey?: string | null;
+    memberRevision?: number;
 };
 /** Member view; subject IDs are deliberately not unique within a Collection. */
 export type CollectionMember = Omit<CollectionMemberRow, 'route' | 'memberId' | 'transactionId'> & {

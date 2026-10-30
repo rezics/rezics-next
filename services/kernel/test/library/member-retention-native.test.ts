@@ -182,6 +182,34 @@ test('original placement collision rolls back; deleted parents never revive thro
   expect((await f.send(owner.bearer, 'POST', m.path + ':restore', removed)).status).toBe(404);
 });
 
+test('deleted parent stays deleted when an otherwise valid member episode is restored', async () => {
+  const m = await make();
+  const removed = await m.remove();
+  const parent = await m.parent();
+  expect((await f.send(owner.bearer, 'DELETE', `${m.root}?revision=${parent.revision}`)).status).toBe(204);
+  const before = await m.snapshot();
+  expect((await f.send(owner.bearer, 'POST', m.path + ':restore', removed)).status).toBe(404);
+  expect(await m.snapshot()).toEqual(before);
+});
+
+test('restore respects the live 5000 member cap while preserving the retained episode', async () => {
+  const m = await make();
+  for (let n = 1; n < 5000; n++) {
+    if (n % 16 === 0) {
+      owner.bearer = await accountToken(owner.actor);
+      owner.actor = await f.access.authenticate(owner.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
+    }
+    await f.commands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: `filler ${n}` }, entryKey());
+  }
+  const removed = await m.remove();
+  await f.commands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: 'replacement at cap' }, entryKey());
+  const before = await m.snapshot();
+  const response = await f.send(owner.bearer, 'POST', m.path + ':restore', removed);
+  expect(response.status).toBe(409);
+  expect((await response.json()).code).toBe('collection_full');
+  expect(await m.snapshot()).toEqual(before);
+}, 300000);
+
 test('fresh Undo rechecks current native subject concealment without exposing the retained note', async () => {
   const m = await make();
   const removed = await m.remove();

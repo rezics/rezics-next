@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { newId } from '../route/route.ts';
 import type {
   Collection,
   CollectionChanges,
@@ -270,10 +271,17 @@ export async function deleteMember(
   route: number,
   collectionId: string,
   memberId: string,
-  expectedRevision: number,
-  deletionId: string,
-  context: WriteContext,
+  expectedRevisionOrContext: number | WriteContext,
+  deletionIdOrContext?: string | WriteContext,
+  suppliedContext?: WriteContext,
 ): Promise<(CollectionMember & { deletionId: string; revision: number }) | null> {
+  const legacy = typeof expectedRevisionOrContext !== 'number';
+  const expectedRevision = legacy
+    ? (await readCollection(client, route, collectionId))?.revision
+    : expectedRevisionOrContext;
+  const context = legacy ? expectedRevisionOrContext : suppliedContext;
+  const deletionId = legacy ? newId(route) : deletionIdOrContext;
+  if (!expectedRevision || !context || typeof deletionId !== 'string') return null;
   const rows = await memberDelete.run(queryClient(client), {
     route,
     collection_id: collectionId,

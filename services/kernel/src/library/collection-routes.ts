@@ -91,6 +91,10 @@ const failures = {
     'deadline_exceeded',
   ),
 };
+const memberRestoreFailures = {
+  ...failures,
+  409: problemSchema('conflict', 'collection_full', 'member_restore_stale', 'member_restore_occupied', 'member_restore_expired'),
+};
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 function detail(operationId: string, action: string, anonymous = false) {
   return {
@@ -383,12 +387,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
     )
     .post(
-      '/v1/collections/:collectionId/members/:memberId:restore',
+      customMethod('/v1/collections/:collectionId/members/:memberId', 'restore'),
       {
         params: memberParams,
         headers,
         body: strict(t.Object({ deletionId: id, revision }, closed)),
-        response: { 200: memberResponse, ...failures },
+        response: { 200: memberResponse, ...memberRestoreFailures },
         detail: detail('collection_member.restore', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {

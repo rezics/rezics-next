@@ -38,6 +38,10 @@ export const LIBRARY_EVENTS = {
     { collectionId: id, memberId: id, subjectId: id },
     { additionalProperties: false },
   ),
+  'com.rezics.library.collection.member.purged.v1': Type.Object(
+    { memberId: id, deletionId: id },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.collection.listing.changed.v1': Type.Object(
     { collectionId: id },
     { additionalProperties: false },

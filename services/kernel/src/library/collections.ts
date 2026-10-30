@@ -639,18 +639,12 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
       requestKey,
       { collectionId, memberId, deletionId: deletion.deletionId, revision: expectedRevision },
       async (tx, command) => {
-        await activeCollection(tx, route, collectionId);
+        const parent = await activeCollection(tx, route, collectionId);
         const saved = await readMemberDeletion(tx, route, collectionId, memberId);
         if (!saved || saved.deletionId !== deletion.deletionId) throw notFound();
-        if (saved.deletionRevision !== expectedRevision) throw new ProblemError('member_restore_stale');
         if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
           throw new ProblemError('member_restore_expired');
-        const collision = await tx.query(
-          `SELECT 1 FROM library.collection_member
-            WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key=$3 AND member_id<>$4 LIMIT 1`,
-          [route, collectionId, saved.ordinalKey, memberId],
-        );
-        if (collision.rows.length) throw new ProblemError('member_restore_occupied');
+        if (saved.deletionRevision !== expectedRevision) throw new ProblemError('member_restore_stale');
         const subject = await resolveSubject(
           { pool, access, ...(clock ? { clock } : {}) },
           accountActor(actor),
@@ -658,6 +652,13 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         );
         if (!subject || (subject.subjectId !== saved.subjectId && subject.requestedSubjectId !== saved.subjectId))
           throw notFound();
+        if (parent.memberCount >= MEMBER_LIMIT) throw new ProblemError('collection_full');
+        const collision = await tx.query(
+          `SELECT 1 FROM library.collection_member
+            WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key=$3 AND member_id<>$4 LIMIT 1`,
+          [route, collectionId, saved.ordinalKey, memberId],
+        );
+        if (collision.rows.length) throw new ProblemError('member_restore_occupied');
         const value = await restoreMemberRow(
           tx,
           route,
