@@ -50,7 +50,7 @@ test('Inbox stories enter the inbox route through the shared page story shell', 
   const source = await readFile(new URL('../src/stories/inbox.stories.tsx', import.meta.url), 'utf8');
   expect(source).toContain("import { PageStory } from './page'");
   expect(source).toContain('<PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />');
-  expect(source).toContain("title: 'Pages/Inbox'");
+  expect(source).toContain("title: 'Pages/Account/Inbox'");
 });
 
 test('the inbox renders notifications as ListRows, with an actor avatar or kind icon, and distinguishes unread rows', () => {
