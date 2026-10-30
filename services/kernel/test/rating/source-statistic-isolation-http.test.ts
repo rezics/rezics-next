@@ -39,7 +39,7 @@ async function readProblem(response: Response, status: number): Promise<Record<s
 }
 
 async function until<T>(read: () => Promise<T>, ready: (value: T) => boolean, label: string): Promise<T> {
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 60_000;
   let value = await read();
   while (!ready(value) && Date.now() < deadline) {
     await Bun.sleep(25);
@@ -117,6 +117,73 @@ async function mutationState(subjectId: string): Promise<unknown> {
     [route, partition, subjectId],
   );
   return result.rows[0];
+}
+
+type NativePriorProgress = {
+  committedVotes: string;
+  sourceEvents: string;
+  deliveredEvents: string;
+  appliedVotes: string;
+  aggregateCount: string;
+  aggregateSum: string;
+  totalCount: string;
+  totalSum: string;
+  priorStartCount: string | null;
+  priorMean: string | null;
+  priorThreshold: string | null;
+  publishedFigures: string;
+};
+
+async function nativePriorProgress(subjectIds: readonly string[]): Promise<NativePriorProgress> {
+  const result = await fixture.database.admin.query<NativePriorProgress>(
+    `WITH source_votes AS MATERIALIZED (
+       SELECT vote.route, vote.voter_id, vote.question_id, vote.target_id, vote.transaction_id
+       FROM rating.vote AS vote
+       WHERE vote.question_id = $2 AND vote.target_id = ANY($1::uuid[]) AND vote.units = 4
+     ), source_events AS MATERIALIZED (
+       SELECT receipt.partition_no, receipt.epoch, receipt.position, event.id
+       FROM source_votes AS vote
+       JOIN core.receipt AS receipt
+         ON receipt.partition_no = (vote.route >> 4) AND receipt.transaction_id = vote.transaction_id
+       JOIN core.outbox AS event
+         ON event.partition_no = receipt.partition_no AND event.position = receipt.position
+        AND event.type = 'com.rezics.rating.vote.changed.v1'
+        AND event.data ->> 'targetId' = vote.target_id::text
+     )
+     SELECT
+       (SELECT count(*)::text FROM source_votes) AS "committedVotes",
+       (SELECT count(*)::text FROM source_events) AS "sourceEvents",
+       (SELECT count(*)::text FROM source_events AS event
+        JOIN core.consumer_checkpoint AS checkpoint
+          ON checkpoint.partition_no = event.partition_no AND checkpoint.consumer = 'effects'
+         AND (checkpoint.epoch > event.epoch OR
+              (checkpoint.epoch = event.epoch AND checkpoint.position >= event.position))) AS "deliveredEvents",
+       (SELECT count(*)::text FROM rating.population_vote AS vote
+        WHERE vote.question_id = $2 AND vote.population_id = $3
+          AND vote.target_id = ANY($1::uuid[]) AND vote.units = 4) AS "appliedVotes",
+       (SELECT coalesce(sum(component.count), 0)::text FROM rating.aggregate_component AS component
+        WHERE component.question_id = $2 AND component.population_id = $3
+          AND component.target_id = ANY($1::uuid[])) AS "aggregateCount",
+       (SELECT coalesce(sum(component.sum), 0)::text FROM rating.aggregate_component AS component
+        WHERE component.question_id = $2 AND component.population_id = $3
+          AND component.target_id = ANY($1::uuid[])) AS "aggregateSum",
+       (SELECT coalesce(sum(component.count), 0)::text FROM rating.population_total_component AS component
+        WHERE component.question_id = $2 AND component.population_id = $3) AS "totalCount",
+       (SELECT coalesce(sum(component.sum), 0)::text FROM rating.population_total_component AS component
+        WHERE component.question_id = $2 AND component.population_id = $3) AS "totalSum",
+       (SELECT epoch.start_count::text FROM rating.population_prior_epoch AS epoch
+        WHERE epoch.question_id = $2 AND epoch.population_id = $3) AS "priorStartCount",
+       (SELECT epoch.m::text FROM rating.population_prior_epoch AS epoch
+        WHERE epoch.question_id = $2 AND epoch.population_id = $3) AS "priorMean",
+       (SELECT epoch.c::text FROM rating.population_prior_epoch AS epoch
+        WHERE epoch.question_id = $2 AND epoch.population_id = $3) AS "priorThreshold",
+       (SELECT count(*)::text FROM rating.public_figure AS figure
+        WHERE figure.question_id = $2 AND figure.population_id = $3
+          AND figure.subject_id = ANY($1::uuid[]) AND figure.count = 5
+          AND figure.mean = 2 AND figure.score = 2) AS "publishedFigures"`,
+    [subjectIds, STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
+  );
+  return result.rows[0]!;
 }
 
 async function castVote(subjectId: string, voter: IsolationActor, units: number): Promise<void> {
@@ -197,6 +264,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(await sourceStatistics(subjectId, fixture.actors.importer)).toEqual([firstEnvelope]);
 
   const refreshKey = randomUUID();
+  // The documented source contract replaces the slot; a stale asOf is still accepted as current source data.
   const refresh = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
     body: refreshedValue,
@@ -270,6 +338,10 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     actor: fixture.actors.secondImporter,
   });
   const hiddenProblem = await readProblem(hiddenRead, 404);
+  const hiddenOwnerRead = await fixture.request('GET', `/v1/subjects/${hiddenSubjectId}/source-statistics`, {
+    actor: fixture.actors.author,
+  });
+  const hiddenOwnerProblem = await readProblem(hiddenOwnerRead, 404);
   const unknownSubjectId = newId(routeOf(hiddenSubjectId)!);
   const unknownRead = await fixture.request('GET', `/v1/subjects/${unknownSubjectId}/source-statistics`, {
     actor: fixture.actors.secondImporter,
@@ -278,9 +350,12 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   const withoutRequestId = (problem: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(problem).filter(([field]) => field !== 'request_id'));
   expect(withoutRequestId(hiddenProblem)).toEqual(withoutRequestId(unknownProblem));
-  expect(JSON.stringify(hiddenProblem)).not.toContain('private-attribution-sentinel-record');
-  expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel licence');
-  expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel attribution.');
+  expect(withoutRequestId(hiddenOwnerProblem)).toEqual(withoutRequestId(unknownProblem));
+  for (const responseProblem of [hiddenProblem, hiddenOwnerProblem]) {
+    expect(JSON.stringify(responseProblem)).not.toContain('private-attribution-sentinel-record');
+    expect(JSON.stringify(responseProblem)).not.toContain('Private attribution sentinel licence');
+    expect(JSON.stringify(responseProblem)).not.toContain('Private attribution sentinel attribution.');
+  }
 });
 
 test('A large imported count does not seed a native mean, prior, or score.', async () => {
@@ -348,14 +423,58 @@ test('A large imported count does not seed a native mean, prior, or score.', asy
   ]);
 
   // Native prior epochs require 50 counted votes; imported counts remain source-local.
-  await Promise.all(fixture.actors.voters.map((voter) => castVote(subjectId, voter, 20)));
+  expect(fixture.actors.voters).toHaveLength(5);
+  const priorSubjects: string[] = [];
+  for (let index = 0; index < 10; index++)
+    priorSubjects.push(await fixture.createSubject(`Native prior source isolation ${index + 1}`));
+  for (const priorSubject of priorSubjects)
+    for (const voter of fixture.actors.voters) await castVote(priorSubject, voter, 4);
+
+  // Join each real vote to its committed event and wait for the registered rating effect and figure drain.
+  // The broader prior-epoch suite owns republishing unrelated rated siblings.
+  const priorProgress = await until(
+    () => nativePriorProgress(priorSubjects),
+    (value) =>
+      value.committedVotes === '50' &&
+      value.sourceEvents === '50' &&
+      value.deliveredEvents === '50' &&
+      value.appliedVotes === '50' &&
+      value.aggregateCount === '50' &&
+      value.aggregateSum === '200' &&
+      value.totalCount === '50' &&
+      value.totalSum === '200' &&
+      value.priorStartCount === '50' &&
+      value.priorMean === '2.0000' &&
+      value.priorThreshold === '5' &&
+      value.publishedFigures === '10',
+    'Native Global prior results for the ten real prior subjects',
+  );
+  expect(priorProgress).toEqual({
+    committedVotes: '50',
+    sourceEvents: '50',
+    deliveredEvents: '50',
+    appliedVotes: '50',
+    aggregateCount: '50',
+    aggregateSum: '200',
+    totalCount: '50',
+    totalSum: '200',
+    priorStartCount: '50',
+    priorMean: '2.0000',
+    priorThreshold: '5',
+    publishedFigures: '10',
+  });
+  const priorFigures = await Promise.all(priorSubjects.map((priorSubject) => figure(priorSubject)));
+  for (const priorFigure of priorFigures)
+    expect(priorFigure.figure).toMatchObject({ count: 5, state: 'ready', mean: 2, score: 2 });
+
+  for (const voter of fixture.actors.voters) await castVote(subjectId, voter, 20);
   const publishedFigure = await until(
     () => figure(subjectId),
     (value) =>
       value.figure.count === 5 &&
       value.figure.state === 'ready' &&
       value.figure.mean === 10 &&
-      value.figure.score === null,
+      value.figure.score === 6,
     'Native figure after five actual votes',
   );
   expect(publishedFigure.figure).toEqual({
@@ -365,7 +484,7 @@ test('A large imported count does not seed a native mean, prior, or score.', asy
     count: 5,
     state: 'ready',
     mean: 10,
-    score: null,
+    score: 6,
   });
 
   const nativeAggregate = await until(
@@ -418,14 +537,14 @@ test('A large imported count does not seed a native mean, prior, or score.', asy
       population_votes: '5',
       aggregate_count: '5',
       aggregate_sum: '100',
-      prior_start_count: null,
-      prior_mean: null,
-      total_count: '5',
-      total_sum: '100',
+      prior_start_count: '50',
+      prior_mean: '2.0000',
+      total_count: '55',
+      total_sum: '300',
       figure_count: '5',
       figure_mean: '10.0000',
-      figure_score: null,
-      figure_prior_mean: null,
+      figure_score: '6.0000',
+      figure_prior_mean: '2.0000',
       imported_count: '2147483647',
     },
   ]);
