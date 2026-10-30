@@ -255,8 +255,9 @@ for (const feed of ['boards', 'threads'] as const) {
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
-    expect(statementCounts[0]).toBeGreaterThan(0);
+    expect(statementCounts[0]!).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
+    expect(statementCounts.every((count) => count <= pageSize * 14 + 6)).toBe(true);
     const relations = ['content.board', 'content.board_thread', 'content.thread', 'content.post', 'content.revision'];
     for (const { scale, cost } of report.samples) {
       for (const relation of relations) {
@@ -265,11 +266,7 @@ for (const feed of ['boards', 'threads'] as const) {
         );
       }
     }
-    assertGrowthAccessPaths(
-      `Sitemap ${feed} page, listed items`,
-      report.samples,
-      relations,
-    );
+    assertGrowthAccessPaths(`Sitemap ${feed} page, listed items`, report.samples, relations);
   }, 180_000);
 
   test(`${feed} sitemap page stays within its bound as protected Realm content grows`, async () => {
@@ -292,14 +289,11 @@ for (const feed of ['boards', 'threads'] as const) {
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
-    expect(statementCounts[0]).toBeGreaterThan(0);
+    expect(statementCounts[0]!).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
+    expect(statementCounts.every((count) => count <= pageSize * 4 * 20 + 6)).toBe(true);
     if (feed === 'boards') {
-      const relations = [
-        'content.board',
-        'community.realm',
-        'community.realm_revision',
-      ];
+      const relations = ['content.board', 'community.realm', 'community.realm_revision'];
       for (const { scale, cost } of report.samples) {
         for (const relation of relations) {
           expect(cost.relations[relation]?.sequentialScans, `${feed} scale ${scale} ${relation}`).toEqual(

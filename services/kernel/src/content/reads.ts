@@ -224,7 +224,7 @@ export function withBoardDisclosure<T>(
   decisions?: ReadDecisions,
   options: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'> = {},
 ): Promise<T> {
-  return boardDisclosureHint.run({ boardId, board, decisions, ...options }, work);
+  return boardDisclosureHint.run({ boardId, board, ...(decisions ? { decisions } : {}), ...options }, work);
 }
 
 function batchKey(id: string, threadId = id): BatchKey {
@@ -833,7 +833,7 @@ export async function discloseBoardPageThreads(
   items: readonly Anchored<ThreadView | null>[];
   boardAnchor: AnchoredPosition;
   parentAllowed: boolean;
-}> {
+}>> {
   const ids = [boardId, ...threadIds];
   if (baseline.realmId) ids.push(baseline.realmId);
   const result = await batchSnapshot(dependencies, ids, context, async (client, anchors) => {

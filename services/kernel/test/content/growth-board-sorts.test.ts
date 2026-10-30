@@ -220,7 +220,11 @@ test(
       expect(statementCounts.every((count) => count <= 43)).toBe(true);
       expect(new Set(statementCounts).size).toBe(1);
       const assertedRelations = [
-        ...new Set(report.samples.flatMap(({ cost }) => Object.keys(cost.relations).filter((name) => !name.startsWith('index:')))),
+        ...new Set(
+          report.samples.flatMap(({ cost }) =>
+            Object.keys(cost.relations).filter((name) => !name.startsWith('index:')),
+          ),
+        ),
       ];
       for (const { scale, cost } of report.samples) {
         for (const relation of assertedRelations) {
@@ -378,11 +382,16 @@ test(
         const response = await app.handle(
           new Request(`http://kernel.test/v1/boards/${boardId}/threads?sort=newest&limit=100&query=fixed`),
         );
-        const page = (await response.json()) as { threads: { id: string; firstPost: { body: unknown } }[]; next: string | null };
+        const page = (await response.json()) as {
+          threads: { id: string; firstPost: { body: unknown } }[];
+          next: string | null;
+        };
         expect(response.status).toBe(200);
         expect(page.threads.map(({ id }) => id)).toEqual(visible.slice(0, 100));
         expect(page.threads).toHaveLength(100);
-        expect(page.threads.every((thread) => JSON.stringify(thread.firstPost.body) === JSON.stringify(document))).toBe(true);
+        expect(page.threads.every((thread) => JSON.stringify(thread.firstPost.body) === JSON.stringify(document))).toBe(
+          true,
+        );
         expect(page.next).toEqual(expect.any(String));
         return page;
       },
@@ -393,7 +402,9 @@ test(
     expect(new Set(queryCounts).size).toBe(1);
     const queryRelations = [
       ...new Set(
-        queryReport.samples.flatMap(({ cost }) => Object.keys(cost.relations).filter((name) => !name.startsWith('index:'))),
+        queryReport.samples.flatMap(({ cost }) =>
+          Object.keys(cost.relations).filter((name) => !name.startsWith('index:')),
+        ),
       ),
     ];
     for (const { scale, cost } of queryReport.samples) {
@@ -445,7 +456,16 @@ test(
        VALUES ($1, $2, 'actor', 'active', true, $2), ($1, $3, 'actor', 'active', true, $3)`,
       [0x3456, grantedReader, bannedReader],
     );
-    const realmRoute = [boardRoute, spaceId, spaceRevisionId, at, author, realmId, newId(boardRoute), realmRevisionId] as const;
+    const realmRoute = [
+      boardRoute,
+      spaceId,
+      spaceRevisionId,
+      at,
+      author,
+      realmId,
+      newId(boardRoute),
+      realmRevisionId,
+    ] as const;
     await db.admin.query(
       `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
        VALUES ($1, $2, 'active', $3, $4, $5)`,
