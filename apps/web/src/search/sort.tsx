@@ -23,8 +23,8 @@ export function SearchSort({
   disabled?: boolean;
 }) {
   return (
-    <form method="get" action={`/${locale}/search`} className="flex items-center justify-end gap-2">
-      <Field className="flex-row items-center gap-2">
+    <form method="get" action={`/${locale}/search`} className="flex max-w-full items-center justify-end gap-2">
+      <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
         <FieldLabel htmlFor="search-sort" className="text-sm text-muted-foreground">
           {m.search_sort_label()}
         </FieldLabel>
@@ -32,7 +32,7 @@ export function SearchSort({
           id="search-sort"
           disabled={disabled}
           value={sort}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm [&_select]:w-auto"
           onChange={(event) => {
             const url = state
               ? new URL(
