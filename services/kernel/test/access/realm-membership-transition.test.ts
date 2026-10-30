@@ -147,10 +147,7 @@ test.serial.each(['leave', 'ban'] as const)(
     await state.driver.settle();
     expect(await state.inverse()).toEqual([]);
     expect((await state.intervals()).every((interval) => !interval.open)).toBe(true);
-    const erased = await deletePersona(
-      { pool: state.system.database.pool, auth: state.deletion.auth },
-      state.persona,
-    );
+    const erased = await deletePersona({ pool: state.system.database.pool, auth: state.deletion.auth }, state.persona);
     expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toMatchObject({
       at: erased.at,
       completedAt: null,
