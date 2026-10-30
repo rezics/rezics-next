@@ -39,7 +39,7 @@ No implementation files or long passages are proposed for copying into REZICS.
 | Comparison | Retained source / version | Licence and limits |
 | --- | --- | --- |
 | BookWyrm | `shelves/bookwyrm`, commit `fe2fa0bd2b16f1d95030d8ac1d41139e51b8cde4`; [repository][bw-repo] | [Anti-Capitalist Software License 1.4][bw-licence], `LICENSE.md`; restricted source-available software, not a permissive implementation dependency. |
-| EPUB | [CFI 1.1][cfi], IDPF Recommended Specification, 5 January 2017; [EPUB 3.3][epub], W3C Recommendation, 13 January 2026 | CFI carries IDPF copyright and restrictions on changed reproduction; EPUB 3.3 uses the [W3C permissive document licence][w3c-licence]. Standards were read on their official sites; no reference clone was needed. |
+| EPUB | [CFI 1.1][cfi], IDPF Recommended Specification, 5 January 2017; [EPUB 3.3][epub], W3C Recommendation, 13 January 2026 | CFI carries IDPF copyright and restrictions on changed reproduction; EPUB 3.3 links the [W3C Software and Document License 2023][w3c-licence]. Standards were read on their official sites; no reference clone was needed. |
 | Komga | `shelves/komga`, commit `023ec905c10a35bbb8e29095420d266cd3adad60`; [repository][komga-repo] | [MIT][komga-licence], `LICENSE`. Live official guides supplement the pinned implementation; they need not describe exactly that commit. |
 
 ### BookWyrm: an edition is a target, but switching can rewrite the association
@@ -210,7 +210,7 @@ Existing private activity timestamps may advance on successful commands under th
 | `progress_session.library_profile_pin` and `resolveLibraryProfilePin` | Already source-present. Do not add a second profile store, a mutable current pin or a numeric profile revision. Preserve exact historic pins and receipts. |
 | Owner detail accepted presentation / current record admission | Genuinely missing from the inspected HTTP `sessionSchema`/`sessionView`: Web accepts optional `unitLabel`, count forms, dimension and `inputRules`, but the route supplies none. Detail initially uses `offered = !unsupported` and learns retirement from a rejected mutation. Adopt a bounded server-resolved detail presentation/admission seam; do not infer write permission from a label or expose private pin fields. Response names/transport require owner agreement; no new endpoint is authorized here. |
 | Web `ProgressStartInput.versionSubjectId` | Absent from the Web type, validator, form and POST body; already supported by kernel creation and stored on the session. An explicit version choice is a consumer gap, not a missing version column. Current source proves readable subject resolution, not work/edition relationship validation or immutable content equivalence. |
-| Structure identity and revision | Genuinely absent: `LibraryProgressUnitDescriptor.structure` supports only `{kind: 'none'}`; sparse identity is only `session_local`. The session has no immutable content/structure revision address or accepted ordered-unit manifest. `versionSubjectId` is a subject reference, not that address. No unit-to-source resolver or cross-version map is supplied. |
+| [Structure identity and revision](../../packages/definitions/src/library-profile.ts) | Genuinely absent: `LibraryProgressUnitDescriptor.structure` supports only `{kind: 'none'}`; sparse identity is only `session_local`. The session has no immutable content/structure revision address or accepted ordered-unit manifest. `versionSubjectId` is a subject reference, not that address. No unit-to-source resolver or cross-version map is supplied. |
 | Cursor resolver | Absent: parser validates bounded locator text and numeric position only. Do not install EPUB parsing/matching or a provider adapter to make the UI promise work. |
 | Sparse storage and rereads | Already source-present: exact unit keys, maintained cardinality, separate session IDs and append-only intent rows. No range expansion, history migration, bulk conversion or derived completion is needed. |
 
@@ -272,7 +272,7 @@ native/full-row/main completion remains unproved.
 [bw-guide]: https://docs.joinbookwyrm.com/shelves.html
 [cfi]: https://idpf.org/epub/linking/cfi/
 [epub]: https://www.w3.org/TR/2026/REC-epub-33-20260113/
-[w3c-licence]: https://www.w3.org/copyright/document-license-2023/
+[w3c-licence]: https://www.w3.org/copyright/software-license-2023/
 [komga-repo]: https://github.com/gotson/komga/tree/023ec905c10a35bbb8e29095420d266cd3adad60
 [komga-licence]: https://github.com/gotson/komga/blob/023ec905c10a35bbb8e29095420d266cd3adad60/LICENSE
 [komga-book]: https://github.com/gotson/komga/blob/023ec905c10a35bbb8e29095420d266cd3adad60/komga/src/main/kotlin/org/gotson/komga/domain/model/Book.kt
