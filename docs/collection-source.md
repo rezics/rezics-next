@@ -7,18 +7,31 @@ specializes Collection obligations for shared Search/Zone composition, not a new
 
 ## Current implementation and superseded scaffolding
 
-The exported `createCollectionSource` factory in
-[`collection-source.ts`](../services/kernel/src/library/collection-source.ts) throws retryable
-`ProblemError('dependency_unavailable')` from every method. It does no query, mutation, identity production or
-readiness simulation. Its typed `prepare`, `prefix`, `containsSubject`, `readRawStoredPrefix` and
-`readRawOrdinalPrefix` surface and outcome driver interfaces do not establish native capability.
+The exported `createCollectionSource` factory composes native Collection authorization, source-scoped identity
+observations and maintained canonical generations. Preparation and every later call admit current source authority;
+positive membership additionally checks current original support and the ordinary original/terminal Subject guards.
+Unknown scope, incomplete generations and unavailable public capture return retryable `dependency_unavailable`.
+
+`canonical-source-store.ts` owns indexed successor/group reads, native raw-driver repair checkpoints and complete
+publication CAS. The default Library WorkModule binds its existing operational transaction/client and maintenance
+queue. Population capture uses `createNativeLibrarySourceCustody`; mapping points only map examined originals.
+Semantic's closed `IdentityScopedObservations` declarations are consumed through its real module name. The
+provisional producer adapter returns explicit `source_unready` with zero work until its authoritative body lands.
+Public output needs Semantic's independent public capture, never a borrowed Library capture. Native useful-page,
+whole-query and lifecycle proof remains pending combined integration.
+`collection-source-order.ts` owns the data-only raw ordinal declaration. Its native reader
+`readNativeCollectionRawOrdinalPage` reads 1–100 raw curated occurrences in actual `(ordinalKey,memberId)` order,
+including retained deletion episodes. The frontier settles the last examined raw occurrence even when later
+membership/disclosure excludes it; an exact-sized page conservatively needs a later seek to prove exhaustion.
+It returns no notes or other retained member payload. These internal rows provide neither canonical uniqueness,
+current viewer disclosure nor complete query observations. The caller uses the same Source work allowance and
+receipt; complete observations still require the shared native scope producer.
 
 Old exported identity-basis, sealed-repair, alias-window and one-pending-group protocols are superseded list
 scaffolding until replacement native acceptance permits removal. The universal 256 raw-key ledger, exhaustive
 request-time alias recovery, repeated home sweeps and final leaf replay are no longer list requirements. Existing
 code and frozen tests are unchanged by this prose adoption. Native batch, byte/string and cursor limits keep their
-independent units and scope. Apart from the raw ordinal callable below, no replacement executable signature,
-discriminant, counter ABI or schema is selected.
+independent units and scope. The scoped observation ABI is selected in `semantic/identity-scope-types.ts`; raw ordinal data retains the callable below.
 
 ## Raw native ordinal callable
 

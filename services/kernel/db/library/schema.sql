@@ -1933,6 +1933,8 @@ CREATE UNIQUE INDEX collection_member_deletion_id ON library.collection_member U
 
 CREATE INDEX collection_member_live_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id) WHERE (deletion_id IS NULL);
 
+CREATE INDEX collection_member_raw_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id);
+
 
 --
 -- Name: collection_member_retention_due; Type: INDEX; Schema: library; Owner: -
@@ -3078,3 +3080,87 @@ CREATE TRIGGER shelf_type_reservation_input_immutable BEFORE INSERT OR UPDATE ON
   FOR EACH ROW EXECUTE FUNCTION library.guard_shelf_type_reservation_input();
 CREATE INDEX type_preparation_request ON library.type_preparation_header
   (route, account_id, (binding ->> 'subjectId'), (binding ->> 'requestKey'), principal_namespace, created_at DESC, preparation_id DESC);
+
+-- Explicit membership publications. No predicate, personal fact, Access result or ready-empty sentinel.
+CREATE TABLE library.collection_source_output (
+  route integer NOT NULL CHECK(route BETWEEN 0 AND 65535),
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  source_generation bigint NOT NULL CHECK(source_generation >= 0),
+  expected_members bigint NOT NULL CHECK(expected_members >= 0),
+  written_members bigint NOT NULL DEFAULT 0 CHECK(written_members >= 0),
+  after_subject_id uuid,
+  state text NOT NULL DEFAULT 'building' CHECK(state IN ('building','complete','cancelled')),
+  PRIMARY KEY(route,collection_id,generation),
+  FOREIGN KEY(route,collection_id) REFERENCES library.collection(route,collection_id),
+  CHECK(route = get_byte(uuid_send(collection_id),10)*256 + get_byte(uuid_send(collection_id),11)),
+  CHECK(written_members <= expected_members),
+  CHECK((written_members=0) = (after_subject_id IS NULL)),
+  CHECK(state <> 'complete' OR written_members=expected_members)
+);
+CREATE UNIQUE INDEX collection_source_output_building ON library.collection_source_output(route,collection_id)
+  WHERE state='building';
+CREATE TABLE library.collection_source_output_member (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  subject_id uuid NOT NULL,
+  PRIMARY KEY(route,collection_id,generation,subject_id),
+  FOREIGN KEY(route,collection_id,generation) REFERENCES library.collection_source_output(route,collection_id,generation)
+);
+CREATE TABLE library.collection_source_output_head (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  source_generation bigint NOT NULL CHECK(source_generation >= 0),
+  PRIMARY KEY(route,collection_id),
+  FOREIGN KEY(route,collection_id,generation) REFERENCES library.collection_source_output(route,collection_id,generation)
+);
+-- Nothing cascades. Withdrawing a pointer never proves release of source/receiving/control/reader custody.
+
+-- Derived references and checkpoints. Originals, personal pins and native facts remain immutable.
+CREATE TABLE library.canonical_source_scope (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  source_fence text NOT NULL,
+  identity jsonb NOT NULL CHECK(octet_length(identity::text)<=4096),
+  frontier jsonb CHECK(octet_length(frontier::text)<=4096),
+  capture_id uuid,
+  committed_revision bigint,
+  PRIMARY KEY(route,collection_id,source_fence),
+  FOREIGN KEY(route,collection_id) REFERENCES library.collection(route,collection_id)
+);
+CREATE TABLE library.canonical_source_generation (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  basis jsonb NOT NULL CHECK(octet_length(basis::text)<=4096),
+  driver text NOT NULL CHECK(driver IN ('member','entry','label','session','copy','output','done')),
+  after_subject uuid,
+  after_fact uuid,
+  source_exhausted boolean NOT NULL DEFAULT false,
+  state text NOT NULL DEFAULT 'working' CHECK(state IN ('working','complete','abandoned')),
+  version bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY(route,collection_id,generation),
+  FOREIGN KEY(route,collection_id) REFERENCES library.collection(route,collection_id)
+);
+CREATE UNIQUE INDEX canonical_source_working ON library.canonical_source_generation(route,collection_id) WHERE state='working';
+CREATE TABLE library.canonical_source_reference (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  canonical_subject_id uuid NOT NULL,
+  stored_subject_id uuid NOT NULL,
+  driver smallint NOT NULL CHECK(driver BETWEEN 0 AND 5),
+  fact_id uuid NOT NULL,
+  PRIMARY KEY(route,collection_id,generation,canonical_subject_id,stored_subject_id,driver,fact_id),
+  FOREIGN KEY(route,collection_id,generation) REFERENCES library.canonical_source_generation(route,collection_id,generation)
+);
+CREATE TABLE library.canonical_source_head (
+  route integer NOT NULL,
+  collection_id uuid NOT NULL,
+  generation uuid NOT NULL,
+  PRIMARY KEY(route,collection_id),
+  FOREIGN KEY(route,collection_id,generation) REFERENCES library.canonical_source_generation(route,collection_id,generation)
+);
+-- No cascade or lease-based disposition. Old public references and capture custody remain retained.

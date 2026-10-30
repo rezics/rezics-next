@@ -48,8 +48,10 @@ Current implementation evidence is narrower than the capability:
   saved writes/replays and member pages with `503 dependency_unavailable`. This is a caller-owned unavailable
   boundary, not a guessed producer declaration, provisional native success or ready-empty result.
 - `collection-source-native.ts` supplies metered stored-header metadata, native authorization, raw fact/member ranges
-  and original-subject probes. Headerless references and public/unlisted dynamic output return unavailable. These
-  helpers do not implement the shared members service or the adopted complete indexed filter/identity plan.
+  and original-subject probes. The output driver reads only a selected explicit COMPLETE membership generation
+  at the current Collection source fence; it never reads live private facts. Missing/pending output and headerless
+  references remain unavailable. These helpers do not implement the shared members service or the adopted complete
+  indexed filter/identity plan.
 - `builtin-identity.ts` deterministically derives Everything/state IDs. `builtin-reference-store.ts` binds exact
   entry witnesses; it does not prove copy/session-only whole-state-set support, all siblings or writer coverage.
   These helpers implement neither Liked identity nor its Content reaction integration.
@@ -105,8 +107,11 @@ Current implementation evidence is narrower than the capability:
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
-- Every method of `createCollectionSource` and the canonical-source-store factories throws `dependency_unavailable`.
-  Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
+- `createCollectionSource` composes current native authorization, scoped observations and indexed canonical
+  generations. `canonical-source-store.ts` implements successor/group seeks, bounded native raw-driver repair,
+  checkpoints and complete publication CAS. The sole default Library WorkModule supplies its operational client
+  and maintenance queue. Missing Semantic scope/public capture remains retryable unavailability; the provisional
+  Semantic factory returns `source_unready`, never current/ready-empty. Native useful outcomes remain pending.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
@@ -118,6 +123,56 @@ Current implementation evidence is narrower than the capability:
 - `work-module.ts` registers Collection listing and the [terminal participant boundary](erasure-participant.md).
   It runs the integrated entry/copy/follow purge pages, records explicit pending evidence and never mistakes those
   pages for a complete graph or no-data proof. Full graph cleanup and shared custody remain incomplete.
+
+### Explicit membership Publication hooks
+
+`collection-source-output.ts` exports `beginCollectionSourceOutput`, `appendCollectionSourceOutput`,
+`completeCollectionSourceOutput`, `cancelCollectionSourceOutput` and `readCollectionSourceOutputInventory`.
+The first four use the actual caller-owned Core command transaction with current `collection:update` authority
+bound to that Collection; they hold its curator's native `shareAccount` fence through commit. The caller supplies
+an explicitly selected membership set through ordinary Source/subject admission and emits its ordinary Collection
+update event. These hooks do not implement query evaluation, another command runner, grants or a public HTTP API.
+The native output test calls them through real Access-authorized Core commands. The production native source
+reader consumes their selected COMPLETE facts; no private-query producer or test inserts ready output.
+
+Append admits at most 100 strictly ordered subject UUIDs and a 4096-byte checkpoint/input, checks the exact prior
+frontier and source fence, and commits rows with its checkpoint. COMPLETE requires the declared exact number of
+members, including genuine empty output, and selects the generation atomically with advancing the Collection
+source fence. A pending B never replaces selected A. Any visibility transition changes that native fence, so an old
+selection cannot be resurrected by a later visibility change. Private or deleted Collections are not output.
+A known unlisted Collection remains governed by ordinary known-ID Access, never public discovery.
+`NativeCollectionMetadata.outputGeneration` is the selected native generation; `authority='activated_output'`
+selects only the output driver. The native raw-page and original-probe functions are its current consumers;
+canonical factory integration still awaits the shared producers below.
+
+`collection-source-order.ts` publishes the shared raw ordinal data types and the CollectionSource
+`readRawOrdinalPrefix` call. `readNativeCollectionRawOrdinalPage` uses the all-state
+`collection_member_raw_ordinal` index with a strict `(ordinal_key,member_id)` seek and raw limit 1–100.
+Retained deletion episodes advance its frontier and consume work; they provide no disclosed membership or
+canonical completeness. The projection excludes notes and other retained payload, and its statements, rows,
+points, keys and bytes use the existing native Source work ledger. Native observation and current source fences
+are checked on each page. The public factory call remains explicitly unavailable pending the shared scoped binding.
+
+Source storage retains at most two generations, including cancelled, abandoned and superseded copies. With no
+actual destination-disposition producer, a third allocation returns `dependency_unavailable`; it never reuses a
+lease, infers NoData or deletes a source copy. Source-local inventory returns the exact retained generation keys
+and member counts in one indexed bounded range. It does not certify receiving/control/reader cleanup or terminal
+account erasure. Terminal public freeze and the actual shared disposition binding remain pending.
+
+The independent canonical runtime cannot be completed by substituting `identityEpochStore.readMappings` for the
+shared whole-source observation. That real API observes at most 100 specified originals; it does not register or
+observe complete excluded/order/population dependencies, retain a scoped reader revision, or fence first apply
+into the fixed Library participant. The current canonical ABI still requires the superseded whole-identity
+`basis.identity.digest`; `readIdentityBasis` and `readSealedSubjectIdentity` named in its old handoff have no
+current native exports, and the owner contract forbids reinstating their global home sweeps. The adopted scoped
+register/arm/finish/revalidate producer has no callable export/interface in this checkout. Its binding must come
+from Semantic; this slice supplies neither a replacement identity protocol nor a third participant.
+`semantic/identity-epoch-mapping.ts:stepIdentityEpochMapping`, the fixed Library participant's concrete export,
+`semantic/public-filter-source.ts:publicFilterSource` and the shared destination-disposition producer also remain
+unavailable here. Core's real `runOperationalTransaction` and `enqueueIntent` exist; a default canonical worker
+must bind them to the actual shared scoped Source/admission producer before it can publish or expose readiness.
+The added runtime/growth suites require successful real store/factory behavior; they intentionally do not turn
+missing coverage into successful empty or preparing assertions. They have not been run in minimal mode.
 
 ### Scoped subject-search status
 
@@ -211,8 +266,8 @@ custody; it defines no replacement writer or completion interface.
 
 | Existing producer                                                                       | Native boundary still required                                                                                                                                                                                                                                                                            |
 | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collection-source-native.ts:readNativeCollectionRawPage`                               | Member, entry, label, session and copy ranges exist. The function rejects `driver: 'output'`; its metadata reports dynamic output as `unavailable_output`. There is no installed complete-output activation/freeze source to observe.                                                                     |
-| `canonical-source-store.ts` exported observation, repair and publication functions      | Every function throws `dependency_unavailable`. `canonical_source_state` and `canonical_source_fact` describe storage, without an installed generation writer, source registration, first-apply capture or final writer closure. Table absence or emptiness cannot establish coverage.                    |
+| `collection-source-native.ts:readNativeCollectionRawPage`                               | Member, entry, label, session, copy and selected explicit COMPLETE output ranges exist. Missing/incomplete output remains unavailable; public capture and terminal freeze still need their authoritative producers.                                                                     |
+| `canonical-source-store.ts` exported observation, repair and publication functions      | Indexed generation/reference/head storage supports bounded repair and publication under source fences and committed scoped observations. The default worker captures complete native dependencies; absent Semantic scope/public capture remains unavailable. Table absence or emptiness cannot establish coverage.                    |
 | `follow-store.ts:applyFollow`, `readFollow`, `pageFollows`                              | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody. |
 | `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority.                                                                                   |
 
@@ -864,6 +919,7 @@ owns the design, while this inventory must gain exact native locators with each 
 | `shelf_type_reservation`, `shelf_type_node`, `shelf_type_root`, `shelf_type_value`, `shelf_count`; `type_preparation_header`, `type_preparation_progress`, `type_preparation_slot` | Fence preparation/publication; erase all staging, partial/orphan tries, zero-use values, pins and counters. Progress/slots precede headers/values; nodes/roots precede values. No whole-graph terminal worker supplies this ordering.                                                                                                                                                                                                                                                                            |
 | `builtin_collection_reference`, `builtin_state_reference_source`; candidate/support data                                                                                           | Fence late repair and remove source children before reference/support parents; erase private discovery data. A proposed candidate/support representation has no current complete producer/cleanup guarantee.                                                                                                                                                                                                                                                                                                     |
 | `canonical_source_state`, `canonical_source_fact`                                                                                                                                  | Erase every obsolete, old, building and private generation, not only the current pointer. Keep only selected permitted published output A; pending B never survives. Tables exist but store factories throw and implement no cleanup.                                                                                                                                                                                                                                                                            |
+| `collection_source_output`, `collection_source_output_head`, `collection_source_output_member`                                                                                     | Exact source locators are `(route,collection_id,generation)` and `(route,collection_id,generation,subject_id)`; selected head is `(route,collection_id)`. Retain every building/cancelled/superseded generation until the shared disposition authority releases all copies. No cascades, lease ACK or global erasure claim. Completed public freeze and destination custody binding remain pending.                                                                                                              |
 | `subject_collection`, `subject_collection_version`, `subject_listing`, `subject_collection_source_fence`                                                                           | Use exact Collection reverse indexes on remote subject routes; remove/reconcile pairs, versions, counts and fences without touching other public contributions. Preserve necessary anti-replay evidence until late applies are fenced. Current listing work lacks terminal cutover.                                                                                                                                                                                                                              |
 | `bulk_target`, `bulk_effect`, exact operation/selection locators                                                                                                                   | Erase manifests, request/target/effect/outcome and receipt payload for every owned operation. `pageBulkOutcomes` needs a known operation; current tables lack an account-leading complete locator. Planned operation/selection stores also need producer locators; JSON/history scans are forbidden.                                                                                                                                                                                                             |
 | `published_log`                                                                                                                                                                    | Erase published and retracted snapshots and personal links/payload at T; no active log contribution is retained. A nullable source pointer is not terminal erasure.                                                                                                                                                                                                                                                                                                                                              |
@@ -883,7 +939,6 @@ owns the design, while this inventory must gain exact native locators with each 
 | `published_log`                                                                                                                                                                    | The worker erases published and retracted snapshots and personal links/payload at T; no active log contribution is retained. A nullable source pointer is not terminal erasure.                                                                                                                                                                                                                                                                                                                                  |
 | Shared receipts/outbox/editorial/work artifacts and cleanup state                                                                                                                  | Producers record exact receipt/event/workflow/payload locators; each store owner minimizes actual private payload and acknowledges completion. Remove nonminimal staging/checkpoints only after dependent phases finish; keep minimal terminal completion independently of DBOS retention. Dispatch or age-based history deletion is insufficient.                                                                                                                                                               |
 | `fact_source_head`                                                                                                                                                                 | The worker removes the head LAST after local fact-source children; native fact-delete hooks can recreate it before then. Its existence is not candidate completeness or permission.                                                                                                                                                                                                                                                                                                                              |
-
 Cleanup must use bounded, indexed native phases with child-before-parent ordering and durable receipts/cursors; a Collection tombstone, terminal flag or empty account-local read is not proof that children and remote listing pairs are gone. Proposed page bounds have not been measured here. The [listing freshness contract](listing-freshness-contract.md#bounded-storage-purge-and-delivery) records the stale-positive projection race and fencing requirement.
 
 Library cleanup does not run broad SQL over shared stores. `core.receipt` can retain command request/response payloads; `core.outbox` must keep tombstone and projection events deliverable until durable custody is established; `core.consumer_checkpoint` is a shared stream position, not per-account state. `editorial.write_basis` and DBOS status/input/output/step/event/message histories follow their owners' retention and minimization rules. Existing age-based workflow history collection does not establish Library erasure. Exact event, receipt, workflow and payload locators, account-specific cleanup and some consumer-custody acknowledgements are still missing; do not delete shared stores by broad principal or JSON scans. No claim extends beyond the demonstrated native locators. Logs, caches, exports, replicas and backups remain explicit custody gaps.

@@ -1,12 +1,12 @@
-/** Specification ABI only. No membership, identity, publication or Access implementation lives here. */
+/** The sole Collection Source ABI and native runtime composition. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
-import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
+import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
@@ -77,14 +77,14 @@ export interface CollectionSourceObservation {
   readonly basis: CollectionSourceBasis;
 }
 
-declare const preparedSource: unique symbol;
+const preparedSource: unique symbol = Symbol('prepared Collection Source');
 /** Not an allow capability. EVERY operation reauthorizes actor/source/required subject anchors currently. */
 export interface PreparedCollectionSource {
   readonly [preparedSource]: true;
   readonly observation: CollectionSourceObservation;
 }
 
-declare const nativeEvidence: unique symbol;
+const nativeEvidence: unique symbol = Symbol('native Collection evidence');
 /** Owner evidence reference; no public DTO/debug serialization. Not a fake Search Hit. */
 export type CollectionSourceEvidence = { readonly [nativeEvidence]: true };
 
@@ -197,23 +197,190 @@ export interface CollectionSource {
   readRawOrdinalPrefix(input: ReadRawOrdinalCollectionPrefix): Promise<RawOrdinalCollectionPrefix>;
 }
 
-/**
- * Explicit unimplemented factory. Export presence is NOT native readiness.
- * See docs/collection-source.md and the real-driver outcome suite. No queries, mutations or fake empty results.
- */
-export function createCollectionSource(_dependencies: {
-  pool: Pool;
-  access: Access;
-  clock?: KernelClock;
-}): CollectionSource {
-  const unavailable = async (): Promise<never> => {
-    throw new ProblemError('dependency_unavailable');
-  };
+import { routeOf } from '../route/route.ts';
+import { readNativeCollectionMetadata, authorizeNativeCollectionMetadata, readNativeCollectionRawPage,
+  readNativeCollectionRawOrdinalPage, probeNativeCollectionOriginal, type NativeCollectionMetadata } from './collection-source-native.ts';
+import { CollectionSourceLedger } from './collection-source-work.ts';
+import { readCanonicalSourceState, readCanonicalSourceGroup, seekCanonicalSourceGroup,nativeSourceFence,
+  type CanonicalAllowance, type CanonicalBasis, type CanonicalWork, type CanonicalRawKey } from './canonical-source-store.ts';
+import { resolveSubject } from './subject-anchor.ts';
+
+const sourceDrivers = ['member','entry','label','session','copy','output'] as const;
+type Prepared = { metadata: NativeCollectionMetadata; basis: CanonicalBasis; generation: string };
+function canonicalAllowance(a: WorkAllowance, rawLimit = 100): CanonicalAllowance {
+  return { reservationId: a.reservationId,rawKeys: Math.min(rawLimit,a.remaining.candidateKeys),
+    nativeRows: a.remaining.nativeRows,nativePoints: a.remaining.nativePoints,emptySeeks: a.remaining.emptySeeks,
+    statements: a.remaining.statements,bytes: a.remaining.bytes,identityMetadataRows: a.remaining.identityMetadataRows };
+}
+function canonicalReceipt(w: CanonicalWork): WorkReceipt {
+  return { reservationId: w.reservationId,used: { candidateKeys: w.candidateKeys+w.aliasKeys+w.duplicateKeys+w.lookaheadKeys+w.internalDriverKeys,
+    nativeRows: w.nativeRows,nativePoints: w.nativePoints,emptySeeks: w.emptySeeks,statements: w.statements,
+    bytes: w.bytes,identityMetadataRows: w.identityMetadataRows,witnessKeys: 0 } };
+}
+async function useCanonical<T extends { work: CanonicalWork }>(l: CollectionSourceLedger, operation: () => Promise<T>): Promise<T> {
+  const settled = await l.run(async () => {
+    const result = await operation();
+    return { result,work: canonicalReceipt(result.work) };
+  });
+  return settled.result;
+}
+function observation(metadata: NativeCollectionMetadata, basis: CanonicalBasis): CollectionSourceObservation {
+  return { route: metadata.route,collectionId: metadata.collectionId,incarnation: metadata.incarnation,
+    revision: metadata.revision,authority: basis.authority,stamp: metadata.stamp,
+    basis: { digest: basis.digest,identity: basis.identity,query: basis.meaning,
+      profilePins: metadata.releaseDigest ? [metadata.releaseDigest] : [],projection: null } };
+}
+function decodeSourceAfter(value: CollectionSourceAfter | null): CanonicalRawKey | null {
+  if (value === null) return null;
+  const parts = /^1:([0-5]):([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(value);
+  if (!parts || routeOf(parts[2]!) === null || routeOf(parts[3]!) === null) throw new ProblemError('invalid_cursor');
+  const driver = sourceDrivers[Number(parts[1])];
+  if (!driver) throw new ProblemError('invalid_cursor');
+  return { driver,storedSubjectId: parts[2]!,factId: parts[3]! };
+}
+function encodeSourceAfter(key: CanonicalRawKey | null): CollectionSourceAfter | null {
+  if (!key) return null;
+  const driver = sourceDrivers.indexOf(key.driver);
+  if (driver === 0 || driver === 1 || driver === 2 || driver === 3 || driver === 4 || driver === 5)
+    return `1:${driver}:${key.storedSubjectId}:${key.factId}`;
+  throw new ProblemError('invalid_cursor');
+}
+/** Handles retain provenance, never Access. Every operation reauthorizes current source and identity scope. */
+export function createCollectionSource(dependencies: { pool: Pool; access: Access; clock?: KernelClock }): CollectionSource {
+  const prepared = new WeakMap<PreparedCollectionSource,Prepared>();
+  async function authorize(input: CollectionSourceContext, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
+    const allowed = await l.run((allowance) => authorizeNativeCollectionMetadata(dependencies.pool,metadata,
+      { ...input,access: dependencies.access,allowance }));
+    if (!allowed.authorized) throw new ProblemError('not_found');
+  }
+  async function ready(input: CollectionSourceContext, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
+    const result = await useCanonical(l,() => readCanonicalSourceState(dependencies.pool,{ route: metadata.route,collectionId: metadata.collectionId,
+      deadline: input.deadline,allowance: canonicalAllowance(l.allowance()) }));
+    if (result.state !== 'ready') throw new ProblemError('dependency_unavailable');
+    if (result.basis.sourceFence !== nativeSourceFence(metadata)) throw new ProblemError('stale_cursor');
+    return result;
+  }
+  async function revalidate(input: CollectionSourceCall, l: CollectionSourceLedger): Promise<Prepared> {
+    const saved = prepared.get(input.source);
+    if (!saved) throw new ProblemError('invalid_cursor');
+    await authorize(input,saved.metadata,l);
+    const state = await ready(input,saved.metadata,l);
+    if (state.basis.digest !== saved.basis.digest || state.generation !== saved.generation) throw new ProblemError('stale_cursor');
+    return saved;
+  }
+  async function guarded<T>(input: { allowance: WorkAllowance; deadline: number }, body: (l: CollectionSourceLedger) => Promise<T>) {
+    const l = new CollectionSourceLedger(input.allowance,input.deadline);
+    try { return await body(l); }
+    catch (error) {
+      if (error instanceof Error) Object.defineProperty(error,'work',{ value: l.receipt(),configurable: true });
+      throw error;
+    }
+  }
+  async function membership(input: ContainsCollectionSubject, saved: Prepared, l: CollectionSourceLedger): Promise<CollectionSubjectMembership> {
+    if (routeOf(input.subjectId) === null) throw new ProblemError('not_found');
+    const progress = input.progress;
+    if (progress && (progress.subjectId !== input.subjectId || progress.basisDigest !== saved.basis.digest))
+      throw new ProblemError('invalid_cursor');
+    let after = decodeSourceAfter(progress?.sourceAfter ?? null);
+    const obs = observation(saved.metadata,saved.basis);
+    const partial = (reason: 'allowance' | 'native_evidence'): CollectionSubjectMembership => ({
+      subjectId: input.subjectId,result: 'not_proven',reason,observation: obs,
+      progress: after ? { subjectId: input.subjectId,basisDigest: saved.basis.digest,aliasAfter: null,sourceAfter: encodeSourceAfter(after) } : null,
+      work: l.receipt(),
+    });
+    const raw = Math.min(100,Math.floor(l.allowance().remaining.candidateKeys/4));
+    if (!raw) return partial('allowance');
+    const window = await useCanonical(l,() => readCanonicalSourceGroup(dependencies.pool,{ route: obs.route,collectionId: obs.collectionId,
+      deadline: input.deadline,allowance: canonicalAllowance(l.allowance(),raw),basis: saved.basis,
+      progress: { pendingSubjectId: input.subjectId,after,generation: saved.generation,basis: saved.basis } }));
+    if (window.state !== 'ready') return partial('native_evidence');
+    for (const row of window.rows) {
+      // Probe current original support, then consume the ordinary Semantic original AND terminal guards at T.
+      const probe = await l.run((allowance) => probeNativeCollectionOriginal(dependencies.pool,saved.metadata,
+        { originalId: row.key.storedSubjectId,keyHint: row.key,deadline: input.deadline,allowance }));
+      if (probe.result === 'not_proven') return partial('native_evidence');
+      if (probe.result === 'present') {
+        const resolved = await l.bounded({ nativeRows: 8192,nativePoints: 128,statements: 128,bytes: 1024*1024 }, () =>
+          resolveSubject(dependencies,input.actor,row.key.storedSubjectId,input.at,{ pool: dependencies.pool,deadline: input.deadline }));
+        if (resolved?.subjectId === input.subjectId) {
+          await revalidate(input,l);
+          // A positive is issued only after a fresh fact reread as well as source/scope admission.
+          const final = await l.run((allowance) => probeNativeCollectionOriginal(dependencies.pool,saved.metadata,
+            { originalId: row.key.storedSubjectId,keyHint: probe.key,deadline: input.deadline,allowance }));
+          if (final.result !== 'present') return partial('native_evidence');
+          return { result: true,subjectId: input.subjectId,positiveEvidence: { [nativeEvidence]: true },
+            observation: obs,work: l.receipt() };
+        }
+      }
+      after = row.key;
+    }
+    if (!window.exhausted) return partial('allowance');
+    await revalidate(input,l);
+    return { result: false,subjectId: input.subjectId,negativeEvidence: { [nativeEvidence]: true },observation: obs,work: l.receipt() };
+  }
   return {
-    prepare: unavailable,
-    prefix: unavailable,
-    containsSubject: unavailable,
-    readRawStoredPrefix: unavailable,
-    readRawOrdinalPrefix: unavailable,
+    prepare(input) { return guarded(input,async (l) => {
+      const route = routeOf(input.collectionId);
+      if (route === null) throw new ProblemError('not_found');
+      const { metadata } = await l.run((allowance) => readNativeCollectionMetadata(dependencies.pool,
+        { route,collectionId: input.collectionId },{ deadline: input.deadline,allowance }));
+      if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
+      await authorize(input,metadata,l);
+      const state = await ready(input,metadata,l);
+      const source: PreparedCollectionSource = { [preparedSource]: true,observation: observation(metadata,state.basis) };
+      prepared.set(source,{ metadata,basis: state.basis,generation: state.generation });
+      return { source,work: l.receipt() };
+    }); },
+    containsSubject(input) { return guarded(input,async (l) => membership(input,await revalidate(input,l),l)); },
+    prefix(input) { return guarded(input,async (l) => {
+      const saved = await revalidate(input,l), obs = observation(saved.metadata,saved.basis);
+      const candidates: CanonicalCollectionCandidate[] = [];
+      let coveredThrough = input.afterSubjectId, exhausted = false;
+      while (l.allowance().remaining.candidateKeys>0 && candidates.length<100) {
+        const seek = await useCanonical(l,() => seekCanonicalSourceGroup(dependencies.pool,{ route: obs.route,collectionId: obs.collectionId,
+          basis: saved.basis,generation: saved.generation,afterSubjectId: coveredThrough,deadline: input.deadline,
+          allowance: canonicalAllowance(l.allowance(),1) }));
+        if (seek.state !== 'ready') throw new ProblemError('dependency_unavailable');
+        if (!seek.subjectId) { exhausted = true; break; }
+        const result = await membership({ ...input,subjectId: seek.subjectId },saved,l);
+        if (result.result === 'not_proven') throw new ProblemError('dependency_unavailable');
+        coveredThrough = seek.subjectId;
+        if (result.result) candidates.push({ subjectId: result.subjectId,evidence: result.positiveEvidence });
+      }
+      if (!exhausted && candidates.length===0) throw new ProblemError('dependency_unavailable');
+      await revalidate(input,l);
+      return { kind: 'canonical_subject_prefix',candidates,coveredThrough,exhausted,observation: obs,work: l.receipt() };
+    }); },
+    readRawStoredPrefix(input) { return guarded(input,async (l) => {
+      const saved = await revalidate(input,l), ids: string[] = [];
+      let after = input.afterStoredSubjectId, exhausted = false;
+      if (after !== null && routeOf(after) === null) throw new ProblemError('invalid_cursor');
+      const drivers: readonly CanonicalRawKey['driver'][] = saved.metadata.authority === 'curated' ? ['member'] :
+        saved.metadata.authority === 'activated_output' ? ['output'] : saved.metadata.builtinKind === 'state' ? ['entry'] : ['entry','label','session','copy'];
+      while (l.allowance().remaining.candidateKeys>=drivers.length && ids.length<100) {
+        const heads: string[] = [];
+        for (const driver of drivers) {
+          const page = await l.run((allowance) => readNativeCollectionRawPage(dependencies.pool,saved.metadata,
+            { driver,after: after ? { driver,storedSubjectId: after,factId: driver==='entry' || driver==='output' ? after : 'ffffffff-ffff-ffff-ffff-ffffffffffff' } : null,
+              limit: 1,deadline: input.deadline,allowance }));
+          if (page.rows[0]) heads.push(page.rows[0].key.storedSubjectId);
+        }
+        const first = heads.sort()[0];
+        if (!first) { exhausted = true; break; }
+        ids.push(first); after = first;
+      }
+      if (!ids.length && !exhausted) throw new ProblemError('dependency_unavailable');
+      await revalidate(input,l);
+      return { kind: 'raw_stored_subject_prefix',storedSubjectIds: ids,storedCoveredThrough: after,
+        storedExhausted: exhausted,observation: observation(saved.metadata,saved.basis),work: l.receipt() };
+    }); },
+    readRawOrdinalPrefix(input) { return guarded(input,async (l) => {
+      const saved = await revalidate(input,l);
+      const page = await l.run((allowance) => readNativeCollectionRawOrdinalPage(dependencies.pool,saved.metadata,
+        { after: input.after,limit: input.limit,deadline: input.deadline,allowance }));
+      await revalidate(input,l);
+      return { kind: 'raw_curated_ordinal_prefix',rows: page.rows,frontier: page.frontier,exhausted: page.exhausted,
+        observation: observation(saved.metadata,saved.basis),work: l.receipt() };
+    }); },
   };
 }

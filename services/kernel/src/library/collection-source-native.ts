@@ -14,6 +14,7 @@ import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-so
 import { grantCapable } from './collection-reads.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
+import type { NativeOrdinalKey, NativeOrdinalRow } from './collection-source-order.ts';
 import partitionRead from '../partition/read.sql';
 import permissionTime from '../access/permission-time.sql';
 import inverse from '../access/permission-inverse.sql';
@@ -47,7 +48,9 @@ export type NativeCollectionMetadata = Readonly<
     incarnation: string;
     stamp: ListingStamp;
     factFence: string | null;
-    authority: 'curated' | 'private_builtin' | 'unavailable_output';
+    authority: 'curated' | 'private_builtin' | 'activated_output' | 'unavailable_output';
+    /** Selected explicit COMPLETE membership only; never a private working generation. */
+    outputGeneration: string | null;
   }
 >;
 export type NativeCollectionWitness = Readonly<{
@@ -65,6 +68,10 @@ const headerSQL = headerQuery.sql;
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
 import probeQuery from './collection-source-native-probe.sql';
+import outputHead from './collection-source-output-head.sql';
+import outputPage from './collection-source-output-page.sql';
+import outputProbe from './collection-source-output-probe.sql';
+import ordinalPage from './collection-source-native-ordinal.sql';
 const probeSQL = probeQuery.sql;
 const bind = (query: { params: readonly string[] }, values: Record<string, unknown>) =>
   query.params.map((name) => values[name]);
@@ -102,6 +109,26 @@ const fixed = (rows: number, points: number, bytes: number) => () => ({
 // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
 for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
 register(partitionSizeSQL, fixed(4, 1, 128));
+register(outputHead.sql, fixed(8, 2, 256));
+register(outputProbe.sql, () => ({
+  nativeRows: 4,
+  nativePoints: 1,
+  candidateKeys: 1,
+  witnessKeys: 1,
+  bytes: 256,
+}));
+register(outputPage.sql, (v) => ({
+  nativeRows: 4 * Number(v[4]) + 4,
+  nativePoints: 1,
+  candidateKeys: Number(v[4]),
+  bytes: 256 * Number(v[4]),
+}));
+register(ordinalPage.sql, (v) => ({
+  nativeRows: 4 * Number(v[4]) + 4,
+  nativePoints: 1,
+  candidateKeys: Number(v[4]),
+  bytes: 512 * Number(v[4]),
+}));
 register(entrySQL, () => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: 256 }));
 register(pinSQL, (v) => ({ nativeRows: 4, nativePoints: 1, candidateKeys: 1, witnessKeys: 1, bytes: Number(v[3]) }));
 for (const sql of [probeSQL, copySQL, sessionSQL])
@@ -235,12 +262,24 @@ async function observe(
   work.admitResultBytes('partition:' + home, 6 * Number(size.bytes) + 256);
   const partition = await readPartition(client, home);
   if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+  const outputGeneration =
+    row.membershipKind === 'dynamic' && row.visibility !== 'private' && row.state === 'active'
+      ? ((
+          await client.query<{ generation: string }>(outputHead.sql, [
+            ref.route,
+            ref.collectionId,
+            row.sourceGeneration,
+          ])
+        ).rows[0]?.generation ?? null)
+      : null;
   const authority =
     row.membershipKind === 'curated'
       ? 'curated'
       : row.visibility === 'private'
         ? 'private_builtin'
-        : 'unavailable_output';
+        : outputGeneration
+          ? 'activated_output'
+          : 'unavailable_output';
   const factFence =
     authority === 'private_builtin'
       ? ((await client.query<{ generation: string }>(fenceSQL, [ref.route, row.curatorAccountId])).rows[0]
@@ -250,6 +289,7 @@ async function observe(
     ...row,
     incarnation: `${row.collectionId}:${row.createdAt}`,
     authority,
+    outputGeneration,
     factFence,
     stamp: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
   });
@@ -345,7 +385,8 @@ async function currentSource(client: PoolClient, metadata: NativeCollectionMetad
     current.incarnation !== metadata.incarnation ||
     current.sourceGeneration !== metadata.sourceGeneration ||
     current.factFence !== metadata.factFence ||
-    current.authority !== metadata.authority
+    current.authority !== metadata.authority ||
+    current.outputGeneration !== metadata.outputGeneration
   )
     throw new ProblemError('stale_cursor');
   if (
@@ -361,10 +402,57 @@ function keyInput(key: CanonicalRangeKey | null | undefined, driver?: CanonicalR
     (routeOf(key.storedSubjectId) === null ||
       routeOf(key.factId) === null ||
       !['member', 'entry', 'copy', 'session', 'label', 'output'].includes(key.driver) ||
-      (key.driver === 'entry' && key.factId !== key.storedSubjectId) ||
+      ((key.driver === 'entry' || key.driver === 'output') && key.factId !== key.storedSubjectId) ||
       (driver && key.driver !== driver))
   )
     throw new ProblemError('invalid_cursor');
+}
+/** Internal raw data only: deletion episodes advance the same native ordinal frontier as live occurrences. */
+export function readNativeCollectionRawOrdinalPage(
+  pool: Pool,
+  metadata: NativeCollectionMetadata,
+  input: Options & { after: NativeOrdinalKey | null; limit: number },
+) {
+  if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
+    throw new RangeError('Native source limit must be 1..100');
+  if (
+    input.after &&
+    (routeOf(input.after.memberId) === null ||
+      !/^[\x21-\x7e]{1,48}$/.test(input.after.ordinalKey))
+  )
+    throw new ProblemError('invalid_cursor');
+  return call(pool, input, async (work) =>
+    readOnly(pool, input.deadline, async (client) => {
+      const current = await currentSource(client, metadata, work);
+      if (current.authority !== 'curated') throw new ProblemError('dependency_unavailable');
+      const raw = (
+        await client.query<Omit<NativeOrdinalRow, 'memberRevision'> & { memberRevision: string }>(
+          ordinalPage.sql,
+          [
+            current.route,
+            current.collectionId,
+            input.after?.ordinalKey ?? '',
+            input.after?.memberId ?? '00000000-0000-0000-0000-000000000000',
+            input.limit,
+          ],
+        )
+      ).rows;
+      const rows: NativeOrdinalRow[] = raw.map((row) => {
+        const memberRevision = Number(row.memberRevision);
+        if (!Number.isSafeInteger(memberRevision) || memberRevision < 1)
+          throw new ProblemError('dependency_unavailable');
+        return { ...row, memberRevision };
+      });
+      const last = rows.at(-1);
+      return {
+        rows,
+        frontier: {
+          after: last ? { ordinalKey: last.ordinalKey, memberId: last.memberId } : input.after,
+        },
+        exhausted: rows.length < input.limit,
+      };
+    }),
+  );
 }
 export function readNativeCollectionRawPage(
   pool: Pool,
@@ -380,12 +468,24 @@ export function readNativeCollectionRawPage(
     readOnly(pool, input.deadline, async (client) => {
       const current = await currentSource(client, metadata, work);
       if (
-        (current.authority === 'curated') !== (input.driver === 'member') ||
-        input.driver === 'output' ||
-        (current.authority !== 'curated' && current.curatorAccountId === null) ||
-        (current.builtinKind === 'state' && input.driver !== 'entry')
+        (current.authority === 'curated' && input.driver !== 'member') ||
+        (current.authority === 'activated_output' && input.driver !== 'output') ||
+        (current.authority === 'private_builtin' && (input.driver === 'member' || input.driver === 'output')) ||
+        (current.authority === 'private_builtin' && current.builtinKind === 'state' && input.driver !== 'entry')
       )
         throw new ProblemError('dependency_unavailable');
+      if (input.driver === 'output') {
+        const rows = (
+          await client.query<{ storedSubjectId: string; factId: string }>(outputPage.sql, [
+            current.route,
+            current.collectionId,
+            current.outputGeneration,
+            input.after?.storedSubjectId ?? '00000000-0000-0000-0000-000000000000',
+            input.limit,
+          ])
+        ).rows.map((row) => ({ key: { driver: 'output' as const, ...row } }));
+        return { rows, after: rows.at(-1)?.key ?? input.after, exhausted: rows.length < input.limit };
+      }
       const query = input.driver === 'member' ? membersQuery : factsQuery;
       const rows = (
         await client.query<{ storedSubjectId: string; factId: string }>(
@@ -446,6 +546,17 @@ export async function probeNativeCollectionOriginal(
             ? { result, key: null, progress: null, witness: null }
             : { result, key: null, progress, witness: null };
         };
+        if (current.authority === 'activated_output') {
+          const row = (
+            await client.query<{ storedSubjectId: string; factId: string }>(outputProbe.sql, [
+              current.route,
+              current.collectionId,
+              current.outputGeneration,
+              input.originalId,
+            ])
+          ).rows[0];
+          return row ? done('present', { driver: 'output', ...row }) : done('absent');
+        }
         if (current.authority === 'curated') {
           const row = (
             await client.query<{ storedSubjectId: string; factId: string }>(

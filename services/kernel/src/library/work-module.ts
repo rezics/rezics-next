@@ -33,6 +33,8 @@ export const libraryWorkModule: WorkModule = {
     await registerMembersPreparationWork(context);
     const { registerOwnerIndexWork } = await import('./owner-index-work.ts');
     await registerOwnerIndexWork(context);
+    const { registerCollectionSourceWork } = await import('./collection-source-work.ts');
+    await registerCollectionSourceWork(context);
   },
 };
 
