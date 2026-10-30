@@ -72,8 +72,16 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
   type Continuation = { segment: number; factKind: number; factAfter: FactInput['after']; graph: GraphCheckpoint };
   const continueErasure = DBOS.registerStep(
     async (accountId: string, next: Continuation) => {
-      await client.enqueue({ workflowName: WORKFLOW, workflowID: `${libraryErasureWorkflowId(accountId)}:${next.segment}`,
-        workflowIDReusePolicy: 'return-existing', queueName: 'workflows' }, accountId, next);
+      await client.enqueue(
+        {
+          workflowName: WORKFLOW,
+          workflowID: `${libraryErasureWorkflowId(accountId)}:${next.segment}`,
+          workflowIDReusePolicy: 'return-existing',
+          queueName: 'workflows',
+        },
+        accountId,
+        next,
+      );
     },
     { name: 'library.continueAccountErasure', ...COMMAND_STEP_RETRIES },
   );
@@ -82,7 +90,12 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
       const initial = await inspect(accountId);
       // An immutable acknowledgement is never reopened by duplicate/stale work.
       if (initial.outcome !== null) return { state: 'acknowledged', outcome: initial.outcome };
-      const cursor: Continuation = start ?? { segment: 0, factKind: 0, factAfter: null, graph: initialGraphCheckpoint() };
+      const cursor: Continuation = start ?? {
+        segment: 0,
+        factKind: 0,
+        factAfter: null,
+        graph: initialGraphCheckpoint(),
+      };
       const facts = { pages: 0, examined: 0, removed: 0 };
       const kinds = ['entry', 'copy', 'follow'] as const;
       while (cursor.factKind < kinds.length && facts.pages < 100) {
@@ -90,28 +103,38 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
         facts.pages++;
         facts.examined += page.examined;
         facts.removed += page.removed;
-        if (page.exhausted) { cursor.factKind++; cursor.factAfter = null; }
-        else {
+        if (page.exhausted) {
+          cursor.factKind++;
+          cursor.factAfter = null;
+        } else {
           if (page.after === null) throw new Error('Library erasure page made no progress');
           cursor.factAfter = page.after;
         }
       }
-      const graph = cursor.factKind === kinds.length
-        ? await runOwnedGraphSegment(accountId, cursor.segment, cursor.graph, graphPage) : null;
+      const graph =
+        cursor.factKind === kinds.length
+          ? await runOwnedGraphSegment(accountId, cursor.segment, cursor.graph, graphPage)
+          : null;
       if (graph) cursor.graph = graph.cursor;
-      const continuation = cursor.factKind < kinds.length || !graph?.exhausted
-        ? { ...cursor, segment: cursor.segment + 1 } : null;
+      const continuation =
+        cursor.factKind < kinds.length || !graph?.exhausted ? { ...cursor, segment: cursor.segment + 1 } : null;
       if (continuation) await continueErasure(accountId, continuation);
       const final = await inspect(accountId);
       if (final.outcome !== null) return { state: 'acknowledged', outcome: final.outcome };
       // Local exhaustion is not proof of foreign copies or shared producer custody.
       return {
-        state: 'pending', facts, owned: graph?.stats ?? { pages: 0, removed: 0 }, continuation,
+        state: 'pending',
+        facts,
+        owned: graph?.stats ?? { pages: 0, removed: 0 },
+        continuation,
         remainingStores: final.remainingStores,
-        blockers: [...BLOCKERS,
-          ...(cursor.graph.blockedCollection === null ? [] : [
-            `collection:${cursor.graph.blockedCollection}: public-history destination withdrawal/fence not committed; source retained`,
-          ]),
+        blockers: [
+          ...BLOCKERS,
+          ...(cursor.graph.blockedCollection === null
+            ? []
+            : [
+                `collection:${cursor.graph.blockedCollection}: public-history destination withdrawal/fence not committed; source retained`,
+              ]),
         ],
       };
     },

@@ -88,7 +88,12 @@ beforeAll(async () => {
   // Cross the real 100-key boundary; each copy is created through the ordinary API.
   for (let i = 0; i < 101; i++)
     await json(
-      await request(people.bob, 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned', note: `private copy ${i}` }),
+      await request(people.bob, 'POST', '/v1/copies', {
+        subjectId,
+        kind: 'physical',
+        status: 'owned',
+        note: `private copy ${i}`,
+      }),
       201,
     );
   privateId = (
@@ -188,17 +193,28 @@ test('complete local native cleanup stays pending for shared custody and T immed
   expect((await request(people.bob, 'GET', `/v1/collections/${privateId}`)).status).toBe(200);
   expect((await request(null, 'GET', `/v1/collections/${unlistedId}`)).status).toBe(200);
   const nativeOwner = [routeOf(people.bob.accountId), people.bob.accountId];
-  expect((await db.admin.query(
-    'SELECT session_id FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3',
-    [...nativeOwner, sessionId],
-  )).rows).toEqual([{ session_id: sessionId }]);
+  expect(
+    (
+      await db.admin.query(
+        'SELECT session_id FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3',
+        [...nativeOwner, sessionId],
+      )
+    ).rows,
+  ).toEqual([{ session_id: sessionId }]);
   for (const table of ['progress_head', 'fact_source_head'])
-    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, nativeOwner)).rows).toEqual([{ '?column?': 1 }]);
+    expect(
+      (await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, nativeOwner))
+        .rows,
+    ).toEqual([{ '?column?': 1 }]);
   for (const id of [privateId, unlistedId])
-    expect((await db.admin.query(
-      'SELECT collection_id FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
-      [...nativeOwner, id],
-    )).rows).toEqual([{ collection_id: id }]);
+    expect(
+      (
+        await db.admin.query(
+          'SELECT collection_id FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
+          [...nativeOwner, id],
+        )
+      ).rows,
+    ).toEqual([{ collection_id: id }]);
   await deletePersona(options, people.bob);
   // Authority/disclosure must fail at T, independently of asynchronous physical work.
   const denied = await capture(db, async () => {
@@ -236,16 +252,36 @@ test('complete local native cleanup stays pending for shared custody and T immed
     ).rows,
   ).toEqual([]);
   for (const table of ['progress_unit', 'progress_change'])
-    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND session_id=$2 LIMIT 1`,
-      [owner[0], sessionId])).rows).toEqual([]);
+    expect(
+      (
+        await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND session_id=$2 LIMIT 1`, [
+          owner[0],
+          sessionId,
+        ])
+      ).rows,
+    ).toEqual([]);
   for (const table of ['progress_head', 'fact_source_head'])
-    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, owner)).rows).toEqual([]);
+    expect(
+      (await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, owner)).rows,
+    ).toEqual([]);
   for (const id of [privateId, unlistedId]) {
-    expect((await db.admin.query('SELECT 1 FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
-      [...owner, id])).rows).toEqual([]);
+    expect(
+      (
+        await db.admin.query(
+          'SELECT 1 FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
+          [...owner, id],
+        )
+      ).rows,
+    ).toEqual([]);
     for (const table of ['collection_member', 'canonical_source_fact', 'canonical_source_state'])
-      expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`,
-        [owner[0], id])).rows).toEqual([]);
+      expect(
+        (
+          await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`, [
+            owner[0],
+            id,
+          ])
+        ).rows,
+      ).toEqual([]);
   }
   // Native receipts prove page/result/delete atomicity and fixed raw-key bounds.
   const receipts = await db.admin.query(
