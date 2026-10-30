@@ -39,14 +39,14 @@ No source files, full currency table or long passages are proposed for copying.
 
 **Observed:** the relevant current files establish these limits:
 
-| Source | Current behavior relevant to this question |
-| --- | --- |
+| Source                                                                                                                                                                            | Current behavior relevant to this question                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [model.ts](../../services/kernel/src/commerce/model.ts), [routes.ts](../../services/kernel/src/commerce/routes.ts), [commands.ts](../../services/kernel/src/commerce/commands.ts) | Offers/orders capture `currency` and numeric `unitAmountMinor`; creation accepts lowercase three-letter codes and positive safe integers. Repricing accepts positive safe integers. No provider currency/unit allowlist establishes those values' meaning. |
-| [stripe.ts](../../services/kernel/src/commerce/stripe.ts) | Sends quantity one, inline `price_data.currency` and integer `unit_amount`; omits `tax_behavior`. Selects Managed Payments or automatic tax. Validates provider integers and same-currency fee details before flattening movements. |
-| [config.ts](../../services/kernel/src/commerce/config.ts) | Configures direct-account namespace/mode and Managed Payments selection, but no admitted currency set, settlement-currency proof or unit version. |
-| [price.ts](../../apps/web/src/checkout/price.ts), [orders-page.tsx](../../apps/web/src/checkout/orders-page.tsx) | Derive the divisor from `Intl` fractional digits and divide a `number`. |
-| [money.ts](../../apps/web/src/checkout/money.ts), [creator-statements-page.tsx](../../apps/web/src/checkout/creator-statements-page.tsx) | Statement formatting already preserves safe integers through BigInt parts. It still chooses the exponent from `Intl.supportedValuesOf`/`NumberFormat`. Keep that precision improvement and ordinary USD/EUR display. |
-| [creator-statements.ts](../../apps/web/src/checkout/creator-statements.ts), [schema.sql](../../services/kernel/db/commerce/schema.sql) | Statement amounts are safe-integer API numbers; native columns are `bigint`. `weightedNetMinor` is an integer-text weighted numerator, not directly a currency amount. |
+| [stripe.ts](../../services/kernel/src/commerce/stripe.ts)                                                                                                                         | Sends quantity one, inline `price_data.currency` and integer `unit_amount`; omits `tax_behavior`. Selects Managed Payments or automatic tax. Validates provider integers and same-currency fee details before flattening movements.                        |
+| [config.ts](../../services/kernel/src/commerce/config.ts)                                                                                                                         | Configures direct-account namespace/mode and Managed Payments selection, but no admitted currency set, settlement-currency proof or unit version.                                                                                                          |
+| [price.ts](../../apps/web/src/checkout/price.ts), [orders-page.tsx](../../apps/web/src/checkout/orders-page.tsx)                                                                  | Derive the divisor from `Intl` fractional digits and divide a `number`.                                                                                                                                                                                    |
+| [money.ts](../../apps/web/src/checkout/money.ts), [creator-statements-page.tsx](../../apps/web/src/checkout/creator-statements-page.tsx)                                          | Statement formatting already preserves safe integers through BigInt parts. It still chooses the exponent from `Intl.supportedValuesOf`/`NumberFormat`. Keep that precision improvement and ordinary USD/EUR display.                                       |
+| [creator-statements.ts](../../apps/web/src/checkout/creator-statements.ts), [schema.sql](../../services/kernel/db/commerce/schema.sql)                                            | Statement amounts are safe-integer API numbers; native columns are `bigint`. `weightedNetMinor` is an integer-text weighted numerator, not directly a currency amount.                                                                                     |
 
 No decimal creator-price parser is present in the inspected price/write path. The parser below is a proposed
 boundary for the editor; it does not reinterpret existing API numbers as major units.
@@ -64,12 +64,12 @@ currency, or license fractional yen in this integer-price integration. Keep usin
 **Fact:** these charge facts come from Stripe's [amount rules and special cases](https://docs.stripe.com/currencies#minor-units).
 Here `e` means major amount = raw integer / `10^e`; `q` is the required charge-input multiple.
 
-| Charge currency/group | `e` | `q` |
-| --- | ---: | ---: |
-| Ordinary documented two-decimal currencies, including USD/EUR | 2 | 1 |
-| BIF CLP DJF GNF JPY KMF KRW MGA PYG RWF VND VUV XAF XOF XPF | 0 | 1 |
-| ISK, UGX | 2 | 100 |
-| HUF, TWD | 2 | 1 |
+| Charge currency/group                                         | `e` | `q` |
+| ------------------------------------------------------------- | --: | --: |
+| Ordinary documented two-decimal currencies, including USD/EUR |   2 |   1 |
+| BIF CLP DJF GNF JPY KMF KRW MGA PYG RWF VND VUV XAF XOF XPF   |   0 |   1 |
+| ISK, UGX                                                      |   2 | 100 |
+| HUF, TWD                                                      |   2 |   1 |
 
 HUF/TWD manual payouts require multiples of 100; that restriction does **not** apply to charges. UGX invoice
 rounding can create a customer-balance adjustment. These are provider rules, not permission to round creator input.
