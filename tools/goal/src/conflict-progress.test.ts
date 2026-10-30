@@ -424,7 +424,7 @@ if (count === 0) {
   run(['rebase', '--abort']);
   const head = run(['rev-parse', 'HEAD']).stdout.trim();
   run(['checkout', '-B', plan.branch, head]);
-  writeFileSync(plan.fileA, readFileSync(plan.fileA, 'utf8') + 'worker follow-up\n');
+  writeFileSync(plan.fileA, readFileSync(plan.fileA, 'utf8') + 'worker follow-up\\n');
   run(['add', '--', plan.fileA]);
   run(['commit', '-qm', 'Worker updates Storybook entry']);
 } else if (count === 2) {
