@@ -39,6 +39,7 @@ import type {
 import receivingJob from './identity-epoch-store-receiving-job.sql';
 import receivingPlan from './identity-epoch-store-receiving-plan.sql';
 import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
+import receivingSelection from './identity-receiving-selection-read.sql';
 
 export type * from './identity-receiving-effects-types.ts';
 const step = 'library-private-follow-counts';
@@ -568,6 +569,76 @@ export async function lookupIdentityReceivingEffect(
     throw stale();
   if (row.effect_transaction_id && row.effect_epoch === null) throw stale();
   return record;
+}
+/** Resolve a locator at its declared native home, then release that home before returning.
+ * Neither the selection nor its serialized capture is permission or committed custody proof.
+ */
+export async function readIdentityReceivingSelection(
+  pool: Pool,
+  selection: IdentityReceivingSelection,
+  context: Readonly<{ deadline: number }>,
+): Promise<IdentityReceivingRecord | null> {
+  try {
+    selected(selection);
+    const hint = selection.capture;
+    if (!hint) throw unavailable('Receiving selection requires a native capture locator');
+    const identity = hint.identity;
+    // Only the actual Library factory's current account-backed Source forms are supported.
+    // A public output or terminal account cannot borrow a collection ID as account authority.
+    if (
+      !identity ||
+      !['curated', 'private_builtin'].includes(identity.scope) ||
+      routeOf(identity.accountId) === null
+    )
+      throw unavailable('Unsupported native receiving Source form');
+    if (
+      routeOf(identity.collectionId) !== identity.route ||
+      selection.sourceId !== identity.collectionId ||
+      selection.owner !== identity.collectionId ||
+      identity.receivingEpoch !== selection.job.epoch.toString()
+    )
+      return null;
+    const home = partitionOf(identity.route);
+    const result = await runCommand(pool, { partition: home, deadline: context.deadline }, async (tx) => {
+      const native = (
+        await tx.query(receivingSelection.sql, [
+          home,
+          selection.job.jobId,
+          selection.job.epoch.toString(),
+          selection.effectKey,
+          selection.original,
+          selection.owner,
+        ])
+      ).rows[0];
+      if (!native) return noEffect(null);
+      // Use the original committed receipt, never today's partition epoch/position.
+      const record = await lookupIdentityReceivingEffect(tx, {
+        kind: 'receiving',
+        job: selection.job,
+        original: selection.original,
+        effectKey: selection.effectKey,
+        receipt: receipt(home, native.transaction_id, native.epoch, native.position),
+      });
+      if (
+        !record ||
+        record.owner !== selection.owner ||
+        record.source.id !== selection.sourceId ||
+        record.source.scope !== selection.scope ||
+        record.source.disposition !== selection.disposition ||
+        record.source.native.captureId !== hint.frontier.captureId ||
+        canonicalize(record.source.native.identity) !== canonicalize(identity)
+      )
+        return noEffect(null);
+      // This checks the actual retained capture/receipt/hold on the SAME client and T.
+      // It does not acquire a hold, admit an effect, reconcile custody or clear a gate.
+      await holdSource(tx, record.source, 'revalidateHold');
+      return noEffect(record);
+    });
+    return result.value;
+  } catch (error) {
+    if (error instanceof IdentityEpochStoreError && error.code === 'identity_effect_stale') return null;
+    throw error;
+  }
 }
 const admittedSources = new WeakMap<CommandTransaction, Map<string, NativeSourceCustody>>();
 /** Used by the existing Store. The actual Source owner retains custody on the receiving client and T. */
