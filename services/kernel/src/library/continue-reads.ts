@@ -35,25 +35,40 @@ export function createContinueReads(deps: { pool: Pool; tokens: KeyRing; clock?:
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
           const owner = await readAccount(client, route, actor.accountId);
-          if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||
-            !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
-            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)) throw new ProblemError('forbidden');
+          if (
+            !owner ||
+            owner.kind !== 'actor' ||
+            owner.state !== 'active' ||
+            owner.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch < 1 ||
+            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+          )
+            throw new ProblemError('forbidden');
           if (query.cursor !== undefined) {
             if (query.cursor.length === 0 || query.cursor.length > 4096) throw new ProblemError('invalid_cursor');
-            const cursor = await decodeListCursor(deps.tokens, {
-              route: 'GET /v1/libraryContinue', viewer: actor.accountId,
-              query: { limit, source: 'owner-active-state-session' },
-            }, query.cursor, (deps.clock ?? systemClock)());
+            const cursor = await decodeListCursor(
+              deps.tokens,
+              {
+                route: 'GET /v1/libraryContinue',
+                viewer: actor.accountId,
+                query: { limit, source: 'owner-active-state-session' },
+              },
+              query.cursor,
+              (deps.clock ?? systemClock)(),
+            );
             if (!cursor.ok) throw new ProblemError('invalid_cursor');
             // No mapping point, fabricated epoch or native source version can replace
             // the shared source-scoped query basis needed to authorize this continuation.
             requireBuiltinQueryRuntime();
           }
-          const presence = (await client.query<{ entry: boolean; session: boolean }>(
-            `SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
+          const presence = (
+            await client.query<{ entry: boolean; session: boolean }>(
+              `SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
               EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state='active') AS session`,
-            [route, actor.accountId],
-          )).rows[0]!;
+              [route, actor.accountId],
+            )
+          ).rows[0]!;
           if (presence.entry || presence.session) requireBuiltinQueryRuntime();
           // Native absence, not missing index metadata, proves this genuine empty union.
           await client.query('COMMIT');

@@ -154,16 +154,25 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
       if (!meaning.rows[0]) throw new ProblemError('semantic_not_ready');
       labels = meaning.rows[0].labels;
     }
-    const stored = (await client.query<{
-      kind: string | null; owner: string | null; membership: string; state: string; visibility: string;
-      title: string; description: string | null; revision: number;
-      presentationKind: string | null; coverMediaId: string | null;
-    }>(
-      `SELECT builtin_kind AS kind,curator_account_id AS owner,membership_kind AS membership,state,visibility,
+    const stored = (
+      await client.query<{
+        kind: string | null;
+        owner: string | null;
+        membership: string;
+        state: string;
+        visibility: string;
+        title: string;
+        description: string | null;
+        revision: number;
+        presentationKind: string | null;
+        coverMediaId: string | null;
+      }>(
+        `SELECT builtin_kind AS kind,curator_account_id AS owner,membership_kind AS membership,state,visibility,
         title,description,revision,presentation_kind AS "presentationKind",cover_media_id AS "coverMediaId"
        FROM library.collection WHERE route=$1 AND collection_id=$2`,
-      [routeOf(value.id), value.id],
-    )).rows[0];
+        [routeOf(value.id), value.id],
+      )
+    ).rows[0];
     if (stored) {
       if (stored.owner !== accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
         throw new ProblemError('dependency_unavailable');
@@ -171,13 +180,19 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
       // Published output and configured covers use their owning current readers, never a private fallback.
       if (stored.visibility !== 'private' || stored.presentationKind !== null || stored.coverMediaId !== null)
         return requireBuiltinQueryRuntime();
-      return { ...value, title: stored.title, description: stored.description, revision: stored.revision,
-        ...(labels === undefined ? {} : { builtinLabels: labels }) };
+      return {
+        ...value,
+        title: stored.title,
+        description: stored.description,
+        revision: stored.revision,
+        ...(labels === undefined ? {} : { builtinLabels: labels }),
+      };
     }
     return { ...value, ...(labels === undefined ? {} : { builtinLabels: labels }) };
   }
   async function discover(actor: Actor, after: string | null = null, limit = 100): Promise<BuiltinCollectionView[]> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 101) throw new RangeError('Builtin descriptor limit must be 1..101');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 101)
+      throw new RangeError('Builtin descriptor limit must be 1..101');
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) return [];
@@ -191,7 +206,9 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
       const keys: BuiltinCollectionKey[] = [{ kind: 'everything' }, { kind: 'liked' }];
       // One indexed successor per descriptor skips all same-identity pins, including old release fanout.
       const states = await client.query<{
-        profileId: string; stateSetId: string; stateId: string;
+        profileId: string;
+        stateSetId: string;
+        stateId: string;
       }>(
         `WITH RECURSIVE keys(collection_id,n) AS (
           (SELECT collection_id,1 FROM library.owner_index_state
@@ -211,9 +228,10 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
         [routeOf(owner.accountId), owner.accountId, after, limit],
       );
       keys.push(...states.rows.map((state) => ({ kind: 'state' as const, ...state })));
-      const selected = keys.map((key) => ({ key, id: builtinCollectionId(owner.accountId, key) }))
+      const selected = keys
+        .map((key) => ({ key, id: builtinCollectionId(owner.accountId, key) }))
         .filter((value) => after === null || value.id > after)
-        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+        .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
         .slice(0, limit);
       const values: BuiltinCollectionView[] = [];
       for (const value of selected) values.push(await present(client, owner.accountId, value.key));
@@ -246,26 +264,33 @@ export function createBuiltinRuntime(config: { pool: Pool; access?: Access; toke
     if (actor.kind !== 'account') throw new ProblemError('not_found');
     const { access, tokens } = config;
     if (!access || !tokens) return requireBuiltinQueryRuntime();
-    return readOwnerMembers({ pool: config.pool, access, tokens,
-      ...(config.clock === undefined ? {} : { clock: config.clock }) }, {
-      actor, collectionId: id, limit: options.limit ?? 20,
-      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-      deadline,
-      async revalidateOwner() {
-        if (!(await read(actor, id, 'collection:read', deadline))) throw new ProblemError('not_found');
+    return readOwnerMembers(
+      { pool: config.pool, access, tokens, ...(config.clock === undefined ? {} : { clock: config.clock }) },
+      {
+        actor,
+        collectionId: id,
+        limit: options.limit ?? 20,
+        ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+        deadline,
+        async revalidateOwner() {
+          if (!(await read(actor, id, 'collection:read', deadline))) throw new ProblemError('not_found');
+        },
+        readSourceVersion: () =>
+          snapshot(async (client) => {
+            const owner = await admitted(client, actor);
+            if (!owner) throw new ProblemError('not_found');
+            if (source.builtinKind === 'liked') return readLikedOriginalVersion(client, owner.accountId);
+            const head = (
+              await client.query<{ generation: string }>(
+                'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
+                [routeOf(owner.accountId), owner.accountId],
+              )
+            ).rows[0];
+            if (!head) throw new ProblemError('semantic_not_ready');
+            return head.generation;
+          }, deadline),
       },
-      readSourceVersion: () => snapshot(async (client) => {
-        const owner = await admitted(client, actor);
-        if (!owner) throw new ProblemError('not_found');
-        if (source.builtinKind === 'liked') return readLikedOriginalVersion(client, owner.accountId);
-        const head = (await client.query<{ generation: string }>(
-          'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
-          [routeOf(owner.accountId), owner.accountId],
-        )).rows[0];
-        if (!head) throw new ProblemError('semantic_not_ready');
-        return head.generation;
-      }, deadline),
-    });
+    );
   }
   return { read, discover, members };
 }

@@ -16,23 +16,34 @@ export async function readContinueOriginalFacts(client: Client, accountId: strin
   const truth = await readOwnerOriginalTruth(client, accountId, original);
   const sessions = await createShelfActiveReader().sessions(client, routeOf(accountId)!, accountId, [original]);
   const session = sessions.get(original) ?? null;
-  const pin = session === null ? null : (await client.query<{ pin: unknown; lastChangedAt: string }>(
-    `SELECT library_profile_pin AS pin,
+  const pin =
+    session === null
+      ? null
+      : (
+          await client.query<{ pin: unknown; lastChangedAt: string }>(
+            `SELECT library_profile_pin AS pin,
        to_char(last_changed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "lastChangedAt"
      FROM library.progress_session
       WHERE route=$1 AND account_id=$2 AND session_id=$3 AND subject_id=$4 AND state='active'`,
-    [routeOf(accountId), accountId, session.id, original],
-  )).rows[0];
+            [routeOf(accountId), accountId, session.id, original],
+          )
+        ).rows[0];
   if (session !== null && pin === undefined) throw new ProblemError('semantic_not_ready');
-  const activity = (await client.query<{ lastActivityAt: string | null; unknown: boolean }>(
-    `SELECT to_char(activity_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "lastActivityAt",
+  const activity = (
+    await client.query<{ lastActivityAt: string | null; unknown: boolean }>(
+      `SELECT to_char(activity_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "lastActivityAt",
       activity_unknown AS unknown FROM library.owner_original_activity($1,$2,$3)`,
-    [routeOf(accountId), accountId, original],
-  )).rows[0];
+      [routeOf(accountId), accountId, original],
+    )
+  ).rows[0];
   if (!activity || activity.unknown) throw new ProblemError('semantic_not_ready');
-  return { truth, session, sessionPin: pin === null || pin === undefined ? null : decodeLibraryProfilePin(pin.pin),
-    sessionLastChangedAt: pin?.lastChangedAt ?? null, lastActivityAt: activity.lastActivityAt };
-
+  return {
+    truth,
+    session,
+    sessionPin: pin === null || pin === undefined ? null : decodeLibraryProfilePin(pin.pin),
+    sessionLastChangedAt: pin?.lastChangedAt ?? null,
+    lastActivityAt: activity.lastActivityAt,
+  };
 }
 
 async function acceptedProfile(pool: Pool, pin: LibraryProfilePin | null) {
@@ -77,7 +88,9 @@ export type ContinueOriginalFacts = Awaited<ReturnType<typeof readContinueOrigin
  * Large groups remain that plan's retained preparation work rather than a per-page alias sweep.
  */
 export async function evaluateContinueGroup(
-  pool: Pool, subjectId: string, originals: readonly ContinueOriginalFacts[],
+  pool: Pool,
+  subjectId: string,
+  originals: readonly ContinueOriginalFacts[],
 ) {
   if (originals.length === 0 || originals.length > 100) throw new ProblemError('semantic_not_ready');
   const state = currentOwnerState(originals.map((original) => original.truth));
@@ -88,13 +101,17 @@ export async function evaluateContinueGroup(
       lastActivityAt = original.lastActivityAt;
     if (original.session === null) continue;
     if (original.sessionLastChangedAt === null) throw new ProblemError('semantic_not_ready');
-    if (active === null || original.sessionLastChangedAt > active.sessionLastChangedAt! ||
-      (original.sessionLastChangedAt === active.sessionLastChangedAt && original.session.id < active.session!.id))
+    if (
+      active === null ||
+      original.sessionLastChangedAt > active.sessionLastChangedAt! ||
+      (original.sessionLastChangedAt === active.sessionLastChangedAt && original.session.id < active.session!.id)
+    )
       active = original;
   }
   // Validate every contributing session's accepted mode/unit, including an older support that is not displayed.
-  for (const original of originals) if (original.session !== null)
-    await evaluateContinueSupports(pool, { status: 'complete', state: null }, original.session, original.sessionPin);
+  for (const original of originals)
+    if (original.session !== null)
+      await evaluateContinueSupports(pool, { status: 'complete', state: null }, original.session, original.sessionPin);
   const supports = await evaluateContinueSupports(pool, state, active?.session ?? null, active?.sessionPin ?? null);
   if (!supports.eligible) return null;
   if (lastActivityAt === null) throw new ProblemError('semantic_not_ready');

@@ -19,11 +19,15 @@ import type { DynamicMemberView } from './builtin-runtime.ts';
 
 /** Structural/source compatibility is not disclosure. Each positive is checked by the native Source again. */
 function sameSource(left: CollectionSourceObservation, right: CollectionSourceObservation) {
-  return left.collectionId === right.collectionId && left.route === right.route &&
-    left.incarnation === right.incarnation && left.revision === right.revision &&
+  return (
+    left.collectionId === right.collectionId &&
+    left.route === right.route &&
+    left.incarnation === right.incarnation &&
+    left.revision === right.revision &&
     left.stamp.epoch === right.stamp.epoch &&
     JSON.stringify(left.authority) === JSON.stringify(right.authority) &&
-    JSON.stringify(left.basis) === JSON.stringify(right.basis);
+    JSON.stringify(left.basis) === JSON.stringify(right.basis)
+  );
 }
 
 /** One common caller ledger; native owners return actual charged work, including rejected/empty reads. */
@@ -31,14 +35,21 @@ function pageWork(limit: number) {
   const candidates = Math.min(600, 6 * limit + 3);
   const id = crypto.randomUUID();
   let remaining: WorkAllowance['remaining'] = {
-    candidateKeys: candidates, nativeRows: 64 + 16 * candidates,
-    nativePoints: 16 + 8 * candidates, witnessKeys: 16 + 8 * candidates,
-    statements: 12, bytes: 80 * 1024 + 5120 * candidates,
-    emptySeeks: 3, identityMetadataRows: 0,
+    candidateKeys: candidates,
+    nativeRows: 64 + 16 * candidates,
+    nativePoints: 16 + 8 * candidates,
+    witnessKeys: 16 + 8 * candidates,
+    statements: 12,
+    bytes: 80 * 1024 + 5120 * candidates,
+    emptySeeks: 3,
+    identityMetadataRows: 0,
   };
   return {
     allowance(candidateKeys = remaining.candidateKeys): WorkAllowance {
-      return { reservationId: id, remaining: { ...remaining, candidateKeys: Math.min(candidateKeys, remaining.candidateKeys) } };
+      return {
+        reservationId: id,
+        remaining: { ...remaining, candidateKeys: Math.min(candidateKeys, remaining.candidateKeys) },
+      };
     },
     settle(receipt: WorkReceipt) {
       if (receipt.reservationId !== id) throw new TypeError('Foreign owner source work receipt');
@@ -62,7 +73,11 @@ function pageWork(limit: number) {
 export async function readOwnerMembers(
   deps: { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock },
   input: {
-    actor: AccountActor; collectionId: string; limit: number; cursor?: string | null; deadline: number;
+    actor: AccountActor;
+    collectionId: string;
+    limit: number;
+    cursor?: string | null;
+    deadline: number;
     /** Actual owner-home reread after releasing all foreign source homes. */
     revalidateOwner: () => Promise<void>;
     /** Actual native source version, independent of identity and permission. */
@@ -71,12 +86,18 @@ export async function readOwnerMembers(
 ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
   const clock = deps.clock ?? systemClock;
   const binding = {
-    route: 'GET /v1/collections/:collectionId/members', viewer: input.actor.accountId,
+    route: 'GET /v1/collections/:collectionId/members',
+    viewer: input.actor.accountId,
     query: { collectionId: input.collectionId, limit: input.limit, order: 'id', source: 'private_builtin' },
   };
   const position = input.cursor == null ? null : await decodeListCursor(deps.tokens, binding, input.cursor, clock());
-  if (position && (!position.ok || position.after.length !== 4 ||
-    position.after.some((value) => typeof value !== 'string') || routeOf(String(position.after[3])) === null))
+  if (
+    position &&
+    (!position.ok ||
+      position.after.length !== 4 ||
+      position.after.some((value) => typeof value !== 'string') ||
+      routeOf(String(position.after[3])) === null)
+  )
     throw new ProblemError('invalid_cursor');
   const work = pageWork(input.limit);
   const source = createCollectionSource(deps);
@@ -85,7 +106,12 @@ export async function readOwnerMembers(
   try {
     const context = { actor: input.actor, at, deadline: input.deadline };
     async function prepare(time: AuthoritativeTime = at): Promise<PreparedCollectionSource> {
-      const result = await source.prepare({ ...context, at: time, collectionId: input.collectionId, allowance: work.allowance() });
+      const result = await source.prepare({
+        ...context,
+        at: time,
+        collectionId: input.collectionId,
+        allowance: work.allowance(),
+      });
       work.settle(result.work);
       return result.source;
     }
@@ -95,8 +121,12 @@ export async function readOwnerMembers(
       throw new ProblemError('not_found');
     let after: string | null = null;
     if (position?.ok) {
-      if (position.epoch !== observed.stamp.epoch || position.after[0] !== observed.incarnation ||
-        position.after[1] !== observed.basis.digest || position.after[2] !== version)
+      if (
+        position.epoch !== observed.stamp.epoch ||
+        position.after[0] !== observed.incarnation ||
+        position.after[1] !== observed.basis.digest ||
+        position.after[2] !== version
+      )
         throw new ProblemError('stale_cursor');
       after = String(position.after[3]);
     }
@@ -104,16 +134,25 @@ export async function readOwnerMembers(
     let exhausted = false;
     for (let round = 0; round < 3 && members.length <= input.limit && !exhausted; round++) {
       const quota = Math.min(600, 2 * (input.limit - members.length) + 1);
-      const prefix = await source.prefix({ ...context, source: prepared,
-        allowance: work.allowance(quota), afterSubjectId: after });
+      const prefix = await source.prefix({
+        ...context,
+        source: prepared,
+        allowance: work.allowance(quota),
+        afterSubjectId: after,
+      });
       work.settle(prefix.work);
       if (prefix.candidates.length > quota) throw new ProblemError('dependency_unavailable');
       if (!sameSource(observed, prefix.observation)) throw new ProblemError('semantic_not_ready');
       for (const candidate of prefix.candidates) {
         if (routeOf(candidate.subjectId) === null || (after !== null && candidate.subjectId <= after))
           throw new ProblemError('dependency_unavailable');
-        const membership = await source.containsSubject({ ...context, source: prepared,
-          allowance: work.allowance(), subjectId: candidate.subjectId, positiveEvidence: candidate.evidence });
+        const membership = await source.containsSubject({
+          ...context,
+          source: prepared,
+          allowance: work.allowance(),
+          subjectId: candidate.subjectId,
+          positiveEvidence: candidate.evidence,
+        });
         work.settle(membership.work);
         if (!sameSource(observed, membership.observation)) throw new ProblemError('semantic_not_ready');
         if (membership.result === 'not_proven') throw new ProblemError('dependency_unavailable');
@@ -135,24 +174,36 @@ export async function readOwnerMembers(
       const current = await prepare(finalAt);
       if (!sameSource(observed, current.observation)) throw new ProblemError('semantic_not_ready');
       for (const member of shown) {
-        const checked = await source.containsSubject({ ...context, at: finalAt, source: current,
-          allowance: work.allowance(), subjectId: member.subjectId });
+        const checked = await source.containsSubject({
+          ...context,
+          at: finalAt,
+          source: current,
+          allowance: work.allowance(),
+          subjectId: member.subjectId,
+        });
         work.settle(checked.work);
         if (!sameSource(observed, checked.observation) || checked.result !== true)
           throw new ProblemError('semantic_not_ready');
       }
       await input.revalidateOwner();
-      if (await input.readSourceVersion() !== version)
-        throw new ProblemError('semantic_not_ready');
+      if ((await input.readSourceVersion()) !== version) throw new ProblemError('semantic_not_ready');
     } finally {
       releaseOperationalTime(finalAt);
     }
     return {
       members: shown,
-      next: members.length > input.limit ? await encodeListCursor(deps.tokens, binding, {
-        epoch: observed.stamp.epoch,
-        after: [observed.incarnation, observed.basis.digest, version, shown.at(-1)!.subjectId],
-      }, clock()) : null,
+      next:
+        members.length > input.limit
+          ? await encodeListCursor(
+              deps.tokens,
+              binding,
+              {
+                epoch: observed.stamp.epoch,
+                after: [observed.incarnation, observed.basis.digest, version, shown.at(-1)!.subjectId],
+              },
+              clock(),
+            )
+          : null,
     };
   } finally {
     releaseOperationalTime(at);
