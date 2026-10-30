@@ -337,8 +337,11 @@ export function SubjectPage({
   base,
   operator,
   curation,
+  subjectLabel,
 }: {
   page: SubjectPageData;
+  /** The current frame's label for list-only documents that do not repeat the subject read. */
+  subjectLabel?: string;
   locale: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
@@ -424,6 +427,7 @@ export function SubjectPage({
         <PageData
           locale={locale}
           subject={page.subject}
+          {...(subjectLabel !== undefined ? { subjectLabel } : {})}
           {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
           {...(page.account ? { account: page.account } : {})}
           {...(operator ? { operator } : {})}

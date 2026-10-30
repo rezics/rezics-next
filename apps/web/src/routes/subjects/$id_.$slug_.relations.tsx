@@ -2,9 +2,9 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { useQuery } from '@tanstack/react-query';
 import { RelationsView } from '../../features/pages/relations-view';
-import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
-import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
-import { subjectPageType } from '../../features/pages/subject';
+import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
+import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { pageRelationProperties, subjectPageType } from '../../features/pages/subject';
 import { subjectTabs } from '../../features/pages/views';
 import { useSession } from '../../session/query';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -20,10 +20,11 @@ import {
   subjectRelationsQuery,
   subjectUrlForView,
   subjectViewPaths,
+  subjectViewPagesQuery,
 } from '../../features/pages/subject-queries';
 import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
-import { validateViewCursor } from '../../features/pages/view-cursor';
+import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
 
@@ -50,7 +51,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
       (typeof property !== 'string' || !curiePattern.test(property) || property.length > 128)
     )
       throw notFound();
-    if (cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 2048)) throw notFound();
+    validateViewCursor(cursor);
     return {
       id,
       slug,
@@ -78,15 +79,22 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
-  staticData: { publicCache: true },
+  staticData: { publicCache: false },
   // Validate the cursor in the loader so invalid input answers the not-found document.
-  validateSearch: (search: Record<string, unknown>): { property?: string; cursor?: unknown } => {
+  validateSearch: (search: Record<string, unknown>) => {
     return {
       ...(typeof search.property === 'string' && search.property.length <= 128 ? { property: search.property } : {}),
       cursor: search.cursor,
+      realm: validatePageRealm(search.realm),
+      node: validatePageNode(search.node),
     };
   },
-  loaderDeps: ({ search }) => ({ property: search.property, cursor: search.cursor }),
+  loaderDeps: ({ search }) => ({
+    property: search.property,
+    cursor: search.cursor,
+    realm: search.realm,
+    node: search.node,
+  }),
   loader: async ({ params, deps, location, context }) => {
     const cursor = validateViewCursor(deps.cursor);
     const canonical = await readRelations({
@@ -99,6 +107,44 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         search: keepSearch('', location.searchStr, location.hash),
       },
     });
+    // Configured groups use their native incoming/outgoing descriptors and independent signed continuations.
+    // Keep the older Global property-only URL for callers whose profile has no corresponding view node.
+    if (!deps.property || deps.realm || deps.node) {
+      const loaded = await context.queryClient.ensureQueryData(
+        subjectViewPagesQuery(params.id, getLocale(), 'relations', cursor, deps.realm, deps.node),
+      );
+      if (loaded.kind === 'redirect') {
+        if (loaded.target === 'account')
+          throw redirect(
+            canonicalRedirect(accountHref(getLocale(), loaded.id, 'relations'), location.searchStr, location.hash),
+          );
+        const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(loaded.id, getLocale()));
+        if (survivor.kind === 'missing') throw notFound();
+        throw redirect(
+          canonicalRedirect(subjectUrlForView(survivor.value, 'relations'), location.searchStr, location.hash),
+        );
+      }
+      if (loaded.kind !== 'page') throw notFound();
+      const frame = subjectFrame(loaded.overview, getLocale());
+      if (!frame) throw notFound();
+      const type = subjectPageType(loaded.overview);
+      const [typeData, relations] = await Promise.all([
+        type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : Promise.resolve({}),
+        context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale())),
+      ]);
+      return {
+        configured: true as const,
+        page: loaded.page,
+        title: frame.title.text,
+        frame,
+        tabs: subjectTabs(loaded.overview),
+        type: typeData,
+        relations,
+        paths: canonical.paths,
+        cursor,
+        realm: deps.realm,
+      };
+    }
     const [overview, links] = await Promise.all([
       context.queryClient.ensureQueryData(subjectPageQuery(params.id, getLocale(), 'overview')),
       context.queryClient.ensureQueryData(subjectLinksQuery(params.id, getLocale(), deps.property, cursor)),
@@ -132,6 +178,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       context.queryClient.ensureQueryData(subjectRelationsQuery([...properties], getLocale())),
     ]);
     return {
+      configured: false as const,
       page: overview.page,
       title: frame.title.text,
       frame,
@@ -141,6 +188,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       body,
       paths: canonical.paths,
       cursor,
+      realm: undefined,
     };
   },
   head: ({ loaderData, match }) =>
@@ -166,7 +214,8 @@ function RelationsRoute() {
     credit: m.subject_cover_credit(),
     via: m.subject_cover_via(),
   };
-  const { frame, tabs, type, relations, body } = Route.useLoaderData();
+  const data = Route.useLoaderData();
+  const { frame, tabs, type, relations, realm } = data;
   const { state: session } = useSession();
   const { data: loadedReader } = useQuery({
     ...subjectReaderQuery(frame.id, getLocale()),
@@ -174,26 +223,44 @@ function RelationsRoute() {
   });
   const reader = loadedReader ?? defaultReader;
   const { property } = Route.useSearch();
+  const frameElement = (
+    <SubjectFrame
+      frame={frame}
+      realm={realm}
+      locale={getLocale()}
+      link={SubjectLink}
+      reader={reader}
+      coverLabels={coverLabels}
+      unlabelled={m.subject_value_unlabelled()}
+      {...(type.label ? { typeLabel: type.label } : {})}
+      {...(type.ratio ? { ratio: type.ratio } : {})}
+      tabs={tabs}
+      tabLabels={viewTabLabels()}
+      view="relations"
+    />
+  );
+  if (data.configured)
+    return (
+      <SubjectViewPage
+        page={data.page}
+        subjectLabel={frame.title.text}
+        locale={getLocale()}
+        messages={subjectPageMessages()}
+        reader={reader}
+        link={SubjectLink}
+        view="relations"
+        label={m.subject_relations()}
+        relations={relations}
+        frame={frameElement}
+        renderJsonLd={false}
+      />
+    );
   return (
     <RelationsView
       locale={getLocale()}
       subject={{ id: frame.id, label: frame.title.text }}
-      frame={
-        <SubjectFrame
-          frame={frame}
-          locale={getLocale()}
-          link={SubjectLink}
-          reader={reader}
-          coverLabels={coverLabels}
-          unlabelled={m.subject_value_unlabelled()}
-          {...(type.label ? { typeLabel: type.label } : {})}
-          {...(type.ratio ? { ratio: type.ratio } : {})}
-          tabs={tabs}
-          tabLabels={viewTabLabels()}
-          view="relations"
-        />
-      }
-      data={{ body, property: property ?? null }}
+      frame={frameElement}
+      data={{ body: data.body, property: property ?? null }}
       relations={relations}
       value={{
         locale: getLocale(),

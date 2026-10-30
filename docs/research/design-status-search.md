@@ -44,6 +44,13 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   consumer calls `POST /v1/pages:read`. Account identity lookup already supports
   `GET /v1/accounts?ids=...`; it is not discovery. A native discovery producer/current-discovery guard
   and generic mixed hit consumer remain missing. Proposed `POST /v1/search:query` is not mounted.
+- **Edition and creator traversal:** Search wires the remaining vertical journey on Web's Subject pages.
+  The shipped CreativeWork configuration adds the released `schema:exampleOfWork` outgoing group;
+  editions and creator Works compose the existing configured incoming lists and independent relation streams.
+  The unfiltered `/relations` route now consumes that current grouped page rather than its older incoming-only
+  reader. Semantic retains ownership of native streams, counts, qualifiers, disclosure and cursor limits.
+  Cards and continuation preserve the selected Realm for fresh native Context resolution; bounded embedded
+  statements never supply a native total. This is journey wiring, with native proof and Web visual review separate.
 - **Refinement:** Web uses released definitions but displays only its first eight property controls;
   its type choices come from sampled facets, not complete configured-kind metadata. The current public
   facet envelope already omits counts. Its underlying sampled, count-ordered execution still lacks

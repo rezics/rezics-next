@@ -96,7 +96,7 @@ export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
 export type RowValue = Pick<
   OverviewValue,
-  'locale' | 'link' | 'reader' | 'labels' | 'unlabelled' | 'spoilerShow' | 'ratio'
+  'locale' | 'link' | 'reader' | 'labels' | 'unlabelled' | 'spoilerShow' | 'ratio' | 'context'
 >;
 
 type SubjectRead = { subject: Subject; related: Related; documents?: unknown; summary?: SubjectCover | null };
@@ -330,7 +330,7 @@ export function holderItems(
   return {
     items,
     ...(total ? { count: total } : {}),
-    more: total ? hasMore(total, items.length) : body.next != null || body.links.length > items.length,
+    more: hasMore(total, items.length) || body.next != null || body.links.length > items.length,
   };
 }
 
@@ -361,12 +361,12 @@ export function statementItems(
       .filter(isRecord)
       .slice(0, limit)
       .flatMap((row): Item[] => {
-        if (typeof row.target !== 'string' || !isRecord(row.statement)) return [];
+        if (typeof row.target !== 'string' || !isRecord(row.statement) || !isRecord(row.summary)) return [];
         const statement = row.statement;
 
         return [
           {
-            id: row.target,
+            id: typeof row.summary.id === 'string' ? row.summary.id : row.target,
             label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
             ...(typeof row.type === 'string' ? { type: row.type } : {}),
             statement: typeof statement.id === 'string' ? statement.id : undefined,
@@ -381,7 +381,12 @@ export function statementItems(
       isRecord(section.body.count) && typeof section.body.count.value === 'number'
         ? countFromLinks({ value: section.body.count.value, exact: section.body.count.exact === true }, items.length)
         : undefined;
-    return { items, count, more: typeof section.body.next === 'string' };
+    return {
+      items,
+      count,
+      more:
+        hasMore(count, items.length) || typeof section.body.next === 'string' || section.body.relations.length > limit,
+    };
   }
   const read = subjectRead(section);
   if (!read || typeof property !== 'string') return;
@@ -404,6 +409,17 @@ export function statementItems(
         label: pageText(entry.labels, value.locale),
         statement: statement.id,
         ...(entry.type ? { type: entry.type } : {}),
+        ...(entry.type
+          ? {
+              summary: {
+                id: entry.redirect ?? target,
+                type: entry.type,
+                ...(entry.types ? { types: entry.types } : {}),
+                label: { value: pageText(entry.labels, value.locale).text, language: value.locale },
+                ...(entry.cover ? { cover: entry.cover } : {}),
+              },
+            }
+          : {}),
         notes: [],
         qualified: qualifiedNotes(
           statement,
@@ -423,7 +439,14 @@ export function statementItems(
   return { items, count, more: count ? hasMore(count, items.length) : statements.length > 0 };
 }
 
-function LinkSection(props: Record<string, unknown>, slot: string, title: string, view: string, forward: boolean) {
+function LinkSection(
+  props: Record<string, unknown>,
+  slot: string,
+  title: string,
+  view: string,
+  forward: boolean,
+  propertyView?: string,
+) {
   const state = useOverview(props.id);
   if (!state) return null;
   const { value, section } = state;
@@ -461,7 +484,7 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       titleLang={text.text ? text.lang : undefined}
       count={listed.count}
       more={props.paged !== true && (listed.more ?? hasMore(listed.count, listed.items.length))}
-      href={viewHref(value, view)}
+      href={viewHref(value, view, propertyView)}
       locale={value.locale}
     >
       {listed.items.length === 0 && (
@@ -640,42 +663,14 @@ export function RelationGroups(props: Record<string, unknown>) {
 
 /** A list of the subjects whose statement of one property points at the page subject, in the property's declared order. */
 export function SubjectList(props: Record<string, unknown>) {
-  const state = useOverview(props.id);
-  if (!state) return null;
-  const { value, section } = state;
-  const id = String(props.id);
-  const title = pageText(props.title, value.locale);
-  if (props.paged === true)
-    return (
-      <RelationStream
-        value={value}
-        section={section ?? { ok: false }}
-        node={id}
-        view={listView(props.property) ?? 'relations'}
-        title={title.text}
-      />
-    );
-  const found = linkItems(section, props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props), value);
-  if (!found) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
-  if (found.items.length === 0) return null;
-  const listed = { ...found, items: datedItems(found.items, value.locale) };
-  return (
-    <Preview
-      slot="subject-list"
-      id={id}
-      title={title.text}
-      titleLang={title.lang}
-      count={listed.count}
-      more={props.paged !== true && listed.more}
-      href={viewHref(
-        value,
-        listView(props.property) ?? 'relations',
-        listView(props.property) ? undefined : typeof props.property === 'string' ? props.property : undefined,
-      )}
-      locale={value.locale}
-    >
-      <CoverList items={listed.items} value={value} label={title.text} preview={props.paged !== true} />
-    </Preview>
+  const view = listView(props.property);
+  return LinkSection(
+    props,
+    'subject-list',
+    '',
+    view ?? 'relations',
+    false,
+    !view && typeof props.property === 'string' ? props.property : undefined,
   );
 }
 

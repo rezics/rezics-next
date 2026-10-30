@@ -321,6 +321,14 @@
               }
             },
             {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
               "type": "Statements",
               "props": {
                 "id": "statements",
@@ -599,6 +607,15 @@
                 },
                 "property": "rezics:bangumiRelatedTo",
                 "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12,
                 "paged": true
               }
             }

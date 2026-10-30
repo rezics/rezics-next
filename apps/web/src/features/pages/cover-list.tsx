@@ -11,7 +11,7 @@ import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { listKeyFacts } from '../../media/type-presentation';
 import type { Fact } from '../../search/results';
-import { subjectHref } from '../../subject/subject-href';
+import { relationTargetHref } from './edition-work';
 import type { Item, RowValue } from './overview';
 import { SpoilerGate } from './values';
 
@@ -39,7 +39,7 @@ function ItemCard({
   );
   const qualified = (item.qualified ?? []).map((note, index) =>
     note.subject ? (
-      <value.link key={index} href={subjectHref(note.subject, value.locale).href}>
+      <value.link key={index} href={relationTargetHref(note.subject, value.locale, value.context)}>
         {note.text}
       </value.link>
     ) : (
@@ -51,7 +51,7 @@ function ItemCard({
   const card = (
     <CoverCard
       link={value.link}
-      href={subjectHref({ id: item.id, label: title }, value.locale).href}
+      href={relationTargetHref({ id: item.id, label: title }, value.locale, value.context)}
       title={title}
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
       cover={{

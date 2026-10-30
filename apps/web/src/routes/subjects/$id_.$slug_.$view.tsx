@@ -117,7 +117,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
     );
     if (loaded.kind === 'missing') {
-      const overview = await context.queryClient.ensureQueryData(subjectPageQuery(params.id, getLocale()));
+      const overview = await context.queryClient.ensureQueryData(
+        subjectPageQuery(params.id, getLocale(), 'overview', deps.realm),
+      );
       if (overview.kind !== 'page') throw notFound();
       throw redirect(canonicalRedirect(canonical.href, location.searchStr, location.hash, 302));
     }
@@ -200,6 +202,7 @@ function SubjectViewRoute() {
   return (
     <SubjectViewPage
       page={page}
+      subjectLabel={frame.title.text}
       curation={view === 'details' ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined}
       locale={locale}
       messages={subjectPageMessages()}

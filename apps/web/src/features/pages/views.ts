@@ -115,7 +115,7 @@ function previewCount(
   node: Node,
   read: { kind: string; id?: string; limit?: number } | undefined,
   result: Read | undefined,
-): { items: number; count?: Count } | undefined {
+): { items: number; count?: Count; more?: boolean } | undefined {
   if (!read || result?.status !== 200 || !isRecord(result.body)) return;
   const body = result.body;
   if (read.kind === 'links' && Array.isArray(body.links)) {
@@ -126,6 +126,7 @@ function previewCount(
     const mappedCount = countFromLinks(count, body.links.length);
     return {
       items: Math.min(body.links.length, previewLimit(node, read)),
+      more: typeof body.next === 'string' || body.links.length > previewLimit(node, read),
       ...(mappedCount ? { count: mappedCount } : {}),
     };
   }
@@ -135,7 +136,11 @@ function previewCount(
       isRecord(body.count) && typeof body.count.value === 'number'
         ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, body.relations.length)
         : undefined;
-    return { items: Math.min(body.relations.length, previewLimit(node, read)), ...(count ? { count } : {}) };
+    return {
+      items: Math.min(body.relations.length, previewLimit(node, read)),
+      more: typeof body.next === 'string' || body.relations.length > previewLimit(node, read),
+      ...(count ? { count } : {}),
+    };
   }
   if (read.kind === 'search' && Array.isArray(body.subjects)) {
     return { items: body.subjects.length };
@@ -224,6 +229,7 @@ export function subjectTabs(page: {
       previews: number;
       counted: number;
       fits: boolean;
+      more: boolean;
     }
   >();
   const openReads = new Set<View>();
@@ -236,6 +242,7 @@ export function subjectTabs(page: {
       previews: 0,
       counted: 0,
       fits: true,
+      more: false,
     };
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
@@ -253,8 +260,13 @@ export function subjectTabs(page: {
       sum.counted += 1;
       sum.items += counted.items;
       sum.counts.push(counted.count);
+      sum.more ||= counted.more === true || !!counted.count?.value;
       sum.fits =
-        sum.fits && !!counted.count && counted.count.relation === 'exact' && counted.count.value === counted.items;
+        sum.fits &&
+        !counted.more &&
+        !!counted.count &&
+        counted.count.relation === 'exact' &&
+        counted.count.value === counted.items;
     } else {
       sum.counts.push(undefined);
       sum.fits = false;
@@ -271,7 +283,7 @@ export function subjectTabs(page: {
     }
     if (ALWAYS.has(view) && !driven.has(view)) return [{ view }];
     const sum = sums.get(view);
-    if (!sum || sum.items === 0) return [];
+    if (!sum || (sum.items === 0 && !sum.more)) return [];
     if (!ALWAYS.has(view) && sum.fits && sum.previews === sum.counted) return [];
     const count = sumCounts(sum.counts);
     return [{ view, ...(count ? { count } : {}) }];

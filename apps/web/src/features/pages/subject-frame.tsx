@@ -230,7 +230,10 @@ export function SubjectFrame({
             <span
               className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-serif text-lg font-semibold`}
             >
-              <Link href={base} {...(frame.title.lang ? { lang: frame.title.lang } : {})}>
+              <Link
+                href={realm ? `${base}?${new URLSearchParams({ realm })}` : base}
+                {...(frame.title.lang ? { lang: frame.title.lang } : {})}
+              >
                 {title}
               </Link>
             </span>
