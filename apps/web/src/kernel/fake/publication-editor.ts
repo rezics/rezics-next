@@ -64,7 +64,7 @@ export function publicationFixture(scenario: PublicationScenario = 'ready', loca
         session: request.headers.get('rezics-session-token'),
       });
       if (path === '/v1/definitions/active') return json({ digest: definitions.digest });
-      if (path === `/v1/definitions/releases/${definitions.digest}`)
+      if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`)
         return json({ digest: definitions.digest, release });
       if (request.method === 'GET' && path === `/v1/subjects/${work.subject.id}`) {
         if (activeScenario === 'loading') return new Promise<Response>(() => {});
