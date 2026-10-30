@@ -109,6 +109,14 @@ export async function stepIdentityEpochBootstrap(
   pool: Pool,
   partition: number,
 ): Promise<IdentityEpochBootstrapProgress> {
+  return stepBootstrapHome(pool, partition, false);
+}
+
+async function stepBootstrapHome(
+  pool: Pool,
+  partition: number,
+  schedule: boolean,
+): Promise<IdentityEpochBootstrapProgress> {
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid bootstrap home');
   const work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
   const query = async (tx: CommandTransaction, sql: string, values: unknown[] = []) => {
@@ -423,7 +431,11 @@ export async function stepIdentityEpochBootstrap(
     }
     return {
       value: sealed,
-      events: [{ ...identityBootstrapWake(partition, retained.generation), type: IDENTITY_EPOCH_PROGRESS }],
+      events: [
+        schedule
+          ? { type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }
+          : { ...identityBootstrapWake(partition, retained.generation), type: IDENTITY_EPOCH_PROGRESS },
+      ],
     };
   });
   return {
@@ -520,7 +532,15 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
     await tx.query(advanceCursor.sql, [(homes.at(-1)! + 1) % 4096]);
     return {
       value: homes,
-      events: [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition: homes[0]! } }],
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: {
+            partition: 0,
+            generation: ((await readPartition(tx, 0))!.position + 1n).toString(),
+          },
+        },
+      ],
     };
   });
   if (!selected.value.length) {
@@ -549,8 +569,11 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
   await Promise.all(
     Array.from({ length: 8 }, async () => {
       while (issued < selected.value.length) {
-        const partition = selected.value[issued++]!;
-        await stepIdentityEpochBootstrap(pool, partition);
+        const index = issued++;
+        const partition = selected.value[index]!;
+        // The continuation belongs to the real first source ACK, not the shared topology queue key.
+        // A crash before that ACK is recovered by this already durable DBOS effect.
+        await stepBootstrapHome(pool, partition, index === 0);
         const evidence = await withReadTransaction(pool, async (tx) => {
           const owner = await readPartition(tx, partition);
           const home = (await tx.query(closureReceipt.sql, [partition])).rows[0];

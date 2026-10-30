@@ -53,7 +53,8 @@ export const semanticWorkModule: WorkModule = {
     context.addService(async () => {
       await runCommand(context.pool, { partition: 0 }, async () => ({
         value: null,
-        events: [identityBootstrapWake(0, 1n)],
+        // Four bounded wake chains share the existing effect registration and queue limits.
+        events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
       }));
       return startRelays(context.pool, [linkProjection(context.pool)]);
     });

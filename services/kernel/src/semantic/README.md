@@ -145,8 +145,10 @@ custody. The resolver rechecks original and terminal visibility independently; m
 
 Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; the default Semantic WorkModule batches at most
 100 of those same bounded steps with eight released native-home pipelines during initial closure. One bounded
-topology-home frontier command advances the cursor and commits the next wake before source contact; one later
-local command takes at most 100 separately verified native closure receipts. Dirty-home repair retains its
+topology-home frontier command advances the cursor; one later local command takes at most 100 separately
+verified native closure receipts. Four initial native wake events seed bounded chains. A batch continuation is
+committed by its first actual source ACK, so successive batches use the existing source-home queue partitions
+rather than serialize at topology home 0. The durable DBOS effect recovers a crash before that ACK. Dirty-home repair retains its
 individual scheduler steps. All 4096 homes, including empty
 homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
 `readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.

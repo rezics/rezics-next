@@ -1396,8 +1396,11 @@ with first absence and takes no capacity. Receiving waiters are discovered from 
 
 Default bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
-advances the cursor and retains the next wake before source contact; one later local command takes at most 100
-independently released native closure receipts. It decrements only newly retained custody and never rewinds the
+advances the cursor; one later local command takes at most 100 independently released native closure receipts.
+Four initial native wake events seed bounded chains under the same worker registration. The first actual source ACK
+in each batch commits its continuation at that source home, preserving the existing queue partitioning instead of
+serializing every batch on topology home 0. A crash before the ACK is recovered by the already durable DBOS effect.
+It decrements only newly retained custody and never rewinds the
 scheduling cursor. These bounded transient locators add no retained copy or membership vector. Dirty-home repair
 keeps its individual scheduler steps and four pipelines. Pool and queue limits are unchanged. Individual
 source export/receiving/source ACK commands, raw100 bound, all4096 closure and every registered queue remain intact.
