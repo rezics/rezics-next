@@ -127,6 +127,136 @@ identities, times and decisions. No body in their payloads. Search and Content d
 availability regardless of delivery. Shared receipt/outbox cleanup needs exact native custody locators and
 owner retention hooks, not broad JSON scans in production. Test-wide JSON evidence scans are not a job design.
 
+## Field-scoped takedown proposal
+
+This section is the single proposed field-disclosure seam for the implementation brief to Semantic and Root.
+It specifies native red outcomes, not delivered runtime support. Root and the actual consumers (Web/client for
+`Statement`, Search for Source/filter disclosure, Content for authored-field disclosure, Imports for source fences)
+must agree to the body/response changes below before production schemas, generated clients or readers change.
+No agreement or implementation is claimed here. Existing whole-record moderation remains authoritative.
+
+### Command and compatibility
+
+Use the existing `POST /v1/subjects/:id/candidates/:candidate:takedown` (`statement.take_down`) with
+`{notice:{complaint,received_at,scope?},fields?:string[]}`. Preserve complaint (1..2000 characters), RFC3339 time,
+and optional free-form scope (0..500 characters). `fields` is an explicit selector, never parsed from prose:
+
+- Accept 1..32 distinct paths, each at most 64 ASCII bytes, sorted lexically in stored/public mask state.
+  The closed grammar is `/value`, `/qualifiers/N`, or `/references/N`, where N is a canonical zero-based decimal
+  index (no sign, leading zero except zero, wildcard, escape, range or append). These address the immutable
+  candidate statement, not a rendered/reordered array, subject JSON, field hash, adoption or revision history.
+  `/value` covers the complete value object, including its semantic tag; qualifier paths cover one complete Snak;
+  reference paths cover one complete Reference, including its hash. Sub-value/passages/images belong to their
+  body/media owner and are not accepted by this selector.
+- Reject unsupported paths, duplicates, empty/oversized lists and absent array entries with 400 `invalid_request`,
+  a violation at `/fields` or `/fields/N`, and no effects. Never silently promote an invalid selector to whole-record
+  takedown. Unknown/mismatched candidate identities retain the existing indistinguishable 404 `not_found`.
+- With no `fields`, absent scope or any free-form scope retains the current whole-candidate takedown. The sole
+  reserved compatibility spelling is **exactly** `notice.scope:"/value"`: normalize it to `fields:["/value"]` to
+  satisfy the original frozen native deletion case. No other pointer-looking scope is interpreted. When explicit
+  `fields` accompanies that shorthand, require exactly `["/value"]`; a conflicting selector is 400. Existing
+  stored prose notices remain whole-candidate decisions; do not retroactively reinterpret history.
+- Add disjoint selectors to the current mask by union; a fresh request containing an already masked path is 409
+  `conflict`. A whole takedown supersedes the field mask; field takedown under whole-candidate moderation is 409.
+  Keep the original immutable statement, acceptance and adoption heads. A mask must also work on compact native
+  facts through the existing bounded expansion path, without choosing a different candidate identity.
+
+Use existing candidate `:restore` (`statement.restore`) with `{reason,fields?:string[]}`. Omitted `fields` restores
+the whole moderation state as today, including every field mask. Explicit fields remove only those exact currently
+masked paths; absent masks or a whole-candidate hide/takedown return 409. Preserve the 1..500-character reason.
+The selector grammar/caps are identical. Takedown/restore still require `moderation:takedown` at the seeded Global
+Context (route 0), current real Access and account state before receipt replay. No creator, contributor, target,
+Context owner, `moderation:hide` grant or JWT scope alone acquires moderation authority. Subject moderation accepts
+no `fields` and keeps its current whole-subject behavior.
+
+Keep the existing command response exactly `{subject,candidate,visibility,security_revision}`: a nonempty mask
+reports `taken_down`, the last field restore reports `visible`. Whole responses are unchanged. These describe
+moderation state, not permission to publish. Every successful change advances the existing subject security revision
+and uses the existing statement-visibility/link events, receipt and editorial basis. Replay returns its original
+response only after current authorization; a changed body with the same key is 422. Failed, denied, unknown or
+expired-deadline attempts leave masks, revisions, receipts, events and custody unchanged. A field mask has **no**
+deletion time, expiry, scheduled purge or 30-day deadline. It survives 30/60 days and retention restarts. Existing
+early-purge refusal, legal-order route and active legal-hold precedence above apply without new hold machinery.
+
+### One public representation and current disclosure
+
+Propose extending the existing `Statement` in place, on detail, candidate, graph/property pages and other statement
+renderers, rather than adding a competing DTO. A fully available Statement remains byte-for-byte compatible.
+A partially available statement preserves its existing id, property, rank, rezics metadata and uncovered data:
+
+```text
+{id, property, rank, qualifiers, references, rezics,
+ availability:{state:"partial",withheld:["/value"]}}
+```
+
+For `/value`, omit `value` entirely. For a covered qualifier/reference, keep its original array position as `null`;
+do not compact arrays or return the covered reference hash. `availability.withheld` is the sorted complete current
+mask, contains no notice text or payload, and distinguishes these holes from actual absence. Uncovered references,
+their parts and hashes remain exactly as before; a value-only mask cannot drop its existing citation. This is a
+presentation tombstone, never a stored `Value`, `novalue`, `somevalue`, empty value or semantic assertion. A wholly
+hidden/taken-down/deleted/private/fenced candidate is omitted as before, never exposed as a new partial skeleton.
+Candidates retain decision/head/provenance metadata only when independently publishable. Detail exposes a partial
+statement only if it is currently selected; restoring an old mask cannot rewind selection or recreate acceptance.
+
+Current gates run before rendering: subject/Context availability, candidate lifecycle/moderation, source fence,
+account fence and target consent. Restore clears only its moderation cause, then rechecks these gates on every
+read. Unknown or denied evidence withholds the whole candidate; unavailable/deadline evidence fails closed using
+the existing 503 path, never a successful empty/complete negative answer. An authenticated suspended account keeps
+the existing 403 `account_suspended`, with no anonymous fallback. Account erasure remains terminal.
+
+`subjectSource(pool,routeKey).read(partition,ids)` keeps the existing `IndexedSubject`/`IndexedStatement` shape:
+omit an indexed statement if its value or any qualifier is masked. References are not part of this Source DTO;
+a reference-only mask leaves its otherwise public indexed fact intact. Citations survive on the existing public
+Statement surfaces. Never send the partial display object to the index or matcher as a real fact. The complete
+public-filter producer withholds affected evidence through its already proposed dependency/reduction protocol;
+missing masked evidence is not definitive absence for NOT, counts, order, or relation membership. Paused consumers
+must still apply current disclosure before returning old indexed values, inverse links or live counts. Reference
+masking alone does not remove an uncovered main-value relation. Search owns that consumer integration.
+
+`readCandidateDisclosure(client,{subject,candidate,routeKey})` is the proposed exact native call. Add the trusted
+service `routeKey:Uint8Array` to its reference input so it can derive the actual provider tuple home; Content passes
+its existing `DocumentReadDependencies.routeKey`. This input change also requires consumer agreement. Keep its
+current `null | {disclosed,security_revision}` return shape: unknown is null; **any** field mask is `disclosed:false`, so Content cannot expose the retained authored
+value using a whole-candidate boolean. False does not authorize a citation fetch or classify a semantic value.
+No field-aware Content endpoint or new permission formula is introduced here.
+
+### Current source inventory and implementation handoff
+
+| Current source | Concrete gap / consumer of the proposal |
+| --- | --- |
+| `moderation.ts:validateModerationBody/moderateStatement/readStatementCandidate`, `moderation-*.sql` | Only string `notice.scope`, whole `hidden_candidate`, immutable statement decision and bounded slot expansion today. Store current masks under the existing `(route,subject_id,candidate_id)` authority and decision transaction; no history scan to recover a mask. |
+| `http/subjects.ts:TakedownModerationBody/ReasonModerationBody/StatementSchema`, `item.ts:Value/Snak/Reference/Statement/resolveItem` | Exact body and partial Statement schema proposal above; current value/arrays are mandatory. Client mirror is `packages/client/src/kernel/semantic/item.d.ts`; production/generated edits await agreement. |
+| `candidates.ts:listCandidates`, `slots.ts:slotView/candidateFact`, `subject.ts`, `read.ts`, `page.ts`, `graph.ts` | Current hidden-candidate filtering drops every citation. Apply one mask rendering contract to compact and expanded statements after native selection and privacy; preserve unrelated candidates. |
+| `disclosure.ts:readCandidateDisclosure`, `disclosure-read-candidate.sql`; Content `document-read.ts` | Proposed trusted routeKey input; current boolean consults subject/hidden/consent state; add current field availability and existing lifecycle/source/account gates, without turning this reader into an authorizer. |
+| `search-source.ts:subjectSource`, `search-source-{facts,adoptions,statements}.sql`, `search/source.ts`; `public-filter-source-contract.{md,ts}` | Scalar Source has no references or partial DTO. Omit masked values/qualifiers and retain reference-only facts; use the agreed complete producer/reduction seam for query withholding. Missing native producer exports remain exactly `publicFilterSource` and `recordPrivacyReduction` from `public-filter-source.ts`. |
+| `fences.ts:candidateSources/withoutFencedEntries`, `statement-disclosure.ts:statementAudience/withPublicStatementReader`, account lifecycle | Re-evaluate real revision source and target consent/account fence. A moderation restore never clears a source fence, owner deletion, private assertion or terminal account barrier. |
+| `links.ts`, `link-freshness.ts`, `aggregate-disclosure.md`, outbound/inbound property SQL | Existing projections and current aggregate proof remain owners. Value masks revoke the matching edge immediately even without relay progress; other edges/references survive. |
+| Original `test/semantic/deletion-contract.test.ts` and `support/deletion-fixture.ts` | Frozen `/value` citation, indefinite retention, early/legal-order/hold outcomes remain unchanged. `field-scoped-takedown.test.ts` adds explicit selectors, exact display/Source/disclosure results and failure/cost cases using the same native fixture. |
+
+Root should dispatch the whole implementation across those actual consumers after agreement, including HTTP/client
+schemas, current mask storage/read gates, compact and expanded paths, Search invalidation and physical receiving
+custody. A type-only field model or an event-only fix is insufficient. No further research round is required by this
+proposal; no external implementation is cited for this surface.
+
+### Cost and integration evidence
+
+- **Touches:** the exact changed candidate/source/owner/receiving keys and existing native authorization, receipt,
+  editorial, custody and lifecycle records. Mask/restore is one existing single-partition command; foreign authority
+  and source checks release their home before target checkout. Public reads use their existing bounded windows and
+  current gates. A notice must not copy covered material into a new receipt, event, public hash or metadata field.
+- **Bound:** preserve partition-leading indexes and current P1, raw-key, row, point, byte, SQL, deadline and engine
+  caps. Selector validation is at most 32 paths over one already admitted immutable statement, not arbitrary JSON
+  traversal. Existing statement byte bounds still apply; the selector cap cannot enlarge a slot read. No unrelated
+  scan, permission mirror, new engine, unmetered callback, synchronous receiving fanout or history walk. Legal-order
+  minimization uses the existing durable exact-locator custody protocol, with bounded work per receiving partition.
+- **Growth check:** after integration, run retained native 64/512/4096 unrelated/history and changed-neighborhood
+  cases through the shared harness. The new native file captures mask, detail/candidate/Source/disclosure, restore,
+  denial and replay while unrelated candidates and this candidate's moderation history grow. Rollback, deadline,
+  current source/selection/privacy and owner-deletion cases are native outcomes there. Keep original growth-deletion
+  and physical receiving-custody obligations: durable receipts/outbox/provenance and each receiving store must be
+  measured and checked under their owner contracts, not certified by public-response absence. No native, database,
+  growth or remote acceptance runs in minimal specification mode; run the workspace typecheck only.
+
 ## First independent state and attribution slice
 
 Add exactly one read-only semantic export, resolved from existing `semantic/index.ts`:

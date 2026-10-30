@@ -11,15 +11,15 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import * as semantic from '../../../src/semantic/index.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
-import { openGrowthDatabase } from '../../support/growth.ts';
+import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { createRealAccess } from '../real-access.ts';
 
 // Shared native fixtures; each test file creates and closes its own instance.
-export async function createDeletionFixture() {
+export async function createDeletionFixture(database?: Pick<GrowthDatabase, 'pool' | 'admin'>) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
-  const admin = new pg.Pool({ connectionString: url, max: 2 });
+  const pool = database?.pool ?? createPool(url);
+  const admin = database?.admin ?? new pg.Pool({ connectionString: url, max: 2 });
   const accounts = { owner: newId(21000), editor: newId(21001), stranger: newId(21002), platform: newId(21003) };
   let now = new Date();
   const clock = () => new Date(now);
@@ -65,6 +65,7 @@ export async function createDeletionFixture() {
     'semantic:purge',
     'semantic:hold',
     'moderation:takedown',
+    'source_fence:takedown',
   ];
   const real = await createRealAccess(admin, accounts, actions);
   const routeKey = new Uint8Array(32).fill(71);
@@ -211,7 +212,7 @@ export async function createDeletionFixture() {
       await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'platform', action);
   }
   async function close() {
-    await Promise.all([pool.end(), admin.end()]);
+    if (!database) await Promise.all([pool.end(), admin.end()]);
   }
 
   return {
