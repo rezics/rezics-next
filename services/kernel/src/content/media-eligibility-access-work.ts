@@ -78,7 +78,7 @@ function parentWork(plan: ParentPlan): AccessWork {
     keys: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
     points: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
     witnesses: 0,
-    rows: plan.kind === 'container' ? 9 : plan.kind === 'post' ? 6 : plan.kind === 'thread' ? 4 : 1,
+    rows: plan.kind === 'container' ? 10 : plan.kind === 'post' ? 6 : plan.kind === 'thread' ? 4 : 1,
     bytes: bytes(input) + bytes(plan.kind === 'container' ? [parentProjection, parentProjection] : [parentProjection]),
     emptySeeks: 1,
   };
@@ -126,8 +126,8 @@ function mediaParameters(plan: MediaPlan): readonly unknown[] {
  * inputs + aggregate + output = 29. The UNIQUE media_variant_slot_idx maps
  * two formats to six slots each, independent of how many historical widths
  * exist. No derivative enumeration occurs in the download plan.
- * Container seek: one input, thread/post/head (3), their three join outputs,
- * and at most two UNION outputs = 9. Subsequent known-kind seeks prune a branch.
+ * Container seek: both inlined input branches (2), thread/post/head (3),
+ * their three join outputs and at most two UNION outputs = 10. Subsequent known-kind seeks prune a branch.
  * Bytes cover parameters and the entire closed wire projection, not rowCount,
  * compressed storage size, returned array cardinality or an initial row's size.
  */

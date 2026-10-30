@@ -291,7 +291,7 @@ test('post image receipts charge the actual bounded chain and refuse changed anc
     ));
     expect(parentDispatches).toBe(changed ? 1 : 2);
     expect(result.state).toBe(changed ? 'failed' : 'complete');
-    expect(result.usage.rows).toBe(6 + 9 + 4);
+    expect(result.usage.rows).toBe(6 + 10 + 4);
     if (changed) expect(result.usage).toEqual(admitted[0]!);
   }
 });
