@@ -53,7 +53,7 @@ async function isAgentType(type: string): Promise<boolean> {
   }
 }
 
-async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {
+export async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {
   const subject = read.subject;
   if (!read.account && !(await isAgentType(subject.type))) return undefined;
   try {

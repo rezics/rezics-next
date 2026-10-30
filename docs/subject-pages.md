@@ -36,6 +36,12 @@ An uncertain submit freezes the exact draft and idempotency key for retry; concu
 A key conflict requires explicit review before a new request. A confirmed creation with an unavailable reader
 keeps its exact ID and offers an ordinary read retry without creating again. This private, uncached form is noindex.
 
+## Correct names and descriptions
+
+The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug}/terms`. This private companion
+editor follows the [multilingual terms browser flow](catalogue-editing.md#browser-flow-multilingual-subject-terms),
+keeping the exact native subject, explicit per-language changes and recoverable drafts through conflicts.
+
 ## Canonical public reading
 
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):

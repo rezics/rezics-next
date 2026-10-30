@@ -1,5 +1,6 @@
 import type { PublicFigure } from './subject-ratings';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
+import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -371,6 +372,7 @@ export function SubjectPage({
       <>
         {existingActions}
         <CreateSubjectEntry locale={locale} />
+        <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
       </>
     ) : (
       existingActions
