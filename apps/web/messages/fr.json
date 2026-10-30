@@ -996,6 +996,7 @@
   "thread_reveal_spoiler": "Afficher le spoiler",
   "document_task_status": "État de la tâche",
   "document_embedded_component": "Composant intégré",
+  "content_edition_image_unavailable": "Image indisponible",
   "thread_review_boards_loading": "Chargement des forums d’avis…",
   "thread_review_choose_board": "Choisir un forum d’avis",
   "thread_review_cite_vote": "Citer mon vote actuel ({score}/10)",

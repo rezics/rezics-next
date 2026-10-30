@@ -996,6 +996,7 @@
   "thread_reveal_spoiler": "顯示劇透",
   "document_task_status": "任務狀態",
   "document_embedded_component": "嵌入元件",
+  "content_edition_image_unavailable": "圖片暫時無法顯示",
   "thread_review_boards_loading": "正在載入評價版塊…",
   "thread_review_choose_board": "選擇評價版塊",
   "thread_review_cite_vote": "引用我目前的投票（{score}/10）",

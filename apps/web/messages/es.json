@@ -996,6 +996,7 @@
   "thread_reveal_spoiler": "Mostrar el spoiler",
   "document_task_status": "Estado de la tarea",
   "document_embedded_component": "Componente integrado",
+  "content_edition_image_unavailable": "Imagen no disponible",
   "thread_review_boards_loading": "Cargando los tableros de reseñas…",
   "thread_review_choose_board": "Elegir un tablero de reseñas",
   "thread_review_cite_vote": "Citar mi voto actual ({score}/10)",

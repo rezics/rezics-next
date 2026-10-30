@@ -997,6 +997,7 @@
   "thread_reveal_spoiler": "显示剧透",
   "document_task_status": "任务状态",
   "document_embedded_component": "嵌入组件",
+  "content_edition_image_unavailable": "图片暂不可用",
   "thread_review_boards_loading": "正在加载评价版块…",
   "thread_review_choose_board": "选择评价版块",
   "thread_review_cite_vote": "引用我当前的投票（{score}/10）",
