@@ -2554,5 +2554,6 @@
   "settings_managed_read_only": "Private Kontodetails für deine aktuell angemeldete Identität, nur zur Ansicht.",
   "settings_managed_detail_loading": "Kontodetails werden geladen…",
   "settings_managed_responsibilities_unavailable": "Verantwortlichkeiten sind für dieses Konto nicht verfügbar oder nicht freigegeben.",
-  "settings_managed_observation": "Dies sind Beobachtungen aktueller Beziehungen. Weder eine aktuelle Beziehung noch eine noch abzugleichende Verantwortung bestätigt den Abschluss eines Kontovorgangs."
+  "settings_managed_observation": "Dies sind Beobachtungen aktueller Beziehungen. Weder eine aktuelle Beziehung noch eine noch abzugleichende Verantwortung bestätigt den Abschluss eines Kontovorgangs.",
+  "settings_managed_navigation_unavailable": "Aktionen zur Kontoverwaltung sind in dieser Ansicht nicht verfügbar."
 }

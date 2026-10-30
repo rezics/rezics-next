@@ -2554,5 +2554,6 @@
   "settings_managed_read_only": "Détails privés du compte, consultables avec votre identité actuellement connectée, en lecture seule.",
   "settings_managed_detail_loading": "Chargement des détails du compte…",
   "settings_managed_responsibilities_unavailable": "Les responsabilités de ce compte sont indisponibles ou leur consultation n’est pas autorisée.",
-  "settings_managed_observation": "Il s’agit d’observations des relations actuelles. Ni une relation actuelle ni une responsabilité en cours de rapprochement ne confirme qu’une opération sur le compte est terminée."
+  "settings_managed_observation": "Il s’agit d’observations des relations actuelles. Ni une relation actuelle ni une responsabilité en cours de rapprochement ne confirme qu’une opération sur le compte est terminée.",
+  "settings_managed_navigation_unavailable": "Les actions de gestion du compte ne sont pas disponibles dans cette vue."
 }

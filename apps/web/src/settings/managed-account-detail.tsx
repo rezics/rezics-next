@@ -240,6 +240,9 @@ export function ManagedAccountDetailCard({
               ) : null}
               <p className="text-sm text-muted-foreground">{m.settings_managed_observation()}</p>
             </section>
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.settings_managed_navigation_unavailable()}
+            </p>
             <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>
               {m.managed_refresh()}
             </Button>

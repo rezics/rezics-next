@@ -2555,5 +2555,6 @@
   "settings_managed_read_only": "以你当前登录的身份查看私人账号资料，仅供读取。",
   "settings_managed_detail_loading": "正在加载账号资料…",
   "settings_managed_responsibilities_unavailable": "此账号的责任资料不可用，或你尚未获得查看权限。",
-  "settings_managed_observation": "这些是当前观察到的关系。现有关系或仍在核对中的责任，都不能证明账号操作已完成。"
+  "settings_managed_observation": "这些是当前观察到的关系。现有关系或仍在核对中的责任，都不能证明账号操作已完成。",
+  "settings_managed_navigation_unavailable": "此页面暂不提供账户管理操作。"
 }

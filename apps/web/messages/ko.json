@@ -2554,5 +2554,6 @@
   "settings_managed_read_only": "현재 로그인한 사용자에게 허용된 비공개 계정 정보입니다. 읽기만 가능합니다.",
   "settings_managed_detail_loading": "계정 정보를 불러오는 중…",
   "settings_managed_responsibilities_unavailable": "이 계정의 책임 정보를 이용할 수 없거나 조회 권한이 없습니다.",
-  "settings_managed_observation": "현재 확인된 관계를 표시합니다. 현재 관계나 조정 중인 책임 정보만으로는 계정 작업이 완료되었다고 확인할 수 없습니다."
+  "settings_managed_observation": "현재 확인된 관계를 표시합니다. 현재 관계나 조정 중인 책임 정보만으로는 계정 작업이 완료되었다고 확인할 수 없습니다.",
+  "settings_managed_navigation_unavailable": "이 화면에서는 계정 관리 작업을 사용할 수 없습니다."
 }

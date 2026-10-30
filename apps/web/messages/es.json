@@ -2554,5 +2554,6 @@
   "settings_managed_read_only": "Datos privados de la cuenta, de solo lectura, para la identidad con la que has iniciado sesión.",
   "settings_managed_detail_loading": "Cargando los datos de la cuenta…",
   "settings_managed_responsibilities_unavailable": "Las responsabilidades de esta cuenta no están disponibles o no tienes permiso para consultarlas.",
-  "settings_managed_observation": "Estas son observaciones de las relaciones actuales. Ni una relación actual ni una responsabilidad en proceso de conciliación confirma que una operación de cuenta haya finalizado."
+  "settings_managed_observation": "Estas son observaciones de las relaciones actuales. Ni una relación actual ni una responsabilidad en proceso de conciliación confirma que una operación de cuenta haya finalizado.",
+  "settings_managed_navigation_unavailable": "Las acciones de administración de la cuenta no están disponibles en esta vista."
 }
