@@ -97,3 +97,48 @@ test('status, detail, unknown effects and erased applied results never identify 
     expect(classifyRealmLeaveFailure(result)).toEqual({ kind: 'uncertain', ownerReason: 'unavailable' });
   }
 });
+
+test('only the declared closed last-owner problem on leave offers specific ownership recovery', async () => {
+  const ownerProblem = {
+    type: 'https://rezics.com/problems/realm_last_owner',
+    title: 'Realm Ownership Transfer Required',
+    status: 409,
+    code: 'realm_last_owner',
+    retryable: false,
+    effect_status: 'not_applied',
+    request_id: 'native-owner-request',
+  };
+  async function failure(body: Record<string, unknown>, action: 'join' | 'leave' = 'leave', status = 409) {
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async () => Response.json(body, { status }),
+    });
+    const result = await requestRealmMembership(client,
+      new Request('https://site.example/action', { method: 'POST', ...auth }), {},
+      { realmId, action, idempotencyKey });
+    if (result.outcome === 'accepted') throw new Error('Unexpected acceptance');
+    return classifyRealmLeaveFailure(result);
+  }
+  const recovery = await failure(ownerProblem);
+  expect(recovery).toEqual({ kind: 'refused', ownerReason: 'last-owner' });
+  const markup = renderToStaticMarkup(createElement(RealmLeaveRecovery, {
+    realmId, recovery, check: 'checking', busy: true, ready: true, onCheck() {}, onRetry() {},
+  }));
+  expect(markup).toContain('Another eligible explicit owner is required');
+  expect(markup).not.toContain('If you are');
+  expect(markup).not.toContain('href=');
+  expect(markup).not.toContain('Your request was accepted');
+  expect(markup).not.toContain('Retry the same leave request');
+  // No nearby generic denial, malformed envelope or join result can identify a last owner.
+  for (const body of [
+    { ...ownerProblem, code: 'forbidden', type: 'https://rezics.com/problems/forbidden' },
+    { ...ownerProblem, title: 'Conflict' },
+    { ...ownerProblem, retryable: true },
+    { ...ownerProblem, effect_status: 'unknown' },
+    { ...ownerProblem, effect_status: 'applied' },
+    { ...ownerProblem, type: 'https://other.example/realm_last_owner' },
+    { ...ownerProblem, request_id: undefined },
+    { ...ownerProblem, status: 403 },
+  ]) expect((await failure(body)).ownerReason).toBe('unavailable');
+  expect((await failure(ownerProblem, 'leave', 403)).ownerReason).toBe('unavailable');
+  expect(await failure(ownerProblem, 'join')).toEqual({ kind: 'uncertain', ownerReason: 'unavailable' });
+});

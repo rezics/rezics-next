@@ -8,8 +8,10 @@ Twelve earlier product slices are integrated on dev: board continuation, targete
 community setup, publication shelves, membership/follow settlement, bans, question/figure presentation, opening-post
 mentions, descendant report queues, reporter receipts and appeal retry/confirmation. This is delivered source,
 not proof of served native behavior. The manager snapshot and current assignments describe pending work, not passes.
-The maintainer rejected the member Space error screen and bare board layout. Their repairs and the assigned thread,
-moderator queue, setup and reporter layouts still need current visual review; integration does not erase that finding.
+The member Space error screen and bare board layout have source repairs. The supplied ten English Page views at
+phone 390 and desktop 1280 in light/dark, plus the phone Pattern regions, correct the earlier visible thread
+reply-target/draft findings only within that coverage. Desktop Patterns, other locales, native behavior and the
+whole journey remain pending. Moderator queue, setup and reporter layouts still need current visual review.
 
 Content owns these journeys end to end. Web owns visual design, review at phone 390 and desktop 1280 through globals,
 and group screenshots. Story IDs below identify existing review surfaces, not screenshot or native acceptance.
@@ -54,15 +56,25 @@ retain 20 revisions. Author deletion immediately hides bytes/history; replies ke
 becomes null, undo ends at 30 days, then bounded purge is irreversible. Account erasure has its separate immediate
 rules. Stable command keys do not bypass current authorization; edit conflicts retain the draft.
 
-**Next action and proof.** Existing Content page writers finish the assigned community feed/header and thread reading
-layouts, the directly addressable `/posts/{id}/revisions/{revisionId}` reader, and Global board directory producer/
-consumer. `GET /v1/boards?purpose=discussion|reviews` is assigned, not established here as delivered; keep a provisional
-consumer unavailable until the real API is joined. Its planned public-only source examines at most `4 × limit`
-candidates, limit at most 100, with current final disclosure. Do not create another directory or permission writer.
-Web recaptures `pages-community-board-continuation--continue-hot` and
-`pages-community-thread--selected-reply-target`, plus the new exact-revision/directory states when supplied.
+**Next action and proof.** The Global board directory producer and consumer are integrated:
+`GET /v1/boards?purpose=discussion|reviews` → `{boards,next}` and Web's `createNativeBoardDirectoryAdapter` serve
+`/boards`. The public-only source examines at most `4 × limit` candidates, limit at most 100, with current final
+disclosure. Reuse this directory for discussion/review destinations; do not create another permission writer.
+Web reviews `pages-community-board-directory--current`, `pages-community-board-continuation--continue-hot` and
+`pages-community-thread--selected-reply-target`, retaining the supplied thread review's limited coverage above.
+The directly addressable `/posts/{id}/revisions/{revisionId}` reader and remaining feed/header review stay pending.
 Later native proof must follow compose → reply → edit → exact history → delete/restore, continuation after an empty
 page, and revocation before final output; screenshots must show the actual shared components at both widths.
+
+Native fixed-edition commands, returning-creator inventory and Web's creator list/draft resume are integrated source.
+`content-editions/edition-create-native.ts` consumes `POST /v1/contentEditions`, exact edition metadata and keyed
+publication; `/editions/new?editionId=…` resumes the stored ID/version without another create. The creator inventory
+uses the declared own-account native route. Review `pages-content-creatoreditions--editions` and
+`pages-content-editionpublication--resumed-draft`, `--reloaded-published`, `--resumed-conflict`, `--uncertain-publish`.
+Only confirmed publication exposes the separate Commerce offer next step. End-to-end native use, current source
+rights, fixed bytes, inventory disclosure, sale/entitlement and visual review remain unproved; no new writer is needed.
+Bounded author-thread erasure source and its Page states are also integrated; enqueue and running counters never
+claim completion or an upfront total. Native erasure closure remains deferred.
 
 ## Realms and Spaces
 
@@ -89,37 +101,60 @@ replay. A retained Context pointer survives removed/restored containers; publica
 before and at final output. A removed container never produces Global fallback. A separate live Context retains
 its own authority; a query parameter cannot implement Realm selection.
 
-Native Accounts has only its installed roles: no invented administrator. Sole-owner transfer-before-leave and
-erasure succession must consume the genuine native helper. Orphan state is read-only; a claim request after 30 days
-confers no ownership. UI or provisional types cannot prove this authority exists.
+Native Accounts has only its installed roles: no invented administrator. Its explicit-holder guard, atomic native
+ownership helper, erasure succession and claim approval source have been handed off; these remain the sole
+ownership authorities. Community's locked source/state application ports and Web's claim reviewer are integrated.
+The reviewer transport's current binding remains pending; source availability proves no approval or succession.
+Orphan state is read-only; a claim request after 30 days confers no ownership.
 
-**Next action and proof.** Existing writers repair the member Space route error and guide setup, then Web recaptures
-`pages-community-space--member` and `pages-community-space-setup--new-community`; Content verifies create → addressed
-home → board → membership settlement → publication → ban/unban with native personas and current denial races later.
+Leave recovery is prepared in the existing `RealmMembership`, pending source integration, native runtime and Web
+review. Only Accounts' declared closed `409 realm_last_owner`, `retryable:false`, `effect_status:not_applied`
+problem supplies its specific reason. The current generic guard and native leave caller still need the owning
+producer/binding integration; unrelated refusals cannot identify an owner. The original `ResourceAccessLink`
+performs a current authorized Access read after explicit recovery interaction; the existing Access page can add
+another eligible explicit owner. It is not an atomic transfer route. A fresh membership/participation read is
+required before a new leave intent after refusal; an uncertain response retains its original action/key and offers
+current-state checking or explicit same-request retry. Accepted workflows still wait for authoritative settlement.
+
+**Next action and proof.** Review the repaired member Space route and existing setup at
+`pages-community-space--member` and `pages-community-space-setup--new-community`. The same setup now contains the
+Context directory picker, constrained scheme/concept picker and shared publication EntityPicker; native Context
+directory integration remains pending and unavailable until its original Semantic source is joined. The scheme/
+concept and publication consumers reuse their existing sources and commands. No second setup or publish writer is needed.
+Container lifecycle HTTP, binding fences and `container-lifecycle-native.ts` are integrated source: current
+`/lifecycle`, `/removal` and `/restoration` calls retain head/version CAS, independent Context authorization and
+restored-destination validation. Content later verifies create → addressed home → board → membership settlement →
+publication → ban/unban → remove/restore with native personas and current denial races.
+
 Realm-owned presentation is adopted in the Community/Content READMEs: revisioned settings select native exact
-rules, and the shared current-authorized reader enriches board responses and the Space home. The assigned native
-assets producer supplies permanent claims and derivative summaries through its original module; optional dependency
-failures remain unavailable, and its implementation establishes no native proof. Accounts owns
-the original native member-count reader, current version/removal coverage and bounded initialization. Content binds
-that reader at its fixed before/final Realm anchors; its throwing declaration keeps members unknown until the
-producer lands, and changed final counts are withheld without refill. Exact rules retain native author/editor and
-disclosure authority. This adoption and implementation claim
-no runtime or visual pass; Web retains header/settings design and screenshot review.
-Semantic's existing writer owns Realm page binding; do not duplicate it or claim contextual publication from a shelf.
+rules, and the shared current-authorized reader enriches board responses and the Space home. The original native
+member-count module `member-count.ts::readRealmMemberCount` is integrated, including source version, temporal
+frontier, removal coverage and bounded initialization. Count remains unknown unless its actual current read is
+covered; source availability is neither zero nor native proof. Content compares the fixed before/final Realm anchors
+and withholds changed final counts without refill. Exact rules retain native author/editor and disclosure authority.
+Native image-summary/claim, byline-avatar, thread-media/rules-byte and Worker-delivery connections remain pending
+source/runtime/review at their owning stages; optional failures retain honest fallback. Realm-home presentation and
+header integration likewise remain pending source/runtime/review. The appearance main now renders, but its controls
+and header defects remain open; the assigned controls repair is pending source/runtime/review. Web still owns
+normal 390/1280 light/dark review. Semantic's existing writer owns Realm page binding; do not duplicate it or claim
+contextual publication from a shelf.
 
-Popular/Trending source and aggregate/API remain parallel implementation. Popular counts qualifying originally
+The original-public discovery source, aggregate/API and shared discovery section are integrated source; their native
+privacy, rollover, physical and served navigation proof remains deferred. Popular counts qualifying originally
 public discussion starts in the prior 30 complete UTC days; Trending uses the prior one complete UTC day.
 No memberships, views, unique people or tracking contribute. The settled interface uses the genuine committed
 source generation/predecessor log and gate; source recovery alone resolves its exact fence. Aggregate disclosure
 also needs matching applied/current generation, epoch, settled gate, current rollover and final anonymous public
 Realm/Space/carried-slot chain. Board changes touch at most 31 buckets; catch-up and due work at most 50 keys/step.
-The assigned `GET /v1/realms/discovery` response is `{realms, next}`, superseding the research's proposed `items`;
+The integrated `GET /v1/realms/discovery` response is `{realms, next}`, superseding the research's proposed `items`;
 it examines at most `min(limit,20)` candidates, permits sparse continuation, and returns `avatar:null` until genuine
-selection authority exists. No demo runtime or temporary unavailable seam is native proof. Existing source/API
-owners finish this connection; Web consumes it, then later proves UTC expiry/replay/privacy and both-width navigation.
+selection authority exists. No demo runtime or temporary unavailable seam is native proof. Reuse the existing
+source/API and shared section; later prove UTC expiry/replay/privacy and both-width navigation.
 
-The carried-Realm sitemap `canonicalDestination` native producer is still pending; Web is the sole consumer.
-No per-row HTTP, guessed address or protected-slot leak substitutes for it.
+The carried-Realm sitemap `canonicalDestination` native producer is integrated; Web remains the sole consumer.
+Its closed Space-address or Realm-ID destination follows current anonymous Realm/Space/slot and exact address-claim
+validation. Native privacy and sitemap consumer integration proof remain pending. No per-row HTTP, guessed address
+or protected-slot leak substitutes for it.
 
 ## Ratings and reviews
 
@@ -145,7 +180,7 @@ alone feed public Search; private Realm figures never do, and Realm rating sorts
 cursors bind subject/place/kind/viewer/epoch, examine at most `4 × limit`, and retain empty continuation.
 
 **Next action and proof.** Web's existing subject review-list/destination writer joins Content's list to the actual
-subject surface and the assigned Global board directory, including later membership/destination pages. Content
+subject surface and the integrated Global board directory, including later membership/destination pages. Content
 supplies the existing producer, not another list. Review `patterns-subjects-subject-rating--save-clear-zero`,
 `patterns-subjects-subject-rating--below-threshold` and `patterns-community-revision-provenance--changed-vote`.
 Later native proof follows private save/clear → actual drain → public subject/Search figure → review/citation →
@@ -163,7 +198,10 @@ and [Web's receipt and queue contracts](../../apps/web/README.md#report-receipt-
 | `/moderation/decisions/{id}` → appeal → Appeal Resolution confirmation     | Decision GET/`:appeal`, board/thread appeals GET, appeal `:resolve`; native `moderation_decision`/`moderation_appeal`, pending board projection, atomic lift-takedown on reversal and mandatory notices.                                |
 
 Delivered slices add descendant discovery, the reporter destination, one reason field and stable retry/visible appeal
-confirmation. The queue's complete reusable review Pattern was missing from the earlier handoff; its current writer
+confirmation. The integrated `DecisionPageView` now supplies kind-specific outcome and appeal recovery in one main;
+its current review IDs are `pages-community-moderation-decision--open`, `--native-denied`, `--conflict`,
+`--uncertain-retry` and the same suffixes under `patterns-moderation-decision`. Their source availability is not
+visual or native approval. The queue's complete reusable review Pattern was missing from the earlier handoff; its current writer
 owns that repair and layout. The reporter layout also has an assigned refinement; neither is visually accepted here.
 
 **Boundary.** The reporter owns submitted target/revision/reason/evidence and current outcome with `targetAvailability`;
@@ -215,10 +253,11 @@ review. Optional metadata and provisional unavailable adapters stay honestly una
 Do not dispatch duplicate writers or substitute another interface/typing pass for the missing product result.
 
 Original Content, Community, Rating and notice cleanup/retention and physical-cost outcomes remain open for later
-verification under [deletion](../deletion.md). The sole membership-erasure producer awaits controller environment
-setup; notice/rating cleanup tooling settlement is routed to control-plane. The native temporal-role GiST cost contract
-remains unresolved with Accounts, not a waived requirement or evidence of cleanup.
+verification under [deletion](../deletion.md). Membership-erasure environment setup and notice/rating cleanup tooling recovery remain control-plane-owned.
+The original native role-predecessor source correction is delivered; its physical cost verdict and the original
+physical outcomes remain unproved, not waived requirements or evidence of cleanup.
 Queued or integrated cleanup does not establish residue removal, succession or final acknowledgement.
 
-This document-only update runs no acceptance/native/database/browser/remote checks; it changes no typed workspace.
-Promotion, main and root proof are deferred. No whole scope row or Goal is declared complete.
+This planning maintenance accompanies the leave-recovery interface; acceptance/native/database/browser/remote and
+visual proof remain deferred. Promotion, main, root and final erasure closure remain unproved. No whole scope row
+or Goal is declared complete.

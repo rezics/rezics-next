@@ -1290,6 +1290,38 @@ visual review remain required after producer integration.
 - **Growth check:** `tests/community-seo.test.ts`: unique localized metadata, public visibility, one WebPage and
   BreadcrumbList graph, and no server session reread.
 
+### Realm leave recovery
+
+The existing `RealmMembership` keeps participation unchanged after a refused leave. Its recovery region in
+`community/realm-leave-recovery.tsx` separates an explicit native RFC 9457 `effect_status:not_applied` from a lost,
+malformed or otherwise uncertain response. Only a leave response matching Accounts' declared `409 realm_last_owner`,
+standard type/title, `retryable:false` and `not_applied` supplies the specific ownership explanation. Generic denial
+offers conditional policy guidance; membership, creator identity, role data and error details supply no ownership
+verdict. The consumer is ready for the declared problem; the native guard producer and same-Realm leave admission/
+publication binding remain owning integration work, with no native pass inferred from this interface.
+
+An explicit Review ownership and access action mounts the original Accounts `ResourceAccessLink`. It reads genuine
+current `readResourceAccess` authority only after signed-in hydration, then links to localized `/access/{resourceId}`.
+Denied or unavailable Access hides that link and retains the explanation. The existing Access page can add another
+eligible explicit owner; it does not expose the native atomic transfer helper as an HTTP/UI operation. After resolving
+a refusal elsewhere, Check membership reads both native membership and participation before releasing the old intent
+and allowing a new leave request. An uncertain still-member/pending/denied read retains the original action/key;
+explicit retry reuses it. Checking never sends another leave. A `202 {workflowId}` still enters the existing pending
+flow with at most four authoritative refreshes and manual read retry. Independent Space following is unchanged.
+
+Review the same controller through Page IDs `pages-community-realm-leave-recovery--owner-required`,
+`--generic-refusal`, `--access-denied`, `--uncertain-retry`, `--accepted-pending` and the same suffixes under
+`patterns-community-realm-leave-recovery`. Pages use the actual Space route in AppShell with one main; Patterns mount
+the same membership component. Existing viewport/theme/locale globals supply normal 390/1280 review. Story-only native
+problem/acceptance envelopes exercise refusal, denied Access, retained retry keys and pending settlement; they fabricate
+no grant, transfer or successful leave. The existing acceptance in `tests/realm-leave-recovery.test.ts` is retained,
+with a focused closed-problem case added. Acceptance, native, browser, visual, physical and privacy/replay proof remain
+deferred under the current minimal verification contract.
+
+Cost: one native leave per explicit intent/retry, no automatic command retry; one existing membership + participation
+read per recovery check, and one current Access read per explicit review mount. There are no per-row reads, permission
+mirrors, grant writes or new membership workflows.
+
 ### My Realms
 
 - **Touches:** One session read and `GET /v1/me/realms` for one page of at most 20 Realms; the next page is a cursor.

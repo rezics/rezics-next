@@ -7,7 +7,7 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, viewerCredential } from '../session/request';
 import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
-import { nativeMembershipEffect } from './realm-leave-recovery';
+import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -398,7 +398,7 @@ export async function loadMyRealms(
 export type MembershipOutcome = 'accepted' | 'closed' | 'refused';
 export type MembershipResult =
   | { outcome: 'accepted'; workflowId: string }
-  | { outcome: 'closed' | 'refused'; detail?: string; effect?: 'not-applied' };
+  | { outcome: 'closed' | 'refused'; detail?: string; effect?: 'not-applied'; ownerReason?: 'last-owner' };
 
 type MembershipInput = { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
 
@@ -419,11 +419,13 @@ export async function requestRealmMembership(
       : await realm.membership.delete(undefined, { headers });
   const body = isRecord(result.error) && isRecord(result.error.value) ? result.error.value : undefined;
   const effect = input.action === 'leave' ? nativeMembershipEffect(statusOf(result), body) : undefined;
+  const ownerReason = input.action === 'leave' ? nativeRealmLeaveOwnerReason(statusOf(result), body) : undefined;
   if (isPlatformClosedProblem(statusOf(result), body)) return { outcome: 'closed', ...(effect ? { effect } : {}) };
   if (result.error || statusOf(result) !== 202 || !result.data?.workflowId)
     return {
       outcome: 'refused',
       ...(effect ? { effect } : {}),
+      ...(ownerReason ? { ownerReason } : {}),
       ...(typeof body?.detail === 'string' ? { detail: body.detail } : {}),
     };
   return { outcome: 'accepted', workflowId: result.data.workflowId };
