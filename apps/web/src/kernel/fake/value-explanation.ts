@@ -95,6 +95,9 @@ export function valueExplanationFixture(scenario: ValueScenario = 'selected', lo
       }
       if (decodeURIComponent(url.pathname) === `/v1/definitions/releases/${definitions.digest}`)
         return json(definitions);
+      // Preserve this fixture's unavailable-detail outcome through the bound native client.
+      if (url.pathname === `/v1/subjects/${id}/revisions/${selected.rezics.revision}`)
+        return json({ code: 'overloaded' }, 503);
       if (url.pathname !== `/v1/subjects/${id}/candidates`) return json({ code: 'not_found' }, 404);
       if (scenario === 'review-denied') return json({ code: 'forbidden' }, 403);
       if (scenario === 'review-error') return json({ code: 'overloaded' }, 503);
