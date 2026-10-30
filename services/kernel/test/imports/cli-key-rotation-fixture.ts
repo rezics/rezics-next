@@ -7,7 +7,11 @@ import { decodeJwt, decodeProtectedHeader, exportJWK, generateKeyPair } from 'jo
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { runImportCli } from '../../../importer/src/cli.ts';
-import { createAccountTokenProvider, IMPORTER_SCOPES, CredentialDeniedError } from '../../../importer/src/credentials.ts';
+import {
+  createAccountTokenProvider,
+  IMPORTER_SCOPES,
+  CredentialDeniedError,
+} from '../../../importer/src/credentials.ts';
 import type { Importer } from '../../../importer/src/importer.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -57,7 +61,9 @@ export async function runCliKeyRotationJourney() {
     const input = new TextEncoder().encode(JSON.stringify(source) + '\n');
     await runtime.mediaBoundary.source(sourceUrl);
 
-    async function credential(credential: Parameters<typeof identity.auth.internal.stageCredentialEffect>[0]['credential']) {
+    async function credential(
+      credential: Parameters<typeof identity.auth.internal.stageCredentialEffect>[0]['credential'],
+    ) {
       await native.renewManagement();
       const staged = await identity.auth.internal.stageCredentialEffect({
         key: randomUUID(),
@@ -120,11 +126,13 @@ export async function runCliKeyRotationJourney() {
           tokens.push({
             phase,
             status: response.status,
-            ...(claims ? {
-              account: claims.sub,
-              client: String(claims.client_id),
-              scopes: String(claims.scope).split(' ').sort(),
-            } : {}),
+            ...(claims
+              ? {
+                  account: claims.sub,
+                  client: String(claims.client_id),
+                  scopes: String(claims.scope).split(' ').sort(),
+                }
+              : {}),
           });
         }
         return response;
@@ -142,7 +150,9 @@ export async function runCliKeyRotationJourney() {
       if (isBatch) {
         const store = currentImporter!.session.store;
         const run = store.activeRun(owner.source)!;
-        const seal = store.database.query('SELECT status,supplied,invalid FROM run_generations WHERE source=? AND id=?').get(run.source, run.id);
+        const seal = store.database
+          .query('SELECT status,supplied,invalid FROM run_generations WHERE source=? AND id=?')
+          .get(run.source, run.id);
         expect(seal).toMatchObject({ status: 'ready', supplied: 1, invalid: 0 });
         seals.push(seal);
         expect(consumed).toBe(input.byteLength);
@@ -159,9 +169,17 @@ export async function runCliKeyRotationJourney() {
       const replay = request.clone();
       const response = await runtime.replay(request);
       const body = await response.clone().json();
-      if (url.pathname === '/v1/sourceFences:check') fences.push({ phase, request: JSON.parse(bytes), status: response.status, body });
+      if (url.pathname === '/v1/sourceFences:check')
+        fences.push({ phase, request: JSON.parse(bytes), status: response.status, body });
       if (request.method !== 'GET' && url.pathname !== '/v1/sourceFences:check')
-        writes.push({ phase, path: url.pathname, bytes, key: request.headers.get('idempotency-key'), status: response.status, body });
+        writes.push({
+          phase,
+          path: url.pathname,
+          bytes,
+          key: request.headers.get('idempotency-key'),
+          status: response.status,
+          body,
+        });
       if (phase === 'pending' && isBatch && !lost) {
         const batch = JSON.parse(bytes) as BatchWriteRequest;
         if (batch.commands.every((c) => c.op !== 'create')) {
@@ -179,16 +197,40 @@ export async function runCliKeyRotationJourney() {
 
     // Import the old key before replacing its file, then ask real Auth to use it after retirement.
     const retiredKey = await createAccountTokenProvider({
-      accountKeyPath: keyPath, account: identity.bulk.accountId, client: identity.client.clientId, authOrigin: auth, fetch: upstream,
+      accountKeyPath: keyPath,
+      account: identity.bulk.accountId,
+      client: identity.client.clientId,
+      authOrigin: auth,
+      fetch: upstream,
     });
-    const argv = ['--source', 'bangumi', '--dump', '-', '--state', state, '--api', api, '--auth', auth,
-      '--account-key', keyPath, '--account', identity.bulk.accountId, '--client', identity.client.clientId];
+    const argv = [
+      '--source',
+      'bangumi',
+      '--dump',
+      '-',
+      '--state',
+      state,
+      '--api',
+      api,
+      '--auth',
+      auth,
+      '--account-key',
+      keyPath,
+      '--account',
+      identity.bulk.accountId,
+      '--client',
+      identity.client.clientId,
+    ];
     async function invoke(next: Phase) {
       phase = next;
       controller = new AbortController();
       let invocationBytes = 0;
       const result = await runImportCli(argv, {
-        stdin: (async function* () { invocationBytes += input.byteLength; consumed += input.byteLength; yield input; })(),
+        stdin: (async function* () {
+          invocationBytes += input.byteLength;
+          consumed += input.byteLength;
+          yield input;
+        })(),
         signal: controller.signal,
         fetch: upstream,
         observer: {
@@ -200,7 +242,11 @@ export async function runCliKeyRotationJourney() {
           },
           onCoordinator({ importer, registration, converterModule, decoderModule }) {
             currentImporter = importer;
-            coordinator.push({ converter: converterModule, decoder: decoderModule, revision: registration.converter_revision });
+            coordinator.push({
+              converter: converterModule,
+              decoder: decoderModule,
+              revision: registration.converter_revision,
+            });
             // Observe the real maintained seal immediately before the first public effect.
             const active = importer.session.store.activeRun(owner.source);
             if (active) expect(active.source).toBe(owner.source);
@@ -220,20 +266,41 @@ export async function runCliKeyRotationJourney() {
         const run = session.store.activeRun(owner.source);
         const claim = session.bindings.claim(owner);
         const envelopes = run ? session.store.pagePending(run, { limit: 100 }) : [];
-        return { run, claim, envelopes, source: session.store.source(owner.source),
+        return {
+          run,
+          claim,
+          envelopes,
+          source: session.store.source(owner.source),
           records: session.store.pageAcknowledged(owner.source, { limit: 8 }),
-          bootstrap: [...commands.values()].filter((c) => c.op === 'create').map((c) => session.bindings.journal(owner, c.key)),
+          bootstrap: [...commands.values()]
+            .filter((c) => c.op === 'create')
+            .map((c) => session.bindings.journal(owner, c.key)),
           mediaIds: session.bindings.mediaIds(owner),
-          mediaJournal: session.store.database.query('SELECT key,bytes,signature,accepted,status FROM binding_media WHERE source=? AND external_id=? ORDER BY key LIMIT 8').all(owner.source, owner.external_id),
-          bootstrapAcknowledgements: [...commands.values()].filter((c) => c.op === 'create').map((c) => session.store.database.query('SELECT acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?').get(owner.source, owner.external_id, c.key)),
+          mediaJournal: session.store.database
+            .query(
+              'SELECT key,bytes,signature,accepted,status FROM binding_media WHERE source=? AND external_id=? ORDER BY key LIMIT 8',
+            )
+            .all(owner.source, owner.external_id),
+          bootstrapAcknowledgements: [...commands.values()]
+            .filter((c) => c.op === 'create')
+            .map((c) =>
+              session.store.database
+                .query('SELECT acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?')
+                .get(owner.source, owner.external_id, c.key),
+            ),
         };
-      } finally { session.close(); }
+      } finally {
+        session.close();
+      }
     }
     async function receipts(keys: readonly string[]) {
       const rows: Receipt[] = [];
       for (const key of keys) {
         const command = commands.get(key)!;
-        const route = command.op === 'create' ? tupleRoute(identity.routeKey, command.source.source, command.source.external_id) : routeOf(command.subject)!;
+        const route =
+          command.op === 'create'
+            ? tupleRoute(identity.routeKey, command.source.source, command.source.external_id)
+            : routeOf(command.subject)!;
         const result = await runtime.database.admin.query<Omit<Receipt, 'key'>>(
           'SELECT transaction_id,response,xmin::text FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5',
           [partitionOf(route), 'account', identity.bulk.accountId, `subject.batch_${command.op}`, key],
@@ -260,7 +327,8 @@ export async function runCliKeyRotationJourney() {
     const publicBefore = await observer.http(`/v1/subjects/${subject}`);
     expect(publicBefore.status).toBe(200);
     const candidatesBefore = await runtime.database.admin.query<{ candidate_id: string; xmin: string }>(
-      'SELECT candidate_id,xmin::text FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100', [routeOf(subject), subject],
+      'SELECT candidate_id,xmin::text FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
+      [routeOf(subject), subject],
     );
     expect(candidatesBefore.rows.length).toBeGreaterThan(0);
     const mediaId = before.mediaIds.cover;
@@ -300,13 +368,19 @@ export async function runCliKeyRotationJourney() {
     expect(after.records[0]!.digest).toMatch(/^[a-f0-9]{64}$/);
     const resumedWrites = writes.filter((w) => w.phase === 'resumed' && w.path === '/v1/subjects:batchWrite');
     const resumedPreparedBytes = resumedWrites.map((w) => w.bytes);
-    const resumedPreparedKeys = resumedWrites.map((w) => (JSON.parse(w.bytes) as BatchWriteRequest).commands.map((c) => c.key));
+    const resumedPreparedKeys = resumedWrites.map((w) =>
+      (JSON.parse(w.bytes) as BatchWriteRequest).commands.map((c) => c.key),
+    );
     const originalReceiptRowsAfter = await receipts(originalKeys);
     const candidatesAfter = await runtime.database.admin.query<{ candidate_id: string; xmin: string }>(
-      'SELECT candidate_id,xmin::text FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100', [routeOf(subject), subject],
+      'SELECT candidate_id,xmin::text FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
+      [routeOf(subject), subject],
     );
     // An actual extra/rewritten candidate is a duplicate effect witness.
-    const duplicateEffectRows = candidatesAfter.rows.filter((row) => !candidatesBefore.rows.some((prior) => prior.candidate_id === row.candidate_id && prior.xmin === row.xmin));
+    const duplicateEffectRows = candidatesAfter.rows.filter(
+      (row) =>
+        !candidatesBefore.rows.some((prior) => prior.candidate_id === row.candidate_id && prior.xmin === row.xmin),
+    );
     expect(candidatesAfter.rows).toEqual(candidatesBefore.rows);
     expect(await runtime.mediaBoundary.observe(mediaId)).toEqual(mediaBefore);
     expect(await observer.http(`/v1/subjects/${subject}`)).toMatchObject({ status: 200, body: publicBefore.body });
@@ -329,22 +403,63 @@ export async function runCliKeyRotationJourney() {
     const worker = await runtime.mediaBoundary.capture();
     expect(worker.executedJobs).toBeGreaterThan(0);
     expect(worker.liveInternetRequests).toEqual([]);
-    console.log('CLI key rotation native evidence', JSON.stringify({
-      source: owner, inputBytes: sealedInputBytes, inputSha256: createHash('sha256').update(input).digest('hex'),
-      coordinator, bundle: { catalogue: bundledRelease.catalogue, digest: bundledDigest }, seals, fences, signIns, tokens, keyReads,
-      run: before.run, sourceAfter: after.source, records: after.records,
-      prepared: before.envelopes, receipts: originalReceiptRowsAfter, mediaWrite,
-      subject, candidates: candidatesAfter.rows, media: mediaBefore,
-      worker: { jobs: worker.executedJobs, calls: worker.calls, registrations: worker.registrations.map((r) => r.name) },
-      revokedReplay, resumed: { code: resumed.code }, unchanged: { code: unchanged.code, writes: unchangedPublicWrites.length },
-    }));
+    console.log(
+      'CLI key rotation native evidence',
+      JSON.stringify({
+        source: owner,
+        inputBytes: sealedInputBytes,
+        inputSha256: createHash('sha256').update(input).digest('hex'),
+        coordinator,
+        bundle: { catalogue: bundledRelease.catalogue, digest: bundledDigest },
+        seals,
+        fences,
+        signIns,
+        tokens,
+        keyReads,
+        run: before.run,
+        sourceAfter: after.source,
+        records: after.records,
+        prepared: before.envelopes,
+        receipts: originalReceiptRowsAfter,
+        mediaWrite,
+        subject,
+        candidates: candidatesAfter.rows,
+        media: mediaBefore,
+        worker: {
+          jobs: worker.executedJobs,
+          calls: worker.calls,
+          registrations: worker.registrations.map((r) => r.name),
+        },
+        revokedReplay,
+        resumed: { code: resumed.code },
+        unchanged: { code: unchanged.code, writes: unchangedPublicWrites.length },
+      }),
+    );
     return {
-      pending, oldKeyId: firstSignIn.kid, newKeyId: newKeySignIn.kid,
-      accountBefore: firstToken.account, accountAfter: newToken.account,
-      clientBefore: firstToken.client, clientAfter: newToken.client,
-      oldKeySignIn, newKeySignIn, newToken, originalScopes: firstToken.scopes, newScopes: newToken.scopes,
-      revokedReplay, resumed, resumedPreparedBytes, originalPreparedBytes, resumedPreparedKeys, originalPreparedKeys,
-      originalReceiptRowsAfter, originalReceiptRowsBefore, duplicateEffectRows, unchanged, unchangedPublicWrites, close,
+      pending,
+      oldKeyId: firstSignIn.kid,
+      newKeyId: newKeySignIn.kid,
+      accountBefore: firstToken.account,
+      accountAfter: newToken.account,
+      clientBefore: firstToken.client,
+      clientAfter: newToken.client,
+      oldKeySignIn,
+      newKeySignIn,
+      newToken,
+      originalScopes: firstToken.scopes,
+      newScopes: newToken.scopes,
+      revokedReplay,
+      resumed,
+      resumedPreparedBytes,
+      originalPreparedBytes,
+      resumedPreparedKeys,
+      originalPreparedKeys,
+      originalReceiptRowsAfter,
+      originalReceiptRowsBefore,
+      duplicateEffectRows,
+      unchanged,
+      unchangedPublicWrites,
+      close,
     };
   } catch (error) {
     await close();

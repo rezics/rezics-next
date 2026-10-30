@@ -15,7 +15,11 @@ test('reopening credentials reads the rotated key at the same private path and p
     const generate = async () => {
       const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
       const kid = randomUUID();
-      return { kid, publicKey: pair.publicKey, jwk: { ...(await crypto.subtle.exportKey('jwk', pair.privateKey)), alg: 'ES256', kid } };
+      return {
+        kid,
+        publicKey: pair.publicKey,
+        jwk: { ...(await crypto.subtle.exportKey('jwk', pair.privateKey)), alg: 'ES256', kid },
+      };
     };
     const old = await generate();
     const fresh = await generate();
@@ -34,13 +38,20 @@ test('reopening credentials reads the rotated key at the same private path and p
         expect(claims.sub).toBe(account);
         expect(claims.aud).toBe(`${authOrigin}/token`);
         const publicKey = active.get(kid);
-        const valid = publicKey && await crypto.subtle.verify(
-          { name: 'ECDSA', hash: 'SHA-256' }, publicKey,
-          Buffer.from(signature, 'base64url'), Buffer.from(`${header}.${payload}`),
-        );
+        const valid =
+          publicKey &&
+          (await crypto.subtle.verify(
+            { name: 'ECDSA', hash: 'SHA-256' },
+            publicKey,
+            Buffer.from(signature, 'base64url'),
+            Buffer.from(`${header}.${payload}`),
+          ));
         const status = valid ? 200 : 401;
         signIns.push({ kid, account: body.account_id, client: body.client_id, scopes: body.scope, status });
-        return Response.json({}, { status, ...(valid ? { headers: { 'set-cookie': 'unit-session=private; HttpOnly; Secure' } } : {}) });
+        return Response.json(
+          {},
+          { status, ...(valid ? { headers: { 'set-cookie': 'unit-session=private; HttpOnly; Secure' } } : {}) },
+        );
       }
       expect(url.pathname).toBe('/token');
       expect(request.headers.get('cookie')).toBe('unit-session=private');
@@ -59,7 +70,9 @@ test('reopening credentials reads the rotated key at the same private path and p
     const newProvider = await createAccountTokenProvider(options);
     expect(await newProvider()).not.toBe(originalToken);
     expect(signIns.map(({ kid, status }) => ({ kid, status }))).toEqual([
-      { kid: old.kid, status: 200 }, { kid: old.kid, status: 401 }, { kid: fresh.kid, status: 200 },
+      { kid: old.kid, status: 200 },
+      { kid: old.kid, status: 401 },
+      { kid: fresh.kid, status: 200 },
     ]);
     for (const observed of signIns) {
       expect(observed.account).toBe(account);
