@@ -209,7 +209,11 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets cover_ratio schema_org_type library list_presentation', annotationLocation);
+            allowed(
+              definition.annotations,
+              'facets cover_ratio schema_org_type library list_presentation',
+              annotationLocation,
+            );
             const annotations = object(definition.annotations);
             if (Object.hasOwn(annotations, 'list_presentation')) {
               const location = { file, pointer: at(annotationLocation.pointer, 'list_presentation') };
@@ -217,12 +221,24 @@ export async function compileCatalogue(input: {
               allowed(hint, 'imageAspect keyFacts', location);
               if (record(hint)) {
                 if (!['portrait', 'landscape', 'square'].includes(hint.imageAspect as string))
-                  add({ ...location, pointer: at(location.pointer, 'imageAspect') }, 'invalid', 'Expected portrait, landscape or square');
+                  add(
+                    { ...location, pointer: at(location.pointer, 'imageAspect') },
+                    'invalid',
+                    'Expected portrait, landscape or square',
+                  );
                 if (!Array.isArray(hint.keyFacts))
-                  add({ ...location, pointer: at(location.pointer, 'keyFacts') }, 'invalid', 'Expected a list of property CURIEs');
+                  add(
+                    { ...location, pointer: at(location.pointer, 'keyFacts') },
+                    'invalid',
+                    'Expected a list of property CURIEs',
+                  );
                 else {
                   if (hint.keyFacts.length > 4)
-                    add({ ...location, pointer: at(location.pointer, 'keyFacts') }, 'limit', 'At most four key facts are allowed');
+                    add(
+                      { ...location, pointer: at(location.pointer, 'keyFacts') },
+                      'limit',
+                      'At most four key facts are allowed',
+                    );
                   const seen = new Set<string>();
                   hint.keyFacts.forEach((key, index) => {
                     const pointer = at(at(location.pointer, 'keyFacts'), index);
