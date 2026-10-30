@@ -109,24 +109,55 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
       });
 
       if (url.pathname === '/signin' && request.method === 'POST') {
+        // The page's authPost and Auth's bodyOf use JSON. Native form submissions
+        // are unsupported by Auth and must not establish a scoped session here.
+        if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json')
+          return Response.json({ error: 'invalid_request' }, { status: 415, headers });
+        if (new TextEncoder().encode(body).byteLength > 16384)
+          return Response.json({ error: 'invalid_request' }, { status: 413, headers });
+        let payload: unknown;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          return Response.json({ error: 'invalid_request' }, { status: 400, headers });
+        }
+        if (
+          !payload ||
+          typeof payload !== 'object' ||
+          Array.isArray(payload) ||
+          Object.keys(payload).some((key) => !['email', 'password', 'client_id', 'scope'].includes(key)) ||
+          !('email' in payload) ||
+          typeof payload.email !== 'string' ||
+          !payload.email ||
+          payload.email.length > 1024 ||
+          !('password' in payload) ||
+          typeof payload.password !== 'string' ||
+          !payload.password ||
+          payload.password.length > 1024 ||
+          !('client_id' in payload) ||
+          typeof payload.client_id !== 'string' ||
+          !('scope' in payload) ||
+          !Array.isArray(payload.scope) ||
+          !payload.scope.every((scope): scope is string => typeof scope === 'string')
+        )
+          return Response.json({ error: 'invalid_request' }, { status: 400, headers });
+        // Auth normalizes JSON scope arrays as sorted sets, never form strings.
+        const scopes = [...new Set(payload.scope)].sort();
+        const profileValid =
+          payload.client_id === 'login'
+            ? scopes.length === 0
+            : payload.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
+              Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
+                (allowed) =>
+                  allowed.length === scopes.length && allowed.every((scope, index) => scope === scopes[index]),
+              );
+        if (!profileValid) return Response.json({ error: 'invalid_scope' }, { status: 400, headers });
         if (state.signInSucceeds) {
-          const payload = JSON.parse(body) as { client_id?: unknown; scope?: unknown };
-          const scopes = payload.scope;
-          const profileValid =
-            payload.client_id === 'login'
-              ? Array.isArray(scopes) && scopes.length === 0
-              : payload.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
-                Array.isArray(scopes) &&
-                Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
-                  (allowed) =>
-                    allowed.length === scopes.length && allowed.every((scope, index) => scope === scopes[index]),
-                );
-          if (!profileValid) return Response.json({ error: 'invalid_scope' }, { status: 400, headers });
           state.signedOut = false;
           state.sessionFresh = true;
           state.sessionAccountId = state.signInAccountId;
-          state.sessionClientId = payload.client_id as string;
-          state.sessionScopes = scopes as string[];
+          state.sessionClientId = payload.client_id;
+          state.sessionScopes = scopes;
           headers.append('set-cookie', 'auth_session=fake-fresh-session; Path=/; HttpOnly; SameSite=Lax');
           return Response.json({ success: true }, { headers });
         }
