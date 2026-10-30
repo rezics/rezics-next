@@ -281,6 +281,7 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
   const startedAt = Date.now();
   const deadline = startedAt + INNER_BUDGET_MS;
   let temporary = '';
+  let workerRoot = '';
   let clone = '';
   let tree = '';
   let devTree = '';
@@ -295,6 +296,7 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
     if (sourceSettings.codex.serviceTier.trim().toLowerCase() === 'fast')
       throw new Error('Codex service tier is Fast; launch smoke only permits the configured non-Fast tier');
     temporary = uuidPath(root, 'launch-smoke-');
+    workerRoot = uuidPath(root, 'launch-smoke-workers-');
     clone = join(temporary, 'repository');
     tree = join(temporary, 'candidate');
     const cloneResult = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
@@ -338,7 +340,7 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
         REZICS_LAUNCH_SMOKE_BRANCH: branch,
         REZICS_LAUNCH_SMOKE_WORKER_CHECK: join(devTree, 'scripts/worker-check.ts'),
         REZICS_LAUNCH_SMOKE_STATE: join(temporary, 'state'),
-        REZICS_LAUNCH_SMOKE_WORKTREES: join(temporary, 'workers'),
+        REZICS_LAUNCH_SMOKE_WORKTREES: workerRoot,
         REZICS_LAUNCH_SMOKE_DEADLINE: String(deadline),
       },
       Math.max(1, remaining + 5_000),
@@ -370,6 +372,7 @@ async function runRealSmoke(root: string, report: Reporter): Promise<void> {
         /* The disposable repository is removed below. */
       }
     }
+    if (workerRoot) rmSync(workerRoot, { recursive: true, force: true });
     if (temporary) rmSync(temporary, { recursive: true, force: true });
   }
 }
