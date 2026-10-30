@@ -16,6 +16,5 @@ freezes the payload, ETag and key for retry. Stale revisions or conflicting keys
 explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read
 supplies current terms and the canonical reader address. Failed or concealed rereads never publish a local preview.
 
-Semantic owns the native terms API. Until its generated producer contract lands, the browser binding uses the
-declared typed port over the existing client transport. An unserved port is unavailable, and isolated story samples
-do not establish native availability. Native outcome proof and Web/Root story and screenshot review remain pending.
+Semantic owns the native terms API. An unavailable operation remains unavailable in the browser; it never becomes
+a successful local preview or a substitute catalogue mutation.
