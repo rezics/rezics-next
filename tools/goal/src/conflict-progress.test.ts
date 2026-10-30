@@ -44,6 +44,12 @@ function resetWorkerBranch(worktree: string, commit: string): void {
   git(worktree, ['reset', '--hard', commit]);
 }
 
+function recordWorkerBranchHead(worktree: string, branch: string): string {
+  if (git(worktree, ['branch', '--show-current']) !== branch)
+    git(worktree, ['update-ref', `refs/heads/${branch}`, 'HEAD']);
+  return git(worktree, ['rev-parse', '--verify', `${branch}^{commit}`]);
+}
+
 function advanceMain(h: ReturnType<typeof integrationHarness>, file: string, content: string): string {
   mkdirSync(dirname(join(h.root, file)), { recursive: true });
   writeFileSync(join(h.root, file), content);
@@ -151,7 +157,7 @@ test('Identical redacted failure fingerprints on different files/heads or with n
     writeFileSync(join(task.worktree, fileA), revisedContent);
     git(task.worktree, ['add', '--', fileA]);
     git(task.worktree, ['commit', '-m', 'Worker updates Storybook entry']);
-    const secondSource = h.head(task.branch);
+    const secondSource = recordWorkerBranchHead(task.worktree, task.branch);
     const second = await runTrain(h, job, { sameRedactedFingerprint: true });
 
     expect(first[0]!.rebaseConflict?.targetHead).toBe(firstTarget);
@@ -169,7 +175,7 @@ test('Identical redacted failure fingerprints on different files/heads or with n
     writeFileSync(join(task.worktree, fileB), revisedLayout);
     git(task.worktree, ['add', '--', fileB]);
     git(task.worktree, ['commit', '-m', 'Worker adds Storybook layout']);
-    const thirdSource = h.head(task.branch);
+    const thirdSource = recordWorkerBranchHead(task.worktree, task.branch);
     const thirdTarget = advanceMain(h, fileB, 'main Storybook layout reorganization\n');
     const third = await runTrain(h, job, { sameRedactedFingerprint: true });
 
