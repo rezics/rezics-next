@@ -1,11 +1,15 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { fromMarkdown, fromPlainText, normalizeDocument, withDocumentIds, checkDocument } from '@rezics/document';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import type { SubjectPageData } from '../src/features/pages/subject.tsx';
 import { serializeJsonLd, subjectJsonLd } from '../src/features/pages/jsonld.ts';
+
+// The composed renderer imports Worker bindings; this suite supplies its public read directly.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, SubjectPage } = await import('../src/features/pages/subject.tsx');
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const diet = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e02';
