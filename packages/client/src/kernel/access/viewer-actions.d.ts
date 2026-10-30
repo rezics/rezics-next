@@ -3,7 +3,7 @@ import type { Static, TSchema } from 'typebox';
 import { type Exposure } from './gates/declaration.ts';
 import type { createApp } from '../http/app.ts';
 import { type MountedRoute } from '../http/request.ts';
-import { type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { type Access, type AccessClient, type Actor, type AccountAuthorityKind } from '../request/access.ts';
 /** Trusted owner read, shared with its ordinary resource reader. Absence and the
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
@@ -16,8 +16,11 @@ export type ViewerActionBinding = Readonly<{
     operationId: string;
     exposure: Exposure;
     authority: 'resource' | 'own-account';
+    accountAuthority?: AccountAuthorityKind;
 }>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
+/** Include conditional native anchors in the same per-type/action limit. */
+export declare function viewerActionBindingActions(binding: ViewerActionBinding): readonly string[];
 /** No module-maintained operation list: only mounted direct declarations and
  * explicit different authority anchors participate in this catalogue. */
 export declare function compileViewerActionBindings(routes: readonly MountedRoute[]): ViewerActionBindings;

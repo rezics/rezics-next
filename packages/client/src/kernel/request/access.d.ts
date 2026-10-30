@@ -95,7 +95,22 @@ export type ReadDecisionInput = Readonly<{
     ids: readonly string[];
     eligibility?: ReadDecisionEligibility;
 }>;
+/** Native, server-only operation binding. Only the installed evaluator produces
+ * this handle; no request field, callback or authorization boolean is accepted. */
+export type AccountAuthorityKind = 'profile' | 'self' | 'verification';
+export type AccountAuthorityDecision = AccessDecision & {
+    action: string;
+};
+export type AccountAuthority = Readonly<{
+    decide(client: AccessClient, input: {
+        kind: AccountAuthorityKind;
+        action: string;
+        ids: readonly string[];
+    }, time?: AuthoritativeTime): Promise<Readonly<Record<string, AccountAuthorityDecision>>>;
+}>;
 export type ReadDecisions = Readonly<{
+    /** Prepare native Account/foreign-operator formula pages before target checkout. */
+    prepareAccountAuthority?(ids: readonly string[]): Promise<AccountAuthority>;
     decide(client: AccessClient, input: ReadDecisionInput, time?: AuthoritativeTime): Promise<Readonly<Record<string, AccessDecision>>>;
 }>;
 export type PrepareReadDecisionsInput = {

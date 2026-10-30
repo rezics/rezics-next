@@ -1695,7 +1695,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "profile",
         "x-action": "account:update",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "public",
         "x-rate-limit": {
           "family": "write",
@@ -7169,7 +7173,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "self",
         "x-action": "account:read",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "public"
       },
       "patch": {
@@ -8468,7 +8476,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "self",
         "x-action": "account:update",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "public",
         "x-rate-limit": {
           "family": "write",
@@ -9275,7 +9287,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "profile",
         "x-action": "account:update",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "public"
       }
     },
@@ -12623,7 +12639,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "verification",
         "x-action": "account:read",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "gate:agent_verification"
       }
     },
@@ -14973,7 +14993,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "verification",
         "x-action": "account:update",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",
@@ -17970,7 +17994,11 @@
             "bearerAuth": []
           }
         ],
+        "x-account-authority": "verification",
         "x-action": "account:update",
+        "x-authority-resource-types": [
+          "access.account"
+        ],
         "x-exposure": "gate:agent_verification",
         "x-rate-limit": {
           "family": "write",

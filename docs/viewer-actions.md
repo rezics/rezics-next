@@ -178,8 +178,9 @@ taken-down and unknown subjects are all concealed even when an independent subje
 unknown management references all return `not_found`. Public identity visibility and `account:read` grants confer
 no mutation permission. This private batch does not change the ordinary public identity tombstone DTO.
 
-Mounted Account routes declare their actual resource types and `x-account-authority`: `profile` for the editable
-profile GET and profile PATCH, `self` for preferences, and `verification` for verification request/read/withdraw.
+Mounted Account routes declare `x-authority-resource-types: ['access.account']` and `x-account-authority`: `profile`
+for the editable profile GET and profile PATCH, `self` for preferences, and `verification` for verification
+request/read/withdraw. These authority declarations do not initialize an Account resource or add resource roles.
 `compileViewerActionBindings` preserves those declarations. No unmounted operator, governance or issuer operation
 is invented. The native conditional actions count toward the existing 64-action and 256-binding limits.
 
