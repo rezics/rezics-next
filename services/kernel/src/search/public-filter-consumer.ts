@@ -685,9 +685,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         check();
         cost.engineRequests++;
         cost.bytes += Buffer.byteLength(encodeState(body));
-        if (path === '/_search' || path === '/_search/template') cost.engineSearches++;
+        if (path.endsWith('/_search') || path.endsWith('/_search/template')) cost.engineSearches++;
         const result = await config.search.request(method, path, body, { ...options, timeoutMs: remaining(context) });
         cost.bytes += Buffer.byteLength(encodeState(result.body));
+        // Physical keyed repair readbacks have no public query profile. Charge their actual shards;
+        // the retained PIT path separately charges its native profile iterator work.
+        if (path !== '/_search' && path.endsWith('/_search')) {
+          const shards = (result.body as { _shards?: { total?: number } })._shards?.total;
+          if (Number.isSafeInteger(shards) && shards! > 0) cost.engineIteratorSteps += shards!;
+        }
         check();
         return result as any;
       },
