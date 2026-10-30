@@ -84,6 +84,9 @@ export function createApp({
   const jsonBodyChecks = new Map<string, () => ReturnType<typeof Compile>>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
   const boundedBodyErrors = new WeakMap<Request, unknown>();
+  // Undefined means "try the next parser" to Elysia. Preserve an absent wire
+  // body through parsing, then restore it before the route's schema checks.
+  const absentBody = Symbol('absent request body');
   const bodyReservations = new WeakMap<Request, number>();
   let bodyBudget: IngressBodyBudget | undefined;
   const selfParsingRoutes = new Set([
@@ -151,7 +154,8 @@ export function createApp({
       try {
         if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
         bodyReservations.set(request, reservation);
-        return await parseBoundedBody(request, limit, bodyModeOf(detail));
+        const body = await parseBoundedBody(request, limit, bodyModeOf(detail));
+        return body === undefined ? absentBody : body;
       } catch (error) {
         boundedBodyErrors.set(request, error);
         return {};
@@ -221,7 +225,9 @@ export function createApp({
         problem.headers.set('cache-control', 'private, no-store');
       return problem;
     })
-    .onTransform('global', ({ body, request, route }) => {
+    .onTransform('global', (context) => {
+      if (context.body === absentBody) context.body = undefined;
+      const { body, request, route } = context;
       const boundedError = boundedBodyErrors.get(request);
       if (boundedError !== undefined) {
         boundedBodyErrors.delete(request);
@@ -305,6 +311,13 @@ export function createApp({
       const original = originalRequests.get(request) ?? request;
       const mounted = mountedFor(request, route);
       const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
+      // These mounted operations require an acting account and their exact
+      // credential scope even when domain input would otherwise refuse first.
+      // The command still evaluates its full native own-account permission.
+      if (detail?.['x-authority-anchor'] === 'own-account') {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (!actor.scopes.includes(actionLabelOfMountedRoute(mounted))) throw new ProblemError('forbidden');
+      }
       const gated = typeof detail?.['x-exposure'] === 'string' && detail['x-exposure'].startsWith('gate:');
       if (
         !gated &&

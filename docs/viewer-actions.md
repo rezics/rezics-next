@@ -152,6 +152,8 @@ The mounted declaration contributes that self-account authority to Access's exis
 its own exact action and consented scope, current actor, assignment, principal, membership and denials. A subject mutation grant cannot supply
 this authority. Public subject visibility supplies only the subject read floor. Anonymous readers receive no
 personal mutation operations. The ordinary commands still enforce their current owner checks and domain state.
+The mounted own-account declaration requires an authenticated account and the exact credential scope before a
+domain-state refusal; the command then evaluates the full native permission formula as usual.
 
 Preparation includes `access.account` and the four personal actions. Each operation's own-account decision is made once
 per request and reused across displayed subjects; subject existence, released primary type and public visibility
