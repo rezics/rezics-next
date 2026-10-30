@@ -65,8 +65,11 @@ export class AccessWorkAccounting {
     for (const pending of this.pending) pending.finish(pending.bound);
   }
   async capture<T>(operation: () => Promise<T>): Promise<AccessWorkResult<T>> {
-    try { return { state: 'complete', value: await operation(), usage: this.usage() }; }
-    catch (error) {
+    try {
+      const value = await operation();
+      if (this.failure) throw this.failure;
+      return { state: 'complete', value, usage: this.usage() };
+    } catch (error) {
       this.fail(error);
       return error instanceof AccessWorkUnavailableError
         ? { state: 'unavailable', dependency: error.dependency, usage: this.usage() }
@@ -84,11 +87,12 @@ export class AccessWorkAccounting {
     requireAccessDeadline(this.deadline);
     if (!footprint) this.unavailable(operation);
     const bound = copy(footprint);
+    // Validate the cumulative arithmetic before asking the parent to hold work.
+    const next = copy(Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, this.used[axis] + bound[axis]])) as AccessWork);
     const reservation = this.sink.reserve(operation, bound);
     if (!reservation) this.unavailable(operation);
-    const before = this.used;
-    // Add, rather than replace a snapshot: sibling reservations may be in flight.
-    this.used = copy(Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, before[axis] + bound[axis]])) as AccessWork);
+    // Synchronous admission cannot interleave sibling dispatches.
+    this.used = next;
     const pending = {
       bound,
       finish: (charged: AccessWork) => {
@@ -132,7 +136,7 @@ export async function accessOwnerWork<C, R>(
   dispatch: () => Promise<R>,
 ): Promise<R> {
   if (!work) return dispatch();
-  if (!producer) work.unavailable(operation);
+  if (!producer) return work.unavailable(operation);
   return work.run(operation, producer.bound(context), dispatch, (result) => producer.actual(context, result));
 }
 
@@ -200,7 +204,7 @@ export function accessNativeWork<T>(
       examinedKeys = points;
       // Include the finite input/target/key/branch/probe/decision intermediates
       // and final equality joins as well as native tuple candidates.
-      rows = native + 1 + targets + keys + branches + probes + targets * branches + targets * 6;
+      rows = native + (shape.assignment ? 1 : 0) + 1 + targets + keys + branches + probes + targets * branches + targets * 6;
       if (operation === 'formula') {
         projection = rowBytes({ resourceId: uuid, allowed: false, governanceReach: false, explicit: false, publicAllowed: false, at: timestamp, live: false }, shape.targets ?? 1);
       } else projection = rowBytes({ accountId: uuid, organizationId: uuid }, keys);
