@@ -1,3 +1,4 @@
+import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { t } from 'elysia';
 import { deadlineClient } from '../access/authenticate.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
@@ -145,7 +146,7 @@ class ViewReader {
     if (type === 'collection') {
       try {
         const value = await createCollectionReads(this.deps).readCollection(this.actor, id);
-        return { id, type, label: value.title };
+        return value.title === null ? null : { id, type, label: value.title };
       } catch (error) {
         if (error instanceof ProblemError && error.code === 'not_found') return null;
         throw error;
@@ -179,7 +180,7 @@ class ViewReader {
     return withConnection(pool, async (client) => {
       if (!(await check(client))) return null;
       const value = sink.value;
-      return value ? { id, type, label: value.title } : null;
+      return value ? { id, type, label: value.title ?? '' } : null;
     });
   }
 }
@@ -249,6 +250,8 @@ export async function fullMembers(
   options: { cursor?: string; limit?: number },
   deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
 ) {
+  const builtins = createBuiltinRuntime(deps);
+  if (await builtins.read(actor,collectionId)) return builtins.members(actor,collectionId,options);
   const parsedRoute = routeOf(collectionId);
   if (parsedRoute === null) throw new ProblemError('not_found');
   const route = parsedRoute;

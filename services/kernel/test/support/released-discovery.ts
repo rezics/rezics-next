@@ -1,3 +1,7 @@
+import { authoritativeTimeValue } from '../../src/command/command.ts';
+import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
+import { setLabelAssignment } from '../../src/library/label-assignment-store.ts';
+import { readStoredLabelAssignment, unassignStoredLabelAssignment, restoreStoredLabelAssignment } from '../../src/library/label-assignment-lifecycle-store.ts';
 import { testReceiptKeys } from './receipt-keys.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Release } from '@rezics/definitions';
@@ -110,6 +114,7 @@ export interface ReleasedDiscoveryFixture {
     spaceCreation(persona: DiscoveryAccountName): Promise<void>;
     realmCreation(persona: DiscoveryAccountName): Promise<void>;
   };
+  nativeLabelAssignment(persona: 'alice' | 'bob', labelId: string, subjectId: string, operation?: 'set' | 'unassign' | 'restore'): Promise<void>;
   scoped(persona: 'alice' | 'bob', scopes: readonly string[]): Promise<DiscoveryScopedTransport>;
   /** Trusted test SQL on the owned kernel database, within the existing native read-only transaction. */
   inspect<Row extends QueryResultRow = QueryResultRow>(
@@ -357,6 +362,27 @@ export async function createReleasedDiscoveryFixture(
         'Adopt released same-statement platform/language/date qualifier grammar: inLanguage currently string, not a Concept or credit role.',
       ),
       request,
+      async nativeLabelAssignment(persona, labelId, subjectId, operation='set') {
+        requireOpen();
+        // Delivered DAO seam: authenticate the real bearer, then use the real scoped owner command runner.
+        const actor = await driver.fixtures.authenticatedAccount(personas[persona]);
+        await createLibraryCommandRunner({ pool: driver.fixtures.pool }).ownAccount(actor, {
+          action: 'library_entry:update', kind: `library_label.${operation}`,
+          requestKey: randomUUID(), input: { labelId, subjectId },
+        }, async (tx, command) => {
+          const tuple = { route: routeOf(actor.accountId)!, accountId: actor.accountId, labelId, subjectId };
+          const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
+          const value = await (async () => {
+            if (operation==='set') return setLabelAssignment(tx,tuple,context);
+            const current = await readStoredLabelAssignment(tx,tuple);
+            if (!current?.id) throw new Error('Missing native assignment identity');
+            return (operation==='unassign' ? unassignStoredLabelAssignment : restoreStoredLabelAssignment)(
+              tx,{ ...tuple,assignmentId:current.id,revision:current.revision },context);
+          })();
+          if (value.kind!=='applied' && value.kind!=='existing') throw new Error(`Native label setup: ${value.kind}`);
+          return { value: null, events: [{ type:'com.rezics.library.label.changed.v1',subject:actor.accountId,data:{labelId} }] };
+        });
+      },
       setup: {
         openFeatures: (groups) => driver.fixtures.openFeatures(groups),
         async spaceCreation(persona) {

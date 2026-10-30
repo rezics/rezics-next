@@ -1,3 +1,4 @@
+import type { AccountActor } from '../../src/request/access.ts';
 import { releaseDigest } from '@rezics/definitions';
 import {
   createBarrierProofVerifier,
@@ -110,6 +111,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       authJwksUrl: string;
     };
     person(name: string, options?: { scopes?: readonly string[] }): Promise<Account>;
+    authenticatedAccount(account: Account): Promise<AccountActor>;
     scopeVariant(account: Account, scopes: readonly string[]): Promise<Account>;
     openFeatures(groups: readonly ReleasedDiscoveryFeature[]): Promise<void>;
     grantAccount(account: Account, actions: string[], resourceId?: string): Promise<void>;
@@ -596,6 +598,13 @@ async function startDriver(
       ...driver,
       fixtures: {
         pool: pool!,
+        async authenticatedAccount(account) {
+          if (!credentials.has(account)) throw new Error('Expected an existing native fixture account');
+          const actor = await access.authenticate(account.bearer, { pool: pool!, deadline: Date.now()+10_000 });
+          if (actor.kind !== 'account' || actor.accountId !== account.accountId)
+            throw new Error('Native account authentication did not preserve fixture identity');
+          return actor;
+        },
         runtime: {
           databaseUrl: kernelUrl,
           routeKey: Buffer.from(routeKey).toString('base64url'),

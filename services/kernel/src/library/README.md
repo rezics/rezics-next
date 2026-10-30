@@ -786,11 +786,12 @@ custody. Full label HTTP/generated-client adoption belongs to the catalogue/assi
 #### Retention inventory
 
 The owner directory adds private structural records, erased after native family hooks stop and before
-`fact_source_head`: `owner_index_state` at `(route, account_id, pin, collection_id)`,
+`fact_source_head`: `owner_index_label_repair` at `(route, account_id, label_id)` (raw100 indexed children),
+`owner_index_state` at `(route, account_id, pin, collection_id)`,
 `owner_member_support` at `(route, account_id, subject_id, family, pin)`, `owner_member_index` at
 `(route, account_id, subject_id)`, `owner_index_pin` at `(route, account_id, pin)`,
 the existing `builtin_collection_reference` at `(route, collection_id)` (owner-prefix cleanup), and
-`owner_index_control` at `(route, account_id)`. The existing A5 owned graph deletes these in that order,
+`owner_index_control` at `(route, account_id)`. The existing A5 owned graph deletes the existing references first, then these new directory records in child-before-parent order,
 at most 100 exact keys per page. State labels are immutable released presentation metadata; supports retain
 structural original/pin scopes without session/copy/assignment IDs, revisions, notes, timestamps or fact bodies.
 

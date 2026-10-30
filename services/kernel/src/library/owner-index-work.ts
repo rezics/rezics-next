@@ -62,10 +62,11 @@ async function page(context: WorkContext, input: Locator) {
 
 /** Default Library composition, existing maintenance queue and schedules; no new scheduler or identity participant. */
 export async function registerOwnerIndexWork(context: WorkContext) {
-  const step = DBOS.registerStep(async (input: Locator) => {
+  async function apply(input: Locator) {
     try { await page(context, input); }
     catch (error) { if (!(error instanceof LifecycleDeniedError)) throw error; }
-  }, { name: 'library.ownerIndexPage', ...COMMAND_STEP_RETRIES });
+  }
+  const step = DBOS.registerStep(apply, { name: 'library.ownerIndexPage', ...COMMAND_STEP_RETRIES });
   DBOS.registerWorkflow((input: Locator) => step(input), { name: OWNER_INDEX_WORKFLOW });
   const sweepPage = DBOS.registerStep(async (input: Sweep) => {
     const { rows } = await withConnection(context.pool, client => client.query<{ route: number; account: string }>(
@@ -76,8 +77,9 @@ export async function registerOwnerIndexWork(context: WorkContext) {
     const row = rows[0];
     if (!row) return { ...input, partition: input.partition+1, route: null, account: null };
     const frontier = await withConnection(context.pool, client => readOwnerIndexFrontier(client, row.account));
-    await step({ accounts: [row.account], frontier, metadata: false });
-    await step({ accounts: [row.account], frontier: null, metadata: true });
+    // This is already a registered step; call the transaction body, never nest DBOS steps.
+    await apply({ accounts: [row.account], frontier, metadata: false });
+    await apply({ accounts: [row.account], frontier: null, metadata: true });
     return { ...input, route: row.route, account: row.account };
   }, { name: 'library.ownerIndexSweepPage', ...COMMAND_STEP_RETRIES });
   const continuation = DBOS.registerStep(async (input: Sweep) => {

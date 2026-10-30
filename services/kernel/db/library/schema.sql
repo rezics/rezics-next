@@ -2885,6 +2885,8 @@ CREATE TABLE library.owner_member_index (
   CHECK (route BETWEEN 0 AND 65535),
   CHECK (route = (get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)))
 );
+CREATE INDEX owner_index_label_live ON library.label_assignment(route,account_id,subject_id,label_id)
+  WHERE deleted_at IS NULL;
 CREATE TABLE library.owner_index_control (
   route integer NOT NULL,
   account_id uuid NOT NULL,
@@ -2897,6 +2899,25 @@ CREATE TABLE library.owner_index_control (
   CHECK (route BETWEEN 0 AND 65535),
   CHECK (route = (get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)))
 );
+-- One retained parent frontier, not a per-child witness or synchronous owner fanout.
+CREATE TABLE library.owner_index_label_repair (
+  route integer NOT NULL,
+  account_id uuid NOT NULL,
+  label_id uuid NOT NULL,
+  after_subject uuid,
+  PRIMARY KEY(route,account_id,label_id)
+);
+CREATE FUNCTION library.queue_owner_label_repair() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND (OLD.deleted_at IS NULL) = (NEW.deleted_at IS NULL) THEN RETURN NULL; END IF;
+  INSERT INTO library.owner_index_label_repair(route,account_id,label_id)
+    VALUES(OLD.route,OLD.account_id,OLD.label_id)
+    ON CONFLICT(route,account_id,label_id) DO UPDATE SET after_subject=NULL;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER zz_owner_index_label_parent AFTER UPDATE OF deleted_at OR DELETE ON library.personal_label
+  FOR EACH ROW EXECUTE FUNCTION library.queue_owner_label_repair();
 -- Qualified same-pin native EXISTS; one million sessions/copies do not multiply structural rows.
 CREATE INDEX owner_index_entry_scope ON library.entry
   (route, account_id, subject_id, (COALESCE(library_profile_pin, '{}'::jsonb))) WHERE true;

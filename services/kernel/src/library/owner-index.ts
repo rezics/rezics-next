@@ -38,6 +38,23 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   await tx.query('SELECT 1 FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR UPDATE', args);
   await tx.query('INSERT INTO library.owner_index_control(route,account_id) VALUES($1,$2) ON CONFLICT DO NOTHING', args);
   const current = (await readOwnerIndexFrontier(tx, accountId))!;
+  // Parent transitions invalidate the source head immediately. Indexed child repair catches up in raw100 steps.
+  const repair = (await tx.query<{ label: string; after: string | null }>(`SELECT label_id AS label,
+    after_subject AS after FROM library.owner_index_label_repair WHERE route=$1 AND account_id=$2
+    ORDER BY label_id LIMIT 1 FOR UPDATE`, args)).rows[0];
+  if (repair) {
+    const children = (await tx.query<{ subject: string }>(`SELECT subject_id AS subject
+      FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND label_id=$3
+      AND ($4::uuid IS NULL OR subject_id>$4) ORDER BY subject_id LIMIT 100`,
+    [...args,repair.label,repair.after])).rows;
+    for (const child of children) await tx.query(
+      "SELECT library.refresh_owner_member_scope($1,$2,$3,'label','{}'::jsonb)", [...args,child.subject]);
+    if (children.length===100) await tx.query(`UPDATE library.owner_index_label_repair SET after_subject=$4
+      WHERE route=$1 AND account_id=$2 AND label_id=$3`, [...args,repair.label,children.at(-1)!.subject]);
+    else await tx.query(`DELETE FROM library.owner_index_label_repair
+      WHERE route=$1 AND account_id=$2 AND label_id=$3`, [...args,repair.label]);
+    return current;
+  }
   if (current.phase === 'ready') return current;
   const [table, id, pin] = sources[current.phase];
   // Only fixed native table/column literals above are interpolated; inputs remain parameters.

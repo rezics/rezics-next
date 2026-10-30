@@ -91,13 +91,24 @@ test('empty owner discovers stable logical Everything without materialization', 
   expect(empty.ids).toEqual([]);
   expect(empty.response.body.next).toBeNull();
   status(await world.request('alice', 'GET', `/v1/collections/${everything()}`));
+  const readonly = await world.base.scoped('alice',['collection:read']);
+  status(await readonly.request('GET',`/v1/collections/${everything()}/members`));
+  status(await readonly.request('POST',`/v1/collections/${everything()}/members`,
+    { subjectId:everything() },discoveryKey()),403);
   const after = await world.base.inspect('SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1', [account]);
   expect(after.rows).toEqual(before.rows);
 });
 
 test('native Everything is the exact independent entry label session and holding union', async () => {
   const state = await world.state();
-  const labels = await world.labels();
+  const made = await world.request('alice','POST','/v1/libraryLabels',{ name:'Independent builtin label' },discoveryKey());
+  status(made,201);
+  const label = made.body.label as { id:string };
+  const subject = await world.base.createSubject('schema:Book','Entryless native label');
+  const recipe = await world.base.createSubject('schema:Recipe','Unprofiled native label');
+  await world.base.nativeLabelAssignment('alice',label.id,subject.id);
+  await world.base.nativeLabelAssignment('alice',label.id,recipe.id);
+  const labels = { subject,recipe };
   const sessions = await world.sessions();
   const holding = await world.holdings();
   await world.controls();
@@ -137,4 +148,18 @@ test('state identities include supported siblings and membership uses the actual
   }
   status(await world.request('alice', 'POST', `/v1/collections/${everything()}/members`,
     { subjectId: own.subject.id }, discoveryKey()), 409);
+});
+
+
+test('clearing the last live label removes presence and native restore restores it without an entry', async () => {
+  const subject = await world.base.createSubject('schema:Book','Last independent support');
+  const made = await world.request('alice','POST','/v1/libraryLabels',{ name:'Last support' },discoveryKey());
+  status(made,201);
+  const label = made.body.label as { id:string };
+  await world.base.nativeLabelAssignment('alice',label.id,subject.id);
+  expect((await page()).ids).toContain(subject.id);
+  await world.base.nativeLabelAssignment('alice',label.id,subject.id,'unassign');
+  expect((await page()).ids).not.toContain(subject.id);
+  await world.base.nativeLabelAssignment('alice',label.id,subject.id,'restore');
+  expect((await page()).ids).toContain(subject.id);
 });

@@ -156,8 +156,8 @@ this does not promise a simultaneous cross-owner snapshot at network delivery.
 
 [Owner consumer requirements](library-owner-queries.md#scoped-subject-search-consumption-required-runtime-pending)
 adopt Library/Collection conditions in existing `subject.search`, without another source or interpreter.
-Search's sole `docs/subject-search-conditions.md` authority is pending adoption here; the request-only resource
-grammar producer follows its freeze. Manual membership is eligible canonical occurrence EXISTS, including subjects
+The sole [Search conditions](search-conditions.md) authority covers universal mixed-kind requests; existing
+`subjects:search` is its first producer. Integrate actual delivered shared grammar and source producers. Manual membership is eligible canonical occurrence EXISTS, including subjects
 absent Everything; own private dynamics use native facts/pins, other readers complete authorized published output.
 Authorize every resource even under true OR/NOT before candidates. The exact one-Library-scope preparation rule,
 Everything basis equivalence, missing verified/logical-owner bridges and native text/Cost obligations are in that
@@ -208,10 +208,12 @@ Search; Commerce canonical access retains actual original support for current di
 `a → z` cannot be normalized after paging to certify canonical `[c,z]`. Dedup within a page alone cannot establish
 cross-page uniqueness. An arbitrary representative cannot discard the only eligible original of a large group.
 
-[Semantic identity](../services/kernel/src/semantic/README.md#identity) owns the serialized durable job and shared
-catalogue identity epoch. Admit at most 4,096 originals per group before effects; publish only direct redirects to
-active terminals after complete mapping/index maintenance. Lists prepare while the epoch is pending and restart
-cursors after changes. No request-time 4,096-home sweep or exhaustive alias walk is required. Bounded preparation
+[Semantic identity](../services/kernel/src/semantic/README.md#identity) owns the durable job and scoped concurrent publication. Disjoint changed-group sets may proceed concurrently;
+only overlap is busy. Admission/publication/cursor currentness cover the ACTUAL source and its COMPLETE dependencies,
+including excluded and order originals. There is no global active marker or universal page gate: unrelated identity
+work cannot stall a finite unchanged source. Publish only direct redirects to active terminals after complete fixed
+mapping/Search/ALL-Library maintenance; use the actual native control and mapping declarations without a local epoch
+or capacity substitute. Relevant pending work returns readiness; changed relevant bases restart cursors. No request-time 4,096-home sweep or exhaustive alias walk is required. Bounded preparation
 and maintained access must support listing and direct targets when only the last original is eligible, and complete
 negative outcomes on finite ready input. Stored personal originals, notes, copies/sessions and occurrence IDs remain.
 
@@ -263,9 +265,27 @@ native cursor restart/session/cache. Full persona/API/default/growth and unrelat
 ### Preparation and canonical maintenance
 
 - Touches: bounded input/frontier/result writes, actual source changes/dependencies, shared durable work/outbox and
-  canonical mapping/index changes while the shared identity epoch is pending.
+  canonical mapping/index changes within the actual source/query dependency scope.
 - Bound: each step admits keys/rows/points/bytes/statements/engine operations and retains settled work. Finite total
   work may follow relevant finite input and changed dependencies. No per-built-in witness mirror, whole-account
   synchronous fanout or permission-bearing result. No new service/scheduler.
 - Growth check: three-scale native captures, interruption/replay, concurrent privacy reduction and terminal fencing;
   verify complete activation/catch-up and useful pages. Permanent preparing fails.
+
+
+## Staged owner directory binding
+
+The [owner implementation status](library-owner-queries.md#staged-native-owner-implementation) records the native
+structural directory, all four native writer families, bounded bootstrap/parent repair and released pin metadata.
+Common Collection callers share `builtin-runtime.ts`; logical empty Everything is read-only and needs no header,
+grant or receipt. The general `createCollectionSource` factory remains unavailable. Nonempty common members and
+state descriptors refuse readiness/current disclosure until the actual cross-owner publication and whole-query
+privacy bindings arrive; source versions and structural candidates are not substitutes.
+
+The adopted [current](research/library-scoped-title-plan-current.md) and
+[deep](research/library-scoped-title-plan-deep.md) text-plan direction is finite retained evaluation over ONE
+structural owner directory with native facts as authority, without mandatory persistent owner text copies. It is
+conditional on actual complete source/provenance, seekable rank, writer-aware registration and current original AND
+terminal disclosure. Full `search_text` means labels, aliases AND descriptions using shared parser/analyzer/phrase,
+ranking and defaults; title-only narrowing is rejected. This delivery adds no text evaluator and does not close the
+full shared Search/owner-query capability, useful-page, cost or native acceptance obligations.

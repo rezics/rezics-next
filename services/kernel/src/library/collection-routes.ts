@@ -33,6 +33,7 @@ const revision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 export const collectionSchema = t.Object(
   {
     id,
+    membershipKind: t.Literal('curated'),
     curatorAccountId: t.Union([id, t.Null()]),
     title: t.String(),
     description: nullableString,
@@ -54,6 +55,21 @@ export const collectionSchema = t.Object(
   },
   closed,
 );
+const dynamicCollectionSchema = t.Object({
+  id, curatorAccountId: id, membershipKind: t.Literal('dynamic'),
+  builtinKind: t.Union([t.Literal('everything'),t.Literal('state')]),
+  builtin: t.Union([
+    t.Object({ kind:t.Literal('everything') },closed),
+    t.Object({ kind:t.Literal('state'), profileId:id, stateSetId:id, stateId:id },closed),
+  ]),
+  builtinLabels:t.Optional(t.Record(t.String(),t.String())),
+  title:nullableString, description:nullableString, visibility:t.Literal('private'),
+  revision:t.Integer({minimum:0}), presentationKind:t.Null(), presentationKindSource:t.Literal('empty'),
+  cover:t.Null(), coverSource:t.Literal('none'),
+},closed);
+export const collectionReadSchema = t.Union([
+  embedded(collectionSchema,curatorFields), embedded(dynamicCollectionSchema,curatorFields),
+]);
 const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const {
@@ -66,10 +82,11 @@ export const savedDynamicCollectionSchema = t.Object(
   { ...dynamicMetadata, membershipKind: t.Literal('dynamic') },
   closed,
 );
-export const collectionResourceSchema = t.Union([collectionSchema, savedDynamicCollectionSchema]);
+export const collectionResourceSchema = t.Union([collectionSchema, savedDynamicCollectionSchema, dynamicCollectionSchema]);
 const embeddedCollectionSchema = t.Union([
   embedded(collectionSchema, curatorFields),
   embedded(savedDynamicCollectionSchema, curatorFields),
+  embedded(dynamicCollectionSchema, curatorFields),
 ]);
 const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
 const createMetadata = {
@@ -119,7 +136,7 @@ const failures = {
   401: problemSchema('authentication_required', 'invalid_credentials'),
   403: problemSchema('forbidden'),
   404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'collection_full', 'stale_cursor'),
+  409: problemSchema('conflict', 'collection_full', 'stale_cursor', 'dynamic_membership_immutable'),
   422: problemSchema('idempotency_conflict', 'unsupported_query'),
   503: problemSchema(
     'semantic_not_ready',
@@ -205,6 +222,7 @@ function collectionView(value: Collection) {
     title,
     description,
     visibility,
+    membershipKind: 'curated' as const,
     revision,
     memberCount,
     createdAt,
@@ -451,16 +469,20 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           200: t.Object(
             {
               members: t.Array(
-                embedded(memberSchema, {
-                  ...subjectFields,
-                  facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
-                }),
+                t.Union([
+                  embedded(memberSchema, {
+                    ...subjectFields,
+                    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
+                  }),
+                  t.Object({ kind:t.Literal('dynamic'), subjectId:id, ...subjectFields },closed),
+                ]),
               ),
               next: nullableString,
             },
             closed,
           ),
           ...failures,
+          422: problemSchema('unsupported_query'),
         },
         detail: detail('collection_member.list', 'collection:read', true),
       },
@@ -480,8 +502,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         }
         return admission.run('normal', job, () =>
           query.view === 'FULL'
-            ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
-            : read().listMembers(actor, params.collectionId, basicQuery(query)),
+            ? fullMembers(viewDependencies(), actor, params.collectionId, { cursor:query.cursor, limit:query.limit }, job.deadline)
+            : read().listMembers(actor, params.collectionId, { cursor:query.cursor, limit:query.limit }),
         );
       },
     )

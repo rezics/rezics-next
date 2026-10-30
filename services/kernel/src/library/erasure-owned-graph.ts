@@ -38,6 +38,7 @@ export const OWNED_PHASES = [
   'shelf_type_root',
   'shelf_type_value',
   'owner_write_counter',
+  'owner_index_label_repair',
   'owner_index_state',
   'owner_member_support',
   'owner_member_index',

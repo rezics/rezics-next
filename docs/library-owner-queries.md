@@ -165,8 +165,9 @@ maintenance work is charged under [Filtered lists cost](filtered-lists.md#cost);
 
 ## Scoped subject-search consumption (required; runtime pending)
 
-Search owns the sole condition authority, `docs/subject-search-conditions.md`, pending adoption in this checkout,
-and its Search README integration. Semantic later supplies ONE pure shared grammar producer after that freeze.
+[Search conditions](search-conditions.md) is the sole shared condition authority for universal mixed-kind requests;
+existing `subjects:search` is its first producer. Search's README owns its native integration. Consumers use the
+actual shared grammar producer as delivered, without another parser.
 This section adopts Library consumer requirements only; it creates no alternative grammar, ABI or runtime.
 The site's one header field uses existing `POST /v1/subjects:search`, operation `subject.search`. Its chip adds a
 shared Boolean subtree to `body.filter`; `text`, `languages`, `sort`, `limit`, `cursor` and subject result DTO remain.
@@ -239,9 +240,14 @@ without HTTP rewrite.
 ### Native text physical requirements
 
 Keep the ONE structural candidate/support directory, native fact/pin authority, selective dependency repair and
-full canonical Library participant/custody below. The source-only native text design pair remains evidence pending;
-no report name selects a title projection, per-Collection cache, engine or schema. A copied public text derivative
-is neither native authority nor permission. Before runtime derive physical copies/indexes/bytes, inverse affected
+full canonical Library participant/custody below. The adopted physical baseline from the
+[current](research/library-scoped-title-plan-current.md) and [deep](research/library-scoped-title-plan-deep.md)
+reports is finite retained evaluation over that ONE directory, with native facts as authority, rather than mandatory
+persistent owner text copies. This conditional direction establishes neither a native evaluator nor complete
+source/provenance, seekable rank or disclosure. Both reports' title-only narrowing is rejected: `search_text`
+includes public labels, aliases AND descriptions with the actual shared analyzer/parser/phrase/ranking/defaults.
+No second text evaluator is introduced. A copied public text derivative is neither native authority nor permission.
+Before runtime derive physical copies/indexes/bytes, inverse affected
 dependencies, retention/reclaim/source withdrawals, owner A5/shared-history custody and bootstrap/crash proof.
 If text is copied later, every subject text change fans out to holders in paged bounded steps, total LINEAR in
 affected owner rows, never synchronously in the subject write.
@@ -574,3 +580,21 @@ state-clear history, independent holdings, canonical uniqueness, public publicat
 privacy, full/final/preparing progress and cursor reauthorization. Bind real SQL/index/preparation counters and the
 shared composed growth harness before claiming native acceptance. Specified, native-bound, implemented/exposed,
 passed at a revision and promoted remain separate evidence stages. No second protocol engine closes a missing producer.
+
+
+### Staged native owner implementation
+
+`owner_member_index` and `owner_member_support` now retain one original directory and structural family/pin scopes;
+entry/session/copy/assignment SQL triggers maintain first/last scopes in the native writer transaction. Parent
+liveness changes advance the existing source head immediately and retain one indexed raw100 child repair frontier.
+Native predicate truth always checks the current same-owner live parent. Bounded default maintenance bootstraps
+native rows and resolves actual immutable released pin meanings, expanding all supported state siblings through
+the existing opaque reference authority. These records are not canonical keys, query results or disclosure evidence.
+
+The common Collection reader/routes now recognize logical owner Everything, discriminate dynamic DTOs and reject
+occurrence mutations. Empty Everything uses complete independent native absence checks, never an unbuilt directory
+or fabricated identity basis. Any possibly nonempty member query remains explicitly unavailable until the delivered
+mapping, fixed ALL-Library participant, final coordinator and whole-query privacy observation compose. No successful
+empty result or permanent preparation substitutes for those bindings. State discovery/detail and materialized header
+presentation still require that integration. Full filters, text/ranking, selective dependency registration/repair,
+canonical keyset/prepared useful pages, Liked, Continue, native cost and complete erasure acceptance remain outstanding.

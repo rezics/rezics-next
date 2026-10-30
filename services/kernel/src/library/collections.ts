@@ -1,3 +1,4 @@
+import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
@@ -426,6 +427,13 @@ export function createCollectionCommands(config: {
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
+    if (owner.scopes.includes(action) && (kind.startsWith('library.collection.member') || kind === 'library.collection.delete')) {
+      const builtins = createBuiltinRuntime({ pool });
+      if (await builtins.read(owner,collectionId))
+        throw new ProblemError(kind === 'library.collection.delete' ? 'conflict' : 'dynamic_membership_immutable');
+      if (destinationCollectionId && await builtins.read(owner,destinationCollectionId))
+        throw new ProblemError('dynamic_membership_immutable');
+    }
     const identity = principalCommandIdentity(owner);
     const normalAccess = destinationCollectionId
       ? resourceAuthorizationPage({

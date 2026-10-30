@@ -1,3 +1,4 @@
+import { createBuiltinRuntime, type DynamicMemberView, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -37,6 +38,7 @@ type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
 export type CollectionView = CollectionPresentation & {
+  membershipKind: 'curated';
   id: string;
   curatorAccountId: string | null;
   title: string;
@@ -48,10 +50,10 @@ export type CollectionView = CollectionPresentation & {
   updatedAt: string;
 };
 
-export type SavedDynamicCollectionView = Omit<CollectionView, 'memberCount' | 'createdAt' | 'updatedAt'> & {
+export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'createdAt' | 'updatedAt'> & {
   membershipKind: 'dynamic';
 };
-export type CollectionResourceView = CollectionView | SavedDynamicCollectionView;
+export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
 
 export type MemberView = {
   id: string;
@@ -117,6 +119,7 @@ function collectionView(row: {
     };
   return {
     ...collectionPresentation(row),
+    membershipKind: 'curated',
     id: row.id,
     curatorAccountId: row.curatorAccountId,
     title: row.title,
@@ -230,6 +233,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
 export function createCollectionReads(dependencies: PresentationDependencies & { tokens: KeyRing }) {
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
+  const builtins = createBuiltinRuntime({ pool });
 
   return { readCollection, listCollections, listAccountCollections, listMembers, listSubjectCollections };
 
@@ -278,6 +282,8 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     deadline?: number,
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
   ): Promise<CollectionResourceView> {
+    const logical = await builtins.read(viewer, id);
+    if (logical) return logical;
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
     return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
@@ -375,8 +381,15 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       parameters: { curatorAccountId, fullView },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
-    const after = listPosition(cursor, route);
+    const builtinCursor = cursor?.after[0] === 'builtin';
+    if (builtinCursor && (cursor.after.length !== 2 || typeof cursor.after[1] !== 'string' || routeOf(cursor.after[1]) !== route))
+      throw invalidCursor();
+    const after = builtinCursor ? null : listPosition(cursor, route);
     if (!visible && !curator) return { collections: [], next: null };
+    const logical = fullView && (cursor === null || builtinCursor)
+      ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null) : [];
+    const shownLogical = logical.slice(0,page.limit);
+    const remaining = page.limit - shownLogical.length;
     const result = await readOnly(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       if (cursor && cursor.epoch !== partition?.epoch) {
@@ -390,22 +403,24 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
         after_updated_at: after?.updatedAt ?? ABSENT_UPDATED_AT,
         after_id: after?.id ?? ABSENT_ID,
         has_cursor: after !== null,
-        limit: page.limit + 1,
+        limit: remaining + 1,
       });
-      const hasMore = rows.length > page.limit;
-      const shown = rows.slice(0, page.limit);
+      const hasMore = rows.length > remaining;
+      const shown = rows.slice(0, remaining);
       if (hasMore && !partition) throw new ProblemError('partition_unavailable');
       const last = shown.at(-1);
       const exact = last?.updatedAtExact;
       return {
         collections: shown,
         next:
-          hasMore && last && partition && exact
-            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [exact, last.id] })
-            : null,
+          logical.length > shownLogical.length && partition
+            ? encodeCursor(tokens,binding,{ epoch:partition.epoch, after:['builtin',shownLogical.at(-1)!.id] })
+            : hasMore && partition
+              ? encodeCursor(tokens,binding,{ epoch:partition.epoch, after:last && exact ? [exact,last.id] : ['curated'] })
+              : null,
       };
     });
-    const collections: CollectionResourceView[] = [];
+    const collections: CollectionResourceView[] = [...shownLogical];
     for (const row of result.collections) collections.push(await present(viewer, row));
     return { ...result, collections };
   }
@@ -414,8 +429,10 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     viewer: Actor,
     collectionId: string,
     options: { cursor?: string | null; limit?: number } = {},
-  ): Promise<{ members: MemberView[]; next: string | null }> {
+  ): Promise<{ members: (MemberView | DynamicMemberView)[]; next: string | null }> {
     const page = pageRequest(options, ['cursor', 'limit']);
+    const logical = await builtins.read(viewer, collectionId);
+    if (logical) return builtins.members(viewer, collectionId, options);
     const collection = await loadCollection(viewer, collectionId);
     if (!collection) throw notFound();
     if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
@@ -516,7 +533,7 @@ function listPosition(
   cursor: { epoch: number; after: CursorKey[] } | null,
   route: number,
 ): { updatedAt: string; id: string } | null {
-  if (cursor === null) return null;
+  if (cursor === null || (cursor.after.length === 1 && cursor.after[0] === 'curated')) return null;
   const [updatedAt, id] = cursor.after;
   if (
     cursor.after.length !== 2 ||
