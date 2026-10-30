@@ -6,6 +6,10 @@ separate service and database. This document states their contract. The linked s
 READMEs describe mechanisms, operational requirements and measured costs. An implementation gap called out here
 does not change the contract.
 
+The [five-system design status](research/design-status-accounts.md) links the delivered primary research and
+current journey gaps. Its findings adopted below belong to this contract; research reports remain evidence,
+not additional normative authorities or proof of complete delivery.
+
 ## 1. Accounts
 
 An account's immutable, non-reusable ID identifies its sign-ins, attribution, ownership and grants. There are
@@ -46,8 +50,9 @@ Renaming publishes the new claim and retires the former spelling to its owner; f
 must redirect to the same account, without alias chains. [lifecycle.ts][lifecycle] provides that internal
 resolution. [Public profile lookup][account-data] also resolves a former claim while its `formerUntil` is in the
 future, to the same account only while it is active, and never to its current spelling; it returns `movedTo` with
-the current handle. The [website page loader][agent-page] still treats reserved handles as missing, so page
-forwarding remains an implementation gap.
+the current handle. The [website BFF][web-agent-actions] provides former-handle fallback forwarding, while the
+page routes canonicalize current spelling; both preserve the view and query. Forwarding is present in development
+source, as traced in the [profiles report](research/accounts-design-agents-profiles.md#actual-ui--api--storage-journeys).
 After forwarding expires, [reservation SQL][handle-reserve] keeps the former spelling reserved to its owner.
 Another account cannot claim it through expiry or cleanup. The owner may reclaim it through the native handle
 transition. Privacy unlinking and dispute/reassignment procedures in the research remain proposals.
@@ -75,12 +80,13 @@ handoff. Discovery text is current handle/displayName only. Catalogue people and
 hits. Handleless eligible accounts remain in the population; only an exact active claim may supply handle text
 or navigation. Current public avatar, profile and verified-agent guards apply at hydration.
 
-The shared source/document/summary/count boundary in that contract is a concrete Root/Search co-owner proposal,
-not a delivered API. Today's Search `SubjectSource`, `IndexedSubject`, `SubjectSummary`, count/read and facet
-paths remain Subject-only. Attribution ID reads, former-handle forwarding and sitemap enumeration do not deliver
-Account search. [Universal search](search-conditions.md) and [facet discovery](search-facets.md) remain the sole
-Search policy; the contract adds no second engine or permission cache. Native handoff cases remain future red
-until the proposed native assembly and production integration are adopted and delivered.
+Search has adopted the shared source/document/summary/count boundary. The sole Accounts discovery source
+producer supplies the Account product contract; the existing Search producers continue mixed-kind integration.
+There is no further Accounts research prerequisite or `SubjectSource` change in this adoption. This supersedes
+pending-adoption labels in the original handoff and [profiles report](research/accounts-design-agents-profiles.md),
+without asserting that the complete search journey is callable in every checkout. Attribution ID reads, former-handle forwarding
+and sitemap enumeration do not deliver Account search. [Universal search](search-conditions.md) and
+[facet discovery](search-facets.md) remain the sole Search policy; there is no second engine or permission cache.
 
 The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label. The base's
 [account-data.ts][account-data] meets that shape for organizations but still returns extra null/false fields
@@ -92,6 +98,15 @@ It never selects email, credentials, sessions, consent, controller, birth date o
 and organization speaker lists respect the account's publication settings; hiding a list does not change
 underlying content permissions. See [account-data.ts][account-data], [public-views.ts][public-views] and
 [Public profile by handle][access-profile].
+
+Web preserves the server-derived automation marker even when operator hydration is unavailable; only an actual
+operator address may become a link. Profile editing must round-trip the actual Content avatar summary and every
+public-view choice without widening content access. The [profiles report](research/accounts-design-agents-profiles.md)
+records existing gaps: avatar `{media}` versus the settings adapter's `id`, omitted Realms projection, form/API
+limits, handleless and managed-target loading, and representative explanation/release controls. These are whole
+profile/verification delivery slices for Web, Accounts and Semantic, not new identity policies. Semantic's
+released identity coordinator must publish verification and exact reversal; local merge primitives or stored
+verification state alone do not establish the final public-page outcome.
 
 ## 2. Operators and automated accounts
 
@@ -353,6 +368,48 @@ on its actor anchor; exceeding the cap returns `membership_limit`. Following a R
 not consume a slot. This bounds candidates without dropping possible grants as a resource's ACL grows.
 [membership-inverse.ts][membership-inverse] and [permission-inverse.sql][permission-inverse] enforce that limit.
 
+### Realms and Spaces boundary
+
+Content owns Space/Realm resources and their content; Accounts owns membership and Access, Semantic Contexts
+and definitions, and Web the controls. A Space address or follow grants no membership or resource authority.
+Realm participation can be public without membership. Direct owner/moderator resource roles are not membership
+roles; creating a Realm does not create an owner membership. The
+[Realms/Spaces report](research/accounts-design-realms-spaces.md) supports retaining the current public self-join
+and direct manager-add model. There is no implicit invitation, recipient approval or request-to-join feature.
+
+Ban and membership transitions retain current authorization at publication. A current protected-ban veto cannot
+be bypassed through an independent grant, own-list candidate or pending inverse cleanup; public anonymous
+disclosure retains its existing floor. Unban restores neither membership nor follow. The existing membership
+transition producer owns exact settled hold retirement and account deletion entry: it must establish the real
+committed/cancelled generation. Inverse release, a synthetic settlement or requiring leave to bypass a settled
+hold cannot substitute for that transition.
+
+Web can settle pending join/leave using existing member and participation reads. Accepted 202 is not settled
+membership; arbitrary participation denial is not evidence of a ban. No workflow-status API is selected here.
+Realm succession, orphan/last-holder handling, direct-owner inclusion in own-Realm discovery, and Realm/Space
+delete/restore authority remain precise Content/Accounts/Root decisions, with Semantic for Context obligations.
+Generic role commands and record restoration do not supply those policies. No new permission or `globalReach`
+is implied; section 4's closed governance set remains unchanged.
+
+### Follows boundary
+
+Commerce owns the [Library follow edge](../services/kernel/src/library/README.md#follow), derived maintenance
+and Library erasure; Accounts supplies current actor/client/principal authority and membership/lifecycle
+boundaries. Web owns controls. The [follow report](research/accounts-design-follows.md) supports this selected
+own-edge removal rule: deleting an existing own follow requires current own-account `follow:delete` client
+scope, actor grant and delegated principal authorization when applicable. Removal remains possible when the
+target is hidden, deleted or otherwise unavailable, using the stored original edge without disclosing target
+data. This does not waive account standing or fresh authorization before replay. Create/refollow still requires
+current target eligibility bound to command T. The current Library preflight blocks unavailable-target removal;
+the manager coordinates adoption in Library/Web before their existing producer implements this rule.
+
+A follow grants neither membership nor access. Explicit negative intent survives delayed Library/membership
+work; leaving a Realm does not unfollow its Space. Account follows address the agent Subject, not a new Account
+edge type. [Private follow counts](private-follow-counts.md) remain manager-only aggregates with no follower
+list or public-zero fallback; represented source metadata is not count readiness. Global gate ordering and
+`403 platform_closed` remain unchanged. The exact count-only concealment exception needs Root adoption and
+Library/HTTP coordination; this contract does not silently change it to a global 404.
+
 ## 6. Auth ownership and registration
 
 Auth owns credentials, login/recovery email, native sessions, refresh families, authentication evidence, signing
@@ -366,15 +423,45 @@ copy. See [service.ts][auth-service], [Auth schema][auth-schema], [account schem
 Private preferences are self-service account data: even a grant to another account does not bypass the
 actor/path equality check. An operator-opened session changes the automated account's preferences as that
 account. Spoiler, suitability, shelf and notification settings belong to [preferences.ts][preferences];
-[Viewer preferences][access-preferences] defines their defaults and update contract. Notification delivery
-checks the recipient's current settings as well as content access; mandatory moderation notices cannot be
-turned off, as defined by [notification-kinds.ts][notification-kinds] and [preferences.ts][preferences].
+[Viewer preferences][access-preferences] defines their defaults and update contract. Content retains existing
+notification delivery and storage; Web owns settings/inbox. The
+[notification report](research/accounts-design-notification-preferences.md) is adopted with that ownership,
+superseding its alternative delivery allocation. Minimal scope remains in-app replies, mentions and required
+moderation/report/appeal outcomes, with no quiet-hour, channel, sender or conversation expansion.
+
+An optional-send decision becomes final at the actual recipient notice commit, using the current native
+preference/account cut and existing current resource Access. Content must durably preserve suppression and
+replay identity so crashes, retries or stale positive work cannot resurrect a suppressed send or duplicate a
+notice. The current `notificationAllowed` helper is a boolean read, not a commit witness; its existence and the
+notice unique key alone do not prove this selected race outcome. Required moderation, report and appeal
+outcomes remain available independently of optional toggles, including the existing suspended-recipient policy;
+missing, pending or deleted recipients retain their refusal. Inbox/target reads apply current disclosure again.
+The manager coordinates this consumption boundary with Content and Web in their owner documents.
+
+Turning an optional kind off affects future optional sends, not old inbox entries, content authority or follows.
+Preserve effective defaults, null-reset merge patch, shared `expectedVersion` CAS, idempotency and self-only
+session/CSRF behavior. A matching receipt is historical acknowledgement, not current readback. Web must keep an
+ambiguous save distinct from Saved, retain its original input/key for resolution and use fresh GET/replay as
+appropriate; failures cannot fabricate effective defaults. Unavailable unread data must be distinct from real
+zero. Current count measures capped stored candidates, not the Access-filtered visible inbox population.
 
 Auth is the configured OIDC issuer at `auth.rezics.com`; signing keys and its database credentials stay out of
 the kernel and clients. Login, consent and security pages belong to Auth, with main-site settings reached
 through the website BFF. Cookie caching is disabled, so session revocation cannot be bypassed by a cached cookie.
 See [issuer.ts][issuer], [better-auth.ts][better-auth], [Website client][auth-website] and
 [Ordinary native host assembly][auth-host].
+
+Approved account operations use the actual same-host Auth assembly: start `createAuthHost`, serve its wrapped
+`handler`, and supply real native approval/admission ports and the owned Auth pool lifetime. Serving only
+`service.handler` omits that transport; missing bindings remain unavailable. The fixed
+`rezics-auth-account-operations` client has exactly two profiles, `organization:create` and `account:delete`,
+with their deduplicated union as its ceiling. Login stays scope-empty; website scopes are not unioned into it.
+Operation key/body, initiating account and normal confirmation survive step-up and are bound to fresh approval.
+The [Accounts/Auth report](research/accounts-design-accounts-auth-deletion.md) distinguishes this implemented
+assembly from missing production page triggers and general management UI. Additional management clients,
+owned-client inventory and credential-control methods require their own concrete adopted transport; native
+methods, descriptors or proposed ports are not callable page APIs. Comparative password, confirmation,
+controller-review and security-notification recommendations do not change their existing policy here.
 
 Registration is durable: reserve a pending account and handle in Access, install credentials in Auth for that
 same ID, then activate the account and claim. Credentialless automation skips credential installation. Expired
@@ -512,6 +599,22 @@ Operators must resolve operated-account responsibilities and organizations their
 the barrier, while statutory erasure requests remain independent; expired cleanup cannot restore identity or
 release a hold, and [Auth consent erasure][consent-erasure] removes consent after the access-token lifetime.
 
+Immediate refusal at the barrier, native Auth local proof, shared-copy minimization, eleven-owner closure and
+external/backup disposition are separate completion claims. As traced in the
+[Accounts/Auth report](research/accounts-design-accounts-auth-deletion.md), native consumer proof may retire
+after durable copy handoff without waiting for shared history's global acknowledgement; global completion still
+requires that acknowledgement and every applicable owner. The existing receipt-key, preference-copy and universal
+shared-history producers retain that dependency order. No new closure harness or substitute acknowledgement is
+selected.
+
+Retry and restore preserve the original source obligation/version/T, captured epoch floor, applicability and
+original 310-second consent due time. Neither a new local receipt nor a restored timestamp renews the delay or
+authority. [External custody](../services/auth/src/external-custody-contract.md) owns the selected disposition;
+its restore-source tuple/feed and receiving-copy APIs remain explicit missing interfaces, not existing exports.
+Database/deployment owners must isolate restored generations until current native and external replay admits
+them. Local absence, enqueue, TTL, callback success and coordinator completion do not independently prove
+external or backup erasure. No provider, retention schedule or deleted-account restoration policy is added.
+
 [access]: ../services/kernel/src/access/README.md
 [auth]: ../services/auth/README.md
 [schema]: ../services/kernel/db/access/schema.sql
@@ -522,6 +625,7 @@ release a hold, and [Auth consent erasure][consent-erasure] removes consent afte
 [handle-policy]: ../services/kernel/src/access/handle-policy.ts
 [handle-reserve]: ../services/kernel/src/access/lifecycle-handle-reserve.sql
 [agent-page]: ../apps/web/src/features/pages/agent.tsx
+[web-agent-actions]: ../apps/web/src/features/pages/agent-actions.ts
 [web-profile-reader]: ../apps/web/src/features/pages/account-read.ts
 [web-profile-header]: ../apps/web/src/features/pages/account.tsx
 [account-routes]: ../services/kernel/src/access/routes.ts

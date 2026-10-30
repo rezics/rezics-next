@@ -500,6 +500,13 @@ time, under the original request deadline. A retry alone is never a denial. Chan
 deny; exhausted deadlines and unavailable evidence answer unavailable. The locked last-owner guard remains required
 on every attempt.
 
+The existing transition producer owns retirement of the exact settled membership hold before account deletion
+entry. It must prove the actual committed/cancelled generation; inverse cleanup or a forced leave cannot stand
+in for settlement. Current Realm member/participation reads may reconcile a pending UI; no workflow-status API
+is introduced. Accounts adopts the current direct manager-add model and keeps Realm succession, orphan and
+delete/restore authority pending in [its membership boundary](../../../../docs/accounts.md#realms-and-spaces-boundary),
+supported by the [Realms/Spaces research](../../../../docs/research/accounts-design-realms-spaces.md).
+
 ## Resource denials
 
 `recordResourceDenial` and `endResourceDenial` run inside the caller's command transaction. The transaction's own authorization must be execute mode for the same resource route and id, and `at` must be that attempt's authoritative time. Otherwise they throw `ResourceAccessWriteDeniedError` and write nothing. `reason` is `resource`, `suspension` or `realm_ban`. `action` matches the denial table's action pattern. `subjectRole` is empty, so the row is one direct identity denial. `record` opens `[T, infinity)` and leaves a key that is already open at T unchanged. `end` sets that open row's upper bound to T and leaves the table unchanged when no open row contains T. A row whose lower bound is already T cannot be closed to an empty range, so that call throws and writes nothing. One key — resource, subject, action and reason — is one row. Community records `realm_ban` on the Realm resource for `realm:join` and `realm:participate`. From T the formula denies exactly that action; ending the row restores the underlying grant from the closing T.
@@ -1163,11 +1170,13 @@ receipt-bound workflow step after Semantic's merge and before the account is mar
 the existing pointer; a subject already pointing at another account fails with a typed workflow problem. The page table
 is backfilled from accounts already verified when the migration runs. Reversal owns pointer removal.
 
-- Returns per visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state` (`active` or
-  `deleted`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
-  every other account is `automated: false` with `operatorId: null`. A deleted account keeps only its `kind`: handle,
-  display name and operator are withheld, and `automated` is false. Pending accounts are absent and no private field is
-  selected.
+- Returns per live visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state`
+  (`active`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
+  every other live account is `automated: false` with `operatorId: null`. A deleted identity's contract is exactly
+  `{ id, state, kind }`, without an automation label. The wider null/false actor projection still present in source
+  is an implementation gap, as recorded in [Accounts](../../../../docs/accounts.md#public-identity) and the
+  [profiles research](../../../../docs/research/accounts-design-agents-profiles.md). Pending accounts are absent
+  and no private field is selected.
 - Touches: one statement (`public-identity-page.sql`); at most 100 `account_pkey(route, account_id)` probes on `access.account`.
 - Bound: the sum of at most k independently indexed `account_pkey` probes, O(k log N) for k <= 100 requested ids and N accounts, with discrete index-depth transitions; constant statements; rows at most k.
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
@@ -1597,8 +1606,8 @@ Anonymous viewers use these defaults locally.
   `mention` are optional and enabled by default; `moderation_decision` is mandatory and cannot be turned off.
   Mandatory kinds are absent from this field. Content appends kinds to the catalogue, at most 32 total, with unique
   lowercase snake case keys and an `optional` flag and `default` boolean. Moderation decisions include the statement
-  of reasons owed to a content author and the decision owed to a notifier. These preferences cover in-app notices;
-  there is no email delivery.
+  of reasons owed to a content author, the decision owed to a notifier and required appeal outcomes. These
+  preferences cover in-app notices; there is no email delivery.
 
   PATCH applies JSON Merge Patch (RFC 7396) over stored notification overrides: `true` or `false` sets one kind,
   `null` removes its override, and `notifications: null` clears all overrides. Mandatory or unknown keys and values
@@ -1650,6 +1659,19 @@ setting. Content still checks access to the item. The port uses one statement in
 one account row to at most one preference row by `(route, account_id)`: constant rows and statements, logarithmic
 blocks in accounts. `test/access/growth-preferences.test.ts` checks `notificationAllowed stays constant as accounts
 grow`, seeding every optional kind overridden at the same scales with the shared harness.
+
+The helper remains a read, not a notice-commit witness. The selected consumer contract makes optional-send final
+at the actual recipient notice commit, using current native recipient preference/account state and existing
+current resource Access. Content retains delivery and must durably preserve suppression/replay; separate helper
+and Access reads plus deduplicating insertion do not alone establish this race outcome. Required moderation,
+report and appeal outcomes are independent of optional toggles. Optional off affects future optional sends,
+not old inbox entries, content authority or follows. See [Accounts adoption](../../../../docs/accounts.md#6-auth-ownership-and-registration)
+and the [notification research](../../../../docs/research/accounts-design-notification-preferences.md).
+
+Consumers retain the actual effective-map/default, null-reset, shared CAS and replay contracts above. Web must
+distinguish an ambiguous save from confirmed Saved and unavailable unread data from zero, preserving session
+and CSRF behavior. A replayed preference response is historical acknowledgement; fresh GET establishes current
+readback. No channel, quiet-hour or conversation setting is implied.
 
 ## Direct resource role data
 
