@@ -1,6 +1,11 @@
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
-import type { IdentityEffect, IdentityJobRef, IdentityNativeReceipt, IdentityFrontier } from './identity-epoch-contract.ts';
+import type {
+  IdentityEffect,
+  IdentityJobRef,
+  IdentityNativeReceipt,
+  IdentityFrontier,
+} from './identity-epoch-contract.ts';
 
 export type IdentityReceivingEffect = Extract<IdentityEffect, { kind: 'receiving' }>;
 export type IdentityReceivingDisposition = 'OLD' | 'NEW' | 'first-apply' | 'handoff';
@@ -40,12 +45,13 @@ export type IdentityReceivingBinding = Readonly<{
   scopeDigest: string;
   source: IdentityReceivingSource;
 }>;
-export type IdentityReceivingRecord = IdentityReceivingBinding & Readonly<{
-  plan: IdentityNativeReceipt;
-  sourceHold: IdentityNativeReceipt;
-  receipt: IdentityNativeReceipt;
-  applied: Readonly<{ receipt: IdentityNativeReceipt; frontier: IdentityFrontier }> | null;
-}>;
+export type IdentityReceivingRecord = IdentityReceivingBinding &
+  Readonly<{
+    plan: IdentityNativeReceipt;
+    sourceHold: IdentityNativeReceipt;
+    receipt: IdentityNativeReceipt;
+    applied: Readonly<{ receipt: IdentityNativeReceipt; frontier: IdentityFrontier }> | null;
+  }>;
 export type IdentityReceivingProgress = Readonly<{
   frontier: IdentityFrontier;
 }>;
@@ -55,7 +61,10 @@ export type IdentityReceivingProgress = Readonly<{
  * source mutation/move until effect + control custody; it cannot be disposed by a lease or timeout.
  */
 export type IdentityReceivingSourceProducer = Readonly<{
-  readIdentityReceivingSource(pool: Pool, selection: IdentityReceivingSelection): Promise<IdentityReceivingSource | null>;
+  readIdentityReceivingSource(
+    pool: Pool,
+    selection: IdentityReceivingSelection,
+  ): Promise<IdentityReceivingSource | null>;
   holdIdentityReceivingSource(pool: Pool, binding: IdentityReceivingBinding): Promise<IdentityNativeReceipt>;
   /** Exact current owner/scope/disposition, source hold and first-apply fence, in the effect transaction.
    * Must retain the actual Source-owned hold in this transaction along with the native effect receipt.
@@ -64,6 +73,8 @@ export type IdentityReceivingSourceProducer = Readonly<{
   lockIdentityReceivingSource(tx: CommandTransaction, record: IdentityReceivingRecord): Promise<void>;
   /** Resolve actual control custody before releasing the exact held source obligation. No job-wide ACK. */
   acknowledgeIdentityReceivingSource(
-    pool: Pool, record: IdentityReceivingRecord, custody: IdentityNativeReceipt,
+    pool: Pool,
+    record: IdentityReceivingRecord,
+    custody: IdentityNativeReceipt,
   ): Promise<void>;
 }>;

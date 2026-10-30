@@ -10,7 +10,10 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   f = await epochFixture(db.url);
 });
-afterAll(async () => { await f?.close(); await db?.close(); });
+afterAll(async () => {
+  await f?.close();
+  await db?.close();
+});
 
 test('native receiving receipt custody replay stays bounded across unrelated source history', async () => {
   const input = await admittedReceivingJob(f);

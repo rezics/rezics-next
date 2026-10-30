@@ -1525,7 +1525,6 @@ This changes scheduling overhead, not closure meaning or Community's default 30s
 full participant/output-generation, all-nine Cost, Content consumer acceptance and main/root promotion remain
 separate obligations.
 
-
 ### Receiving effect interface and missing Source validation seam
 
 The closed native producer/lookup and Store correction are implemented in

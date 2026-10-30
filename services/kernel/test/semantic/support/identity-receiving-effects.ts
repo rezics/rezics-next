@@ -18,26 +18,33 @@ export async function admittedReceivingJob(f: EpochFixture, options: { pending?:
   const library = await libraryCutoverInput(f, [original, terminal]);
   const actor = await f.actor();
   const key = randomUUID();
-  const job = await store.prepareAdmission(f.pool, {
-    basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
-    authorization: await f.authorization('subject:merge'),
-  }, {
-    intent: { kind: 'merge', redirected: original, survivor: terminal, release: release.digest },
-    receipt: {
-      kind: 'subject.merge',
-      command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
+  const job = await store.prepareAdmission(
+    f.pool,
+    {
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      authorization: await f.authorization('subject:merge'),
     },
-  });
+    {
+      intent: { kind: 'merge', redirected: original, survivor: terminal, release: release.digest },
+      receipt: {
+        kind: 'subject.merge',
+        command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
+      },
+    },
+  );
   for (let step = 0; options.pending !== false && step < 16; step++) {
     const progress = await stepIdentityEpochAdmission(f.pool, job);
     if (progress.state === 'pending') break;
     expect(progress.state).toBe('preparing');
   }
   expect((await store.readJob(f.pool, job))?.state).toBe(options.pending === false ? 'preparing' : 'pending');
-  const members = async () => (await f.admin.query(
-    'SELECT * FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY member_id',
-    [routeOf(library.collection.id), library.collection.id],
-  )).rows;
+  const members = async () =>
+    (
+      await f.admin.query(
+        'SELECT * FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY member_id',
+        [routeOf(library.collection.id), library.collection.id],
+      )
+    ).rows;
   return { original, terminal, library, job, members };
 }
 
