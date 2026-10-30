@@ -4,7 +4,7 @@ import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
-import type { ConversionInput, SourceId } from '@rezics/conversion';
+import type { ConversionInput, SourceId } from '../../../../packages/conversion/src/index.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { publicBulkRecord } from '../../../../packages/conversion/examples/public-bulk.ts';
@@ -225,7 +225,7 @@ export async function runJourney() {
         ]),
       };
     }
-    const contextBody = await read('/v1/contexts', { labels: { en: 'Community converter review' } });
+    const contextBody = await read('/v1/contexts', { labels: { en: 'Community converter review' } }, 201);
     const context = (contextBody.context as { id: string }).id;
     const sources = [];
     for (const feed of feeds) {

@@ -23,9 +23,20 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 The one frozen child is
 `a community caller uses each public pure converter export and real public bulk identities independently of the platform importer`.
-Execution is pending; no native pass, assertion count or main success is claimed.
+The first managed execution at `1d4230e75e983641d6d5bd49edbd709ff6310b6e`
+failed: zero pass, one fail, two assertions. The compiler first reported
+`TS2307: Cannot find module '@rezics/conversion'` in the native fixture's type
+import; kernel does not declare that package dependency. The native child then
+reached a real successful Context creation response (201) that the new fixture
+incorrectly expected to be 200. The fix uses the existing relative source-type
+import convention and expects the public create route's 201. No existing
+acceptance assertion or production implementation was changed.
+
+Raw log: `.temp/goal/checks/worker-check-2026-10-30T08-55-28.872Z-4ac3931e.log`.
+That run reached no provider bulk sends or all-source evidence line. Corrected
+native execution is pending; no native pass or main success is claimed.
 The managed check log retains the actual tested revision and first reached
-failure. Its `community converter caller native evidence` JSON captures complete
+failure. On completion, its `community converter caller native evidence` JSON captures complete
 public batch bytes/responses, native receipt transaction IDs and responses,
 exact source/candidate/subject/revision rows, editor requests/responses, source
 digests/revisions and bundled definition digest/catalogue. It excludes bearers
