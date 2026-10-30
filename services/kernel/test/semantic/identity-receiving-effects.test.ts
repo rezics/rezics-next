@@ -74,11 +74,17 @@ async function capturedSelection() {
     },
   });
   let capture = await captureIdentityReceivingSource(f.pool, selection, {
-    identity, frontier: null, limit: 100, ...work(),
+    identity,
+    frontier: null,
+    limit: 100,
+    ...work(),
   });
   for (let page = 0; capture.status === 'pending' && page < 32; page++) {
     capture = await captureIdentityReceivingSource(f.pool, selection, {
-      identity, frontier: capture.frontier, limit: 100, ...work(),
+      identity,
+      frontier: capture.frontier,
+      limit: 100,
+      ...work(),
     });
   }
   if (capture.status !== 'complete') throw new Error('Finite native Source capture did not complete');
@@ -116,7 +122,10 @@ test('A native expected Source selection resolves its actual committed receiving
     { ...selection, sourceId: newId(routeOf(selection.sourceId)!) },
     { ...selection, scope: `${selection.scope}-other` },
     { ...selection, disposition: 'OLD' },
-    { ...selection, capture: { ...selection.capture, frontier: { ...selection.capture.frontier, captureId: randomUUID() } } },
+    {
+      ...selection,
+      capture: { ...selection.capture, frontier: { ...selection.capture.frontier, captureId: randomUUID() } },
+    },
     ...[
       { incarnation: `${native.incarnation}-other` },
       { generation: (BigInt(native.generation) + 1n).toString() },
@@ -129,12 +138,21 @@ test('A native expected Source selection resolves its actual committed receiving
   ];
   for (const changed of invalid) expect(await readIdentityReceivingSelection(f.pool, changed, context())).toBeNull();
   // A supplied count grants nothing; the retained native rows remain the proof.
-  expect(await readIdentityReceivingSelection(f.pool, {
-    ...selection, capture: { ...selection.capture, frontier: { ...selection.capture.frontier, scanned: '999999999' } },
-  }, context())).toEqual(expected.value);
+  expect(
+    await readIdentityReceivingSelection(
+      f.pool,
+      {
+        ...selection,
+        capture: { ...selection.capture, frontier: { ...selection.capture.frontier, scanned: '999999999' } },
+      },
+      context(),
+    ),
+  ).toEqual(expected.value);
   // Revalidation retains the original capture generation rather than acquiring fresh Source custody.
-  await f.admin.query('UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2',
-    [native.route, native.collectionId]);
+  await f.admin.query(
+    'UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2',
+    [native.route, native.collectionId],
+  );
   expect(await readIdentityReceivingSelection(f.pool, selection, context())).toEqual(expected.value);
   expect(await members()).toEqual(before);
   expect(f.pool.totalCount - f.pool.idleCount).toBe(0);
@@ -142,12 +160,17 @@ test('A native expected Source selection resolves its actual committed receiving
 
 test('an uncommitted native receiving preparation supplies no selection proof and a committed retry resolves its original receipt', async () => {
   const { selection } = await capturedSelection();
-  const effect = await duringNativeSQL(f, /INSERT INTO semantic.identity_epoch_receiving_record/,
-    () => prepareIdentityReceivingEffect(f.pool, selection), async () => {
+  const effect = await duringNativeSQL(
+    f,
+    /INSERT INTO semantic.identity_epoch_receiving_record/,
+    () => prepareIdentityReceivingEffect(f.pool, selection),
+    async () => {
       // The pending writer owns the partition fence. Its uncommitted native receipt is unavailable.
-      await expect(readIdentityReceivingSelection(f.pool, selection, { deadline: Date.now() + 50 }))
-        .rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
-    });
+      await expect(
+        readIdentityReceivingSelection(f.pool, selection, { deadline: Date.now() + 50 }),
+      ).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
+    },
+  );
   expect((await readIdentityReceivingSelection(f.pool, selection, context()))?.receipt).toEqual(effect.receipt);
 });
 
@@ -164,17 +187,38 @@ test('missing native capture and released retained custody stay unavailable with
   const { currentCommand, currentCommandResources } = await import('../../src/command/command.ts');
   await runCommand(f.pool, { partition: record!.receipt.partition }, async (tx) => {
     const released = await createNativeLibrarySourceCustody({ pool: f.pool }).releaseHold({
-      client: tx, at: currentCommand(tx).time, ...record!.source.native,
+      client: tx,
+      at: currentCommand(tx).time,
+      ...record!.source.native,
       deadline: currentCommandResources(tx).deadline,
-      allowance: { reservationId: randomUUID(), remaining: {
-        candidateKeys: 0, identityMetadataRows: 0, nativeRows: 512, nativePoints: 32,
-        witnessKeys: 0, statements: 16, bytes: 262144, emptySeeks: 0,
-      } },
+      allowance: {
+        reservationId: randomUUID(),
+        remaining: {
+          candidateKeys: 0,
+          identityMetadataRows: 0,
+          nativeRows: 512,
+          nativePoints: 32,
+          witnessKeys: 0,
+          statements: 16,
+          bytes: 262144,
+          emptySeeks: 0,
+        },
+      },
     });
     expect(released.status).toBe('released');
-    return { value: null, events: [{ type: IDENTITY_EPOCH_ADMITTED, data: {
-      jobId: selection.job.jobId, epoch: selection.job.epoch.toString(), partition: home(selection.job.jobId),
-    } }] };
+    return {
+      value: null,
+      events: [
+        {
+          type: IDENTITY_EPOCH_ADMITTED,
+          data: {
+            jobId: selection.job.jobId,
+            epoch: selection.job.epoch.toString(),
+            partition: home(selection.job.jobId),
+          },
+        },
+      ],
+    };
   });
   await expect(readIdentityReceivingSelection(f.pool, selection, context())).rejects.toMatchObject({
     code: 'identity_epoch_unavailable',
