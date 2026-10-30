@@ -101,8 +101,8 @@ test.serial('current-authorized community header keeps unavailable media and cur
   const media = await patch(target.realmId, head, {
     presentation: { avatarMediaId: newId(routeOf(target.realmId)!), bannerMediaId: null, rules: pin },
   });
-  expect(media.response.status, media.text).toBe(503);
-  expect(media.value!.code).toBe('dependency_unavailable');
+  expect(media.response.status, media.text).toBe(409);
+  expect(media.value!.code).toBe('media_unavailable');
   expect((await realmHead(target.realmId)).headRevisionId).toBe(head);
   expect((await realmHead(target.realmId)).presentation).toEqual({ ...empty, rules: pin });
 
