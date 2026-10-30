@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { fromPlainText, documentText, serializeDocument } from '@rezics/document';
 import { createKernelClient } from '@rezics/client';
 import { authoredFixture, authoredProperty } from '../src/kernel/fake/authored-field';
@@ -11,8 +11,10 @@ import {
 import { candidateIsPublic } from '../src/subject/candidates';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AuthoredField } from '../src/features/catalogue/authored-field-view';
 import { readAuthoredField, type AuthoredRead } from '../src/features/catalogue/authored-field';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { AuthoredField } = await import('../src/features/catalogue/authored-field-view');
 
 test('Write licensed original catalogue text and review its actual candidate through the declared native contract with truthful authority and failure states', async () => {
   const fixture = authoredFixture();
