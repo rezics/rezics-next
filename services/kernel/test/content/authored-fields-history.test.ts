@@ -152,7 +152,7 @@ test('actual standalone authored-field command enrolls exact original native sou
       [partitionOf(route), row.artifact_type, row.locator],
     )).rows;
     expect(accounts).toContainEqual({ account_id: author.accountId,
-      roles: ACCOUNT_ROLE_BITS.author | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal });
+      roles: ACCOUNT_ROLE_BITS.author | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS['acting-human'] });
   }
   expect(await readAuthoredField(db.pool, route, stored.id)).toMatchObject({ availability: 'erased', body: null,
     digest: stored.digest });
