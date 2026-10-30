@@ -34,6 +34,7 @@ async function deadlineFailure(): Promise<void> {
     forceGraceMs: 800,
   });
   let server: ReturnType<typeof Bun.serve> | undefined;
+  let listenerPort: number | undefined;
   let privateBrowser: Awaited<ReturnType<typeof launchPrivateBrowser>> | undefined;
   let devServer: ReturnType<typeof spawn> | undefined;
   let devServerIdentity: ReturnType<typeof inspectNativeProcess>;
@@ -55,6 +56,7 @@ async function deadlineFailure(): Promise<void> {
         fetch: () =>
           new Response('<main>owned native lifecycle page</main>', { headers: { 'content-type': 'text/html' } }),
       });
+      listenerPort = server.port;
       const ownedServer = server;
       lifecycle.register({
         label: 'hung owned native listener',
@@ -132,7 +134,7 @@ async function deadlineFailure(): Promise<void> {
         );
       }
       report('NATIVE_TIMEOUT_READY', {
-        listenerPort: server.port,
+        listenerPort,
         devServerPort,
         devServer: devServerIdentity,
         bridgeDirectory: privateBrowser.bridgeDirectory,
@@ -156,7 +158,7 @@ async function deadlineFailure(): Promise<void> {
   await lifecycle.close();
   report('NATIVE_TIMEOUT_CLEANED', {
     receivedTimeout,
-    listenerPort: server?.port,
+    listenerPort,
     devServerPort,
     devServer: devServerIdentity,
     bridgeDirectory: privateBrowser?.bridgeDirectory,
@@ -174,6 +176,7 @@ async function partialSetupFailure(): Promise<void> {
     forceGraceMs: 1_000,
   });
   let listener: ReturnType<typeof Bun.serve> | undefined;
+  let listenerPort: number | undefined;
   let child: ReturnType<typeof spawn> | undefined;
   let childIdentity: ReturnType<typeof inspectNativeProcess>;
   let expectedFailure = false;
@@ -183,6 +186,7 @@ async function partialSetupFailure(): Promise<void> {
       5_000,
       async () => {
         listener = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('partial fixture') });
+        listenerPort = listener.port;
         const ownedListener = listener;
         lifecycle.register({
           label: 'partially initialized native listener',
@@ -192,7 +196,7 @@ async function partialSetupFailure(): Promise<void> {
         child = spawn('node', ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
         lifecycle.ownProcessGroup('partially initialized native child', child);
         childIdentity = inspectNativeProcess(child.pid!);
-        report('NATIVE_PARTIAL_READY', { listenerPort: listener.port, child: childIdentity });
+        report('NATIVE_PARTIAL_READY', { listenerPort, child: childIdentity });
         throw new Error('deliberate assertion after partial native fixture setup');
       },
       false,
@@ -205,7 +209,7 @@ async function partialSetupFailure(): Promise<void> {
   await lifecycle.close();
   report('NATIVE_PARTIAL_CLEANED', {
     expectedFailure,
-    listenerPort: listener?.port,
+    listenerPort,
     child: childIdentity,
   });
 }
