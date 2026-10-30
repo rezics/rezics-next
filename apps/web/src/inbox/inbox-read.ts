@@ -8,6 +8,8 @@ import { readPageAuthors } from '../identity/read';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { reporterStatusResponse } from '../moderation/reporter-status-model';
+import { m } from '../paraglide/messages.js';
 
 export const INBOX_PAGE_SIZE = 20;
 
@@ -158,7 +160,7 @@ type InboxKernelClient = {
   };
   posts: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
   'moderation-decisions': (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-  reports: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
+  reports: KernelClient['reports'];
 };
 function authHeaders(authorization: string) {
   return { authorization };
@@ -217,9 +219,19 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
     report: async (id) => {
       const result = await client.reports({ id }).get({ headers: authHeaders(authorization) });
       if (failTargetRead(result)) return null;
-      const data = result.data as { report?: { outcome?: string } } | undefined;
-      const outcome = data?.report?.outcome;
-      return result.error || !outcome ? null : { outcome, href: `/moderation/reports/${id}` };
+      // Moderator inspection is a different authorized response, never an own-status notice.
+      if (!result.data?.report || !('targetAvailability' in result.data.report)) return null;
+      const report = reporterStatusResponse(result.data);
+      if (report.id !== id) throw new InboxReadError({ status: result.status });
+      return {
+        outcome:
+          report.outcome === 'actioned'
+            ? m.moderation_actioned()
+            : report.outcome === 'dismissed'
+              ? m.moderation_dismissed()
+              : m.reporter_status_pending(),
+        href: `/moderation/reports/${report.id}`,
+      };
     },
   };
 }
@@ -349,11 +361,34 @@ export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (
   return loadUnreadCount(kernelClient(), getRequest(), env as Partial<SessionEnv>);
 });
 
+export type InboxSeenAttempt = { through: string; idempotencyKey: string };
+
+/** Replay the same marker and key after an unknown outcome; only native 204 confirms it. */
+export async function markInboxThrough(
+  client: Pick<KernelClient, 'accounts'>,
+  accountId: string,
+  authorization: string,
+  attempt: InboxSeenAttempt,
+): Promise<void> {
+  const result = await client
+    .accounts({ accountId })
+    .notifications.$markSeen.post(
+      { through: attempt.through },
+      { headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) } },
+    );
+  if (result.error || result.status !== 204) throw new Error('Kernel notification mark seen failed');
+}
+
 export const markInboxSeen = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
-    if (!input || typeof input !== 'object' || !('through' in input) || typeof input.through !== 'string')
+    if (
+      !isRecord(input) ||
+      typeof input.through !== 'string' ||
+      typeof input.idempotencyKey !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.idempotencyKey)
+    )
       throw new Error('Invalid notice id');
-    return { through: input.through };
+    return { through: input.through, idempotencyKey: input.idempotencyKey };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -362,12 +397,6 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
-    const result = await kernelClient()
-      .accounts({ accountId })
-      .notifications.$markSeen.post(
-        { through: data.through },
-        { headers: { ...authHeaders(authorization), 'idempotency-key': crypto.randomUUID() } },
-      );
-    if (result.error) throw new Error('Kernel notification mark seen failed');
+    await markInboxThrough(kernelClient(), accountId, authorization, data);
     return { signedIn: true };
   });

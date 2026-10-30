@@ -78,3 +78,13 @@ export const UnreadUnavailable: Story = {
     await view.findByRole('list');
   },
 };
+
+export const ModeratorResponse: Story = {
+  render: () => <Example fixture="report-moderator" />,
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    await list.findByText(m.inbox_unavailable_item());
+    await expect(list.queryByRole('link')).toBeNull();
+    await expect(list.queryByText('Repeated advertising in this discussion.')).toBeNull();
+  },
+};

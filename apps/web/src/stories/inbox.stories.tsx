@@ -70,3 +70,22 @@ export const RowOverlay: Story = {
   render: () => <InboxStory fixture="row-overlay" />,
   play: rowsReady,
 };
+
+const reportHref = '/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
+
+export const ReporterAvailable: Story = {
+  render: () => <InboxStory fixture="report-available" />,
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    await expect(list.getByRole('link', { name: m.moderation_actioned() })).toHaveAttribute('href', reportHref);
+  },
+};
+
+export const ReporterUnavailable: Story = {
+  render: () => <InboxStory fixture="report-unavailable" />,
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    await expect(list.getByRole('link', { name: m.moderation_dismissed() })).toHaveAttribute('href', reportHref);
+    await expect(list.queryByText(m.inbox_unavailable_item())).toBeNull();
+  },
+};

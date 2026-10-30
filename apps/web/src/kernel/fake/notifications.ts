@@ -1,5 +1,6 @@
 import { fromPlainText } from '@rezics/document';
 import type { FakeRoute } from '../fake-modules.ts';
+import type { ReporterStatus } from '../../moderation/reporter-status-model';
 
 function storyFixture(): string | null {
   const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url: string } }).__rezicsStoryContext;
@@ -12,6 +13,18 @@ const storyThread = '01a17a3b-0884-721b-91ef-d7ffd7bb58f1';
 const storyPost = '01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
 const storyReport = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
 const storyDecision = '01a17a3b-0884-721b-91ef-d7ffd7bb58f4';
+const ownReport: ReporterStatus = {
+  id: storyReport,
+  target: { kind: 'post', id: storyPost },
+  revisionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58f6',
+  reason: 'spam',
+  evidence: 'Repeated advertising in this discussion.',
+  reporterId: storyActor,
+  createdAt: '2026-10-27T08:00:00.000Z',
+  outcome: 'actioned',
+  resolvedAt: '2026-10-28T08:00:00.000Z',
+  targetAvailability: 'available',
+};
 const fixtures = {
   mixed: [
     {
@@ -136,6 +149,7 @@ const list: FakeRoute = {
         retryable: true,
         request_id: 'story-inbox-unavailable',
       };
+    if (fixture?.startsWith('report-')) return { status: 200, items: [fixtures.mixed[1]], next: null };
     return fixture === 'empty' || !fixture
       ? (recordings['notifications-inbox-empty'] ?? { status: 200, items: [], next: null })
       : { status: 200, items: fixtures[fixture as keyof typeof fixtures] ?? [], next: null };
@@ -161,7 +175,20 @@ const storyTargets: FakeRoute[] = [
   {
     method: 'GET',
     path: new RegExp(`^/v1/reports/${storyReport}$`),
-    story: () => ({ status: 200, report: { outcome: 'actioned' } }),
+    story: () => {
+      const fixture = storyFixture();
+      if (fixture === 'report-moderator') {
+        const { targetAvailability: _availability, ...report } = ownReport;
+        return { status: 200, report: { ...report, partition: 1, transactionId: storyDecision } };
+      }
+      return {
+        status: 200,
+        report: {
+          ...ownReport,
+          ...(fixture === 'report-unavailable' ? { targetAvailability: 'unavailable', outcome: 'dismissed' } : {}),
+        },
+      };
+    },
   },
   {
     method: 'GET',

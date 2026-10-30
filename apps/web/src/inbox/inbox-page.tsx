@@ -12,7 +12,13 @@ import { unreadCountQuery } from './inbox-query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
-import { markInboxSeen, readInboxPage, type InboxPage, type ResolvedInboxPage } from './inbox-read';
+import {
+  markInboxSeen,
+  readInboxPage,
+  type InboxPage,
+  type InboxSeenAttempt,
+  type ResolvedInboxPage,
+} from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
@@ -110,6 +116,8 @@ export function InboxPageView() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [older, setOlder] = useState<ResolvedInboxPage | null>(null);
   const marked = useRef<string | null>(null);
+  const seenAttempt = useRef<InboxSeenAttempt | null>(null);
+  const marking = useRef(false);
   const [seenFailed, setSeenFailed] = useState(false);
   const [seenRetry, setSeenRetry] = useState(0);
   const accumulatedCursor = useRef<string | undefined>(undefined);
@@ -130,18 +138,29 @@ export function InboxPageView() {
   }, [cursor, page]);
 
   useEffect(() => {
-    if (cursor !== undefined) return;
+    if (cursor !== undefined || !csrfToken || marking.current || marked.current || seenFailed) return;
     const newest = page?.items[0];
-    if (!newest || !csrfToken || marked.current === newest.id) return;
-    marked.current = newest.id;
-    setSeenFailed(false);
-    void markInboxSeen({ data: { through: newest.id }, headers: csrfHeaders() })
+    if (!seenAttempt.current) {
+      if (!newest?.unread) return;
+      seenAttempt.current = { through: newest.id, idempotencyKey: crypto.randomUUID() };
+    }
+    const attempt = seenAttempt.current;
+    marking.current = true;
+    void markInboxSeen({ data: attempt, headers: csrfHeaders() })
       .then((result) => {
         if (!result.signedIn) throw new Error('Signed out');
-        return queryClient.invalidateQueries({ queryKey: unreadCountQuery.queryKey });
+        marked.current = attempt.through;
+        seenAttempt.current = null;
+        return Promise.all([
+          queryClient.invalidateQueries({ queryKey: unreadCountQuery.queryKey }),
+          queryClient.invalidateQueries({ queryKey }),
+        ]);
       })
-      .catch(() => setSeenFailed(true));
-  }, [cursor, page?.items, queryClient, csrfToken, seenRetry]);
+      .catch(() => setSeenFailed(true))
+      .finally(() => {
+        marking.current = false;
+      });
+  }, [cursor, page?.items, queryClient, csrfToken, seenRetry, seenFailed]);
 
   const loadMore = () => {
     if (!page?.next) return;
@@ -160,7 +179,7 @@ export function InboxPageView() {
           <Button
             variant="outline"
             onClick={() => {
-              marked.current = null;
+              setSeenFailed(false);
               setSeenRetry((value) => value + 1);
             }}
           >
