@@ -139,7 +139,9 @@ export async function createViewerActionsSurfacesDriver(): Promise<NativeSurface
         const withheld = await subject(),
           concealed = await subject();
         await command(staff, `/v1/subjects/${withheld.id}:hide`, { reason: 'Withheld catalogue row' });
-        await command(staff, `/v1/subjects/${concealed.id}:takedown`, { reason: 'Concealed catalogue row' });
+        await command(staff, `/v1/subjects/${concealed.id}:takedown`, {
+          notice: { complaint: 'Concealed catalogue row', received_at: new Date().toISOString() },
+        });
         return {
           alice: persona(identities.alice),
           bob: persona(identities.bob),
