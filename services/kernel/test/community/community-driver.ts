@@ -58,6 +58,7 @@ async function startWorker(system: ContentSystem): Promise<{
   child: Bun.Subprocess;
   failure(): string | undefined;
   output(): string;
+  stopped(): boolean;
   stop(): Promise<void>;
 }> {
   const executorId = workerIdentities.get(system) ?? `community-${crypto.randomUUID()}`;
@@ -130,16 +131,19 @@ async function startWorker(system: ContentSystem): Promise<{
     await Bun.sleep(20);
   }
   let stopping: Promise<void> | undefined;
+  let stopped = false;
   return {
     child,
     failure: () => workerFailure,
     output: () => output,
+    stopped: () => stopped,
     stop: () =>
       (stopping ??= (async () => {
         if (child.exitCode === null) child.kill();
         await child.exited;
         await diagnostics;
         await consent.close();
+        stopped = true;
       })()),
   };
 }
@@ -228,7 +232,7 @@ export const worker = {
 /** Resume native workflows, preserving the worker handle held by existing drivers. */
 export async function restartWorker(): Promise<void> {
   if (!shared) throw new Error('Community driver is not open');
-  if (shared.worker.child.exitCode === null) throw new Error('Community worker is still running');
+  if (!shared.worker.stopped()) throw new Error('Community worker is still running');
   Object.assign(shared.worker, await startWorker(shared.system));
 }
 
@@ -421,25 +425,34 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
     };
     for (const id of pending) await result(id);
     pending.clear();
+    // The native bootstrap continuously schedules its next bounded page. Drain
+    // the command frontier, then every workflow enqueued through that frontier;
+    // waiting for global quiescence would also wait for unrelated future pages.
+    const frontier = (
+      await system.database.pool.query('SELECT partition_no, position::text FROM core.partition')
+    ).rows;
     const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
       if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-      const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
-        (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
-      );
-      for (const workflow of workflows) await result(workflow.workflowID);
       const behind = await system.database.pool.query(`
-        SELECT partition.partition_no, partition.position, consumers.name, checkpoint.position AS checkpoint
-          FROM core.partition AS partition
+        SELECT frontier.partition_no, frontier.position, consumers.name, checkpoint.position AS checkpoint
+          FROM jsonb_to_recordset($1::jsonb) AS frontier(partition_no integer, position bigint)
           CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
           LEFT JOIN core.consumer_checkpoint AS checkpoint
-            ON checkpoint.partition_no = partition.partition_no AND checkpoint.consumer = consumers.name
-         WHERE partition.position > COALESCE(checkpoint.position, 0)
-         LIMIT 1`);
-      if (!behind.rowCount && workflows.length === 0) return;
+            ON checkpoint.partition_no = frontier.partition_no AND checkpoint.consumer = consumers.name
+         WHERE frontier.position > COALESCE(checkpoint.position, 0)
+         LIMIT 1`, [JSON.stringify(frontier)]);
+      if (!behind.rowCount) {
+        const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
+          (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
+        );
+        for (const workflow of workflows) await result(workflow.workflowID);
+        if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
+        return;
+      }
       if (Date.now() >= deadline)
         throw new Error(
-          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, workflows, exitCode: worker.child.exitCode })}`,
+          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, exitCode: worker.child.exitCode })}`,
         );
       await Bun.sleep(10);
     }
