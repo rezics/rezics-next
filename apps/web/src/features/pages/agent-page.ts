@@ -1,4 +1,4 @@
-import { isView, planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import { isView, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { CoverSummary } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
 import { locales, type Locale } from '../../paraglide/runtime.js';

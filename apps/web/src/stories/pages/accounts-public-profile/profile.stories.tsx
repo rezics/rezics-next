@@ -12,7 +12,7 @@ import { profilePage } from './fixtures';
 function Example({
   mode = 'human',
 }: {
-  mode?: 'human' | 'verified' | 'organization' | 'automated' | 'operator' | 'private' | 'empty' | 'denied';
+  mode?: 'human' | 'verified' | 'organization' | 'automated' | 'operator' | 'private' | 'empty' | 'denied' | 'long';
 }) {
   const page = profilePage({
     verified: mode === 'verified' || mode === 'organization',
@@ -22,6 +22,15 @@ function Example({
       : {}),
     ...(mode === 'private'
       ? { profile: { publicViews: { posts: false, reviews: false, collections: false, realms: false } } }
+      : {}),
+    ...(mode === 'long'
+      ? {
+          profile: {
+            displayName: 'The International Reading Room and Translation Collective',
+            bio: 'Readers, translators and librarians meet here to exchange notes across languages.\nWe keep our reading lists public so others can join the conversation.',
+            links: [{ label: 'Reading journal and upcoming conversations', url: 'https://example.test/journal' }],
+          },
+        }
       : {}),
     empty: mode === 'empty',
     ...(mode === 'denied' ? { activityStatus: 403 } : {}),
@@ -95,26 +104,27 @@ export const PrivateActivity: Story = {
     await expect(canvasElement.querySelector('[data-slot="account-posts"]')).toBeNull();
   },
 };
+export const LongContent: Story = { render: () => <Example mode="long" /> };
 export const EmptyActivity: Story = { render: () => <Example mode="empty" /> };
 export const DeniedActivity: Story = { render: () => <Example mode="denied" /> };
 export const Preparing: Story = {
   render: () => (
     <PatternStory>
-      <PublicAccountState state="preparing" retry={() => {}} />
+      <PublicAccountState page state="preparing" retry={() => {}} />
     </PatternStory>
   ),
 };
 export const Denied: Story = {
   render: () => (
     <PatternStory>
-      <PublicAccountState state="denied" />
+      <PublicAccountState page state="denied" />
     </PatternStory>
   ),
 };
 export const Unavailable: Story = {
   render: () => (
     <PatternStory>
-      <PublicAccountState state="unavailable" retry={() => {}} />
+      <PublicAccountState page state="unavailable" retry={() => {}} />
     </PatternStory>
   ),
 };

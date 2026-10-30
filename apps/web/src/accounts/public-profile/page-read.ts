@@ -32,9 +32,9 @@ export async function loadPublicAccountJourney(
   input: {
     handle: string;
     locale: string;
-    view?: AccountView;
-    cursor?: string;
-    search?: string;
+    view?: AccountView | undefined;
+    cursor?: string | undefined;
+    search?: string | undefined;
   },
 ) {
   const { handle, locale, cursor, search } = input;
@@ -89,7 +89,7 @@ export async function loadPublicAccountJourney(
     const page = compositionView && cursor ? await continueAgentList(client, result.page, cursor) : result.page;
     return {
       kind: 'page' as const,
-      view: view ?? 'overview',
+      view: (view ?? 'overview') as AccountView,
       handle,
       page,
       overview: shown.page,

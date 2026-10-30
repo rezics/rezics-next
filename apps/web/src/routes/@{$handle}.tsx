@@ -69,7 +69,8 @@ function AgentRoute() {
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
-  if (data.kind === 'state') return <PublicAccountState state={data.state} retry={() => void router.invalidate()} />;
+  if (data.kind === 'state')
+    return <PublicAccountState page state={data.state} retry={() => void router.invalidate()} />;
   return (
     <PublicProfilePage
       page={data.page}

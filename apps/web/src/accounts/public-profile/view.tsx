@@ -8,9 +8,11 @@ import type { PublicReadState, PublicRealms } from './read';
 export function PublicAccountState({
   state,
   retry,
+  page = false,
 }: {
   state: PublicReadState | 'invalid-cursor';
-  retry?: () => void;
+  page?: boolean;
+  retry?: (() => void) | undefined;
 }) {
   const text =
     state === 'denied'
@@ -23,7 +25,7 @@ export function PublicAccountState({
   return (
     <Empty role={state === 'unavailable' ? 'alert' : 'status'} className="p-6 sm:p-10">
       <EmptyHeader>
-        <EmptyTitle>{m.public_account_heading()}</EmptyTitle>
+        <EmptyTitle>{page ? <h1>{m.public_account_heading()}</h1> : m.public_account_heading()}</EmptyTitle>
         <EmptyDescription>{text}</EmptyDescription>
       </EmptyHeader>
       {retry && (
@@ -60,7 +62,7 @@ export function PublicRealmsPage({
   title: string;
   locale: string;
   result: PublicRealms;
-  retry?: () => void;
+  retry?: (() => void) | undefined;
 }) {
   const base = accountHref(locale, handle, 'realms');
   return (

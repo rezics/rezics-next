@@ -36,7 +36,7 @@ export async function readPublicRealms(
         return { id, role, title: realm.title, summary: realm.summary };
       }),
     );
-    return { state: 'ready', realms: rows.filter((row): row is RealmRow => row !== null), next: result.data.next };
+    return { state: 'ready', realms: rows.filter((row) => row !== null), next: result.data.next };
   } catch {
     return { state: 'unavailable' };
   }
