@@ -9,6 +9,8 @@ export type CollectionRow = {
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
+  presentationKind: string | null;
+  coverMediaId: string | null;
   state: CollectionState;
   revision: number;
   memberCount: number;
@@ -27,9 +29,14 @@ export type CollectionDraft = {
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
+  presentationKind?: string | null;
+  coverMediaId?: string | null;
 };
 
-export type CollectionChanges = Pick<CollectionDraft, 'title' | 'description' | 'visibility'>;
+export type CollectionChanges = Pick<
+  CollectionDraft,
+  'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId'
+>;
 
 /** Database projection for one ordered member. */
 export type CollectionMemberRow = {

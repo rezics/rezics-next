@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
 import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
-import { createCollectionReads } from '../../src/library/collection-reads.ts';
+import { createCollectionReads, type CollectionView } from '../../src/library/collection-reads.ts';
 import type { Collection, CollectionMember, CollectionVisibility } from '../../src/library/collection-model.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -206,11 +206,15 @@ async function add(
   return created.value;
 }
 
-function viewOf(collection: Collection) {
+function viewOf(collection: Collection): CollectionView {
   return {
     id: collection.id,
     curatorAccountId: collection.curatorAccountId,
     title: collection.title,
+    presentationKind: null,
+    presentationKindSource: collection.memberCount === 0 ? 'empty' : 'pending',
+    cover: null,
+    coverSource: collection.memberCount === 0 ? 'none' : 'pending',
     description: collection.description,
     visibility: collection.visibility,
     revision: collection.revision,
@@ -271,11 +275,15 @@ test('public and unlisted Collections read for anyone and a private one matches 
   }
   expect(await reads.readCollection(owner, hidden.id)).toEqual(viewOf(hidden));
   expect(Object.keys(await reads.readCollection(owner, hidden.id)).sort()).toEqual([
+    'cover',
+    'coverSource',
     'createdAt',
     'curatorAccountId',
     'description',
     'id',
     'memberCount',
+    'presentationKind',
+    'presentationKindSource',
     'revision',
     'title',
     'updatedAt',

@@ -1322,3 +1322,64 @@ command_kind IN ('library.pin.put','library.pin.delete'), idempotency_key)` in `
 These private IDs/evidence follow shared history minimization and delivery custody; this module adds no
 participant acknowledgement and does not claim complete account erasure. Built-in pin integration remains
 separately required through the common Collection reader and its frozen native suite.
+
+### Owner-selected Collection presentation
+
+The existing Collection POST/PATCH accept optional `presentationKind` and `coverMediaId`; PATCH keeps its numeric
+revision CAS. Omission preserves a choice, null clears it. `collection-presentation.ts` validates a new exact TypeId
+against the active definitions release, without changing members or accepted personal profile pins. Stored choices
+survive a later release that lacks that Type; clients apply their explicit rendering fallback. Selection preparation
+releases every foreign home before the native Collection command checks current authorization and its receipt.
+Business validation failures are deferred to the fresh command body, so an authorized exact replay retains the native
+receipt, while current authorization, curator fencing and digest-conflict behavior still apply before replay.
+
+The sole transport composition is `http/kernel.ts` → `collectionRoutes`, which supplies the trusted route key.
+Existing imported cover facts come from Content's `checkMediaObject(..., 'cover')`. Authority comes separately from
+`decideDownload` with the installed actor/Access, trusted route key/deadline and an actual AVIF/WebP variant. The
+original imported subject/container, tuple/source and variant remain authoritative. No Collection container, claim,
+upload, grant or retention reservation is created. Every list/detail viewer, including anonymous viewers, receives
+only a currently authorized existing `CoverSummary`; the storage key and source URL are never a Collection URL.
+The curator with update scope may also receive the configured ID. After foreign waits, reads recheck native
+Collection authorization, revision and source generation; a changed source returns unavailable rather than a stale
+positive. Metadata GET starts no work and creates no header, grant, receipt or event.
+
+The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`. Owner overrides return `owner`.
+A proved zero-count curated source returns `empty`/`none`; a nonempty or dynamic source without a complete admitted
+observation returns null/`pending`. Losing configured-cover readability follows the same rule. The complete automatic
+dominant-Type and ordered member-cover producer must connect here using the existing
+`collection-source-native.ts` `observe`/`page`/`probe` source generation and current-disclosure observations, including
+`collection-source-native-header.sql`; it must not sample the first page. The separate bounded FULL fact producer
+connects at `views.ts`'s `fullMembers`, reusing the same presentation fields and Semantic's admitted fact batch. This
+change does not implement those producers, first-three previews or fact projections. Logical dynamic readers must
+consume these row fields and this response seam without another metadata table or writes on GET.
+
+Retention inventory under the existing Library A5 and Accounts shared-history ownership:
+
+- `library.collection.presentation_kind` and `cover_media_id` are nullable values on the existing routed row. Ordinary
+  deletion retains them for the same exact 720-hour episode; restore updates the same row and preserves them. Terminal
+  removal of that row removes both values. There is no private backup, new participant or independent cleanup ACK.
+- Native `library.collection.create`/`library.collection.update` receipts in `core.receipt.response` contain the returned
+  Collection, hence both fields, including cleared nulls. Their exact existing receipt locator and account identity
+  belong to Accounts' `command-receipt/v1` custody and Library's account-erasure inventory.
+- Existing `com.rezics.library.collection.updated.v1`/listing events contain locators/publication state only; no selected
+  Type or cover value is added to outbox data. Existing Collection listing work consumes that event; no new DBOS input,
+  workflow output, object-store copy, worker or cache is introduced. This inventory is not universal cleanup proof.
+
+Cost for owner metadata:
+
+- Touches: native current Collection/curator/resource authorization, one active release and immutable Type lookup for a
+  new nonnull selection, exact row CAS/receipt/event and the existing keyset list. No membership scan or history walk.
+- Bound: fixed point operations per command/read, indexed logarithmic block growth; lists retain their 100-row cap.
+- Growth check: `collection-presentation-growth.test.ts` exercises successful/stale/denied/replayed commands and exact
+  detail plus genuine first/deep keyset cursors at 64/512/4096 unrelated same-owner/foreign rows and receipts.
+
+Cost for existing owner cover:
+
+- Touches: one configured imported reference and actual native variant/source/subject/Access points, a repeated reference
+  fact check and the final native Collection/source check after released foreign anchors. Each selected row on a list
+  pays its own current cover checks; rows without a configured cover need none of that work.
+- Bound: fixed exact reference/variant costs per selected row; no per-member metadata requests, image bytes, full curated
+  scan or worker runtime. Unproved member fallback remains pending and is not a cost waiver for its separate producer.
+- Growth check: the same native suite grows unrelated media variants/source tuples/history/grants, captures actual
+  statements/plans/rows/blocks/wire bytes across registered pools, and covers current source-hidden/tuple/media loss,
+  viewer scope reduction and a real late Collection visibility change. Shared capture rules and allowances are unchanged.

@@ -9,6 +9,7 @@ type Dependencies = {
     access: () => Access;
     tokens: KeyRing;
     clock: KernelClock;
+    routeKey: Uint8Array;
 };
 export declare const collectionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
@@ -16,6 +17,36 @@ export declare const collectionSchema: import("typebox").TObject<{
     title: import("typebox").TString;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        media: import("typebox").TString;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+        placeholder: import("typebox").TObject<{
+            thumbhash: import("typebox").TString;
+            color: import("typebox").TString;
+        }>;
+        variants: import("typebox").TArray<import("typebox").TObject<{
+            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+            width: import("typebox").TInteger;
+        }>>;
+        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+            x: import("typebox").TNumber;
+            y: import("typebox").TNumber;
+        }>, import("typebox").TNull]>;
+        credit: import("typebox").TObject<{
+            rightsHolder: import("typebox").TString;
+            via: import("typebox").TObject<{
+                name: import("typebox").TString;
+                url: import("typebox").TString;
+            }>;
+            license: import("typebox").TString;
+            obligations: import("typebox").TArray<import("typebox").TString>;
+        }>;
+    }>, import("typebox").TNull]>>;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
+    coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
     revision: import("typebox").TInteger;
     memberCount: import("typebox").TInteger;
     createdAt: import("typebox").TString;
@@ -3984,6 +4015,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     title: string;
                     description?: string | null;
                     visibility: "private" | "public" | "unlisted";
+                    presentationKind?: string | null;
+                    coverMediaId?: string | null;
                 };
                 params: {};
                 query: unknown;
@@ -3993,6 +4026,10 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 response: {
                     200: {
                         collection: {
+                            presentationKind: string | null;
+                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
                             curatorAccountId: string;
                             title: string;
@@ -4002,6 +4039,21 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             memberCount: number;
                             createdAt: string;
                             updatedAt: string;
+                        } | {
+                            presentationKind: string | null;
+                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            coverSource: 'owner' | 'member' | 'none' | 'pending';
+                            id: string;
+                            curatorAccountId: string;
+                            title: string;
+                            description: string | null;
+                            visibility: import("./collection-model.ts").CollectionVisibility;
+                            revision: number;
+                            memberCount: number;
+                            createdAt: string;
+                            updatedAt: string;
+                            coverMediaId: string;
                         };
                     };
                     201: {
@@ -4011,6 +4063,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             title: string;
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            cover?: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            coverSource: "member" | "none" | "owner" | "pending";
+                            coverMediaId?: string | null;
                             revision: number;
                             memberCount: number;
                             createdAt: string;
@@ -4146,6 +4228,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             title: string;
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            cover?: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            coverSource: "member" | "none" | "owner" | "pending";
+                            coverMediaId?: string | null;
                             revision: number;
                             memberCount: number;
                             createdAt: string;
@@ -4285,6 +4397,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     title: string;
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
                                     revision: number;
                                     memberCount: number;
                                     createdAt: string;
@@ -4423,6 +4565,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                                coverSource: "member" | "none" | "owner" | "pending";
+                                coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
                                 createdAt: string;
@@ -4543,6 +4715,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         title?: string;
                         description?: string | null;
                         visibility?: "private" | "public" | "unlisted";
+                        presentationKind?: string | null;
+                        coverMediaId?: string | null;
                     };
                     params: {
                         collectionId: string;
@@ -4559,6 +4733,36 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                                coverSource: "member" | "none" | "owner" | "pending";
+                                coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
                                 createdAt: string;

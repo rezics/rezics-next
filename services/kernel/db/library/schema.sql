@@ -478,6 +478,8 @@ CREATE TABLE library.collection (
     builtin_state_set_id text,
     builtin_state_id text,
     source_generation bigint DEFAULT 0 NOT NULL,
+    presentation_kind text,
+    cover_media_id uuid,
     CONSTRAINT collection_active_deletion CHECK (((state <> 'active'::text) OR (deleted_at IS NULL))),
     CONSTRAINT collection_builtin_identity_check CHECK (
 CASE membership_kind

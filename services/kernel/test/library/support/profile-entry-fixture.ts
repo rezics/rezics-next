@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg, { type Pool } from 'pg';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
@@ -56,6 +57,12 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
   const input = fixture(profiles.game);
   const schema = JSON.parse(input.schemas['fixture.yaml']!);
   schema.version = version;
+  // Collection API fixtures select from the bundled vocabulary. Keep that Type in
+  // the actual compiled/activated fixture release, alongside the profile test Types.
+  const presentationType = Object.keys(bundledRelease.types).sort()[0]!;
+  const prefix = presentationType.split(':')[0]!;
+  schema.prefixes[prefix] = bundledRelease.prefixes[prefix];
+  schema.classes.CollectionPresentation = { class_uri: presentationType };
   schema.classes.Recipe = { class_uri: 'ex:Recipe', annotations: { library: profiles.recipe } };
   schema.classes.Record = {
     class_uri: 'ex:Record',
@@ -65,7 +72,11 @@ export async function compileEntryRelease(version: 'original' | 'replacement'): 
   for (const [key, text] of Object.entries(input.presentation)) {
     const labels = JSON.parse(text);
     const locale = key.split('/')[1] as Parameters<typeof libraryLabels>[1];
-    Object.assign(labels.types, { 'ex:Recipe': 'recipe', 'ex:Record': 'record' });
+    Object.assign(labels.types, {
+      'ex:Recipe': 'recipe',
+      'ex:Record': 'record',
+      [presentationType]: 'presentation selection',
+    });
     for (const profile of [profiles.recipe, ...(version === 'original' ? [profiles.record] : [])])
       labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
     input.presentation[key] = JSON.stringify(labels);

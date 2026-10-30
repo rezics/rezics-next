@@ -8,11 +8,17 @@ import { createResourcePublicEligibility } from '../access/public-eligibility.ts
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import {
+  collectionPresentation,
+  readablePresentationCover,
+  type CollectionPresentation,
+  type PresentationDependencies,
+} from './collection-presentation.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
@@ -29,7 +35,7 @@ type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
-export type CollectionView = {
+export type CollectionView = CollectionPresentation & {
   id: string;
   curatorAccountId: string;
   title: string;
@@ -84,6 +90,8 @@ function collectionView(row: {
   title: string;
   description: string | null;
   visibility: string;
+  presentationKind: string | null;
+  membershipKind?: string;
   revision: number;
   memberCount: number;
   createdAt: string;
@@ -91,6 +99,7 @@ function collectionView(row: {
 }): CollectionView {
   if (row.visibility !== 'private' && row.visibility !== 'unlisted' && row.visibility !== 'public') throw notFound();
   return {
+    ...collectionPresentation(row),
     id: row.id,
     curatorAccountId: row.curatorAccountId,
     title: row.title,
@@ -201,7 +210,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
   });
 }
 
-export function createCollectionReads(dependencies: { pool: Pool; access: Access; tokens: KeyRing }) {
+export function createCollectionReads(dependencies: PresentationDependencies & { tokens: KeyRing }) {
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
 
@@ -245,7 +254,53 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
   ): Promise<CollectionView> {
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
-    return collectionView(row);
+    return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
+  }
+
+  async function present(
+    viewer: Actor,
+    row: Parameters<typeof collectionView>[0] & {
+      coverMediaId: string | null;
+      sourceGeneration: string;
+    },
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+  ): Promise<CollectionView> {
+    const cover =
+      row.coverMediaId === null
+        ? null
+        : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline);
+    let editor = false;
+    if (
+      row.coverMediaId !== null &&
+      viewer.kind === 'account' &&
+      viewer.accountId === row.curatorAccountId &&
+      viewer.scopes.includes('collection:update')
+    ) {
+      const check = await accessCheck(
+        access,
+        viewer,
+        'collection:update',
+        { route: routeOf(row.id)!, id: row.id },
+        { pool, deadline },
+      );
+      editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
+    }
+    if (row.coverMediaId !== null) {
+      const final = await loadCollection(viewer, row.id, deadline);
+      if (!final) throw notFound();
+      if (
+        final.revision !== row.revision ||
+        final.sourceGeneration !== row.sourceGeneration ||
+        final.coverMediaId !== row.coverMediaId ||
+        final.presentationKind !== row.presentationKind
+      )
+        throw new ProblemError('dependency_unavailable');
+    }
+    return {
+      ...collectionView(row),
+      ...collectionPresentation(row, cover),
+      ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
+    };
   }
 
   async function seesAll(viewer: Actor, curatorAccountId: string): Promise<boolean> {
@@ -296,7 +351,7 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = listPosition(cursor, route);
     if (!visible && !curator) return { collections: [], next: null };
-    return readOnly(pool, async (client) => {
+    const result = await readOnly(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       if (cursor && cursor.epoch !== partition?.epoch) {
         if (!partition) throw new ProblemError('partition_unavailable');
@@ -317,13 +372,16 @@ export function createCollectionReads(dependencies: { pool: Pool; access: Access
       const last = shown.at(-1);
       const exact = last?.updatedAtExact;
       return {
-        collections: shown.map(collectionView),
+        collections: shown,
         next:
           hasMore && last && partition && exact
             ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [exact, last.id] })
             : null,
       };
     });
+    const collections: CollectionView[] = [];
+    for (const row of result.collections) collections.push(await present(viewer, row));
+    return { ...result, collections };
   }
 
   async function listMembers(

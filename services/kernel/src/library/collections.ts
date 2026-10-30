@@ -32,6 +32,11 @@ import type {
   MemberPosition,
   MemberReordering,
 } from './collection-model.ts';
+import {
+  presentationSelection,
+  preparePresentationSelection,
+  type PresentationSelection,
+} from './collection-presentation.ts';
 import { placeMember } from './collection-placement.ts';
 import {
   deleteMember as deleteMemberRow,
@@ -56,7 +61,7 @@ const TITLE_LIMIT = 200;
 const DESCRIPTION_LIMIT = 2_000;
 const NOTE_LIMIT = 1_000;
 
-type CollectionPatch = {
+type CollectionPatch = PresentationSelection & {
   revision: number;
   title?: string;
   description?: string | null;
@@ -249,7 +254,12 @@ async function activeCollection(tx: CommandTransaction, route: number, collectio
   return current;
 }
 
-export function createCollectionCommands(config: { pool: Pool; access: Access; clock?: KernelClock }) {
+export function createCollectionCommands(config: {
+  pool: Pool;
+  access: Access;
+  clock?: KernelClock;
+  routeKey?: Uint8Array;
+}) {
   const { pool, access, clock } = config;
   const owned = createLibraryCommandRunner({ pool: writerPool(pool), ...(clock ? { clock } : {}) });
   const creation = collectionCreationAccess(access);
@@ -267,22 +277,30 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
 
   async function createCollection(
     actor: Actor,
-    draft: { title: string; description?: string | null; visibility: CollectionVisibility },
+    draft: PresentationSelection & { title: string; description?: string | null; visibility: CollectionVisibility },
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
     const title = requiredText(draft.title, TITLE_LIMIT);
     const description = draft.description === undefined ? null : optionalText(draft.description, DESCRIPTION_LIMIT);
     const visibility = visibilityOf(draft.visibility);
-    const input = { title, description, visibility };
+    const selection = presentationSelection(draft);
+    const input = { title, description, visibility, ...selection };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
     const id = route === null ? newId(1) : newId(route);
     let provenance: { transactionId: string; at: string } | null = null;
 
-    return owned.ownAccount(
+    return owned.ownAccountPrepared(
       actor,
-      { action: 'collection:create', kind: 'library.collection.create', requestKey, input },
-      async (tx, command) => {
+      {
+        action: 'collection:create',
+        kind: 'library.collection.create',
+        requestKey,
+        input,
+        prepare: () => preparePresentationSelection(config, actor, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
+      },
+      async (tx, command, failure) => {
         if (actor.kind !== 'account' || route === null) throw new GrantDeniedError();
+        if (failure) throw failure;
         provenance = null;
         const resource = Object.freeze({ route, id });
         const authorization = parentCreationAuthorization({
@@ -326,7 +344,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         const value = await insertCollection(
           tx,
           route,
-          { id, curatorAccountId: actor.accountId, title, description, visibility },
+          { id, curatorAccountId: actor.accountId, title, description, visibility, ...selection },
           { transactionId: command.transactionId, time: at },
         );
         provenance = { transactionId: command.transactionId, at };
@@ -349,6 +367,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
       command: { transactionId: string; time: string },
       route: number,
     ) => Promise<{ value: T; events: CommandEvent[] }>,
+    selection?: PresentationSelection,
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
@@ -363,8 +382,18 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
       },
       context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
     });
+    const failures = new WeakMap<object, ProblemError | null>();
     const authorization: typeof normalAccess = {
       ...normalAccess,
+      async prepare(attempt) {
+        const proof = await normalAccess.prepare!(attempt);
+        if (selection)
+          failures.set(
+            attempt.time,
+            await preparePresentationSelection(config, owner, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
+          );
+        return proof;
+      },
       async authorize(tx, attempt, proof) {
         const mode = await normalAccess.authorize(tx, attempt, proof);
         const collection = await visibleCollection(tx, owner, route, collectionId, attempt.time);
@@ -388,8 +417,11 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
         authorization,
       },
-      async (tx, command) =>
-        body(tx, { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) }, route),
+      async (tx, command) => {
+        const failure = failures.get(command.time);
+        if (failure) throw failure;
+        return body(tx, { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) }, route);
+      },
     );
   }
 
@@ -399,6 +431,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
     patch: CollectionPatch,
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
+    const selection = presentationSelection(patch);
     const revision = revisionOf(patch.revision);
     const title = patch.title === undefined ? undefined : requiredText(patch.title, TITLE_LIMIT);
     const description =
@@ -410,6 +443,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
       title: title ?? null,
       description: description ?? null,
       visibility: visibility ?? null,
+      ...selection,
       present: {
         title: title !== undefined,
         description: description !== undefined,
@@ -436,12 +470,16 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
             title: title ?? current.title,
             description: description === undefined ? current.description : description,
             visibility: visibility ?? current.visibility,
+            presentationKind:
+              selection.presentationKind === undefined ? current.presentationKind : selection.presentationKind,
+            coverMediaId: selection.coverMediaId === undefined ? current.coverMediaId : selection.coverMediaId,
           },
           command,
         );
         if (!value) throw new ProblemError('conflict');
         return { value, events: collectionEvents('updated', id, wasListed !== listed(value)) };
       },
+      selection,
     );
   }
 

@@ -50,6 +50,8 @@ function asCollection(row: CollectionResult): Collection {
     title: row.title,
     description: row.description,
     visibility: row.visibility,
+    presentationKind: row.presentationKind,
+    coverMediaId: row.coverMediaId,
     state: row.state,
     revision: row.revision,
     memberCount: row.memberCount,
@@ -95,6 +97,8 @@ export async function insertCollection(
     title: collection.title,
     description: collection.description,
     visibility: collection.visibility,
+    presentation_kind: collection.presentationKind ?? null,
+    cover_media_id: collection.coverMediaId ?? null,
     ...write(context),
   });
   const row = rows[0];
@@ -122,6 +126,10 @@ export async function updateCollection(
     title: changes.title,
     description: changes.description,
     visibility: changes.visibility,
+    set_presentation_kind: changes.presentationKind !== undefined,
+    presentation_kind: changes.presentationKind ?? null,
+    set_cover_media_id: changes.coverMediaId !== undefined,
+    cover_media_id: changes.coverMediaId ?? null,
     ...write(context),
   });
   return row ? asCollection(row as CollectionResult) : null;

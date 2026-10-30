@@ -11,15 +11,17 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
+import { collectionPresentation } from './collection-presentation.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
+type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array };
 const closed = { additionalProperties: false } as const;
 // Domain commands and reads distinguish malformed resource IDs from malformed JSON.
 const id = t.String();
@@ -33,6 +35,16 @@ export const collectionSchema = t.Object(
     title: t.String(),
     description: nullableString,
     visibility,
+    presentationKind: nullableString,
+    presentationKindSource: t.Union([
+      t.Literal('owner'),
+      t.Literal('members'),
+      t.Literal('empty'),
+      t.Literal('pending'),
+    ]),
+    cover: t.Optional(CoverSummarySchema),
+    coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+    coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
     revision,
     memberCount: t.Integer(),
     createdAt: t.String(),
@@ -145,7 +157,18 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
 }
 function collectionView(value: Collection) {
   const { id, curatorAccountId, title, description, visibility, revision, memberCount, createdAt, updatedAt } = value;
-  return { id, curatorAccountId, title, description, visibility, revision, memberCount, createdAt, updatedAt };
+  return {
+    id,
+    curatorAccountId,
+    title,
+    description,
+    visibility,
+    revision,
+    memberCount,
+    createdAt,
+    updatedAt,
+    ...collectionPresentation(value),
+  };
 }
 function memberView(value: CollectionMember) {
   const { id, subjectId, note, addedAt } = value;
@@ -158,8 +181,33 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
   const viewDependencies = () => ({ ...dependencies, access: dependencies.access() });
-  const write = () => (commands ??= createCollectionCommands({ pool, access: dependencies.access(), clock }));
-  const read = () => (reads ??= createCollectionReads({ pool, access: dependencies.access(), tokens }));
+  const write = () =>
+    (commands ??= createCollectionCommands({
+      pool,
+      access: dependencies.access(),
+      clock,
+      routeKey: dependencies.routeKey,
+    }));
+  const read = () =>
+    (reads ??= createCollectionReads({
+      pool,
+      access: dependencies.access(),
+      tokens,
+      clock,
+      routeKey: dependencies.routeKey,
+    }));
+  async function written(value: Collection, actor: Actor) {
+    // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
+    if (value.coverMediaId == null) return collectionView(value);
+    // Native writes do not require collection:read. Preserve their receipt metadata;
+    // descriptor enrichment requires the viewer's independent current read authority.
+    if (actor.kind !== 'account' || !actor.scopes.includes('collection:read'))
+      return { ...collectionView(value), coverMediaId: value.coverMediaId };
+    const current = await read().readCollection(actor, value.id);
+    const cover =
+      current.revision === value.revision && current.coverMediaId === value.coverMediaId ? current.cover : null;
+    return { ...collectionView(value), ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId };
+  }
   const sitemapQuery = strict(SitemapQuerySchema);
   return app
     .get(
@@ -189,7 +237,18 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       '/v1/collections',
       {
         headers,
-        body: strict(t.Object({ title: t.String(), description: t.Optional(nullableString), visibility }, closed)),
+        body: strict(
+          t.Object(
+            {
+              title: t.String(),
+              description: t.Optional(nullableString),
+              visibility,
+              presentationKind: t.Optional(nullableString),
+              coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
+            },
+            closed,
+          ),
+        ),
         response: { 201: collectionResponse, ...failures },
         detail: { ...detail('collection.create', 'collection:create'), 'x-resource-types': ['library.collection'] },
       },
@@ -201,7 +260,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
-        return { collection: collectionView(result.value) };
+        return { collection: await written(result.value, actor) };
       },
     )
     .get(
@@ -273,6 +332,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
               title: t.Optional(t.String()),
               description: t.Optional(nullableString),
               visibility: t.Optional(visibility),
+              presentationKind: t.Optional(nullableString),
+              coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
             },
             closed,
           ),
@@ -287,7 +348,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => write().updateCollection(actor, params.collectionId, body, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { collection: collectionView(result.value) };
+        return { collection: await written(result.value, actor) };
       },
     )
     .delete(
