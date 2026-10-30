@@ -159,7 +159,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
           ...writeFailures,
         },
         detail: {
-          operationId: 'realm.media.create',
+          operationId: 'realm_media.create',
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['content.media'],
