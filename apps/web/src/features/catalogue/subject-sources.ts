@@ -11,7 +11,6 @@ import {
   type Sources,
   type Stmt,
 } from '../pages/shared';
-import { candidateSourceRecords } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { defaultReader } from '../../subject/reader';
 import { subjectHref, subjectViewHref } from '../../subject/subject-href';
@@ -153,7 +152,9 @@ export function explainSubjectSources(
     related,
     sources: {
       credit: read.summary?.cover?.credit ?? null,
-      records: candidateSourceRecords(subject)
+      // Native selected support owns this list. Citations above remain per field;
+      // a record in this list grants neither field support nor prose/cover rights.
+      records: subject.sourceRecords
         .filter((record) => record.name.trim() && webUrl(record.url))
         .map((record) => ({
           ...record,

@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -46,6 +47,7 @@ for (const source of ['vndb', 'wikidata'] as const) {
       let lose = false;
       let controller = new AbortController();
       const transport = {
+        setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
         async readFence() {
           return { fenced: false, securityRevision: null };
         },

@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -15,6 +16,7 @@ test('source provenance refresh preserves acknowledged proposals through partial
   const effects: BatchCommand[] = [];
   let fault: 'partial' | 'lost' | null = null;
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence() {
       return { fenced: false, securityRevision: null };
     },

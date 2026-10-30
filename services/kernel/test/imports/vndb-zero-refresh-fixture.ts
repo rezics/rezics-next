@@ -115,6 +115,7 @@ export async function runJourney() {
       new Importer({
         path: state,
         transport: {
+          setSourceRecordMetadata: ordinaryTransport.setSourceRecordMetadata,
           batchWrite: ordinaryTransport.batch,
           readFence: (tuple) =>
             ordinaryTransport.fence({

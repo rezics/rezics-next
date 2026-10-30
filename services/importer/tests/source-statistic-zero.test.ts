@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -73,6 +74,7 @@ async function fixture() {
   const writes: { method: string; bytes: string; key: string | null }[] = [];
   const batches: BatchWriteRequest[] = [];
   let candidate = 0;
+  const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
     origin: 'https://zero.import.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -81,6 +83,7 @@ async function fixture() {
     fetch: (async (input, init) => {
       const request = new Request(input, init),
         path = new URL(request.url).pathname;
+      if (path === '/v1/source-records:setMetadata') return metadata.fetch(request);
       if (request.method === 'GET') {
         const facts = new URL(request.url).searchParams.get('fieldGroup') === 'facts';
         return Response.json({ fenced: fenced && facts, securityRevision: fenced && facts ? '1' : null });
@@ -119,6 +122,7 @@ async function fixture() {
     new Importer({
       path: join(directory, 'state.sqlite'),
       transport: {
+        setSourceRecordMetadata: transport.setSourceRecordMetadata,
         batchWrite: (body) => transport.batch(body),
         readFence: (tuple) =>
           transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),

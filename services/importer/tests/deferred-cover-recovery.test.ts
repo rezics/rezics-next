@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -35,6 +36,7 @@ function remote() {
   const media = new Map<string, { bytes: string; id: string }>();
   const availability: boolean[] = [];
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence() {
       return { fenced: false, securityRevision: null };
     },

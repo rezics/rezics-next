@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +34,7 @@ test('native mixed Wikidata dump imports only items and preserves refresh and ma
   const importer = new Importer({
     path: ':memory:',
     transport: {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       async readFence() {
         return { fenced: false, securityRevision: null };
       },

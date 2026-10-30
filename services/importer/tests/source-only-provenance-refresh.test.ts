@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -11,6 +12,7 @@ test('source-only Bangumi change publishes fresh digest without inventing a fiel
   const importer = new Importer({
     path: ':memory:',
     transport: {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       async readFence(tuple) {
         return fenced && tuple.field_group === 'facts'
           ? { fenced: true, securityRevision: '1' }

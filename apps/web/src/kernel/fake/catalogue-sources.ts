@@ -15,7 +15,7 @@ export type SourcesScenario =
 export const sourceDefinitions = release.release as unknown as SourceDefinitions;
 export const citationUrl = 'https://catalogue.example.test/books/prince';
 
-/** A small native-shaped response seam. It makes no claim that optional metadata has a registered producer. */
+/** A generated Subject DTO story seam; runtime availability still requires native proof. */
 export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-facts') {
   const read = structuredClone(recording) as unknown as SubjectRead;
   const id = read.subject.id;
@@ -47,23 +47,21 @@ export function catalogueSourcesFixture(scenario: SourcesScenario = 'selected-fa
           'schema:isbn': [fact('schema:isbn', 'external-id', '9780156012195')],
         };
   // Reuse returned cover credit while keeping the detailed page free of media fetching.
-  Object.assign(read.subject, {
-    sourceRecords:
-      scenario === 'no-citations' || scenario === 'empty'
-        ? []
-        : [
-            {
-              name: 'Reviewed bibliography',
-              url: citationUrl,
-              ...(scenario !== 'partial-metadata'
-                ? {
-                    licence: { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
-                    attribution: 'Bibliography contributors',
-                  }
-                : {}),
-            },
-          ],
-  });
+  read.subject.sourceRecords =
+    scenario === 'no-citations' || scenario === 'empty'
+      ? []
+      : [
+          {
+            name: 'Reviewed bibliography',
+            url: citationUrl,
+            ...(scenario !== 'partial-metadata'
+              ? {
+                  licence: { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
+                  attribution: 'Bibliography contributors',
+                }
+              : {}),
+          },
+        ];
   const calls: { path: string; authorization: string | null; session: string | null }[] = [];
   let outcome = scenario;
   const client = createKernelClient('http://sources.test', {

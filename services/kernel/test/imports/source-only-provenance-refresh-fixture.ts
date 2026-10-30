@@ -120,7 +120,9 @@ export async function runJourney() {
             }
             expect(url.origin).toBe(api);
             expect(request.headers.has('cookie')).toBe(false);
-            expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
+            expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check', '/v1/source-records:setMetadata']).toContain(
+              url.pathname,
+            );
             if (url.pathname !== '/v1/subjects:batchWrite') return runtime.replay(request);
             expect(acquired).toBe(true);
             const bytes = await request.clone().text();

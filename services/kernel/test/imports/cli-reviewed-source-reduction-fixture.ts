@@ -269,6 +269,7 @@ export async function runReviewedProviderReduction() {
             expect(
               url.pathname === '/v1/subjects:batchWrite' ||
                 url.pathname === '/v1/sourceFences:check' ||
+                url.pathname === '/v1/source-records:setMetadata' ||
                 (source === 'vndb' && /^\/v1\/subjects\/[^/]+\/source-statistics\/vndb(?::clear)?$/.test(url.pathname)),
             ).toBe(true);
             const saved = request.clone();

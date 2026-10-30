@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -56,6 +57,7 @@ function remote() {
   };
 
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence() {
       return { fenced: false, securityRevision: null };
     },

@@ -24,7 +24,14 @@ import {
   type ImportHttpOptions,
   type ImportRetryState,
 } from './import-fetch.ts';
-import type { ImportSourceStatisticValue, ImportSourceStatisticClearValue } from './import-contract.ts';
+import {
+  isImportSourceRecord,
+  isImportSourceRecordMetadataResult,
+  type ImportSourceRecordMetadataCommand,
+  type ImportSourceRecordMetadataResult,
+  type ImportSourceStatisticValue,
+  type ImportSourceStatisticClearValue,
+} from './import-contract.ts';
 
 export interface FenceTuple {
   source: string;
@@ -216,7 +223,11 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
     reply.response ? importRetryState(reply.response) : undefined,
   );
 }
-async function response(call: () => Promise<ClientResponse>, expected: number, signal?: AbortSignal) {
+async function response(
+  call: () => Promise<ClientResponse>,
+  expected: number | readonly number[],
+  signal?: AbortSignal,
+) {
   signal?.throwIfAborted();
   let reply: ClientResponse;
   try {
@@ -226,7 +237,12 @@ async function response(call: () => Promise<ClientResponse>, expected: number, s
     throw new ImportTransportError();
   }
   signal?.throwIfAborted();
-  if (!reply.response || reply.error || reply.status !== expected) throw httpFailure(reply);
+  if (
+    !reply.response ||
+    reply.error ||
+    !(typeof expected === 'number' ? reply.status === expected : expected.includes(reply.status))
+  )
+    throw httpFailure(reply);
   if (expected === 204) {
     ensure(reply.data === undefined || reply.data === null || reply.data === '');
     return { status: reply.status, body: null };
@@ -300,6 +316,36 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(result.results.length === body.commands.length);
     result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));
     return result;
+  }
+  async function setSourceRecordMetadata(
+    input: { command: ImportSourceRecordMetadataCommand; idempotencyKey: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceRecordMetadataResult> {
+    const body = snapshot(input.command, bodyLimit) as ImportSourceRecordMetadataCommand;
+    ensure(
+      body &&
+        typeof body === 'object' &&
+        Object.keys(body).sort().join(',') === 'expected_metadata_revision,external_id,metadata,source' &&
+        typeof body.source === 'string' &&
+        /^[a-z][a-z0-9_-]{0,31}$/.test(body.source) &&
+        typeof body.external_id === 'string' &&
+        body.external_id.length > 0 &&
+        body.external_id.length <= 255 &&
+        isImportSourceRecord(body.metadata) &&
+        (body.expected_metadata_revision === null ||
+          (Number.isSafeInteger(body.expected_metadata_revision) && body.expected_metadata_revision > 0)),
+    );
+    const reply = await response(
+      () =>
+        client['source-records'].$setMetadata.post(body, {
+          headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+          ...fetchOptions(signal),
+        }),
+      [200, 201],
+      signal,
+    );
+    ensure(isImportSourceRecordMetadataResult(reply.body));
+    return reply.body;
   }
   async function writeSourceStatistic(
     input: {
@@ -511,6 +557,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     return media(body, key, signal);
   }
   return {
+    setSourceRecordMetadata,
     batch,
     batches,
     fence,

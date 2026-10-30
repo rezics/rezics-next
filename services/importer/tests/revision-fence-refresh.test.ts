@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -41,6 +42,7 @@ function fixture() {
   const receipts = new Map<string, { body: string; result: BatchWriteResult['results'][number] }>();
   const statistics: { body: string; key: string | null }[] = [];
   let fault: 'denied' | 'interrupted' | 'statistic-denied' | null = null;
+  const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -48,6 +50,7 @@ function fixture() {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
+      if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
       if (request.method === 'GET' && url.pathname === '/v1/sourceFences:check') {
         const key = tupleKey(
           url.searchParams.get('source')!,
@@ -105,6 +108,7 @@ function fixture() {
       path: resolve(directory, 'journal.sqlite'),
       recordConcurrency: 1,
       transport: {
+        setSourceRecordMetadata: transport.setSourceRecordMetadata,
         batchWrite: (request) => transport.batch(request),
         readFence: (tuple) =>
           transport.fence({

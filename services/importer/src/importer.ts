@@ -13,6 +13,8 @@ import { checkBatch, checkResult } from './accepted-checks.ts';
 import type {
   ImportConversion,
   ImportTransport,
+  ImportSourceRecord,
+  ImportSourceRecordMetadataCommand,
   RunResultSink,
   RunStatus,
   SourceRegistration,
@@ -437,6 +439,53 @@ export class Importer {
     return candidates;
   }
 
+  private async metadata(
+    owner: Owner,
+    descriptor: ImportSourceRecord | undefined,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<void> {
+    const bindings = this.session.bindings;
+    if (!descriptor || bindings.claim(owner)?.state !== 'bound') return;
+    const signature = hash(JSON.stringify(descriptor));
+    let journal = bindings.metadata(owner);
+    if (journal?.result && journal.signature === signature) return;
+    const port = this.options.transport.setSourceRecordMetadata;
+    if (!port) throw new Error('Source record metadata transport is unavailable');
+    const send = async (pending: NonNullable<typeof journal>) => {
+      const result = await write(() =>
+        port.call(
+          this.options.transport,
+          {
+            command: JSON.parse(pending.bytes) as ImportSourceRecordMetadataCommand,
+            idempotencyKey: pending.key,
+          },
+          signal,
+        ),
+      );
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      bindings.acknowledgeMetadata(owner, pending.key, result);
+    };
+    // Never consume a new descriptor in place of a response-lost immutable intent.
+    if (journal && !journal.result) {
+      await send(journal);
+      journal = bindings.metadata(owner);
+      if (journal?.signature === signature) return;
+    }
+    const revision = journal?.result?.metadata_revision ?? null;
+    const pending = bindings.prepareMetadata(
+      owner,
+      operationKey(owner, `metadata:${signature}:${revision}`),
+      signature,
+      {
+        ...owner,
+        metadata: descriptor,
+        expected_metadata_revision: revision,
+      },
+    );
+    await send(pending);
+  }
+
   private async bootstrap(
     registration: SourceRegistration,
     staged: Staged<SourceProjection>,
@@ -538,6 +587,9 @@ export class Importer {
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
+    // Metadata is independent of semantic no-change detection. Failure keeps this
+    // record unclassified and the source baseline unchanged, with its own retry intent.
+    if (row.state === 'present') await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
     let omissions = await this.fences(owner, signal);
     const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
@@ -577,6 +629,7 @@ export class Importer {
       ) {
         subject = await this.bootstrap(registration, staged, conversion, signal, write);
         if (!subject) return null;
+        await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
@@ -1058,7 +1111,15 @@ export class Importer {
                 digest: conversion.digest,
                 state: 'present',
               },
-              projection: { sourceKind: registration.sourceKind, normalizedRecord: conversion.normalized },
+              projection: {
+                sourceKind: registration.sourceKind,
+                normalizedRecord: conversion.normalized,
+                ...('outcome' in conversion && conversion.outcome === 'ignored'
+                  ? {}
+                  : registration.describeSourceRecord
+                    ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
+                    : {}),
+              },
             });
             if (buffered.length >= 100) flush();
           }

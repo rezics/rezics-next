@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -30,6 +31,7 @@ for (const source of ['bangumi', 'openlibrary'] as const) {
     let lose = true;
     const controller = new AbortController();
     const transport = {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       async readFence() {
         return { fenced: false, securityRevision: null };
       },

@@ -638,6 +638,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return track(() => result);
   };
   const signalTransport = {
+    setSourceRecordMetadata: (input: Parameters<typeof importTransport.setSourceRecordMetadata>[0]) =>
+      track(() => importTransport.setSourceRecordMetadata(input, signal)),
     batchWrite: (request: Parameters<typeof importTransport.batch>[0]) =>
       track(() => importTransport.batch(request, signal)),
     clearSourceStatistic: (input: Parameters<typeof importTransport.clearSourceStatistic>[0]) =>

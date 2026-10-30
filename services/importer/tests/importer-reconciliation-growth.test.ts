@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,6 +40,7 @@ function fake() {
   const requests: BatchWriteRequest[] = [];
   let fenceCalls = 0;
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
       requests.push(structuredClone(request));
       return {

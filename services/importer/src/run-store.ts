@@ -9,13 +9,18 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { checkBatch, checkResult } from './accepted-checks.ts';
-import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts';
+import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord } from './import-contract.ts';
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 
 export type Run = { source: string; id: string; lease: string };
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
-export type SourceProjection = { sourceKind: SourceId; normalizedRecord: unknown };
+export type SourceProjection = {
+  sourceKind: SourceId;
+  normalizedRecord: unknown;
+  /** Reviewed descriptor snapshot, separate from semantic revisions and envelopes. */
+  sourceRecordMetadata?: ImportSourceRecord;
+};
 export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
 export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
 export type Pending = { after: string; recordKey: string; bytes: string; keys: string[] };
@@ -550,11 +555,15 @@ export class RunStore<Projection = BatchStatement[]> {
     let projection: string;
     if (this.projectionMode === 'source-record') {
       const sourceProjection: unknown = record.projection;
-      exact(sourceProjection, ['sourceKind', 'normalizedRecord']);
+      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], ['sourceRecordMetadata']);
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
       const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
-      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}}`;
+      const metadata =
+        sourceProjection.sourceRecordMetadata === undefined
+          ? ''
+          : `,"sourceRecordMetadata":${boundedJson(sourceProjection.sourceRecordMetadata, 8192)}`;
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
       projection = boundedJson(record.projection);

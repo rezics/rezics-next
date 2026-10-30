@@ -597,6 +597,8 @@ export async function openApiRuntime(
         },
         instrumentDatabase: growthSqlite?.instrument ?? measurement.instrument,
         transport: {
+          setSourceRecordMetadata: (input, signal) =>
+            transport.setSourceRecordMetadata(input, signal ?? current?.abort.signal),
           batchWrite: (body) => transport.batch(body, current?.abort.signal),
           ...(options.sourceStatistics === 'vndb'
             ? {

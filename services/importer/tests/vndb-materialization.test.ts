@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -41,6 +42,7 @@ async function local(instrumentDatabase?: ImporterOptions['instrumentDatabase'])
   const calls: BatchWriteRequest[] = [];
   let deny = false;
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(body: BatchWriteRequest): Promise<BatchWriteResult> {
       calls.push(structuredClone(body));
       if (deny) throw new Error('Unit transport unavailable');

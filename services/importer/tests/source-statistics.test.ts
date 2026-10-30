@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -51,6 +52,7 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
   const stored = new Map<string, unknown>();
   const sequence = { value: 0 };
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(request: BatchWriteRequest) {
       requests.push({ method: 'POST', path: '/v1/subjects:batchWrite', body: request });
       return resultFor(request, sequence);
@@ -130,6 +132,7 @@ test('the production import transport PUTs the VNDB statistic route with its ide
     licence: 'ODbL-1.0',
     attribution: 'VNDB',
   };
+  const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',
@@ -193,6 +196,7 @@ async function statisticRefreshFixture() {
   const statisticRuns: Run[] = [];
   const writes: { body: string; key: string | null }[] = [];
   let failure: 'denied' | 'lost' | null = null;
+  const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -200,6 +204,7 @@ async function statisticRefreshFixture() {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
+      if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
       if (request.method === 'GET' && url.pathname === '/v1/sourceFences:check')
         return Response.json({ fenced: false, securityRevision: null });
       if (request.method === 'POST' && url.pathname === '/v1/subjects:batchWrite') {
@@ -221,6 +226,7 @@ async function statisticRefreshFixture() {
     new Importer({
       path,
       transport: {
+        setSourceRecordMetadata: transport.setSourceRecordMetadata,
         batchWrite: (request) => transport.batch(request),
         readFence: (tuple) =>
           transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),

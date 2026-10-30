@@ -13,8 +13,52 @@ effects through `POST /v1/subjects:batchWrite`, exact `GET /v1/sourceFences:chec
 `GET /v1/subjects/{id}`, `POST /v1/pages:read` and `POST /v1/subjects:search`, then the
 [Web](../../apps/web/README.md) subject/search journey. These APIs and CLI form the designed journey; browser
 candidate-review entry remains Web/Semantic work and is not delivered by Imports. Primary-source rights,
-independent selection, current authorization and exact replay remain required. General SourceRecord catch-up/ACK,
-reviewed vocabulary/measured inputs and broader discovery remain deferred.
+independent selection, current authorization and exact replay remain required. The reviewed SourceRecord binding
+below is implemented for the four launch registrations. A general metadata ACK programme, reviewed
+vocabulary/measured inputs and broader discovery remain deferred.
+
+## Reviewed provider metadata
+
+The four built-in registrations describe their actual canonical record identity, independently of the configured
+source alias: Bangumi subject IDs, VNDB visual-novel IDs, Open Library work/edition keys and Wikidata item IDs.
+Names, record links and attribution are application-reviewed descriptors, never dump-supplied licence/name fields.
+Bangumi metadata uses CC-BY-SA-3.0; VNDB records identify ODbL-1.0 database terms and separately name DbCL-1.0
+permitted metadata contents in attribution; Open Library metadata and Wikidata structured data use CC0-1.0.
+These descriptions grant no cover or prose rights. Unknown community registrations have no default descriptor
+or writer, and there is no CLI option for unreviewed rights.
+
+Only a completely acquired, validated, mass-loss-checked and sealed generation can send metadata. After actual
+tuple binding, the ordinary client calls public `POST /v1/source-records:setMetadata` under current Global
+`subject:batch_write` authority, normal rate limits, idempotency and Session handling. Old bound unchanged records
+also catch up; an acknowledged identical descriptor skips future writes, including reopen. Metadata failure keeps
+the previous source baseline and independent tuple/subject intact. Missing ports, denial, unknown responses and
+conflicts never count as completion.
+
+A distinct immutable SQLite metadata request/result journal binds the exact tuple, descriptor and HTTP intent.
+Initial fill uses `expected_metadata_revision: null`; a changed descriptor uses only the last actual returned
+revision. Pending response-loss intents replay their original bytes/key under current authority before any replacement
+descriptor or acquisition. Existing sealed plans, bootstrap envelopes, semantic receipts, source/converter/native
+revisions and digests are unchanged. Partial fill preserves native optional leaves; incompatible leaves and stale
+CAS remain explicit conflicts.
+
+Metadata costs are separate from semantic/media/statistic envelopes: at most one new point intent per bound
+record/descriptor in an ordinary run, or two when replaying a pending descriptor before a replacement. Each intent
+uses the existing maximum eight coordinator attempts and at most five HTTP attempts per coordinator attempt;
+unchanged acknowledged descriptors send none. The staged descriptor is capped at 8 KiB and native leaf limits
+still apply. These bounds do not enlarge old semantic, fence, native-vote or source-statistic ceilings or claim
+measured PostgreSQL/local work units.
+
+The Sources consumer now reads the actual returned current `subject.sourceRecords` DTO. Native selected support
+and exact fences determine those rows; original per-field references and separate cover/prose credit remain intact.
+A metadata row proves neither support for every field nor publication permission. Unknown metadata stays unknown.
+The [native outcome](../kernel/test/imports/source-record-metadata.test.ts) uses the existing ordinary API/CLI fixture
+to connect catch-up to selected Sources and unchanged reopen while retaining bootstrap/semantic receipt identity.
+It is added for integration verification and has not been run in this implementation attempt. Web owns normal
+visual review of `pages-subject-sources--selected-facts` and `pages-subject-sources--partial-metadata`.
+
+```sh
+bun run --cwd services/kernel check test/imports/source-record-metadata.test.ts
+```
 
 Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. A recognized Bangumi
 input outside launch scope remains a present source member and increments `skipped` once during acquisition; it creates
@@ -121,7 +165,7 @@ count with unavailable mean also sends no statistic request. No mean, vote, mapp
 For the same native/converter revision, the statistic-refresh completion proof requires an existing
 acknowledged VNDB record and exhaustive retention of every semantic candidate/proposal, including when the
 source-specific statistic omission requires no request. It advances only the input projection, without a
-fabricated receipt or changes to old semantic requests/receipts. General metadata acknowledgement remains deferred.
+fabricated receipt or changes to old semantic requests/receipts. Beyond the reviewed binding above, general metadata acknowledgement remains deferred.
 
 The supplemental [alias journey](../kernel/test/imports/vndb-statistic-alias.test.ts) reuses the same fixture
 for ordinary alias PUT/clear, exact facts fencing and stale-association preservation.

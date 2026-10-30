@@ -286,6 +286,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
       new Importer({
         path,
         transport: {
+          setSourceRecordMetadata: transport.setSourceRecordMetadata,
           batchWrite: (request) => transport.batch(request),
           readFence: (tuple) =>
             transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),

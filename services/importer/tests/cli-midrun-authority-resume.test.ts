@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -44,6 +45,7 @@ test('CLI denial closes handles and retains prepared writes and baseline for a s
     const receipts = new Map<string, { bytes: string; result: BatchWriteResult['results'][number] }>();
     let denied = false;
     const sent: { bytes: string; status: number }[] = [];
+    const metadata = sourceRecordMetadataFixture();
     const upstream = (async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
@@ -58,6 +60,7 @@ test('CLI denial closes handles and retains prepared writes and baseline for a s
         expect(url.pathname).toBe('/token');
         return Response.json({ access_token: 'unit-token', token_type: 'Bearer', expires_in: 300 });
       }
+      if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
       if (url.pathname === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
       expect(url.pathname).toBe('/v1/subjects:batchWrite');
       const bytes = await request.text();

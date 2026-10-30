@@ -22,6 +22,7 @@ import type {
   ImportConversion,
   ImportSourceStatistic,
   ImportSourceStatisticClear,
+  ImportSourceRecord,
   SourceRegistration,
 } from './import-contract.ts';
 
@@ -68,6 +69,46 @@ const nativeSources: Readonly<Record<SourceId, NativeSource>> = {
     convert: convertOpenLibrary,
   },
 };
+
+/** Reviewed metadata rights only; prose and cover permissions remain converter-owned. */
+function describeSourceRecord(kind: SourceId, id: string): ImportSourceRecord {
+  const cc0 = { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' };
+  switch (kind) {
+    case 'bangumi':
+      if (!/^[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid Bangumi record identity');
+      return {
+        name: 'Bangumi',
+        url: `https://bgm.tv/subject/${id}`,
+        licence: { id: 'CC-BY-SA-3.0', url: 'https://creativecommons.org/licenses/by-sa/3.0/' },
+        attribution: 'Bangumi contributors',
+      };
+    case 'vndb':
+      if (!/^v[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid VNDB record identity');
+      return {
+        name: 'VNDB',
+        url: `https://vndb.org/${id}`,
+        licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
+        attribution: 'VNDB (database: ODbL-1.0; permitted metadata contents: DbCL-1.0)',
+      };
+    case 'openlibrary':
+      if (!/^\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M)$/.test(id))
+        throw new TypeError('Invalid Open Library record identity');
+      return {
+        name: 'Open Library',
+        url: `https://openlibrary.org${id}`,
+        licence: cc0,
+        attribution: 'Open Library contributors',
+      };
+    case 'wikidata':
+      if (!/^Q[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid Wikidata record identity');
+      return {
+        name: 'Wikidata',
+        url: `https://www.wikidata.org/wiki/${id}`,
+        licence: cc0,
+        attribution: 'Wikidata contributors',
+      };
+  }
+}
 
 type SourceField = 'source' | 'converter_revision';
 type StringConstraint = { minLength?: number; maxLength?: number; pattern?: string };
@@ -143,6 +184,7 @@ export function createSourceRegistration(
     sourceKind,
     source,
     converter_revision: converterRevision,
+    describeSourceRecord: (externalId) => describeSourceRecord(sourceKind, externalId),
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
       const result = native.convert(input, context, { converterRevision });

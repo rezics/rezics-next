@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -50,6 +51,7 @@ function remote() {
   const media = new Map<string, { bytes: string; id: string }>();
   const mediaRequests: string[] = [];
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence() {
       return { fenced: false, securityRevision: null };
     },
@@ -235,6 +237,7 @@ test('CLI executes actual acquisition and prints skipped=2 on each same-input in
     '--auth',
     'https://auth.importer.test',
   ];
+  const metadata = sourceRecordMetadataFixture();
   const fetchRemote = async (request: Request) => {
     const url = new URL(request.url);
     if (url.origin === 'https://auth.importer.test') {
@@ -244,6 +247,7 @@ test('CLI executes actual acquisition and prints skipped=2 on each same-input in
         return Response.json({ access_token: 'SCOPE_TOKEN', token_type: 'Bearer', expires_in: 300 });
     }
     expect(url.origin).toBe(origin);
+    if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
     if (url.pathname === '/v1/sourceFences:check') return Response.json(await f.transport.readFence());
     expect(url.pathname).toBe('/v1/subjects:batchWrite');
     return Response.json(await f.transport.batchWrite((await request.json()) as BatchWriteRequest));

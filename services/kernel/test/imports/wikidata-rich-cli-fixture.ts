@@ -239,7 +239,9 @@ export async function runWikidataRichCliJourney() {
           expect(claims.sub).toBe(runtime.identity.bulk.accountId);
           expect(claims.client_id).toBe(runtime.identity.client.clientId);
           expect(String(claims.scope).split(' ').sort()).toEqual([...IMPORTER_SCOPES].sort());
-          expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
+          expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check', '/v1/source-records:setMetadata']).toContain(
+            url.pathname,
+          );
           const body = request.method === 'GET' ? '' : await request.clone().text();
           if (url.pathname === '/v1/subjects:batchWrite') {
             expect(Buffer.byteLength(body)).toBeLessThanOrEqual(65536);

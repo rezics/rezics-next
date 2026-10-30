@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -51,6 +52,7 @@ function nativeReceipts() {
     requests,
     receipts,
     transport: {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       async readFence() {
         return { fenced: false, securityRevision: null };
       },

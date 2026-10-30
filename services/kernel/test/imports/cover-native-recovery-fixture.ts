@@ -64,6 +64,7 @@ export async function openCoverRecovery() {
       const next: Importer = new Importer({
         path,
         transport: {
+          setSourceRecordMetadata: transport.setSourceRecordMetadata,
           readFence: (tuple) =>
             transport.fence(
               { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },

@@ -57,6 +57,7 @@ function transportFor(
     }) as typeof fetch,
   });
   return {
+    setSourceRecordMetadata: transport.setSourceRecordMetadata,
     batchWrite: (body: Parameters<typeof transport.batch>[0]) => transport.batch(body),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),

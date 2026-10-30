@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Database, Statement } from 'bun:sqlite';
@@ -372,6 +373,7 @@ export const createImportPipelineDriver: (
   };
 
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     readFence(tuple: { source: string; external_id: string; field_group: BatchCommand['source']['field_group'] }) {
       const key = tuple.external_id;
       return scheduler.request(

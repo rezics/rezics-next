@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -61,6 +62,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const clearRequests = new Map<string, string>();
     const fences = new Set<string>();
     const transport = {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       // This coordinator-only protocol double acknowledges exact clear requests separately
       // from semantic receipts. The native companion observes actual removal/204/receipts.
       async clearSourceStatistic(input: Parameters<NonNullable<ImportTransport['clearSourceStatistic']>>[0]) {

@@ -187,7 +187,9 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           }
           expect(url.origin).toBe(api);
           expect(request.headers.has('cookie')).toBe(false);
-          expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
+          expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check', '/v1/source-records:setMetadata']).toContain(
+            url.pathname,
+          );
           const bearer = request.headers.get('authorization')!;
           expect(bearer).toStartWith('Bearer ');
           const claims = decodeJwt(bearer.slice(7));
@@ -235,13 +237,17 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
       expect(authPaths.slice(authOffset)).toEqual(result.code === 0 ? ['/signin/key', '/token'] : []);
       for (const name of await readdir(directory!))
         expect((await stat(join(directory!, name))).mode & 0o777).toBe(0o600);
-      const captured = exchanges.slice(offset);
+      const allCaptured = exchanges.slice(offset);
+      const metadataWrites = allCaptured.filter((e) => new URL(e.url).pathname === '/v1/source-records:setMetadata');
+      for (const exchange of metadataWrites) expect([200, 201]).toContain(exchange.status);
+      const captured = allCaptured.filter((e) => new URL(e.url).pathname !== '/v1/source-records:setMetadata');
       return {
         ...result,
         seals,
         consumed,
         peakRetainedBytes,
         captured,
+        metadataWrites,
         writes: captured.filter((exchange) => exchange.method !== 'GET'),
       };
     }
@@ -351,6 +357,7 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
     }
     return {
       runtime,
+      state,
       editor,
       invoke,
       inspect,

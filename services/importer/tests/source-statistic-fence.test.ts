@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -27,6 +28,7 @@ test('bound VNDB refresh suppresses source-statistic publication behind the exac
   let sequence = 0;
   const fences: string[] = [];
   const transport: ImportTransport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async readFence(tuple) {
       fences.push(`${tuple.source}:${tuple.external_id}:${tuple.field_group}`);
       return tuple.field_group === 'facts' && fenced

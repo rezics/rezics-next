@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { join } from 'node:path';
 import { checkBatchWrite, type BatchWriteRequest } from '@rezics/definitions/bulk';
 import type { CommandObservation, CreateImportLedgerDriver } from '../../../specs/imports-ledger-driver.ts';
@@ -11,7 +12,11 @@ export const createImportLedgerDriver: CreateImportLedgerDriver = async (options
   const registrations = new Map(['ledger-converter-1', 'ledger-converter-2'].map((revision) => [revision, revision]));
   const importer = new Importer({
     path: join(options.directory, 'imports.sqlite'),
-    transport: { batchWrite: (request) => options.bulk.send(request), readFence: (tuple) => options.readFence(tuple) },
+    transport: {
+      setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
+      batchWrite: (request) => options.bulk.send(request),
+      readFence: (tuple) => options.readFence(tuple),
+    },
     // This outcome fixture mutates shared fake fence state from response hooks.
     recordConcurrency: 1,
     onConversionOutput(output) {
