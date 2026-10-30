@@ -214,7 +214,6 @@ async function prepareSelection(
     binding.scope.key.source.identity.scope === 'public_output' ||
     binding.scope.key.source.identity.collectionId !== collectionId ||
     binding.scope.key.source.identity.route !== route ||
-    binding.scope.key.source.identity.scope === 'public_output' ||
     binding.scope.key.source.identity.accountId !== actor.accountId ||
     binding.scope.key.source.identity.generation !== saved.header.sourceGeneration
   )
