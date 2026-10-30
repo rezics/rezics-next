@@ -83,7 +83,10 @@ test("each subject view is its own server-rendered URL under the subject's addre
     join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$slug_.$view.tsx'),
   ).text();
   expect(route).toContain("createFileRoute('/subjects/$id_/$slug_/$view')");
-  expect(route).toContain('loadViewPages(client, data.id, data.view, data.locale)');
+  expect(route).toMatch(
+    /context\.queryClient\.ensureQueryData\(\s*subjectViewPagesQuery\(params\.id, getLocale\(\), params\.view, cursor, deps\.realm, deps\.node\),?\s*\)/,
+  );
+  expect(route).toContain('useSuspenseQuery(subjectViewPagesQuery(id, getLocale(), view, cursor, realm, node))');
 
   sent.length = 0;
   const details = await loaded(kokoro, 'details');

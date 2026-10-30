@@ -169,6 +169,8 @@ const text = (html: string) =>
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ');
+const counts = (html: string) =>
+  [...html.matchAll(/<span\b[^>]*data-slot="count"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => text(match[1]!).trim());
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 
@@ -180,7 +182,7 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   const relations = section(html, 'relation-groups');
   // Each card is drawn once for the phone row and once for the grid.
   expect(relations.match(/<article\b/g)).toHaveLength(24);
-  expect(text(relations)).toContain('30 total');
+  expect(counts(relations)).toEqual(['30']);
   expect(relations).toContain(
     `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?property=wdt%3AP155"`,
   );
@@ -188,16 +190,16 @@ test('Cover, Summary, RelationGroups, Appearances, Credits, CollectionList and S
   const characters = section(html, 'appearances');
   expect(text(characters)).toContain('The Fox');
   expect(text(characters)).toContain('Supporting');
-  expect(text(characters)).toContain('1 total');
+  expect(counts(characters)).toEqual(['1']);
   expect(characters).not.toContain('data-slot="see-all"');
 
   const credits = section(html, 'credits');
-  expect(text(credits)).toContain('40+ total');
+  expect(counts(credits)).toEqual(['40+']);
   expect(credits).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/credits"`);
 
   const lists = section(html, 'collection-list');
   expect(lists.match(/Shelf \d/g)).toHaveLength(6);
-  expect(text(lists)).toContain('9 total');
+  expect(counts(lists)).toEqual(['9']);
   expect(lists).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/lists"`);
 
   const sources = section(html, 'subject-sources');
@@ -247,6 +249,7 @@ test('a failed section read says so with a retry and the rest of the page render
   const html = render(pageOf({ links: { status: 503, body: { code: 'unavailable' } } }));
   const failed = section(html, 'relation-groups');
   expect(failed).toContain('data-state="failed"');
+  expect(counts(failed)).toEqual([]);
   expect(text(failed)).toContain('could not be loaded');
   expect(failed).toContain('data-slot="retry"');
   expect(text(section(html, 'collection-list'))).toContain('Shelf 1');
@@ -255,5 +258,5 @@ test('a failed section read says so with a retry and the rest of the page render
   const subjectFailed = render(pageOf({ subject: { status: 500, body: {} } }));
   for (const slot of ['subject-cover', 'subject-summary', 'subject-sources'])
     expect(section(subjectFailed, slot)).toContain('data-state="failed"');
-  expect(text(section(subjectFailed, 'relation-groups'))).toContain('30 total');
+  expect(counts(section(subjectFailed, 'relation-groups'))).toEqual(['30']);
 });

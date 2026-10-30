@@ -126,6 +126,8 @@ const text = (html: string) =>
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ');
+const counts = (html: string) =>
+  [...html.matchAll(/<span\b[^>]*data-slot="count"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => text(match[1]!).trim());
 const section = (html: string, slot: string) =>
   new RegExp(`<section[^>]*data-slot="${slot}"[\\s\\S]*?</section>`).exec(html)?.[0] ?? '';
 // A group's heading, counts and cards. Each card is drawn once for the phone row and once for the grid.
@@ -207,21 +209,22 @@ test('relations are grouped by relation group, each group with its count, cover,
   expect(groups).toEqual(['order', 'derivation', 'world']);
 
   const order = groupBlock(html, 'order');
-  expect(text(order)).toContain('2 total');
+  expect(counts(order)).toEqual(['2']);
   expect(text(order)).toContain('Second Voyage');
   expect(text(order)).toContain('Sequel');
-  expect(order).toContain('<span> <span aria-hidden="true">·</span> 2012</span>');
+  expect(text(order)).toContain('Sequel · 2012');
+  expect(order).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>·<\/span>/);
   expect(text(order)).toContain('2015');
   expect(order).toContain('/media/');
   expect(order.indexOf('Second Voyage')).toBeLessThan(order.indexOf('Third Voyage'));
 
   const derivation = groupBlock(html, 'derivation');
   expect(derivation.match(/<article\b/g)).toHaveLength(24);
-  expect(text(derivation)).toContain('30+ total');
+  expect(counts(derivation)).toEqual(['30+']);
   expect(derivation).toContain(`href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=wdt%3AP144"`);
   expect(groupBlock(html, 'order')).not.toContain('/relations?property=');
 
-  expect(text(groupBlock(html, 'world'))).toContain('1 total');
+  expect(counts(groupBlock(html, 'world'))).toEqual(['1']);
 });
 
 test('SubjectList and TypeList show an exact or at-least count and a See all link to a paged view', () => {
@@ -263,20 +266,20 @@ test('SubjectList and TypeList show an exact or at-least count and a See all lin
     (match) => match[0],
   );
   expect(lists).toHaveLength(3);
-  expect(text(lists[0]!)).toContain('30 total');
+  expect(counts(lists[0]!)).toEqual(['30']);
   expect(lists[0]).toContain(
     `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3AexampleOfWork"`,
   );
-  expect(text(lists[1]!)).toContain('40+ total');
+  expect(counts(lists[1]!)).toEqual(['40+']);
   expect(lists[1]).toContain(
     `href="/en/subjects/${subjectId}/${slug('Unlabelled')}/relations?property=schema%3Aauthor"`,
   );
   // A list that fits shows its count and no link to a view that would repeat it.
-  expect(text(lists[2]!)).toContain('2 total');
+  expect(counts(lists[2]!)).toEqual(['2']);
   expect(lists[2]).not.toContain('data-slot="see-all"');
 
   const types = section(html, 'type-list');
-  expect(text(types)).toContain('120+ total');
+  expect(counts(types)).toEqual(['120+']);
   expect(types).toContain('href="/en/search?type=schema%3ABook"');
 });
 

@@ -166,6 +166,8 @@ const text = (html: string) =>
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();
+const counts = (html: string) =>
+  [...html.matchAll(/<span\b[^>]*data-slot="count"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => text(match[1]!));
 
 /** The phone rows and the grids of one section: each row comes first and is hidden from sm up. */
 function layouts(html: string) {
@@ -188,7 +190,7 @@ const titleOf = (card: string) => text(/<a\b[^>]*>([\s\S]*?)<\/a>/.exec(card)?.[
 const secondaryOf = (card: string) =>
   (/\bdata-slot="cover-card-secondary"[^>]*>([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/[ \t\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 const secondaryMarkupOf = (card: string) =>
   /<div\b[^>]*data-slot="cover-card-secondary"[^>]*>([\s\S]*?)<\/div>/.exec(card)?.[1] ?? '';
@@ -213,8 +215,8 @@ test('subject previews render as cover cards: the cover first and edge to edge, 
   // The secondary line is the relation label with the year, the role, or the edition year; never more than one line.
   const relationGroups = section(html, 'relation-groups');
   const sequel = cards(layouts(relationGroups).grid).find((card) => titleOf(card) === 'Holder 6')!;
-  expect(secondaryOf(sequel)).toBe('Sequel · 2012');
-  expect(secondaryMarkupOf(sequel)).toContain('<span> <span aria-hidden="true">·</span> 2012</span>');
+  expect(secondaryOf(sequel)).toBe('Sequel · 2012');
+  expect(secondaryMarkupOf(sequel)).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>·<\/span>/);
   const editions = cards(layouts(section(html, 'subject-list')).grid);
   expect(editions).toHaveLength(3);
   expect(editions.filter((card) => card.includes('<img') && card.includes('src="/media/'))).toHaveLength(3);
@@ -229,7 +231,7 @@ test('subject previews render as cover cards: the cover first and edge to edge, 
 
   // Headings, counts and See all links stay as they were.
   const [, parts] = [...html.matchAll(/<section[^>]*data-slot="subject-list"[\s\S]*?<\/section>/g)].map((m) => m[0]);
-  expect(text(parts!)).toContain('30 total');
+  expect(counts(parts!)).toEqual(['30']);
   expect(parts).toContain(
     `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?property=schema%3AisPartOf"`,
   );
@@ -354,13 +356,13 @@ test('the full relations view uses the responsive cover grid and keeps its conti
   expect(grid).toContain('gap-2');
   for (const card of cards(html)) expect([...card.matchAll(/<a\b/g)]).toHaveLength(1);
   expect(titleOf(cards(html)[0]!)).toBe('Holder 1');
-  expect(secondaryOf(cards(html)[0]!)).toBe('Sequel · 2015');
-  expect(secondaryMarkupOf(cards(html)[0]!)).toContain('<span> <span aria-hidden="true">·</span> 2015</span>');
+  expect(secondaryOf(cards(html)[0]!)).toBe('Sequel · 2015');
+  expect(secondaryMarkupOf(cards(html)[0]!)).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>·<\/span>/);
   expect(html).toContain(`data-slot="next-page"`);
   expect(html).toContain(
     `href="/en/subjects/${subjectId}/${slug('The Little Prince')}/relations?cursor=opaque-cursor"`,
   );
-  expect(text(html)).toContain('250 total');
+  expect(counts(html)).toEqual(['250']);
 });
 
 test('agent pages show works and characters as cover cards', async () => {
