@@ -95,7 +95,11 @@ export class NotificationEditor {
       return;
     }
     if (!result.ok) {
-      if (result.reason === 'unavailable' || result.reason === 'preparing') {
+      if (
+        result.reason === 'unavailable' ||
+        result.reason === 'preparing' ||
+        (recovering && result.reason !== 'conflict')
+      ) {
         this.update({ phase: 'uncertain', failure: result.failure });
       } else {
         this.update({

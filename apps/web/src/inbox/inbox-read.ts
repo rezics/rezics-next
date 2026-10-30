@@ -67,7 +67,13 @@ function nativeFailure(value: unknown, status?: number): NativeInboxFailure {
   const root = isRecord(value) ? value : undefined;
   const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
   return {
-    status: status ?? (root && typeof root.status === 'number' ? root.status : null),
+    status:
+      status ??
+      (root && typeof root.status === 'number'
+        ? root.status
+        : problem && typeof problem.status === 'number'
+          ? problem.status
+          : null),
     ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
     ...(problem && typeof problem.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
     ...(problem && typeof problem.request_id === 'string'

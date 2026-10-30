@@ -166,6 +166,30 @@ test('reset recovery keeps null and its original version/key until a fresh read 
   expect(journey.calls).toHaveLength(before);
 });
 
+test('authorization refusal during recovery does not establish the original outcome or discard its input', async () => {
+  const sent: string[] = [];
+  let count = 0;
+  const editor = new NotificationEditor(initial, {
+    save: async (input) => {
+      sent.push(JSON.stringify(input));
+      count += 1;
+      return count === 1
+        ? { ok: false, reason: 'unavailable' }
+        : { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
+    },
+    read: async () => {
+      throw new Error('A refused replay cannot establish current state');
+    },
+  });
+  await editor.edit('reply', false, 7);
+  const pending = editor.snapshot().pending;
+  await editor.edit('mention', false, 7);
+  await editor.retry();
+  expect(editor.snapshot().pending).toBe(pending);
+  expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', draft: { reply: false, mention: false } });
+  expect(sent[1]).toBe(sent[0]);
+});
+
 test('unread failures remain unavailable rather than a zero badge, with one private session preparation and at most one native count request', async () => {
   for (const response of [
     () => Response.json({ code: 'dependency_unavailable', request_id: 'count-read' }, { status: 503 }),
