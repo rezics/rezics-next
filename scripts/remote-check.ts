@@ -28,7 +28,7 @@
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
 // Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   chmodSync,
@@ -38,13 +38,17 @@ import {
   linkSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
+  rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { stageCheckGit } from './check-git.ts';
 
 export type Host = {
   name: string;
@@ -2048,12 +2052,43 @@ export function runScript(
   ),
   estimateMs?: number,
   maxMs?: number,
+  gitManifestRelativePath?: string,
+  gitManifestSha256?: string,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
-  const systemdScript = `${refreshBaseScript(id, directory)}
+  const gitManifestPath =
+    gitManifestRelativePath === undefined ? undefined : resolve(directory, gitManifestRelativePath);
+  const gitArtifactDirectory = gitManifestPath === undefined ? undefined : dirname(gitManifestPath);
+  const gitArtifactRelativePath =
+    gitArtifactDirectory === undefined ? undefined : relative(resolve(directory), gitArtifactDirectory);
+  if (
+    gitManifestRelativePath !== undefined &&
+    (gitManifestRelativePath.startsWith('/') ||
+      relative(resolve(directory), gitManifestPath!).startsWith('..') ||
+      relative(resolve(directory), gitManifestPath!) === '' ||
+      !gitArtifactRelativePath?.startsWith('.temp/remote-check-git-'))
+  ) {
+    throw new Error('remote-check: Git snapshot artifacts must be inside the run scratch directory');
+  }
+  if (
+    (gitManifestRelativePath === undefined) !== (gitManifestSha256 === undefined) ||
+    (gitManifestSha256 !== undefined && !/^[a-f0-9]{64}$/.test(gitManifestSha256))
+  ) {
+    throw new Error('remote-check: Git snapshot manifest identity is invalid');
+  }
+  const gitRestore =
+    gitManifestPath === undefined || gitArtifactDirectory === undefined
+      ? ''
+      : `if ! "$bun" ${quote(`${directory}/scripts/check-git.ts`)} restore ${quote(gitManifestPath)} ${quote(directory)} ${quote(gitManifestSha256!)}; then
+      echo "remote-check: native Git snapshot preparation failed" >&2
+      rm -rf -- ${quote(gitArtifactDirectory)}
+      exit 1
+    fi
+    rm -rf -- ${quote(gitArtifactDirectory)}`;
+  const systemdScript = `${refreshBaseScript(id, directory, gitArtifactRelativePath)}
 set +e
 host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
@@ -2101,6 +2136,7 @@ host=$REMOTE_CHECK_HOST
       fi
       bun="$pinned_cache/package/bin/bun"
     fi
+    ${gitRestore}
     mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
     export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
     real_bun=$bun
@@ -2269,7 +2305,11 @@ flock -u 9`;
 }
 
 /** Refreshes only when the current immutable base is old enough; replacing the symlink is atomic. */
-function refreshBaseScript(id: string, directory: string): string {
+function refreshBaseScript(id: string, directory: string, gitArtifactRelativePath?: string): string {
+  const removeGitArtifacts =
+    gitArtifactRelativePath === undefined
+      ? ''
+      : `rm -rf -- ${quote(`${ROOT}/bases/.new-${id}/${gitArtifactRelativePath}`)}`;
   return `# REMOTE_CHECK_BASE_REFRESH
 set -eu
 if [ -d ${quote(directory)} ]; then
@@ -2288,6 +2328,7 @@ if [ "$refresh" -eq 1 ]; then
   rm -rf -- "$staging"
   mkdir -p "$staging"
   cp -a ${quote(directory)}/. "$staging"/
+  ${removeGitArtifacts}
   mv -- "$staging" "$target"
   ln -s "$target" ${ROOT}/bases/.current-${id}
   mv -Tf ${ROOT}/bases/.current-${id} ${ROOT}/bases/current
@@ -2335,6 +2376,10 @@ export function workspaceFiles(workspace: string): string[] {
       return false;
     }
   });
+}
+
+function commandUsesBun(command: string[]): boolean {
+  return command.some((part) => part === 'bun' || basename(part) === 'bun');
 }
 
 type Lease = { host: Host; release: () => Promise<void>; registerRun?: (id: string) => Promise<void> };
@@ -3809,7 +3854,14 @@ async function copyReturns(
   else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
 }
 
-type PreparedRun = { host: Host; id: string; directory: string; connectionId: string };
+type PreparedRun = {
+  host: Host;
+  id: string;
+  directory: string;
+  connectionId: string;
+  gitManifestRelativePath?: string;
+  gitManifestSha256?: string;
+};
 
 /** Transfers the workspace before admission so upload work never owns execution capacity. */
 async function uploadRun(
@@ -3824,38 +3876,62 @@ async function uploadRun(
   const transferLimit = transferTimeout(options);
   const base = await baseState(host, connectionId, transferLimit);
   if (signal.aborted) throw new Aborted();
-  const useZstd = base.zstd && localRsyncSupportsZstd();
-  if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
-  const rsyncStarted = performance.now();
-  const compression = useZstd
-    ? ['--compress', '--compress-choice=zstd', `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
-    : ['--compress'];
-  const sync = Bun.spawn(
-    [
-      'rsync',
-      '-lpt',
-      ...compression,
-      '--stats',
-      '--info=progress2',
-      '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
-      ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
-      '--mkpath',
-      '--from0',
-      '--files-from=-',
-      '-e',
-      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
-      `${resolve(options.workspace)}/`,
-      `${host.address}:${directory}/`,
-    ],
-    { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
-  );
-  const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
-  reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
-  if (signal.aborted) throw new Aborted();
-  if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
-  if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
-  else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
-  return { host, id, directory, connectionId };
+  let localGitStage: string | undefined;
+  let gitManifestRelativePath: string | undefined;
+  let gitManifestSha256: string | undefined;
+  try {
+    const uploadFiles = [...files];
+    if (commandUsesBun(options.command)) {
+      const localTemp = join(resolve(options.workspace), '.temp');
+      mkdirSync(localTemp, { recursive: true, mode: 0o700 });
+      if (!lstatSync(localTemp).isDirectory())
+        throw new Error('remote-check: local Git staging directory is unavailable');
+      localGitStage = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
+      const gitStageStarted = performance.now();
+      const manifestPath = await stageCheckGit(options.workspace, localGitStage);
+      const packPath = join(localGitStage, 'snapshot.pack');
+      gitManifestRelativePath = relative(resolve(options.workspace), manifestPath);
+      gitManifestSha256 = createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
+      uploadFiles.push(gitManifestRelativePath, relative(resolve(options.workspace), packPath));
+      const artifactBytes = statSync(manifestPath).size + statSync(packPath).size;
+      console.error(`remote-check: staged native Git snapshot ${artifactBytes} bytes on ${host.name}`);
+      reportDuration('Git snapshot staging', gitStageStarted, host.name);
+    }
+    const useZstd = base.zstd && localRsyncSupportsZstd();
+    if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
+    const rsyncStarted = performance.now();
+    const compression = useZstd
+      ? ['--compress', '--compress-choice=zstd', `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
+      : ['--compress'];
+    const sync = Bun.spawn(
+      [
+        'rsync',
+        '-lpt',
+        ...compression,
+        '--stats',
+        '--info=progress2',
+        '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
+        ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
+        '--mkpath',
+        '--from0',
+        '--files-from=-',
+        '-e',
+        ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+        `${resolve(options.workspace)}/`,
+        `${host.address}:${directory}/`,
+      ],
+      { stdin: new Blob([`${uploadFiles.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
+    );
+    const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
+    reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
+    if (signal.aborted) throw new Aborted();
+    if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
+    if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
+    else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
+    return { host, id, directory, connectionId, gitManifestRelativePath, gitManifestSha256 };
+  } finally {
+    if (localGitStage !== undefined) rmSync(localGitStage, { recursive: true, force: true });
+  }
 }
 
 async function cleanupPreparedRun(prepared: PreparedRun): Promise<void> {
@@ -3974,6 +4050,8 @@ async function runLeased(
           ),
           options.estimateMs,
           options.maxMs,
+          prepared.gitManifestRelativePath,
+          prepared.gitManifestSha256,
         ),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
@@ -4195,7 +4273,7 @@ async function runWithTransportRetries(
     let managedByRun = false;
     try {
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
-      await uploadRun(host, prepared.connectionId, id, options, files, signal);
+      Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal));
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
@@ -4297,7 +4375,7 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
   };
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
-    await uploadRun(host, prepared.connectionId, id, options, files, signal);
+    Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal));
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,

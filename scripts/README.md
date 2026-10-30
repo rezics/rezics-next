@@ -206,7 +206,12 @@ Admission retries races against other callers. The default probe interval is fiv
    closes another run's control path.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
-   Omit Git metadata, `node_modules` and root `.temp` files.
+   Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in
+   an ignored, unique directory under root `.temp` and include its manifest and pack in the same upload. The snapshot
+   retains the checkout's real `HEAD`, reachable history and staged index tree, without transferring `.git`, its
+   mutable index, configuration, remotes, credentials, hooks, reflogs or object alternates. A reusable immutable pack
+   is accepted only when its object format, `HEAD`, index tree and manifest/pack integrity match. Snapshot staging
+   reports its artifact bytes; the per-run local staging directory is removed after transfer, including on failure.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
    After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;
@@ -243,7 +248,11 @@ Admission retries races against other callers. The default probe interval is fiv
    `.temp/remote-check/receipts/<run-id>/`, and retains the timeout cause if returns fail. Worker-check records the same
    reason in its physical ledger and terminal result, without local fallback or a timeout retry. A command's own exit
    124 or test timeout is not this infrastructure classification. The later controller timer is only a recovery guard.
-   Prepare dependencies at the copied checkout root, then run the command in its requested directory. A Python 3
+   For Bun-backed commands, before dependency installation the bootstrap verifies the transferred manifest and pack,
+   then restores a genuine independent repository with a private writable index and worktree registry. It does not
+   check out over the synced files, so tracked, staged, unstaged and untracked bytes remain intact. Missing or corrupt
+   artifacts fail preparation before `command-started`; the manifest and pack are removed after restore and excluded
+   from refreshed bases. Prepare dependencies at the copied checkout root, then run the command in its requested directory. A Python 3
    supervisor inside the run's systemd scope and the independent host monitor apply an absolute **180,000 ms** preparation deadline, starting before base refresh and
    pinned-runtime verification/download and including cache lock waits, installation, lifecycle children, artifact
    verification, publication and restore. Output and CPU activity never extend it. Override it with
