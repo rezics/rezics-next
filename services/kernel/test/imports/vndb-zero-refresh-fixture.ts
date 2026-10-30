@@ -207,12 +207,24 @@ export async function runJourney() {
     const voteControl = async () => ({
       figure: await figures!.figure(figureSubject),
       votes: (
-        await figures!.database.admin.query('SELECT * FROM rating.vote WHERE target_id=$1 ORDER BY voter_id', [
-          figureSubject,
-        ])
+        await Promise.all(
+          figures!.globalVoters.map(
+            async (voter) =>
+              (
+                await figures!.database.admin.query(
+                  'SELECT * FROM rating.vote WHERE route=$1 AND voter_id=$2 AND target_id=$3',
+                  [routeOf(voter.id), voter.id, figureSubject],
+                )
+              ).rows,
+          ),
+        )
+      ).flat(),
+      importedVotes: (
+        await runtime.database.admin.query(
+          'SELECT * FROM rating.vote WHERE route=$1 AND voter_id=$2 AND target_id=$3',
+          [routeOf(runtime.identity.bulk.accountId), runtime.identity.bulk.accountId, subject],
+        )
       ).rows,
-      importedVotes: (await runtime.database.admin.query('SELECT * FROM rating.vote WHERE target_id=$1', [subject]))
-        .rows,
     });
     const nativeVotesAndFigureBefore = await voteControl();
     expect(nativeVotesAndFigureBefore.votes.length).toBeGreaterThan(0);
