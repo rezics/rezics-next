@@ -5,6 +5,7 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import { claimRealmPresentationMedia, readRealmPresentationImages } from '../../src/content/realm-media.ts';
 import { eraseAccountUploadItem } from '../../src/content/account-erasure-uploads.ts';
 import { runCommand } from '../../src/command/command.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { testAccess } from '../support/test-kernel.ts';
@@ -132,6 +133,23 @@ test('native Realm management selects only matching available same-Realm uploade
   const remote = await upload(fixture.protectedRealm.realmId, 'realm-icon');
   await fixture.grant(fixture.alice.accountId, realmId, ['realm:manage']);
   const otherUploader = await upload(realmId, 'realm-icon', fixture.alice.bearer, fixture.alice.websiteBearer);
+  const reservation = await fixture.call('GET', `/v1/media/${otherUploader}`, { bearer: fixture.alice.bearer });
+  expect(reservation.response.status).toBe(200);
+  await fixture.revoke(realmId, fixture.alice.accountId, ['realm:manage']);
+  expect(
+    (
+      await fixture.call('POST', `/v1/media/${otherUploader}:complete`, {
+        bearer: fixture.alice.websiteBearer,
+        body: {
+          containerId: realmId,
+          reservationRequestId: reservation.value.media.reservationRequestId,
+          byteCount: reservation.value.media.byteCount,
+          sha256: reservation.value.media.sha256,
+        },
+      })
+    ).response.status,
+  ).toBe(403);
+
   for (const [avatar, cover] of [
     [banner, null],
     [unprocessed, null],
@@ -151,7 +169,7 @@ test('native Realm management selects only matching available same-Realm uploade
       await claimRealmPresentationMedia(tx, { realmId, author: actor, avatarMediaId: icon, bannerMediaId: banner });
       throw new Error('Standalone claim must never execute');
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow(GrantDeniedError);
   expect((await select(realmId, icon, banner)).response.status).toBe(200);
   const result = await summaries(realmId, icon, banner, null);
   expect(result.avatar).toMatchObject({

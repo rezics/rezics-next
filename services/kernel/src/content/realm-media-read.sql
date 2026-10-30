@@ -1,4 +1,7 @@
 -- One exact object. The slot constraint bounds the derivative subquery to twelve rows.
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :media_id::uuid AS media_id
+)
 SELECT m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
        m.claimed_realm_id, m.claimed_at::text, m.erased, m.collection_pending,
        m.taken_down, m.security_revision::text, m.sha256,
@@ -9,8 +12,7 @@ SELECT m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
            'key', v.key, 'sha256', v.sha256, 'mediaType', v.media_type, 'byteCount', v.byte_count
          ) ORDER BY v.format, v.width)::text
          FROM content.media_variant v
-         WHERE v.route = :route::integer AND v.media_id = m.media_id
+         WHERE v.route = i.route AND v.media_id = m.media_id
        ), '[]') AS variants_json
-FROM content.media m
-WHERE m.route = :route::integer AND m.media_id = :media_id::uuid
+FROM input i JOIN content.media m ON m.route = i.route AND m.media_id = i.media_id
 LIMIT 1;

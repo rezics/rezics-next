@@ -98,7 +98,7 @@ export async function readRealmPresentationImages(
         value: {
           id: row.media_id,
           containerId: row.container_id,
-          digest: row.sha256,
+          digest: largest.sha256,
           width: largest.width,
           height: largest.height,
           variants: variants.map(({ format, width, height }) => ({ format, width, height })),

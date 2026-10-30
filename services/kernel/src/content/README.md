@@ -545,7 +545,7 @@ prior revision claims survive. No separate claim HTTP route or generic claim con
 `readRealmPresentationImages` returns the exact optional image types exported by `realm-media.ts`. Unset, erased,
 concealed, unclaimed or mismatched images produce `{state:'none',value:null}` without identifying reasons.
 Optional dependency failures produce `unavailable` with no cached value. Available summaries contain only native
-media/container IDs, digest, actual largest derivative dimensions and at most twelve derivative format/width/height
+media/container IDs, largest derivative digest and actual dimensions and at most twelve derivative format/width/height
 facts. Missing stored placeholder/focal-point metadata is null; uploaded native assets have null credit. No storage
 key, original, account identity or source URL is disclosed.
 
