@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { exportJWK, generateKeyPair } from 'jose';
+import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import type { SourceRecord } from '@rezics/conversion';
 import { converter_revision } from '@rezics/conversion/vndb';
 import { runImportCli } from '../../../importer/src/cli.ts';
@@ -89,9 +89,25 @@ export async function runJourney() {
     ];
     const capture = captureVndbStatistics(runtime);
     const records = new Map<string, SourceRecord>();
+    let credential = runtime.bulk;
+    let renewal: Promise<void> | undefined;
+    const currentBearer = async () => {
+      if ((decodeJwt(credential.bearer).exp ?? 0) * 1000 < Date.now() + 60_000) {
+        renewal ??= support
+          .issue(runtime.identity.bulk.accountId, runtime.identity.client.scopes)
+          .then((fresh) => {
+            credential = fresh;
+          })
+          .finally(() => {
+            renewal = undefined;
+          });
+        await renewal;
+      }
+      return credential.bearer;
+    };
     const ordinaryTransport = createImportTransport({
       origin: VNDB_API_ORIGIN,
-      tokenProvider: async () => runtime.identity.bulk.bearer,
+      tokenProvider: currentBearer,
       fetch: capture.fetch,
     });
     const open = () =>
@@ -131,7 +147,7 @@ export async function runJourney() {
     async function publicRead(path: string) {
       const response = await runtime.replay(
         new Request(new URL(path, VNDB_API_ORIGIN), {
-          headers: { authorization: `Bearer ${runtime.identity.bulk.bearer}` },
+          headers: { authorization: `Bearer ${await currentBearer()}` },
         }),
       );
       expect(response.status, await response.clone().text()).toBe(200);
@@ -285,6 +301,7 @@ export async function runJourney() {
     const pendingClearBytes = pending.map((e) => e.body),
       pendingClearKeys = pending.map((e) => e.idempotencyKey);
     expect(pending[0]!.receipt).not.toBeNull();
+    await support.renewManagement();
     await support.setStatisticGrant(false);
     const replay = await capture.replay(pending[0]!);
     const revokedReplay = {
@@ -294,6 +311,7 @@ export async function runJourney() {
     expect(replay.status).toBe(403);
     expect(JSON.stringify(replay.response)).not.toContain('sourceRecordId');
     expect(JSON.stringify(replay.response)).not.toContain('removed');
+    await support.renewManagement();
     await support.setStatisticGrant(true);
     // Preserve the existing native archive admission gate. The valid replacement archive has
     // positive votes, but its grouped SourceRecord stream must remain unread during sealed replay.
