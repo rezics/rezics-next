@@ -11,6 +11,8 @@ import { uploadAvatar } from '../threads/upload';
 import { profileChanges } from './profile-data';
 import { ProfileEditor, profileFieldErrors, type ProfileScope } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
+import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
+import type { AvatarUpload } from './profile-avatar-upload';
 
 function profileError(status: number) {
   if (status === 400 || status === 422) return m.settings_profile_invalid_error();
@@ -82,17 +84,24 @@ export function ProfileSection() {
   return <ProfileCard key={writable ? 'signed-in' : 'unavailable'} editor={editor} writable={writable} />;
 }
 
-export function ProfileCard({ editor, writable = true }: { editor: ProfileEditor; writable?: boolean }) {
+export function ProfileCard({
+  editor,
+  writable = true,
+  avatarUpload,
+}: {
+  editor: ProfileEditor;
+  writable?: boolean;
+  avatarUpload?: AvatarUpload;
+}) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const profile = state.draft;
   const ids = useId();
-  const [uploading, setUploading] = useState(false);
-  const uploadLock = useRef(false);
-  const [uploadError, setUploadError] = useState(false);
   const [validate, setValidate] = useState(false);
   const errors = profile && validate ? profileFieldErrors(profile) : {};
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.phase === 'unavailable';
+  const avatar = useProfileAvatarUpload(editor, closed, avatarUpload);
+  const uploading = avatar.blocked;
   const changed =
     !!profile &&
     !!state.known &&
@@ -105,22 +114,6 @@ export function ProfileCard({ editor, writable = true }: { editor: ProfileEditor
         links: profile.links,
       }),
     ).length > 0;
-  async function pickAvatar(file: File | undefined) {
-    if (!file || !profile || closed || uploadLock.current) return;
-    uploadLock.current = true;
-    editor.edit({});
-    setUploading(true);
-    setUploadError(false);
-    try {
-      const uploaded = await uploadAvatar(profile.accountId, file, new AbortController().signal);
-      editor.edit({ avatar: { media: uploaded.src } });
-    } catch {
-      setUploadError(true);
-    } finally {
-      uploadLock.current = false;
-      setUploading(false);
-    }
-  }
   const fieldError = (field: string) =>
     errors[field] ? (
       <p id={`${ids}-${field}-error`} className="text-sm text-destructive">
@@ -177,50 +170,12 @@ export function ProfileCard({ editor, writable = true }: { editor: ProfileEditor
               />
               {fieldError('biography')}
             </label>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">{m.settings_profile_avatar()}</p>
-              {profile.avatar ? (
-                <div className="size-20 overflow-hidden rounded-full bg-muted">
-                  {'variants' in profile.avatar ? (
-                    <MediaImage
-                      {...profile.avatar}
-                      className="rounded-full"
-                      frame={1}
-                      sizes="80px"
-                      alt=""
-                      src={({ media, format, width }) => coverSrc(media, format, width)}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex cursor-pointer items-center rounded-md border px-4 py-2 text-sm focus-within:ring-2 focus-within:ring-ring">
-                  {m.settings_profile_choose_avatar()}
-                  <input
-                    className="sr-only"
-                    type="file"
-                    accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
-                    disabled={closed || uploading || busy}
-                    onChange={(event) => {
-                      void pickAvatar(event.target.files?.[0]);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-                {profile.avatar ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={closed || uploading || busy}
-                    onClick={() => editor.edit({ avatar: null })}
-                  >
-                    {m.settings_profile_remove_avatar()}
-                  </Button>
-                ) : null}
-                {uploading ? <span role="status">{m.settings_profile_uploading()}</span> : null}
-              </div>
-              {uploadError ? <p role="alert">{m.settings_profile_avatar_error()}</p> : null}
-            </div>
+            <ProfileAvatar
+              avatar={profile.avatar}
+              known={state.known?.avatar ?? null}
+              upload={avatar}
+              disabled={closed || busy || !!state.attempt}
+            />
             <div className="space-y-3">
               <h3 className="font-medium">{m.settings_profile_links()}</h3>
               {profile.links.map((link, index) => (
