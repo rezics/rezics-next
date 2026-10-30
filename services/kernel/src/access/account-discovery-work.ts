@@ -4,13 +4,22 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 
-const basis = { actorAccountId: '00000000-0000-8000-8000-000000000001',
-  clientId: 'internal-access', requestedBy: null };
+const basis = {
+  actorAccountId: '00000000-0000-8000-8000-000000000001',
+  clientId: 'internal-access',
+  requestedBy: null,
+};
 type Intent = { route: number; accountId: string; revision: string };
 function validate(input: Intent) {
   const route = routeOf(input.accountId);
-  if (route === null || !Number.isInteger(input.route) || input.route < 0 || input.route > 65535 ||
-    !/^[1-9][0-9]{0,18}$/.test(input.revision) || BigInt(input.revision) > 9223372036854775807n)
+  if (
+    route === null ||
+    !Number.isInteger(input.route) ||
+    input.route < 0 ||
+    input.route > 65535 ||
+    !/^[1-9][0-9]{0,18}$/.test(input.revision) ||
+    BigInt(input.revision) > 9223372036854775807n
+  )
     throw new TypeError('Account discovery intent requires exact native keys and revision');
   return route;
 }
@@ -20,36 +29,51 @@ function validate(input: Intent) {
  * Per-claim-partition high water survives receipt/history expiry and makes replay
  * harmless. Every cursor write and source revision advance commits together.
  */
-export async function consumeAccountDiscoveryClaim(
-  deps: { pool: Pool; clock?: () => Date }, input: Intent,
-) {
+export async function consumeAccountDiscoveryClaim(deps: { pool: Pool; clock?: () => Date }, input: Intent) {
   const route = validate(input);
   const claimPartition = partitionOf(input.route);
-  const source = await withConnection(deps.pool, (client) => client.query(
-    `SELECT 1 FROM access.account_discovery_claim_intent
+  const source = await withConnection(deps.pool, (client) =>
+    client.query(
+      `SELECT 1 FROM access.account_discovery_claim_intent
      WHERE route=$1 AND account_id=$2 AND revision >= $3::bigint`,
-    [input.route, input.accountId, input.revision],
-  ));
+      [input.route, input.accountId, input.revision],
+    ),
+  );
   if (!source.rowCount) return false;
-  const command = await runCommand(deps.pool, { partition: partitionOf(route), clock: deps.clock, basis }, async (tx) => {
-    const account = await tx.query<{ state: string }>(
-      'SELECT state FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [route, input.accountId],
-    );
-    if (!account.rows[0] || account.rows[0].state === 'deleted') return noEffect(true);
-    const consumed = await tx.query(
-      `INSERT INTO access.account_discovery_claim_cursor(route,account_id,claim_partition,revision)
+  const command = await runCommand(
+    deps.pool,
+    { partition: partitionOf(route), clock: deps.clock, basis },
+    async (tx) => {
+      const account = await tx.query<{ state: string }>(
+        'SELECT state FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE',
+        [route, input.accountId],
+      );
+      if (!account.rows[0] || account.rows[0].state === 'deleted') return noEffect(true);
+      const consumed = await tx.query(
+        `INSERT INTO access.account_discovery_claim_cursor(route,account_id,claim_partition,revision)
        VALUES ($1,$2,$3,$4::bigint) ON CONFLICT (route,account_id,claim_partition)
        DO UPDATE SET revision=EXCLUDED.revision
        WHERE access.account_discovery_claim_cursor.revision < EXCLUDED.revision RETURNING revision`,
-      [route, input.accountId, claimPartition, input.revision],
-    );
-    if (!consumed.rowCount) return noEffect(true);
-    // The native hook assigns the revision and queues the source notification.
-    await tx.query('UPDATE access.account SET discovery_revision=discovery_revision WHERE route=$1 AND account_id=$2',
-      [route, input.accountId]);
-    return { value: true, events: [{ type: 'com.rezics.access.account-updated.v1',
-      subject: input.accountId, data: { accountId: input.accountId } }] };
-  });
+        [route, input.accountId, claimPartition, input.revision],
+      );
+      if (!consumed.rowCount) return noEffect(true);
+      // The native hook assigns the revision and queues the source notification.
+      await tx.query(
+        'UPDATE access.account SET discovery_revision=discovery_revision WHERE route=$1 AND account_id=$2',
+        [route, input.accountId],
+      );
+      return {
+        value: true,
+        events: [
+          {
+            type: 'com.rezics.access.account-updated.v1',
+            subject: input.accountId,
+            data: { accountId: input.accountId },
+          },
+        ],
+      };
+    },
+  );
   return command.value;
 }
 
@@ -65,8 +89,16 @@ async function deliver(deps: { pool: Pool; clock?: () => Date }, input: Intent, 
       [input.route, input.accountId, input.revision],
     );
     if (!removed.rowCount) return noEffect(false);
-    return { value: true, events: [{ type: 'com.rezics.access.account-discovery-changed.v1',
-      subject: input.accountId, data: { ...input, source } }] };
+    return {
+      value: true,
+      events: [
+        {
+          type: 'com.rezics.access.account-discovery-changed.v1',
+          subject: input.accountId,
+          data: { ...input, source },
+        },
+      ],
+    };
   });
 }
 
@@ -74,17 +106,31 @@ async function deliver(deps: { pool: Pool; clock?: () => Date }, input: Intent, 
  * caller may repeat the partition; coalescing and consumed high water are durable.
  */
 export async function redriveAccountDiscovery(
-  deps: { pool: Pool; clock?: () => Date }, partition: number, limit = 100,
+  deps: { pool: Pool; clock?: () => Date },
+  partition: number,
+  limit = 100,
 ) {
-  if (!Number.isInteger(partition) || partition < 0 || partition > 4095 ||
-    !Number.isInteger(limit) || limit < 1 || limit > 100)
+  if (
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition > 4095 ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 100
+  )
     throw new RangeError('Account discovery redrive requires a native partition and limit 1..100');
   const read = (table: 'account_discovery_intent' | 'account_discovery_claim_intent') =>
-    withConnection(deps.pool, async (client) => (await client.query<Intent>(
-      `SELECT route, account_id::text AS "accountId", revision::text FROM access.${table}
+    withConnection(
+      deps.pool,
+      async (client) =>
+        (
+          await client.query<Intent>(
+            `SELECT route, account_id::text AS "accountId", revision::text FROM access.${table}
        WHERE route >= $1 AND route < $2 ORDER BY route,account_id LIMIT $3`,
-      [partition * 16, (partition + 1) * 16, limit],
-    )).rows);
+            [partition * 16, (partition + 1) * 16, limit],
+          )
+        ).rows,
+    );
   const foreign = await read('account_discovery_claim_intent');
   let delivered = 0;
   for (const input of foreign) {
@@ -101,15 +147,18 @@ export async function redriveAccountDiscovery(
  * step is bounded and does not hold any connection across foreign commands.
  */
 export function registerAccountDiscoveryWork(context: WorkContext): void {
-  context.addEffects([{
-    name: 'account_discovery_redrive',
-    types: ['com.rezics.access.account-updated.v1', 'com.rezics.access.account-tombstoned.v1'],
-    async run(event) {
-      const data = event.data as { accountId?: string };
-      const route = data.accountId ? routeOf(data.accountId) : null;
-      if (route !== null) await redriveAccountDiscovery({ pool: context.pool, clock: context.clock }, partitionOf(route));
+  context.addEffects([
+    {
+      name: 'account_discovery_redrive',
+      types: ['com.rezics.access.account-updated.v1', 'com.rezics.access.account-tombstoned.v1'],
+      async run(event) {
+        const data = event.data as { accountId?: string };
+        const route = data.accountId ? routeOf(data.accountId) : null;
+        if (route !== null)
+          await redriveAccountDiscovery({ pool: context.pool, clock: context.clock }, partitionOf(route));
+      },
     },
-  }]);
+  ]);
   context.addService(() => {
     let stopped = false;
     let partition = 0;
@@ -127,6 +176,12 @@ export function registerAccountDiscoveryWork(context: WorkContext): void {
       })();
     };
     timer = setTimeout(tick, 0);
-    return { async stop() { stopped = true; clearTimeout(timer); await pending; } };
+    return {
+      async stop() {
+        stopped = true;
+        clearTimeout(timer);
+        await pending;
+      },
+    };
   });
 }
