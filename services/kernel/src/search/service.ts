@@ -550,8 +550,9 @@ export function createSearchService({
         }
         const installed = operations;
         const retainedRead = installed ? await indexRequest(() => readPublicSearchPage({
-          operations: installed, context, plan: capturePlan, capture,
-          prepare: preparePublic,
+          operations: installed, context, plan: capturePlan,
+          ...(capture ? { capture } : {}),
+          ...(preparePublic ? { prepare: preparePublic } : {}),
           ...(retained ? { continuation: retained } : {}),
           check: checkCandidates,
           canonicalId: (subject) => subject.id,
