@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import type { FilterDocument as Filter } from '@rezics/filter';
 import { randomUUID } from 'node:crypto';
-import type { QueryResult, QueryResultRow } from 'pg';
+import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -17,6 +17,10 @@ import {
   type SemanticOutcomeDriver,
 } from '../semantic/outcome-driver.ts';
 export { releasedDiscoveryFeatures, type ReleasedDiscoveryFeature } from '../semantic/outcome-driver.ts';
+import {
+  releasedDiscoveryRuntime,
+  type ReleasedDiscoveryRuntime,
+} from '../search/support/released-discovery-runtime.ts';
 
 export const releasedDiscoveryVersion = 1 as const;
 type Account = Awaited<ReturnType<SemanticOutcomeDriver['fixtures']['person']>>;
@@ -81,6 +85,7 @@ export type RecipeGroup = Readonly<{
 /** Closed extension points name missing owner data without pretending an API exists. */
 export interface ReleasedDiscoveryFixture {
   readonly version: 1;
+  readonly search?: ReleasedDiscoveryRuntime;
   readonly release: { digest: string; definition: Release; activeHead: number };
   readonly personas: Readonly<Record<'alice' | 'bob' | 'outsider' | 'unscoped', Account>>;
   readonly meaning: {
@@ -166,19 +171,33 @@ const expectStatus = (response: HttpResponse, status: number, operation: string)
 
 /** Owns a native driver; never accepts a transport, truth callback or replacement release. */
 export async function createReleasedDiscoveryFixture(
-  options: { version: 1 } = { version: releasedDiscoveryVersion },
+  options: { version: 1; kernelPool?: (url: string) => Pool | Promise<Pool>; search?: 'native' } = {
+    version: releasedDiscoveryVersion,
+  },
 ): Promise<ReleasedDiscoveryFixture> {
   if (options.version !== releasedDiscoveryVersion) throw new Error('Unsupported released discovery fixture version');
+  const native = options.search === 'native' ? releasedDiscoveryRuntime(options.kernelPool) : undefined;
   const driver = await createSemanticDriver(
     (config) =>
       createKernel({
         ...config,
+        ...(native ? { search: native.service(config) } : {}),
         writeRate: createWriteRateLimiter({
           secret: 'released-discovery-native-test-rate-secret',
           overrides: JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
         }),
       }),
-    { strictCleanup: true },
+    {
+      strictCleanup: true,
+      ...(options.kernelPool ? { kernelPool: options.kernelPool } : {}),
+      ...(native
+        ? {
+            isolatedAuth: true,
+            linkProjection: 'external',
+            beforeClose: () => native.close(),
+          }
+        : {}),
+    },
   );
   try {
     const [alice, bob, outsider, unscoped] = await Promise.all([
@@ -297,6 +316,7 @@ export async function createReleasedDiscoveryFixture(
     let recipes: RecipeGroup | undefined;
     const fixture: ReleasedDiscoveryFixture = {
       version: releasedDiscoveryVersion,
+      ...(native ? { search: native.control } : {}),
       release: {
         digest: bundledDigest,
         definition: read.body.release as Release,
@@ -534,6 +554,7 @@ export async function createReleasedDiscoveryFixture(
         };
       },
       async catchUp(subjects) {
+        if (native) return native.control.converge(subjects);
         const projection = linkProjection(driver.fixtures.pool);
         for (const partition of new Set(subjects.map((subject) => partitionOf(routeOf(subject.id)!)))) {
           let done = false;
@@ -555,6 +576,10 @@ export async function createReleasedDiscoveryFixture(
         return driver.close();
       },
     };
+    if (native)
+      await native.start(driver.fixtures.runtime, (path, body) =>
+        request('anonymous', body === undefined ? 'GET' : 'POST', path, body),
+      );
     return fixture;
   } catch (error) {
     try {

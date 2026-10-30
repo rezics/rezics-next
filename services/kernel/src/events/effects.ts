@@ -6,7 +6,7 @@ import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
 import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
-import { readBatch, type CloudEvent, type Envelope } from './log.ts';
+import { projectBatch, type CloudEvent, type Envelope } from './log.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
 export const EFFECTS_QUEUE = 'effects';
@@ -177,7 +177,7 @@ export async function shutdownWork(): Promise<void> {
 
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
 export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number) {
-  return readBatch(pool, { consumer: EFFECTS_CONSUMER, partition, apply: effects.enqueue });
+  return projectBatch(pool, { consumer: EFFECTS_CONSUMER, partition, apply: effects.enqueue });
 }
 
 export function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>): Relay {

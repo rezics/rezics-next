@@ -25,6 +25,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
 import { setupContent } from '../../src/content/setup.ts';
 import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
+import { isolatedOutcomeAuth } from './isolated-outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
 export const releasedDiscoveryFeatures = Object.freeze(['personal_library', 'reading_progress'] as const);
@@ -115,6 +116,10 @@ export type SemanticOutcomeDriver = SemanticDriver & {
 export type SemanticOutcomeOptions = {
   /** Named development gate grants for the original fourteen semantic capability scenarios only. */
   originalCapabilities?: boolean;
+  /** Actual HTTP/relay runtime pool; fixture seeding and inspection keep their own pool. */
+  kernelPool?: (url: string) => Pool | Promise<Pool>;
+  /** Keep Auth's process-global SDK out of an in-process default kernel worker. */
+  isolatedAuth?: boolean;
   linkProjection?: 'owned' | 'external';
   beforeClose?: () => Promise<void>;
   onOwnedResource?: OwnedResourceObserver;
@@ -157,7 +162,8 @@ async function startDriver(
   let owner: Pool | undefined;
   const owned: string[] = [];
   let pool: Pool | undefined;
-  let release: (() => void) | undefined;
+  let runtimePool: Pool | undefined;
+  let release: (() => void | Promise<void>) | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
   let completion: Promise<void> | undefined;
   const close = () => {
@@ -173,8 +179,9 @@ async function startDriver(
         }
       };
       await attempt(async () => options.beforeClose?.());
-      await attempt(() => release?.());
+      await attempt(async () => release?.());
       await attempt(async () => relays?.stop());
+      if (runtimePool && runtimePool !== pool) await attempt(() => runtimePool!.end());
       await attempt(async () => pool?.end());
       if (owner) {
         for (const name of owned.reverse()) await attempt(() => dropTestDatabase(owner!, name));
@@ -203,18 +210,21 @@ async function startDriver(
     await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     const kernelUrl = databaseUrl(source, kernelName);
     pool = createPool(kernelUrl);
+    runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
     timer.mark('kernel database');
-
-    const auth = await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
-    const { issuer, audience, service, host, database: authPool } = auth;
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+    const auth = options.isolatedAuth
+      ? await isolatedOutcomeAuth(source, kernelUrl, routeKey, sessionKeys, options.onOwnedResource)
+      : await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
+    if ('close' in auth) release = () => auth.close();
+    const { issuer, audience, service, host } = auth;
     const authJwksUrl = `${issuer}/.well-known/jwks.json`;
     let runtimeAuth: { issuer: string; audience: string; jwksUrl: string } | undefined;
     let access!: ReturnType<typeof createAccess>;
     const app = compose({
-      pool,
+      pool: runtimePool,
       routeKey,
       tokens: sessionKeys,
       writeRate: createWriteRateLimiter({
@@ -244,21 +254,23 @@ async function startDriver(
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     const governanceScopes = [...scopes, 'gate:any'];
     const knownScopes = new Set(governanceScopes);
-    const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
-    const { ports: registrationPorts } = createRegistrationPorts({
-      pool,
-      authPool,
-      routeKey,
-      referenceKeys: sessionKeys,
-    });
-    release = auth.bind({
-      trustedAccess: createAuthBindings({
+    if ('bind' in auth) {
+      const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
+      const { ports: registrationPorts } = createRegistrationPorts({
         pool,
-        ...registration,
-        verifyPendingIdentity: registration.verifyNativePendingIdentity,
-      }),
-      access: registrationPorts,
-    });
+        authPool: auth.database,
+        routeKey,
+        referenceKeys: sessionKeys,
+      });
+      release = auth.bind({
+        trustedAccess: createAuthBindings({
+          pool,
+          ...registration,
+          verifyPendingIdentity: registration.verifyNativePendingIdentity,
+        }),
+        access: registrationPorts,
+      });
+    }
     await auth.registerClient(clientId, governanceScopes);
     timer.mark('auth side');
 
@@ -456,7 +468,7 @@ async function startDriver(
     );
 
     if ((options.linkProjection ?? 'owned') === 'owned')
-      relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 25 });
+      relays = startRelays(runtimePool, [linkProjection(runtimePool)], { intervalMs: 25 });
 
     const driver: SemanticDriver = {
       globalContext: GLOBAL_CONTEXT,

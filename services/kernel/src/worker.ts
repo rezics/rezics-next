@@ -13,6 +13,8 @@ export type WorkerConfig = {
   poolSize: number;
   /** Trusted service composition only; never read from the environment. */
   clock?: KernelClock;
+  /** Trusted composition only. The worker owns and ends the returned runtime pool. */
+  kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
 };
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
@@ -55,9 +57,17 @@ export async function startWorker(
   modules: readonly WorkModule[] = KERNEL_WORK_MODULES,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  const pool = new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  const pool = config.kernelPool
+    ? await config.kernelPool(config.databaseUrl)
+    : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
   pool.on('error', () => {});
-  const client = await createWorkClient(config.databaseUrl, pool);
+  let client: Awaited<ReturnType<typeof createWorkClient>>;
+  try {
+    client = await createWorkClient(config.databaseUrl, pool);
+  } catch (error) {
+    await pool.end();
+    throw error;
+  }
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
   let starting: Promise<void> | undefined;
