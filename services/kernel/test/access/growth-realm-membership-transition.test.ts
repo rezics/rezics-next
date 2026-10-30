@@ -791,9 +791,7 @@ test.serial(
       const cursor = firstPage.cursor!;
       const changed = Math.floor(cursor.length / 2);
       const forged = cursor.slice(0, changed) + (cursor[changed] === 'a' ? 'b' : 'a') + cursor.slice(changed + 1);
-      await expect(
-        reconciler.page({ accountId: state.persona.accountId, cursor: forged }),
-      ).rejects.toThrow();
+      await expect(reconciler.page({ accountId: state.persona.accountId, cursor: forged })).rejects.toThrow();
       await expect(reconciler.page({ accountId: other.accountId, cursor })).rejects.toThrow();
       const otherPage = await reconcileCommunityMembership({ accountId: other.accountId });
       expect(otherPage.completed).toBe(true);
@@ -834,10 +832,14 @@ test.serial(
         [overflowRoute, overflow.accountId, historical],
       );
       await expect(reconciler.page({ accountId: overflow.accountId })).rejects.toThrow();
-      expect((await state.system.database.pool.query(
-        'SELECT 1 FROM access.realm_membership_reconciliation WHERE route=$1 AND account_id=$2',
-        [overflowRoute, overflow.accountId],
-      )).rows).toEqual([]);
+      expect(
+        (
+          await state.system.database.pool.query(
+            'SELECT 1 FROM access.realm_membership_reconciliation WHERE route=$1 AND account_id=$2',
+            [overflowRoute, overflow.accountId],
+          )
+        ).rows,
+      ).toEqual([]);
     } finally {
       await worker.stop();
       if (previousBarrier === undefined) delete process.env.KERNEL_REALM_MEMBERSHIP_BARRIER;
