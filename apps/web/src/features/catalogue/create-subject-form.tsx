@@ -380,21 +380,29 @@ export function CreateSubjectForm({
                     <ul className="list-inside list-disc">
                       {[...new Set(errors.map((error) => control(error.pointer)))].map((id) => (
                         <li key={id}>
-                          {profile?.errorLabel?.(id) ? <a className="underline" href={`#${id}`}>{profile.errorLabel(id)}</a> : <>
-                          <a className="underline" href={`#${id}`}>
-                            {profile?.control?.(errors.find((error) => control(error.pointer) === id)?.pointer ?? '')
-                              ? errors.find((error) => control(error.pointer) === id)?.pointer
-                              : id === 'create-type'
-                                ? m.catalogue_create_type({}, options)
-                                : id.includes('-language-')
-                                  ? m.catalogue_create_language({}, options)
-                                  : id.includes('-description-')
-                                    ? m.catalogue_create_description({}, options)
-                                    : id.includes('-aliases-')
-                                      ? m.catalogue_create_aliases({}, options)
-                                      : m.catalogue_create_label({}, options)}
-                          </a>
-                          </>}
+                          {profile?.errorLabel?.(id) ? (
+                            <a className="underline" href={`#${id}`}>
+                              {profile.errorLabel(id)}
+                            </a>
+                          ) : (
+                            <>
+                              <a className="underline" href={`#${id}`}>
+                                {profile?.control?.(
+                                  errors.find((error) => control(error.pointer) === id)?.pointer ?? '',
+                                )
+                                  ? errors.find((error) => control(error.pointer) === id)?.pointer
+                                  : id === 'create-type'
+                                    ? m.catalogue_create_type({}, options)
+                                    : id.includes('-language-')
+                                      ? m.catalogue_create_language({}, options)
+                                      : id.includes('-description-')
+                                        ? m.catalogue_create_description({}, options)
+                                        : id.includes('-aliases-')
+                                          ? m.catalogue_create_aliases({}, options)
+                                          : m.catalogue_create_label({}, options)}
+                              </a>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>

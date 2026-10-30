@@ -247,7 +247,8 @@ export function LiteraryProfile({
             hideHeading: true,
             href: `/${locale}/catalogue/literary`,
             labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
-            descriptionLanguage: (type) => pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
+            descriptionLanguage: (type) =>
+              pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
             control: (pointer) => {
               const [, kind, escaped, index] = pointer.split('/');
               if (kind !== 'statements') return undefined;

@@ -16,10 +16,7 @@ export function LiteraryProfileEntry({
   if (type && !isLiteraryType(type)) return null;
   const entry = catalogueEntries.literary({ id, label, locale });
   return (
-    <a
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-      href={entry.href}
-    >
+    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
       {entry.label}
     </a>
   );
