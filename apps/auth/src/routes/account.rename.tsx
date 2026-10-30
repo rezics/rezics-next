@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -39,45 +39,55 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
   const alert = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
 
+  const receiveCurrent = useCallback((result: RenameRead) => {
+    const saved = readRenameContinuation();
+    if (saved && result.kind === 'ready') {
+      if (saved.accountId !== result.target.accountId) {
+        clearRenameContinuation();
+        attempt.current = null;
+        setLocked(false);
+        setHandle('');
+        setConfirmed(false);
+        setMessage(m.auth_rename_denied());
+      } else if (saved.submitted || saved.operation.expectedHandle === result.target.handle) {
+        attempt.current = saved;
+        setHandle(saved.operation.handle);
+        setLocked(saved.submitted);
+        setConfirmed(false);
+        setReturned(true);
+      } else {
+        clearRenameContinuation();
+        attempt.current = null;
+        setConfirmed(false);
+        setMessage(m.auth_rename_conflict());
+      }
+    }
+    setCurrent(result);
+  }, []);
+
   useEffect(() => {
     let active = true;
     void source
       .readCurrent()
       .catch((): RenameRead => ({ kind: 'unavailable' }))
       .then((result) => {
-        if (!active) return;
-        const saved = readRenameContinuation();
-        if (saved && result.kind === 'ready') {
-          if (saved.accountId !== result.target.accountId) {
-            clearRenameContinuation();
-            setMessage(m.auth_rename_denied());
-          } else if (saved.submitted || saved.operation.expectedHandle === result.target.handle) {
-            attempt.current = saved;
-            setHandle(saved.operation.handle);
-            setLocked(saved.submitted);
-            setReturned(true);
-          } else {
-            clearRenameContinuation();
-            setMessage(m.auth_rename_conflict());
-          }
-        }
-        setCurrent(result);
+        if (active) receiveCurrent(result);
       });
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [source, receiveCurrent]);
   useLayoutEffect(() => {
     if (inputError) input.current?.focus();
-    else if (message) alert.current?.focus();
-  }, [inputError, message]);
+    else if (message || current?.kind === 'unavailable' || current?.kind === 'denied') alert.current?.focus();
+  }, [inputError, message, current?.kind]);
 
   async function reload() {
     if (busy.current) return;
     busy.current = true;
     setPending(true);
     try {
-      setCurrent(await source.readCurrent());
+      receiveCurrent(await source.readCurrent());
     } catch {
       setCurrent({ kind: 'unavailable' });
     } finally {
@@ -160,7 +170,9 @@ export function RenameAccountPage({ source = nativeRenameSource }: { source?: Re
         </p>
       ) : current.kind !== 'ready' ? (
         <>
-          <ErrorAlert>{m.auth_rename_unavailable()}</ErrorAlert>
+          <ErrorAlert ref={alert} tabIndex={-1}>
+            {m.auth_rename_unavailable()}
+          </ErrorAlert>
           <Button type="button" disabled={pending} aria-busy={pending} onClick={() => void reload()}>
             {m.auth_rename_reload()}
           </Button>
