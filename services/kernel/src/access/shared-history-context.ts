@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
-import { currentCommand, hasLiveCommandTransaction, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, hasLiveCommandTransaction, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { enrollContextRoleProvenance } from '../semantic/context-role-provenance.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import type { Resource } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
@@ -25,7 +26,7 @@ export type ContextRoleDelivery =
   | Readonly<{ state: 'missing' | 'delivered' | 'not-applicable' }>
   | Readonly<{
       state: 'pending';
-      reason: 'semantic-context-historical-party-receiver-unavailable';
+      reason: 'semantic-context-historical-party-receiver-unavailable' | 'semantic-context-historical-party-enrollment-pending';
       source: ContextRoleOccurrence;
     }>;
 
@@ -60,45 +61,62 @@ export async function readContextRoleProvenance(
   return result.rows;
 }
 
-/** Shared with the deferred native trigger: the SQL entrypoint locks and validates the real
- * occurrence before receiving or transitioning it. No caller-supplied metadata is authoritative. */
-async function deliverNativeOccurrence(tx: CommandTransaction, input: ContextRoleOccurrence): Promise<ContextRoleDelivery> {
+/** Both native callsites use the same Access-owned source lock and validation. The
+ * Source wrapper records its own real forthcoming command fence before enrollment. */
+async function deliverNativeOccurrence(
+  tx: CommandTransaction,
+  input: ContextRoleOccurrence,
+): Promise<Readonly<{ delivery: ContextRoleDelivery; changed: boolean }>> {
   partitionOf(input.route);
   assertOccurrence(input.occurrence);
-  const result = await tx.query<{ outcome: 'missing' | 'delivered' | 'not-applicable' | 'receiver-unavailable' }>(
-    'SELECT access.try_deliver_resource_role_provenance($1,$2) AS outcome',
+  const source = (await tx.query<ContextRoleProvenance>(
+    `SELECT occurrence::text,resource_id::text AS "resourceId",resource_type AS "resourceType",
+       original_creator::text AS "originalCreator",account_id::text AS "accountId",grant_role AS "grantRole",
+       valid::text,side,grant_transaction::text AS "grantTransaction",source_transaction::text AS "sourceTransaction",
+       context_key::text AS "contextKey",delivery
+     FROM access.lock_resource_role_provenance($1,$2)`,
     [input.route, input.occurrence],
-  );
-  const outcome = result.rows[0]?.outcome;
-  switch (outcome) {
-    case 'receiver-unavailable':
-      return {
-        state: 'pending',
-        reason: 'semantic-context-historical-party-receiver-unavailable',
-        source: { route: input.route, occurrence: input.occurrence },
-      };
-    case 'missing':
-    case 'delivered':
-    case 'not-applicable':
-      return { state: outcome };
-    default:
-      throw new TypeError('Invalid native Context role delivery result');
+  )).rows[0];
+  if (!source) return { delivery: { state: 'missing' }, changed: false };
+  if (source.delivery !== 'pending') return { delivery: { state: source.delivery }, changed: false };
+  const pending = (reason: Extract<ContextRoleDelivery, { state: 'pending' }>['reason']) => ({
+    delivery: { state: 'pending' as const, reason, source: input }, changed: false,
+  });
+  if (source.resourceType === 'semantic.context') {
+    const available = (await tx.query<{ available: boolean }>(
+      `SELECT to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)')
+         IS NOT NULL AS available`,
+    )).rows[0]!.available;
+    if (!available) return pending('semantic-context-historical-party-receiver-unavailable');
+    const result = await enrollContextRoleProvenance(tx, { route: input.route, occurrence: source });
+    if (result.state === 'pending') return pending('semantic-context-historical-party-enrollment-pending');
+    // The native guard independently checks the actual Source enrollment, in this same
+    // physical transaction. Neither a caller's key nor a boolean can forge delivery.
+    const state = result.state === 'enrolled' ? 'delivered' : 'not-applicable';
+    await tx.query(
+      `UPDATE access.resource_role_provenance SET delivery=$3,context_key=$4
+       WHERE route=$1 AND occurrence=$2 AND delivery='pending'`,
+      [input.route, input.occurrence, state, result.state === 'enrolled' ? result.contextKey : null],
+    );
+    return { delivery: { state }, changed: true };
   }
+  await tx.query('SELECT access.try_deliver_resource_role_provenance($1,$2)', [input.route, input.occurrence]);
+  return { delivery: { state: 'not-applicable' }, changed: true };
 }
 
-/** Only a live same-home command can drive the request-side adapter. The missing Semantic
- * receiver is explicit pending state, never a false success, empty source or permission denial. */
+/** A live same-home command supplies Source's real native commit, never human authority
+ * reconstructed from historical metadata. Missing/unresolved receiving remains pending. */
 export async function deliverContextRoleProvenance(
   tx: CommandTransaction,
   input: ContextRoleOccurrence,
 ): Promise<ContextRoleDelivery> {
   if (!hasLiveCommandTransaction(tx) || currentCommand(tx).partition !== partitionOf(input.route))
     throw new TypeError('Context role delivery requires a live same-home command');
-  return deliverNativeOccurrence(tx, input);
+  return (await deliverNativeOccurrence(tx, input)).delivery;
 }
 
-/** One LIVE mechanical work step, no Actor or reconstructed permission. The native pending
- * partial index supplies at most eight exact occurrences from one configured physical home.
+/** One LIVE mechanical selection followed by a native platform command, no Actor or
+ * reconstructed permission. The pending index supplies at most eight exact occurrences in one home.
  * The cursor is only scheduling state: restarting at the beginning cannot lose pending work. */
 export async function advancePendingContextRoleProvenance(
   deps: Readonly<{ pool: Pool; client: WorkClient; clock?: () => Date }>,
@@ -110,7 +128,7 @@ export async function advancePendingContextRoleProvenance(
     if (partitionOf(input.after.route) !== input.partition) throw new TypeError('Context cursor belongs to another home');
     assertOccurrence(input.after.occurrence);
   }
-  return runOperationalTransaction(
+  const selected = await runOperationalTransaction(
     deps.pool,
     {
       partition: input.partition,
@@ -128,15 +146,41 @@ export async function advancePendingContextRoleProvenance(
          ORDER BY route,occurrence LIMIT 8 FOR UPDATE SKIP LOCKED`,
         [firstRoute, firstRoute + 16, input.after?.route ?? firstRoute, input.after?.occurrence ?? '0'],
       );
-      let pending = 0;
-      for (const occurrence of selected.rows) {
-        if ((await deliverNativeOccurrence(tx, occurrence)).state === 'pending') pending++;
-      }
-      return {
-        attempted: selected.rows.length,
-        pending,
-        after: selected.rows.length === 8 ? selected.rows.at(-1)! : null,
-      };
+      return selected.rows;
     },
   );
+  // Release the selection transaction, connection and gate before starting a command.
+  // One real platform command re-locks this bounded page in its original home. Source's
+  // deferred constraint validates its commit against the executor's forthcoming write basis.
+  if (!selected.length) return { attempted: 0, pending: 0, after: null };
+  const result = await runCommand(
+    deps.pool,
+    {
+      partition: input.partition,
+      basis: {
+        actorAccountId: '00000000-0000-8000-8000-000000000001',
+        clientId: 'internal-access',
+        requestedBy: null,
+      },
+      clock: deps.clock,
+    },
+    async (tx) => {
+      let pending = 0;
+      let changed = false;
+      for (const occurrence of selected) {
+        const result = await deliverNativeOccurrence(tx, occurrence);
+        if (result.delivery.state === 'pending') pending++;
+        changed ||= result.changed;
+      }
+      const value = {
+        attempted: selected.length,
+        pending,
+        after: selected.length === 8 ? selected.at(-1)! : null,
+      };
+      return changed
+        ? { value, events: [{ type: 'com.rezics.access.context-role-delivery-advanced.v1', data: {} }] }
+        : noEffect(value);
+    },
+  );
+  return result.value;
 }

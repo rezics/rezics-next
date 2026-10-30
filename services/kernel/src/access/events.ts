@@ -119,6 +119,8 @@ const verificationReversal = Type.Object(
 );
 
 export const ACCESS_EVENTS = {
+  // Native command fence only; no account, resource, occurrence or receiving proof payload.
+  'com.rezics.access.context-role-delivery-advanced.v1': Type.Object({}, { additionalProperties: false }),
   'com.rezics.access.organization-close.page.v1': Type.Object(
     {
       count: Type.Integer({ minimum: 0, maximum: 100 }),

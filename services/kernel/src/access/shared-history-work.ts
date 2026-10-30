@@ -70,7 +70,8 @@ export const sharedHistoryWorkModule: WorkModule = {
         running = (async () => {
           try {
             // Keyset one configured home per existing unit, releasing discovery before entering
-            // its LIVE work-step. No request-time all-home scan or account-bearing work payload.
+            // its LIVE selection and released native command. No request-time all-home scan
+            // or account-bearing work payload.
             const home = (
               await context.pool.query<{ partition_no: number }>(
                 'SELECT partition_no FROM core.partition WHERE partition_no>$1 ORDER BY partition_no LIMIT 1',

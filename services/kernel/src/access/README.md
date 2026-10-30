@@ -2617,30 +2617,35 @@ canonical decimal PostgreSQL bigint. The producer records `resourceId`, `resourc
 `sourceTransaction`. `contextKey` and `delivery` are receiving state. These fields are metadata, never permission.
 OLD before DELETE and NEW after INSERT are separate occurrences; current ownership cannot replace either.
 
-Semantic's actual historical-party receiver is unavailable in this checkout. The exact binding point is
-`access.try_deliver_resource_role_provenance(route,occurrence)`, called by the original deferred
-`resource_role_provenance_deliver` trigger and by `deliverContextRoleProvenance(tx,{route,occurrence})`.
-The Access function locks and validates the original native row. Semantic must publish its own actual same-home
-entrypoint taking that locked row's route and literal metadata above, including the original `sourceTransaction`.
-It must enroll the historical party using its real Context erasure key and existing generation/late-item admission
-in that physical transaction before Access can update `context_key` and `delivery='delivered'`. No Source function
-or receipt ABI is assumed here. A boolean or Context-key lookup is insufficient. A future forward migration must
-bind the actual published entrypoint and replace the unavailable transition guard together.
+The original deferred `resource_role_provenance_deliver` trigger calls
+`access.try_deliver_resource_role_provenance(route,occurrence)`. It locks and validates the genuine native row,
+then passes its literal fields to Semantic's published `semantic.enroll_context_role_provenance` SQL port.
+The executor's real same-transaction editorial write basis must exist before this deferred call enrolls.
+`deliverContextRoleProvenance(tx,{route,occurrence})` uses the same Access source lock, then the actual
+`enrollContextRoleProvenance` TypeScript wrapper in a live same-home command. That wrapper records Source's
+forthcoming native commit and its own deferred constraint validates the executor's eventual fence.
 
-Until that binding exists, every Context occurrence, including creator and unknown roles, stays pending and the
-TypeScript adapter returns the precise typed `semantic-context-historical-party-receiver-unavailable` result.
-Source chooses applicability; Access does not infer it from a role name. Non-Context occurrences are not applicable.
-No artifact, candidate, account token, deletion generation or current DATA authority is synthesized.
+Delivery changes only after Source returns actual enrollment with its real Context erasure key, or its explicit
+native `not-applicable` policy. The update guard invokes that idempotent Source port again to verify the transition
+in the same physical transaction; a key or boolean alone cannot forge delivery. Source owns the original/late
+locator and generation admission. Access reads no Source tables. An unavailable SQL receiver produces the typed
+`semantic-context-historical-party-receiver-unavailable` result. Unresolved receiving produces
+`semantic-context-historical-party-enrollment-pending`. Both preserve pending input, including creator and unknown
+roles. Non-Context occurrences are not applicable. No artifact, candidate, account token, deletion generation or
+current DATA authority is synthesized.
 
-Each existing default `shared_history` work unit keysets one configured `core.partition` home and enters a genuine
-`runOperationalTransaction` work step with no Actor and no fenced account reconstruction. It locks at most eight
-pending `(route,occurrence)` keys from `resource_role_provenance_delivery` and invokes the same native delivery
-function. Home discovery releases its connection before the home step; no foreign home or SDK is entered while
-the occurrence is held. Source metadata is immutable. A failure rolls back the whole batch and preserves its
-cursor; an unavailable receiver leaves the rows pending. Volatile per-home cursors wrap and start over after
-restart, including rows skipped because another worker held their lock. These cursors contain only native keys;
-there is no new journal, queue or coordinator. Delivery alone proves neither Source's historical cut nor History
-receiving completeness, and does not change the account erasure participant proof or final acknowledgement.
+Each existing default `shared_history` work unit keysets one configured `core.partition` home and uses a genuine
+`runOperationalTransaction` work step to select at most eight pending `(route,occurrence)` keys from
+`resource_role_provenance_delivery`. It releases that transaction, connection and gate before a native platform
+`runCommand` re-locks and revalidates those exact source rows in the same home and invokes the Source wrapper.
+There is no Actor or human permission reconstruction. Only a changed page emits an empty native advancement event,
+so its real command basis/fence validates Source enrollment; a pending-only page makes no domain write.
+Home discovery also releases its connection before selection; no foreign home or SDK is entered while an occurrence
+is held. Source metadata is immutable. A failure rolls back the delivery batch and preserves its scheduling cursor.
+Volatile per-home cursors wrap and start over after restart, including rows skipped because another worker held
+their lock. These cursors contain only native keys; there is no new journal, queue or coordinator. Delivery alone
+proves neither Source's historical cut nor History receiving completeness, and does not change the account erasure
+participant proof or final acknowledgement.
 
 The shared-history participant covers `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`. Receipt
 skeletons retain receipt identity, principal and command identity, request digest, transaction and observed position,
