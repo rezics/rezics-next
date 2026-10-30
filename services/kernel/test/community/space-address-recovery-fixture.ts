@@ -40,10 +40,12 @@ export function addressRoute(address: string): number {
   return hashRoute(address.toLowerCase());
 }
 
-export function addressInPartition(prefix: string, partition: number): string {
+export function addressInPartition(prefix: string, partition: number, spaceIds: readonly string[] = []): string {
+  const spaceRoutes = spaceIds.map((id) => routeOf(id)!);
   for (let suffix = 0; ; suffix++) {
     const address = `${prefix}-${suffix.toString(36)}`;
-    if (partitionOf(addressRoute(address)) === partition) return address;
+    const route = addressRoute(address);
+    if (partitionOf(route) === partition && !spaceRoutes.includes(route)) return address;
   }
 }
 
@@ -74,6 +76,12 @@ export type SpaceAddressRecoveryFixture = Readonly<{
   person(name: string): Promise<RecoveryActor>;
   request(method: string, path: string, options?: RecoveryCallOptions): Promise<RecoveryResponse>;
   grantGlobal(grantor: RecoveryActor, subject: RecoveryActor, actions: readonly string[]): Promise<RecoveryResponse>;
+  grantSpaceActions(
+    grantor: RecoveryActor,
+    subject: RecoveryActor,
+    spaceId: string,
+    actions: readonly string[],
+  ): Promise<RecoveryResponse>;
   createSpace(owner: RecoveryActor, title?: string, key?: string): Promise<RecoverySpace>;
   addressClaim(address: string): Promise<null | Record<string, unknown>>;
   spaceState(spaceId: string): Promise<{
@@ -190,6 +198,26 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
       return result;
     };
 
+    const grantSpaceActions = async (
+      grantor: RecoveryActor,
+      subject: RecoveryActor,
+      spaceId: string,
+      grantedActions: readonly string[],
+    ) => {
+      const route = routeOf(spaceId);
+      if (route === null) throw new TypeError('Space id is not routed');
+      return request('POST', '/v1/grants', {
+        bearer: grantor.bearer,
+        key: randomUUID(),
+        body: {
+          resource: { route, id: spaceId },
+          subject: { kind: 'account', id: subject.accountId },
+          actions: [...grantedActions],
+          valid: '(,)',
+        },
+      });
+    };
+
     const createSpace = async (owner: RecoveryActor, title = 'Recovery Space', key = randomUUID()) => {
       const created = await request('POST', '/v1/spaces', {
         bearer: owner.bearer,
@@ -302,6 +330,7 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
       },
       request,
       grantGlobal,
+      grantSpaceActions,
       createSpace,
       addressClaim,
       spaceState,

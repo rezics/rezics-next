@@ -18,11 +18,13 @@ import {
 
 let fixture: SpaceAddressRecoveryFixture;
 let governance: RecoveryActor;
+let fixtureStartTime: Date;
 
 beforeAll(async () => {
   const opened = await createSpaceAddressRecoveryFixture();
   fixture = opened.fixture;
   governance = opened.governance;
+  fixtureStartTime = fixture.now;
 }, 60_000);
 
 afterAll(async () => {
@@ -293,6 +295,10 @@ test.serial('revoking Space management after reservation blocks replay without a
       normalized_address: address,
       space_id: space.spaceId,
     });
+    // Space owners hold space:manage but not access:grant. Give this owner the
+    // exact resource-scoped grant needed to exercise the real role-revoke route.
+    const grantAuthority = await fixture.grantSpaceActions(governance, actor, space.spaceId, ['access:grant']);
+    expect(grantAuthority.response.status).toBe(201);
     const revoked = await fixture.revokeOwner(actor, space.spaceId, actor);
     expect(revoked.response.status).toBe(200);
     barrier.release();
@@ -326,6 +332,7 @@ test.serial('revoking Space management after reservation blocks replay without a
 test.serial(
   'old-address reservation expires at thirty days and case-normalized reads keep a protected Realm private',
   async () => {
+    fixture.setTime(fixtureStartTime);
     const firstOwner = await owner('old-address-owner', ['space:create', 'realm:create']);
     const nextOwner = await owner('reserved-address-taker');
     const firstSpace = await fixture.createSpace(firstOwner, 'Address change owner');
