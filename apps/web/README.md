@@ -242,6 +242,7 @@ assertions require the actual image afterward. Unavailable retries fresh exact r
 Refused/Withdrawn/Versionmismatch conceal bytes. Constructed fixtures establish neither native buyer delivery nor
 visual approval. `tests/content-edition.test.ts` adds the named authorized-image acceptance and bounded-reference
 cases for later integration; acceptance execution and visual review remain pending.
+The local Web workspace typecheck passes with the consumer boundary; the acceptance command was not run.
 The implementation reuses the repository's exact-revision reader, shell, subject point and public identity boundary.
 The UI README's external shelf references do not apply to this document surface; no external reference project was used.
 
