@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { anchorRoute, partitionOf, routeOf, newId } from '../../src/route/route.ts';
+import { CREATE_SUBJECT } from '../../src/semantic/subject.ts';
 import {
   createSubjectSourceKeyPages,
   readSubjectKeyPage,
@@ -17,7 +18,7 @@ async function homeWriter(f: Fixture, partition: number, route?: number) {
   return async () => {
     for (;;) {
       const key = `${prefix}-${ordinal++}`;
-      const actual = anchorRoute(f.config.routeKey, key);
+      const actual = anchorRoute(f.config.routeKey, `${f.accounts.editor}\n${CREATE_SUBJECT}\n${key}`);
       if (partitionOf(actual) !== partition || (route !== undefined && actual !== route)) continue;
       const id = await f.create('schema:Book', {}, key);
       expect(routeOf(id)).toBe(actual);
