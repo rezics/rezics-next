@@ -23,7 +23,9 @@ test('specification factory exposes the exact ABI and every method throws existi
       throw new Error('A specification stub must not authorize');
     },
   });
-  expect(Object.keys(source).sort()).toEqual(['containsSubject', 'prefix', 'prepare', 'readRawStoredPrefix']);
+  expect(Object.keys(source).sort()).toEqual(
+    ['containsSubject', 'prefix', 'prepare', 'readRawStoredPrefix', 'readRawOrdinalPrefix'].sort(),
+  );
   for (const method of Object.values(source)) {
     // No invented T, Access implementation or native fixture is needed to prove an explicit unimplemented method.
     let failure: unknown;
