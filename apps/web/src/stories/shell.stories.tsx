@@ -57,7 +57,9 @@ export const SignedOut: Story = {
     const phoneMenu = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const focusedWhenOpened = signIn === document.activeElement;
     if (!phoneMenu) await expect(focusedWhenOpened).toBe(true);
-    if (focusedWhenOpened) await expect(getComputedStyle(signIn).textDecorationLine).toContain('underline');
+    const underlinedWhenOpened = signIn.matches(':hover, :focus-visible');
+    if (underlinedWhenOpened) await expect(getComputedStyle(signIn).textDecorationLine).toContain('underline');
+    else await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
 
     signIn.blur();
     await userEvent.unhover(signIn);

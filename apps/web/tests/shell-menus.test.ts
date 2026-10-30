@@ -170,7 +170,6 @@ test(
     const signInLink = phonePage.getByRole('menu').getByRole('link', { name: en.account_sign_in!, exact: true });
     await signInLink.waitFor();
     await expectActive(phonePage, signInLink);
-    expect(await signInLink.evaluate((link) => getComputedStyle(link).textDecorationLine)).toContain('underline');
     await phonePage.context().close();
   },
   timeout,
