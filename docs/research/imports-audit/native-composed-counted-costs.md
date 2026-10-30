@@ -530,27 +530,25 @@ the `api-outcomes.test.ts` seed-settle failure on `dbos.operation_outputs` (10 p
 rounds); this is the already classified harness failure and was not changed here. No claim is made that those older
 counts establish a passing implementation.
 
-The shared capture already retains `planStatements` beside `plans`, plus statement and plan backend IDs and aligned
-SQLSTATEs. `withoutCatalogStatements` remaps occurrence IDs when it filters the bounded catalog probes. Imports'
-`createApiCapture.merge()` then concatenated foreground plans and statements but omitted those remapped occurrence
-IDs, and also omitted background plan occurrence IDs. The consumer consequently consumed plans by backend and
-normalized SQL order alone, which loses which retained plan belongs to a repeated execution and its composing owner.
-The defect is in the Imports projection; no shared capture or portable validator change is required.
+The first Imports-owned defect was the capture merge: it concatenated foreground and background statements and plans
+without rebasing the shared `planStatements` occurrence IDs. `appendImportPostgresCapture()` now rebases those IDs
+while retaining raw statement, plan, Query Text, SQLSTATE, message, backend and byte arrays. The existing projection
+associates a plan only when owner, backend, successful execution identity and normalized Query Text agree. It does
+not transfer a plan from a failed or different occurrence. It preserves appended-row accounting and continues to
+use canonical `costOf(PostgresCapture)`.
 
-The repair keeps Imports owner labels on its projection, rebases foreground and background plan occurrence IDs as
-captures are composed, and preserves the raw plan/backend/error arrays. `associatePostgresStatements()` uses that
-shared execution identity together with owner, backend and normalized SQL. A failed execution receives no plan;
-plans lacking an identity or matching backend remain retained in the raw capture and are not borrowed. Every native
-plan attached to a successful execution contributes its ModifyTable rows once; only a plan whose Query Text matches
-the client SQL supplies that statement's `explain`. `costOf(PostgresCapture)`, raw Query Text, exact outcomes,
-appended-row totals, bounds, index proofs, seed/settle behavior and retry behavior remain under their existing owners.
+The post-integration native receipt below exposed a second problem that cannot be repaired safely in this projection:
+the `planStatements` identity delivered through the shared Capture path points to a different client SQL execution
+than the plan's own Query Text. The Imports merge applies a statement-array offset; it does not infer or replace the
+shared occurrence identity. Matching on SQL and backend alone would also accept plans whose identity names another
+operation on that same backend. That would violate the retained execution/error identity requirement, so the native
+projection leaves those plans in the raw capture and the unchanged portable validator rejects the successful call
+without its own `explain`.
 
-The new focused unit case covers the reported operation SQL with its source comment, repeated SQL across distinct
+The focused unit case covers the reported operation SQL with its source comment, repeated SQL across distinct
 backends, the same backend value under the other actual owner, reversed repeated-plan order, a failed attempt followed
-by success, full raw foreground/background array retention and canonical cost immutability. Those hand-built inputs
-prove projection association only. Native proof remains the unchanged portable suite under the existing
-`growth-outcomes.test.ts` wrapper. The implementation is limited to the four assigned paths; no acceptance or
-specification contradiction was found.
+by success, full raw foreground/background array retention and canonical cost immutability. Its 1 test and 30
+expectations passed earlier; those hand-built inputs prove projection association only, not the native producer.
 
 ## Implementation receipts
 
@@ -583,11 +581,54 @@ retry, deadline, scheduling, or bounds. The run produced no measured native Impo
 plan/backend pairing evidence for the repaired projection. The focused hand-built association case passed but is not
 native proof.
 
-The earlier supplied native receipt remains the only execution evidence for the reported missing-plan failures:
-the vanished-page occurrence was the successful `SELECT operation FROM semantic.fact WHERE route =
-$1::integer AND subject_id = $2::uuid AND slot_id = $3::uuid ORDER BY log_seq DESC LIMIT 1` from
-`slots-read-operation.sql`, with a null statement error and an empty projected `explain`; the isolated new-record case
-named `read-item-types.sql`. That receipt states raw plans and inclusive client calls were retained, but does not
-expose a matching native plan/backend tuple for those occurrences. I do not treat the unit fixture's explicit backend
-IDs as native evidence. The focused acceptance therefore remains qualified by the independent settle failure rather
-than claimed all-green.
+After the actual seed-settle prerequisite integrated at `fc0de8d4c855858e53075801e87ddf9577de390a`, the focused
+native command ran once at `26f11804490567af598ff32ccfbec69585a9a998`:
+`bun run --cwd services/kernel check test/imports/growth-outcomes.test.ts`. Check
+`a1954e6f-dd8a-49f1-a752-8e5ced8cc394` exited 1; its retained log is
+`.temp/goal/checks/worker-check-2026-10-30T00-42-50.267Z-0f1a8b4d.log`. The wrapper's automatic isolated rerun
+repeated the same result: each run had 17 native child cases, 8 passed and 9 failed. The outer
+`all real import growth outcomes pass` test failed in each run. Passing children were all four independent
+converter cases, oversized-record rejection, bounded dump streaming, hard-cap bulk rejection, and the configured
+64 KiB reader-cap case. Failing children were native import growth, unchanged refresh, one new record, one changed
+record, converter revision change, mass disappearance, vanished-page reads, bulk request growth, and private 300
+command planning.
+
+The first child failure was `native import growth preserves canonical PostgreSQL capture and exact separate SQLite
+transport and derived work bounds`; the unchanged portable validator failed at `specs/imports-growth.test.ts:160`
+on successful non-control SQL with a null SQLSTATE and empty projected `explain`. The first unplanned SQL was:
+
+```sql
+SELECT partition_no AS "partitionNo", node, write_state AS "writeState", moved_to AS "movedTo", epoch, position
+FROM core.partition
+WHERE partition_no = $1 /*file='..%2F..%2Fsrc%2Fpartition%2Fread.sql'*/;
+```
+
+The retained owner export has that statement at foreground index 9, owner `kernel`, backend 535, error `null`.
+Native plan 8 has the same owner and backend and an `Index Scan` on `core.partition` (1 actual row, 1 loop, 3 hit
+blocks), and its exact Query Text matches the SQL above; however, its `planStatements` value is 12, whose retained
+statement is the unrelated `semantic.context` read. This is already enough to show that Query Text/backend alone
+cannot recover the statement identity.
+
+The originally reported `read-item-types.sql` case has the same defect in the retained composed Capture: successful
+statement index 88 is owner `kernel`, backend 587, error `null`. Native plan 64 is also owner `kernel`, backend 587,
+and its Query Text is the exact `read-item-types.sql` SQL, with a `Nested Loop` plan (0 actual rows, 1 loop, 2 hit
+blocks). Its shared `planStatements` value is 89, which names `INSERT INTO semantic.subject ... create-subject.sql`,
+not statement 88. The vanished-page operation case is similarly mismatched: successful statement index 256 is owner
+`kernel`, backend 601, error `null`; native plans 188 and 209 have exact `slots-read-operation.sql` Query Text and
+the same owner/backend, but their occurrence identities are 257 and 286, naming `slots-read-compact.sql` calls.
+Both plan roots are `Limit` nodes with actual rows 0, 1 loop and 1 hit block. The full SQL, Query Text, candidate
+owner/backend/index arrays and these plan summaries are retained in the log named above.
+
+Other native failures in this receipt were two setup outcomes (`converter revision change...` raised
+`Unexpected production import status: bulk-failed`; `mass disappearance...` raised `Import setup did not commit:
+bulk-failed`) and plan-coverage assertion failures in the remaining seven named children. The run also records the
+known `GROWTH_REVIEW` seed-settle condition `core.consumer_lag`, 1 page and 0 all-visible pages. No change was made
+to seeding, settle, retry policy, deadlines, worker scheduling, or bounds. These outcomes remain qualified rather
+than being treated as evidence that the measured acceptance passed.
+
+The Imports-only regression and composition work is committed, and no shared harness or portable validator file was
+changed. There is no safe Imports-only reconstruction for these native calls: the shared execution identity points
+at a different SQL operation, and matching by text/backend could attach a nested or repeated plan to an unrelated or
+failed attempt. Completing native acceptance now requires the shared Capture producer to supply the correct
+per-plan execution identity, after which this same bounded owner/backend/SQL projection can be rerun. The report
+preserves the exact native counterexample rather than substituting generic index proofs or weakening the invariant.

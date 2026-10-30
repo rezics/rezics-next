@@ -450,69 +450,11 @@ export function associatePostgresStatements(capture: ImportPostgresCapture): Pos
       explains[statementIndex] ??= document;
   }
 
-  function associationEvidence(statementIndex: number): string {
-    const sql = sqls[statementIndex]!;
-    const normalized = normalizedPlanSql(sql);
-    const matches = plans.flatMap((document, planIndex) => {
-      const queryTexts = planQueries(document).filter((query) => normalizedPlanSql(query) === normalized);
-      if (queryTexts.length === 0) return [];
-      const ownerIndex = planStatements[planIndex];
-      const root = (Array.isArray(document) ? document : [document]).find(
-        (value) => value && typeof value === 'object' && !Array.isArray(value) && 'Plan' in value,
-      ) as Record<string, unknown> | undefined;
-      const plan = root?.Plan && typeof root.Plan === 'object' ? (root.Plan as Record<string, unknown>) : undefined;
-      return [
-        {
-          planIndex,
-          planOwner: capture.importPlanOwners[planIndex],
-          planBackend: planBackends[planIndex],
-          planStatement: ownerIndex,
-          ownerStatement:
-            ownerIndex === undefined || ownerIndex < 0 || ownerIndex >= sqls.length ? undefined : sqls[ownerIndex],
-          statementOwner:
-            ownerIndex === undefined || ownerIndex < 0 || ownerIndex >= sqls.length
-              ? undefined
-              : capture.importStatementOwners[ownerIndex],
-          statementBackend:
-            ownerIndex === undefined || ownerIndex < 0 || ownerIndex >= sqls.length
-              ? undefined
-              : statementBackends[ownerIndex],
-          statementError:
-            ownerIndex === undefined || ownerIndex < 0 || ownerIndex >= sqls.length
-              ? undefined
-              : statementErrors[ownerIndex],
-          queryTexts,
-          planSummary: plan && {
-            nodeType: plan['Node Type'],
-            schema: plan.Schema,
-            relation: plan['Relation Name'],
-            actualRows: plan['Actual Rows'],
-            actualLoops: plan['Actual Loops'],
-            sharedHitBlocks: plan['Shared Hit Blocks'],
-            sharedReadBlocks: plan['Shared Read Blocks'],
-          },
-        },
-      ];
-    });
-    return JSON.stringify({
-      kind: 'unplanned-native-association',
-      statement: {
-        index: statementIndex,
-        owner: capture.importStatementOwners[statementIndex],
-        backend: statementBackends[statementIndex],
-        error: statementErrors[statementIndex],
-        sql,
-      },
-      matchingPlanCount: matches.length,
-      matchingPlans: matches.slice(0, 4),
-    });
-  }
-
   return sqls.map((sql, index): PostgresStatement => {
     const failed = statementErrors[index] !== null;
     const explain = failed ? undefined : explains[index];
     if (explain === undefined && !failed && !isControlStatement(sql)) {
-      const diagnostic = associationEvidence(index);
+      const diagnostic = `unplanned SQL: ${sql}`;
       if (!reportedCaptureDiagnostics.has(diagnostic)) {
         reportedCaptureDiagnostics.add(diagnostic);
         console.error(`GROWTH_CAPTURE_DIAGNOSTIC ${diagnostic}`);
