@@ -301,7 +301,8 @@ and cover/media attribution are separate:
 
 The selected metadata endpoint is **not mounted yet**: `POST /v1/source-records:setMetadata` accepts
 `{source,external_id,metadata:{name,url,licence?:{id,url?},attribution?},expected_metadata_revision}` and returns
-`{record,metadata_revision,noEffect}` under trusted `subject:batch_write`. Identity is the exact `(source,external_id)`
+`{record,metadata_revision,effect:'filled'|'corrected'|'noEffect'}` under trusted `subject:batch_write`.
+Identity is the exact `(source,external_id)`
 tuple; null revision fills missing metadata without silently overwriting conflicting fields, and a positive revision
 is an explicit CAS correction. Existing receipt/rollback semantics apply. This is the existing producer's work.
 
@@ -375,7 +376,8 @@ The existing [anchored authorization](../../services/kernel/src/semantic/http/su
   second permission cache or unprotected helper bypass is appropriate for the new Web flow.
 - `runCommand`, native time, request digest, `Idempotency-Key`, `core.receipt`, write basis and one owning-partition
   transaction already provide replay/rollback and Session continuity. Current authorization precedes receipt replay;
-  a revoked owner cannot recover old effects by replaying a successful key. Changed-body replay is a conflict, not an edit.
+  a revoked owner cannot recover old effects by replaying a successful key. Changed-body replay returns 422
+  `idempotency_conflict`, not an edit.
 - Current source/field fences, subject/Context visibility, candidate disclosure and related-value authority apply to
   detail, competition, search facts, cards, links, counts, history and documents. Public aggregate readers remain
   public even when the caller privately owns an undisclosed candidate. Omit unproved counts rather than disclose a
@@ -383,6 +385,12 @@ The existing [anchored authorization](../../services/kernel/src/semantic/http/su
 - Use actual Auth failure semantics. A genuine pre-suspension bearer becomes 401 `invalid_credentials` with
   `WWW-Authenticate: Bearer error="invalid_token"`; a defensive verified-suspended 403 path is not the same persona.
   Hidden/unreadable targets conceal 404 where contracted. Source citations do not override consent or privacy.
+
+For properties marked `disclosure: sourceOrConsent`, a reference makes a statement eligible for ordinary public
+review; without a reference, only the account linked to the target agent may assert it and it remains private until
+that account discloses it. This is the existing [definition and disclosure contract](../../packages/definitions/README.md#statement-disclosure),
+implemented through `semantic/statement-disclosure.ts`, not an optional editor preference. A generic form must
+explain that state without exposing the private candidate through public competition, related labels or aggregates.
 
 All reads remain bounded owner reads: batch distinct full keys by partition, use current authorization and the
 existing deadlines/budgets, and avoid cross-database joins, per-row hydration and whole-history scans. A polished
