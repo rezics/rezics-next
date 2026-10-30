@@ -23,9 +23,9 @@ const scales = [256, 1024, 4096] as const;
 const body = fromPlainText('A fixed native review lifecycle growth body.');
 const bodyBytes = Buffer.from(serializeDocument(body));
 const bodyDigest = createHash('sha256').update(bodyBytes).digest();
-const citation = { questionId: STANDARD_QUESTION_ID, units: 5, revision: 1 } as const;
 
 type Review = Readonly<{ threadId: string; postId: string; revisionId: string }>;
+type Citation = Readonly<{ questionId: string; units: number; revision: number }>;
 
 let fixture: ReviewLifecycleFixture | undefined;
 let growth: GrowthDatabase | undefined;
@@ -35,7 +35,22 @@ afterAll(async () => {
   await fixture?.close();
 });
 
-async function createReview(f: ReviewLifecycleFixture, title: string): Promise<Review> {
+async function vote(f: ReviewLifecycleFixture): Promise<Citation> {
+  const result = await f.call('PUT', `/v1/subjects/${f.subjectId}/ratings/${STANDARD_QUESTION_ID}/vote`, {
+    bearer: f.author.bearer,
+    key: requestKey('growth-review-vote'),
+    body: { units: 5 },
+  });
+  expect(result.response.status, result.text).toBe(200);
+  expect(result.value).toMatchObject({ units: 5, revision: 1 });
+  return {
+    questionId: STANDARD_QUESTION_ID,
+    units: result.value.units as number,
+    revision: result.value.revision as number,
+  };
+}
+
+async function createReview(f: ReviewLifecycleFixture, title: string, citation: Citation): Promise<Review> {
   const result = await f.call('POST', '/v1/threads', {
     bearer: f.author.bearer,
     key: requestKey('growth-review-create'),
@@ -81,6 +96,7 @@ async function growthCounts(
     hot_threads: number;
     hot_live: number;
     revisions: number;
+    hot_revisions: number;
     votes: number;
     hot_votes: number;
     receipts: number;
@@ -98,6 +114,9 @@ async function growthCounts(
           AND visibility <> 'taken_down') AS hot_live,
        (SELECT count(*)::integer FROM content.revision r JOIN content.thread t USING (route, thread_id)
         WHERE r.route = $1 AND t.author_account_id = $2 AND t.board_id = $3 AND t.kind = 'review') AS revisions,
+       (SELECT count(*)::integer FROM content.revision r JOIN content.thread t USING (route, thread_id)
+        WHERE r.route = $1 AND t.author_account_id = $2 AND t.board_id = $3 AND t.kind = 'review'
+          AND t.review_subject_id = $4) AS hot_revisions,
        (SELECT count(*)::integer FROM rating.vote
         WHERE route = $1 AND voter_id = $2 AND question_id = $5) AS votes,
        (SELECT count(*)::integer FROM rating.vote
@@ -113,7 +132,8 @@ async function growthCounts(
 test('Joined review lifecycle retains current authority, one live slot and strict physical growth.', async () => {
   fixture = await createReviewLifecycleFixture();
   const f = fixture;
-  const original = await createReview(f, 'Growth review original');
+  const citation = await vote(f);
+  const original = await createReview(f, 'Growth review original', citation);
   expect(
     (
       await f.call('DELETE', `/v1/posts/${original.postId}`, {
@@ -122,7 +142,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
       })
     ).response.status,
   ).toBe(204);
-  const replacement = await createReview(f, 'Growth review slot replacement');
+  const replacement = await createReview(f, 'Growth review slot replacement', citation);
 
   const connectionString = f.system.database.pool.options.connectionString;
   if (typeof connectionString !== 'string') throw new Error('Native content pool has no connection string');
@@ -287,6 +307,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
       expect(after.hot_threads - before.hot_threads).toBe(delta / 2);
       expect(after.hot_live).toBe(1);
       expect(after.revisions - before.revisions).toBe(delta * 2);
+      expect(after.hot_revisions - before.hot_revisions).toBe(delta + delta / 2);
       expect(after.votes - before.votes).toBe(delta);
       expect(after.hot_votes).toBe(1);
       expect(after.receipts - before.receipts).toBe(delta);
@@ -294,6 +315,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
       expect(after.threads).toBe(2 + scale);
       expect(after.hot_threads).toBe(2 + scale / 2);
       expect(after.revisions).toBe(2 + scale * 2);
+      expect(after.hot_revisions).toBe(2 + (3 * scale) / 2);
       expect(after.votes).toBe(1 + scale);
     },
     warmup: async (growthDatabase) => refusedRestore(growthDatabase.pool),

@@ -151,6 +151,8 @@ async function vote(f: ReviewLifecycleFixture, person: ReviewLifecyclePerson, su
 test('Ratings and reviews: native vote citations remain immutable through review slot replacement and owner restoration.', async () => {
   fixture = await createReviewLifecycleFixture();
   const f = fixture;
+  expect(f.author.accountId).not.toBe(f.other.accountId);
+  expect(f.author.bearer).not.toBe(f.other.bearer);
   const originalSubject = f.subjectId;
   const authorRoute = routeOf(f.author.accountId)!;
 
@@ -310,6 +312,8 @@ test('Ratings and reviews: native vote citations remain immutable through review
       .value.post.voteCitation,
   ).toEqual(changedVote);
   expect(await storedRevision(f, original.revisionId)).toEqual(originalStored);
+  expect(await storedRevision(f, revisedRevisionId)).toEqual(revisedStored);
+  expect(restoredThread.value.thread.title).toBe('Original cited review');
   const liveSlot = await f.admin.query(
     `SELECT thread_id FROM content.thread
      WHERE route = $1 AND author_account_id = $2 AND board_id = $3 AND review_subject_id = $4
@@ -361,9 +365,32 @@ test('Ratings and reviews: native vote citations remain immutable through review
     type: 'com.rezics.content.post.restored.v1',
     subject: controlReview.postId,
   });
+  expect(afterControlRestore.slots).toEqual([
+    {
+      thread_id: controlReview.threadId,
+      review_live: true,
+      availability: 'available',
+      visibility: 'published',
+    },
+  ]);
+  expect(afterControlRestore.heads).toHaveLength(1);
+  expect(afterControlRestore.heads[0]).toMatchObject({
+    thread_id: controlReview.threadId,
+    availability: 'available',
+  });
+  expect(afterControlRestore.revisions).toHaveLength(1);
+  expectStatus(
+    await f.call('POST', `/v1/posts/${controlReview.postId}:restore`, {
+      bearer: f.other.bearer,
+      key: controlRestoreKey,
+    }),
+    204,
+  );
+  expect(await snapshot(f, f.other, controlSubject)).toEqual(afterControlRestore);
 
   const raceSubject = await f.subject('Native review race subject');
   const decoy = await createReview(f, f.other, raceSubject, 'Other author race decoy');
+  const raceOtherBefore = await snapshot(f, f.other, raceSubject);
   await vote(f, f.author, raceSubject, 9);
   const raceKeys = [requestKey('race-review-left'), requestKey('race-review-right')] as const;
   const observer = observeSql(f.system.database.pool);
@@ -405,6 +432,7 @@ test('Ratings and reviews: native vote citations remain immutable through review
   expect(JSON.stringify(loser.value)).not.toContain(decoy.threadId);
   expect(JSON.stringify(loser.value)).not.toContain('Other author race decoy');
   const raceAfter = await snapshot(f, f.author, raceSubject);
+  const raceOtherAfter = await snapshot(f, f.other, raceSubject);
   expect(Number(raceAfter.position[0]?.position) - Number(raceBefore.position[0]?.position)).toBe(1);
   expect(raceAfter.slots).toEqual([
     { thread_id: winnerThread.id, review_live: true, availability: 'available', visibility: 'published' },
@@ -429,6 +457,13 @@ test('Ratings and reviews: native vote citations remain immutable through review
     type: 'com.rezics.content.thread.created.v1',
     subject: winnerThread.id,
   });
+  expect(raceOtherAfter.receipts).toEqual(raceOtherBefore.receipts);
+  expect(raceOtherAfter.heads).toEqual(raceOtherBefore.heads);
+  expect(raceOtherAfter.revisions).toEqual(raceOtherBefore.revisions);
+  expect(raceOtherAfter.slots).toEqual(raceOtherBefore.slots);
+  expect(raceOtherAfter.outbox.filter((row: { subject: string }) => row.subject === decoy.threadId)).toEqual(
+    raceOtherBefore.outbox.filter((row: { subject: string }) => row.subject === decoy.threadId),
+  );
 
   const revokedSubject = await f.subject('Review owner revocation subject');
   const revokedReview = await createReview(f, f.author, revokedSubject, 'Review with revoked owner grant');
@@ -474,6 +509,13 @@ test('Ratings and reviews: native vote citations remain immutable through review
     f.call('POST', `/v1/posts/${revokedReview.postId}:restore`, {
       key: requestKey('anonymous-restore'),
     }),
+    f.call('DELETE', `/v1/posts/${revokedReview.postId}`, {
+      bearer: f.other.bearer,
+      key: requestKey('other-author-delete'),
+    }),
+    f.call('DELETE', `/v1/posts/${revokedReview.postId}`, {
+      key: requestKey('anonymous-delete'),
+    }),
     f.call('POST', `/v1/posts/${revokedReview.postId}/revisions`, {
       bearer: f.author.bearer,
       key: requestKey('revoked-author-revise'),
@@ -492,7 +534,7 @@ test('Ratings and reviews: native vote citations remain immutable through review
       body: { body: fromPlainText('This anonymous revision must not be written.') },
     }),
   ]);
-  expect(denied.map(({ response }) => response.status)).toEqual([403, 404, 404, 401, 403, 404, 401]);
+  expect(denied.map(({ response }) => response.status)).toEqual([403, 404, 404, 401, 404, 401, 403, 404, 401]);
   expect(denied.slice(0, 3).map(({ value }) => value.code)).toEqual(['forbidden', 'not_found', 'not_found']);
   const unknownRestore = await f.call('POST', `/v1/posts/${Bun.randomUUIDv7()}:restore`, {
     bearer: f.other.bearer,
