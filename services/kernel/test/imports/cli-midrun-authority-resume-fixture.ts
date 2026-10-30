@@ -24,6 +24,7 @@ type Exchange = {
   leg: Leg;
   ordinal: number;
   path: string;
+  query: string;
   bytes: string;
   keys: string[];
   phase: string | null;
@@ -117,7 +118,7 @@ export async function runJourney() {
             source: session.store.source(source),
             rows: initialRows.map((row) => session.store.key(source, String(row.id)).baseline),
           },
-          records: initialRows.map((row) => session.store.key(source, String(row.id))),
+          records: initialRows.map((row) => session.store.key(source, String(row.id), active ?? undefined)),
           claims: initialRows.map((row) => session.bindings.claim({ source, external_id: String(row.id) })),
           journals: initialRows.flatMap((row) =>
             session.store.database
@@ -265,6 +266,7 @@ export async function runJourney() {
               leg,
               ordinal: ++ordinal,
               path: url.pathname,
+              query: url.search,
               bytes,
               keys,
               phase,
@@ -273,12 +275,12 @@ export async function runJourney() {
             };
             exchanges.push(exchange);
             if (first) {
-              expect(response.status, responseBytes).toBe(200);
-              const results = (JSON.parse(responseBytes) as BatchWriteResult).results;
-              for (const entry of results) expect('value' in entry, JSON.stringify(entry)).toBe(true);
-              successfulRequest = saved;
-              successfulExchange = exchange;
               try {
+                expect(response.status, responseBytes).toBe(200);
+                const results = (JSON.parse(responseBytes) as BatchWriteResult).results;
+                for (const entry of results) expect('value' in entry, JSON.stringify(entry)).toBe(true);
+                successfulRequest = saved;
+                successfulExchange = exchange;
                 await hasHeldRequest.promise;
                 await native.renewManagement();
                 await identity.setBulkPermission(false);
@@ -299,6 +301,17 @@ export async function runJourney() {
           }) as typeof fetch,
         },
       );
+      if (result.code !== (leg === 'denied' ? 4 : 0))
+        console.log(
+          'CLI mid-run authority failure witness',
+          JSON.stringify({
+            leg,
+            result,
+            consumed,
+            seals,
+            exchanges: exchanges.slice(start),
+          }),
+        );
       expect(result.openHandles).toBe(0);
       expect(phases.size).toBe(0);
       expect(coordinator).toBeDefined();
@@ -471,6 +484,7 @@ export async function runJourney() {
     expect(afterResume.active).toBeNull();
     expect(afterResume.claims).toEqual(before.claims);
     expect(afterResume.completed.source.count).toBe(17);
+    expect(afterResume.completed.rows).toEqual(afterDenial.records.map((record) => record.staged?.row));
     expect(afterResume.completed.rows.every((row) => row?.converter_revision === converter_revision)).toBe(true);
     expect(afterResume.completed.rows.every((row) => row?.recordRevision === 'unversioned')).toBe(true);
     for (let i = 0; i < 17; i++)
@@ -491,6 +505,12 @@ export async function runJourney() {
     expect(originalReceiptRowsAfter).toEqual(originalReceiptRowsBefore);
     expect(await nativeEffects(ids[0]!)).toEqual(committedEffectsBefore);
     for (const old of before.journals) expect(afterResume.journals.find((row) => row.key === old.key)).toEqual(old);
+    for (const old of afterDenial.journals) {
+      const current = afterResume.journals.find((row) => row.key === old.key);
+      expect(current).toBeDefined();
+      expect(current!.bytes).toBe(old.bytes);
+      if (old.acknowledgement !== null) expect(current!.acknowledgement).toBe(old.acknowledgement);
+    }
     expect(afterResume.media).toEqual(afterDenial.media);
     for (const old of mediaBefore) expect(await runtime.mediaBoundary.observe(old.row.id)).toEqual(old);
 
@@ -540,6 +560,7 @@ export async function runJourney() {
       completedBaselineBefore,
       completedBaselineAfterDenial,
       pending: afterDenial.pending,
+      sealedRows: afterDenial.records.map((record) => record.staged?.row),
       resumedRows: afterResume.completed.rows,
       successorRows: final.completed.rows,
       successful,

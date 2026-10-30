@@ -64,3 +64,9 @@ Read sources: CLI, credentials, Importer, ImportSession, RunStore, RecordBinding
 native API runtime/observer, identity fixture and media boundary, plus existing backpressure/key-rotation/ACK callers
 as behavior references. The read-only reference index was inspected. This binding needs no external implementation
 or new research; the previously adopted backpressure algorithm is unchanged. The frozen test is unchanged.
+
+Local preflight passed the importer compiler (147 files), the new local CLI protocol test (one test, 31 assertions),
+and formatting of the five edited files. A discretionary direct-file compiler invocation for the native fixture
+could not load Reylo SQL types outside the managed analysis setup (`Cannot find module './account-agent-effect-read.sql'`).
+It is not a native assertion failure or a passing native typecheck; the managed command owns that analysis. No
+production defect has been reached by the local proof. There are no changes outside the declared paths.
