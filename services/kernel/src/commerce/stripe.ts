@@ -125,9 +125,8 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
       // https://docs.stripe.com/api/errors; stripe-node esm/Error.js maps HTTP errors to these classes.
       // Fixed messages also prevent Stripe's diagnostic text (or connection causes) from leaking credentials.
       if (
-        error instanceof Stripe.errors.StripeInvalidRequestError ||
-        error instanceof Stripe.errors.StripeCardError ||
-        error instanceof Stripe.errors.StripeIdempotencyError
+        (error instanceof Stripe.errors.StripeInvalidRequestError && error.code !== 'idempotency_key_in_use') ||
+        error instanceof Stripe.errors.StripeCardError
       ) {
         throw new StripeRejectedError('Stripe rejected the request');
       }
@@ -136,7 +135,9 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
     }
   }
 
+  const managedPayments = config.managedPayments;
   return {
+    managedPayments,
     createCheckoutSession(request, idempotencyKey) {
       return call(1, { request, idempotencyKey }, async (stripe) => {
         // https://docs.stripe.com/api/checkout/sessions/create: inline price_data, one item, order correlation.
@@ -164,7 +165,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           // Managed Payments handles indirect taxes for approved digital sellers and eligible product tax codes.
           // https://docs.stripe.com/changelog/dahlia/2026-04-22/managed-payments (2026-04-22.dahlia)
           // The installed SDK types include managed_payments; other accounts use the ADR's automatic-tax fallback.
-          ...(config.managedPayments ? { managed_payments: { enabled: true } } : { automatic_tax: { enabled: true } }),
+          ...((request.managedPayments ?? managedPayments) ? { managed_payments: { enabled: true } } : { automatic_tax: { enabled: true } }),
         };
         // https://docs.stripe.com/api/idempotent_requests: Stripe retains the first result for this exact request key.
         const session = await stripe.checkout.sessions.create(params, { idempotencyKey });

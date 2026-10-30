@@ -2,8 +2,8 @@ import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createCommerceCommands } from './commands.ts';
-import { checkoutUrlsForOrder } from './config.ts';
-import { StripeRejectedError, StripeUnavailableError, type Order, type StripePort } from './model.ts';
+import { createCheckoutForOrder } from './creation-attempt.ts';
+import type { Order, StripePort } from './model.ts';
 import { readOrder } from './store.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 
@@ -41,29 +41,7 @@ export async function checkout(
     };
     const order = await current();
     if (order.checkoutSessionId !== null || order.settlement === 'failed' || order.settlement === 'paid') return order;
-    try {
-      const urls = checkoutUrlsForOrder({ successUrl, cancelUrl }, id);
-      const session = await stripe.createCheckoutSession(
-        {
-          orderId: id,
-          buyerAccountId: order.buyerAccountId,
-          title: order.title,
-          currency: order.currency,
-          unitAmountMinor: order.unitAmountMinor,
-          taxCode: order.taxCode,
-          ...urls,
-          expiresAt: Math.floor(Date.parse(order.createdAt) / 1000) + 3600,
-        },
-        `order:${id}`,
-      );
-      await commands.recordCheckout(id, { session });
-    } catch (error) {
-      if (error instanceof StripeRejectedError) await commands.recordCheckout(id, { kind: 'failed' });
-      else if (error instanceof StripeUnavailableError) {
-        await commands.recordCheckout(id, { kind: 'unknown' });
-        throw error;
-      } else throw error;
-    }
+    await createCheckoutForOrder({ commands, stripe, urls: { successUrl, cancelUrl } }, id);
     return current();
   }
 }

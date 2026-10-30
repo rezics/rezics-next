@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createCommerceWork as createEnqueue } from '../../src/commerce/enqueue.ts';
 import { classifyStripeEvent, verifyStripeEvent } from '../../src/commerce/webhook.ts';
+import { StripeUnavailableError } from '../../src/commerce/model.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { refreshUserFixture } from './support/refresh-user-fixture.ts';
 import { workFixture } from './support/work-fixture.ts';
@@ -127,4 +128,81 @@ test('a worker stopped after the full checkout read recovers fresh and applies o
     await native.close();
     await fixture.start();
   }
+});
+
+
+test('Lost creation response preserves one stable native intent and provider request within the safe window', async () => {
+  const key = Bun.randomUUIDv7();
+  fixture.transport.fake.nextCreateFault = 'lost';
+  await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+  const order = await fixture.orderForRequest(key);
+  const native = await fixture.pool.query(
+    'SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2',
+    [routeOf(order.id), order.id],
+  );
+  expect(native.rows).toHaveLength(1);
+  const first = fixture.transport.fake.requests.find((r) => r.params.get('client_reference_id') === order.id)!;
+  const originalSession = [...fixture.transport.fake.sessions.values()].find((s) => s.client_reference_id === order.id)!;
+  expect(originalSession).toBeDefined();
+  const result = await fixture.checkoutRequest(key, {
+    successUrl: 'https://changed.test/success',
+    cancelUrl: 'https://changed.test/cancel',
+    stripe: { ...fixture.providerStripe, managedPayments: true },
+  });
+  expect(result.checkoutSessionId).toBe(originalSession.id);
+  const calls = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+  expect(calls).toHaveLength(2);
+  expect(calls.map((r) => r.rawParams)).toEqual([first.rawParams, first.rawParams]);
+  expect(calls.map((r) => r.headers.get('idempotency-key'))).toEqual([`order:${order.id}`, `order:${order.id}`]);
+  expect([...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id)).toHaveLength(1);
+  const after = (await fixture.pool.query(
+    'SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2',
+    [routeOf(order.id), order.id],
+  )).rows;
+  expect(after).toEqual([{ ...native.rows[0], retried: true }]);
+  const beforeReplay = fixture.transport.fake.requests.length;
+  expect((await fixture.checkoutRequest(key)).checkoutSessionId).toBe(originalSession.id);
+  expect(fixture.transport.fake.requests).toHaveLength(beforeReplay);
+  expect(result).not.toHaveProperty('request');
+  expect(result).not.toHaveProperty('firstAttemptAt');
+});
+
+for (const fault of ['lost', 'cached failure'] as const)
+  test(`${fault} followed by replay cannot erase an earlier uncertain creation`, async () => {
+    const key = Bun.randomUUIDv7();
+    fixture.transport.fake.nextCreateFault = fault === 'lost' ? 'lost' : { type: 'api_error', status: 500 };
+    await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+    const order = await fixture.orderForRequest(key);
+    const before = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+    if (fault === 'lost') {
+      await expect(fixture.providerStripe.createCheckoutSession(
+        { ...fixture.request(order), title: 'Mismatched retry' }, `order:${order.id}`,
+      )).rejects.toBeInstanceOf(StripeUnavailableError);
+      expect(await fixture.state(order.id)).toMatchObject({ settlement: 'unknown' });
+      const restored = await fixture.checkoutRequest(key);
+      const original = [...fixture.transport.fake.sessions.values()].find((s) => s.client_reference_id === order.id)!;
+      expect(restored.checkoutSessionId).toBe(original.id);
+    } else {
+      await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+      expect(await fixture.state(order.id)).toMatchObject({ settlement: 'unknown' });
+    }
+    const calls = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+    expect(calls.at(-1)!.rawParams).toBe(before[0]!.rawParams);
+    expect(calls.every((r) => r.headers.get('idempotency-key') === `order:${order.id}`)).toBe(true);
+    expect([...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id))
+      .toHaveLength(fault === 'lost' ? 1 : 0);
+  });
+
+
+test('HTTP replay refuses an expired uncertain creation without another provider create', async () => {
+  const key = Bun.randomUUIDv7();
+  fixture.transport.fake.nextCreateFault = 'lost';
+  await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+  const order = await fixture.orderForRequest(key);
+  const before = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+  await expect(fixture.checkoutRequest(key, { clockOffset: 25 * 60 * 60 * 1000 }))
+    .rejects.toBeInstanceOf(StripeUnavailableError);
+  expect(fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id)).toEqual(before);
+  expect(await fixture.state(order.id)).toMatchObject({ settlement: 'unknown' });
+  expect([...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id)).toHaveLength(1);
 });

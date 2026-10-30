@@ -116,10 +116,34 @@ only and still returns a delisted row. New purchases already reject delisted off
 Existing orders and Sessions keep their captured terms after price revision or delisting; neither delisting nor
 Library Undo revokes a paid benefit or expires every outstanding Session.
 
-[Checkout](checkout.ts) commits the order before the provider call and retries identical captured parameters with
-`order:<orderId>`. This provider key is separate from principal receipts, event deduplication and accounting keys.
-Provider idempotency is not permanent duplicate prevention; unresolved creation beyond provider key retention needs
-identification/reconciliation, not automatic creation of another purchase.
+[Checkout](checkout.ts) and [durable creation](work.ts) share one [native attempt](creation-attempt.ts).
+Before provider I/O, a command in the buyer/order home takes the current account share barrier and exact order
+lock, then captures the first physical attempt instant, `order:<orderId>` key, resolved success/cancel URLs,
+Session expiry and provider tax mode. Captured order offer/price/currency/tax code/buyer identity are already
+immutable; the private attempt projection combines those fields with immutable creation settings. Replays and
+worker recovery reuse that exact request even after configuration changes. All native connections release before
+provider I/O. Private attempt parameters, URLs and error diagnostics are absent from public Order DTOs.
+The provider key is separate from principal receipts, event deduplication and accounting keys.
+Each physical admission touches the account/order/attempt keys and ordinary command receipt/fence only, with one
+order revision event; retry evidence is monotonic. Work is fixed indexed point work, O(log R) rows/blocks per key,
+with bounded URLs (8 KiB each) and captured order fields, no history scan or timer queue. Focused fixture cases
+assert request identity and zero creates at cutoff; managed acceptance and derived proof remain pending.
+
+Following findings 9–11 of the [payment evidence research](../../../../docs/research/commerce-payment-evidence-settlement.md),
+automatic creation stops before the earlier of first attempt plus **23 hours** and captured expiry minus
+**30 minutes**, with another **20 seconds** reserved for the bounded provider operation. This is a local safety
+cutoff, not a promise of provider retention or eventual resolution. The captured expiry remains order creation plus
+one hour; a delayed, never-started order whose terms are no longer valid fails without a provider create or renewed
+expiry. A started attempt or pre-migration unknown order without trustworthy attempt evidence remains `unknown`
+after cutoff and returns the fixed unavailable/reconciliation outcome. No new key, new Session or recovery privilege
+is created. Recorded Sessions are reused, and public receipt replays still authorize before reading the current order.
+
+`StripeRejectedError` describes rejection of this call before creation, as supported by invalid-request/card
+rejection evidence. It does not prove an earlier ambiguous execution absent. Parameter mismatch, in-flight
+idempotency conflict, cached server failure and network loss produce sanitized `StripeUnavailableError` outcomes.
+A first definitive rejection may fail the order only while native evidence proves no other physical admission and
+no prior uncertainty. Concurrent/replayed rejection cannot erase an earlier unknown. Successful exact-key recovery
+records the original Session; the current buyer barrier also guards Session recording.
 
 ## Session refresh and payment truth
 
@@ -591,7 +615,7 @@ Bounds below distinguish rows examined (`R`), shared blocks (`B`) and SQL statem
 Index bounds assume selective indexed access and fixed row width; JSON fee details, provider arrays and receipt payloads add their byte/element costs, and cache warmth does not make block touches constant. The physical provider limits above do not establish SQL or receipt-storage bounds.
 HTTP and store entitlement pages cap `s` at 100; HTTP and payout pages fetch at most `s+1 = 101` rows, while the entitlement store helper fetches at most 100.
 The adapter and trusted snapshot command cap balance transactions at 256 per complete snapshot; the Stripe adapter also caps refund objects at 100 and dispute objects at 10. Settlement and royalty recording read only named transaction keys, at most 256 per run. The real provider adapter additionally caps aggregate fee details at 256 and enforces the physical byte/object bounds above; injected trusted snapshots remain a separate boundary.
-The checkout recorder permits pending → unknown once, then a session or failed outcome; unchanged outcomes roll back, and session/failed/paid orders exit before counting, so successful numbered receipts have `c <= 2` (the range count itself has no LIMIT).
+The checkout recorder permits pending → unknown once, then a session; a definitive first rejection may instead fail pending; unchanged outcomes roll back, and session/failed/paid orders exit before counting, so successful numbered receipts have `c <= 2` (the range count itself has no LIMIT).
 
 | Operation                              | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Growth check                                                                                                                                                                                    |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

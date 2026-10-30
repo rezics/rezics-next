@@ -7,10 +7,9 @@ import { CheckoutMismatchError } from './settlement.ts';
 import { readCommerceProviderConfig } from './config.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
-import { checkoutUrlsForOrder } from './config.ts';
+import { createCheckoutForOrder } from './creation-attempt.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import {
-  StripeRejectedError,
   StripeUnavailableError,
   type CheckoutLocator,
   type StripeCheckoutLocatorPort,
@@ -272,29 +271,8 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         { name: 'commerce.readOrder' },
       );
       const createCheckout = DBOS.registerStep(
-        async (order: Order): Promise<CheckoutOutcome> => {
-          try {
-            return {
-              session: await stripe.createCheckoutSession(
-                {
-                  orderId: order.id,
-                  buyerAccountId: order.buyerAccountId,
-                  title: order.title,
-                  currency: order.currency,
-                  unitAmountMinor: order.unitAmountMinor,
-                  taxCode: order.taxCode,
-                  ...checkoutUrlsForOrder(checkout, order.id),
-                  // Stable across the HTTP attempt, delayed reconciliation and step recovery.
-                  expiresAt: Math.floor(Date.parse(order.createdAt) / 1000) + 3600,
-                },
-                `order:${order.id}`,
-              ),
-            };
-          } catch (error) {
-            if (error instanceof StripeRejectedError) return { kind: 'failed' };
-            throw error;
-          }
-        },
+        (order: Order): Promise<CheckoutOutcome | null> =>
+          attempt(() => createCheckoutForOrder({ commands, stripe, urls: checkout }, order.id)),
         { name: 'commerce.createCheckout', ...stripeRetries },
       );
       const recordCheckout = DBOS.registerStep(
@@ -330,7 +308,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
           if (!order || order.settlement === 'paid' || order.settlement === 'failed') return;
           if (!order.checkoutSessionId) {
             const outcome = await createCheckout(order);
-            await recordCheckout(orderId, outcome);
+            if (outcome) await recordCheckout(orderId, outcome);
             order = await getOrder(orderId);
             if (!order || order.settlement === 'paid' || order.settlement === 'failed') return;
           }

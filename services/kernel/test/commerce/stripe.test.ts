@@ -260,7 +260,7 @@ test('lost create then retry with the same key returns the same session and stor
   fake.pay(retry.id);
   expect(await port.createCheckoutSession(request, 'lost')).toEqual(retry);
   await expect(port.createCheckoutSession({ ...request, title: 'different' }, 'lost')).rejects.toBeInstanceOf(
-    StripeRejectedError,
+    StripeUnavailableError,
   );
   expect(fake.sessions.size).toBe(1);
 });
@@ -281,7 +281,7 @@ test('rejected and unknown Stripe outcomes are distinguished without exposing th
       await port.createCheckoutSession(request, type);
       throw new Error('Expected failure');
     } catch (error) {
-      expect(error).toBeInstanceOf(status <= 402 && status !== 401 ? StripeRejectedError : StripeUnavailableError);
+      expect(error).toBeInstanceOf(type === 'invalid_request_error' || type === 'card_error' ? StripeRejectedError : StripeUnavailableError);
       expect(String(error)).not.toContain(config.apiKey);
     }
   }
@@ -331,4 +331,15 @@ test('fake events contain current Stripe objects and exact bytes signed by strip
   fake.updateDispute(dispute, 'won');
   const current = await fake.event('charge.dispute.closed', dispute);
   expect(JSON.parse(current.bytes).data.object.status).toBe('won');
+});
+
+test('captured provider tax mode survives a factory configuration change', async () => {
+  const { fake, port } = setup(true);
+  const captured = { ...request, managedPayments: false };
+  const first = await port.createCheckoutSession(captured, 'captured-mode');
+  expect(await port.createCheckoutSession(captured, 'captured-mode')).toEqual(first);
+  expect(fake.requests.map((r) => r.rawParams)[0]).toBe(fake.requests.map((r) => r.rawParams)[1]);
+  expect(fake.requests.every((r) => r.params.get('automatic_tax[enabled]') === 'true')).toBe(true);
+  expect(fake.requests.every((r) => !r.params.has('managed_payments[enabled]'))).toBe(true);
+  expect(fake.sessions.size).toBe(1);
 });

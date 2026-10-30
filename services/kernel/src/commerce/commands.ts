@@ -13,6 +13,7 @@ import {
   principalCommandIdentity,
   hasOwnCommandCompletion,
   normalizeCommandKey,
+  noEffect,
   runCommand,
   type CommandEvent,
   type CommandAuthorization,
@@ -25,12 +26,17 @@ import type { Access } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
-import type { CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
+import type { CheckoutRequest, CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
 import { assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import offerCreated from './command-offer-created.sql';
 import checkoutCount from './command-checkout-count.sql';
 import checkoutRecord from './command-checkout-record.sql';
+import checkoutCreate from './command-checkout-create.sql';
+import creationRead from './creation-attempt-read.sql';
+import creationInsert from './creation-attempt-insert.sql';
+import creationRetry from './creation-attempt-retry.sql';
+import { creationRetryUntil, type CheckoutCreationAdmission, type CheckoutCreationAttempt } from './creation-attempt.ts';
 
 export class OfferUnavailableError extends Error {
   constructor() {
@@ -43,7 +49,10 @@ class CompletedRefresh extends Error {}
 class SupersededRefresh extends Error {}
 const unchanged = { changed: false } as const;
 const WORK_STEP_DEADLINE_MS = 5_000;
-export type CheckoutOutcome = { session: CheckoutSession } | { kind: 'failed' | 'unknown' };
+export type CheckoutOutcome =
+  | { session: CheckoutSession }
+  | { kind: 'unknown' }
+  | { kind: 'failed'; creationAttemptId?: string };
 export type OfferInput = Pick<Offer, 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'>;
 
 /** Trusted native port input, never a client operation or buyer permission. */
@@ -289,6 +298,92 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       },
     );
   }
+  // Both trusted creation ports fence the current buyer before receipt lookup and hold
+  // the one order lock only through native work. No permission snapshot reaches Stripe.
+  function creationAuthorization(order: Order): CommandAuthorization {
+    return {
+      action: 'commerce.checkout.create',
+      resource: { route: route(order.id), id: order.id },
+      denied: () => new GrantDeniedError(),
+      async authorize(tx) {
+        await shareAccount(tx, order.buyerAccountId);
+        const current = await store.lockOrder(tx, route(order.id), order.id);
+        if (!current || current.buyerAccountId !== order.buyerAccountId) throw new GrantDeniedError();
+        return 'execute';
+      },
+    };
+  }
+  async function beginCheckoutCreation(
+    id: string,
+    configuration: Pick<CheckoutRequest, 'successUrl' | 'cancelUrl' | 'managedPayments'>,
+  ): Promise<CheckoutCreationAdmission> {
+    const r = route(id);
+    const order = await store.readOrder(pool, r, id);
+    if (!order) throw new GrantDeniedError();
+    const attemptId = Bun.randomUUIDv7();
+    const result = await runCommand<CheckoutCreationAdmission>(
+      pool,
+      {
+        partition: partitionOf(r),
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+        authorization: creationAuthorization(order),
+        receipt: {
+          actorAccountId: order.buyerAccountId,
+          kind: 'commerce.checkout.create',
+          key: attemptId,
+          digest: digest({ id }),
+        },
+      },
+      async (tx, command) => {
+        const current = await store.readOrder(tx, r, id);
+        if (!current) throw new GrantDeniedError();
+        const observedAt = authoritativeTimeValue(command.time);
+        const done = (value: CheckoutCreationAdmission) => noEffect(value);
+        if (current.checkoutSessionId || current.settlement === 'paid' || current.settlement === 'failed')
+          return done({ kind: 'finished' });
+        const stored = await creationRead.run(tx, { route: r, id });
+        // Pre-migration uncertainty has no trustworthy request/first-call evidence. Never guess it.
+        if (!stored && current.settlement === 'unknown') return done({ kind: 'unknown' });
+        const request: CheckoutRequest = {
+          orderId: id,
+          buyerAccountId: current.buyerAccountId,
+          title: current.title,
+          currency: current.currency,
+          unitAmountMinor: current.unitAmountMinor,
+          taxCode: current.taxCode,
+          successUrl: stored?.successUrl ?? configuration.successUrl,
+          cancelUrl: stored?.cancelUrl ?? configuration.cancelUrl,
+          expiresAt: stored ? Number(stored.expiresAt) : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
+          managedPayments: stored?.managedPayments ?? configuration.managedPayments ?? false,
+        };
+        const attempt: CheckoutCreationAttempt = {
+          firstAttemptId: stored?.firstAttemptId ?? attemptId,
+          firstAttemptAt: stored?.firstAttemptAt ?? observedAt,
+          providerKey: stored?.providerKey ?? `order:${id}`,
+          request,
+          retried: stored?.retried ?? false,
+        };
+        if (Math.max(Date.now(), Date.parse(observedAt)) >= creationRetryUntil(attempt))
+          return done({ kind: stored ? 'unknown' : 'failed' });
+        if (!stored) {
+          await creationInsert.run(tx, {
+            route: r, id, attempt_id: attemptId, at: observedAt, provider_key: attempt.providerKey,
+            success_url: request.successUrl, cancel_url: request.cancelUrl, expires_at: request.expiresAt,
+            managed_payments: request.managedPayments ?? false,
+          });
+        } else if (!stored.retried) await creationRetry.run(tx, { route: r, id });
+        const changed = await checkoutCreate.run(tx, {
+          route: r, id, revision: current.revision, at: observedAt, transaction_id: command.transactionId,
+        });
+        if (!changed) throw new RangeError('Commerce order revision exhausted');
+        return {
+          value: { kind: 'ready', attempt, first: !stored, observedAt },
+          events: [updated(id, changed.revision)],
+        };
+      },
+    );
+    return result.value;
+  }
   async function recordCheckout(id: string, body: CheckoutOutcome) {
     const r = routeOf(id);
     if (r === null) return unchanged;
@@ -318,6 +413,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           {
             partition: partitionOf(r),
             deadline: expiresAt,
+            authorization: creationAuthorization(order),
             receipt: {
               actorAccountId: order.buyerAccountId,
               kind: 'commerce.checkout.record',
@@ -336,6 +432,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
               throw new Unchanged();
             const session = 'session' in outcome ? outcome.session : null;
             const settlement = session ? 'pending' : (outcome as { kind: 'failed' | 'unknown' }).kind;
+            if (!session && settlement === 'failed') {
+              const attempt = await creationRead.run(tx, { route: r, id });
+              const evidence = 'creationAttemptId' in outcome ? outcome.creationAttemptId : undefined;
+              if (current.settlement === 'unknown' ||
+                  (attempt && (evidence !== attempt.firstAttemptId || attempt.retried))) throw new Unchanged();
+            }
             if (!session && settlement === current.settlement) throw new Unchanged();
             const rows = await checkoutRecord.run(tx, {
               route: r,
@@ -592,6 +694,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     reviseOffer,
     createOrder,
     recordCheckout,
+    beginCheckoutCreation,
     applyCheckoutSnapshot,
     beginCheckoutRefresh,
     applyClaimedCheckoutSnapshot,
