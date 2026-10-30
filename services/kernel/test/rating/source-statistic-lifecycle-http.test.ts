@@ -570,6 +570,17 @@ test('default alias normalization retains original positive and clear receipt di
     await fixture.request('POST', clearPath(subjectId), { body: { ...clear, sourceAlias: 'feed-two' }, key: clearKey }),
     422,
   );
+  const legacyClearReceipt = await fixture.database.admin.query(
+    `SELECT request_digest FROM core.receipt
+     WHERE principal_id=$1 AND command_kind='rating.source_statistic.clear' AND idempotency_key=$2`,
+    [fixture.actorId, clearKey],
+  );
+  expect(legacyClearReceipt.rows).toHaveLength(1);
+  expect(Buffer.from(legacyClearReceipt.rows[0]!.request_digest)).toEqual(
+    createHash('sha256')
+      .update(canonicalize([subjectId, source, clear])!)
+      .digest(),
+  );
 });
 
 test('a configured tuple home unavailable503 does not use the provider tuple as a substitute', async () => {

@@ -588,7 +588,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
             external_id: result.value.sourceRecordId,
             securityRevision: result.preparedFenceRevision,
           });
-          if (!rows.some((row) => JSON.stringify(row) === JSON.stringify(result.value)))
+          if (!rows.some((row) => canonicalize(row) === canonicalize(result.value)))
             throw new SourceStatisticNotFoundError();
           const finalSubject = await resolveSubject(
             {
