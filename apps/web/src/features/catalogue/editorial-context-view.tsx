@@ -152,7 +152,7 @@ export function EditorialContextWorkspace({
         <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
       </header>
       {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {notice && (
+      {notice && (notice !== 'delete' || !knownDeleted) && (
         <p role="status">
           {notice === 'delete'
             ? m.editorial_deleted({}, o)
@@ -162,7 +162,9 @@ export function EditorialContextWorkspace({
         </p>
       )}
       {knownDeleted && !active && (
-        <Tombstone shape="row" reason="deleted" labels={{ deleted: m.contribution_tombstone({}, o) }} />
+        <div role="status">
+          <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
+        </div>
       )}
       {failure && <p role="alert">{errorText(failure.reason)}</p>}
       {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}

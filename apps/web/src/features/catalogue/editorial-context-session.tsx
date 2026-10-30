@@ -33,7 +33,7 @@ export function EditorialContextSession({
         {state === 'unavailable'
           ? m.editorial_unavailable({}, { locale: locale as never })
           : state === 'signed-out'
-            ? m.relation_sign_in({}, { locale: locale as never })
+            ? m.account_sign_in({}, { locale: locale as never })
             : m.candidate_loading({}, { locale: locale as never })}
       </p>
     );
