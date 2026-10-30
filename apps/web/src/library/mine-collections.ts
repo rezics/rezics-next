@@ -94,7 +94,7 @@ function previewOf(collection: Partial<CollectionPreview>): MineCollectionPrevie
 }
 
 function present(collection: RawCollection & Partial<CollectionPreview>): MineCollection {
-  const membershipKind = 'membershipKind' in collection ? collection.membershipKind : undefined;
+  const membershipKind: unknown = 'membershipKind' in collection ? collection.membershipKind : undefined;
   const builtinKind = 'builtinKind' in collection ? collection.builtinKind : undefined;
   const labels = 'builtinLabels' in collection ? collection.builtinLabels : undefined;
   const builtinLabels =
