@@ -62,7 +62,10 @@ export async function readDocumentMediaPresentations(
   ids: readonly string[],
   context: DownloadContext,
 ): Promise<DocumentMediaPage> {
-  if (ids.length < 1 || ids.length > 32 || new Set(ids).size !== ids.length || ids.some((id) => routeOf(id) === null))
+  if (
+    ids.length < 1 || ids.length > 32 || new Set(ids).size !== ids.length ||
+    ids.some((id) => id.length !== 36 || routeOf(id) === null)
+  )
     throw new RangeError('Expected one to thirty-two unique routed media IDs');
   const images: DocumentImagePresentation[] = [];
   if (!Number.isFinite(context.deadline) || Date.now() >= context.deadline) return { images };

@@ -467,7 +467,9 @@ const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
 const imageDimension = t.Integer({ minimum: 1 });
 export const DocumentMediaInputSchema = t.Object(
-  { ids: t.Array(ContentIdSchema, { minItems: 1, maxItems: 32, uniqueItems: true }) },
+  { ids: t.Array(t.String({ pattern: `${ContentIdSchema.pattern}(?![\\s\\S])` }), {
+    minItems: 1, maxItems: 32, uniqueItems: true,
+  }) },
   closed,
 );
 export const DocumentMediaPageSchema = t.Unsafe<DocumentMediaPage>(t.Object(

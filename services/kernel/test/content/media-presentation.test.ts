@@ -70,7 +70,7 @@ test('presentation input and page are closed, bounded and reject transport field
   const id = fixture.globalImage.id;
   const input = Compile(DocumentMediaInputSchema);
   for (const body of [
-    { ids: [] }, { ids: [id, id] }, { ids: [newId(1), 'not-routed'] },
+    { ids: [] }, { ids: [id, id] }, { ids: [newId(1), 'not-routed'] }, { ids: [`${id}\n`] },
     { ids: Array.from({ length: 33 }, () => newId(1)) }, { ids: [id], containerId: id },
   ]) {
     expect(input.Check(body)).toBe(false);
