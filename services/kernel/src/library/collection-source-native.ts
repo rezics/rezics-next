@@ -28,7 +28,7 @@ export type CanonicalRangeKey = CanonicalRawKey;
 type Options = { deadline: number; allowance: WorkAllowance };
 type Ref = { route: number; collectionId: string };
 type Header = Ref & {
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   state: 'active' | 'deleted';
   visibility: 'private' | 'unlisted' | 'public';
   membershipKind: 'curated' | 'dynamic';
@@ -382,6 +382,7 @@ export function readNativeCollectionRawPage(
       if (
         (current.authority === 'curated') !== (input.driver === 'member') ||
         input.driver === 'output' ||
+        (current.authority !== 'curated' && current.curatorAccountId === null) ||
         (current.builtinKind === 'state' && input.driver !== 'entry')
       )
         throw new ProblemError('dependency_unavailable');

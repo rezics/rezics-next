@@ -399,6 +399,7 @@ export function createCollectionCommands(config: {
         const collection = await visibleCollection(tx, owner, route, collectionId, attempt.time);
         try {
           // Keep the immutable curator live through commit, including receipt replay.
+          if (collection.curatorAccountId === null) throw new GrantDeniedError();
           await shareAccount(tx, collection.curatorAccountId);
         } catch (error) {
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();

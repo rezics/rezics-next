@@ -912,6 +912,20 @@ $$;
 
 
 --
+-- Name: erasure_mutation_allowed(text, integer, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.erasure_mutation_allowed(p_store text, p_route integer, p_key bigint) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT current_setting('semantic.erasure_cleanup',true)='on' AND EXISTS (
+ SELECT 1 FROM semantic.erasure_locator l JOIN semantic.erasure_home h USING(partition_no,account_id)
+ WHERE l.partition_no=p_route/16 AND l.account_id=nullif(current_setting('semantic.erasure_account',true),'')::uuid
+ AND l.store=p_store AND l.record_key=p_key AND l.state='pending' AND h.state='local')
+$$;
+
+
+--
 -- Name: export_identity_epoch_empty_bootstrap(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -970,20 +984,6 @@ BEGIN
   ) THEN RAISE EXCEPTION 'identity_epoch_birth_custody_required'; END IF;
   RETURN NEW;
 END; $$;
-
-
---
--- Name: erasure_mutation_allowed(text, integer, bigint); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.erasure_mutation_allowed(p_store text, p_route integer, p_key bigint) RETURNS boolean
-    LANGUAGE sql STABLE
-    AS $$
- SELECT current_setting('semantic.erasure_cleanup',true)='on' AND EXISTS (
- SELECT 1 FROM semantic.erasure_locator l JOIN semantic.erasure_home h USING(partition_no,account_id)
- WHERE l.partition_no=p_route/16 AND l.account_id=nullif(current_setting('semantic.erasure_account',true),'')::uuid
- AND l.store=p_store AND l.record_key=p_key AND l.state='pending' AND h.state='local')
-$$;
 
 
 --
@@ -1276,8 +1276,6 @@ BEGIN
     VALUES(p_home,p_home,1,p_export,p_tx,owner.epoch,owner.position+1);
   RETURN true;
 END; $$;
-
-
 
 
 --
@@ -3661,13 +3659,6 @@ CREATE UNIQUE INDEX identity_epoch_effect_receipt_erasure_key ON semantic.identi
 
 
 --
--- Name: identity_epoch_generation_original; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX identity_epoch_generation_original ON semantic.identity_epoch_original USING btree (generation, original) WHERE present;
-
-
---
 -- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -4144,13 +4135,6 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 
 
 --
--- Name: identity_epoch_admission_handoff identity_epoch_admission_handoff_immutable; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER identity_epoch_admission_handoff_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_handoff FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
---
 -- Name: hidden_candidate hidden_candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -4169,6 +4153,13 @@ CREATE CONSTRAINT TRIGGER identity_epoch_ack_erasure_capture AFTER INSERT OR UPD
 --
 
 CREATE CONSTRAINT TRIGGER identity_epoch_admission_attempt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_attempt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_attempt_erasure();
+
+
+--
+-- Name: identity_epoch_admission_handoff identity_epoch_admission_handoff_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_admission_handoff_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_handoff FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -4193,6 +4184,13 @@ CREATE TRIGGER identity_epoch_admission_receipt_immutable BEFORE DELETE OR UPDAT
 
 
 --
+-- Name: identity_epoch_admission_source identity_epoch_admission_source_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_admission_source_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_source_erasure();
+
+
+--
 -- Name: identity_epoch_admission_validation identity_epoch_admission_validation_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -4213,13 +4211,6 @@ ALTER TABLE semantic.subject DISABLE TRIGGER identity_epoch_birth_custody;
 --
 
 CREATE TRIGGER identity_epoch_bootstrap_basis_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_basis FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
---
--- Name: identity_epoch_admission_source identity_epoch_admission_source_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER identity_epoch_admission_source_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_source_erasure();
 
 
 --
@@ -4279,6 +4270,27 @@ CREATE TRIGGER identity_epoch_change_immutable_truncate BEFORE TRUNCATE ON seman
 
 
 --
+-- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_effect_receipt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_effect_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_effect_receipt_erasure();
+
+
+--
+-- Name: identity_epoch_home_gate identity_epoch_home_gate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_home_gate_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_home_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_home_gate_erasure();
+
+
+--
+-- Name: identity_epoch_input identity_epoch_input_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_input_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_input_erasure();
+
+
+--
 -- Name: identity_epoch_installation_cut identity_epoch_installation_cut_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -4304,27 +4316,6 @@ CREATE TRIGGER identity_epoch_installation_immutable BEFORE DELETE OR UPDATE ON 
 --
 
 CREATE TRIGGER identity_epoch_installation_immutable_truncate BEFORE TRUNCATE ON semantic.identity_epoch_installation FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
---
--- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER identity_epoch_effect_receipt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_effect_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_effect_receipt_erasure();
-
-
---
--- Name: identity_epoch_home_gate identity_epoch_home_gate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER identity_epoch_home_gate_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_home_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_home_gate_erasure();
-
-
---
--- Name: identity_epoch_input identity_epoch_input_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE CONSTRAINT TRIGGER identity_epoch_input_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_input_erasure();
 
 
 --

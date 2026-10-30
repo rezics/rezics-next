@@ -13,7 +13,7 @@ import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createPersonas, type Persona, type PersonasOptions } from '../support/personas.ts';
 import { testKernel, testTokens, type TestKernel } from '../support/test-kernel.ts';
-import { workerTestEnv } from '../support/worker-env.ts';
+import { startErasureWorker } from './support/erasure-worker.ts';
 
 let db: GrowthDatabase;
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -21,9 +21,7 @@ let kernel: TestKernel;
 let options: PersonasOptions;
 let people: Awaited<ReturnType<typeof createPersonas>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
-let worker: ReturnType<typeof Bun.spawn> | undefined;
-let output = '';
-let reading: Promise<void> | undefined;
+let worker: Awaited<ReturnType<typeof startErasureWorker>> | undefined;
 let subjectId: string;
 let privateId: string;
 let unlistedId: string;
@@ -49,43 +47,6 @@ async function json(response: Response, status: number) {
   const body = await response.json();
   expect(response.status, JSON.stringify(body)).toBe(status);
   return body;
-}
-async function startDefaultWorker() {
-  let ready!: () => void;
-  const readiness = new Promise<void>((resolve) => {
-    ready = resolve;
-  });
-  worker = Bun.spawn([process.execPath, new URL('../../src/worker.ts', import.meta.url).pathname], {
-    env: workerTestEnv({
-      ...process.env,
-      DATABASE_URL: db.url,
-      STRIPE_SECRET_KEY: 'sk_test_library_erasure',
-      STRIPE_MANAGED_PAYMENTS: 'false',
-      CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
-      CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-    }),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const read = async (stream: ReadableStream<Uint8Array>) => {
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) {
-      output += decoder.decode(chunk, { stream: true });
-      if (output.includes('Worker ready')) ready();
-    }
-  };
-  reading = Promise.all([
-    read(worker.stdout as ReadableStream<Uint8Array>),
-    read(worker.stderr as ReadableStream<Uint8Array>),
-  ]).then(() => {});
-  await Promise.race([
-    readiness,
-    worker.exited.then(async (code) => {
-      await reading;
-      throw new Error(`Default worker exited ${code}: ${output}`);
-    }),
-  ]);
-  for (const queue of await client.listQueues()) await queue.setMinPollingIntervalMs(5);
 }
 
 beforeAll(async () => {
@@ -127,7 +88,7 @@ beforeAll(async () => {
   // Cross the real 100-key boundary; each copy is created through the ordinary API.
   for (let i = 0; i < 101; i++)
     await json(
-      await request(people.bob, 'POST', '/v1/copies', { subjectId, status: 'owned', note: `private copy ${i}` }),
+      await request(people.bob, 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned', note: `private copy ${i}` }),
       201,
     );
   privateId = (
@@ -163,15 +124,11 @@ beforeAll(async () => {
   entries = createEntryCommands({ pool: db.pool, access: kernel.testAccess, tokens: testTokens() });
   client = await createWorkClient(db.url);
   // Auth owns its separate executor; the default kernel worker runs in its own process.
-  await startDefaultWorker();
+  worker = await startErasureWorker(db.url, client);
 }, 360_000);
 
 afterAll(async () => {
-  if (worker) {
-    worker.kill('SIGTERM');
-    await worker.exited;
-    await reading;
-  }
+  await worker?.close();
   await client?.close();
   await auth?.close();
   await db?.close();
@@ -183,7 +140,7 @@ async function result(persona: Persona) {
   const id = libraryErasureWorkflowId(persona.accountId);
   const deadline = Date.now() + 30000;
   while (!(await client.getWorkflow(id))) {
-    if (Date.now() >= deadline) throw new Error(`Default Library effect did not register ${id}: ${output}`);
+    if (Date.now() >= deadline) throw new Error(`Default Library effect did not register ${id}: ${worker?.output}`);
     await Bun.sleep(10);
   }
   const value = (await client.retrieveWorkflow(id).getResult()) as {
@@ -220,7 +177,6 @@ test('fresh Auth deletion of an unused actor reaches the registered default part
   expect(observed.state).toBe('pending');
   expect(observed.facts).toEqual({ pages: 3, examined: 0, removed: 0 });
   expect(observed.remainingStores).toEqual([]);
-  expect(observed.blockers).toContain('bulk_target/bulk_effect: no account-leading operation/selection locator');
   expect(observed.blockers).toContain(
     'shared receipt/outbox/write_basis/work payloads: no exact Library producer custody/minimizer handoff',
   );
@@ -228,9 +184,21 @@ test('fresh Auth deletion of an unused actor reaches the registered default part
   expect((await request(people.alice, 'GET', '/v1/libraryEntries')).status).toBe(401);
 }, 90000);
 
-test('owned native data stays pending after partial primitive exhaustion and T immediately fences typed writes and private/unlisted reads', async () => {
+test('complete local native cleanup stays pending for shared custody and T immediately fences typed writes and private/unlisted reads', async () => {
   expect((await request(people.bob, 'GET', `/v1/collections/${privateId}`)).status).toBe(200);
   expect((await request(null, 'GET', `/v1/collections/${unlistedId}`)).status).toBe(200);
+  const nativeOwner = [routeOf(people.bob.accountId), people.bob.accountId];
+  expect((await db.admin.query(
+    'SELECT session_id FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3',
+    [...nativeOwner, sessionId],
+  )).rows).toEqual([{ session_id: sessionId }]);
+  for (const table of ['progress_head', 'fact_source_head'])
+    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, nativeOwner)).rows).toEqual([{ '?column?': 1 }]);
+  for (const id of [privateId, unlistedId])
+    expect((await db.admin.query(
+      'SELECT collection_id FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
+      [...nativeOwner, id],
+    )).rows).toEqual([{ collection_id: id }]);
   await deletePersona(options, people.bob);
   // Authority/disclosure must fail at T, independently of asynchronous physical work.
   const denied = await capture(db, async () => {
@@ -252,8 +220,7 @@ test('owned native data stays pending after partial primitive exhaustion and T i
   expect(observed.facts.pages).toBe(4);
   expect(observed.facts.examined).toBeGreaterThanOrEqual(102);
   expect(observed.facts.removed).toBe(observed.facts.examined);
-  for (const store of ['collection', 'progress_session', 'progress_head', 'fact_source_head'])
-    expect(observed.remainingStores).toContain(store);
+  expect(observed.remainingStores).toEqual([]);
   await pending(people.bob);
   const owner = [routeOf(people.bob.accountId), people.bob.accountId];
   for (const table of ['entry', 'copy', 'follow'])
@@ -267,7 +234,19 @@ test('owned native data stays pending after partial primitive exhaustion and T i
         sessionId,
       ])
     ).rows,
-  ).toEqual([{ session_id: sessionId }]);
+  ).toEqual([]);
+  for (const table of ['progress_unit', 'progress_change'])
+    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND session_id=$2 LIMIT 1`,
+      [owner[0], sessionId])).rows).toEqual([]);
+  for (const table of ['progress_head', 'fact_source_head'])
+    expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, owner)).rows).toEqual([]);
+  for (const id of [privateId, unlistedId]) {
+    expect((await db.admin.query('SELECT 1 FROM library.collection WHERE route=$1 AND curator_account_id=$2 AND collection_id=$3',
+      [...owner, id])).rows).toEqual([]);
+    for (const table of ['collection_member', 'canonical_source_fact', 'canonical_source_state'])
+      expect((await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`,
+        [owner[0], id])).rows).toEqual([]);
+  }
   // Native receipts prove page/result/delete atomicity and fixed raw-key bounds.
   const receipts = await db.admin.query(
     `SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2

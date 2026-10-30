@@ -10,6 +10,8 @@ import { purgeAccountFactsPage } from './account-fact-purge.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import scope from './erasure-scope.sql';
 import probe from './erasure-probe.sql';
+import { purgeOwnedGraphPage } from './erasure-owned-graph.ts';
+import { initialGraphCheckpoint, runOwnedGraphSegment, type GraphCheckpoint } from './erasure-owned-work.ts';
 
 const TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
 const WORKFLOW = 'library.accountErasure';
@@ -17,7 +19,7 @@ const WORKFLOW = 'library.accountErasure';
 // These gaps apply even when every indexed native root is absent. Never turn a
 // missing producer/locator/minimizer into an attestation that no data applies.
 const BLOCKERS = Object.freeze([
-  'bulk_target/bulk_effect: no account-leading operation/selection locator',
+  'bulk_effect: target-home effects have no account-home producer locator or late-disposition fence',
   'collection_listing_history: no curator locator after parent removal',
   'shared receipt/outbox/write_basis/work payloads: no exact Library producer custody/minimizer handoff',
   'listing effects: no account-home locator fence or committed late-item disposition',
@@ -30,8 +32,8 @@ export const libraryErasureWorkflowId = (accountId: string) => {
   return `library:erasure:${accountId}`;
 };
 
-/** Registration and honest partial progress, not the full Library erasure graph.
- * No native complete-proof path exists yet; therefore this module cannot ACK.
+/** Default terminal cleanup of indexed local stores.
+ * Shared/foreign custody still has no complete-proof path; this module cannot ACK.
  * See erasure-participant.md for every remaining producer and cleanup obligation.
  */
 export function registerLibraryErasure({ pool, client, addEffects }: WorkContext): void {
@@ -63,41 +65,54 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
     },
     { name: 'library.purgeErasureFactsPage', ...COMMAND_STEP_RETRIES },
   );
+  const graphPage = DBOS.registerStep(
+    async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
+    { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
+  );
+  type Continuation = { segment: number; factKind: number; factAfter: FactInput['after']; graph: GraphCheckpoint };
+  const continueErasure = DBOS.registerStep(
+    async (accountId: string, next: Continuation) => {
+      await client.enqueue({ workflowName: WORKFLOW, workflowID: `${libraryErasureWorkflowId(accountId)}:${next.segment}`,
+        workflowIDReusePolicy: 'return-existing', queueName: 'workflows' }, accountId, next);
+    },
+    { name: 'library.continueAccountErasure', ...COMMAND_STEP_RETRIES },
+  );
   DBOS.registerWorkflow(
-    async (accountId: string) => {
+    async (accountId: string, start?: Continuation) => {
       const initial = await inspect(accountId);
       // An immutable acknowledgement is never reopened by duplicate/stale work.
       if (initial.outcome !== null) return { state: 'acknowledged', outcome: initial.outcome };
+      const cursor: Continuation = start ?? { segment: 0, factKind: 0, factAfter: null, graph: initialGraphCheckpoint() };
       const facts = { pages: 0, examined: 0, removed: 0 };
-      let continuation: { kind: FactInput['kind']; after: FactInput['after'] } | null = null;
-      factsSegment: for (const kind of ['entry', 'copy', 'follow'] as const) {
-        let after: FactInput['after'] = null;
-        for (;;) {
-          if (facts.pages === 100) {
-            continuation = { kind, after };
-            break factsSegment;
-          }
-          const page = await purgePage(accountId, kind, after);
-          facts.pages++;
-          facts.examined += page.examined;
-          facts.removed += page.removed;
-          if (page.exhausted) break;
+      const kinds = ['entry', 'copy', 'follow'] as const;
+      while (cursor.factKind < kinds.length && facts.pages < 100) {
+        const page = await purgePage(accountId, kinds[cursor.factKind]!, cursor.factAfter);
+        facts.pages++;
+        facts.examined += page.examined;
+        facts.removed += page.removed;
+        if (page.exhausted) { cursor.factKind++; cursor.factAfter = null; }
+        else {
           if (page.after === null) throw new Error('Library erasure page made no progress');
-          after = page.after;
+          cursor.factAfter = page.after;
         }
       }
+      const graph = cursor.factKind === kinds.length
+        ? await runOwnedGraphSegment(accountId, cursor.segment, cursor.graph, graphPage) : null;
+      if (graph) cursor.graph = graph.cursor;
+      const continuation = cursor.factKind < kinds.length || !graph?.exhausted
+        ? { ...cursor, segment: cursor.segment + 1 } : null;
+      if (continuation) await continueErasure(accountId, continuation);
       const final = await inspect(accountId);
       if (final.outcome !== null) return { state: 'acknowledged', outcome: final.outcome };
-      // Exhaustion attests only to these three native namespaces. Even zero roots
-      // cannot close unindexed roles or copies committed before their locator effect.
+      // Local exhaustion is not proof of foreign copies or shared producer custody.
       return {
-        state: 'pending',
-        facts,
-        continuation,
+        state: 'pending', facts, owned: graph?.stats ?? { pages: 0, removed: 0 }, continuation,
         remainingStores: final.remainingStores,
-        blockers: continuation
-          ? [...BLOCKERS, 'fact pages: 100-page segment limit reached; native continuation remains pending']
-          : BLOCKERS,
+        blockers: [...BLOCKERS,
+          ...(cursor.graph.blockedCollection === null ? [] : [
+            `collection:${cursor.graph.blockedCollection}: public-history destination withdrawal/fence not committed; source retained`,
+          ]),
+        ],
       };
     },
     { name: WORKFLOW },

@@ -37,7 +37,7 @@ type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
 export type CollectionView = CollectionPresentation & {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   description: string | null;
   visibility: 'private' | 'unlisted' | 'public';
@@ -56,7 +56,7 @@ export type MemberView = {
 
 export type PublicCollectionView = {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   multiplicity: number;
 };
@@ -86,7 +86,7 @@ function iso(value: string): string {
 
 function collectionView(row: {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   description: string | null;
   visibility: string;
@@ -245,6 +245,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       // T hides nonpublic contributions even from a known-ID anonymous/unlisted
       // read. Authentication of the viewer alone cannot fence the curator's data.
       if (sink.row && sink.row.visibility !== 'public') {
+        if (sink.row.curatorAccountId === null) return null;
         const curatorRoute = routeOf(sink.row.curatorAccountId);
         const curator =
           curatorRoute === null ? null : await readAccount(client, curatorRoute, sink.row.curatorAccountId);
@@ -466,8 +467,10 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
           // Publication is eventual. A detected withdrawn positive cannot certify an exact count.
           if (!row || row.state !== 'active' || row.visibility !== 'public')
             throw new ProblemError('dependency_unavailable');
-          const views = await readPublicViews(client, [row.curatorAccountId]);
-          if (views.get(row.curatorAccountId)?.collections !== true) continue;
+          if (row.curatorAccountId !== null) {
+            const views = await readPublicViews(client, [row.curatorAccountId]);
+            if (views.get(row.curatorAccountId)?.collections !== true) continue;
+          }
           shown.push({
             id: row.id,
             curatorAccountId: row.curatorAccountId,

@@ -182,6 +182,46 @@ $$;
 
 
 --
+-- Name: guard_retained_collection(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_retained_collection() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.curator_account_id IS NULL AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Deidentified public contribution is immutable' USING ERRCODE='check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: guard_retained_collection_member(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_retained_collection_member() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  parent_route integer;
+  parent_id uuid;
+  curator uuid;
+BEGIN
+  IF TG_OP='DELETE' THEN parent_route:=OLD.route; parent_id:=OLD.collection_id;
+  ELSE parent_route:=NEW.route; parent_id:=NEW.collection_id; END IF;
+  SELECT curator_account_id INTO curator FROM library.collection
+    WHERE route=parent_route AND collection_id=parent_id FOR SHARE;
+  IF FOUND AND curator IS NULL THEN
+    RAISE EXCEPTION 'Deidentified public contribution is immutable' USING ERRCODE='check_violation';
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;
+
+
+--
 -- Name: guard_type_preparation_header(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -456,7 +496,7 @@ CREATE TABLE library.canonical_source_state (
 CREATE TABLE library.collection (
     route integer NOT NULL,
     collection_id uuid NOT NULL,
-    curator_account_id uuid NOT NULL,
+    curator_account_id uuid,
     title text NOT NULL,
     description text,
     visibility text NOT NULL,
@@ -470,7 +510,6 @@ CREATE TABLE library.collection (
     listing_ever_public boolean DEFAULT false NOT NULL,
     deleted_at timestamp with time zone,
     purge_after timestamp with time zone,
-    deleted_ordinal_key text COLLATE pg_catalog."C",
     membership_kind text DEFAULT 'curated'::text NOT NULL,
     builtin_kind text,
     builtin_release_digest text,
@@ -495,6 +534,7 @@ END),
     CONSTRAINT collection_builtin_kind_check CHECK ((builtin_kind = ANY (ARRAY['everything'::text, 'state'::text]))),
     CONSTRAINT collection_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_check1 CHECK ((route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11)))),
+    CONSTRAINT collection_deidentified_public CHECK (((curator_account_id IS NOT NULL) OR ((state = 'active'::text) AND (visibility = 'public'::text) AND (membership_kind = 'curated'::text)))),
     CONSTRAINT collection_deletion_pair CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
     CONSTRAINT collection_deletion_window CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
@@ -543,13 +583,14 @@ CREATE TABLE library.collection_member (
     deletion_revision bigint,
     deleted_at timestamp with time zone,
     purge_after timestamp with time zone,
+    deleted_ordinal_key text COLLATE pg_catalog."C",
     CONSTRAINT collection_member_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_member_check1 CHECK ((route = ((get_byte(uuid_send(member_id), 10) * 256) + get_byte(uuid_send(member_id), 11)))),
     CONSTRAINT collection_member_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
-    CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (deleted_ordinal_key IS NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL) AND (deleted_ordinal_key IS NOT NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (deleted_ordinal_key IS NULL) AND (added_at IS NULL) AND (note IS NULL)))),
     CONSTRAINT collection_member_ordinal_key_check CHECK (((char_length(ordinal_key) >= 1) AND (char_length(ordinal_key) <= 48))),
-    CONSTRAINT collection_member_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT collection_member_revision_check CHECK ((member_revision >= 1))
+    CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NULL) AND (note IS NULL)))),
+    CONSTRAINT collection_member_revision_check CHECK ((member_revision >= 1)),
+    CONSTRAINT collection_member_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -1414,11 +1455,6 @@ ALTER TABLE ONLY library.collection_listing_history
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_ordinal_key UNIQUE (route, collection_id, ordinal_key) DEFERRABLE;
 
--- Name: collection_member_live_ordinal; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX collection_member_live_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id) WHERE (deletion_id IS NULL);
-
 
 --
 -- Name: collection_member collection_member_pkey; Type: CONSTRAINT; Schema: library; Owner: -
@@ -1756,10 +1792,24 @@ CREATE INDEX builtin_state_reference_source_support ON library.builtin_state_ref
 
 
 --
+-- Name: bulk_effect_erasure_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_effect_erasure_owner ON library.bulk_effect USING btree (route, account_id, operation_id, ordinal);
+
+
+--
 -- Name: bulk_effect_expiry; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX bulk_effect_expiry ON library.bulk_effect USING btree (route, expires_at, operation_id, ordinal);
+
+
+--
+-- Name: bulk_target_erasure_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_erasure_owner ON library.bulk_target USING btree (route, account_id, operation_id, ordinal);
 
 
 --
@@ -1840,20 +1890,31 @@ CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btre
 
 
 --
--- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
+-- Name: collection_member_deletion_id; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id);
+CREATE UNIQUE INDEX collection_member_deletion_id ON library.collection_member USING btree (route, collection_id, deletion_id) WHERE (deletion_id IS NOT NULL);
 
--- Name: collection_member_live_subject; Type: INDEX; Schema: library; Owner: -
+
+--
+-- Name: collection_member_live_ordinal; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX collection_member_live_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id) WHERE (deletion_id IS NULL);
+CREATE INDEX collection_member_live_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id) WHERE (deletion_id IS NULL);
 
+
+--
 -- Name: collection_member_retention_due; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX collection_member_retention_due ON library.collection_member USING btree (partition_no, purge_after, route, collection_id, member_id) WHERE ((deletion_id IS NOT NULL) AND (purge_after IS NOT NULL));
+
+
+--
+-- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id);
 
 
 --
@@ -2165,10 +2226,24 @@ CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE O
 
 
 --
+-- Name: collection_member collection_member_retained_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_member_retained_immutable BEFORE INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.guard_retained_collection_member();
+
+
+--
 -- Name: collection collection_membership_kind_immutable; Type: TRIGGER; Schema: library; Owner: -
 --
 
 CREATE TRIGGER collection_membership_kind_immutable BEFORE UPDATE OF membership_kind ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_membership_kind();
+
+
+--
+-- Name: collection collection_retained_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_immutable BEFORE UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_retained_collection();
 
 
 --

@@ -283,6 +283,12 @@ export async function fullMembers(
       if (!sink.seen) sink.row = await collectionRead.run(client, identity);
       const collection = sink.row;
       if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
+      // The same exact curator-T fence as BASIC members, before any child read.
+      if (collection.visibility !== 'public') {
+        const curator = collection.curatorAccountId === null ? null
+          : await readAccount(client, route, collection.curatorAccountId);
+        if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
+      }
       // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
       if (
         collection.visibility === 'private' &&

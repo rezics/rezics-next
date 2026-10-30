@@ -31,7 +31,7 @@ const revision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 export const collectionSchema = t.Object(
   {
     id,
-    curatorAccountId: id,
+    curatorAccountId: t.Union([id, t.Null()]),
     title: t.String(),
     description: nullableString,
     visibility,
@@ -61,7 +61,7 @@ const subjectPage = t.Object(
       t.Object(
         {
           id,
-          curatorAccountId: id,
+          curatorAccountId: t.Union([id, t.Null()]),
           title: t.String(),
           multiplicity: t.Integer({ minimum: 1 }),
         },
@@ -266,7 +266,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     .get(
       '/v1/collections',
       {
-        query: t.Object({ curatorAccountId: id, ...pageQuery }, closed),
+        query: t.Object({ curatorAccountId: t.Union([id, t.Null()]), ...pageQuery }, closed),
         response: {
           200: t.Object(
             { collections: t.Array(embedded(collectionSchema, curatorFields)), next: nullableString },
