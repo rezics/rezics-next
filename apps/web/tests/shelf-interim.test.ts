@@ -177,14 +177,18 @@ describe('interim library shelf contract', () => {
   test('all shelf menus use the shared responsive menu and grid tiles omit updated time', async () => {
     const view = await source('library/shelf-view.tsx');
     const menu = await readFile(new URL('../../../packages/ui/src/components/menu.tsx', import.meta.url), 'utf8');
-    const stories = await readFile(new URL('../src/stories/library-entries.stories.tsx', import.meta.url), 'utf8');
+    const stories = await readFile(
+      new URL('../src/stories/library-entries-patterns.stories.tsx', import.meta.url),
+      'utf8',
+    );
     const grid = /function GridView[\s\S]*?function ListView/.exec(view)?.[0] ?? '';
     expect(view).toContain("from '@rezics/ui/item-menu'");
     expect(view).not.toContain('shadcn/dropdown-menu');
     expect(menu).toContain("window.matchMedia('(max-width: 767px)')");
     expect(menu).toContain("window.matchMedia('(pointer: coarse)')");
-    expect(stories).toMatch(/phone|390/);
-    expect(stories).toMatch(/menu.*open|open.*menu/i);
+    expect(stories).toContain('export const PhoneTileMenuOpen');
+    expect(stories).toContain("globals: { viewport: { value: 'phone' } }");
+    expect(stories).toContain('[data-slot="drawer-content"]');
     expect(grid).not.toContain('Updated');
     expect(grid).not.toContain('updatedAt');
   });
