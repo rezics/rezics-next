@@ -27,6 +27,8 @@ import {
 type Current = Extract<EditorRead, { ok: true }>;
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 
+export { ScalarControl };
+
 export function EditorFailure({ reason, locale }: { reason: string; locale: string }) {
   const o = { locale: locale as never };
   return (

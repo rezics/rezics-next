@@ -1,6 +1,7 @@
 import type { PublicFigure } from './subject-ratings';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
+import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -371,6 +372,7 @@ export function SubjectPage({
     read && !page.account ? (
       <>
         {existingActions}
+        {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
         <CreateSubjectEntry locale={locale} />
         <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
       </>

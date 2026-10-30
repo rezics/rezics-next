@@ -1,5 +1,6 @@
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
+import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -244,6 +245,7 @@ export function SubjectFrame({
           )}
         </div>
         <div data-slot="actions">
+          {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
           <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
         </div>

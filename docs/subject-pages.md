@@ -42,6 +42,30 @@ The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug
 editor follows the [multilingual terms browser flow](catalogue-editing.md#browser-flow-multilingual-subject-terms),
 keeping the exact native subject, explicit per-language changes and recoverable drafts through conflicts.
 
+## Add an edition or release
+
+The work's Editions view and a work header that supports Editions offer
+`/{locale}/catalogue/publication?work={id}`. The editor requires the exact readable existing work; missing or hidden
+work is concealed, and a merged identity is not silently substituted. Discovery opens the existing search page
+before creation. A separate confirmation identifies an independent publication: a file, language/format combination,
+personal Library Copy or distribution event alone does not establish this grain.
+
+Only emitted profiles and effective fields are offered: Book editions use `bf:Instance`, video works use
+`rezics:AnimeRelease`, and software/game works use `wd:Q20631656` where the released work target permits it.
+`schema:exampleOfWork` identifies the work; the released AnimeRelease `bf:hasPart` means an included work instead.
+These are separate native relations, not an invented anthology Type. Definition labels follow the interface locale;
+the entered name's data language is independent. Optional ISBN, identifier, date, publisher, language and page facts
+use their released schema. ISBN text is retained without guessed normalization, date precision and quantity units
+are explicit, and publisher selection uses existing discovery summaries and real subject IDs. An entered citation
+supports the work link and entered facts. Work credits, word count and progress are never copied.
+
+The form uses the same generated `POST /v1/subjects`, session BFF and CSRF path as generic creation. Native creation
+selects initial facts in Global; it is not a proposal-only result. Success reads the exact returned UUID through the
+ordinary current reader and opens its canonical address. A concealed or unavailable reader offers only a read retry.
+Definite refusal preserves the draft and key until an explicit edit; uncertain delivery freezes the original command
+for exact retry. A conflict requires explicit review before a new request. Rejected values refresh current definitions
+without discarding the draft. The private editor is noindex and does not infer ownership or media permissions.
+
 ## Canonical public reading
 
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
