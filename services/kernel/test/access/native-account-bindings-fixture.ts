@@ -12,6 +12,7 @@ import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
+import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -140,6 +141,7 @@ export async function nativeFixture(
         const context = () => ({ pool, deadline: Date.now() + 10000 });
         const ports: AccountOperationAccess = {
           context,
+          readOperatorTransferState: createAccountManagementReadAccess({ pool, access }).readOperatorTransferState,
           approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
           resolveForCaller: (token, reference, operation, ctx) =>
             workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),

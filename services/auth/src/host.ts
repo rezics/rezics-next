@@ -5,6 +5,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { authManagementClient } from './auth-management-client.ts';
+import {
+  accountManagementReadTransport,
+  type AccountManagementReadAccess,
+} from './account-management-read-transport.ts';
 import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
@@ -36,6 +40,8 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
   /** Kernel workflow approval and gate ports for the account-operation routes.
    * Absent, both routes answer 503 account_operation_denied. */
   accountOperations?: AccountOperationAccess;
+  /** Independent native read binding; defaults to the additive accountOperations port. */
+  accountManagementReads?: AccountManagementReadAccess;
   executorId?: string;
   /** UTC five- or six-field numeric cron expression. */
   maintenanceSchedule?: string;
@@ -162,13 +168,17 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     handler: accountOperationTransport(
       service,
       workflows,
-      accountManagementMembershipTransport(
+      accountManagementReadTransport(
         service,
-        credentialEffectTransport(service, workflows.handler, options),
-        (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
-          .readOrganizationMembershipCommandState
-          ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
-          : undefined,
+        accountManagementMembershipTransport(
+          service,
+          credentialEffectTransport(service, workflows.handler, options),
+          (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
+            .readOrganizationMembershipCommandState
+            ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
+            : undefined,
+        ),
+        options.accountManagementReads ?? options.accountOperations,
       ),
       options.accountOperations,
     ),

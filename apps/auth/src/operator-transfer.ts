@@ -1,15 +1,10 @@
 import { authPost, type AuthPostResult } from './api';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
+import { managementOperationProfile } from '@rezics/auth-contract';
 
-// Local adapter until the shared management bindings land. The host owner must
-// mount this private, cookie/Origin-protected point read, using native current
-// disclosure/management authority, and return the exact tuple AND row version.
-// Public profile/operatorId and responsibility-list rows cannot supply this DTO.
+// Closed private native source; its tuple/version is never transfer approval.
 export const OPERATOR_RELATION_PATH = '/account-management/operators/relation';
-export const OPERATOR_MANAGEMENT_PROFILE = {
-  client_id: 'rezics-auth-account-management',
-  scope: ['account:manage'],
-} as const;
+export const OPERATOR_MANAGEMENT_PROFILE = managementOperationProfile('transfer');
 export type OperatorRelation = {
   previous: { operatorAccountId: string; subjectAccountId: string; reservationId: string };
   expectedVersion: string;
@@ -128,8 +123,7 @@ async function boundSession(accountId: string): Promise<TransferFailure | null> 
 export async function readOperatorRelation(subjectAccountId: string, accountId: string): Promise<RelationResult> {
   const denied = await boundSession(accountId);
   if (denied) return denied;
-  // POST is a private read so the browser supplies Origin. The owner must send
-  // private,no-store responses and recheck normal native authority on every call.
+  // POST supplies Origin; Auth rechecks the human and native management authority.
   const result = await authPost<unknown>(OPERATOR_RELATION_PATH, { subjectAccountId });
   if (!result.ok) return failure(result);
   if (

@@ -6,6 +6,7 @@ import {
   automatedDescriptorMatches,
   automatedNativeResult,
 } from './automated-account-transport.ts';
+import type { OperatorTransferState } from './account-management-read-transport.ts';
 
 /** Kernel workflow approval and platform gate ports, bound by the composition.
  * The transport hands them an Access bearer from a live Auth proof scope and
@@ -13,6 +14,12 @@ import {
 export interface AccountOperationAccess<Context = { pool: unknown; deadline: number }> {
   /** One bounded context per request. */
   context(): Context;
+  /** Additive native private read. Omitted bindings return typed 503. */
+  readOperatorTransferState?(
+    token: string,
+    input: { subjectAccountId: string },
+    context: Context,
+  ): Promise<OperatorTransferState | null>;
   approve(
     token: string,
     input: { operationKey: string; operation: AccountOperation },

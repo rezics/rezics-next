@@ -733,6 +733,39 @@ cancellation. Awaiting, substituted or malformed continuations cannot execute.
 Stale sessions require another step-up; approval expiry and current native checks
 still apply. An unknown execution result is not final workflow/readback evidence.
 
+`POST /account-management/operators/relation` is the private native source for the
+existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;
+success contains only `{ previous: { operatorAccountId, subjectAccountId,
+reservationId }, expectedVersion: string }`. The reservation, operator and decimal
+version come from the current native Account and nonterminal operator slot. Public
+profiles and caller tuples never supply this evidence. No accounts are enumerated.
+The source releases its first snapshot before Access prepares foreign authority,
+then rechecks the exact source tuple/version and ordinary `account:manage` on the
+actual operator in a final snapshot at the same native T. It also checks current
+actor/floor, principal assignment, lifecycle and partition availability. Scope alone
+does not authorize disclosure.
+
+The default host mounts this read through the optional
+`AccountOperationAccess.readOperatorTransferState` binding, or the independent
+`AuthHostOptions.accountManagementReads` port. Supply the production
+`createAccountManagementReadAccess({ pool, access })` from Kernel
+`access/management-source.ts` as `accountManagementReads`, or copy its exact
+`readOperatorTransferState` method into existing approval/gate ports. This leaves
+the frozen native account-workflow composition shape and required callers intact.
+Existing callers may omit the additive binding; the endpoint then answers 503
+`account_management_read_unavailable`, never an empty successful result. The host
+retains its management-client registration. It uses the real fresh-human proof and
+exact transfer profile, obtains the Access bearer through `accessTokenForProof`,
+and revalidates that same Auth session/account/floor/consent after the source read.
+Tokens remain inside the trusted proof scope. The route requires POST, current
+Origin, JSON, no query or bearer header, and the existing CSRF boundary. Responses
+are `private, no-store`. Closed failures use 400 (shape/transport), 401 (session or
+`step_up_required`), 403 (refusal or missing relation), 409 (changed source),
+413 (bounded body), or 503 (unavailable source/binding). Refusals disclose no tuple.
+The result supplies current readback only: destination acceptance and source
+approval/execute keep their original immutable descriptor, operation key and
+explicit confirmation requirements.
+
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
 system pool must name that same database. The SDK creates and migrates its schema;
@@ -1217,6 +1250,7 @@ import {
 import type { Pool } from 'pg';
 import { createAccess } from './services/kernel/src/access/index.ts';
 import { createNativeAccountBindings } from './services/kernel/src/access/native-account-bindings.ts';
+import { createAccountManagementReadAccess } from './services/kernel/src/access/management-source.ts';
 import { createWorkflowApprovals } from './services/kernel/src/access/workflow-approvals.ts';
 import type { LifecycleRequest } from './services/kernel/src/access/lifecycle.ts';
 import type { ActionCatalogue } from './services/kernel/src/request/access.ts';
@@ -1267,6 +1301,7 @@ export async function ordinaryHost(options: Options) {
     database: authPool,
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
+    accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
   });
   service = host.service;
   const COMMANDS = {
