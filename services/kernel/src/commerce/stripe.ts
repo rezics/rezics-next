@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { deadlineFor } from '../request/deadline.ts';
 import { stripeTransport } from './stripe-transport.ts';
-import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
+import { assertCheckoutEvidence, assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
   MAX_ORDER_TRANSACTIONS,
   StripeRejectedError,
@@ -27,19 +27,56 @@ export type StripePortConfig = {
   clock: () => Date;
 };
 
-function expanded<T>(value: string | T | null): T | null {
-  if (typeof value === 'string') throw new StripeUnavailableError('Stripe omitted a requested expansion');
+function expanded<T>(value: string | T | null | undefined): T | null {
+  if (value === undefined || typeof value === 'string')
+    throw new StripeUnavailableError('Stripe omitted a requested expansion');
   return value;
 }
 
-function known<T extends string>(value: string | null, supported: readonly T[]): T {
+function known<T extends string>(value: string | null, supported: readonly T[], field = 'Checkout'): T {
   const match = supported.find((status) => status === value);
-  if (match === undefined) throw new StripeUnavailableError('Stripe returned an unsupported Checkout status');
+  if (match === undefined) throw new StripeUnavailableError(`Stripe returned an unsupported ${field} status`);
   return match;
+}
+
+/** Reasons contain only local vocabulary, never provider diagnostic text or payloads. */
+function evidence(condition: boolean, reason: string): asserts condition {
+  if (!condition) throw new StripeUnavailableError(`Stripe ${reason}`);
+}
+
+function idOf(value: string | { id: string } | null | undefined): string | null {
+  return typeof value === 'string' ? value : (value?.id ?? null);
+}
+
+function validId(value: string, prefix: string): boolean {
+  return typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length;
+}
+
+function minor(value: number | null | undefined, minimum = 0): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
+}
+
+function currency(value: string | null): value is string {
+  return typeof value === 'string' && /^[a-z]{3}$/.test(value);
 }
 
 // https://docs.stripe.com/api/balance_transactions/object: preserve Stripe's settlement amounts, fees and FX rate.
 function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string): StripeTransaction {
+  evidence(
+    balance.object === 'balance_transaction' &&
+      validId(balance.id, 'txn_') &&
+      idOf(balance.source) === sourceId &&
+      currency(balance.currency) &&
+      Number.isSafeInteger(balance.amount) &&
+      Number.isSafeInteger(balance.fee) &&
+      Number.isSafeInteger(balance.net) &&
+      balance.net === balance.amount - balance.fee &&
+      (balance.exchange_rate === null || (Number.isFinite(balance.exchange_rate) && balance.exchange_rate > 0)) &&
+      minor(balance.created) &&
+      Array.isArray(balance.fee_details) &&
+      balance.fee_details.every((fee) => fee.currency === balance.currency && Number.isSafeInteger(fee.amount)),
+    'balance transaction association or amounts are inconsistent',
+  );
   return {
     id: balance.id,
     kind,
@@ -68,8 +105,17 @@ async function boundedList<T extends { id: string }>(
   const seen = new Set<string>();
   let after: string | undefined;
   for (;;) {
-    const page = await read(maximum - items.length, after);
+    const limit = maximum - items.length;
+    const page = await read(limit, after);
+    evidence(
+      page.object === 'list' &&
+        typeof page.has_more === 'boolean' &&
+        Array.isArray(page.data) &&
+        page.data.length <= limit,
+      'pagination completeness is unavailable',
+    );
     for (const item of page.data) {
+      evidence(typeof item?.id === 'string' && item.id.length > 0, 'pagination object identity is unavailable');
       if (seen.has(item.id)) throw new StripeUnavailableError('Stripe pagination repeated an object');
       seen.add(item.id);
       items.push(item);
@@ -202,8 +248,87 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         const session = await stripe.checkout.sessions.retrieve(sessionId, {
           expand: ['payment_intent.latest_charge.balance_transaction'],
         });
+        evidence(
+          session.object === 'checkout.session' &&
+            session.id === sessionId &&
+            validId(session.id, 'cs_') &&
+            session.mode === 'payment' &&
+            typeof session.livemode === 'boolean',
+          'Checkout identity or mode is inconsistent',
+        );
+        const status = known(session.status, ['open', 'complete', 'expired']);
+        const paymentStatus = known(session.payment_status, ['paid', 'unpaid', 'no_payment_required']);
         const intent = expanded(session.payment_intent);
+        evidence(intent !== null || paymentStatus !== 'paid', 'paid Checkout PaymentIntent is missing');
+        if (intent) {
+          evidence(
+            intent.object === 'payment_intent' &&
+              validId(intent.id, 'pi_') &&
+              intent.livemode === session.livemode &&
+              intent.metadata?.order_id === session.metadata?.order_id &&
+              !!session.metadata?.order_id &&
+              currency(session.currency) &&
+              intent.currency === session.currency &&
+              minor(session.amount_subtotal, 1) &&
+              session.total_details !== null &&
+              minor(session.total_details.amount_tax) &&
+              minor(session.amount_total, 1) &&
+              session.amount_total === session.amount_subtotal + session.total_details.amount_tax &&
+              intent.amount === session.amount_total &&
+              minor(intent.amount_received) &&
+              intent.amount_received <= intent.amount,
+            'Checkout PaymentIntent identity, currency or amounts are inconsistent',
+          );
+          known(
+            intent.status,
+            [
+              'requires_payment_method',
+              'requires_confirmation',
+              'requires_action',
+              'processing',
+              'requires_capture',
+              'canceled',
+              'succeeded',
+            ],
+            'PaymentIntent',
+          );
+          evidence(
+            paymentStatus !== 'paid' || intent.status === 'succeeded',
+            'paid Checkout PaymentIntent is not succeeded',
+          );
+        }
         const charge = intent ? expanded(intent.latest_charge) : null;
+        evidence(
+          !intent || intent.status !== 'succeeded' || charge !== null,
+          'succeeded PaymentIntent charge is missing',
+        );
+        if (charge && intent) {
+          evidence(
+            charge.object === 'charge' &&
+              validId(charge.id, 'ch_') &&
+              idOf(charge.payment_intent) === intent.id &&
+              charge.livemode === session.livemode &&
+              charge.currency === intent.currency &&
+              minor(charge.amount, 1) &&
+              charge.amount === intent.amount &&
+              minor(charge.amount_captured) &&
+              charge.amount_captured <= charge.amount &&
+              minor(charge.amount_refunded) &&
+              charge.amount_refunded <= charge.amount &&
+              typeof charge.disputed === 'boolean' &&
+              charge.refunded === (charge.amount_refunded === charge.amount),
+            'PaymentIntent charge association, currency or amounts are inconsistent',
+          );
+          evidence(
+            intent.status !== 'succeeded' ||
+              (intent.amount_received === charge.amount &&
+                charge.paid === true &&
+                charge.captured === true &&
+                charge.status === 'succeeded' &&
+                charge.amount_captured === charge.amount),
+            'succeeded payment charge is not fully captured',
+          );
+        }
         const refunds = intent
           ? await boundedList(100, (limit, after) =>
               stripe.refunds.list({
@@ -224,10 +349,75 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
               }),
             )
           : [];
+        // Validate associations while the original provider fields are still present. Lists are complete or fail.
+        let succeededRefunds = 0;
+        let countedRefunds = 0;
+        for (const refund of refunds) {
+          evidence(
+            refund.object === 'refund' &&
+              validId(refund.id, 're_') &&
+              !!intent &&
+              !!charge &&
+              idOf(refund.payment_intent) === intent.id &&
+              idOf(refund.charge) === charge.id &&
+              refund.currency === charge.currency &&
+              minor(refund.amount, 1) &&
+              refund.amount <= charge.amount,
+            'refund payment association, currency or amount is inconsistent',
+          );
+          const status = known(
+            refund.status,
+            ['pending', 'requires_action', 'succeeded', 'failed', 'canceled'],
+            'refund',
+          );
+          if (status === 'succeeded') succeededRefunds += refund.amount;
+          if (status !== 'failed' && status !== 'canceled') countedRefunds += refund.amount;
+        }
+        for (const dispute of disputes) {
+          evidence(
+            dispute.object === 'dispute' &&
+              validId(dispute.id, 'du_') &&
+              !!intent &&
+              !!charge &&
+              idOf(dispute.payment_intent) === intent.id &&
+              idOf(dispute.charge) === charge.id &&
+              dispute.livemode === session.livemode &&
+              dispute.currency === charge.currency &&
+              minor(dispute.amount, 1) &&
+              dispute.amount <= charge.amount &&
+              Array.isArray(dispute.balance_transactions),
+            'dispute payment association, mode, currency or amount is inconsistent',
+          );
+          known(
+            dispute.status,
+            [
+              'needs_response',
+              'under_review',
+              'lost',
+              'won',
+              'warning_needs_response',
+              'warning_under_review',
+              'warning_closed',
+              'prevented',
+            ],
+            'dispute',
+          );
+        }
+        if (charge) {
+          evidence(
+            succeededRefunds === charge.amount_refunded &&
+              countedRefunds <= charge.amount &&
+              (!charge.disputed || disputes.length > 0),
+            'charge and adverse lists contain mixed or incomplete evidence',
+          );
+        }
         const transactions: StripeTransaction[] = [];
+        const transactionIds = new Set<string>();
         const addTransaction = (balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string) => {
           if (transactions.length === MAX_ORDER_TRANSACTIONS)
             throw new StripeUnavailableError('Stripe transaction limit exceeded');
+          evidence(!transactionIds.has(balance.id), 'balance transaction identity repeated');
+          transactionIds.add(balance.id);
           transactions.push(transaction(balance, kind, sourceId));
         };
         const chargeBalance = charge ? expanded(charge.balance_transaction) : null;
@@ -251,8 +441,8 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           clientReferenceId: session.client_reference_id,
           metadataOrderId: session.metadata?.order_id ?? null,
           livemode: session.livemode,
-          status: known(session.status, ['open', 'complete', 'expired']),
-          paymentStatus: known(session.payment_status, ['paid', 'unpaid', 'no_payment_required']),
+          status,
+          paymentStatus,
           currency: session.currency,
           amountSubtotalMinor: session.amount_subtotal,
           amountTaxMinor: session.total_details?.amount_tax ?? null,
@@ -263,7 +453,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           chargeAmountMinor: charge?.amount ?? null,
           refunds: refunds.map((refund) => ({
             id: refund.id,
-            status: refund.status ?? 'unknown',
+            status: known(refund.status, ['pending', 'requires_action', 'succeeded', 'failed', 'canceled']),
             amountMinor: refund.amount,
           })),
           disputes: disputes.map((dispute) => ({
@@ -274,6 +464,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           transactions,
           observedAt: config.clock().toISOString(),
         };
+        assertCheckoutEvidence(snapshot, paymentStatus === 'paid');
         return snapshot;
       });
     },

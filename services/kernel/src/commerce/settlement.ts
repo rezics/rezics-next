@@ -1,5 +1,6 @@
 import {
   MAX_ORDER_TRANSACTIONS,
+  StripeUnavailableError,
   type CheckoutDecision,
   type CheckoutSnapshot,
   type EntitlementAction,
@@ -100,6 +101,65 @@ const nonRevokingDisputeStatuses = new Set([
   'prevented',
 ]);
 
+const ignoredRefundStatuses = new Set(['failed', 'canceled']);
+const revokingDisputeStatuses = new Set(['needs_response', 'under_review', 'lost']);
+
+/** Validate even injected port evidence; a typed unavailable outcome writes no decision or receipt. */
+export function assertCheckoutEvidence(snapshot: CheckoutSnapshot, requirePayment: boolean): void {
+  const amount = (value: number | null): value is number => Number.isSafeInteger(value) && value !== null && value > 0;
+  if (
+    requirePayment &&
+    (!snapshot.paymentIntentId?.startsWith('pi_') ||
+      snapshot.paymentIntentStatus !== 'succeeded' ||
+      !snapshot.chargeId?.startsWith('ch_') ||
+      !amount(snapshot.chargeAmountMinor) ||
+      !amount(snapshot.amountTotalMinor) ||
+      snapshot.chargeAmountMinor !== snapshot.amountTotalMinor ||
+      !amount(snapshot.amountSubtotalMinor) ||
+      snapshot.amountTaxMinor === null ||
+      !Number.isSafeInteger(snapshot.amountTaxMinor) ||
+      snapshot.amountTaxMinor < 0 ||
+      snapshot.amountSubtotalMinor + snapshot.amountTaxMinor !== snapshot.amountTotalMinor ||
+      snapshot.currency === null ||
+      !/^[a-z]{3}$/.test(snapshot.currency))
+  ) {
+    throw new StripeUnavailableError('Checkout current paid payment associations are incomplete');
+  }
+  if (snapshot.refunds.length > 100 || snapshot.disputes.length > 10) {
+    throw new StripeUnavailableError('Checkout adverse evidence exceeds its complete list bound');
+  }
+  let countedRefunds = 0;
+  for (const [items, prefix, supported, ignored] of [
+    [snapshot.refunds, 're_', countedRefundStatuses, ignoredRefundStatuses],
+    [snapshot.disputes, 'du_', revokingDisputeStatuses, nonRevokingDisputeStatuses],
+  ] as const) {
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (!supported.has(item.status) && !ignored.has(item.status)) {
+        throw new StripeUnavailableError(
+          prefix === 're_' ? 'Checkout refund status is unsupported' : 'Checkout dispute status is unsupported',
+        );
+      }
+      if (
+        !item.id.startsWith(prefix) ||
+        seen.has(item.id) ||
+        !amount(item.amountMinor) ||
+        !amount(snapshot.chargeAmountMinor) ||
+        item.amountMinor > snapshot.chargeAmountMinor ||
+        !snapshot.paymentIntentId ||
+        !snapshot.chargeId
+      ) {
+        throw new StripeUnavailableError('Checkout adverse payment evidence is inconsistent');
+      }
+      seen.add(item.id);
+      if (prefix === 're_' && countedRefundStatuses.has(item.status)) countedRefunds += item.amountMinor;
+    }
+  }
+  if (snapshot.chargeAmountMinor !== null && countedRefunds > snapshot.chargeAmountMinor) {
+    throw new StripeUnavailableError('Checkout aggregate refund amount exceeds the charge');
+  }
+}
+
 /** Decide from the current provider snapshot without performing effects or mutating the input. */
 export function decideCheckout(
   state: SettlementState,
@@ -120,13 +180,21 @@ export function decideCheckout(
   }
 
   const settlement = settlementFor(state, snapshot);
+  assertCheckoutEvidence(snapshot, settlement === 'paid');
   let refundedAmount = 0;
   for (const refund of snapshot.refunds) {
     if (countedRefundStatuses.has(refund.status)) refundedAmount += refund.amountMinor;
   }
   const fullyRefunded = snapshot.chargeAmountMinor !== null && refundedAmount >= snapshot.chargeAmountMinor;
-  const revokingDispute = snapshot.disputes.some((dispute) => !nonRevokingDisputeStatuses.has(dispute.status));
+  const revokingDispute = snapshot.disputes.some((dispute) => revokingDisputeStatuses.has(dispute.status));
   const desired = settlement === 'paid' && !fullyRefunded && !revokingDispute;
+  if (
+    desired &&
+    (state.entitlement === null || state.entitlement.revokedAt !== null) &&
+    (snapshot.status !== 'complete' || snapshot.paymentStatus !== 'paid')
+  ) {
+    throw new StripeUnavailableError('Checkout current Session does not prove a paid benefit grant or restore');
+  }
   const reason = fullyRefunded ? 'refund' : 'dispute';
 
   let entitlement: EntitlementAction = { kind: 'none' };

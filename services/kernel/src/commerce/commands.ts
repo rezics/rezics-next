@@ -27,7 +27,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import type { CheckoutRequest, CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
-import { assertTransactionBound, decideCheckout } from './settlement.ts';
+import { assertCheckoutEvidence, assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import offerCreated from './command-offer-created.sql';
 import checkoutCount from './command-checkout-count.sql';
@@ -630,6 +630,9 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             snapshot.transactions.map((t) => t.id),
           );
           if (!state || state.order.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
+          // Receipt replay and claim fencing precede evidence validation. Unavailable evidence rolls back
+          // this apply, retaining the committed admission and durable work's retry/reconciliation debt.
+          assertCheckoutEvidence(snapshot, state.order.settlement === 'paid' || snapshot.paymentStatus === 'paid');
           let decision = decideCheckout(state, snapshot, claim ? 'admitted-revision' : 'legacy-time');
           if (
             decision.changed &&

@@ -6,7 +6,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createCommerceCommands, stepCommandKey, type CheckoutRefreshClaim } from '../../src/commerce/commands.ts';
-import type { Order } from '../../src/commerce/model.ts';
+import { StripeUnavailableError, type Order } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
@@ -522,4 +522,33 @@ test('invalid immutable binding, stable digest, native key length and revision e
     commands.beginCheckoutRefresh({ orderId: other.id, sessionId: other.checkoutSessionId!, workflowId: entryKey() }),
   ).rejects.toThrow('Commerce order revision exhausted');
   expect(await state(other)).toEqual(exhausted);
+});
+
+test('incomplete current evidence preserves a paid revocation and leaves admitted apply retryable without a receipt', async () => {
+  const { order, session } = await paid();
+  const dispute = fake.dispute(session, { status: 'lost', withdraw: false });
+  expect((await apply((await begin(order)).command.value)).changed).toBe(true);
+  fake.updateDispute(dispute, 'won');
+  const claim = (await begin(order)).command.value;
+  const complete = await stripe.readCheckout(session);
+  const before = await state(order);
+  expect(before.row.settlement).toBe('paid');
+  expect(before.entitlement[0].revoked_at).not.toBeNull();
+  for (const patch of [
+    { paymentIntentId: null, paymentIntentStatus: null, chargeId: null, chargeAmountMinor: null },
+    { chargeId: null, chargeAmountMinor: null },
+    { disputes: [{ id: dispute, status: 'future_status', amountMinor: 1200 }] },
+  ]) {
+    await expect(commands.applyClaimedCheckoutSnapshot({ ...complete, ...patch }, claim)).rejects.toBeInstanceOf(
+      StripeUnavailableError,
+    );
+    expect(await state(order)).toEqual(before);
+    expect(await applyReceipt(claim)).toHaveLength(0);
+  }
+  expect((await commands.applyClaimedCheckoutSnapshot(complete, claim)).changed).toBe(true);
+  const restored = await state(order);
+  expect(restored.entitlement[0].entitlement_id).toBe(before.entitlement[0].entitlement_id);
+  expect(restored.entitlement[0].revoked_at).toBeNull();
+  expect(restored.transactions).toEqual(before.transactions);
+  expect(await applyReceipt(claim)).toHaveLength(1);
 });

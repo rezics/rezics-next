@@ -407,14 +407,42 @@ outage enumeration stays outside this service and must supply finite pages, neve
 
 ### Settlement, benefits and accounting
 
-Settlement has `pending`, `paid`, `failed` and `unknown`; reconciliation is work, not a fifth state.
-An order once paid remains paid. Benefit access follows current provider state separately:
+Settlement describes the purchase outcome, independently of provider cash availability and benefit permission:
+`pending` is awaiting payment, `failed` is the current failed/expired attempt (later verified payment may still
+succeed), `unknown` is ambiguous creation or mismatched initial payment truth, and historical `paid` never
+downgrades through refunds, disputes or unavailable reads. Reconciliation is work, not a fifth state.
 
-- Complete and paid without a blocker grants/retains the benefit; unpaid completion never grants.
-- Partial refunds retain access. Full pending/requires-action refunds provisionally revoke; full succeeded refunds
-  stay revoked. Failed/canceled refunds restore the same entitlement when no other blocker remains.
-- Active chargebacks revoke; won disputes restore absent a full refund; lost disputes stay revoked. Warnings,
-  inquiries and prevented disputes retain access under the existing policy.
+The [adapter](stripe.ts) validates the current payment-mode Session → expanded PaymentIntent → expanded Charge,
+including identity, mode, presentment currency, positive integer amounts and captured paid evidence. It verifies
+each Refund/Dispute against that exact PaymentIntent and Charge before flattening association fields. Both lists
+must be complete under the existing 100-refund/10-dispute and 111-logical-read bounds; malformed, repeated,
+nonadvancing or capped pagination fails visibly. Charge refund totals and adverse lists must agree. The existing
+transaction, physical request, byte and deadline caps remain unchanged; validation is O(k) over bounded evidence.
+
+Required missing/unexpanded payment associations, unsupported adverse status, foreign association/currency or
+mixed/incomplete evidence throw the existing typed `StripeUnavailableError` with a fixed sanitized reason.
+The nullable payment association fields never turn historical paid into proof of current adverse-none. Both
+native apply ports validate after current authorization, receipt replay and claim fencing; unavailable evidence
+writes no settlement/entitlement/transaction decision or apply receipt. It preserves the last verified entitlement
+(active stays active, revoked stays revoked), historical payment truth, committed admission and durable work's
+retry/reconciliation debt. It grants/restores nothing and never speculatively revokes an unclassified dispute.
+This adopts [payment-evidence findings 13 and 15–18](../../../../docs/research/commerce-payment-evidence-settlement.md#findings-requiring-a-correction-or-explicit-adoption).
+
+Missing Balance Transactions alone do not imply missing purchase/adverse evidence: a complete associated paid
+purchase may grant before provider cash is available. Record only actual associated balance movements, never
+invent a debit/reversal from status. Provider GETs run outside native transactions and do not promise an atomic
+Stripe multi-object snapshot. Native admission/revision, not observation time or event time, fences production apply.
+
+Benefit access follows complete current evidence separately from historical purchase outcome:
+
+- Complete paid evidence without a blocker grants/retains the benefit; unpaid/processing evidence cannot grant
+  or restore on the strength of historical paid alone.
+- Partial refunds retain the indivisible benefit under REZICS product policy. Full pending/requires-action refunds
+  provisionally revoke; full succeeded refunds stay revoked. Failed/canceled refunds restore the same entitlement
+  only when complete current evidence proves every other full-refund/dispute blocker absent.
+- Active chargebacks revoke; lost disputes revoke while lost. A later verified win may restore the same entitlement
+  absent every other blocker, including a full refund. Warnings, inquiries and prevented disputes retain access
+  under the existing policy. Unsupported status is unavailable, never classified as active, lost, won or absent.
 - At terminal buyer T, the fence always prevents benefit restoration or private reads, even when financial truth
   still needs reconciliation. Both trusted apply ports implement that terminal-benefit fence.
 
