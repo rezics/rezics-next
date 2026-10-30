@@ -33,7 +33,7 @@ const { subjectTabs } = await import('../src/features/pages/views');
 const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');
 const { relationStreamItems } = await import('../src/features/pages/relation-stream');
 const { loadViewPages } = await import('../src/features/pages/subject-frame');
-const { statementItems } = await import('../src/features/pages/overview');
+const { holderItems, statementItems } = await import('../src/features/pages/overview');
 
 const profile = profileJson as PresentationProfile;
 const definitions = (page: SubjectPageData) =>
@@ -263,4 +263,18 @@ test('embedded qualified previews retain disclosed canonical type, cover and nat
     value,
   )!;
   expect(projected.items[0]?.id).toBe(survivor);
+  const incoming = holderItems(
+    {
+      links: [
+        { subject: target, label: 'Current title', summary: { id: survivor, type: 'schema:Book', cover } },
+        { subject: target, summary: null },
+      ],
+      next: 'native-current-next',
+    },
+    12,
+  )!;
+  expect(incoming.items).toHaveLength(1);
+  expect(incoming.items[0]).toMatchObject({ id: survivor, summary: { type: 'schema:Book', cover } });
+  expect(incoming.count).toBeUndefined();
+  expect(incoming.more).toBe(true);
 });

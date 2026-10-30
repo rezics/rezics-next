@@ -45,7 +45,7 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   `GET /v1/accounts?ids=...`; it is not discovery. A native discovery producer/current-discovery guard
   and generic mixed hit consumer remain missing. Proposed `POST /v1/search:query` is not mounted.
 - **Edition and creator traversal:** Search wires the remaining vertical journey on Web's Subject pages.
-  The shipped CreativeWork configuration adds the released `schema:exampleOfWork` outgoing group;
+  The shipped CreativeWork and generic configurations add the released `schema:exampleOfWork` outgoing group;
   editions and creator Works compose the existing configured incoming lists and independent relation streams.
   The unfiltered `/relations` route now consumes that current grouped page rather than its older incoming-only
   reader. Semantic retains ownership of native streams, counts, qualifiers, disclosure and cursor limits.

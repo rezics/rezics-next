@@ -301,10 +301,10 @@ export function holderItems(
   const links = body.links.filter(isRecord).slice(0, limit);
   const count = isRecord(body.count) ? body.count : undefined;
   const items = links.flatMap((link): Item[] =>
-    typeof link.subject === 'string'
+    typeof link.subject === 'string' && link.summary !== null
       ? [
           {
-            id: link.subject,
+            id: isRecord(link.summary) && typeof link.summary.id === 'string' ? link.summary.id : link.subject,
             label: { text: typeof link.label === 'string' ? link.label : '', lang: undefined },
             ...(isRecord(link.summary) ? { summary: link.summary as unknown as SubjectSummary } : {}),
             ...(typeof link.type === 'string' ? { type: link.type } : {}),
