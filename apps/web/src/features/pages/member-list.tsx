@@ -53,8 +53,7 @@ export function Members(props: Record<string, unknown>) {
   const initial = value?.sections.get(node) ?? { ok: false as const };
   const target = value?.pageTarget;
   // The public shell can conceal self sources or a private curated source. Recheck with the current session BFF.
-  const needsViewer =
-    isRecord(props.source) && !initial.ok && initial.status === 404 && viewer.state === 'signed-in';
+  const needsViewer = isRecord(props.source) && !initial.ok && initial.status === 404 && viewer.state === 'signed-in';
   const request = { target: target!, locale: value?.locale ?? 'en', node };
   const current = useQuery({
     ...personalRead,
