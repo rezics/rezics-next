@@ -535,7 +535,13 @@ export async function runCliAckRecoveryJourney() {
       changedProposalIds.push(...proposals.map((candidate) => candidate.id));
     }
     const newerInputFirstEffectOrdinal = Math.min(
-      ...changedSuccessor.flatMap((result) => result.writes.map((exchange) => exchange.ordinal)),
+      ...changedSuccessor.flatMap((result) =>
+        result.captured
+          .filter(
+            (exchange) => exchange.path === '/v1/subjects:batchWrite' || exchange.path === '/v1/media:importFromUrl',
+          )
+          .map((exchange) => exchange.ordinal),
+      ),
     );
     const originalBootstrapBefore = children.map((child) => child.bootstrap);
     const originalBootstrapAfter = children.map((child) =>
