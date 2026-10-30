@@ -439,6 +439,7 @@ CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING 
 CREATE INDEX history_locator_pending ON core.history_locator USING btree (partition_no, account_route, account_id, artifact_type, locator) WHERE (state = 'pending'::text);
 
 
+
 --
 -- Name: history_locator history_locator_guard; Type: TRIGGER; Schema: core; Owner: -
 --

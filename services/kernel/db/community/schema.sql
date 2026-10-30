@@ -467,6 +467,30 @@ CREATE TABLE community.realm_membership_operation (
 
 
 --
+-- Name: realm_membership_proof; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.realm_membership_proof (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    generation_id uuid NOT NULL,
+    operation_id text NOT NULL,
+    outcome text NOT NULL,
+    transaction_id uuid NOT NULL,
+    publication_transaction_id uuid,
+    principal_id uuid NOT NULL,
+    command_kind text NOT NULL,
+    command_key text NOT NULL,
+    at timestamp with time zone NOT NULL,
+    CONSTRAINT realm_membership_proof_at_check CHECK (isfinite(at)),
+    CONSTRAINT realm_membership_proof_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT realm_membership_proof_outcome_check CHECK ((outcome = ANY (ARRAY['published'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: realm_revision; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -654,6 +678,22 @@ ALTER TABLE ONLY community.realm_membership_operation
 
 
 --
+-- Name: realm_membership_proof realm_membership_proof_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_membership_proof
+    ADD CONSTRAINT realm_membership_proof_pkey PRIMARY KEY (route, realm_id, account_id, generation_id);
+
+
+--
+-- Name: realm_membership_proof realm_membership_proof_route_realm_id_account_id_operation__key; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_membership_proof
+    ADD CONSTRAINT realm_membership_proof_route_realm_id_account_id_operation__key UNIQUE (route, realm_id, account_id, operation_id);
+
+
+--
 -- Name: realm realm_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -818,6 +858,13 @@ CREATE TRIGGER realm_membership_operation_immutable BEFORE DELETE OR UPDATE ON c
 
 
 --
+-- Name: realm_membership_proof realm_membership_proof_immutable; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_membership_proof_immutable BEFORE DELETE OR UPDATE ON community.realm_membership_proof FOR EACH ROW EXECUTE FUNCTION community.guard_realm_member_terminal();
+
+
+--
 -- Name: realm_revision realm_revision_board_scheme; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -945,17 +992,3 @@ ALTER TABLE ONLY community.space_revision
 --
 
 
-
-CREATE TABLE community.realm_membership_proof (
-  route integer NOT NULL, realm_id uuid NOT NULL, account_id uuid NOT NULL,
-  reservation_id uuid NOT NULL, generation_id uuid NOT NULL, operation_id text NOT NULL,
-  outcome text NOT NULL CHECK (outcome IN ('published','cancelled')),
-  transaction_id uuid NOT NULL, publication_transaction_id uuid,
-  principal_id uuid NOT NULL, command_kind text NOT NULL, command_key text NOT NULL,
-  at timestamptz NOT NULL CHECK (isfinite(at)),
-  PRIMARY KEY (route, realm_id, account_id, generation_id),
-  UNIQUE (route, realm_id, account_id, operation_id),
-  CHECK (route = (get_byte(uuid_send(realm_id),10)*256 + get_byte(uuid_send(realm_id),11)))
-);
-CREATE TRIGGER realm_membership_proof_immutable BEFORE UPDATE OR DELETE ON community.realm_membership_proof
- FOR EACH ROW EXECUTE FUNCTION community.guard_realm_member_terminal();
