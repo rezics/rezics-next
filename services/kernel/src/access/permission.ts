@@ -1,3 +1,4 @@
+import { accessNativeWork, accessCheckout, accessOwnerWork, type AccessWorkAccounting, type AccessWorkProducer } from './work.ts';
 import {
   copyContentEditionBenefit,
   contentEditionBenefitBinding,
@@ -84,6 +85,9 @@ export type PermissionConfig = {
    */
   realmRoleReader?: RealmRoleReader;
   contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
+  contentEditionBuyerFactWork?: AccessWorkProducer<
+    Parameters<ContentEditionBuyerFactReader>[0], Awaited<ReturnType<ContentEditionBuyerFactReader>>
+  >;
   /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
 };
@@ -121,6 +125,8 @@ function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | unde
 }
 
 type Prepared = {
+  work?: AccessWorkAccounting;
+  time?: AuthoritativeTime;
   buyerEvidence?: BuyerEvidence;
   historyAccounts: readonly import('../history/locator.ts').AccountReference[];
   ownAccount: boolean;
@@ -196,11 +202,13 @@ const routeOf = (id: string): number => Number.parseInt(id.slice(24, 28), 16);
 async function readPermissionTime(
   client: Parameters<typeof timeRead.run>[0],
   clock?: () => Date,
+  work?: AccessWorkAccounting,
 ): Promise<{ at: string; databaseAt: string | undefined; observedAt: number } | undefined> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
   const observedAt = Date.now();
-  const row = await timeRead.run(client, { at: configured?.toISOString() ?? '' });
+  const input = { at: configured?.toISOString() ?? '' };
+  const row = await accessNativeWork(work, 'time', input, {}, () => timeRead.run(client, input));
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
@@ -261,6 +269,7 @@ async function checkPreparedPermission(
     if (facts) requireAccessDeadline(facts.deadline);
     if (
       !facts ||
+      (facts.work !== undefined && facts.time !== time) ||
       facts.binding !== bind(actor, action, resource, page) ||
       facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
       (resource.eligibility !== undefined &&
@@ -270,7 +279,7 @@ async function checkPreparedPermission(
       return { allowed: false, explicit: false };
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
-    const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock))?.at;
+    const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock, facts.work))?.at;
     requireAccessDeadline(facts.deadline);
     if (!at || (facts.buyerEvidence && !validBuyerEvidence(facts.buyerEvidence, time)))
       return { allowed: false, explicit: false };
@@ -297,7 +306,7 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const rows = await permissionRead.run(client, {
+    const formulaInput = {
       route: resource.route,
       resource_ids: [...ids],
       include_explicit: includeExplicit && !facts.anonymous && facts.scope,
@@ -316,7 +325,13 @@ async function checkPreparedPermission(
       roles: facts.roles,
       grant_roles: [...facts.grantRoles],
       deadline: facts.databaseDeadline,
-    });
+    };
+    const rows = await accessNativeWork(facts.work, 'formula', formulaInput, {
+      targets: ids.length, roles: facts.roles.length,
+      members: actor.kind === 'account' ? (facts.principalId ? 2 : 1) : 0,
+      grantRoles: facts.grantRoles.length, explicit: formulaInput.include_explicit,
+      global: formulaInput.include_global, assignment: facts.assignmentRequestId !== null,
+    }, () => permissionRead.run(client, formulaInput));
     if (
       !stillValid() ||
       rows.length !== ids.length ||
@@ -343,6 +358,7 @@ async function checkPreparedPermission(
       decisions: Object.freeze(Object.fromEntries(rows.map((row) => [row.resourceId!, row.allowed === true]))),
     };
   } catch (error) {
+    facts?.work?.fail(error);
     throwAccessUnavailable(error, facts?.deadline);
     throwEvidenceFailure(error);
     return { allowed: false, explicit: false };
@@ -385,6 +401,7 @@ export function createAccess(config: PermissionConfig): Access {
       if (attempt && context.time !== undefined && context.time !== attempt.time) return evidence;
       const time = attempt?.time ?? context.time;
       if (time) authoritativeTimeValue(time);
+      if (context.work && !time) context.work.unavailable('Access metered preparation requires a live native AuthoritativeTime');
       const benefit =
         resource.authenticatedBenefit === undefined
           ? undefined
@@ -422,7 +439,7 @@ export function createAccess(config: PermissionConfig): Access {
       );
       // Every query uses the pool independently before resource checkout. None
       // of these reads holds a connection while another partition is consulted.
-      const recorded = await readPermissionTime(context.pool, config.clock);
+      const recorded = await readPermissionTime(context.pool, config.clock, context.work);
       if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
@@ -439,13 +456,15 @@ export function createAccess(config: PermissionConfig): Access {
           const principal = request[1]!;
           assignmentRoute = routeOf(principal);
           assignmentRequestId = request[2]!;
-          const assignment = await assignmentRead.run(context.pool, {
+          const assignmentInput = {
             route: assignmentRoute,
             principal_id: principal,
             request_id: assignmentRequestId,
             actor_id: actor.accountId,
             at,
-          });
+          };
+          const assignment = await accessNativeWork(context.work, 'assignment', assignmentInput, {},
+            () => assignmentRead.run(context.pool, assignmentInput));
           if (
             !assignment ||
             assignment.kind !== 'actor' ||
@@ -469,7 +488,10 @@ export function createAccess(config: PermissionConfig): Access {
           const input = Object.freeze({ benefit, buyerAccountId, time, deadline: context.deadline });
           let fact: ContentEditionBuyerFact | null;
           try {
-            fact = await within(context.deadline, () => reader(input));
+            fact = await within(context.deadline, () => accessOwnerWork(
+              context.work, 'Commerce ContentEditionBuyerFactReader', config.contentEditionBuyerFactWork,
+              input, () => reader(input),
+            ));
           } catch (error) {
             throwAccessUnavailable(error, context.deadline);
             throw new AccessUnavailableError('overloaded');
@@ -489,12 +511,11 @@ export function createAccess(config: PermissionConfig): Access {
         // resource ACLs or treat a stale inverse row as a membership role.
         for (const member of members) {
           if (member.automated) continue;
-          const rows = await withConnection(context.pool, (client) =>
-            inverseRead.run(client, {
-              route: routeOf(member.accountId),
-              account_id: member.accountId,
-            }),
-          );
+          const inverseInput = { route: routeOf(member.accountId), account_id: member.accountId };
+          const rows = await accessCheckout(context.work, () => withConnection(context.pool, (client) =>
+            accessNativeWork(context.work, 'inverse', inverseInput, { members: 1, groups: MEMBERSHIP_LIMIT },
+              () => inverseRead.run(client, inverseInput)),
+          ));
           if (!rows.length || rows.some((r) => r.complete !== true)) return evidence;
           const inverse: MembershipPrincipal[] = [];
           for (const row of rows) {
@@ -537,15 +558,22 @@ export function createAccess(config: PermissionConfig): Access {
           isGlobalReachAction(action) && !isPlatformResource(resource)
             ? (
                 await Promise.all([
-                  governanceReachCandidatesRead.run(context.pool, candidateInput),
-                  governanceReachCandidatesRead.run(context.pool, {
-                    ...candidateInput,
-                    route: PLATFORM_RESOURCE.route,
-                    resource_ids: [PLATFORM_RESOURCE.id],
-                  }),
+                  accessNativeWork(context.work, 'candidates', candidateInput, {
+                    targets: candidateInput.resource_ids.length, roles: roles.length,
+                    members: principalId ? 2 : 1, grantRoles: grantRoles.length,
+                  }, () => governanceReachCandidatesRead.run(context.pool, candidateInput)),
+                  (() => {
+                    const globalInput = { ...candidateInput, route: PLATFORM_RESOURCE.route, resource_ids: [PLATFORM_RESOURCE.id] };
+                    return accessNativeWork(context.work, 'candidates', globalInput, {
+                      targets: 1, roles: roles.length, members: principalId ? 2 : 1, grantRoles: grantRoles.length,
+                    }, () => governanceReachCandidatesRead.run(context.pool, globalInput));
+                  })(),
                 ])
               ).flat()
-            : await candidatesRead.run(context.pool, candidateInput);
+            : await accessNativeWork(context.work, 'candidates', candidateInput, {
+                targets: candidateInput.resource_ids.length, roles: roles.length,
+                members: principalId ? 2 : 1, grantRoles: grantRoles.length,
+              }, () => candidatesRead.run(context.pool, candidateInput));
         // Only hits from these bounded probes cause an anchored role read.
         const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
         const groups = new Map<string, RoleEvidence[]>();
@@ -563,27 +591,28 @@ export function createAccess(config: PermissionConfig): Access {
           const results = await Promise.allSettled(
             matched.slice(start, start + 4).map(async (entries) => {
               const group = entries[0]!;
-              const proofs = await withConnection(context.pool, async (client) => {
+              const proofs = await accessCheckout(context.work, () => withConnection(context.pool, async (client) => {
                 if (group.group_kind === 'realm')
                   return accessEvidence(
-                    () =>
-                      config.realmRoleReader?.(client, {
-                        realmId: group.organization_id,
-                        accountId: group.account_id,
-                        at,
-                      }) ?? null,
+                    () => {
+                      const input = { realmId: group.organization_id, accountId: group.account_id, at };
+                      return accessOwnerWork(context.work, 'Content AccessRealmRoleReader', config.realmRoleReader?.work,
+                        input, () => config.realmRoleReader?.(client, input) ?? Promise.resolve(null));
+                    },
                     false,
                     deadline,
                   );
-                const rows = await membershipRead.run(client, {
+                const membershipInput = {
                   route: routeOf(group.organization_id),
                   organization_id: group.organization_id,
                   member_id: group.account_id,
                   at,
-                });
+                };
+                const rows = await accessNativeWork(context.work, 'membership', membershipInput, { groups: 1 },
+                  () => membershipRead.run(client, membershipInput));
                 if (rows.length !== 2 || rows.some((r) => r.kind !== 'organization')) return null;
                 return rows;
-              });
+              }));
               if (
                 !proofs ||
                 proofs.length !== 2 ||
@@ -621,6 +650,8 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        ...(context.work ? { work: context.work } : {}),
+        ...(time ? { time } : {}),
         ...(buyerEvidence ? { buyerEvidence } : {}),
         historyAccounts:
           actor.kind === 'anonymous'
@@ -656,6 +687,7 @@ export function createAccess(config: PermissionConfig): Access {
         verifyFloor,
       });
     } catch (error) {
+      context.work?.fail(error);
       throwAccessUnavailable(error, deadline);
       throwEvidenceFailure(error);
       // Missing tables, unresolved accounts and other unclassified evidence failures deny.
@@ -663,6 +695,8 @@ export function createAccess(config: PermissionConfig): Access {
     return evidence;
   }
   async function prepareReadDecisions(input: PrepareReadDecisionsInput): Promise<ReadDecisions> {
+    if (input.context.work && (!input.time || (input.context.time && input.context.time !== input.time)))
+      input.context.work.unavailable('Access metered ReadDecisions requires the same live native AuthoritativeTime');
     const requested = [...input.actions];
     if (!validReadDecisionActions(input, actions)) throw new RangeError('Invalid read decision actions');
     const admitted = new Set(requested);
@@ -687,6 +721,7 @@ export function createAccess(config: PermissionConfig): Access {
         const recorded = await readPermissionTime(
           pool,
           input.time ? () => new Date(authoritativeTimeValue(input.time!)) : config.clock,
+          context.work,
         );
         if (!recorded?.databaseAt) throw new AccessUnavailableError('overloaded');
         const at = recorded.at;
@@ -703,13 +738,15 @@ export function createAccess(config: PermissionConfig): Access {
             principalId = request[1]!;
             assignmentRoute = routeOf(principalId);
             assignmentRequestId = request[2]!;
-            const assignment = await assignmentRead.run(pool, {
+            const assignmentInput = {
               route: assignmentRoute,
               principal_id: principalId,
               request_id: assignmentRequestId,
               actor_id: identity.accountId,
               at,
-            });
+            };
+            const assignment = await accessNativeWork(context.work, 'assignment', assignmentInput, {},
+              () => assignmentRead.run(pool, assignmentInput));
             if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active' || assignment.fenced)
               throw new AccessUnavailableError('overloaded');
             if (principalId !== identity.accountId && assignment.operatorAccountId === null)
@@ -719,11 +756,9 @@ export function createAccess(config: PermissionConfig): Access {
         }
         const roles: RoleEvidence[] = [];
         if (members.length) {
-          const inverse = await inverseRead.run(pool, {
-            route: members[0]!.route,
-            account_id: members[0]!.account_id,
-            members,
-          });
+          const inverseInput = { route: members[0]!.route, account_id: members[0]!.account_id, members };
+          const inverse = await accessNativeWork(context.work, 'inverse', inverseInput,
+            { members: members.length, groups: MEMBERSHIP_LIMIT }, () => inverseRead.run(pool, inverseInput));
           for (const member of members) {
             const entries = inverse.filter((row) => row.accountId === member.account_id);
             if (!entries.length || entries.some((row) => !row.complete)) throw new AccessUnavailableError('overloaded');
@@ -754,7 +789,7 @@ export function createAccess(config: PermissionConfig): Access {
         const organizations = anchors.filter((row) => row.group_kind === 'organization');
         if (organizations.length) {
           const first = organizations[0]!;
-          const proofs = await membershipRead.run(pool, {
+          const membershipInput = {
             route: routeOf(first.organization_id),
             organization_id: first.organization_id,
             member_id: first.account_id,
@@ -764,7 +799,9 @@ export function createAccess(config: PermissionConfig): Access {
               organization_id: row.organization_id,
               member_id: row.account_id,
             })),
-          });
+          };
+          const proofs = await accessNativeWork(context.work, 'membership', membershipInput,
+            { groups: organizations.length }, () => membershipRead.run(pool, membershipInput));
           const indexed = new Map(
             proofs.map((proof) => [`${proof.accountId}/${proof.organizationId}/${proof.role}`, proof]),
           );
@@ -780,10 +817,10 @@ export function createAccess(config: PermissionConfig): Access {
         }
         const realms = anchors.filter((row) => row.group_kind === 'realm');
         if (realms.length) {
-          const proofs = await config.realmRoleReader?.batch?.(pool, {
-            pairs: realms.map((row) => ({ realmId: row.organization_id, accountId: row.account_id })),
-            at,
-          });
+          const realmInput = { pairs: realms.map((row) => ({ realmId: row.organization_id, accountId: row.account_id })), at };
+          const proofs = await accessOwnerWork(context.work, 'Content AccessRealmRoleReader.batch',
+            config.realmRoleReader?.batchWork, realmInput,
+            () => config.realmRoleReader?.batch?.(pool, realmInput) ?? Promise.resolve(null));
           if (!proofs || proofs.length !== realms.length * 2) throw new AccessUnavailableError('overloaded');
           const indexed = new Map(proofs.map((proof) => [`${proof.accountId}/${proof.realmId}/${proof.role}`, proof]));
           if (indexed.size !== proofs.length) throw new AccessUnavailableError('overloaded');
@@ -819,6 +856,8 @@ export function createAccess(config: PermissionConfig): Access {
           borrowedScope?: string,
         ): Promise<Readonly<Record<string, AccessDecision>>> {
           const gate = borrowedScope !== undefined;
+          if (context.work && decisionTime !== input.time)
+            context.work.unavailable('Access metered ReadDecisions final T differs from its preparation window');
           if (
             !batch ||
             (!gate && !admitted.has(batch.action)) ||
@@ -849,7 +888,7 @@ export function createAccess(config: PermissionConfig): Access {
             return await within(deadline, async () => {
               const bounded = deadlineClient(client, deadline);
               const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? batch.action);
-              const rows = await permissionRead.run(bounded, {
+              const formulaInput = {
                 route: 0,
                 resource_ids: [...ids],
                 batch: true,
@@ -877,7 +916,14 @@ export function createAccess(config: PermissionConfig): Access {
                       .map(([role]) => role)
                   : grantRolesByAction.get(action)!,
                 deadline: databaseDeadline,
-              });
+              };
+              const rows = await accessNativeWork(context.work, 'formula', formulaInput, {
+                targets: ids.length, roles: roles.length,
+                members: identity.kind === 'account' ? (principalId ? 2 : 1) : 0,
+                grantRoles: formulaInput.grant_roles.length,
+                explicit: formulaInput.include_explicit, public: formulaInput.include_public,
+                global: formulaInput.include_global, assignment: assignmentRequestId !== null,
+              }, () => permissionRead.run(bounded, formulaInput));
               requireAccessDeadline(deadline);
               if (
                 rows.length !== ids.length ||
@@ -892,7 +938,10 @@ export function createAccess(config: PermissionConfig): Access {
                 )
               )
                 throw new AccessUnavailableError('overloaded');
-              const floor = eligibility ? await eligibility(bounded, ids, rows[0]!.at!) : undefined;
+              const eligibilityInput = { client: bounded, ids, at: rows[0]!.at! };
+              const floor = eligibility ? await accessOwnerWork(context.work,
+                'Resource ReadDecisionEligibility', eligibility.work, eligibilityInput,
+                () => eligibility(bounded, ids, eligibilityInput.at)) : undefined;
               requireAccessDeadline(deadline);
               if (eligibility && (!floor || typeof floor !== 'object')) throw new AccessUnavailableError('overloaded');
               const result: Record<string, AccessDecision> = Object.create(null);
@@ -907,6 +956,7 @@ export function createAccess(config: PermissionConfig): Access {
               return Object.freeze(result);
             });
           } catch (error) {
+            context.work?.fail(error);
             throwAccessUnavailable(error, deadline);
             throw new AccessUnavailableError('overloaded');
           }
@@ -914,6 +964,7 @@ export function createAccess(config: PermissionConfig): Access {
         const handle: ReadDecisions = Object.freeze({
           decide: (client, batch, time) => decide(client, batch, time),
           async prepareAccountAuthority(requestedIds): Promise<AccountAuthority> {
+            if (context.work) context.work.unavailable('Access AccountAuthority current account/operator projection native work producer');
             if (
               !requestedIds.length ||
               requestedIds.length > 100 ||
@@ -1050,6 +1101,7 @@ export function createAccess(config: PermissionConfig): Access {
         return handle;
       });
     } catch (error) {
+      context.work?.fail(error);
       throwAccessUnavailable(error, deadline);
       throw new AccessUnavailableError('overloaded');
     }

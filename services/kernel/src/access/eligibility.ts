@@ -1,3 +1,4 @@
+import { accessOwnerWork, type AccessWorkAccounting, type AccessWorkProducer } from './work.ts';
 import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { within } from './authenticate.ts';
@@ -25,6 +26,11 @@ export type ResourceEligibilityVerifyContext<E> = Readonly<{
   deadline: number;
 }>;
 export type ResourceEligibilityOptions<E> = Readonly<{
+  /** Native owner declarations for these SAME callbacks, not an alternate evaluator. */
+  work?: Readonly<{
+    prepare: AccessWorkProducer<ResourceEligibilityPrepareContext, E>;
+    verify: AccessWorkProducer<ResourceEligibilityVerifyContext<E>, boolean>;
+  }>;
   resource: Resource;
   action: string;
   /** Trusted owning-module code; runs before resource checkout. Gather bounded,
@@ -44,7 +50,7 @@ type Verify = (client: AccessClient, at: string) => Promise<boolean>;
 type Capability = {
   resource: ResourceIdentity;
   action: string;
-  prepare(context: ResourceEligibilityPrepareContext): Promise<Verify>;
+  prepare(context: ResourceEligibilityPrepareContext, work?: AccessWorkAccounting): Promise<Verify>;
 };
 const capabilities = new WeakMap<ResourceEligibility, Capability>();
 const observations = new WeakMap<object, { token: ResourceEligibility; verify: Verify; deadline: number }>();
@@ -62,28 +68,28 @@ export function createResourceAnonymousEligibility<E extends {}>(
 ): ResourceEligibility;
 export function createResourceAnonymousEligibility<E>(options: ResourceEligibilityOptions<E>): ResourceEligibility;
 export function createResourceAnonymousEligibility<E>(options: ResourceEligibilityOptions<E>): ResourceEligibility {
-  const { prepare, verify } = options;
+  const { prepare, verify, work: producer } = options;
   const capability = Object.freeze({}) as ResourceEligibility;
   capabilities.set(
     capability,
     Object.freeze({
       resource: Object.freeze({ route: options.resource.route, id: options.resource.id }),
       action: options.action,
-      async prepare(context: ResourceEligibilityPrepareContext) {
-        const evidence = await accessEvidence(() => prepare(context), false, context.deadline);
+      async prepare(context: ResourceEligibilityPrepareContext, work?: AccessWorkAccounting) {
+        const evidence = await accessEvidence(
+          () => accessOwnerWork(work, 'Content resource eligibility.prepare', producer?.prepare, context, () => prepare(context)),
+          false, context.deadline,
+        );
         if (evidence === null || evidence === undefined) throw new Error('Missing resource eligibility evidence');
-        return async (client: AccessClient, at: string) =>
-          (await verify(
-            Object.freeze({
-              actor: context.actor,
-              action: context.action,
-              resource: context.resource,
-              deadline: context.deadline,
-              client,
-              at,
-              evidence,
-            }),
+        return async (client: AccessClient, at: string) => {
+          const input = Object.freeze({
+            actor: context.actor, action: context.action, resource: context.resource,
+            deadline: context.deadline, client, at, evidence,
+          });
+          return (await accessOwnerWork(
+            work, 'Content resource eligibility.verify', producer?.verify, input, () => verify(input),
           )) === true;
+        };
       },
     }),
   );
@@ -158,6 +164,7 @@ export async function prepareAnonymousEligibility(
       pool: context.pool,
       deadline: binding.deadline,
     }),
+    context.work,
   );
   const evidence = Object.freeze({});
   observations.set(evidence, { token, verify, deadline: binding.deadline });

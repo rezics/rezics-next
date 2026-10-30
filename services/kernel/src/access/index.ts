@@ -1,3 +1,4 @@
+export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 import { accountStandingCheck, installAccountStandingCheck } from './account-standing.ts';
 export {
@@ -117,6 +118,7 @@ type Prepared = IdentityExpiry & {
   deadline: number;
   requestDeadline: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
+  work?: import('./work.ts').AccessWorkAccounting;
 };
 
 type PlatformGateCheck = (
@@ -185,6 +187,7 @@ export function createAccess(config: AccessConfig): Access {
     ...(config.contentEditionBuyerFactReader
       ? { contentEditionBuyerFactReader: config.contentEditionBuyerFactReader }
       : {}),
+    ...(config.contentEditionBuyerFactWork ? { contentEditionBuyerFactWork: config.contentEditionBuyerFactWork } : {}),
     ...(config.clock ? { clock: config.clock } : {}),
   });
   async function preparePermission(
@@ -210,6 +213,8 @@ export function createAccess(config: AccessConfig): Access {
       const attempt = accessCommandAttempt(context);
       if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
         return null;
+      if (attempt && actor.kind === 'account' && context.work)
+        context.work.unavailable('Auth command admission current identity/consent native work producer');
       if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
       const deadline = Math.min(
         context.deadline,
@@ -217,6 +222,7 @@ export function createAccess(config: AccessConfig): Access {
         !attempt && identity ? identity.observedAt + 180_000 : Infinity,
       );
       const permissionContext = {
+        ...(context.work ? { work: context.work } : {}),
         ...(context.time ? { time: context.time } : {}),
         pool: deadlineClient(context.pool, deadline) as typeof context.pool,
         deadline,
@@ -245,12 +251,14 @@ export function createAccess(config: AccessConfig): Access {
         ...(page ? { pageBinding: JSON.stringify(page) } : {}),
         deadline,
         requestDeadline,
+        ...(context.work ? { work: context.work } : {}),
         expires,
         expiryClock: identity?.expiryClock ?? 'kernel',
         ...(identity?.durableTime ? { durableTime: identity.durableTime } : {}),
       });
       return evidence;
     } catch (error) {
+      context.work?.fail(error);
       throwAccessUnavailable(error, context.deadline);
       throwEvidenceFailure(error);
       if (error instanceof AuthenticationError) throw error;
@@ -291,6 +299,7 @@ export function createAccess(config: AccessConfig): Access {
         return { allowed, explicit: false };
       });
     } catch (error) {
+      facts.work?.fail(error);
       throwAccessUnavailable(error, facts.deadline);
       throwEvidenceFailure(error);
       return { allowed: false, explicit: false };
@@ -320,6 +329,8 @@ export function createAccess(config: AccessConfig): Access {
       const handle = await permissions.prepareReadDecisions!({
         ...input,
         context: {
+          ...(context.work ? { work: context.work } : {}),
+          ...(context.time ? { time: context.time } : {}),
           pool: deadlineClient(context.pool, deadline) as typeof context.pool,
           deadline,
         },

@@ -1,5 +1,98 @@
 # Access
 
+
+## Native work admission
+
+`access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no
+numeric allowance. Its exact structural dimensions are `{keys, points, witnesses, rows, bytes, emptySeeks}`.
+The caller supplies its existing ledger through `AccessWorkSink.reserve(operation, bound)`, which either refuses
+with `null` or returns a one-shot `settle(actual)` reservation. A thrown admission error also prevents dispatch.
+Instantiate `new AccessWorkAccounting(sink, fixedRequestDeadline)` and supply it as `AccessContext.work`.
+The accumulator never grants authority; existing native identity, opaque eligibility, principal, scope and formula
+checks remain mandatory. The ordinary signatures and behavior without `work` are unchanged.
+
+The supported producer is the installed `createAccess` implementation, including its ordinary `prepare`,
+`preparePage`, `authorize`, `authorizePage`, `authorizeExplicit` and `prepareReadDecisions().decide` methods.
+Metered preparation requires the caller's already-live native `AuthoritativeTime`: `context.time` for individual
+and homogeneous page preparation, `input.time` for read-decision windows (and matching `context.time` if supplied).
+Final checks must receive that SAME object. Access does not mint another native clock or exempt epoch checks.
+The caller owns admission of its original clock read and resource checkout; Access admits its own time query,
+independent checkouts/waits, assignment, inverse, candidate, organization role and final formula statements.
+Prepared role/assignment metadata can be shared within this live window and its original evidence TTL/deadline;
+each target/scope/denial decision still executes the same `permission-check.sql` at final T. A homogeneous page
+prepares once for its bounded ids. A read-decision window prepares inventory once and executes a fresh final
+formula for each bounded target batch; it stores no allowed boolean.
+
+`await work.capture(operation)` returns the closed union:
+
+```ts
+type AccessWorkResult<T> =
+  | { state: 'complete'; value: T; usage: AccessWork }
+  | { state: 'unavailable'; dependency: string; usage: AccessWork }
+  | { state: 'failed'; error: unknown; usage: AccessWork };
+```
+
+For example, capture ordinary preparation with its metered context, then capture the ordinary final authorize
+call using its returned evidence and the same live T. `false` is a complete denial, with its actual usage.
+`usage` is cumulative across preparation and final checks, including rejected candidates and failed operations.
+`work.usage()` exposes the same immutable receipt when preserving the ordinary throwing API. Do not add a
+captured cumulative receipt to the ledger again: the sink already receives per-operation settlement.
+
+Reservations precede dispatch, including owner callbacks and explicit pool acquisition. Dispatched native rows
+are the owner-declared plan bound, also on empty output, and cannot be refunded using result cardinality. Completed
+statements settle actual serialized parameter/projection bytes and their outer empty seek; this is not a claim of
+measured PostgreSQL physical tuples. Unknown failed work consumes its entire admitted bound and poisons reuse.
+An enclosing timeout seals every pending bound before returning; a late callback cannot refund unknown work or
+issue another reservation. Foreign owners must account all their nested operations within their declaration;
+Access does not inspect their SQL or substitute result rows for work.
+
+`AccessWorkProducer<C,R>` is exactly `{bound(context: C): AccessWork | undefined;
+actual(context: C, result: R): AccessWork | undefined}`. Both functions are synchronous, pure accounting metadata;
+the owner binds the actual receipt to this exact invocation, including zero-IO results. Access reserves `bound`
+before invoking the ORIGINAL callback, then settles the actual receipt. Missing/invalid receipts retain the
+full bound and fail the attempt. There is no blanket callback estimate. The native owner integration points are:
+
+- `ResourceEligibilityOptions.work.{prepare,verify}` for the SAME Content/resource eligibility callbacks.
+- `ReadDecisionEligibility.work`, with context `{client,ids,at}`, for native batch resource eligibility.
+- `AccessRealmRoleReader.work` / `.batchWork` for the original Realm single / batch callback inputs.
+- `AccessConfig.contentEditionBuyerFactWork` for the original Commerce buyer fact reader input/result.
+
+A missing declaration refuses BEFORE that callback, with `AccessWorkUnavailableError.dependency` naming
+`Content resource eligibility.prepare`, `Content resource eligibility.verify`, `Resource ReadDecisionEligibility`,
+`Content AccessRealmRoleReader`, `Content AccessRealmRoleReader.batch`, or `Commerce ContentEditionBuyerFactReader`.
+No foreign native implementation is claimed by publishing these ports. The explicitly unsupported metered variants
+are account command admission (`Auth command admission current identity/consent native work producer`) and
+`ReadDecisions.prepareAccountAuthority` (`Access AccountAuthority current account/operator projection native work
+producer`). Both refuse before their dependent work. The latter's existing prepared answer map is not a metered
+permission cache. Unmetered account authority and command admission keep their existing behavior.
+
+### Native declaration proof
+
+`accessNativeWork` is called explicitly at each owning SQL call site; it is not a query proxy or SQL matcher.
+Its statement point also admits the implicit pool wait when using `pool.query`; `accessCheckout` admits each
+explicit borrowed checkout separately. Closed projections contain UUIDs, enums, booleans and finite PostgreSQL
+timestamp/range text, never native content bodies. Byte bounds use those shapes plus the actual serialized input;
+completed projection bytes are measured directly. Witness work is zero: Access does not produce Source witnesses.
+
+- `permission-time.sql`: one scalar row and its two timestamp projections.
+- `permission-assignment.sql`: one primary-key assignment and one full-key account, at most two native rows.
+- `permission-inverse.sql`: one canonical coverage point and two account/kind ranges per admitted human.
+  Their combined cardinality is `MEMBERSHIP_LIMIT` from the existing serialized native reservation writer
+  (`membership-inverse-20261025093747-reserve.sql`); incomplete coverage still denies. This is charged once per
+  shared window, never estimated from returned memberships. A caller whose budget cannot admit this bound refuses.
+- `permission-membership.sql`: one organization account and current/next temporal seeks for each of two roles,
+  at most five native candidates per organization/member pair. Both positive and negative roles are charged.
+- Candidate and final formula SQL: keys are the supplied roles plus two identity/active-account keys per resolved
+  account. Targets are the exact page/batch plus optional Global. Branches are ordinary plus requested explicit
+  and public projections. Each key/target/branch has an action-grant seek, each configured resource-role grant
+  seek, and denial work for the three closed reasons (`resource`, `suspension`, `realm_ban`). The native temporal
+  keys' `WITHOUT OVERLAPS` constraints and last-range `LIMIT 1` seeks bound each candidate/reason. The declaration
+  also charges the finite generated key/target/probe/decision work. The final assignment recheck is separately
+  included. No target grant, current denial or final scope decision is reused from preparation.
+
+Native cost/growth evidence remains separate from this supported admission/receipt port. No Source budget,
+resource classifier, ledger or harness is changed here.
+
 Access owns account state and lifecycle, bearer identity evidence, resource permission evaluation, grants, principal assignments and creation authority.
 
 Every access event type has a schema in `events.ts`, and the catalogue test proves it with real data.
