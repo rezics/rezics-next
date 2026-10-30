@@ -34,6 +34,7 @@ import {
   type GateResult,
   type GateRunner,
 } from './merge.ts';
+import { canonicalConflictPaths, makeRebaseConflictContext } from './conflict-progress.ts';
 
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
@@ -1346,6 +1347,8 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
+            if (conflicts.length)
+              result.rebaseConflict = makeRebaseConflictContext(previous, tip, conflicts);
             if (error instanceof WorkerConflictError) {
               refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
               localOutcomes.set(entry.id, result);
@@ -1366,7 +1369,7 @@ export class MergeTrain {
               deferred.add(entry.id);
             } else if (conflicts.length) {
               result.stage = 'rebase';
-              result.conflictedFiles = conflicts;
+              result.conflictedFiles = canonicalConflictPaths(conflicts);
               result.firstFailure = firstFailure(String(error));
               appendFileSync(logPath, `Rebase conflicts with dev: ${conflicts.join(', ')}\n`);
               localOutcomes.set(entry.id, result);
@@ -1949,6 +1952,8 @@ export class MergeTrain {
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
+    let workerCommit: string | undefined;
+    let activeTargetHead: string | undefined;
     const runGate = o.runGate ?? gateRunner();
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
@@ -2000,6 +2005,7 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      workerCommit = tip;
       if (workspace && sharedStore) {
         sharedSource = tip;
         const task = sharedStore.task(request.taskId);
@@ -2056,6 +2062,7 @@ export class MergeTrain {
         delete result.timedOut;
         delete result.failedCommand;
         const base = target();
+        activeTargetHead = base;
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
@@ -2696,7 +2703,13 @@ export class MergeTrain {
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
-      if (stage === 'rebase' && added) result.conflictedFiles = unmergedFiles(trainTree);
+      if (stage === 'rebase' && added) {
+        const conflicts = canonicalConflictPaths(unmergedFiles(trainTree));
+        if (conflicts.length) {
+          result.conflictedFiles = conflicts;
+          result.rebaseConflict = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
+        }
+      }
       result.firstFailure = firstFailure(message);
       return finish();
     } finally {

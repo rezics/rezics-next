@@ -57,6 +57,16 @@ export type FirstFailure = {
   excerpt: string;
 };
 
+/** Git state captured by the train while an unresolved rebase conflict is present. */
+export type RebaseConflictContext = {
+  /** Exact effective target HEAD used by the failed rebase (including earlier members of a batch). */
+  targetHead: string;
+  /** Exact source branch HEAD before the controller rebased or amended the candidate. */
+  workerCommit: string;
+  /** Sorted, unique paths reported by Git as unresolved at the conflict. */
+  paths: readonly string[];
+};
+
 export type GateOutcome = AttemptRef & {
   passed: boolean;
   /** The stage that failed, or 'merge' when the task merged. */
@@ -75,6 +85,8 @@ export type GateOutcome = AttemptRef & {
   nonGeneratedDiffLines?: number;
   /** Paths left unresolved by a rebase-stage failure. */
   conflictedFiles?: readonly string[];
+  /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
+  rebaseConflict?: RebaseConflictContext;
   diffLines: number;
   mergedCommit?: string;
 };

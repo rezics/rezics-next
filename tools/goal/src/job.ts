@@ -26,6 +26,11 @@ import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import { firstFailure } from './merge.ts';
 import {
+  completeRebaseConflictContext,
+  repeatedNoProgressConflict,
+  REBASE_CONFLICT_HISTORY_LIMIT,
+} from './conflict-progress.ts';
+import {
   git,
   HeldTaskConflictError,
   TaskHeldForDependenciesError,
@@ -1446,18 +1451,26 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
-        // The same landing conflict three times in recent attempts is not going to resolve by retrying: a resolution
-        // attempt that found no rebase in progress ended as an environment failure in between, so the previous-attempt
-        // check alone let one task loop 385 times (2026-10-29/30).
-        const fingerprint = failure?.fingerprint;
-        const repeatedConflict =
-          fingerprint !== undefined &&
-          store
-            .attempts(task.id)
-            .filter((a) => a.attempt < outcome.attempt)
-            .slice(-6)
-            .filter((a) => a.failure?.fingerprint === fingerprint).length >= 2;
-        if (attempt.escalation === 'rebase-conflict' || repeatedConflict) {
+        // Only an identical complete Git conflict is evidence that the resolution attempt made no progress.
+        // Historical outcomes without captured target/source/files remain unknown and cannot trigger this guard.
+        const priorConflictContexts = store
+          .attempts(task.id)
+          .filter((prior) => prior.attempt < outcome.attempt)
+          .slice(-REBASE_CONFLICT_HISTORY_LIMIT)
+          .map((prior) => {
+            const priorOutcome = store
+              .events(task.id, prior.attempt)
+              .find((event) => event.kind === 'gate-outcome');
+            if (!priorOutcome) return undefined;
+            try {
+              const body = JSON.parse(priorOutcome.body) as { stage?: unknown; rebaseConflict?: unknown };
+              return body.stage === 'rebase' ? completeRebaseConflictContext(body.rebaseConflict) : undefined;
+            } catch {
+              return undefined;
+            }
+          });
+        const repeatedConflict = repeatedNoProgressConflict(outcome.rebaseConflict, priorConflictContexts);
+        if (repeatedConflict) {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
             a.escalation = 'spec-conflict';
@@ -1465,14 +1478,14 @@ export class WorkerJob implements GateOutcomeSink {
           store.updateTask(outcome, (t) => {
             t.state = 'stopped';
           });
-          const detail = files.length
-            ? `conflicted files: ${files.join(', ')}`
-            : (outcome.firstFailure?.assertion ?? 'conflict with the current integration branch');
+          const detail =
+            `target ${repeatedConflict.targetHead}; worker ${repeatedConflict.workerCommit}; ` +
+            `files: ${repeatedConflict.paths.join(', ')}`;
           const event = {
             managerId: task.brief.manager,
             taskId: task.id,
             kind: 'spec-conflict' as const,
-            summary: `spec-conflict: repeated rebase conflict; ${detail}`.replace(/[\r\n]+/g, ' '),
+            summary: `spec-conflict: repeated unchanged rebase conflict; ${detail}`.replace(/[\r\n]+/g, ' '),
             evidencePath,
           };
           store.event(outcome, 'manager-event', event);

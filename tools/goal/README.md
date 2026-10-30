@@ -138,10 +138,15 @@ changes belong to it and whether all its commits are on dev; those tasks become 
 commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
 acceptance or changed files. Main promotion retains its existing workflow.
 
-A dev rebase conflict enters the existing rebase-conflict retry path with its conflict files and evidence. A batch
-drops members already integrated before advancing dev, so one completed member cannot refuse the others. The
-manager-host sweep also repairs a current `landing` task that has no pending queue entry after both train lanes are
-idle: it records a durable retry and sends one environment notice to the supermanager.
+A rebase conflict enters the existing same-profile retry path with its conflict files and evidence. The train
+records the full effective target commit, source worker commit and sorted unresolved path set at the conflict. A
+bounded no-progress guard stops only when the current conflict and two of the six most recent prior conflicts have
+the same complete Git context; redacted failure fingerprints and legacy outcomes without that context do not count.
+The single stop notice records the target, source and paths durably. A batch uses the cumulative target commit after
+earlier members, so a target advanced within the batch counts as progress. A batch drops members already integrated
+before advancing dev, so one completed member cannot refuse the others. The manager-host sweep also repairs a current
+`landing` task that has no pending queue entry after both train lanes are idle: it records a durable retry and sends
+one environment notice to the supermanager.
 
 The controller merges dev into the workspace only while no worker runs there, under the same short lease used for
 launch. Pending launches also block that merge. Dirty work is preserved and defers the merge until a later idle

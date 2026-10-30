@@ -8,7 +8,7 @@ const conflict = (taskId: string, attempt: number): GateOutcome => ({ taskId, at
     excerpt: 'CONFLICT (content): Merge conflict in result.txt' },
   logPath: 'fixture', hostMs: 1, changedFiles: ['result.txt'], diffLines: 1 });
 
-test('a rebase conflict starts a resolution attempt, not a fix round or a consultation, and the second goes to the manager', async () => {
+test('a rebase conflict starts a same-profile resolution attempt and legacy outcomes without Git context keep retrying', async () => {
   const h = harness(), inbox: ManagerEvent[] = [], consultations: string[] = [];
   try {
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: event => inbox.push(event) },
@@ -24,9 +24,9 @@ test('a rebase conflict starts a resolution attempt, not a fix round or a consul
     expect(consultations).toEqual([]);
     expect(inbox).toEqual([]);
     job.onGateOutcome(conflict(task.id, 2)); await job.drain();
-    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.task(task.id).currentAttempt).toBe(3);
+    expect(h.store.attempt({ taskId: task.id, attempt: 3 }).profile).toEqual(second.profile);
     expect(consultations).toEqual([]);
-    expect(inbox.map(event => event.kind)).toEqual(['spec-conflict']);
-    expect(inbox[0]!.summary).toContain('result.txt');
+    expect(inbox).toEqual([]);
   } finally { h.dispose(); }
 });
