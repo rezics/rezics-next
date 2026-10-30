@@ -100,10 +100,9 @@ async function runGrowth() {
     // Finish fixture-owned runs already started before the pause so they cannot
     // consume rows admitted for the measured tick. SDK results prove completion.
     const started = (
-      await db.admin.query(
-        `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE queue_name=$1`,
-        [AUTH_MAINTENANCE_SCHEDULE],
-      )
+      await db.admin.query(`SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE queue_name=$1`, [
+        AUTH_MAINTENANCE_SCHEDULE,
+      ])
     ).rows;
     await Promise.all(started.map((row) => DBOS.retrieveWorkflow(String(row.workflow_uuid)).getResult()));
     await db.admin.query(`INSERT INTO auth_client VALUES ('growth-web',true,ARRAY['read']);
