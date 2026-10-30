@@ -36,13 +36,14 @@ const initial: SetupSnapshot = {
 };
 // Explicit display/command contract fixtures, not a production catalogue or permission source.
 const choices: BoardChoiceSource = {
+  conceptQuery: 'loaded-page',
   schemes: async ({ query }) => ({
     schemes: scheme.label.toLowerCase().includes(query.toLowerCase()) ? [scheme] : [],
     next: null,
   }),
-  concepts: async ({ schemeId, query }) => {
+  concepts: async ({ schemeId }) => {
     if (schemeId !== scheme.id) throw new BoardChoiceUnavailable();
-    return { concepts: concept.label.toLowerCase().includes(query.toLowerCase()) ? [concept] : [], next: null };
+    return { concepts: [concept], next: null };
   },
 };
 function BoardChoiceExample({ outcome = 'denied' }: { outcome?: 'denied' | 'conflict' | 'unavailable' }) {

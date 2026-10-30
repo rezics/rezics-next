@@ -48,6 +48,8 @@ import {
   setupContextDirectorySchema,
   unavailableNativeContextDirectory,
 } from './setup-context-native';
+import { boardChoiceReadSchema, readNativeBoardChoices } from './setup-board-native';
+import { requestLanguages } from '../kernel/languages';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -209,6 +211,20 @@ export const searchSpaceSetupContexts = createServerFn({ method: 'GET' })
       signal: getRequest().signal,
     }),
   );
+
+export const readSpaceSetupBoardChoices = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(boardChoiceReadSchema, input))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    return readNativeBoardChoices(
+      kernelClient(data.locale),
+      viewerCredential(request),
+      requestLanguages(data.locale),
+      data,
+    );
+  });
 
 export const changeSpaceSetup = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(setupCommandSchema, input))

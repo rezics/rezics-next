@@ -6,8 +6,15 @@ import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { changeSpaceSetup, readSpaceSetup, resolveSpaceSetupChoice, searchSpaceSetupContexts } from './space-actions';
+import {
+  changeSpaceSetup,
+  readSpaceSetup,
+  resolveSpaceSetupChoice,
+  searchSpaceSetupContexts,
+  readSpaceSetupBoardChoices,
+} from './space-actions';
 import { nativeContextChoiceSource } from './setup-context-native';
+import { setupBoardChoiceSource } from './setup-board-picker';
 import { SpaceSetupForm, type SetupTransport } from './space-setup-form';
 import type { SetupSnapshot, SetupFailure } from './space-setup';
 
@@ -20,6 +27,15 @@ export function SpaceSetupPage({
 }) {
   const { csrfToken, state, subject } = useSession();
   const locale = getLocale();
+  const boardChoices = useMemo(
+    () =>
+      setupBoardChoiceSource((input) =>
+        state === 'signed-out'
+          ? Promise.resolve({ kind: 'failure', reason: 'denied', status: 401 })
+          : readSpaceSetupBoardChoices({ data: { ...input, locale } }),
+      ),
+    [locale, state, subject],
+  );
   const transport = useMemo<SetupTransport>(
     () => ({
       contexts: nativeContextChoiceSource(
@@ -49,7 +65,7 @@ export function SpaceSetupPage({
   return (
     <article className="mx-auto max-w-5xl space-y-6 text-foreground">
       <PageHeading>{m.space_setup_heading()}</PageHeading>
-      <SpaceSetupForm initial={initial} transport={transport} />
+      <SpaceSetupForm initial={initial} transport={transport} boardChoices={boardChoices} />
     </article>
   );
 }

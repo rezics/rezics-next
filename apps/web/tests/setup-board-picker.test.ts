@@ -11,6 +11,9 @@ import {
 import { commandSetup, retainSetupAttempt, setupAttempt } from '../src/community/space-setup';
 import realmRecording from '../src/kernel/recorded/realm.json';
 import boardRecording from '../src/kernel/recorded/board-realm.json';
+import { readNativeBoardChoices, type BoardIncomingPage } from '../src/community/setup-board-native';
+import { setupBoardChoiceSource } from '../src/community/setup-board-picker';
+import type { KernelClient } from '@rezics/client';
 
 const scheme = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000003', label: 'Reading topics' };
 const concept = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000004', label: 'Introductions' };
@@ -201,4 +204,184 @@ test('current native denial or membership conflict overrides display selection; 
     });
     expect(retainSetupAttempt(result)).toBe(false);
   }
+});
+
+type SearchData = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
+type CatalogueHit = Extract<SearchData, { subjects: readonly unknown[] }>['subjects'][number];
+const schemeHit = {
+  id: scheme.id,
+  type: 'skos:ConceptScheme',
+  kind: 'subject',
+  base: {
+    id: scheme.id,
+    kind: 'subject',
+    kindLabel: { value: 'Subject', language: 'en' },
+    title: { value: 'Current reading topics', language: 'en' },
+    image: null,
+    url: { id: scheme.id, label: null },
+  },
+  labels: { en: 'Catalogue label' },
+  summary: {
+    id: scheme.id,
+    type: 'skos:ConceptScheme',
+    types: ['skos:ConceptScheme'],
+    label: { value: 'Summary label', language: 'en' },
+    creativeWork: false,
+    cover: null,
+  },
+  figure: {
+    questionId: key,
+    populationId: key,
+    scale: { min: 1, max: 5, displayStep: 1 },
+    count: 0,
+    state: 'insufficient_data',
+    mean: null,
+    score: null,
+  },
+} satisfies CatalogueHit;
+const memberLink = {
+  subject: concept.id,
+  property: 'skos:inScheme',
+  statement: key,
+  type: 'skos:Concept',
+  label: 'Compatibility label',
+  summary: {
+    id: concept.id,
+    type: 'skos:Concept',
+    types: ['skos:Concept'],
+    label: { value: 'Current introductions', language: 'en' },
+    creativeWork: false,
+    cover: null,
+  },
+} satisfies BoardIncomingPage['links'][number];
+
+test('Bind board scheme picker to constrained native Search and incoming SKOS links', async () => {
+  const requests: Request[] = [];
+  const as_of = '2026-10-31T00:00:00.000Z';
+  const client = createKernelClient('https://kernel.test', {
+    headers: { 'accept-language': 'en' },
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ subjects: [schemeHit], next: 'native-search-next', as_of });
+    },
+  });
+  const native = setupBoardChoiceSource((input) => readNativeBoardChoices(client, 'Bearer viewer', ['en'], input));
+  expect(await native.schemes({ query: '  ' })).toEqual({
+    schemes: [{ id: scheme.id, label: 'Current reading topics' }],
+    next: 'native-search-next',
+    as_of,
+  });
+  const query = String.raw`Reading | -"themes" \ (literal*)`;
+  await native.schemes({ query });
+  await native.schemes({ query, cursor: 'native-search-next' });
+  const bodies = await Promise.all(requests.map((request) => request.json()));
+  expect(bodies[0]).toEqual({
+    filter: { type: { in: ['skos:ConceptScheme'] } },
+    sort: 'relevance',
+    limit: 20,
+    languages: ['en'],
+  });
+  expect(bodies[1]).toEqual({ ...bodies[0], text: String.raw`"Reading | -\"themes\" \\ (literal*)"` });
+  expect(bodies[2]).toEqual({ ...bodies[1], cursor: 'native-search-next' });
+  expect(requests.every((request) => new URL(request.url).pathname === '/v1/subjects:search')).toBe(true);
+  expect(requests.every((request) => request.headers.get('authorization') === 'Bearer viewer')).toBe(true);
+  expect(requests.every((request) => request.headers.get('accept-language') === 'en')).toBe(true);
+});
+
+test('incoming member summaries filter only the loaded page and retain native sparse-page continuation and freshness', async () => {
+  const requests: Request[] = [];
+  const freshness = { consistency: 'eventual', target_seconds: 10, caught_up: false } as const;
+  const client = createKernelClient('https://kernel.test', {
+    headers: { 'accept-language': 'en' },
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      return Response.json({
+        links: requests.length > 1 ? [] : [memberLink, { ...memberLink, subject: scheme.id }],
+        next: requests.length > 1 ? 'sparse-native-next' : 'incoming-native-next',
+        freshness,
+      });
+    },
+  });
+  const native = setupBoardChoiceSource((input) => readNativeBoardChoices(client, 'Bearer viewer', ['en'], input));
+  let page: BoardChoicePage | undefined;
+  const pager = new BoardChoicePager((next) => {
+    page = next;
+  });
+  pager.search({ source: native, kind: 'concept', schemeId: scheme.id, query: 'intro' }, 0);
+  await turn();
+  expect(page).toEqual({
+    status: 'ready',
+    choices: [{ id: concept.id, label: 'Current introductions' }],
+    next: 'incoming-native-next',
+    freshness,
+  });
+  pager.search({ source: native, kind: 'concept', schemeId: scheme.id, query: 'no name here' }, 0);
+  expect(page?.choices).toEqual([]);
+  expect(page?.next).toBe('incoming-native-next');
+  expect(requests).toHaveLength(1);
+  pager.next();
+  await turn();
+  expect(page).toEqual({ status: 'ready', choices: [], next: 'sparse-native-next', freshness });
+  expect(requests).toHaveLength(2);
+  const first = new URL(requests[0]!.url);
+  expect(first.pathname).toBe(`/v1/subjects/${scheme.id}/links`);
+  expect(Object.fromEntries(first.searchParams)).toEqual({
+    property: 'skos:inScheme',
+    type: 'skos:Concept',
+    limit: '20',
+  });
+  expect(Object.fromEntries(new URL(requests[1]!.url).searchParams)).toEqual({
+    ...Object.fromEntries(first.searchParams),
+    cursor: 'incoming-native-next',
+  });
+  expect(requests.every((request) => request.method === 'GET' && request.headers.get('accept-language') === 'en')).toBe(
+    true,
+  );
+  pager.cancel();
+});
+
+test('native stale continuation restarts only on explicit retry; denied and unavailable are never empty success', async () => {
+  const requests: Request[] = [];
+  let status = 200;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(
+        status === 200
+          ? { subjects: [schemeHit], next: 'stale-native-next', as_of: '2026-10-31T00:00:00.000Z' }
+          : { code: status === 409 ? 'stale_cursor' : 'gate_denied' },
+        { status },
+      );
+    },
+  });
+  const native = setupBoardChoiceSource((input) => readNativeBoardChoices(client, 'Bearer viewer', ['en'], input));
+  let page: BoardChoicePage | undefined;
+  const pager = new BoardChoicePager((next) => {
+    page = next;
+  });
+  pager.search({ source: native, kind: 'scheme', schemeId: '', query: 'Reading' }, 0);
+  await turn();
+  status = 409;
+  pager.next();
+  await turn();
+  expect(page).toEqual({ status: 'stale', choices: [], next: null });
+  expect(pager.choose(scheme.id)).toBeNull();
+  expect(requests).toHaveLength(2);
+  status = 403;
+  pager.retry();
+  await turn();
+  expect(page).toEqual({ status: 'denied', choices: [], next: null });
+  const bodies = await Promise.all(requests.map((request) => request.json()));
+  expect(bodies[1]).toEqual({ ...bodies[0], cursor: 'stale-native-next' });
+  expect(bodies[2]).toEqual(bodies[0]);
+  status = 503;
+  pager.retry();
+  await turn();
+  expect(page).toEqual({ status: 'unavailable', choices: [], next: null });
+  expect(await readNativeBoardChoices(client, '', ['en'], { kind: 'concept', schemeId: scheme.id, query: '' })).toEqual(
+    { kind: 'failure', reason: 'denied', status: 401 },
+  );
+  expect(requests).toHaveLength(4);
+  pager.cancel();
 });

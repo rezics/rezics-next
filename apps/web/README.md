@@ -2172,7 +2172,7 @@ Back keeps drafts, and Cancel pauses the editor with Resume on the same page. Un
 selection references, survive those controls but are not persisted across navigation. Saved commands are not undone.
 
 The production transport uses `changeSpaceSetup`, `readSpaceSetup`, `resolveSpaceSetupChoice` and
-`searchSpaceSetupContexts` in `community/space-actions.ts`. The Context region uses
+`searchSpaceSetupContexts`, plus `readSpaceSetupBoardChoices`, in `community/space-actions.ts`. The Context region uses
 `community/setup-context-picker-field.tsx`, backed by the consumer-local `ContextChoiceSource` in
 `community/setup-context-picker.ts`. Its `search({ query, cursor?, signal? })` returns one page of
 `{ contexts: readonly { id, label }[], next: string | null }`; `resolve(id)` returns one current readable choice or
@@ -2204,11 +2204,26 @@ Known-reference loading remains optional recovery alongside name search.
 The scheme/topic regions use `community/setup-board-picker-control.tsx`, with shared Input, RadioGroup, Field and
 Button controls. `community/setup-board-picker.ts` owns the consumer-local `BoardChoiceSource` display interface:
 `schemes({query,cursor?})` returns `{schemes: readonly {id,label}[], next: string|null}`, and
-`concepts({schemeId,query,cursor?})` returns the analogous `concepts` page. A supplied native source takes precedence
-over the isolated typed unavailable adapter. The installed generated client currently exports no bounded SKOS
-scheme/member list reader; the default therefore shows unavailable with Retry, never an invented endpoint,
-catalogue, successful empty page or UUID form. The adapter defines no native producer module. Once installed,
-Semantic's actual source should be passed as `SpaceSetupForm.boardChoices`. Choice labels are display data, never
+`concepts({schemeId,query,cursor?})` returns the analogous `concepts` page. The real setup page supplies the native
+source through the authenticated, private/no-store `readSpaceSetupBoardChoices` server function.
+`community/setup-board-native.ts` infers the installed Search input/catalogue hit and Semantic incoming-page types.
+Scheme discovery calls `subjects.$search.post` with `filter.type.in=['skos:ConceptScheme']`, relevance order,
+limit 20 and the reader's languages, omitting representation. Literal names use the closed Search phrase escaping;
+blank input omits text for genuine type-only discovery. Labels use current `base.title`, summary and catalogue
+labels. Search retains its own gate admission; `as_of` is observation metadata, never readiness or permission.
+There is no untyped suggestion filter, global top-ten postfilter, count or catalogue scan.
+
+Concepts use the saved scheme's actual `GET /v1/subjects/{schemeId}/links` with `property=skos:inScheme`,
+`type=skos:Concept` and limit 20. Choices use each native holder summary's identity and label, never a raw edge
+masquerading as a Subject. Exact Concept types are eligible; the native write still revalidates identity and
+membership. The response's freshness is retained, with an updating notice when it is not caught up. Incoming links
+have no arbitrary name predicate, so this source declares `conceptQuery='loaded-page'`: typing filters only names
+on the loaded page and retains its native continuation. Empty local matches do not mean the scheme has no matching
+Concepts. Next loads exactly one native page with the same body/query/language and unchanged signed cursor; sparse
+pages never trigger refill or per-row hydration. Source/query/scheme changes hide late results. Native denial,
+invalid input, stale cursors and unavailability stay distinct from successful empty pages; an explicit stale-page
+retry restarts the current query. A standalone form without a choice transport keeps the isolated typed unavailable
+fallback. Choice labels are display data, never
 permission, publication or membership verdicts. Neither picker supplies a default Context, Realm, owner, Concept,
 membership or Global grant.
 The current server still checks parent creation grants, role authority, scheme membership and current readability.
@@ -2246,7 +2261,7 @@ light/dark through existing Storybook globals; there are no width, locale or the
 The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
 refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
 transport fixtures; production uses the native directory adapter's isolated unavailable transport until the
-generated GET is installed, the actual Context point reader, and the typed unavailable board source above.
+generated GET is installed, the actual Context point reader, and the native board source above.
 Native acceptance and Web screenshot review follow integration; local typing does not establish those outcomes.
 
 Focused Context review IDs are `patterns-community-space-setup-context--unavailable`, `--denied` and `--loading`.

@@ -1,16 +1,61 @@
 import type { SetupChoice } from './space-setup';
+import type { BoardIncomingPage } from './setup-board-native';
+
+type Observation = { as_of?: string; freshness?: BoardIncomingPage['freshness'] };
+type ChoiceInput = { query: string; cursor?: string | undefined };
+export type BoardChoiceRead = ChoiceInput & ({ kind: 'scheme' } | { kind: 'concept'; schemeId: string });
+export type BoardChoiceFailure = 'denied' | 'stale' | 'invalid' | 'unavailable';
+export type BoardChoiceResult =
+  | ({ kind: 'ready'; choices: readonly SetupChoice[]; next: string | null } & Observation)
+  | { kind: 'failure'; reason: BoardChoiceFailure; status: number };
 
 /** Display data only. Native commands remain the authority for lifecycle and membership. */
 export type BoardChoiceSource = {
-  schemes(input: { query: string; cursor?: string }): Promise<{
-    schemes: readonly { id: string; label: string }[];
-    next: string | null;
-  }>;
-  concepts(input: { schemeId: string; query: string; cursor?: string }): Promise<{
-    concepts: readonly { id: string; label: string }[];
-    next: string | null;
-  }>;
+  conceptQuery?: 'loaded-page';
+  schemes(input: ChoiceInput): Promise<
+    {
+      schemes: readonly { id: string; label: string }[];
+      next: string | null;
+    } & Observation
+  >;
+  concepts(input: ChoiceInput & { schemeId: string }): Promise<
+    {
+      concepts: readonly { id: string; label: string }[];
+      next: string | null;
+    } & Observation
+  >;
 };
+
+export class BoardChoiceError extends Error {
+  constructor(
+    readonly reason: BoardChoiceFailure,
+    readonly status: number,
+  ) {
+    super(`Board options: ${reason}`);
+  }
+}
+
+/** The server transports native refusal and observation data without turning them into empty pages. */
+export function setupBoardChoiceSource(
+  read: (input: BoardChoiceRead) => Promise<BoardChoiceResult>,
+): BoardChoiceSource {
+  async function page(input: BoardChoiceRead) {
+    const result = await read(input);
+    if (result.kind === 'failure') throw new BoardChoiceError(result.reason, result.status);
+    return result;
+  }
+  return {
+    conceptQuery: 'loaded-page',
+    async schemes(input) {
+      const { choices, next, as_of } = await page({ ...input, kind: 'scheme' });
+      return { schemes: choices, next, ...(as_of === undefined ? {} : { as_of }) };
+    },
+    async concepts(input) {
+      const { choices, next, freshness } = await page({ ...input, kind: 'concept' });
+      return { concepts: choices, next, ...(freshness === undefined ? {} : { freshness }) };
+    },
+  };
+}
 
 export class BoardChoiceUnavailable extends Error {
   readonly kind = 'unavailable';
@@ -19,7 +64,7 @@ export class BoardChoiceUnavailable extends Error {
   }
 }
 
-/** No native bounded SKOS list export is installed. Never substitute a catalogue or guessed route. */
+/** Isolated fallback for a form rendered without a native choice transport. */
 export const unavailableBoardChoiceSource: BoardChoiceSource = {
   async schemes() {
     throw new BoardChoiceUnavailable();
@@ -35,10 +80,10 @@ export function currentBoardConcept(selection: BoardConceptSelection | null, sch
 }
 
 export type BoardChoicePage = {
-  status: 'loading' | 'ready' | 'unavailable';
+  status: 'loading' | 'ready' | BoardChoiceFailure;
   choices: readonly SetupChoice[];
   next: string | null;
-};
+} & Observation;
 type Scope = { source: BoardChoiceSource; kind: 'scheme' | 'concept'; schemeId: string; query: string };
 const loading: BoardChoicePage = { status: 'loading', choices: [], next: null };
 
@@ -49,12 +94,28 @@ export class BoardChoicePager {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private page: BoardChoicePage = loading;
   private cursor: string | undefined;
+  private loaded: BoardChoicePage | null = null;
   constructor(private publish: (page: BoardChoicePage) => void) {}
 
   search(scope: Scope, debounceMs = 250) {
+    const previous = this.scope;
+    if (
+      scope.kind === 'concept' &&
+      scope.source.conceptQuery === 'loaded-page' &&
+      this.page.status === 'ready' &&
+      previous?.source === scope.source &&
+      previous.kind === scope.kind &&
+      previous.schemeId === scope.schemeId &&
+      this.loaded
+    ) {
+      this.scope = scope;
+      this.showLoaded();
+      return;
+    }
     this.cancel();
     this.scope = scope;
     this.cursor = undefined;
+    this.loaded = null;
     this.update(loading);
     this.timer = setTimeout(() => {
       void this.load();
@@ -66,7 +127,9 @@ export class BoardChoicePager {
     void this.load();
   }
   retry() {
-    if (this.page.status === 'unavailable') void this.load();
+    if (this.page.status === 'ready' || this.page.status === 'loading') return;
+    if (this.page.status === 'stale') this.cursor = undefined;
+    void this.load();
   }
   choose(id: string): SetupChoice | null {
     return this.page.status === 'ready' ? (this.page.choices.find((choice) => choice.id === id) ?? null) : null;
@@ -78,6 +141,17 @@ export class BoardChoicePager {
   private update(page: BoardChoicePage) {
     this.page = page;
     this.publish(page);
+  }
+  private showLoaded() {
+    if (!this.loaded || !this.scope) return;
+    const query = this.scope.query.trim().toLowerCase();
+    this.update({
+      ...this.loaded,
+      choices:
+        this.scope.kind === 'concept' && this.scope.source.conceptQuery === 'loaded-page'
+          ? this.loaded.choices.filter((choice) => choice.label.toLowerCase().includes(query))
+          : this.loaded.choices,
+    });
   }
   private async load() {
     const scope = this.scope;
@@ -95,9 +169,21 @@ export class BoardChoicePager {
           : await scope.source.concepts({ ...input, schemeId: scope.schemeId });
       if (controller.signal.aborted) return;
       const choices = 'schemes' in result ? result.schemes : result.concepts;
-      this.update({ status: 'ready', choices, next: result.next });
-    } catch {
-      if (!controller.signal.aborted) this.update({ status: 'unavailable', choices: [], next: null });
+      this.loaded = {
+        status: 'ready',
+        choices,
+        next: result.next,
+        ...(result.as_of === undefined ? {} : { as_of: result.as_of }),
+        ...(result.freshness === undefined ? {} : { freshness: result.freshness }),
+      };
+      this.showLoaded();
+    } catch (error) {
+      if (!controller.signal.aborted)
+        this.update({
+          status: error instanceof BoardChoiceError ? error.reason : 'unavailable',
+          choices: [],
+          next: null,
+        });
     }
   }
 }

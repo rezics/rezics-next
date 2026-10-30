@@ -44,13 +44,16 @@ export function SetupBoardPicker({
     if (!disabled) pager.search({ source, kind, schemeId, query });
     return () => pager.cancel();
   }, [pager, source, kind, schemeId, query, disabled]);
-  const shown = current ? page : ({ status: 'loading', choices: [], next: null } as const);
+  const shown: BoardChoicePage = current ? page : { status: 'loading', choices: [], next: null };
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <FieldDescription id={`${id}-hint`}>
         {kind === 'scheme' ? m.space_setup_board_scheme_choices_hint() : m.space_setup_concept_hint()}
+        {kind === 'concept' && source.conceptQuery === 'loaded-page'
+          ? ` ${m.space_setup_board_choice_local_hint()}`
+          : ''}
       </FieldDescription>
       {value ? (
         <div className="flex min-w-0 items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -72,6 +75,11 @@ export function SetupBoardPicker({
         onChange={(event) => setQuery(event.target.value)}
       />
       <div aria-busy={shown.status === 'loading' && !disabled} className="space-y-3">
+        {shown.freshness?.caught_up === false ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.space_setup_board_choice_updating()}
+          </p>
+        ) : null}
         {shown.status === 'ready' ? (
           shown.choices.length ? (
             <RadioGroup
@@ -96,12 +104,22 @@ export function SetupBoardPicker({
             </RadioGroup>
           ) : (
             <p role="status" className="text-sm text-muted-foreground">
-              {m.space_setup_board_choice_no_matches()}
+              {kind === 'concept' && source.conceptQuery === 'loaded-page'
+                ? m.space_setup_board_choice_local_empty()
+                : m.space_setup_board_choice_no_matches()}
             </p>
           )
-        ) : shown.status === 'unavailable' ? (
+        ) : shown.status !== 'loading' ? (
           <div role="status" className="space-y-3 rounded-xl border border-border bg-muted/50 p-4">
-            <p className="text-sm leading-relaxed text-muted-foreground">{m.space_setup_board_choice_unavailable()}</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {shown.status === 'denied'
+                ? m.space_setup_denied()
+                : shown.status === 'stale'
+                  ? m.space_setup_board_choice_stale()
+                  : shown.status === 'invalid'
+                    ? m.space_setup_invalid()
+                    : m.space_setup_board_choice_unavailable()}
+            </p>
             <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry()}>
               {m.space_setup_retry()}
             </Button>
