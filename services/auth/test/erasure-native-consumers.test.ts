@@ -110,6 +110,7 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
   // operator responsibility; the separate organization legitimately keeps its hold.
   const creatorHandle = (await f.bindings.workflowPorts.readAccount(creator.accountId))!.handle;
   const redirect = f.bindings.workflowPorts.redirectHandle;
+  if (!creatorHandle || !redirect) throw new Error('Native deletion requires its original handle and redirect port');
   let redirected: Parameters<typeof redirect>[0] | undefined;
   f.bindings.workflowPorts.redirectHandle = async (input) => {
     const result = await redirect(input);
