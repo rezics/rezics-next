@@ -1,4 +1,7 @@
 {
+  "identifiers_title": "識別碼證據",
+  "identifiers_intro": "為此條目及其目前類型提出有引用支持的識別碼或網址。保留證據中的原始值。提案需要審核；引用不授予權利，也不證明身分。",
+  "identifiers_empty": "此類型目前沒有可用的識別碼或網址欄位。",
   "contribute_title": "參與貢獻",
   "contribute_create": "建立新條目",
   "contribute_edit": "編輯此條目",

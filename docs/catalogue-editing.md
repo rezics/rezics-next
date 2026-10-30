@@ -151,3 +151,38 @@ Names and descriptions link the existing terms adapter. Its pending native produ
 remain Semantic-owned; this profile never substitutes `schema:name` proposals for terms writes. Authored text
 uses the existing document/licence editor. Ordinary forms do not submit ingestion Source metadata, infer rights,
 copy provider prose or covers, publish profiles, or change Library progress.
+
+## Browser flow: ordinary identifier evidence
+
+Details and Sources share the existing **Contribute → Edit this subject → Identifier evidence** entry at
+`/{locale}/subjects/{id}/{slug}/identifiers`. The private, noindex route resolves the canonical subject address.
+It uses the ordinary session BFF, public subject read and current immutable definition release. Effective Type
+properties, in emitted order, admit external identifiers, URLs (including `schema:sameAs`) and patterned string
+codes. This is the definitions contract's code classification, not a universal provider inventory. ISBN remains
+edition data; work and edition identities never change. Labels retain their actual fallback language.
+
+The page scopes the existing multi-field fact workspace, scalar controls, native validators and citation/value
+renderers. Each disclosed selected statement remains separate, with its original literal, qualifiers and grouped
+references. Editing a selected assertion starts a replacement candidate; an additional value is explicit where
+multivalued. No URL, scheme, identifier spelling or provider key is normalized or looked up globally. Names,
+relations and original text retain their separate editors. Citations support a fact; they do not prove identity,
+license an asset or supply ingestion Source metadata. Bootstrap receipts and imported claim tuples are untouched.
+
+Changed included fields seal separate native candidate requests and keys. Partial success, denial, invalid values,
+stale metadata, uncertainty and unavailability retain the existing per-field behavior. Session preparation hides
+retained work until the current read is available again. A field no longer admitted by the refreshed Type disables
+submission while retaining the draft and sealed key. No proposal changes the current reader or creates a subject.
+
+Each confirmed result links to its exact property and candidate on this same route and opens the existing native
+candidate reader in place, carrying native session continuity. An absent exact candidate remains absent on that
+page; only the supplied opaque continuation can fetch another page. Review, acceptance, whole-slot adoption and
+confirmed current reading remain distinct. The existing native API owns authority, disclosure, constraints and
+source-or-consent fences; the page adds no permission or validation engine.
+
+Web capture handoff: `pages-catalogue-ordinary-identifier-evidence-editor--` followed by `route-entry`,
+`current-evidence`, `empty`, `loading`, `signed-out`, `denied`, `unavailable`, `stale-metadata`, `proposed`, `invalid`,
+`uncertain-retry`, `partial-results`, `exact-candidate-continuation`, `accepted-awaiting-selection`, `selected`,
+`pending-reading` or `reader-unavailable`. Use the same IDs with phone390/desktop1280, light/dark and locale globals.
+Connected examples use synthetic native-shaped payloads through production adapters; the route story uses
+`PageStory`. Existing native subject/candidate APIs are bound through the current BFF; execution of the plays,
+normal Web captures and native integration acceptance remain pending. There is no new missing producer adapter.

@@ -1,4 +1,7 @@
 {
+  "identifiers_title": "Identifier evidence",
+  "identifiers_intro": "Propose a cited identifier or URL for this subject and its current Type. Keep the exact value from the evidence. Proposals await review; citations do not grant rights or prove identity.",
+  "identifiers_empty": "This Type currently admits no identifier or URL fields.",
   "contribute_title": "Contribute",
   "contribute_create": "Create a new subject",
   "contribute_edit": "Edit this subject",

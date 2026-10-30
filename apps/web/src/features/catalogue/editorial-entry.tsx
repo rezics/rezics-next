@@ -3,6 +3,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
+import { subjectHref } from '../../subject/subject-href';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { CreateSubjectEntry } from './create-subject-entry';
 import { GameProfileEntry } from './game-profile-entry';
@@ -104,6 +105,11 @@ export function EditorialEntry({
   const { state } = useSession();
   const collected = collectEditorialEntries(children);
   const entries = [...collected.entries, ...subjectContributionEntries({ id, label, locale, context, realm })];
+  entries.push({
+    group: 'edit',
+    label: m.identifiers_title({}, { locale: locale as never }),
+    href: `${subjectHref({ id, label }, locale).href}/identifiers`,
+  });
   const o = { locale: locale as never };
   return (
     <>

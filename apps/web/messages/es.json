@@ -1,4 +1,7 @@
 {
+  "identifiers_title": "Evidencia de identificadores",
+  "identifiers_intro": "Propón un identificador o una URL con una cita para esta entrada y su tipo actual. Conserva el valor exacto de la evidencia. Las propuestas esperan revisión; las citas no otorgan derechos ni prueban identidad.",
+  "identifiers_empty": "Este tipo no admite actualmente campos de identificador o URL.",
   "contribute_title": "Contribuir",
   "contribute_create": "Crear un objeto nuevo",
   "contribute_edit": "Editar este objeto",

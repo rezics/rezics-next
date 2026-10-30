@@ -1,4 +1,7 @@
 {
+  "identifiers_title": "Justificatifs des identifiants",
+  "identifiers_intro": "Proposez un identifiant ou une URL avec une citation pour cette entrée et son type actuel. Conservez la valeur exacte du justificatif. Les propositions attendent une révision ; les citations ne confèrent aucun droit et ne prouvent pas l’identité.",
+  "identifiers_empty": "Ce type ne prévoit actuellement aucun champ d’identifiant ou d’URL.",
   "contribute_title": "Contribuer",
   "contribute_create": "Créer un nouvel objet",
   "contribute_edit": "Modifier cet objet",

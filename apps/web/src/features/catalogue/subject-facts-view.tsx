@@ -25,6 +25,13 @@ import {
 } from './subject-facts';
 
 type ReviewAddress = { property: string; candidate: string; session?: string | undefined };
+export type FactsProfile = {
+  properties: (read: FactsCurrent) => string[];
+  title: string;
+  intro: string;
+  empty: string;
+  path: string;
+};
 function ExactReview({
   address,
   id,
@@ -100,6 +107,7 @@ function FactField({
   onStage,
   onChange,
   href,
+  editorHref,
   onReview,
 }: {
   property: string;
@@ -111,6 +119,7 @@ function FactField({
   onStage: (source: string | null) => void;
   onChange: (draft: FactDraft) => void;
   href: string;
+  editorHref?: string | undefined;
   onReview: (address: ReviewAddress) => void;
 }) {
   const o = { locale: locale as never };
@@ -122,7 +131,9 @@ function FactField({
   const locked = !!draft && factLocked(draft);
   return (
     <section aria-label={label} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 className="text-lg font-semibold">{label}</h3>
+      <div lang={pageText(definition.labels, locale).lang}>
+        <h3 className="text-lg font-semibold">{label}</h3>
+      </div>
       <p className="text-sm text-muted-foreground">
         {definition.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
       </p>
@@ -181,6 +192,7 @@ function FactField({
                 locale={locale}
                 change={(statement) => onChange({ ...draft, statement, command: undefined, result: undefined })}
                 guideReturn={`${href}/edit`}
+                {...(editorHref ? { guideReturn: editorHref } : {})}
               />
             </fieldset>
           )}
@@ -203,6 +215,11 @@ function FactField({
                   <p>{m.correction_proposed({}, o)}</p>
                   <a
                     href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
+                    {...(editorHref
+                      ? {
+                          href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
+                        }
+                      : {})}
                     className={buttonVariants({ variant: 'outline' })}
                     onClick={(event) => {
                       if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -243,15 +260,23 @@ export function SubjectFacts({
   transport,
   review,
   initialReview,
+  profile,
 }: {
   initial: EditorRead;
   locale: string;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   initialReview?: ReviewAddress | undefined;
+  profile?: FactsProfile | undefined;
 }) {
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
+  const [previousInitial, setPreviousInitial] = useState(initial);
+  // A refreshed session read retains the workspace's sealed commands and drafts.
+  if (previousInitial !== initial) {
+    setPreviousInitial(initial);
+    setRead(initial);
+  }
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(initialReview);
@@ -261,6 +286,14 @@ export function SubjectFacts({
   const label = pageText(subject?.labels, locale).text || m.subject_value_unlabelled({}, o);
   const href = subject ? subjectHref({ id: subject.id, label }, locale).href : '';
   const groups = current ? factGroups(current) : { text: [], time: [], quantity: [] };
+  const editorHref = profile ? `${href}/${profile.path}` : undefined;
+  if (profile && current) {
+    const scope = new Set(profile.properties(current));
+    for (const group of Object.keys(groups) as (keyof typeof groups)[])
+      groups[group] = groups[group].filter((property) => scope.has(property));
+  }
+  const admitted = new Set(Object.values(groups).flat());
+  const staleDraft = !!profile && drafts.some((draft) => !admitted.has(draft.property));
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   function change(next: FactDraft) {
@@ -268,6 +301,7 @@ export function SubjectFacts({
   }
   async function submit() {
     if (!current || running.current || !changed.length) return;
+    if (staleDraft) return;
     running.current = true;
     const sealed = sealFacts(current.public.subject.id, current.release, drafts);
     setDrafts(sealed);
@@ -298,20 +332,41 @@ export function SubjectFacts({
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6" aria-busy={busy}>
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
+        {profile ? (
+          <h1 className="font-sans text-2xl font-semibold">{profile.title}</h1>
+        ) : (
+          <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
+        )}
         {subject && (
           <p>
-            <a href={href} className="underline underline-offset-4">
-              {label}
-            </a>
-            <span className="ms-2 text-muted-foreground">
-              {pageText(current?.release.types[subject.type]?.labels, locale).text}
+            <span lang={pageText(subject.labels, locale).lang}>
+              <a href={href} className="underline underline-offset-4">
+                {label}
+              </a>
+            </span>
+            <span lang={pageText(current?.release.types[subject.type]?.labels, locale).lang}>
+              <span className="ms-2 text-muted-foreground">
+                {pageText(current?.release.types[subject.type]?.labels, locale).text}
+              </span>
             </span>
           </p>
         )}
-        <p className="text-sm text-muted-foreground">{m.facts_intro({}, o)}</p>
+        {profile ? (
+          <p className="text-sm text-muted-foreground">{profile.intro}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">{m.facts_intro({}, o)}</p>
+        )}
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
-        {subject && <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/edit` }} />}
+        {profile && subject && (
+          <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: editorHref! }} />
+        )}
+        {!profile && (
+          <>
+            {subject && (
+              <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/edit` }} />
+            )}
+          </>
+        )}
       </header>
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
       {current && (
@@ -330,7 +385,11 @@ export function SubjectFacts({
               {m.candidate_view_public({}, o)}
             </a>
           </nav>
-          {!Object.values(groups).some((properties) => properties.length) && <p>{m.facts_empty({}, o)}</p>}
+          {profile && !Object.values(groups).some((properties) => properties.length) && <p>{profile.empty}</p>}
+          {!profile && (
+            <>{!Object.values(groups).some((properties) => properties.length) && <p>{m.facts_empty({}, o)}</p>}</>
+          )}
+          {staleDraft && <EditorFailure reason="stale" locale={locale} />}
           <form
             className="space-y-6"
             onSubmit={(event) => {
@@ -338,50 +397,57 @@ export function SubjectFacts({
               void submit();
             }}
           >
-            {Object.entries(groups)
-              .filter(([, properties]) => properties.length)
-              .map(([group, properties]) => (
-                <section key={group} className="space-y-4">
-                  <h2 className="text-xl font-semibold">{groupLabels[group as keyof typeof groupLabels]}</h2>
-                  {properties.map((property) => (
-                    <FactField
-                      key={property}
-                      property={property}
-                      read={current}
-                      locale={locale}
-                      href={href}
-                      busy={busy}
-                      canStage={drafts.length < factLimit}
-                      draft={drafts.find((draft) => draft.property === property)}
-                      onChange={change}
-                      onReview={setReviewing}
-                      onStage={(source) => {
-                        const draft = stageFact(current, property, source);
-                        if (draft)
-                          setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
-                      }}
-                    />
-                  ))}
-                </section>
-              ))}
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-              <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
-              <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
-              {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
-              {busy && <p role="status">{m.correction_saving({}, o)}</p>}
-              <Button type="submit" disabled={busy || !changed.length}>
-                {m.facts_submit({}, o)}
-              </Button>
-            </div>
+            <fieldset disabled={staleDraft} className="space-y-6">
+              {Object.entries(groups)
+                .filter(([, properties]) => properties.length)
+                .map(([group, properties]) => (
+                  <section key={group} className="space-y-4">
+                    <h2 className="text-xl font-semibold">{groupLabels[group as keyof typeof groupLabels]}</h2>
+                    {properties.map((property) => (
+                      <FactField
+                        key={property}
+                        property={property}
+                        read={current}
+                        locale={locale}
+                        href={href}
+                        editorHref={editorHref}
+                        busy={busy}
+                        canStage={drafts.length < factLimit}
+                        draft={drafts.find((draft) => draft.property === property)}
+                        onChange={change}
+                        onReview={setReviewing}
+                        onStage={(source) => {
+                          const draft = stageFact(current, property, source);
+                          if (draft)
+                            setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
+                        }}
+                      />
+                    ))}
+                  </section>
+                ))}
+              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
+                <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
+                {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
+                {busy && <p role="status">{m.correction_saving({}, o)}</p>}
+                <Button type="submit" disabled={busy || !changed.length}>
+                  {m.facts_submit({}, o)}
+                </Button>
+              </div>
+            </fieldset>
           </form>
-          {reviewing && (
-            <ExactReview
-              key={`${reviewing.property}:${reviewing.candidate}`}
-              id={subject!.id}
-              locale={locale}
-              address={reviewing}
-              review={review}
-            />
+          {(!profile || admitted.has(reviewing?.property ?? '')) && (
+            <>
+              {reviewing && (
+                <ExactReview
+                  key={`${reviewing.property}:${reviewing.candidate}`}
+                  id={subject!.id}
+                  locale={locale}
+                  address={reviewing}
+                  review={review}
+                />
+              )}
+            </>
           )}
         </>
       )}

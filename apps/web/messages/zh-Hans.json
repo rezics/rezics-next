@@ -1,4 +1,7 @@
 {
+  "identifiers_title": "标识符证据",
+  "identifiers_intro": "为此条目及其当前类型提议有引用支持的标识符或网址。保留证据中的原始值。提议需要审核；引用不授予权利，也不证明身份。",
+  "identifiers_empty": "此类型目前没有可用的标识符或网址字段。",
   "contribute_title": "参与贡献",
   "contribute_create": "创建新条目",
   "contribute_edit": "编辑此条目",
