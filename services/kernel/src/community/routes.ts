@@ -701,18 +701,34 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/discovery',
       {
         query: discoveryQuerySchema,
-        response: { 200: discoveryResponseSchema, ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor'), 409: problemSchema('stale_cursor') },
+        response: {
+          200: discoveryResponseSchema,
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+        },
         detail: {
           operationId: 'realms.discovery',
-          description: 'Public discussion volume in the previous 30 complete UTC days (popular) or previous complete UTC day (trending). Examines at most min(limit,20) candidates; sparse and empty pages can have next. Deduplicate Realm IDs across pages.',
+          description:
+            'Public discussion volume in the previous 30 complete UTC days (popular) or previous complete UTC day (trending). Examines at most min(limit,20) candidates; sparse and empty pages can have next. Deduplicate Realm IDs across pages.',
           'x-exposure': 'public',
           'x-action': 'realm:read',
           security: readSecurity,
         },
       },
-      async ({ query, admission, job }) => admission.run('normal', job, () =>
-        listRealmDiscovery({ pool: dependencies.pool, access: dependencies.access(), tokens: dependencies.tokens,
-          clock: dependencies.clock }, job.deadline, query)),
+      async ({ query, admission, job }) =>
+        admission.run('normal', job, () =>
+          listRealmDiscovery(
+            {
+              pool: dependencies.pool,
+              access: dependencies.access(),
+              tokens: dependencies.tokens,
+              clock: dependencies.clock,
+            },
+            job.deadline,
+            query,
+          ),
+        ),
     )
     .get(
       '/v1/sitemap/realms',

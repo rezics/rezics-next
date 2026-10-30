@@ -26,10 +26,14 @@ test('Popular and Trending use complete UTC days across month and leap-day bound
   const at = new Date('2024-03-01T01:00:00+08:00');
   expect(discoveryWindow('popular', at)).toEqual({ from: '2024-01-30', cutoff: '2024-02-29' });
   expect(discoveryWindow('trending', at)).toEqual({ from: '2024-02-28', cutoff: '2024-02-29' });
-  expect(discoveryWindow('popular', new Date('2026-10-31T23:59:59.999Z')))
-    .toEqual({ from: '2026-10-01', cutoff: '2026-10-31' });
-  expect(discoveryWindow('trending', new Date('2026-11-01T00:00:00.000Z')))
-    .toEqual({ from: '2026-10-31', cutoff: '2026-11-01' });
+  expect(discoveryWindow('popular', new Date('2026-10-31T23:59:59.999Z'))).toEqual({
+    from: '2026-10-01',
+    cutoff: '2026-10-31',
+  });
+  expect(discoveryWindow('trending', new Date('2026-11-01T00:00:00.000Z'))).toEqual({
+    from: '2026-10-31',
+    cutoff: '2026-11-01',
+  });
   expect(() => discoveryWindow('popular', new Date(NaN))).toThrow(TypeError);
 });
 
@@ -58,16 +62,22 @@ test('signed continuation retains the last examined rank and rejects changed que
     { ...context, partitionEpoch: 3 },
     { ...context, publicationEpoch: 'next-publication-generation' },
   ]) {
-    expect(() => decodeDiscoveryCursor(tokens, current, cursor, now))
-      .toThrow(expect.objectContaining({ code: 'stale_cursor' }));
+    expect(() => decodeDiscoveryCursor(tokens, current, cursor, now)).toThrow(
+      expect.objectContaining({ code: 'stale_cursor' }),
+    );
   }
-  for (const current of [{ ...context, sort: 'trending' as const }, { ...context, limit: 100 }]) {
-    expect(() => decodeDiscoveryCursor(tokens, current, cursor, now))
-      .toThrow(expect.objectContaining({ code: 'invalid_cursor' }));
+  for (const current of [
+    { ...context, sort: 'trending' as const },
+    { ...context, limit: 100 },
+  ]) {
+    expect(() => decodeDiscoveryCursor(tokens, current, cursor, now)).toThrow(
+      expect.objectContaining({ code: 'invalid_cursor' }),
+    );
   }
   for (const invalid of [position.realmId, `${cursor.slice(0, -1)}!`]) {
-    expect(() => decodeDiscoveryCursor(tokens, context, invalid, now))
-      .toThrow(expect.objectContaining({ code: 'invalid_cursor' }));
+    expect(() => decodeDiscoveryCursor(tokens, context, invalid, now)).toThrow(
+      expect.objectContaining({ code: 'invalid_cursor' }),
+    );
   }
   expect(() => encodeDiscoveryCursor(tokens, context, { ...position, count: '0' }, now)).toThrow(TypeError);
 });
