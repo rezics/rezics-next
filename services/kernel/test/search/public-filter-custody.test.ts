@@ -501,7 +501,7 @@ test('native close revalidates a held obsolete maximum after another factory rel
   const n = await setup();
   const unrelated = await setup();
   const releaser = createPublicFilterCustody(pool);
-  const leaseDeadline = Date.now() + 60_000;
+  const leaseDeadline = Date.now() + 300_000;
   const acquired = await registry.acquire(n.queried, { deadline: leaseDeadline });
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
   let reached!: () => void;
@@ -705,6 +705,7 @@ test('accepted native wide release capture and cold keyed recovery retain full i
   // Publish through real authorization and the ordinary immutable release command, not custody fixture rows.
   const access = await createRealAccess(pool, { publisher: newId(0) }, ['definitions:publish', 'definitions:read']);
   await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'publisher', 'definitions:publish');
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'publisher', 'gate:definition_publication');
   const kernel = createKernel({
     pool,
     access: access.access,
