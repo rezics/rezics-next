@@ -38,6 +38,7 @@ function currentPage(post: ThreadPost): ThreadReadingPage {
     thread: { ...owned.thread, title: null, firstPost: post } as ThreadReadingPage['thread'],
     posts: { posts: [post], next: null, reactionsAsOf: null },
     authors: null,
+    viewerId: owned.thread.authorId,
     mentions: {},
     subjects: [],
     provenanceSubjects: [],

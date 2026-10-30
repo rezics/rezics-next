@@ -95,11 +95,15 @@ function ThreadPage() {
   const id = Route.useParams().id;
   const cursor = Route.useSearch().cursor;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
-  const readScope = useMemo(() => ({}), [loadedPage, id, cursor, session, subject, csrfToken]);
-  const expiredRead = refreshed?.source === loadedPage && refreshed.scope !== readScope;
-  if (expiredRead) setRefreshed({ source: loadedPage, scope: readScope });
-  const currentPageUnavailable = refreshed?.source === loadedPage && (expiredRead || !refreshed.page);
-  const page = !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
+  const readerScope = useMemo(() => ({}), [session, subject, csrfToken]);
+  const readScope = useMemo(() => ({}), [loadedPage, id, cursor, readerScope]);
+  const [lastCurrentReader, setLastCurrentReader] = useState<object>();
+  const expiredRead = refreshed !== undefined && refreshed.scope !== readScope;
+  if (expiredRead) setRefreshed(undefined);
+  const currentPageUnavailable =
+    (lastCurrentReader !== undefined && lastCurrentReader !== readerScope) ||
+    (loadedPage.viewerId !== undefined && (session !== 'signed-in' || loadedPage.viewerId !== subject));
+  const page = !expiredRead && !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
   const personalQuery = useQuery({
     ...threadPersonalQuery(id, cursor, postIds),
     enabled: session === 'signed-in',
@@ -138,6 +142,9 @@ function ThreadPage() {
       retry: false,
     });
     if (!current() || 'redirect' in updated) throw new Error('Current thread page unavailable');
+    if (session === 'signed-in' && (!subject || updated.viewerId !== subject))
+      throw new Error('Current thread reader unavailable');
+    setLastCurrentReader(readerScope);
     setRefreshed({ source: loadedPage, scope: readScope, page: updated });
     rememberThreadSlug(updated.thread.id, updated.thread.title);
     const destination = threadLocation(getLocale(), { id: updated.thread.id, title: updated.thread.title }, cursor);
@@ -343,7 +350,7 @@ export function ThreadReadingPost({
     try {
       const page = await onPageRefresh();
       if (intent.current !== command || command.read !== read) return;
-      if (!page) throw new Error('Current thread page unavailable');
+      if (!page || page.viewerId !== viewerId) throw new Error('Current thread page unavailable');
       command.deleted = false;
       const current = page.posts.posts.find((item) => item.id === post.id);
       if (current?.availability === 'erased') command.applied = false;
