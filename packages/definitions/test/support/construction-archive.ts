@@ -177,7 +177,10 @@ function installArchiveGuard() {
           throw new Error(`Module escaped construction archive: ${path} -> ${actual}`);
         if (inside(root, actual))
           appendFileSync(join(root, 'loaded.jsonl'), `${JSON.stringify(relative(root, actual))}\n`);
-        return undefined;
+        return {
+          contents: readFileSync(actual),
+          loader: path.endsWith('.json') ? 'json' : /\.[cm]?ts$/.test(path) ? 'ts' : 'js',
+        };
       });
     },
   });
