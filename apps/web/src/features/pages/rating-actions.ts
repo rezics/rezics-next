@@ -29,10 +29,8 @@ export const changeSubjectRating = createServerFn({ method: 'POST' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     try {
-      const [{ env }, { kernelClient }] = await Promise.all([
-        import('cloudflare:workers'),
-        import('../../kernel/client'),
-      ]);
+      const { env } = await import('cloudflare:workers');
+      const { kernelClient } = await import('../../kernel/client');
       await prepareSession(request, env as Partial<SessionEnv>);
       const authorization = viewerCredential(request);
       if (!authorization) return false;
