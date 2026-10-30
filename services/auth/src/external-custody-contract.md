@@ -201,6 +201,11 @@ Keep restore targets isolated and unreadable until the following completes:
    snapshots is not proof that later deletions never happened.
 2. The Access owner supplies a bounded, resumable committed-obligation feed for
    the fixed Auth participant, plus exact per-account obligation resolution.
+   The feed visits the existing fixed 4,096 routing partitions one per step,
+   seeks an owner-indexed immutable ordinal (never an account-ID cursor), and
+   returns at most 48 obligations / 64 KiB, with each locator at most 1 KiB.
+   Access owns the necessary native index and source closure proof; this contract
+   does not supply foreign SQL or claim an existing feed export.
    Reconcile through a source-owned sealed high-water boundary; subsequent
    confirmations use the same live producer fence/feed before traffic can race
    cutover. Do not enumerate all living users or read kernel SQL from Auth.
@@ -224,6 +229,10 @@ Keep restore targets isolated and unreadable until the following completes:
    removed earlier than its original due time, and it is not delayed another
    310 seconds on restore/retry. If the original due evidence is unavailable,
    admission stays closed pending exact recovery; do not backdate or guess it.
+   If recovered committed native progress proves user deletion and its cutoff
+   were never established, continue that original obligation and establish its
+   first cutoff through the existing native deletion transaction. Absence of a
+   row in the old snapshot cannot supply that proof.
    Source registration/recovery/reduction authority remains its original
    receipt/deadline; restore cannot renew a 30-minute source hold or authorize a
    credential effect. Stale sessions, refresh tokens, client assertions, signing

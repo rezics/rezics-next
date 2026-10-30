@@ -9,7 +9,7 @@ import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
 // The actual isolated restore/source-feed producer is absent and stays honest red.
 // Never transplant Access SQL, manufacture a source T or reset product fences.
 
-test('a backup predating confirmation cannot lose the exact committed source deletion and T on an empty restored Auth progress store', async () => {
+test('actual Auth external diagnostics and backup restore custody cannot lose a committed deletion or assert none from absent configuration', async () => {
   const f = await nativeFixture();
   const restoredFixture = testDatabase();
   const restored = new Pool({ connectionString: restoredFixture.url });
