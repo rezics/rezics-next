@@ -28,7 +28,7 @@ BEGIN
    IF NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_prearm_directory d
     JOIN semantic.identity_epoch_prearm_bridge n USING(partition_no,generation)
     JOIN semantic.identity_epoch_native_commit c ON c.partition_no=d.partition_no
-     AND c.transaction_id=d.sealed_transaction_id AND c.purpose='identity-prearm'
+     AND c.transaction_id=d.sealed_transaction_id AND c.xmin=d.xmin AND c.purpose='identity-prearm'
     JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch
      AND p.position>=c.position AND p.write_state='active' AND p.moved_to IS NULL
     WHERE d.partition_no=NEW.partition_no AND d.generation=NEW.generation
