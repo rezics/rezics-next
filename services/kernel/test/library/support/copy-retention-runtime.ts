@@ -182,6 +182,9 @@ if (import.meta.main) {
           workerTestEnv(),
         );
         client = await createWorkClient(db.url, db.pool);
+        // This fixture explicitly triggers the installed schedule; wall-clock cron
+        // must not consume the controlled episodes during its parked/crash cases.
+        await client.pauseSchedule(COPY_RETENTION_SCHEDULE);
         for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
       } else if (message.op === 'time') now = message.time!;
       else if (message.op === 'park') park = { copyId: message.copyId!, phase: message.phase! };

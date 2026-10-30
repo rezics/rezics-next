@@ -159,6 +159,22 @@ test('default durable due keysets and exact purge charge native SDK work at 64/5
       }
       now += 720 * 60 * 60 * 1000;
       await runtime.call('time', { time: now });
+      // Let the actual default relay consume seeded commands before measuring a
+      // selected due page. No checkpoint, envelope or SDK result is manufactured.
+      const relayDeadline = Date.now() + 30_000;
+      for (const partition of [4094, 4095]) {
+        for (;;) {
+          const { rows } = await db.admin.query(
+            `SELECT p.position <= COALESCE(c.position,0) AS caught_up
+             FROM core.partition p LEFT JOIN core.consumer_checkpoint c
+             ON c.partition_no=p.partition_no AND c.consumer='effects' WHERE p.partition_no=$1`,
+            [partition],
+          );
+          if (rows[0]?.caught_up) break;
+          if (Date.now() >= relayDeadline) throw new Error('Default effects relay did not drain native seed');
+          await Bun.sleep(20);
+        }
+      }
       await settle(db, { analyze: true });
       const workflowId = entryKey();
       const native = (await runtime.call('capture', { partition: 4095, workflowId, checkpoint })) as Capture;
