@@ -147,3 +147,25 @@ test('one selected viewer/target owns one capability read; stale and late other-
   const anotherViewer = new ManagedAccountActionsRead(target, async () => ({ ...result, viewerId: accountId }));
   expect((await anotherViewer.load()).state).toBe('unavailable');
 });
+
+test('delivered Auth page deployment never substitutes for the missing exact native operation binding', async () => {
+  const result = await loadManagedAccountActions(
+    transport(native([{ action: 'account:update', operations: ['account.update'] }])),
+    'Bearer viewer',
+    target,
+    {
+      AUTH_ISSUER: 'https://auth.test',
+      AUTH_MANAGEMENT_PAGE_ROUTES: JSON.stringify([
+        '/account/rename', '/organizations/members', '/operators/transfer', '/organizations/delete',
+      ]),
+    },
+  );
+  if (result.state !== 'ready') throw new Error('Expected exact-target capabilities');
+  expect(result.actions.profile.state).toBe('available');
+  for (const name of ['rename', 'members', 'transfer', 'delete'] as const) {
+    expect(result.actions[name].state).toBe('unavailable');
+    expect(result.actions[name]).not.toHaveProperty('href');
+    if (result.actions[name].state === 'unavailable')
+      expect(result.actions[name].owner).not.toContain('session/auth-page-routes.ts');
+  }
+});

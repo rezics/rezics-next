@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import type { SessionEnv } from '../session/client';
+import { authManagementPageHref, type AuthManagementPagePath } from '../session/auth-page-routes';
 import { managedAccountsException, managedAccountsFailure } from './managed-accounts-read';
 
 const id = v.pipe(v.string(), v.uuid());
@@ -14,15 +15,11 @@ export type ManagedAccountActionsTarget = {
   operated: boolean;
   self: boolean;
 };
-export type AuthManagementPath =
-  | '/account/rename'
-  | '/organizations/members'
-  | '/operators/transfer'
-  | '/organizations/delete';
-type AuthManagementEnv = { AUTH_ISSUER?: string; AUTH_MANAGEMENT_PAGE_ROUTES?: string };
+export type AuthManagementPath = AuthManagementPagePath;
+type AuthManagementEnv = Parameters<typeof authManagementPageHref>[0];
 
-/** LOCAL port until Accounts delivers session/auth-page-routes.ts. An issuer is not deployment evidence.
- * Replace this port with its authManagementPageHref import, never with a consumer URL/env parser. */
+/** Closed compatibility port retained for the original unavailable-port oracle.
+ * Production reads use Accounts' canonical deployment helper below. */
 export const LOCAL_authManagementPageHref = (
   _env: AuthManagementEnv,
   _path: AuthManagementPath,
@@ -65,11 +62,23 @@ function unavailable(owner: string): Availability {
   return { state: 'unavailable', owner };
 }
 
+/** Deployment never supplies a missing native operation binding. No Auth URL reaches the browser yet. */
+function unmappedAuthAction(
+  env: AuthManagementEnv,
+  path: AuthManagementPagePath,
+  targetId: string | undefined,
+  nativeOwner: string,
+): Availability {
+  const deployed = authManagementPageHref(env, path, targetId);
+  return unavailable(deployed ? nativeOwner : `${nativeOwner}; session/auth-page-routes.ts`);
+}
+
 /** One current exact-target native read; no inventory/role/reservation inference and no fake transport. */
 export async function loadManagedAccountActions(
   client: KernelClient,
   authorization: string,
   target: ManagedAccountActionsSelection,
+  env: AuthManagementEnv = {},
 ): Promise<ManagedAccountActionsResult> {
   try {
     v.parse(selection, target);
@@ -109,10 +118,25 @@ export async function loadManagedAccountActions(
         // Auth workflow commands exist, but the current native viewerActions catalogue has no exact
         // per-operation bindings for these destinations. Generic account.update is NOT rename authority.
         // Accounts owns those bindings; session/auth-page-routes.ts owns installed Auth destinations.
-        rename: unavailable('Accounts viewerActions: rename; session/auth-page-routes.ts'),
-        members: unavailable('Accounts viewerActions: organization membership; session/auth-page-routes.ts'),
-        transfer: unavailable('Accounts viewerActions: operator transfer; session/auth-page-routes.ts'),
-        delete: unavailable('Accounts viewerActions: organization deletion; session/auth-page-routes.ts'),
+        rename: unmappedAuthAction(env, '/account/rename', undefined, 'Accounts viewerActions: rename'),
+        members: unmappedAuthAction(
+          env,
+          '/organizations/members',
+          target.accountId,
+          'Accounts viewerActions: organization membership',
+        ),
+        transfer: unmappedAuthAction(
+          env,
+          '/operators/transfer',
+          target.accountId,
+          'Accounts viewerActions: operator transfer',
+        ),
+        delete: unmappedAuthAction(
+          env,
+          '/organizations/delete',
+          target.accountId,
+          'Accounts viewerActions: organization deletion',
+        ),
       },
     };
   } catch (error) {
@@ -132,7 +156,7 @@ export const readManagedAccountActions = createServerFn({ method: 'GET' })
       if (!authorization) return { state: 'denied', status: 401, code: 'authentication_required' };
       if (!(env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN) return failure(null);
       const { kernelClient } = await import('../kernel/client');
-      return await loadManagedAccountActions(kernelClient(), authorization, data);
+      return await loadManagedAccountActions(kernelClient(), authorization, data, env as Partial<SessionEnv>);
     } catch (error) {
       return exception(error);
     }

@@ -55,7 +55,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual navigation region with illustrative native-shaped IO. Auth workflow capability bindings and deployment helper are absent, so those destinations stay unavailable. Native and visual proof are deferred.',
+          'The actual navigation region with illustrative native-shaped IO. Auth workflow capability bindings are absent, so those destinations stay unavailable even when Accounts declares a page deployed. Native and visual proof are deferred.',
       },
     },
   },
