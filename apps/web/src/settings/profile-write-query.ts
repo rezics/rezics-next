@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { hashKey, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useLayoutEffect } from 'react';
 import { personalRead } from '../kernel/query';
 import { sessionQuery, useSession } from '../session/query';
@@ -6,12 +6,23 @@ import { readProfile, saveProfile } from './actions';
 import { profileReadValue } from './profile-data';
 import { ProfileEditorSession } from './profile-write';
 
-type EditorEntry = { owner: ProfileEditorSession; users: number; release?: () => void };
+type EditorEntry = {
+  owner: ProfileEditorSession;
+  users: number;
+  release?: () => void;
+  readError?: { value: unknown };
+};
 const editors = new WeakMap<QueryClient, EditorEntry>();
+
+function readUnavailable(entry: EditorEntry, error: unknown) {
+  if (entry.readError && entry.readError.value === error) return;
+  entry.readError = { value: error };
+  entry.owner.editor.unavailable(error);
+}
 
 function retire(client: QueryClient, entry: EditorEntry) {
   entry.release?.();
-  entry.release = undefined;
+  delete entry.release;
   entry.owner.retire();
   if (editors.get(client) === entry) editors.delete(client);
   // Only this observation's query and callbacks belong to us.
@@ -76,7 +87,14 @@ export function useProfileEditor() {
   useLayoutEffect(() => {
     entry.users++;
     if (!entry.release) {
+      const profileHash = hashKey(owner.key);
       entry.release = client.getQueryCache().subscribe((event) => {
+        if (event.query.queryHash === profileHash) {
+          // Observe delivered query failures, never a cancelled request's later transport completion.
+          if (event.type === 'updated' && event.action.type === 'error' && event.query.state.status === 'error')
+            readUnavailable(entry, event.query.state.error);
+          return;
+        }
         if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
         const query = client.getQueryState(sessionQuery.queryKey);
         if (query?.status !== 'success' || !owner.matches(query.data)) retire(client, entry);
@@ -94,16 +112,11 @@ export function useProfileEditor() {
     ...personalRead,
     queryKey: owner.key,
     queryFn: async () => {
-      try {
-        if (!isCurrent()) throw new Error('Profile unavailable');
-        const profile = profileReadValue(await readProfile());
-        if (!isCurrent()) throw new Error('Profile unavailable');
-        if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
-        return profile;
-      } catch (error) {
-        if (isCurrent()) editor.unavailable(error);
-        throw error;
-      }
+      if (!isCurrent()) throw new Error('Profile unavailable');
+      const profile = profileReadValue(await readProfile());
+      if (!isCurrent()) throw new Error('Profile unavailable');
+      if (profile.accountId !== owner.actor?.subject) throw new Error('Profile account changed');
+      return profile;
     },
     enabled: personalRead.enabled && writable,
     retry: false,
@@ -111,8 +124,8 @@ export function useProfileEditor() {
     refetchOnReconnect: false,
   });
   useLayoutEffect(() => {
-    if (query.isError) editor.unavailable(query.error);
+    if (query.isError) readUnavailable(entry, query.error);
     else if (writable && query.data) editor.receive(query.data);
-  }, [editor, query.data, query.isError, query.error, writable]);
+  }, [editor, entry, query.data, query.isError, query.error, writable]);
   return { editor, writable, isCurrent };
 }

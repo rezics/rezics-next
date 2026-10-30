@@ -98,6 +98,7 @@ export class ProfileEditor {
     };
   }
   snapshot = () => this.state;
+  isActive = () => this.active;
   subscribe = (listener: () => void) => {
     if (!this.active) return () => {};
     this.listeners.add(listener);
@@ -328,9 +329,14 @@ export class ProfileEditorSession {
   }
   matches(session: ProfileSession | undefined) {
     const actor = profileActor(session);
-    return this.active && this.actor?.subject === actor?.subject && this.actor?.incarnation === actor?.incarnation;
+    return (
+      this.active &&
+      (!this.actor || this.editor.isActive()) &&
+      this.actor?.subject === actor?.subject &&
+      this.actor?.incarnation === actor?.incarnation
+    );
   }
-  isCurrent = () => this.active && !!this.actor;
+  isCurrent = () => this.active && !!this.actor && this.editor.isActive();
   retire() {
     this.active = false;
     this.editor.retire();
