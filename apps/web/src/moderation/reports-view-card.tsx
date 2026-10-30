@@ -8,7 +8,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { reportDecisionReason } from './actions';
-import { createModerationIntent } from './command-intent';
+import { createReportReviewAction, type ReportReviewResult } from './reports-view-action';
 import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-read';
 import type { ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
 import { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
@@ -41,6 +41,7 @@ export function ReportReviewCard({
   takenDown,
   onAction,
   onTakenDown,
+  onRefresh,
 }: {
   report: Report;
   target: ResolvedReportTarget | undefined;
@@ -48,12 +49,14 @@ export function ReportReviewCard({
   takenDown: boolean;
   onAction: ReportQueueAction;
   onTakenDown: () => void;
+  onRefresh?: () => Promise<void>;
 }) {
   const id = useId();
   const [reason, setReason] = useState('');
-  const [commandIntent] = useState(createModerationIntent);
+  const [reviewAction] = useState(createReportReviewAction);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const [failure, setFailure] = useState<Extract<ReportReviewResult, { ok: false }>['state'] | null>(null);
   const [confirmed, setConfirmed] = useState<Confirmation | null>(null);
   const confirmationRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -69,7 +72,14 @@ export function ReportReviewCard({
           : m.moderation_queue_open();
 
   async function act(action: 'dismiss' | 'take-down') {
-    if (pending || confirmed || report.outcome || (takenDown && action === 'take-down')) return;
+    if (
+      pending ||
+      confirmed ||
+      report.outcome ||
+      (failure && failure !== 'uncertain') ||
+      (takenDown && action === 'take-down')
+    )
+      return;
     setMessage('');
     let confirmation: Confirmation;
     try {
@@ -90,15 +100,66 @@ export function ReportReviewCard({
           };
     setPending(true);
     try {
-      await onAction({ ...intent, idempotencyKey: commandIntent.keyFor(intent) });
-      setConfirmed(confirmation);
-      if (confirmation.action === 'take-down') onTakenDown();
-    } catch {
-      setMessage(m.moderation_action_failed());
+      finish(await reviewAction.submit(intent, onAction), confirmation);
     } finally {
       setPending(false);
     }
   }
+
+  function finish(result: ReportReviewResult | undefined, confirmation: Confirmation) {
+    if (!result) return;
+    if (!result.ok) {
+      setFailure(result.state);
+      return;
+    }
+    setFailure(null);
+    setConfirmed(confirmation);
+    if (confirmation.action === 'take-down') onTakenDown();
+  }
+
+  async function retry() {
+    const input = reviewAction.input;
+    if (pending || !input) return;
+    setPending(true);
+    setMessage('');
+    try {
+      finish(
+        await reviewAction.retry(onAction),
+        input.action === 'dismiss' ? { action: 'dismiss' } : { action: 'take-down', reason: input.reason },
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function refresh() {
+    if (pending || !onRefresh) return;
+    setPending(true);
+    setMessage('');
+    try {
+      await reviewAction.refresh(onRefresh);
+      setFailure(null);
+      setMessage(m.moderation_queue_refreshed());
+    } catch {
+      setMessage(m.moderation_queue_error());
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const blocked = pending || (!!failure && failure !== 'uncertain');
+  const failureMessage =
+    failure === 'conflict'
+      ? m.moderation_queue_conflict()
+      : failure === 'forbidden'
+        ? m.moderation_queue_denied()
+        : failure === 'sign-in'
+          ? m.moderation_queue_sign_in_required()
+          : failure === 'unavailable'
+            ? m.moderation_target_unavailable()
+            : failure === 'uncertain'
+              ? m.moderation_queue_uncertain()
+              : m.moderation_action_failed();
 
   return (
     <Card className="min-w-0" role="article" aria-labelledby={`${id}-title`}>
@@ -201,7 +262,7 @@ export function ReportReviewCard({
                       aria-describedby={`${id}-hint`}
                       onChange={(event) => {
                         setReason(event.target.value);
-                        commandIntent.changed();
+                        reviewAction.changed();
                       }}
                     />
                     <FieldDescription id={`${id}-hint`}>{m.moderation_queue_reason_hint()}</FieldDescription>
@@ -210,14 +271,14 @@ export function ReportReviewCard({
                     <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" variant="destructive" className="min-h-11" disabled={pending || takenDown}>
+                    <Button type="submit" variant="destructive" className="min-h-11" disabled={blocked || takenDown}>
                       {m.moderation_take_down()}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       className="min-h-11"
-                      disabled={pending}
+                      disabled={blocked}
                       onClick={() => void act('dismiss')}
                     >
                       {m.moderation_dismiss()}
@@ -228,11 +289,47 @@ export function ReportReviewCard({
                       {m.moderation_queue_pending()}
                     </p>
                   ) : null}
-                  {message ? (
+                  {failure ? (
                     <div role="alert" className="space-y-1 text-sm">
-                      <p>{message}</p>
-                      <p className="text-muted-foreground">{m.moderation_queue_retry_hint()}</p>
+                      <p>{failureMessage}</p>
+                      <p className="text-muted-foreground">
+                        {failure === 'uncertain' ? m.moderation_queue_retry_hint() : m.moderation_queue_refresh_hint()}
+                      </p>
+                      {failure === 'uncertain' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={pending}
+                          onClick={() => void retry()}
+                        >
+                          {m.moderation_queue_retry_action()}
+                        </Button>
+                      ) : onRefresh ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={pending}
+                          onClick={() => void refresh()}
+                        >
+                          {m.moderation_queue_refresh()}
+                        </Button>
+                      ) : null}
+                      {failure === 'sign-in' ? (
+                        <a
+                          className="inline-flex min-h-11 items-center underline"
+                          href={`/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+                        >
+                          {m.moderation_queue_sign_in()}
+                        </a>
+                      ) : null}
                     </div>
+                  ) : null}
+                  {message ? (
+                    <p role={message === m.moderation_queue_refreshed() ? 'status' : 'alert'} className="text-sm">
+                      {message}
+                    </p>
                   ) : null}
                 </form>
               </CollapsibleContent>

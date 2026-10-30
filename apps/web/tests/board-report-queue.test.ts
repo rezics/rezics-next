@@ -126,3 +126,134 @@ test('an empty native page keeps continuation while preparation states disclose 
     expect(markup).not.toContain('<textarea');
   }
 });
+
+test('real stale conflict requires current-state recovery, keeps the reason and gives a reviewed decision a new key', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { sendModerationReportAction } = await import('../src/moderation/actions');
+  const { createReportReviewAction } = await import('../src/moderation/reports-view-action');
+  const { reportActionResult } = await import('../src/moderation/report-actions');
+  for (const [status, code] of [
+    [409, 'conflict'],
+    [422, 'idempotency_conflict'],
+  ] as const) {
+    const requests: { key: string | null; body: unknown; url: string }[] = [];
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: async (url, init) => {
+        requests.push({
+          key: new Headers(init?.headers).get('idempotency-key'),
+          body: JSON.parse(String(init?.body)),
+          url: String(url),
+        });
+        return requests.length === 1
+          ? Response.json({ code, detail: 'Hidden target and denial details' }, { status })
+          : Response.json({ securityRevision: 'current', reportId: report.id, outcome: 'dismissed' });
+      },
+    });
+    const review = createReportReviewAction();
+    const draft = '  Preserve the entered moderator reason.  ';
+    const intent = {
+      action: 'take-down' as const,
+      reportId: report.id,
+      targetKind: 'post' as const,
+      targetId: report.target.id,
+      reason: reportDecisionReason(draft),
+    };
+    const action = (input: import('../src/moderation/actions').ReportActionInput) =>
+      sendModerationReportAction(client, input, 'Bearer moderator');
+    const stale = status === 409 ? { action: 'dismiss' as const, reportId: report.id } : intent;
+    expect(await review.submit(stale, action)).toEqual({ ok: false, state: 'conflict' });
+    expect(JSON.stringify(await review.retry(action))).not.toContain('Hidden target');
+    review.changed();
+    await review.submit(intent, action);
+    expect(requests).toHaveLength(1);
+    // A failed reread cannot unlock a stale command.
+    await expect(
+      review.refresh(async () => {
+        throw new Error('Read unavailable');
+      }),
+    ).rejects.toThrow('Read unavailable');
+    await review.submit(intent, action);
+    expect(requests).toHaveLength(1);
+    let reads = 0;
+    await review.refresh(async () => {
+      reads += 1;
+    });
+    expect(reads).toBe(1);
+    expect(requests).toHaveLength(1);
+    expect(draft).toBe('  Preserve the entered moderator reason.  ');
+    const current = status === 409 ? stale : { ...intent, targetId: 'current-target' };
+    expect(await review.submit(current, action)).toEqual({ ok: true });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.key).not.toBe(requests[0]!.key);
+    if (status === 422) {
+      expect(requests[1]!.url).toContain('/posts/current-target:takeDown');
+      expect(requests[1]!.body).toEqual({ reason: draft.trim() });
+    }
+    await review.submit(current, action);
+    expect(requests).toHaveLength(2);
+  }
+  expect(reportActionResult(412, { code: 'precondition_failed' })).toEqual({ ok: false, state: 'conflict' });
+  expect(reportActionResult(422, { code: 'too_many_events' })).toEqual({ ok: false, state: 'error' });
+});
+
+test('native denied outcomes differ from uncertain transport retry with the exact intent, key and reason preserved', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { sendModerationReportAction } = await import('../src/moderation/actions');
+  const { createReportReviewAction } = await import('../src/moderation/reports-view-action');
+  const intent = {
+    action: 'take-down' as const,
+    reportId: report.id,
+    targetKind: 'post' as const,
+    targetId: report.target.id,
+    reason: 'Preserved reason.',
+  };
+  for (const [status, state] of [
+    [403, 'forbidden'],
+    [401, 'sign-in'],
+    [404, 'unavailable'],
+    [503, 'error'],
+  ] as const) {
+    let writes = 0;
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: async () => {
+        writes += 1;
+        return Response.json({ code: 'private', detail: 'Hidden denial internals' }, { status });
+      },
+    });
+    const review = createReportReviewAction();
+    const action = (input: import('../src/moderation/actions').ReportActionInput) =>
+      sendModerationReportAction(client, input, 'Bearer moderator');
+    expect(await review.submit(intent, action)).toEqual({ ok: false, state });
+    await review.retry(action);
+    await review.submit({ ...intent, reason: 'Edited reason.' }, action);
+    expect(writes).toBe(1);
+    expect(review.input?.action === 'take-down' && review.input.reason).toBe(intent.reason);
+    await review.refresh(async () => {});
+    expect(writes).toBe(1);
+    expect(await review.submit(intent, action)).toEqual({ ok: false, state });
+    expect(writes).toBe(2);
+  }
+  const requests: import('../src/moderation/actions').ReportActionInput[] = [];
+  const review = createReportReviewAction();
+  const action = async (input: import('../src/moderation/actions').ReportActionInput) => {
+    requests.push(input);
+    if (requests.length === 1) throw new TypeError('Failed to fetch');
+    return { ok: true as const };
+  };
+  expect(await review.submit(intent, action)).toEqual({ ok: false, state: 'uncertain' });
+  review.changed();
+  expect(await review.retry(action)).toEqual({ ok: true });
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[1]).toMatchObject(intent);
+  await review.retry(action);
+  await review.submit(intent, action);
+  expect(requests).toHaveLength(2);
+  const unknown = createReportReviewAction();
+  expect(
+    await unknown.submit(intent, async () => {
+      throw new Error('Unknown source failure');
+    }),
+  ).toEqual({ ok: false, state: 'error' });
+  expect(await createReportReviewAction().submit(intent, async () => {})).toEqual({ ok: false, state: 'error' });
+});

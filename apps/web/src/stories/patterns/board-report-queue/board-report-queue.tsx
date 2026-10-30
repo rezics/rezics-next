@@ -2,11 +2,11 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import type { ReportActionInput } from '../../../moderation/actions';
+import type { ReportQueueAction } from '../../../moderation/reports-view-action';
 import type { Report, ReportedRevision, ResolvedReportTarget } from '../../../moderation/reports-read';
 import { ReportReviewCard } from '../../../moderation/reports-view-card';
 
-export type ReportQueueAction = (input: ReportActionInput) => Promise<void>;
+export type { ReportQueueAction } from '../../../moderation/reports-view-action';
 export type ReportQueueProps = {
   reports: Report[];
   targets: ResolvedReportTarget[];
@@ -16,6 +16,7 @@ export type ReportQueueProps = {
   onNext?: (cursor: string) => void;
   state?: 'ready' | 'loading' | 'error';
   onRetry?: () => void;
+  onRefresh?: () => Promise<void>;
 };
 
 /** Review composition over one native page; it never discovers or fetches report details. */
@@ -28,6 +29,7 @@ export function BoardReportQueue({
   onNext,
   state = 'ready',
   onRetry,
+  onRefresh,
 }: ReportQueueProps) {
   const [takenDown, setTakenDown] = useState<ReadonlySet<string>>(() => new Set());
   const targetByKey = new Map(targets.map((target) => [target.key, target]));
@@ -66,6 +68,7 @@ export function BoardReportQueue({
                   revision={takenDown.has(key) ? null : (revisionByReport.get(report.id) ?? null)}
                   takenDown={takenDown.has(key)}
                   onAction={onAction}
+                  {...(onRefresh ? { onRefresh } : {})}
                   onTakenDown={() => setTakenDown((previous) => new Set([...previous, key]))}
                 />
               </li>

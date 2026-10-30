@@ -2276,5 +2276,14 @@
   "zone_editor_discard": "Abandonner et quitter",
   "trending_loading": "Chargement des recherches populaires…",
   "trending_unavailable": "Les recherches populaires sont indisponibles pour le moment.",
-  "trending_empty": "Aucune recherche populaire pour le moment."
+  "trending_empty": "Aucune recherche populaire pour le moment.",
+  "moderation_queue_conflict": "Le signalement ou la cible a changé. Actualisez et examinez l’état actuel avant de prendre une nouvelle décision.",
+  "moderation_queue_denied": "Vous n’avez actuellement pas l’autorisation d’effectuer cette action de modération.",
+  "moderation_queue_sign_in_required": "Reconnectez-vous pour vérifier vos droits de modération actuels.",
+  "moderation_queue_uncertain": "La réponse a été perdue. L’action a peut-être été effectuée.",
+  "moderation_queue_refresh_hint": "Votre brouillon est conservé. Actualisez et examinez l’état actuel avant de prendre une autre décision.",
+  "moderation_queue_refresh": "Actualiser l’état actuel",
+  "moderation_queue_refreshed": "L’état actuel a été actualisé. Examinez-le avant de prendre une nouvelle décision. Votre brouillon est conservé.",
+  "moderation_queue_retry_action": "Réessayer la même action",
+  "moderation_queue_sign_in": "Se connecter"
 }

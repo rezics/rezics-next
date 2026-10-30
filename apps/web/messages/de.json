@@ -2276,5 +2276,14 @@
   "zone_editor_discard": "Verwerfen und verlassen",
   "trending_loading": "Beliebte Suchanfragen werden geladen…",
   "trending_unavailable": "Beliebte Suchanfragen sind derzeit nicht verfügbar.",
-  "trending_empty": "Noch keine beliebten Suchanfragen."
+  "trending_empty": "Noch keine beliebten Suchanfragen.",
+  "moderation_queue_conflict": "Die Meldung oder das Ziel hat sich geändert. Aktualisiere und prüfe den aktuellen Stand vor einer neuen Entscheidung.",
+  "moderation_queue_denied": "Du hast derzeit keine Berechtigung für diese Moderationsaktion.",
+  "moderation_queue_sign_in_required": "Melde dich erneut an, um deine aktuellen Moderationsrechte zu prüfen.",
+  "moderation_queue_uncertain": "Die Antwort ging verloren. Die Aktion wurde möglicherweise abgeschlossen.",
+  "moderation_queue_refresh_hint": "Dein Entwurf bleibt erhalten. Aktualisiere und prüfe den aktuellen Stand vor einer weiteren Entscheidung.",
+  "moderation_queue_refresh": "Aktuellen Stand laden",
+  "moderation_queue_refreshed": "Der aktuelle Stand wurde geladen. Prüfe ihn vor einer neuen Entscheidung. Dein Entwurf bleibt erhalten.",
+  "moderation_queue_retry_action": "Dieselbe Aktion wiederholen",
+  "moderation_queue_sign_in": "Anmelden"
 }

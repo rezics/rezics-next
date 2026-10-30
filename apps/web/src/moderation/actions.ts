@@ -6,6 +6,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { moderationCommandHeaders, validateModerationKey } from './command-intent';
+import { reportActionResult, type ReportActionResult } from './report-actions';
 
 export type ModerationCommand = (path: string, body: unknown) => Promise<unknown>;
 type TakeDownInput = {
@@ -80,12 +81,11 @@ export async function sendModerationReportAction(
   client: KernelClient,
   data: ReportActionInput,
   authorization: string,
-): Promise<{ ok: true }> {
+): Promise<ReportActionResult> {
   const headers = moderationCommandHeaders(authorization, data.idempotencyKey);
   if (data.action === 'dismiss') {
     const result = await client.reports({ id: data.reportId }).$dismiss.post({}, { headers });
-    if (result.error) throw new Error('Report dismissal failed');
-    return { ok: true };
+    return reportActionResult(result.status, result.error?.value);
   }
   const command =
     data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
@@ -93,8 +93,7 @@ export async function sendModerationReportAction(
     { reason: reportDecisionReason(data.reason) },
     { headers },
   );
-  if (result.error) throw new Error('Board takedown failed');
-  return { ok: true };
+  return reportActionResult(result.status, result.error?.value);
 }
 
 export async function sendModerationAppealResolution(
@@ -144,12 +143,12 @@ export const actionOnReport = createServerFn({ method: 'POST' })
       reason: reportDecisionReason(value.reason),
     };
   })
-  .handler(async ({ data }): Promise<{ ok: true }> => {
+  .handler(async ({ data }): Promise<ReportActionResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
-    if (!authorization) throw new Error('Sign in required');
+    if (!authorization) return { ok: false, state: 'sign-in' };
     return sendModerationReportAction(kernelClient(), data, authorization);
   });
 

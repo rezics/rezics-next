@@ -1,8 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
+import { useState } from 'react';
+import { createKernelClient } from '@rezics/client';
 import type { ReportActionInput } from '../../../moderation/actions';
+import { sendModerationReportAction } from '../../../moderation/actions';
+import type { ReportActionResult } from '../../../moderation/report-actions';
 import { m } from '../../../paraglide/messages.js';
-import { BoardReportQueue } from './board-report-queue';
+import { BoardReportQueue, type ReportQueueProps } from './board-report-queue';
 import {
   moderationQueueFixture,
   resolvedQueueFixture,
@@ -75,7 +79,7 @@ export const PendingSubmission: Story = {
 export const UncertainRetry: Story = {
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
-    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_uncertain());
     const takeDown = view.getByRole('button', { name: m.moderation_take_down() });
     await userEvent.click(takeDown);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(2));
@@ -97,21 +101,68 @@ export const UncertainRetry: Story = {
   },
 };
 
-async function refused(canvasElement: HTMLElement) {
+const refreshedText = 'Current content read again after the moderation refusal.';
+
+function RefreshedQueue(args: ReportQueueProps) {
+  const [refreshed, setRefreshed] = useState(false);
+  return (
+    <BoardReportQueue
+      {...args}
+      targets={
+        refreshed
+          ? [{ key: `post:${postReport.target.id}`, kind: 'post', value: { post: { body: refreshedText } } }]
+          : args.targets
+      }
+      onRefresh={async () => {
+        await args.onRefresh?.();
+        setRefreshed(true);
+      }}
+    />
+  );
+}
+
+function nativeRefusal(status: number, code: string) {
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async () => Response.json({ code, status, detail: 'Private native denial detail' }, { status }),
+  });
+  return fn((input: ReportActionInput) => sendModerationReportAction(client, input, 'Bearer story'));
+}
+
+async function refused(canvasElement: HTMLElement, args: ReportQueueProps, message: string) {
   const view = await submit(canvasElement);
-  await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+  await expect(await view.findByRole('alert')).toHaveTextContent(message);
+  await expect(view.getByRole('alert')).not.toHaveTextContent(m.moderation_queue_retry_hint());
+  await expect(view.getByRole('textbox')).toHaveValue(reason);
+  await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeDisabled();
+  await expect(view.getByRole('button', { name: m.moderation_dismiss() })).toBeDisabled();
+  await expect(view.queryByRole('button', { name: m.moderation_queue_retry_action() })).toBeNull();
+  await expect(view.queryByText('Private native denial detail')).toBeNull();
+  await expect(view.queryByRole('status')).toBeNull();
+  await userEvent.click(view.getByRole('button', { name: m.moderation_queue_refresh() }));
+  await expect(args.onRefresh).toHaveBeenCalledTimes(1);
+  await expect(args.onAction).toHaveBeenCalledTimes(1);
+  await expect(await view.findByText(refreshedText)).toBeVisible();
   await expect(view.getByRole('textbox')).toHaveValue(reason);
   await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeEnabled();
-  await expect(view.queryByRole('status')).toBeNull();
+  await expect(view.queryByRole('alert')).toBeNull();
+  return view;
 }
 
 export const StaleConflict: Story = {
   args: {
-    onAction: fn(async (_input: ReportActionInput) => {
-      throw Object.assign(new globalThis.Error('Already resolved'), { status: 409 });
-    }),
+    onAction: nativeRefusal(422, 'idempotency_conflict'),
+    onRefresh: fn(async () => {}),
   },
-  play: async ({ canvasElement }) => refused(canvasElement),
+  render: (args) => <RefreshedQueue {...args} />,
+  play: async ({ canvasElement, args }) => {
+    const view = await refused(canvasElement, args, m.moderation_queue_conflict());
+    await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_conflict());
+    const calls = mocked(args.onAction).mock.calls;
+    await expect(calls).toHaveLength(2);
+    await expect(calls[1]![0].idempotencyKey).not.toBe(calls[0]![0].idempotencyKey);
+    await expect(calls[1]![0]).toMatchObject({ action: 'take-down', reason });
+  },
 };
 
 export const Resolved: Story = {
@@ -143,11 +194,16 @@ export const TargetUnavailable = {
 
 export const NativeDenied = {
   args: {
-    onAction: fn(async (_input: ReportActionInput) => {
-      throw Object.assign(new globalThis.Error('Forbidden'), { status: 403 });
-    }),
+    onAction: nativeRefusal(403, 'forbidden'),
+    onRefresh: fn(async () => {}),
   },
-  play: async ({ canvasElement }) => refused(canvasElement),
+  render: (args) => <RefreshedQueue {...args} />,
+  play: async ({ canvasElement, args }) => {
+    const view = await refused(canvasElement, args, m.moderation_queue_denied());
+    await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_denied());
+    await expect(args.onAction).toHaveBeenCalledTimes(2);
+  },
 } satisfies Story;
 
 export const ReasonValidation: Story = {
@@ -186,7 +242,7 @@ export const RevisionDiffers: Story = {
   },
 };
 export const ConfirmedTakedown: Story = {
-  args: { onAction: fn(async (_input: ReportActionInput): Promise<void> => {}) },
+  args: { onAction: fn(async (_input: ReportActionInput) => ({ ok: true as const })) },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
@@ -200,7 +256,7 @@ export const ConfirmedTakedown: Story = {
   },
 };
 export const ConfirmedDismissal: Story = {
-  args: { onAction: fn(async (_input: ReportActionInput): Promise<void> => {}) },
+  args: { onAction: fn(async (_input: ReportActionInput) => ({ ok: true as const })) },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
@@ -214,15 +270,15 @@ export const ConfirmedDismissal: Story = {
 };
 export const RetryConfirmed: Story = {
   args: {
-    onAction: fn<(input: ReportActionInput) => Promise<void>>()
+    onAction: fn<(input: ReportActionInput) => Promise<ReportActionResult>>()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValue(undefined),
+      .mockResolvedValue({ ok: true }),
   },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await view.findByRole('alert');
     await expect(view.getByRole('textbox')).toHaveValue(reason);
-    await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_retry_action() }));
     await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
     const calls = mocked(args.onAction).mock.calls;
     await expect(calls).toHaveLength(2);

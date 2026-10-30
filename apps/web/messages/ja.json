@@ -2276,5 +2276,14 @@
   "zone_editor_discard": "破棄して移動",
   "trending_loading": "急上昇の検索を読み込み中…",
   "trending_unavailable": "急上昇の検索は現在利用できません。",
-  "trending_empty": "急上昇の検索はまだありません。"
+  "trending_empty": "急上昇の検索はまだありません。",
+  "moderation_queue_conflict": "報告または対象の状態が変わりました。現在の状態を更新して確認してから、新たに判断してください。",
+  "moderation_queue_denied": "現在、このモデレーション操作を実行する権限がありません。",
+  "moderation_queue_sign_in_required": "再度ログインして、現在のモデレーション権限を確認してください。",
+  "moderation_queue_uncertain": "応答が失われました。操作は完了している可能性があります。",
+  "moderation_queue_refresh_hint": "下書きは保持されています。現在の状態を更新して確認してから、再度判断してください。",
+  "moderation_queue_refresh": "現在の状態を更新",
+  "moderation_queue_refreshed": "現在の状態を更新しました。確認してから新たに判断してください。下書きは保持されています。",
+  "moderation_queue_retry_action": "同じ操作を再試行",
+  "moderation_queue_sign_in": "ログイン"
 }

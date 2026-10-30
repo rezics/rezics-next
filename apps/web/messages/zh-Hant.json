@@ -2276,5 +2276,14 @@
   "zone_editor_discard": "捨棄並離開",
   "trending_loading": "正在載入熱門搜尋…",
   "trending_unavailable": "熱門搜尋暫時無法使用。",
-  "trending_empty": "目前沒有熱門搜尋。"
+  "trending_empty": "目前沒有熱門搜尋。",
+  "moderation_queue_conflict": "檢舉或目標的狀態已變更。請重新整理並查看目前狀態，再作出新決定。",
+  "moderation_queue_denied": "你目前沒有權限執行此審核操作。",
+  "moderation_queue_sign_in_required": "請重新登入以查看目前審核權限。",
+  "moderation_queue_uncertain": "回應遺失。操作可能已完成。",
+  "moderation_queue_refresh_hint": "草稿已保留。請重新整理並查看目前狀態，再作出決定。",
+  "moderation_queue_refresh": "重新整理目前狀態",
+  "moderation_queue_refreshed": "目前狀態已重新整理。請查看後再作出新決定。草稿已保留。",
+  "moderation_queue_retry_action": "重試同一操作",
+  "moderation_queue_sign_in": "登入"
 }

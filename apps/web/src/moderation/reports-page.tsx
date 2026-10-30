@@ -10,7 +10,7 @@ export { moderationTargetContent } from '../stories/patterns/board-report-queue/
 export type ModerationTarget = ResolvedReportTarget;
 
 const submitReportAction: ReportQueueAction = async (data) => {
-  await actionOnReport({ data, headers: csrfHeaders() });
+  return actionOnReport({ data, headers: csrfHeaders() });
 };
 
 export function ModerationReportsView({
@@ -26,10 +26,12 @@ export function ModerationReportsView({
   boardId,
   state = 'ready',
   onRetry,
+  onRefresh,
 }: {
   boardId?: string;
   state?: 'ready' | 'loading' | 'error';
   onRetry?: () => void;
+  onRefresh?: () => Promise<void>;
   reports: Report[];
   targets: ModerationTarget[];
   revisions?: ReportedRevision[];
@@ -93,6 +95,7 @@ export function ModerationReportsView({
         {...(onNext ? { onNext } : {})}
         state={state}
         {...(onRetry ? { onRetry } : {})}
+        {...(onRefresh ? { onRefresh } : {})}
       />
     </article>
   );

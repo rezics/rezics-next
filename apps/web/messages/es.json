@@ -2276,5 +2276,14 @@
   "zone_editor_discard": "Descartar y salir",
   "trending_loading": "Cargando búsquedas populares…",
   "trending_unavailable": "Las búsquedas populares no están disponibles ahora.",
-  "trending_empty": "Aún no hay búsquedas populares."
+  "trending_empty": "Aún no hay búsquedas populares.",
+  "moderation_queue_conflict": "La denuncia o el contenido ha cambiado. Actualiza y revisa el estado actual antes de tomar una nueva decisión.",
+  "moderation_queue_denied": "Actualmente no tienes permiso para realizar esta acción de moderación.",
+  "moderation_queue_sign_in_required": "Inicia sesión de nuevo para revisar tus permisos de moderación actuales.",
+  "moderation_queue_uncertain": "Se perdió la respuesta. La acción puede haberse completado.",
+  "moderation_queue_refresh_hint": "Se conserva tu borrador. Actualiza y revisa el estado actual antes de tomar otra decisión.",
+  "moderation_queue_refresh": "Actualizar estado actual",
+  "moderation_queue_refreshed": "Se ha actualizado el estado actual. Revísalo antes de tomar una nueva decisión. Se conserva tu borrador.",
+  "moderation_queue_retry_action": "Reintentar la misma acción",
+  "moderation_queue_sign_in": "Iniciar sesión"
 }

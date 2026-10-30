@@ -52,7 +52,7 @@ export const OpenReports: Story = {
     await expect(view.getAllByRole('textbox', { name: m.moderation_reason_label() })).toHaveLength(1);
     await userEvent.type(view.getAllByRole('textbox')[0]!, 'Private address disclosure.');
     await userEvent.click(view.getAllByRole('button', { name: m.moderation_take_down() })[0]!);
-    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_uncertain());
     await expect(view.getAllByRole('textbox')[0]!).toHaveValue('Private address disclosure.');
     await userEvent.click(view.getByRole('button', { name: m.threads_next_page() }));
     await expect(args.onNext).toHaveBeenCalledWith('cursor-next');
@@ -94,7 +94,7 @@ export const TargetUnavailable: Story = {
 export const RevisionDiffers: Story = { args: { reports: [postReport], next: null } };
 export const NativeDenied: Story = {
   args: { ...Queue.NativeDenied.args, reports: [postReport], next: null },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.moderation_queue_review() }));
     await userEvent.type(
@@ -102,7 +102,14 @@ export const NativeDenied: Story = {
       'Private address disclosure.',
     );
     await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
-    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_denied());
+    await expect(view.getByRole('textbox')).toHaveValue('Private address disclosure.');
+    await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeDisabled();
+    await expect(view.getByRole('link', { name: m.moderation_queue_back() })).toBeVisible();
+    await expect(view.queryByRole('button', { name: m.moderation_queue_retry_action() })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_refresh() }));
+    await expect(args.onRefresh).toHaveBeenCalledTimes(1);
+    await expect(args.onAction).toHaveBeenCalledTimes(1);
     await expect(view.getByRole('textbox')).toHaveValue('Private address disclosure.');
   },
 };

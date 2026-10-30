@@ -2277,5 +2277,14 @@
   "zone_editor_discard": "舍弃并离开",
   "trending_loading": "正在加载热门搜索…",
   "trending_unavailable": "热门搜索暂时不可用。",
-  "trending_empty": "暂无热门搜索。"
+  "trending_empty": "暂无热门搜索。",
+  "moderation_queue_conflict": "举报或目标的状态已更改。请刷新并查看当前状态，再作出新决定。",
+  "moderation_queue_denied": "你目前没有权限执行此审核操作。",
+  "moderation_queue_sign_in_required": "请重新登录以查看当前审核权限。",
+  "moderation_queue_uncertain": "响应丢失。操作可能已完成。",
+  "moderation_queue_refresh_hint": "草稿已保留。请刷新并查看当前状态，再作出决定。",
+  "moderation_queue_refresh": "刷新当前状态",
+  "moderation_queue_refreshed": "当前状态已刷新。请查看后再作出新决定。草稿已保留。",
+  "moderation_queue_retry_action": "重试同一操作",
+  "moderation_queue_sign_in": "登录"
 }

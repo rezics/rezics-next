@@ -45,6 +45,7 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
 
 function ModerationReportsRoute() {
   const navigate = useNavigate();
+  const router = useRouter();
   const page = Route.useLoaderData();
   const { id } = Route.useParams();
   const { thread, post, cursor, tab } = Route.useSearch();
@@ -77,6 +78,7 @@ function ModerationReportsRoute() {
       {...(thread ? { threadId: thread } : {})}
       {...(post ? { postId: post } : {})}
       onNext={onNext}
+      onRefresh={() => router.invalidate({ sync: true })}
     />
   );
 }

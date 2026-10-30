@@ -2314,5 +2314,14 @@
   "zone_editor_discard": "Discard and leave",
   "trending_loading": "Loading trending searches…",
   "trending_unavailable": "Trending searches are unavailable right now.",
-  "trending_empty": "No trending searches yet."
+  "trending_empty": "No trending searches yet.",
+  "moderation_queue_conflict": "The report or target has changed. Refresh the current state and review it before making a new decision.",
+  "moderation_queue_denied": "You do not currently have permission to perform this moderation action.",
+  "moderation_queue_sign_in_required": "Sign in again to review your current moderation access.",
+  "moderation_queue_uncertain": "The response was lost. The action may have completed.",
+  "moderation_queue_refresh_hint": "Your draft is kept. Refresh and review the current state before making another decision.",
+  "moderation_queue_refresh": "Refresh current state",
+  "moderation_queue_refreshed": "Current state refreshed. Review it before making a new decision. Your draft is kept.",
+  "moderation_queue_retry_action": "Retry the same action",
+  "moderation_queue_sign_in": "Sign in"
 }

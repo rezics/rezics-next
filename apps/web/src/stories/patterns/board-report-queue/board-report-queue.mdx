@@ -13,8 +13,10 @@ other-report summaries, copied bodies, raw identifier headings or per-card detai
 Open **Review report** to enter one takedown reason, or dismiss without a reason. The shared controls keep the draft
 when the panel closes. A request disables the form and announces submission. An unchanged retry retains its command
 key; edits and action changes create a new intent. Native denial, conflict and uncertain transport errors preserve
-the draft and never confirm success. The current action interface exposes the same generic refusal for these errors;
-these stories do not invent a permission flag or a new backend error contract.
+the draft and never confirm success. Native conflict explains that the report or target changed; native denial
+explains the current permission failure without exposing private details. Both require an explicit current-state
+refresh and review before a new decision, which receives a new command key. A lost response alone offers an exact
+command retry to confirm its outcome. Unknown failures remain errors and offer a fresh read rather than a blind replay.
 
 A confirmed command stays visible until navigation. Takedown confirmation is distinct from a projected report
 outcome: the page does not claim that asynchronous report resolution has finished. It hides the current and revision
