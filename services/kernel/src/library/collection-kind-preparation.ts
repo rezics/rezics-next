@@ -26,6 +26,8 @@ import type {
 } from './collection-kind.ts';
 import type { NativeSourceFrontier, NativeSourceIdentity } from './native-source-custody.ts';
 import scopeQuery from './collection-kind-preparation-scope.sql';
+import readObservation from './collection-kind-read.sql';
+import retiredCapture from './collection-kind-preparation-retired.sql';
 
 const anonymous: Actor = Object.freeze({ kind: 'anonymous' });
 const publicAudience = 'anonymous';
@@ -48,15 +50,17 @@ function audience(actor: Actor): string {
     actor.accountId, actor.clientId, actor.authnEpoch, actor.requestedBy, [...actor.scopes].sort(),
   ])).digest('hex')}`;
 }
-function locator(capture: CollectionKindCapture): { fence: string; captureId: string; holdId: string } | null {
+function locator(capture: CollectionKindCapture): { fence: string; captureId: string; holdId: string; scopeCaptureId: string; revision: string } | null {
   if (Buffer.byteLength(capture.token) > 4096) return null;
   try {
     const value: unknown = JSON.parse(capture.token);
-    if (!Array.isArray(value) || value.length !== 4 || value[0] !== 1 ||
+    if (!Array.isArray(value) || value.length !== 6 || value[0] !== 1 ||
       typeof value[1] !== 'string' || !/^[0-9a-f]{64}$/.test(value[1]) ||
       typeof value[2] !== 'string' || routeOf(value[2]) === null ||
-      typeof value[3] !== 'string' || routeOf(value[3]) === null) return null;
-    return { fence: value[1], captureId: value[2], holdId: value[3] };
+      typeof value[3] !== 'string' || routeOf(value[3]) === null ||
+      typeof value[4] !== 'string' || routeOf(value[4]) === null ||
+      typeof value[5] !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value[5])) return null;
+    return { fence: value[1], captureId: value[2], holdId: value[3], scopeCaptureId: value[4], revision: value[5] };
   } catch { return null; }
 }
 function identityObservation(identity: NativeSourceIdentity, captureId: string, revision: string): IdentityScopeObservation {
@@ -130,12 +134,16 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
       read.metadata.sourceGeneration !== capture.sourceGeneration || nativeSourceFence(read.metadata) !== key.fence)
       return null;
     const native = await retained(read.metadata, read.work, deadline);
-    if (!native || native.frontier.captureId !== key.captureId) return null;
+    if (!native || native.frontier.captureId !== key.captureId || native.observation.captureId !== key.scopeCaptureId ||
+      native.observation.committedRevision.toString() !== key.revision) return null;
     // The existing scope producer covers original identity and source population, not retained Type/Access
     // changes. Only the truly zero native population has vacuous Type/disclosure dependencies. Nonempty
     // preparations stay unavailable until the native owner supplies that scoped proof; no sample substitutes.
     if (native.scanned !== '0') return null;
-    return { ...read, ...native, key };
+    // Recheck current viewer/source authority after the Semantic wait; never retain its allow verdict.
+    const final = await current(capture.collectionId, actor, deadline);
+    if (!final || nativeSourceFence(final.metadata) !== key.fence) return null;
+    return { ...read, ...native, key, at: final.at };
   }
 
   return {
@@ -155,12 +163,20 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           identity: native.identity, frontier: native.frontier, allowance, deadline: input.deadline,
         }));
         if (completed.status !== 'complete') return unavailable();
+        const previous = await read.work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 8192 }, () =>
+          withConnection(deps.pool, (client) => readObservation.run(deadlineClient(client, input.deadline), {
+            route: read.metadata.route, collection_id: input.collectionId, audience: publicAudience,
+          })));
+        const priorKey = previous ? locator({ collectionId: input.collectionId, accountId: input.accountId,
+          audience: publicAudience, sourceGeneration: previous.sourceGeneration, token: previous.capture }) : null;
         const capture: CollectionKindCapture = {
           collectionId: input.collectionId, accountId: input.accountId, audience: publicAudience,
           sourceGeneration: read.metadata.sourceGeneration,
-          // The exact observation's hold is deterministic across retries, and separate from business custody.
+          // Reuse the adopted observation's exact hold on continuation. A later observation receives a new hold.
           token: JSON.stringify([1, nativeSourceFence(read.metadata), completed.capture.captureId,
-            holdId(completed.capture.captureId)]),
+            priorKey?.captureId === completed.capture.captureId && priorKey.revision === native.observation.committedRevision.toString()
+              ? priorKey.holdId : crypto.randomUUID(),
+            native.observation.captureId, native.observation.committedRevision.toString()]),
         };
         if (!(await resolve(capture, anonymous, input.deadline))) return unavailable();
         return { status: 'prepared' as const, capture };
@@ -230,18 +246,21 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           resources.accounts.length !== 1 || resources.accounts[0] !== input.capture.accountId)
           return unavailable();
         // SAME home only. No Source/Access/identity callback or foreign checkout while Core is held.
-        const row = await scopeQuery.run(input.tx, { route: routeOf(input.capture.collectionId)!,
-          collection_id: input.capture.collectionId, source_fence: key.fence });
-        if (!row || row.nativeCaptureId !== key.captureId || row.scanned !== '0' || !row.complete || !row.committed)
+        const work = new CollectionSourceLedger(allowance(), Math.min(input.deadline, resources.deadline));
+        const row = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>
+          scopeQuery.run(input.tx, { route: routeOf(input.capture.collectionId)!,
+            collection_id: input.capture.collectionId, source_fence: key.fence }));
+        if (!row || row.nativeCaptureId !== key.captureId || row.scanned !== '0' || !row.complete || !row.committed ||
+          row.capture !== key.scopeCaptureId || row.revision !== key.revision)
           return { status: 'stale' as const };
         const identity = row.identity as NativeSourceIdentity;
         if (identity.accountId !== input.capture.accountId || identity.generation !== input.capture.sourceGeneration)
           return { status: 'stale' as const };
         const at = commandTime(input.tx);
         if (!at) return unavailable();
-        const held = await sources.custody.readAndHold({ client: input.tx, at, identity,
-          captureId: key.captureId, holdId: key.holdId, allowance: allowance(),
-          deadline: Math.min(input.deadline, resources.deadline) });
+        const held = await work.run((allowance) => sources.custody.readAndHold({ client: input.tx, at, identity,
+          captureId: key.captureId, holdId: key.holdId, allowance,
+          deadline: Math.min(input.deadline, resources.deadline) }));
         return held.status === 'held' ? { status: 'adopted' as const } : unavailable();
       });
     },
@@ -254,21 +273,22 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         return runOperationalTransaction(deps.pool, { mode: 'work-step', partition: partitionOf(route),
           kind: 'library.collectionKind.retire', accounts: [input.accountId], workClient: deps.workClient,
           deadline: input.deadline, clock: deps.clock }, async (tx) => {
-          const row = await scopeQuery.run(tx, { route, collection_id: input.collectionId, source_fence: key.fence });
+          const work = new CollectionSourceLedger(allowance(), input.deadline);
+          const retired = await work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 256 }, () =>
+            retiredCapture.run(tx, { route, collection_id: input.collectionId, account_id: input.accountId, capture: input.token }));
+          if (!retired) return unavailable();
+          const row = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>
+            scopeQuery.run(tx, { route, collection_id: input.collectionId, source_fence: key.fence }));
           if (!row || row.nativeCaptureId !== key.captureId) return unavailable();
           const identity = row.identity as NativeSourceIdentity;
           if (identity.accountId !== input.accountId || identity.collectionId !== input.collectionId) return unavailable();
           const at = commandTime(tx);
           if (!at) return unavailable();
-          const released = await sources.custody.releaseHold({ client: tx, at, identity,
-            captureId: key.captureId, holdId: key.holdId, allowance: allowance(), deadline: input.deadline });
+          const released = await work.run((allowance) => sources.custody.releaseHold({ client: tx, at, identity,
+            captureId: key.captureId, holdId: key.holdId, allowance, deadline: input.deadline }));
           return released.status === 'released' ? { status: 'retired' as const } : unavailable();
         });
       });
     },
   };
-}
-function holdId(captureId: string): string {
-  const digest = createHash('sha256').update(`collection-kind:anonymous:${captureId}`).digest('hex');
-  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
 }

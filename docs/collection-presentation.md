@@ -77,9 +77,15 @@ replace synchronous full-table/group scans per GET, stale cached winners or glob
 remain pure under the Library contract; only the already authorized common-members preparation boundary may
 start retained work. Different viewers may receive different derived kinds because their eligible members differ;
 no hidden Type or curator-private count oracle is exposed. The Library consumer maintains generation-bound canonical
-votes and indexed Type counts through fenced operational work. Its native retained Type/disclosure capture binding
-remains explicitly unavailable until the authoritative complete Source and scoped dependency producers execute.
-A missing binding cannot publish a winner or complete zero.
+votes and indexed Type counts through fenced operational work. Its default native binding now resolves existing
+Collection Source/capture/custody and scoped identity records through `collection-kind-preparation.ts`; selection
+uses the actual current reader, and anonymous work uses genuine anonymous authority. It retains exact source and
+Semantic observation/custody locators without an Actor or permission cache. Metadata reads create no retained
+preparation or work. The current Semantic scoped producer, complete retained Type/disclosure footprint, and
+Accounts/Search authenticated mutation-origin continuation still lack executable bodies. Nonempty/audience work
+therefore remains typed unavailable; complete zero requires a complete native population capture, never a count
+shortcut. This source delivery does not prove native/whole/main acceptance. The [Library owner contract](../services/kernel/src/library/README.md)
+records the actual composition and remaining producer obligations.
 
 ## FULL member key fact values
 
