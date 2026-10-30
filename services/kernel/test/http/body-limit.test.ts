@@ -435,7 +435,7 @@ test('mounted raw webhook-style ingress retains duplicate text and non-UTF8 byte
   let owned: Uint8Array | undefined;
   let count: number | undefined;
   const app = createApp({ pool: nativePool }).post(
-    '/raw-wire',
+    '/probe',
     {
       detail: {
         operationId: 'probe.raw_wire',
