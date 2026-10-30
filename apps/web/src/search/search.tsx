@@ -434,13 +434,15 @@ export function SearchPage({
   const openFilters = useCallback(() => {
     if (window.matchMedia('(min-width: 1024px)').matches) {
       setDesktopFiltersOpen(true);
-      requestAnimationFrame(() =>
-        desktopPanel.current
-          ?.querySelector<HTMLElement>(
+      requestAnimationFrame(() => {
+        const panel = desktopPanel.current;
+        (
+          panel?.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+          panel?.querySelector<HTMLElement>(
             'a[href], select:not(:disabled), input:not([type="hidden"]), button:not(:disabled)',
           )
-          ?.focus(),
-      );
+        )?.focus();
+      });
     } else setMobileFiltersOpen(true);
   }, []);
   useEffect(() => {
@@ -453,14 +455,7 @@ export function SearchPage({
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
-  const hasFilterPanel = Boolean(
-    data?.conditionMetadata ||
-    data?.refinement?.properties.length ||
-    data?.typeChoices.length ||
-    type ||
-    data?.queryState?.kinds?.length ||
-    data?.problem,
-  );
+  const hasFilterPanel = data !== undefined;
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
     [activeFilterCount, openFilters],

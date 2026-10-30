@@ -126,7 +126,7 @@ export function ConditionEditor({
               variant="outline"
               size="sm"
               onClick={() => {
-                onChange({ and: [{ type: { in: [] } }] });
+                onChange({ and: [{ type: { in: [''] } }] });
                 announce(m.condition_added(), `${CONDITION_POINTER}/and/0`);
               }}
             >
@@ -152,14 +152,18 @@ function EditorField({
   pointer,
   label,
   children,
+  exact = false,
 }: {
   context: EditorContext;
   pointer: string;
   label: string;
+  exact?: boolean;
   children(props: { id: string; 'aria-invalid': boolean; 'aria-describedby'?: string }): ReactNode;
 }) {
   const id = useId();
-  const errors = conditionFieldIssues(context.issues, pointer);
+  const errors = conditionFieldIssues(context.issues, pointer).filter(
+    (issue) => !exact || issue.pointer === pointer || pointer.startsWith(`${issue.pointer}/`),
+  );
   return (
     <Field data-invalid={errors.length > 0 || undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -227,7 +231,7 @@ function NodeEditor({
     <FieldSet className="min-w-0 gap-3 rounded-lg border border-border/60 p-3" data-condition-pointer={pointer}>
       <FieldLegend variant="label">{label}</FieldLegend>
       <div className="flex flex-wrap items-end gap-2">
-        <EditorField context={context} pointer={pointer} label={m.condition_group()}>
+        <EditorField context={context} pointer={pointer} label={m.condition_group()} exact>
           {(props) => (
             <NativeSelect
               {...props}
@@ -291,7 +295,7 @@ function NodeEditor({
                 }
                 onClick={() => {
                   const node: FilterDocument =
-                    kind === 'type' ? { type: { in: [] } } : { statement: { property: '', in: [''] } };
+                    kind === 'type' ? { type: { in: [''] } } : { statement: { property: '', in: [''] } };
                   const children = [...group, node];
                   onChange(operator === 'and' ? { and: children } : { or: children });
                   context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
@@ -613,7 +617,8 @@ function RangeInput({
       value={raw}
       onChange={(event) => {
         const text = event.currentTarget.value;
-        const number = text === '' ? undefined : Number(text);
+        const number =
+          text === '' ? undefined : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
         setRaw(text);
         setPrevious(number);
         onValue(number);
