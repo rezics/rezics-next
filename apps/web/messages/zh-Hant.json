@@ -1540,5 +1540,9 @@
   "reporter_status_target": "檢舉對象",
   "reporter_status_available": "目前可查看此項目。",
   "reporter_status_revision": "提交時的修訂版本",
-  "reporter_status_unavailable": "無法載入你的檢舉，請重試。"
+  "reporter_status_unavailable": "無法載入你的檢舉，請重試。",
+  "library_labels_prefix": "標籤名稱前綴",
+  "library_labels_filter": "篩選標籤",
+  "library_labels_preparing": "正在準備你的標籤，請稍後再試。",
+  "library_labels_denied": "目前使用者無法查看這些標籤。"
 }

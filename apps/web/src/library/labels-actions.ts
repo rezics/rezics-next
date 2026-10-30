@@ -15,3 +15,27 @@ export const manageLabel = createServerFn({ method: 'POST' })
 export const labelsFormPost = createServerOnlyFn(({ request }: { request: Request }) =>
   handleLabelForm(kernelClient(), request, env as Partial<SessionEnv>),
 );
+
+/** One signed prefix page for the existing subject picker. */
+export const readSubjectLabelPage = createServerFn({ method: 'GET' })
+  .validator((input: { query: string; cursor?: string }) => {
+    if (
+      !input ||
+      typeof input.query !== 'string' ||
+      input.query.length > 4096 ||
+      (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+    )
+      throw new Error('Invalid label prefix page');
+    return input;
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { searchSubjectLabels } = await import('./subject-labels.ts');
+    return searchSubjectLabels({
+      client: kernelClient(),
+      request: getRequest(),
+      sessionEnv: env as Partial<SessionEnv>,
+      query: data.query,
+      ...(data.cursor ? { cursor: data.cursor } : {}),
+    });
+  });

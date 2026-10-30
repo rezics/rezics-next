@@ -133,6 +133,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
             url.searchParams.set('undoAssignmentId', String(fields?.get('assignmentId') ?? ''));
             url.searchParams.set('undoRevision', String(result.restoreRevision));
           } else if (!result.ok) {
+            if (intent === 'restore') {
+              url.searchParams.set('undoLabelId', String(fields?.get('labelId') ?? ''));
+              url.searchParams.set('undoAssignmentId', String(fields?.get('assignmentId') ?? ''));
+              url.searchParams.set('undoRevision', String(fields?.get('revision') ?? ''));
+            }
             const value =
               result.reason === 'capacity'
                 ? 'label-capacity'

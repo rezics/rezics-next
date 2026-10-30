@@ -1,12 +1,12 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { readSubjectSlotSession, type SubjectLabelUndo } from './subject-slot';
 import { subjectOf, type LibrarySubject } from './reads';
 import { readLibraryResult } from './reads';
 import { progressView } from './progress-label';
 import type { ProgressLabelInput } from './progress-label';
-import { libraryLabelApi, type LibraryLabelSummary } from './subject-labels.ts';
+import type { LibraryLabelSummary } from './subject-labels.ts';
 import { readRelease } from '../subject/definitions';
 import { requestLocale } from '../kernel/client';
 import { libraryStateLabel } from './profiles';
@@ -17,6 +17,7 @@ export type LabelShelfEntry = {
   labelId: string;
   subjectId: string;
   revision: number;
+  removeKey?: string;
   subject: LibrarySubject | null;
   state?: string;
   stateLabel?: string;
@@ -26,12 +27,16 @@ export type LabelShelfEntry = {
 export type LabelShelfPageData =
   | { state: 'closed' }
   | { state: 'signed-out' }
+  | { state: 'denied' }
+  | { state: 'preparing' }
+  | { state: 'unavailable' }
   | {
       state: 'loaded';
       label: LibraryLabelSummary;
       entries: LabelShelfEntry[];
       next: string | null;
       csrfToken: string | null;
+      undoKey?: string;
       undo?: SubjectLabelUndo & { subjectId: string };
       labelResult?: string;
     };
@@ -47,22 +52,23 @@ export async function loadLabelShelfPage(
     limit: number;
     undo?: SubjectLabelUndo & { subjectId: string };
     labelResult?: string;
+    undoKey?: string;
   },
 ): Promise<LabelShelfPageData> {
   try {
     const identity = await readSubjectSlotSession(request, sessionEnv);
-    if (identity.state !== 'signed-in') return { state: identity.state === 'signed-out' ? 'signed-out' : 'closed' };
+    if (identity.state === 'signed-out') return { state: 'signed-out' };
+    if (identity.state !== 'signed-in') return { state: 'unavailable' };
     const authorization = identity.authorization;
     const exposure = await client.platform.exposure.get({ headers: { authorization } });
-    const admitted = exposure.data?.admitted ?? [];
+    const admitted = readLibraryResult(exposure).admitted;
     if (
       !admitted.includes('personal_library') ||
       !admitted.includes('reading_progress') ||
       !admitted.includes('library_label.assignment_list')
     )
       return { state: 'closed' };
-    const api = libraryLabelApi(client);
-    const result = await api.libraryLabelAssignments.get({
+    const result = await client.libraryLabelAssignments.get({
       query: {
         labelId: input.labelId,
         view: 'FULL',
@@ -71,31 +77,24 @@ export async function loadLabelShelfPage(
       },
       headers: { authorization },
     });
-    const page = readLibraryResult(result as never) as {
-      assignments: {
-        id: string;
-        labelId: string;
-        subjectId: string;
-        revision: number;
-        subject?: unknown;
-        libraryEntry?: unknown;
-      }[];
-      label?: LibraryLabelSummary;
-      next: string | null;
-    };
-    if (!page.label || page.label.id !== input.labelId) throw new Error('Label shelf page omitted its label summary');
+    if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
+    if (result.status === 401 || result.status === 403) return { state: 'denied' };
+    if (result.error?.value?.code === 'index_not_ready' || result.error?.value?.code === 'semantic_not_ready')
+      return { state: 'preparing' };
+    const page = readLibraryResult(result);
+    if (!('label' in page) || page.label.id !== input.labelId)
+      throw new Error('FULL label shelf omitted its label summary');
     const locale = requestLocale() ?? 'en';
     const release = await readRelease().catch(() => undefined);
     return {
       state: 'loaded',
       label: page.label,
       entries: page.assignments.map((row) => {
-        const subject = subjectOf(row.subject as Parameters<typeof subjectOf>[0]);
-        const entry =
-          row.libraryEntry && typeof row.libraryEntry === 'object' && !Array.isArray(row.libraryEntry)
-            ? (row.libraryEntry as { state?: unknown; activeProgressSession?: unknown })
-            : null;
-        const state = typeof entry?.state === 'string' ? entry.state : undefined;
+        if (!('subject' in row) || !('libraryEntry' in row))
+          throw new Error('FULL label shelf omitted its subject or entry');
+        const subject = subjectOf(row.subject);
+        const entry = row.libraryEntry;
+        const state = entry?.state;
         const stateLabel =
           state && release && subject?.type
             ? (libraryStateLabel(release, subject.type, state, locale)?.text ?? m.library_other())
@@ -105,25 +104,27 @@ export async function loadLabelShelfPage(
         const progress = entry?.activeProgressSession;
         return {
           id: row.id,
+          removeKey: crypto.randomUUID(),
           labelId: row.labelId,
           subjectId: row.subjectId,
           revision: row.revision,
           subject,
           ...(state ? { state } : {}),
           ...(stateLabel ? { stateLabel } : {}),
-          ...(progress && typeof progress === 'object'
-            ? { activeProgressSession: progress as ProgressLabelInput }
-            : {}),
+          ...(progress ? { activeProgressSession: progress } : {}),
         };
       }),
       next: page.next,
       csrfToken: identity.csrfToken,
+      undoKey: input.undoKey ?? crypto.randomUUID(),
       ...(input.undo ? { undo: input.undo } : {}),
       ...(input.labelResult ? { labelResult: input.labelResult } : {}),
     };
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'closed' };
-    throw error;
+    if (error && typeof error === 'object' && 'isNotFound' in error) throw error;
+    if (error instanceof Error && error.name === 'StaleCursorError') throw error;
+    return { state: 'unavailable' };
   }
 }
 

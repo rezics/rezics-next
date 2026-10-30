@@ -1,3 +1,5 @@
+import { SubjectLabelMore } from './subject-labels.tsx';
+import { labelReadMessage, SubjectLabelReadNotice } from './subject-labels.tsx';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
 import { Exposure, useOperation } from '../kernel/exposure';
@@ -123,6 +125,8 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const entryDeleteAdmitted = useOperation('library_entry.delete');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
+  const [labelNext, setLabelNext] = useState<string | null>(null);
+  const [labelReadReason, setLabelReadReason] = useState<string>();
   const [labelChoices, setLabelChoices] = useState<LibraryLabelSummary[]>([]);
   const [labelSearchState, setLabelSearchState] = useState<'idle' | 'loaded' | 'closed' | 'unavailable' | 'signed-out'>(
     'idle',
@@ -145,17 +149,28 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   useEffect(() => setLabels(data.labels ?? []), [data.labels]);
   useEffect(() => {
     setLabelNotice(data.labelResult);
+    if (!data.labelUndo && labelUndo) return;
     setLabelUndo(data.labelUndo);
   }, [data.labelResult, data.labelUndo]);
   useEffect(() => {
     if (!hydrated || !labelPickerOpen || data.session !== 'signed-in') return;
     let current = true;
     const query = labelQuery;
+    setLabelNext(null);
+    setLabelChoices([]);
+    setLabelSearchState('idle');
+    setLabelReadReason(undefined);
     const timeout = setTimeout(() => {
       void searchSubjectLabelsAction({ data: { query } })
         .then((response) => {
           if (!current || latestLabelQuery.current !== query) return;
+          setLabelNext(response.next ?? null);
           setLabelChoices(response.labels);
+          setLabelReadReason(response.reason);
+          if (labelReadMessage(response.reason)) {
+            setLabelSearchState('idle');
+            return;
+          }
           setLabelSearchState(response.state);
         })
         .catch(() => {
@@ -342,6 +357,10 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   function labelFailure(reason: string) {
+    if (reason === 'restore-stale') {
+      setLabelNotice('label-restore-stale');
+      return;
+    }
     if (reason === 'capacity') setLabelNotice('label-capacity');
     else if (reason === 'restore-stale') {
       void Promise.all([
@@ -375,7 +394,9 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                 subjectId: subject.id,
                 name: input.name ?? '',
                 createKey: crypto.randomUUID(),
+                ...(data.labelCreateKey ? { createKey: data.labelCreateKey } : {}),
                 idempotencyKey: crypto.randomUUID(),
+                ...(data.labelAssignKey ? { idempotencyKey: data.labelAssignKey } : {}),
               },
               headers,
             })
@@ -386,6 +407,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   subjectId: subject.id,
                   labelId: input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? ''),
                   idempotencyKey: crypto.randomUUID(),
+                  ...(data.labelAssignKey ? { idempotencyKey: data.labelAssignKey } : {}),
                 },
                 headers,
               })
@@ -397,6 +419,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   assignmentId: input.assignment?.id ?? '',
                   revision: input.revision ?? 0,
                   idempotencyKey: crypto.randomUUID(),
+                  ...(data.labelUndoKey ? { idempotencyKey: data.labelUndoKey } : {}),
                 },
                 headers,
               });
@@ -405,6 +428,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         return;
       }
       setLabelUndo(undefined);
+      if (input.intent !== 'restore') setLabelUndo(labelUndo);
       setLabelPickerOpen(false);
       setLabelQuery('');
       latestLabelQuery.current = '';
@@ -423,6 +447,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   async function submitLabelName(event: FormEvent<HTMLFormElement>) {
     if (!hydrated) return;
     event.preventDefault();
+    if (labelSearchState !== 'loaded') return;
     const name = normalizeLibraryLabelName(labelQuery);
     if (!name) return;
     const existing = labelChoices.find((candidate) => normalizeLibraryLabelName(candidate.name) === name);
@@ -442,6 +467,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
           assignmentId: label.id,
           revision: label.revision,
           idempotencyKey: crypto.randomUUID(),
+          ...(data.labelRemoveKeys?.[label.id] ? { idempotencyKey: data.labelRemoveKeys[label.id] } : {}),
         },
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
@@ -458,6 +484,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         setLabelNotice('unavailable');
         return;
       }
+      setLabelUndo({ labelId: label.labelId, assignmentId: label.id, revision: restoreRevision });
       undoToast(
         m.library_subject_label_removed({ name: label.name }),
         () =>
@@ -663,6 +690,11 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             </details>
           </Exposure>
         ) : null}
+        {data.session === 'signed-in' && data.labels === null ? (
+          <Exposure operation="library_label.assignment_list">
+            <p role="alert" className="basis-full text-sm text-muted-foreground">{m.library_subject_label_unavailable()}</p>
+          </Exposure>
+        ) : null}
         {data.session === 'signed-in' && data.labels !== null ? (
           <Exposure operation="library_label.assignment_list">
             <div data-subject-labels className="basis-full space-y-2">
@@ -692,6 +724,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                           <input type="hidden" name="subjectId" value={subject.id} />
                           <input type="hidden" name="labelId" value={label.labelId} />
                           <input type="hidden" name="assignmentId" value={label.id} />
+                          <input type="hidden" name="idempotencyKey" value={data.labelRemoveKeys?.[label.id]} />
                           <input type="hidden" name="revision" value={label.revision} />
                           <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                           <button
@@ -726,6 +759,8 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                     className="mt-2 space-y-2 rounded-lg border bg-background p-3"
                   >
                     <input type="hidden" name="intent" value="assign-by-name" />
+                    <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
+                    <input type="hidden" name="createKey" value={data.labelCreateKey} />
                     <input type="hidden" name="subjectId" value={subject.id} />
                     <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                     <label className="grid gap-1 text-sm font-medium">
@@ -762,6 +797,10 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                         {m.library_collection_cancel()}
                       </button>
                     </div>
+                    <SubjectLabelMore query={labelQuery} next={labelNext} onPage={(page) => {
+                      setLabelNext(page.next ?? null); setLabelChoices(page.labels); setLabelSearchState(page.state);
+                    }} />
+                    <SubjectLabelReadNotice reason={labelReadReason} />
                     {labelSearchState === 'loaded' ? (
                       <ul aria-label={m.library_subject_label_input()} className="space-y-1">
                         {labelChoices.map((choice) => (
@@ -820,6 +859,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   <input type="hidden" name="subjectId" value={subject.id} />
                   <input type="hidden" name="labelId" value={labelUndo.labelId} />
                   <input type="hidden" name="assignmentId" value={labelUndo.assignmentId} />
+                  <input type="hidden" name="idempotencyKey" value={data.labelUndoKey} />
                   <input type="hidden" name="revision" value={labelUndo.revision} />
                   <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                   <span>{m.library_subject_label_removed_status()}</span>

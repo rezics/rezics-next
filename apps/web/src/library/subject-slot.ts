@@ -56,6 +56,10 @@ export type SubjectLabelUndo = { labelId: string; assignmentId: string; revision
 export type SubjectLibrarySlotData = {
   session: 'signed-in' | 'signed-out' | 'unavailable';
   csrfToken: string | null;
+  labelCreateKey?: string;
+  labelAssignKey?: string;
+  labelUndoKey?: string;
+  labelRemoveKeys?: Record<string, string>;
   entryAvailable: boolean;
   entry: SubjectSlotEntry | null;
   stateOptions?: LibraryStateChoice[];
@@ -264,6 +268,10 @@ export async function loadSubjectLibrarySlot(
       ? labelResultValue
       : undefined;
   return {
+    labelRemoveKeys: Object.fromEntries((labels ?? []).map((label) => [label.id, crypto.randomUUID()])),
+    labelCreateKey: crypto.randomUUID(),
+    labelAssignKey: crypto.randomUUID(),
+    labelUndoKey: crypto.randomUUID(),
     session: identity.state,
     csrfToken: identity.csrfToken,
     entryAvailable,

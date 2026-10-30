@@ -1,3 +1,6 @@
+import { activeLabelStoryLabels, isLabelCatalogueStory } from './library-labels';
+import { labelReadStoryFailure } from './library-labels';
+import { normalizeLibraryLabelName } from '../../library/subject-label-name';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { recordedBookState } from './library-entry-states.ts';
@@ -13,6 +16,13 @@ let shelfCount = 3;
 const createdLabels = new Map<string, { id: string; name: string; revision: number }>();
 const addedAssignments = new Map<string, { id: string; labelId: string; subjectId: string; revision: number }>();
 const removedAssignments = new Set<string>();
+
+export function resetLabelAssignmentStory(): void {
+  removedAssignments.clear();
+  addedAssignments.clear();
+  createdLabels.clear();
+}
+
 
 /** Story pages opt into exact populations without changing the fixture or the current fake site behavior. */
 export function setLibraryLabelStorySizes(input: { subject?: number; shelf?: number }): void {
@@ -36,6 +46,7 @@ function labels() {
       revision: 1,
     })),
     ...createdLabels.values(),
+    ...activeLabelStoryLabels(),
   ];
 }
 
@@ -115,11 +126,21 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
 
 async function answer({ request }: { request: Request }): Promise<KernelRecording | undefined> {
   const url = new URL(request.url);
+  if (isLabelCatalogueStory() && /^\/v1\/libraryLabels(?:\/[^/:]+(?::restore)?)?$/.test(url.pathname)) return undefined;
+  if (request.method === 'GET' && (url.pathname === '/v1/libraryLabelAssignments' || url.pathname === '/v1/libraryLabels')) {
+    const failure = labelReadStoryFailure();
+    if (failure) return failure;
+  }
   if (request.method === 'GET' && url.pathname === '/v1/libraryLabels') {
     const query = url.searchParams.get('q') ?? '';
+    const prefix = normalizeLibraryLabelName(query);
+    if (prefix !== query) { url.searchParams.set('q', prefix); return answer({ request: new Request(url, request) }); }
     const matches = labels()
       .filter((label) => label.name.startsWith(query))
       .slice(0, 20);
+    const matching = labels().filter((label) => label.name.startsWith(query));
+    if (url.searchParams.has('cursor')) return { status: 200, labels: matching.slice(20, 40), next: null };
+    if (matching.length > 20) return { status: 200, labels: matches, next: 'label-prefix-next' };
     return { status: 200, labels: matches, next: null };
   }
   if (request.method === 'POST' && url.pathname === '/v1/libraryLabels') {
@@ -161,6 +182,8 @@ async function answer({ request }: { request: Request }): Promise<KernelRecordin
     }
     if (action[2] === 'restoreAssignment') removedAssignments.delete(assignmentId);
     const existing = current.find((row) => row.labelId === id && row.subjectId === input.subjectId);
+    if (action[2] === 'assign' && !existing && current.length >= 32)
+      return { status: 409, code: 'library_label_capacity' };
     const assignment =
       action[2] === 'restoreAssignment'
         ? { id: assignmentId, labelId: id, subjectId: String(input.subjectId ?? subjectId), revision: 3 }

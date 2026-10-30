@@ -1541,5 +1541,9 @@
   "reporter_status_target": "Reported item",
   "reporter_status_available": "This item is currently available.",
   "reporter_status_revision": "Submitted revision",
-  "reporter_status_unavailable": "Your report could not be loaded. Try again."
+  "reporter_status_unavailable": "Your report could not be loaded. Try again.",
+  "library_labels_prefix": "Label name starts with",
+  "library_labels_filter": "Filter labels",
+  "library_labels_preparing": "Your labels are being prepared. Try again shortly.",
+  "library_labels_denied": "These labels are not available to this viewer."
 }

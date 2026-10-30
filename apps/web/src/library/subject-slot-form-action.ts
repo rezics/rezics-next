@@ -16,11 +16,27 @@ export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request
   if (contentLength !== null && (!/^\d+$/.test(contentLength) || Number(contentLength) > 4 * 1024))
     return { ok: false as const, reason: 'unavailable' as const };
   try {
+    if (new TextEncoder().encode(await request.clone().text()).length > 4096)
+      return { ok: false as const, reason: 'unavailable' as const };
     const form = await request.clone().formData();
     const one = (name: string): string | null => {
       const values = form.getAll(name);
       return values.length === 1 && typeof values[0] === 'string' ? values[0] : null;
     };
+    // Newly rendered label forms capture their key with the native guard. Older forms retain their fallback.
+    if (form.has('idempotencyKey')) {
+      const key = one('idempotencyKey');
+      const intent = one('intent');
+      if (!key) return { ok: false as const, reason: 'unavailable' as const };
+      const input = validateSubjectLabelMutation(intent === 'assign-by-name' ? {
+        intent: 'create-and-assign', subjectId: one('subjectId'), name: one('name'),
+        createKey: one('createKey'), idempotencyKey: key,
+      } : {
+        intent, subjectId: one('subjectId'), labelId: one('labelId'), assignmentId: one('assignmentId'),
+        revision: Number(one('revision')), idempotencyKey: key,
+      });
+      return applySubjectLabelMutation(request, env as Partial<SessionEnv>, input, kernelClient());
+    }
     const intents = form.getAll('intent');
     const intent = intents.length === 1 && typeof intents[0] === 'string' ? intents[0] : null;
     const subjectId = one('subjectId');

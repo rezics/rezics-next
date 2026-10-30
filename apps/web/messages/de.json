@@ -1540,5 +1540,9 @@
   "reporter_status_target": "Gemeldeter Inhalt",
   "reporter_status_available": "Dieser Inhalt ist derzeit verfügbar.",
   "reporter_status_revision": "Eingereichte Revision",
-  "reporter_status_unavailable": "Deine Meldung konnte nicht geladen werden. Versuche es erneut."
+  "reporter_status_unavailable": "Deine Meldung konnte nicht geladen werden. Versuche es erneut.",
+  "library_labels_prefix": "Labelname beginnt mit",
+  "library_labels_filter": "Labels filtern",
+  "library_labels_preparing": "Deine Labels werden vorbereitet. Versuche es gleich erneut.",
+  "library_labels_denied": "Diese Labels sind für diese Person nicht verfügbar."
 }

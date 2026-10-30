@@ -397,12 +397,15 @@ function LabelAssignmentRemoveForm({
   locale: string;
   csrfToken: string | null;
 }) {
+  const admitted = useOperation('library_label.unassign');
+  if (!admitted) return null;
   return (
     <form method="post" action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(entry.labelId)}`}>
       <input type="hidden" name="intent" value="unassign" />
       <input type="hidden" name="subjectId" value={entry.subjectId} />
       <input type="hidden" name="labelId" value={entry.labelId} />
       <input type="hidden" name="assignmentId" value={entry.id} />
+      <input type="hidden" name="idempotencyKey" value={entry.removeKey} />
       <input type="hidden" name="revision" value={entry.revision} />
       <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
       <Button type="submit" variant="outline" size="sm" aria-label={m.library_label_shelf_remove()}>
@@ -429,6 +432,7 @@ export function LabelShelfEntries({
   size: ShelfSize;
   csrfToken: string | null;
 }) {
+  const removeAdmitted = useOperation('library_label.unassign');
   const title = (entry: LabelShelfEntry) =>
     entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable();
   const href = (entry: LabelShelfEntry) =>
@@ -453,6 +457,10 @@ export function LabelShelfEntries({
               cover={shelfCover(entry.subject)}
               {...(progress ? { progress } : {})}
               {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
+              {...(removeAdmitted ? {
+                menu: <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />,
+                menuLabel: m.library_entry_actions({ title: title(entry) }),
+              } : {})}
             />
           );
         })}
@@ -480,6 +488,9 @@ export function LabelShelfEntries({
               {...(entry.state ? { status: entry.stateLabel ?? m.library_other() } : {})}
               {...(progress ? { progress } : {})}
               labels={{ select: title(entry), menu: m.library_menu_open() }}
+              {...(removeAdmitted ? {
+                menu: <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />,
+              } : {})}
             />
           );
         })}
@@ -530,6 +541,7 @@ export function LabelShelfEntries({
                 <a className="font-medium hover:underline" href={href(entry)}>
                   {title(entry)}
                 </a>
+                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
               </TableCell>
               <TableCell>{entry.subject.typeLabel}</TableCell>
               <TableCell>{entry.state ? (entry.stateLabel ?? m.library_other()) : null}</TableCell>

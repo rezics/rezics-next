@@ -1,3 +1,5 @@
+import { setLabelCatalogueStory } from '../kernel/fake/library-labels';
+import { resetLabelAssignmentStory } from '../kernel/fake/library-label-assignments';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { StoryObj } from '@storybook/react-vite';
@@ -148,6 +150,8 @@ export function PageStory({
   selectRatingsFixture(ratingsFixture);
   setStoryRequestContext({ visitor, url: entry });
   const { router, queryClient } = useMemo(() => {
+    resetLabelAssignmentStory();
+    if (!labelsFixture) setLabelCatalogueStory(false);
     if (labelsFixture) selectLabelStory(labelsFixture);
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
     const router = createRouter({

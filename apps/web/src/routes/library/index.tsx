@@ -49,6 +49,7 @@ const readLabelShelf = createServerFn({ method: 'GET' })
       cursor,
       undo,
       labelResult: typeof value.labelResult === 'string' ? value.labelResult : undefined,
+      undoKey: typeof value.undoKey === 'string' && routeId.test(value.undoKey) ? value.undoKey : undefined,
     };
   })
   .handler(async ({ data }): Promise<LabelShelfPageData> => {
@@ -58,6 +59,7 @@ const readLabelShelf = createServerFn({ method: 'GET' })
       limit: 100,
       ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
       ...(data.undo !== undefined ? { undo: data.undo } : {}),
+      ...(data.undoKey !== undefined ? { undoKey: data.undoKey } : {}),
       ...(data.labelResult !== undefined ? { labelResult: data.labelResult } : {}),
     });
   });
@@ -74,6 +76,7 @@ export const Route = createFileRoute('/library/')({
         url.searchParams.delete('undoSubjectId');
         url.searchParams.delete('undoAssignmentId');
         url.searchParams.delete('undoRevision');
+        url.searchParams.delete('undoKey');
         if (result.ok && form.get('intent') === 'unassign' && 'restoreRevision' in result && result.restoreRevision) {
           url.searchParams.set('labelResult', 'label-removed');
           url.searchParams.set('undoLabelId', String(form.get('labelId') ?? ''));
@@ -81,6 +84,13 @@ export const Route = createFileRoute('/library/')({
           url.searchParams.set('undoAssignmentId', String(form.get('assignmentId') ?? ''));
           url.searchParams.set('undoRevision', String(result.restoreRevision));
         } else if (!result.ok) {
+          if (form.get('intent') === 'restore') {
+            url.searchParams.set('undoLabelId', String(form.get('labelId') ?? ''));
+            url.searchParams.set('undoSubjectId', String(form.get('subjectId') ?? ''));
+            url.searchParams.set('undoAssignmentId', String(form.get('assignmentId') ?? ''));
+            url.searchParams.set('undoRevision', String(form.get('revision') ?? ''));
+            url.searchParams.set('undoKey', String(form.get('idempotencyKey') ?? ''));
+          }
           const value =
             result.reason === 'capacity'
               ? 'label-capacity'
@@ -103,6 +113,7 @@ export const Route = createFileRoute('/library/')({
   validateSearch: (search: Record<string, unknown>) => ({
     ...validateShelfSearch(search),
     ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
+    ...(typeof search.undoKey === 'string' ? { undoKey: search.undoKey } : {}),
     ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
     ...(typeof search.undoSubjectId === 'string' ? { undoSubjectId: search.undoSubjectId } : {}),
     ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
@@ -128,6 +139,7 @@ export const Route = createFileRoute('/library/')({
           ? Number(search.undoRevision)
           : undefined,
       labelResult: typeof search.labelResult === 'string' ? search.labelResult : undefined,
+      undoKey: typeof search.undoKey === 'string' ? search.undoKey : undefined,
     };
   },
   loader: async ({ deps }) => {
@@ -140,6 +152,7 @@ export const Route = createFileRoute('/library/')({
           undoSubjectId: deps.undoSubjectId,
           undoAssignmentId: deps.undoAssignmentId,
           undoRevision: deps.undoRevision,
+          undoKey: deps.undoKey,
           labelResult: deps.labelResult,
         },
       });

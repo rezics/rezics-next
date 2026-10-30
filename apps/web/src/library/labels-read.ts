@@ -3,8 +3,10 @@ import type { SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, setCookie } from '../session/cookies';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readSessionIdentity } from '../session/state';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import type { LibraryLabelSummary } from './subject-labels';
 
-export type LibraryLabel = { id: string; name: string; revision: number };
+export type LibraryLabel = LibraryLabelSummary;
 export type LabelOperation = 'create' | 'rename' | 'delete' | 'restore';
 export type LabelInput = {
   operation: LabelOperation;
@@ -19,9 +21,12 @@ export type LabelFeedback = LabelResult & {
   id?: string;
   name?: string;
   undo?: LibraryLabel;
+  undoKey?: string;
 };
 export type LabelsPage = {
   signedIn: boolean;
+  state?: 'loaded' | 'closed' | 'denied' | 'preparing' | 'unavailable';
+  query?: string;
   operations: string[];
   csrfToken: string;
   createKey: string;
@@ -30,30 +35,16 @@ export type LabelsPage = {
   next: string | null;
   feedback?: LabelFeedback;
 };
-type Reply<T> = {
-  data?: T | null;
-  error?: { status?: number; value?: { code?: string; detail?: string } } | null;
-  response?: Response;
-};
-type Options = { headers: Record<string, string>; query?: { revision: number } };
-type LabelApi = {
-  libraryLabels: {
-    get(options: {
-      query: { cursor?: string; limit: number };
-      headers: Record<string, string>;
-    }): Promise<Reply<{ labels: LibraryLabel[]; next: string | null }>>;
-    post(body: { name: string }, options: Options): Promise<Reply<unknown>>;
-    (params: { id: string }): {
-      patch(body: { name: string; revision: number }, options: Options): Promise<Reply<unknown>>;
-      delete(body: undefined, options: Options): Promise<Reply<unknown>>;
-      $restore: { post(body: { revision: number }, options: Options): Promise<Reply<unknown>> };
-    };
-  };
-};
-// Waits for the generated library-label client; all shapes come from docs/library-labels.md.
-const labelApi = (client: KernelClient) => client as unknown as LabelApi;
 const flashName = '__Host-rezics_label_result';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function labelProblem(value: unknown): { code?: string; detail?: string } {
+  if (!value || typeof value !== 'object') return {};
+  return {
+    ...('code' in value && typeof value.code === 'string' ? { code: value.code } : {}),
+    ...('detail' in value && typeof value.detail === 'string' ? { detail: value.detail } : {}),
+  };
+}
 
 export function validateLabelInput(value: unknown): LabelInput {
   if (!value || typeof value !== 'object') throw new Error('Invalid label input');
@@ -96,7 +87,7 @@ function readFeedback(request: Request): LabelFeedback | undefined {
     const feedback = value.feedback;
     if (value.session !== cookie(request, SESSION_COOKIE) || !feedback || typeof feedback.ok !== 'boolean')
       return undefined;
-    for (const key of ['reason', 'detail', 'operation', 'id', 'name'] as const) {
+    for (const key of ['reason', 'detail', 'operation', 'id', 'name', 'undoKey'] as const) {
       if (feedback[key] !== undefined && typeof feedback[key] !== 'string') return undefined;
     }
     if (
@@ -120,9 +111,11 @@ export async function loadLabelsPage(
   request: Request,
   env: Partial<SessionEnv>,
   cursor?: string,
+  query?: string,
 ): Promise<LabelsPage> {
   const page: LabelsPage = {
     signedIn: false,
+    ...(query === undefined ? {} : { query }),
     operations: [],
     csrfToken: '',
     createKey: crypto.randomUUID(),
@@ -130,33 +123,50 @@ export async function loadLabelsPage(
     labels: [],
     next: null,
   };
-  const stale = await prepareSession(request, env);
-  const authorization = viewerCredential(request);
-  if (stale || !authorization || !sessionSubject(request)) return page;
-  page.signedIn = true;
-  page.csrfToken = (await readSessionIdentity(request, env)).csrfToken ?? '';
-  const feedback = readFeedback(request);
-  if (feedback) page.feedback = feedback;
-  const exposure = await client.platform.exposure.get({ headers: { authorization } });
-  page.operations = exposure.data?.admitted ?? [];
-  if (!page.operations.includes('library_label.list')) return page;
   try {
-    const result = await labelApi(client).libraryLabels.get({
-      query: { ...(cursor === undefined ? {} : { cursor }), limit: 100 },
+    const stale = await prepareSession(request, env);
+    const authorization = viewerCredential(request);
+    if (stale || !authorization || !sessionSubject(request)) return page;
+    page.signedIn = true;
+    page.csrfToken = (await readSessionIdentity(request, env)).csrfToken ?? '';
+    const feedback = readFeedback(request);
+    if (feedback) {
+      page.feedback = feedback;
+      if (feedback.undoKey) page.undoKey = feedback.undoKey;
+    }
+    const exposure = await client.platform.exposure.get({ headers: { authorization } });
+    if (exposure.error || !exposure.data) throw new Error('Label exposure unavailable');
+    page.operations = exposure.data.admitted;
+    if (!page.operations.includes('library_label.list')) {
+      page.state = 'closed';
+      return page;
+    }
+    const result = await client.libraryLabels.get({
+      query: { ...(cursor === undefined ? {} : { cursor }), ...(query === undefined ? {} : { q: query }), limit: 100 },
       headers: { authorization },
     });
     if (result.error || !result.data) {
-      page.feedback = { ok: false, reason: result.error?.value?.code ?? 'unavailable' };
+      const code = labelProblem(result.error?.value).code;
+      page.state = isPlatformClosedProblem(result.status, result.error?.value)
+        ? 'closed'
+        : result.status === 401 || result.status === 403 || result.status === 404
+          ? 'denied'
+          : code === 'index_not_ready' || code === 'semantic_not_ready'
+            ? 'preparing'
+            : 'unavailable';
+      page.feedback = { ...page.feedback, ok: false, reason: code ?? 'unavailable' };
       return page;
     }
+    page.state = 'loaded';
     page.labels = result.data.labels.map((label) => ({
       ...label,
       renameKey: crypto.randomUUID(),
       deleteKey: crypto.randomUUID(),
     }));
     page.next = result.data.next;
-  } catch {
-    page.feedback = { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    page.state = isPlatformClosedError(error) ? 'closed' : 'unavailable';
+    page.feedback = { ...page.feedback, ok: false, reason: 'unavailable' };
   }
   return page;
 }
@@ -179,7 +189,7 @@ export async function submitLabel(
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'unauthorized' };
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    const labels = labelApi(client).libraryLabels;
+    const labels = client.libraryLabels;
     const result =
       input.operation === 'create'
         ? await labels.post({ name: input.name! }, { headers })
@@ -188,12 +198,15 @@ export async function submitLabel(
           : input.operation === 'delete'
             ? await labels({ id: input.id! }).delete(undefined, { query: { revision: input.revision! }, headers })
             : await labels({ id: input.id! }).$restore.post({ revision: input.revision! }, { headers });
-    if (result.error)
+    if (result.error) {
+      const problem = labelProblem(result.error.value);
       return {
         ok: false,
-        reason: result.error.value?.code ?? (result.error.status === 409 ? 'conflict' : 'unavailable'),
-        ...(result.error.value?.detail === undefined ? {} : { detail: result.error.value.detail }),
+        reason: problem.code ?? (result.error.status === 409 ? 'conflict' : 'unavailable'),
+        ...(problem.detail ? { detail: problem.detail } : {}),
       };
+    }
+    if (!result.data) return { ok: false, reason: 'unavailable' };
     if (input.operation === 'delete') {
       const header = result.response?.headers.get('Library-Label-Revision');
       const revision = header && /^[1-9]\d*$/.test(header) ? Number(header) : NaN;
@@ -210,6 +223,7 @@ export function labelFeedback(input: LabelInput, result: LabelResult): LabelFeed
   return {
     ...result,
     operation: input.operation,
+    ...(result.ok && input.operation === 'delete' ? { undoKey: crypto.randomUUID() } : {}),
     ...(input.id === undefined ? {} : { id: input.id }),
     ...(input.name === undefined ? {} : { name: input.name }),
     ...(result.ok && input.operation === 'delete' && result.revision !== undefined
@@ -234,11 +248,42 @@ export async function handleLabelForm(
     const text = await request.clone().text();
     if (new TextEncoder().encode(text).length > 4096) throw new Error('Invalid form');
     const form = new URLSearchParams(text);
+    for (const key of form.keys()) if (form.getAll(key).length !== 1) throw new Error('Duplicate form field');
     const input = validateLabelInput({
       ...Object.fromEntries(form),
       revision: Number(form.get('library_label_revision')),
     });
     feedback = labelFeedback(input, await submitLabel(client, request, env, input));
+    const capturedRevision = Number(form.get('undoRevision'));
+    const captured =
+      form.get('undoId') &&
+      form.get('undoName') !== null &&
+      Number.isSafeInteger(capturedRevision) &&
+      capturedRevision > 0 &&
+      uuid.test(form.get('undoKey') ?? '')
+        ? {
+            undo: { id: form.get('undoId')!, name: form.get('undoName')!, revision: capturedRevision },
+            undoKey: form.get('undoKey')!,
+          }
+        : undefined;
+    const previous = captured ?? readFeedback(request);
+    if (!feedback.ok && input.operation === 'restore')
+      feedback = {
+        ...feedback,
+        undo: { id: input.id!, name: input.name ?? '', revision: input.revision! },
+        undoKey: input.idempotencyKey,
+      };
+    else if (
+      !feedback.undo &&
+      previous?.undo &&
+      !(
+        feedback.ok &&
+        input.operation === 'restore' &&
+        input.id === previous.undo.id &&
+        input.revision === previous.undo.revision
+      )
+    )
+      feedback = { ...feedback, undo: previous.undo, undoKey: previous.undoKey };
   } catch {
     feedback = { ok: false, reason: 'invalid_request' };
   }
@@ -247,7 +292,8 @@ export async function handleLabelForm(
   return new Response(null, {
     status: 303,
     headers: {
-      location: url.pathname,
+      location:
+        url.pathname + (url.searchParams.has('q') ? `?${new URLSearchParams({ q: url.searchParams.get('q')! })}` : ''),
       'cache-control': 'private, no-store',
       'set-cookie': setCookie(flashName, flash.length <= 3800 ? flash : '', 60),
     },

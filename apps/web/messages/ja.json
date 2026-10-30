@@ -1540,5 +1540,9 @@
   "reporter_status_target": "通報対象",
   "reporter_status_available": "この項目は現在閲覧できます。",
   "reporter_status_revision": "送信時の改訂版",
-  "reporter_status_unavailable": "通報を読み込めませんでした。もう一度お試しください。"
+  "reporter_status_unavailable": "通報を読み込めませんでした。もう一度お試しください。",
+  "library_labels_prefix": "ラベル名の先頭",
+  "library_labels_filter": "ラベルを絞り込む",
+  "library_labels_preparing": "ラベルを準備しています。しばらくしてからもう一度お試しください。",
+  "library_labels_denied": "この閲覧者はラベルを利用できません。"
 }

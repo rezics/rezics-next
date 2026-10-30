@@ -1540,5 +1540,9 @@
   "reporter_status_target": "Élément signalé",
   "reporter_status_available": "Cet élément est actuellement disponible.",
   "reporter_status_revision": "Révision envoyée",
-  "reporter_status_unavailable": "Votre signalement n’a pas pu être chargé. Réessayez."
+  "reporter_status_unavailable": "Votre signalement n’a pas pu être chargé. Réessayez.",
+  "library_labels_prefix": "Le nom de l’étiquette commence par",
+  "library_labels_filter": "Filtrer les étiquettes",
+  "library_labels_preparing": "Vos étiquettes sont en cours de préparation. Réessayez dans un instant.",
+  "library_labels_denied": "Ces étiquettes ne sont pas accessibles à cette personne."
 }

@@ -1,3 +1,4 @@
+import { normalizeLibraryLabelName } from '../../library/subject-label-name';
 import type { FakeRoute } from '../fake-modules';
 import type { KernelRecording } from '../fake';
 
@@ -17,6 +18,15 @@ export const labelOperations = [
   'library_label.rename',
   'library_label.delete',
 ];
+
+export function labelReadStoryFailure(): KernelRecording | undefined {
+  const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url?: string } }).__rezicsStoryContext;
+  const variant = new URL(context?.url ?? '/library', 'http://rezics.local').searchParams.get('labelRead');
+  if (variant === 'unavailable') return { status: 503, code: 'dependency_unavailable' };
+  if (variant === 'preparing') return { status: 503, code: 'index_not_ready' };
+  if (variant === 'denied') return { status: 404, code: 'not_found' };
+  return undefined;
+}
 const sample: Label[] = [
   { id: '01a17a3b-6ef3-71cc-80d0-f4ccb5814bbf', name: 'Winter reads', revision: 9 },
   { id: '01a17a3b-6ef3-71cc-80d0-f4ccb5814bc0', name: '読み返したい本 · Books to revisit', revision: 3 },
@@ -56,6 +66,16 @@ export function createLibraryLabelsFake(
         authorization: request.headers.get('authorization'),
       });
       if (path === '/v1/platform/exposure') return { status: 200, admitted: fake.admitted };
+      if (request.method === 'GET') {
+        const failure = labelReadStoryFailure();
+        if (failure) return failure;
+      }
+      if (request.method === 'GET' && url.searchParams.has('cursor'))
+        return { status: 200, labels: [], next: null };
+      if (request.method === 'GET' && url.searchParams.has('q')) {
+        const q = normalizeLibraryLabelName(url.searchParams.get('q')!);
+        return { status: 200, labels: structuredClone(fake.labels.filter((label) => label.name.startsWith(q))), next: fake.next };
+      }
       if (request.method === 'GET') return { status: 200, labels: structuredClone(fake.labels), next: fake.next };
       if (!key) return { status: 400, code: 'invalid_request' };
       const previous = receipts.get(key);
@@ -121,8 +141,13 @@ export function createLibraryLabelsFake(
   return fake;
 }
 
+let catalogueStoryActive = false;
+export function setLabelCatalogueStory(active: boolean) { catalogueStoryActive = active; }
+export function activeLabelStoryLabels() { return catalogueStoryActive ? story.labels : []; }
+export function isLabelCatalogueStory() { return catalogueStoryActive; }
 let story = createLibraryLabelsFake();
 export function selectLabelStory(state: 'catalogue' | 'empty' | 'next' | 'conflict' | 'undo') {
+  catalogueStoryActive = true;
   story = createLibraryLabelsFake({
     labels: state === 'empty' ? [] : sample,
     next: state === 'next' ? 'next-label-page' : null,

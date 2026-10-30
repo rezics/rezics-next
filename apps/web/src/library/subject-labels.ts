@@ -5,72 +5,19 @@ import { prepareSession, viewerCredential } from '../session/request';
 import { normalizeLibraryLabelName } from './subject-label-name';
 import { readSubjectSlotSession } from './subject-slot';
 
-export type SubjectLabel = { id: string; labelId: string; name: string; revision: number };
-export type LibraryLabelSummary = { id: string; name: string; revision: number };
-export type LabelAssignment = { id: string; revision: number };
+export { normalizeLibraryLabelName } from './subject-label-name';
 
+export type LibraryLabelSummary = NonNullable<
+  Awaited<ReturnType<KernelClient['libraryLabels']['get']>>['data']
+>['labels'][number];
+export type SubjectLabel = { id: string; labelId: string; name: string; revision: number };
+export type LabelAssignment = { id: string; revision: number };
 type Result<T> = {
   status?: number;
   data?: T | null;
   error?: { status?: number; value?: unknown } | null;
   response?: Response;
 };
-export type LabelApi = {
-  libraryLabels: {
-    get(options: {
-      query: { q: string; limit: number };
-      headers: { authorization: string };
-    }): Promise<Result<{ labels: LibraryLabelSummary[]; next: string | null }>>;
-    post(
-      body: { name: string },
-      options: { headers: { authorization: string; 'idempotency-key': string } },
-    ): Promise<Result<{ label: { id: string; revision: number } }>>;
-  } & ((params: { id: string }) => {
-    $assign: {
-      post(
-        body: { subjectId: string },
-        options: { headers: { authorization: string; 'idempotency-key': string } },
-      ): Promise<Result<{ assignment: LabelAssignment }>>;
-    };
-    $unassign: {
-      post(
-        body: { subjectId: string; assignmentId: string; revision: number },
-        options: { headers: { authorization: string; 'idempotency-key': string } },
-      ): Promise<Result<{ deleted: true }>>;
-    };
-    $restoreAssignment: {
-      post(
-        body: { subjectId: string; assignmentId: string; revision: number },
-        options: { headers: { authorization: string; 'idempotency-key': string } },
-      ): Promise<Result<{ assignment: LabelAssignment }>>;
-    };
-  });
-  libraryLabelAssignments: {
-    get(options: {
-      query: { subjectId?: string; labelId?: string; view: 'FULL'; limit: number; cursor?: string };
-      headers: { authorization: string };
-    }): Promise<
-      Result<{
-        assignments: {
-          id: string;
-          labelId: string;
-          subjectId: string;
-          revision: number;
-          label?: { name: string };
-          subject?: unknown;
-          libraryEntry?: unknown;
-        }[];
-        label?: LibraryLabelSummary;
-        next: string | null;
-      }>
-    >;
-  };
-};
-
-/** One local boundary for routes and FULL fields that are waiting for the generated client. */
-export function libraryLabelApi(client: KernelClient): LabelApi {
-  return client as unknown as LabelApi;
-}
 
 export type SubjectLabelMutationInput =
   | { intent: 'create-and-assign'; subjectId: string; name: string; createKey?: string; idempotencyKey: string }
@@ -137,20 +84,25 @@ export async function searchSubjectLabels(input: {
   request: Request;
   sessionEnv: Partial<SessionEnv>;
   query: string;
-}): Promise<{ labels: LibraryLabelSummary[]; state: 'loaded' | 'closed' | 'signed-out' | 'unavailable' }> {
+  cursor?: string;
+}): Promise<{
+  labels: LibraryLabelSummary[];
+  next?: string | null;
+  reason?: string;
+  state: 'loaded' | 'closed' | 'signed-out' | 'unavailable';
+}> {
   const identity = await readSubjectSlotSession(input.request, input.sessionEnv);
   if (identity.state !== 'signed-in')
     return { labels: [], state: identity.state === 'signed-out' ? 'signed-out' : 'unavailable' };
   try {
-    const api = libraryLabelApi(input.client);
-    const result = await api.libraryLabels.get({
-      query: { q: input.query, limit: 20 },
+    const result = await input.client.libraryLabels.get({
+      query: { q: input.query, limit: 20, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization: identity.authorization },
     });
     if (!result.error && result.data && statusOf(result) !== undefined && statusOf(result)! < 400)
-      return { labels: result.data.labels, state: 'loaded' };
+      return { labels: result.data.labels, next: result.data.next, state: 'loaded' };
     if (isPlatformClosedProblem(statusOf(result), result.error?.value)) return { labels: [], state: 'closed' };
-    return { labels: [], state: 'unavailable' };
+    return { labels: [], state: 'unavailable', reason: problemCode(result) };
   } catch (error) {
     return { labels: [], state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
@@ -162,8 +114,7 @@ export async function readSubjectLabelAssignments(
   subjectId: string,
   authorization: string,
 ): Promise<SubjectLabel[]> {
-  const api = libraryLabelApi(client);
-  const result = await api.libraryLabelAssignments.get({
+  const result = await client.libraryLabelAssignments.get({
     query: { subjectId, view: 'FULL', limit: 32 },
     headers: { authorization },
   });
@@ -171,12 +122,10 @@ export async function readSubjectLabelAssignments(
     if (isPlatformClosedProblem(statusOf(result), result.error?.value)) throw new Error('library labels closed');
     throw new Error('Library label assignments could not be read');
   }
-  return result.data.assignments.map((row) => ({
-    id: row.id,
-    labelId: row.labelId,
-    name: row.label?.name ?? '',
-    revision: row.revision,
-  }));
+  return result.data.assignments.map((row) => {
+    if (!('label' in row)) throw new Error('FULL subject labels omitted their names');
+    return { id: row.id, labelId: row.labelId, name: row.label.name, revision: row.revision };
+  });
 }
 
 /** Makes one assignment or one removal/restore command; undo revisions always come from the response header. */
@@ -187,26 +136,28 @@ export async function applySubjectLabelMutation(
   client: KernelClient,
 ): Promise<SubjectLabelMutationResult> {
   try {
-    await prepareSession(request, sessionEnv);
+    const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    if (!authorization) return { ok: false, reason: 'signed-out' };
-    const api = libraryLabelApi(client);
+    if (stale || !authorization) return { ok: false, reason: 'signed-out' };
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
     if (input.intent === 'create-and-assign') {
       const name = normalizeLibraryLabelName(input.name);
       if (!validLabelName(name)) return { ok: false, reason: 'unavailable' };
-      const search = await api.libraryLabels.get({ query: { q: input.name, limit: 20 }, headers: { authorization } });
+      const search = await client.libraryLabels.get({
+        query: { q: input.name, limit: 20 },
+        headers: { authorization },
+      });
       if (search.error || !search.data || (statusOf(search) ?? 500) >= 400) return refused(search, input.intent);
       let label = search.data.labels.find((item) => normalizeLibraryLabelName(item.name) === name);
       if (!label) {
-        const created = await api.libraryLabels.post(
+        const created = await client.libraryLabels.post(
           { name },
           { headers: { authorization, 'idempotency-key': input.createKey ?? crypto.randomUUID() } },
         );
         if (created.error || !created.data || (statusOf(created) ?? 500) >= 400) return refused(created, input.intent);
         label = { id: created.data.label.id, name, revision: created.data.label.revision };
       }
-      const assigned = await api
+      const assigned = await client
         .libraryLabels({ id: label.id })
         .$assign.post({ subjectId: input.subjectId }, { headers });
       if (assigned.error || !assigned.data || (statusOf(assigned) ?? 500) >= 400)
@@ -214,7 +165,7 @@ export async function applySubjectLabelMutation(
       return { ok: true, label, assignment: assigned.data.assignment };
     }
     if (input.intent === 'assign') {
-      const assigned = await api
+      const assigned = await client
         .libraryLabels({ id: input.labelId })
         .$assign.post({ subjectId: input.subjectId }, { headers });
       if (assigned.error || !assigned.data || (statusOf(assigned) ?? 500) >= 400)
@@ -225,14 +176,15 @@ export async function applySubjectLabelMutation(
       return { ok: false, reason: 'unavailable' };
     const body = { subjectId: input.subjectId, assignmentId: input.assignmentId, revision: input.revision };
     if (input.intent === 'unassign') {
-      const removed = await api.libraryLabels({ id: input.labelId }).$unassign.post(body, { headers });
-      if (removed.error || statusOf(removed) === undefined || statusOf(removed)! >= 400)
+      const removed = await client.libraryLabels({ id: input.labelId }).$unassign.post(body, { headers });
+      if (removed.error || !removed.data?.deleted || statusOf(removed) === undefined || statusOf(removed)! >= 400)
         return refused(removed, input.intent);
-      const restoreRevision = Number(removed.response?.headers.get('Library-Label-Assignment-Revision'));
+      const header = removed.response?.headers.get('Library-Label-Assignment-Revision');
+      const restoreRevision = header && /^[1-9]\d*$/.test(header) ? Number(header) : NaN;
       if (!Number.isSafeInteger(restoreRevision) || restoreRevision < 1) return { ok: false, reason: 'unavailable' };
       return { ok: true, assignment: { id: input.assignmentId, revision: input.revision }, restoreRevision };
     }
-    const restored = await api.libraryLabels({ id: input.labelId }).$restoreAssignment.post(body, { headers });
+    const restored = await client.libraryLabels({ id: input.labelId }).$restoreAssignment.post(body, { headers });
     if (restored.error || !restored.data || (statusOf(restored) ?? 500) >= 400) return refused(restored, input.intent);
     return { ok: true, assignment: restored.data.assignment };
   } catch (error) {

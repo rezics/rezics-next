@@ -1,3 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { readSubjectLabelPage } from './labels-actions';
+import type { LibraryLabelSummary } from './subject-labels.ts';
 import { m } from '../paraglide/messages.js';
 
 export type SubjectLabelNoticeCode =
@@ -30,4 +34,83 @@ export function SubjectLabelNotice({ result }: { result?: string }) {
       {noticeMessages[code]()}
     </p>
   );
+}
+
+/** Continues the existing picker with one signed page, without accumulating the owner's catalogue. */
+export function SubjectLabelMore({
+  query,
+  next,
+  onPage,
+}: {
+  query: string;
+  next: string | null;
+  onPage: (page: {
+    labels: LibraryLabelSummary[];
+    next?: string | null;
+    state: 'loaded' | 'closed' | 'signed-out' | 'unavailable';
+  }) => void;
+}) {
+  const requestId = useRef(0);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string>();
+  useEffect(() => {
+    requestId.current++;
+    setBusy(false);
+    setFailure(undefined);
+    return () => {
+      requestId.current++;
+    };
+  }, [query, next]);
+  if (!next) return null;
+  return (
+    <div className="space-y-2">
+      {failure ? <p role="alert">{labelReadMessage(failure) ?? m.library_subject_label_unavailable()}</p> : null}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy}
+        onClick={async () => {
+          if (busy) return;
+          const id = ++requestId.current;
+          setBusy(true);
+          try {
+            const page = await readSubjectLabelPage({
+              data: { query, ...(failure === 'stale_cursor' ? {} : { cursor: next }) },
+            });
+            if (id !== requestId.current) return;
+            if (page.state === 'loaded') onPage(page);
+            else setFailure(page.reason ?? page.state);
+          } catch {
+            if (id === requestId.current) setFailure('unavailable');
+          } finally {
+            if (id === requestId.current) setBusy(false);
+          }
+        }}
+      >
+        {failure === 'stale_cursor' ? m.library_labels_filter() : m.library_label_more()}
+      </Button>
+    </div>
+  );
+}
+
+export function labelReadMessage(reason?: string): string | undefined {
+  if (reason === 'index_not_ready' || reason === 'semantic_not_ready') return m.library_labels_preparing();
+  if (
+    reason === 'forbidden' ||
+    reason === 'unauthorized' ||
+    reason === 'authentication_required' ||
+    reason === 'invalid_credentials' ||
+    reason === 'not_found'
+  )
+    return m.library_labels_denied();
+  return undefined;
+}
+
+export function SubjectLabelReadNotice({ reason }: { reason?: string }) {
+  const text = labelReadMessage(reason);
+  return text ? (
+    <p role="status" className="text-sm text-muted-foreground">
+      {text}
+    </p>
+  ) : null;
 }

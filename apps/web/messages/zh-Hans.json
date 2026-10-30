@@ -1541,5 +1541,9 @@
   "reporter_status_target": "举报对象",
   "reporter_status_available": "目前可查看此项目。",
   "reporter_status_revision": "提交时的修订版本",
-  "reporter_status_unavailable": "无法加载你的举报，请重试。"
+  "reporter_status_unavailable": "无法加载你的举报，请重试。",
+  "library_labels_prefix": "标签名称前缀",
+  "library_labels_filter": "筛选标签",
+  "library_labels_preparing": "正在准备你的标签，请稍后重试。",
+  "library_labels_denied": "当前用户无法查看这些标签。"
 }

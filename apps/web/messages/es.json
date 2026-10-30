@@ -1540,5 +1540,9 @@
   "reporter_status_target": "Elemento denunciado",
   "reporter_status_available": "Este elemento está disponible actualmente.",
   "reporter_status_revision": "Revisión enviada",
-  "reporter_status_unavailable": "No se pudo cargar tu denuncia. Inténtalo de nuevo."
+  "reporter_status_unavailable": "No se pudo cargar tu denuncia. Inténtalo de nuevo.",
+  "library_labels_prefix": "El nombre de la etiqueta empieza por",
+  "library_labels_filter": "Filtrar etiquetas",
+  "library_labels_preparing": "Tus etiquetas se están preparando. Vuelve a intentarlo en breve.",
+  "library_labels_denied": "Estas etiquetas no están disponibles para esta persona."
 }

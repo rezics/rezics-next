@@ -1,4 +1,6 @@
 import type { FakeRoute } from '../fake-modules';
+import demoFixtures from '../fixtures.json';
+import type { Fixtures } from '../fake';
 
 /** A contract-shaped failure fixture: the activated release has no library profile for schema:Person. */
 export const unprofiledSubjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000803';
@@ -15,6 +17,22 @@ const labels: Record<string, string> = {
 };
 
 export const routes: FakeRoute[] = [
+  {
+    method: 'POST',
+    path: '/v1/pages:read',
+    story: async ({ request }) => {
+      const input = await request.clone().json() as { target?: { subject?: string } };
+      if (input.target?.subject !== unprofiledSubjectId) return;
+      const { pageRead } = await import('../fake');
+      const response = await pageRead({
+        ...demoFixtures,
+        subjects: [{ ...demoFixtures.subjects[0], id: unprofiledSubjectId, type: unprofiledType,
+          labels, statements: {} }],
+      } as unknown as Fixtures, request);
+      const value: Record<string, unknown> = await response.json();
+      return { status: response.status, ...value };
+    },
+  },
   {
     method: 'GET',
     path: '/v1/progressSessions',
