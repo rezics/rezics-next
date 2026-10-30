@@ -56,6 +56,30 @@ empty segment, dot segment, query, fragment, encoded slash, backslash or URL. Th
 Reserve the entire first segment `subjects`, including `subjects` itself, before page lookup. A configured
 page cannot shadow it. Unknown configured pages return 404; they do not fall back to the generic template.
 
+Owner browser paths use the same locale prefixes: `/my/zones` is the authenticated owner workspace,
+`/my/zones/new` creates a private site from an explicitly selected inert starter, and
+`/my/zones/{id}/edit` is the selected saved-configuration destination. My Zones uses one native owner-list
+page at a time with `limit=20`, `deleted=false` for Active and `deleted=true` for Trash. It preserves opaque
+`next` cursors without decoding, walking the whole index or deriving totals. Changing tabs starts at the
+first page; invalid or stale continuations offer a first-page link. This list does not enumerate delegated
+grants or act as public discovery. Open links to the independently authorized current `/zones/{id}` reader;
+Configure links to the selected editor destination without borrowing reader or source authority.
+
+Creation copies the selected `packages/definitions/presentation/*/zone.json` into an ordinary create
+command, retaining its pages and saved scopes, all eight editable labels, empty mounts and private
+visibility. No label translation, source data or grants are synthesized. Later releases never instantiate
+or rewrite the saved site. A confirmed create navigates to its returned ID's configuration destination;
+source-dependent starter pages remain subject to current source Access, feature admission and readiness.
+The form does not promise that creating the resource makes those reads available.
+
+Move to trash requires confirmation and calls the ordinary delete route; Restore calls the ordinary
+restore route. Both carry the row's quoted revision and a command-specific idempotency key. Uncertain
+delivery retains the original command for retry; a known conflict requires refreshing current state before
+another attempt. Trash displays the backend's original `restoreUntil`, removes restore availability at
+that deadline, and leaves expiry, write fences and current permissions to the backend. There is no owner
+hard-delete action. All owner reads and commands use the existing session/CSRF handling and private,
+no-store responses. Primary-owner metadata never supplies UI permission.
+
 The implementation adds code-first TypeBox/Elysia request and response declarations in
 `services/kernel/src/zones/http.ts`. These TypeScript shapes specify that ABI; emit OpenAPI from those
 route declarations, never a handwritten schema. Every object below is closed; string aliases carry the

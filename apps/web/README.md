@@ -1406,6 +1406,31 @@ Full subject views page through their owner list read with the first page's para
 - **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
   refusal handling
 
+### My Zones (`/<locale>/my/zones`, `/<locale>/my/zones/new`)
+
+The authenticated workspace reads one native owner-index page with `limit=20`, `deleted` and opaque
+`cursor`; it offers Active, Trash, next-page and first-page links without a client list walk or totals.
+Open uses the current Zone reader. Configure and confirmed creation use
+`/<locale>/my/zones/<id>/edit`, the editor slice's selected destination. No extra configuration read is
+needed for the list. The existing session guard, request-scoped SDK, CSRF and private/no-store transport
+remain in force. `features/zones/manage/navigation.ts` exports `zonesNavigation` for the shell's existing
+`AppShellProps.navigation` insertion point; these static contributions contain no private state.
+
+Creation requires an explicit inert definitions starter, retains all eight editable names and original
+pages/scopes, and submits empty mounts with private visibility. Native Access/Scope/feature denial and
+source readiness remain authoritative. Trash commands use quoted CAS revisions and retained idempotency
+keys; the native original 30-day deadline is displayed without extending it. Uncertain delivery retries the
+same command; conflicts offer refresh, and expired restores stay unavailable. There is no hard delete.
+
+Focused stack-free proof is `tests/zones-owner-workspace.test.ts`. Review stories with Web at phone 390
+and desktop 1280, every locale and theme: `pages-zones-owner-workspace--list`, `--empty`, `--trash`,
+`--loading`, `--denied`, `--actor-denied`, `--feature-closed`, `--missing`, `--stale-cursor`, `--unavailable`,
+`--expired`, `--move-to-trash`, `--restore`, `--conflict`, `--write-fenced`, `--uncertain-retry`; and
+`pages-zones-create--choose-starter`, `--names`, `--created`, `--loading`, `--signed-out`, `--validation`,
+`--denied`, `--actor-denied`, `--feature-closed`, `--conflict`, `--rejected-names`, `--uncertain-retry`,
+`--saving`. Each suffix uses the full prefix of its group. Responses are synthetic, instance-local
+fixtures; these stories do not claim visual, browser or native completion.
+
 ### Static Zone pages (`/<locale>/zones/<id>`)
 
 - **Touches:** The home and configured relative routes read one static page through `POST /v1/zones/<id>:readPage`.
