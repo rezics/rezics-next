@@ -404,6 +404,5 @@ test.serial(
     expect((await fixture.spaceState(firstSpace.spaceId)).head?.head_revision_id).toBe(
       afterChange.head?.head_revision_id,
     );
-
   },
 );
