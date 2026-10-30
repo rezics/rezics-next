@@ -103,6 +103,8 @@ test('facet counts use one request and mark inexact totals', async () => {
       requests.push(args);
       return {
         body: {
+          timed_out: false,
+          _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
           hits: { total: { value: 10000, relation: 'gte' } },
           aggregations: {
             facet_0: {
