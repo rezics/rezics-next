@@ -10,14 +10,13 @@ afterAll(async () => {
   await fixture.close();
 });
 
-test('Context native delete restore and current overlay disclosure stay bounded without scanning dependents', async () => {
+async function checkLifecycleGrowth(axis: 'history' | 'population') {
   const { db, call, status, person, proposal, path } = fixture;
   const createContext = async () => {
     const result = await call('POST', '/v1/contexts', { labels: { en: 'Independent Context' } });
     status(result, 201);
     return result.body.context.id as string;
   };
-  for (const axis of ['history', 'population'] as const) {
     const context = await createContext();
     const subject = await person();
     const selected = await proposal(subject);
@@ -69,5 +68,12 @@ test('Context native delete restore and current overlay disclosure stay bounded 
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
-  }
+}
+
+test('Context lifecycle cost stays bounded as subject history grows', async () => {
+  await checkLifecycleGrowth('history');
+});
+
+test('Context lifecycle cost stays bounded as unrelated Context population grows', async () => {
+  await checkLifecycleGrowth('population');
 });
