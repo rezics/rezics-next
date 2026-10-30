@@ -200,7 +200,7 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
       }),
     });
     expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-    expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(2);
+    expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
     expect(executed.filter((command) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
     expect(
       executed.filter((command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' ')),
