@@ -39,7 +39,10 @@ export type CheckCompatibilityContract = {
     record: {
       identityFields: string[];
       sharedFields: string[];
-      states: Record<string, { status: string; requiredFields: string[]; exitCode: string }>;
+      states: {
+        running: { status: string; requiredFields: string[]; exitCode: string };
+        completed: { status: string; requiredFields: string[]; exitCode: string };
+      };
     };
     bun: {
       manifestField: string;
@@ -332,7 +335,7 @@ function startWorkerCheck(
   const childArgv = [process.execPath, '-e', code];
   const startArgs = [...contract.workerCheck.startArgv.slice(0, -1), '--local', ...childArgv];
   const command = [process.execPath, workerScript, ...startArgs];
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     REZICS_CHECK_MEMORY: 'off',
     REZICS_CHECK_MEMORY_GIB: '1',
