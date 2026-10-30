@@ -115,7 +115,8 @@ export type AccessConfig = {
   contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
   /** Commerce owns the finite footprint and actual receipt of its callback. */
   contentEditionBuyerFactWork?: AccessWorkProducer<
-    Parameters<ContentEditionBuyerFactReader>[0], Awaited<ReturnType<ContentEditionBuyerFactReader>>
+    Parameters<ContentEditionBuyerFactReader>[0],
+    Awaited<ReturnType<ContentEditionBuyerFactReader>>
   >;
   /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
@@ -144,7 +145,8 @@ export type ReadDecisionEligibility = ((
   at: string,
 ) => Promise<Readonly<Record<string, boolean>>>) & {
   work?: AccessWorkProducer<
-    Readonly<{ client: AccessClient; ids: readonly string[]; at: string }>, Readonly<Record<string, boolean>>
+    Readonly<{ client: AccessClient; ids: readonly string[]; at: string }>,
+    Readonly<Record<string, boolean>>
   >;
 };
 export type ReadDecisionInput = Readonly<{

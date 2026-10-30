@@ -1,6 +1,5 @@
 # Access
 
-
 ## Native work admission
 
 `access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no

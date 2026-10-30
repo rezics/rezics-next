@@ -77,18 +77,29 @@ export function createResourceAnonymousEligibility<E>(options: ResourceEligibili
       action: options.action,
       async prepare(context: ResourceEligibilityPrepareContext, work?: AccessWorkAccounting) {
         const evidence = await accessEvidence(
-          () => accessOwnerWork(work, 'Content resource eligibility.prepare', producer?.prepare, context, () => prepare(context)),
-          false, context.deadline,
+          () =>
+            accessOwnerWork(work, 'Content resource eligibility.prepare', producer?.prepare, context, () =>
+              prepare(context),
+            ),
+          false,
+          context.deadline,
         );
         if (evidence === null || evidence === undefined) throw new Error('Missing resource eligibility evidence');
         return async (client: AccessClient, at: string) => {
           const input = Object.freeze({
-            actor: context.actor, action: context.action, resource: context.resource,
-            deadline: context.deadline, client, at, evidence,
+            actor: context.actor,
+            action: context.action,
+            resource: context.resource,
+            deadline: context.deadline,
+            client,
+            at,
+            evidence,
           });
-          return (await accessOwnerWork(
-            work, 'Content resource eligibility.verify', producer?.verify, input, () => verify(input),
-          )) === true;
+          return (
+            (await accessOwnerWork(work, 'Content resource eligibility.verify', producer?.verify, input, () =>
+              verify(input),
+            )) === true
+          );
         };
       },
     }),

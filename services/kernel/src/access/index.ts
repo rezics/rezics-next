@@ -1,5 +1,13 @@
 import { accessCheckout } from './work.ts';
-export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult } from './work.ts';
+export {
+  AccessWorkAccounting,
+  AccessWorkUnavailableError,
+  EMPTY_ACCESS_WORK,
+  type AccessWork,
+  type AccessWorkSink,
+  type AccessWorkProducer,
+  type AccessWorkResult,
+} from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 import { accountStandingCheck, installAccountStandingCheck } from './account-standing.ts';
 export {
@@ -517,9 +525,18 @@ export function createAccess(config: AccessConfig): Access {
       ...(config.clock ? { clock: config.clock } : {}),
     });
     const evidence = await native.prepare!(claims.actor, 'account:manage', resource, context);
-    return accessCheckout(context.work, () => withConnection(context.pool, (client) =>
-      native.authorize(client, claims.actor, 'account:manage', resource, evidence, accessCommandAttempt(context)?.time),
-    ));
+    return accessCheckout(context.work, () =>
+      withConnection(context.pool, (client) =>
+        native.authorize(
+          client,
+          claims.actor,
+          'account:manage',
+          resource,
+          evidence,
+          accessCommandAttempt(context)?.time,
+        ),
+      ),
+    );
   });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
   return access;
