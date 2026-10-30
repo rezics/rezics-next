@@ -7167,7 +7167,7 @@ CREATE TABLE semantic.record_purge_writer (
  partition_no integer NOT NULL, source_key text NOT NULL, route integer NOT NULL,
  kind text NOT NULL CHECK(kind IN ('context','zone')), resource_id uuid NOT NULL,
  enrolled boolean NOT NULL, birth_transaction uuid NOT NULL,
- frontier bigint NOT NULL DEFAULT 0, sealed_cut uuid, sealed_generation uuid, sealed_version text,
+ frontier bigint NOT NULL DEFAULT 0, sealed_cut uuid, sealed_generation uuid, sealed_version text, sealed_epoch integer,
  PRIMARY KEY(partition_no,source_key), UNIQUE(route,kind,resource_id), CHECK(partition_no=route/16)
 );
 CREATE TABLE semantic.record_purge_command (

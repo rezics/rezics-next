@@ -505,6 +505,7 @@ export async function sealRecordPurgeSourceInventory(
     async (tx) => {
       const current = await lockRecordPurgeAuthoritySource(tx, authority);
       if (!current) return noEffect({ id: null, frontier: null, examined: 0 });
+      const sourceEpoch = await epoch(tx);
       const root = (
         await tx.query<{
           enrolled: boolean;
@@ -512,8 +513,9 @@ export async function sealRecordPurgeSourceInventory(
           sealed_cut: string | null;
           sealed_generation: string | null;
           sealed_version: string | null;
+          sealed_epoch: number | null;
         }>(
-          `SELECT enrolled,frontier::text,sealed_cut,sealed_generation,sealed_version FROM semantic.record_purge_writer
+          `SELECT enrolled,frontier::text,sealed_cut,sealed_generation,sealed_version,sealed_epoch FROM semantic.record_purge_writer
        WHERE partition_no=$1 AND source_key=$2 FOR UPDATE`,
           [id.partition, id.key],
         )
@@ -522,11 +524,14 @@ export async function sealRecordPurgeSourceInventory(
       if (
         root.sealed_cut &&
         root.sealed_generation === source.reference.deletionGeneration &&
-        root.sealed_version === source.sourceVersion
+        root.sealed_version === source.sourceVersion &&
+        root.sealed_epoch === sourceEpoch
       )
         return noEffect({ id: root.sealed_cut, frontier: root.frontier, examined: 1 });
       const frontier =
-        root.sealed_generation === source.reference.deletionGeneration && root.sealed_version === source.sourceVersion
+        root.sealed_generation === source.reference.deletionGeneration &&
+        root.sealed_version === source.sourceVersion &&
+        root.sealed_epoch === sourceEpoch
           ? root.frontier
           : '0';
       const page = await tx.query<{ key: string; position: string | null }>(
@@ -539,9 +544,9 @@ export async function sealRecordPurgeSourceInventory(
       const end = page.rows.at(-1)?.key ?? frontier,
         cutId = page.rows.length < 4 ? randomUUID() : null;
       await tx.query(
-        `UPDATE semantic.record_purge_writer SET frontier=$3,sealed_generation=$4,sealed_version=$5,sealed_cut=$6
+        `UPDATE semantic.record_purge_writer SET frontier=$3,sealed_generation=$4,sealed_version=$5,sealed_cut=$6,sealed_epoch=$7
       WHERE partition_no=$1 AND source_key=$2`,
-        [id.partition, id.key, end, source.reference.deletionGeneration, source.sourceVersion, cutId],
+        [id.partition, id.key, end, source.reference.deletionGeneration, source.sourceVersion, cutId, sourceEpoch],
       );
       return noEffect({ id: cutId, frontier: end, examined: page.rows.length });
     },
@@ -560,10 +565,18 @@ export async function verifyRecordPurgeSourceInventory(
   if (!locator) throw new TypeError('Record purge inventory cut was not issued by Semantic');
   const source = await lockRecordPurgeAuthoritySource(tx, authority);
   if (!source || identity(source.reference).key !== locator.key) return false;
+  const sourceEpoch = await epoch(tx);
   const row = await tx.query(
     `SELECT source_key FROM semantic.record_purge_writer WHERE partition_no=$1 AND source_key=$2
-    AND enrolled AND sealed_cut=$3 AND sealed_generation=$4 AND sealed_version=$5 FOR UPDATE`,
-    [currentCommand(tx).partition, locator.key, locator.id, source.reference.deletionGeneration, source.sourceVersion],
+    AND enrolled AND sealed_cut=$3 AND sealed_generation=$4 AND sealed_version=$5 AND sealed_epoch=$6 FOR UPDATE`,
+    [
+      currentCommand(tx).partition,
+      locator.key,
+      locator.id,
+      source.reference.deletionGeneration,
+      source.sourceVersion,
+      sourceEpoch,
+    ],
   );
   return row.rows.length === 1;
 }

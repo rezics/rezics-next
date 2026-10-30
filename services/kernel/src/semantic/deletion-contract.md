@@ -163,7 +163,8 @@ receiving homes remain errors or pending; transfer cannot discard holds or chang
 Original Context creation/lifecycle/extension and Zone commands declare only their actual resource roots once,
 before history serialization, through `declareCommandRecordSources`, under its existing maximum of 16. Source
 birth has no deletion generation. Their source-owned command enrollment records native committed positions.
-The bounded inventory cut covers those finite writer references and the exact source generation/version only.
+The bounded inventory cut covers those finite writer references and the exact source generation/version and
+owner epoch only. A new owner epoch restarts enumeration and invalidates the old cut.
 Older unconverted births/writers stay pending; current roles, known artifact EOF and JSON scans cannot seal them.
 This cut supplies no historical artifact completeness, consumer closure, account-family proof or erasure ACK.
 Custody and inventory use retained progress under the existing WorkModule and deadlines, with at most four
