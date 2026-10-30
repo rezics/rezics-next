@@ -445,7 +445,8 @@ reaches a new backend is discarded as a warm-up up to four times per scale. If l
 actual costs, occurrences and backend IDs are retained as measured repetitions and judged by the same inclusive rule.
 Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
-backend's first. `checkGrowth` refuses fewer than one warm-up per scale. After each scale's `grow`, it settles the whole database
+backend's first. `checkGrowth` refuses fewer than one warm-up per scale. Every periodic job step needs its own growth
+check on rows, blocks and statements. After each scale's `grow`, it settles the whole database
 with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Each settle waits until
 no other connection in that database holds a transaction ID or snapshot older than the starting horizon, then runs
 `VACUUM (INDEX_CLEANUP ON)` on target relations and verifies every nonempty relation page is all-visible. If pages remain

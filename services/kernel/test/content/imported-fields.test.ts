@@ -391,50 +391,48 @@ test('checkGrowth captures actual append and exact read at fixed bytes with same
   const value = input();
   // This measures the hook after real authorization, not the final public Access formula.
   // The prior resource-grant enumeration failure remains in .temp/imported-fields/focused-final.log.
-  const report = (
-    await command(async (tx) =>
-      checkGrowth(db, {
-        name: 'imported field append/read',
-        scales: [32, 256, 2048],
-        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-        async grow(target, scale, previous) {
-          const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
-          await seed(
-            target,
-            {
-              name: 'unrelated imported fields',
-              hotPartition: partitionOf(route),
-              hotShare: 1,
-              rows: ({ route: other }) => {
-                return {
-                  'content.imported_field': [
-                    {
-                      route: other,
-                      id: newId(other),
-                      subject: newId(other),
-                      candidate: newId(other),
-                      revision: 1,
-                      body: bytes,
-                      body_sha256: Buffer.from(hash(bytes), 'hex'),
-                      source: value.source,
-                      rights: value.rights,
-                      language: value.language,
-                      availability: 'available',
-                    },
-                  ],
-                };
-              },
-            },
-            { from: previous, to: scale },
-          );
+  const report = await checkGrowth(db, {
+    name: 'imported field append/read',
+    scales: [32, 256, 2048],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(target, scale, previous) {
+      const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+      await seed(
+        target,
+        {
+          name: 'unrelated imported fields',
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ route: other }) => {
+            return {
+              'content.imported_field': [
+                {
+                  route: other,
+                  id: newId(other),
+                  subject: newId(other),
+                  candidate: newId(other),
+                  revision: 1,
+                  body: bytes,
+                  body_sha256: Buffer.from(hash(bytes), 'hex'),
+                  source: value.source,
+                  rights: value.rights,
+                  language: value.language,
+                  availability: 'available',
+                },
+              ],
+            };
+          },
         },
-        async operation() {
-          const result = await appendImportedField(tx, value);
-          expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
-        },
-      }),
-    )
-  ).value;
+        { from: previous, to: scale },
+      );
+    },
+    async operation() {
+      await command(async (tx) => {
+        const result = await appendImportedField(tx, value);
+        expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
+      });
+    },
+  });
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);

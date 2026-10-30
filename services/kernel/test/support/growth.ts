@@ -17,6 +17,7 @@ import {
   capture,
   captureMeasuredRun,
   GrowthSettleInfrastructureError,
+  captureWarmup,
   settle,
   settleAdmin,
   trackGrow,
@@ -713,28 +714,25 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const vacuumMs = await recordedSettle(db, { analyze: true });
     let settleMs = vacuumMs;
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
-    const availableRelationSizes = await readRelationSizes(db);
+    const measuredDatabases = new Set<GrowthDatabase>([db]);
     let pendingWrites = new Map<GrowthDatabase, Set<string>>();
     const seenBackends = new Set<number>();
+    let pendingBackends = new Set<number>();
     for (let warmup = 0; warmup < warmups; warmup++) {
-      let warmupCapture: Awaited<ReturnType<typeof capture>> | undefined;
-      const warmed = await captureMeasuredRun(async () => {
-        warmupCapture = await capture(
-          db,
-          async () => {
-            if (check.warmup) await check.warmup(db, scale, repetition);
-            else await check.operation(db, scale, repetition);
-          },
-          { includeBackends: true },
-        );
-      });
-      for (const backend of warmupCapture!.capture.statementBackends ?? [])
-        if (backend !== undefined) seenBackends.add(backend);
+      const warmed = await captureMeasuredRun(() =>
+        captureWarmup(db, async () => {
+          if (check.warmup) await check.warmup(db, scale, repetition);
+          else await check.operation(db, scale, repetition);
+        }),
+      );
+      for (const backend of warmed.backends) seenBackends.add(backend);
+      for (const target of warmed.databases) measuredDatabases.add(target);
       for (const [target, relations] of warmed.writes) {
         const accumulated = pendingWrites.get(target) ?? new Set<string>();
         for (const relation of relations) accumulated.add(relation);
         pendingWrites.set(target, accumulated);
       }
+      for (const backend of warmed.backends) pendingBackends.add(backend);
       repetition++;
     }
 
@@ -758,19 +756,22 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           }
         }
         for (const [target, relations] of pendingWrites) {
-          if (relations.size > 0) settleMs += await recordedSettle(target, { relations: [...relations] });
+          if (relations.size > 0) settleMs += await recordedSettle(target, { relations: [...relations], operationBackends: pendingBackends });
         }
         (seeding as { settleMs: number }).settleMs = settleMs;
         if (check.prepare) await check.prepare(db, scale, repetition);
         const captured = await captureMeasuredRun(() =>
           capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
+        for (const target of captured.databases) measuredDatabases.add(target);
+        pendingBackends = new Set(captured.backends);
         const writes = captured.writes;
         const measured = captured.value;
         const runBackends = [
           ...new Set(
             (measured.capture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
           ),
+
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
         if (coldBackends.length > 0 && coldBackendDiscards < 4) {
@@ -814,6 +815,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         accepted = true;
       }
     }
+    const availableRelationSizes: Record<string, RelationSize> = {};
+    for (const target of measuredDatabases) Object.assign(availableRelationSizes, await readRelationSizes(target));
     samples.push({
       scale,
       cost: medianCost(costs),

@@ -20,10 +20,12 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 type ActiveCapture = {
   statementRecords: StatementRecord[];
   plans: unknown[];
+  planDatabases: string[];
   planStatements: (number | undefined)[];
   readonly includeBackends: boolean;
   planBackends: (number | undefined)[];
   backgroundPlans: unknown[];
+  backgroundPlanDatabases: string[];
   backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
   pending: Set<Promise<void>>;
@@ -56,12 +58,17 @@ type CaptureState = {
   seeding: SeedingCount | undefined;
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
+  relatedDatabases: Map<string, GrowthDatabase>;
 };
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
-type RunCapture = Map<GrowthDatabase, Set<string>>;
+const warmupCapture = new AsyncLocalStorage<GrowthDatabase>();
+type RunCapture = Map<GrowthDatabase, Set<string>> & {
+  readonly databases: Set<GrowthDatabase>;
+  readonly backends: Set<number>;
+};
 const measuredRun = new AsyncLocalStorage<RunCapture>();
 const clientAttribution = new WeakMap<PoolClient, Attribution>();
 const clientStatement = new WeakMap<PoolClient, StatementRecord | undefined>();
@@ -137,6 +144,12 @@ function normalizedStatement(text: string): string {
 function backendPid(client: PoolClient): number | undefined {
   const processID = (client as PoolClient & { readonly processID?: unknown }).processID;
   return typeof processID === 'number' && Number.isSafeInteger(processID) ? processID : undefined;
+}
+
+function connectedDatabase(client: PoolClient): string | undefined {
+  const value = (client as PoolClient & { readonly connectionParameters?: { readonly database?: unknown } })
+    .connectionParameters?.database;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
@@ -460,6 +473,9 @@ function instrument(client: PoolClient, state: CaptureState): void {
       )
         statement.planCount++;
       (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
+      (attribution.background ? capture.backgroundPlanDatabases : capture.planDatabases).push(
+        connectedDatabase(client) ?? '',
+      );
       (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(statement?.index);
       if (capture.includeBackends)
         (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
@@ -513,7 +529,12 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
   const pool = createPool(url, { connectionTimeoutMillis: 10_000 });
   const admin = new pg.Pool({ connectionString: url, max: 2 });
   const libraryPools = new Set<pg.Pool>();
-  const state: CaptureState = { active: undefined, seeding: undefined, setupTasks: new Set() };
+  const state: CaptureState = {
+    active: undefined,
+    seeding: undefined,
+    setupTasks: new Set(),
+    relatedDatabases: new Map(),
+  };
   admin.on('connect', (client) => intercept(client, state, false));
   const database: GrowthDatabase = {
     url,
@@ -526,7 +547,12 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
       return libraryPool;
     },
     close: async () => {
-      await Promise.all([pool.end(), admin.end(), ...Array.from(libraryPools, (libraryPool) => libraryPool.end())]);
+      await Promise.all([
+        pool.end(),
+        admin.end(),
+        ...Array.from(libraryPools, (libraryPool) => libraryPool.end()),
+        ...Array.from(state.relatedDatabases.values(), (related) => related.admin.end()),
+      ]);
     },
   };
   states.set(database, state);
@@ -555,16 +581,20 @@ export async function capture<T>(
 ): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
-  if (state.active) throw new Error('A growth capture is already active for this database');
+  const parentActive = state.active;
+  if (parentActive && currentAttribution(state)?.capture !== parentActive && warmupCapture.getStore() !== database)
+    throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
 
   const active: ActiveCapture = {
     statementRecords: [],
     plans: [],
+    planDatabases: [],
     planStatements: [],
-    includeBackends: options.includeBackends === true,
+    includeBackends: options.includeBackends === true || warmupCapture.getStore() === database,
     planBackends: [],
     backgroundPlans: [],
+    backgroundPlanDatabases: [],
     backgroundPlanStatements: [],
     backgroundPlanBackends: [],
     pending: new Set(),
@@ -596,12 +626,25 @@ export async function capture<T>(
     if (active.error) throw active.error;
     const run = measuredRun.getStore();
     if (run) {
-      const relations = run.get(database) ?? new Set<string>();
-      for (const document of [...active.plans, ...active.backgroundPlans]) collectModifyTargets(document, relations);
-      run.set(database, relations);
+      for (const [plans, databaseNames] of [
+        [active.plans, active.planDatabases],
+        [active.backgroundPlans, active.backgroundPlanDatabases],
+      ] as const) {
+        for (let index = 0; index < plans.length; index++) {
+          const target = databaseForName(database, databaseNames[index] || databaseName(database));
+          const relations = run.get(target) ?? new Set<string>();
+          run.databases.add(target);
+          collectModifyTargets(plans[index], relations);
+          if (relations.size > 0) run.set(target, relations);
+        }
+      }
     }
     const foreground = active.statementRecords.filter(({ background }) => !background);
     const background = active.statementRecords.filter(({ background }) => background);
+    if (run)
+      for (const { backend } of foreground) {
+        if (backend !== undefined) run.backends.add(backend);
+      }
     return {
       value,
       capture: {
@@ -631,8 +674,40 @@ export async function capture<T>(
       },
     };
   } finally {
-    state.active = undefined;
+    state.active = parentActive;
   }
+}
+
+/** Runs a warm-up in a recording capture while allowing the hook to open its own nested capture. */
+export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
+  return warmupCapture.run(database, () => capture(database, operation, { includeBackends: true }));
+}
+
+function databaseName(database: GrowthDatabase): string {
+  return new URL(database.url).pathname.slice(1);
+}
+
+function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase {
+  const ownName = databaseName(database);
+  if (name === ownName) return database;
+  const state = states.get(database)!;
+  let related = state.relatedDatabases.get(name);
+  if (related) return related;
+  const url = new URL(database.url);
+  url.pathname = `/${name}`;
+  const admin = new pg.Pool({ connectionString: url.toString(), max: 2 });
+  admin.on('connect', (client) => intercept(client, state, false));
+  related = {
+    url: url.toString(),
+    pool: admin,
+    admin,
+    openPool: () => {
+      throw new Error('A related growth database cannot open instrumented pools');
+    },
+    close: () => admin.end(),
+  };
+  state.relatedDatabases.set(name, related);
+  return related;
 }
 
 function collectModifyTargets(document: unknown, output: Set<string>): void {
@@ -649,9 +724,21 @@ function collectModifyTargets(document: unknown, output: Set<string>): void {
   visit(document);
 }
 
-export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{ value: T; writes: RunCapture }> {
-  const writes: RunCapture = new Map();
-  return measuredRun.run(writes, async () => ({ value: await operation(), writes }));
+export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{
+  value: T;
+  writes: RunCapture;
+  databases: ReadonlySet<GrowthDatabase>;
+  backends: ReadonlySet<number>;
+}> {
+  const writes = new Map() as RunCapture;
+  Object.defineProperty(writes, 'databases', { value: new Set<GrowthDatabase>() });
+  Object.defineProperty(writes, 'backends', { value: new Set<number>() });
+  return measuredRun.run(writes, async () => ({
+    value: await operation(),
+    writes,
+    databases: writes.databases,
+    backends: writes.backends,
+  }));
 }
 
 export class GrowthSettleInfrastructureError extends Error {
@@ -712,21 +799,45 @@ type SettleHolder = {
 
 async function horizonHolders(database: GrowthDatabase, horizon: string): Promise<SettleHolder[]> {
   const result = await database.admin.query<SettleHolder>(
-    `SELECT a.pid,a.backend_type,a.application_name,a.state,a.xact_start,split_part(a.query,E'\\n',1) AS query
-       FROM pg_stat_activity a
+    `WITH current_xid AS (
+       SELECT pg_current_xact_id()::text::numeric AS xid
+     ), xid_parts AS (
+       SELECT xid - mod(xid, 4294967296) AS epoch, mod(xid, 4294967296) AS low FROM current_xid
+     )
+     SELECT a.pid,a.backend_type,a.application_name,a.state,a.xact_start,split_part(a.query,E'\\n',1) AS query
+       FROM pg_stat_activity a CROSS JOIN xid_parts c
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN a.backend_xid IS NULL THEN NULL::numeric
+                    ELSE c.epoch + a.backend_xid::text::numeric
+                      - CASE WHEN a.backend_xid::text::numeric > c.low THEN 4294967296 ELSE 0 END END AS xid,
+               CASE WHEN a.backend_xmin IS NULL THEN NULL::numeric
+                    ELSE c.epoch + a.backend_xmin::text::numeric
+                      - CASE WHEN a.backend_xmin::text::numeric > c.low THEN 4294967296 ELSE 0 END END AS xmin
+      ) full_xid
       WHERE a.datname=current_database() AND a.pid<>pg_backend_pid()
-        AND ((a.backend_xid IS NOT NULL AND a.backend_xid::text::bigint < $1::bigint)
-          OR (a.backend_xmin IS NOT NULL AND a.backend_xmin::text::bigint < $1::bigint))
+        AND ((full_xid.xid IS NOT NULL AND full_xid.xid < $1::numeric)
+          OR (full_xid.xmin IS NOT NULL AND full_xid.xmin < $1::numeric))
       ORDER BY a.pid`,
     [horizon],
   );
   return result.rows;
 }
 
-async function waitForHorizon(database: GrowthDatabase, horizon: string, deadline: number, pollMs: number) {
+async function waitForHorizon(
+  database: GrowthDatabase,
+  horizon: string,
+  deadline: number,
+  pollMs: number,
+  operationBackends: ReadonlySet<number> = new Set(),
+) {
   while (true) {
     const holders = await horizonHolders(database, horizon);
     if (holders.length === 0) return;
+    const operationHolder = holders.find(({ pid }) => operationBackends.has(pid));
+    if (operationHolder)
+      throw new GrowthSettleInfrastructureError(
+        `Backend ${operationHolder.pid} from the measured operation keeps a transaction open across repetitions; each repetition must commit. Holding backend: ${JSON.stringify(operationHolder)}`,
+      );
     if (Date.now() >= deadline)
       throw new GrowthSettleInfrastructureError(
         `Could not reach a clean transaction horizon; holding backends: ${JSON.stringify(holders)}`,
@@ -790,6 +901,8 @@ export async function settle(
     readonly analyze?: boolean;
     readonly timeoutMs?: number;
     readonly pollMs?: number;
+    /** Backends observed in the preceding measured run, used to diagnose a transaction spanning repetitions. */
+    readonly operationBackends?: ReadonlySet<number>;
   } = {},
 ): Promise<number> {
   const started = performance.now();
@@ -823,7 +936,14 @@ export async function settle(
     try {
       for (const relation of relations) {
         const sql = `VACUUM (${vacuumOptions.verbose ? 'VERBOSE, ' : ''}${vacuumOptions.freeze ? 'FREEZE, ' : ''}INDEX_CLEANUP ON${vacuumOptions.disablePageSkipping ? ', DISABLE_PAGE_SKIPPING' : ''}${options.analyze ? ', ANALYZE' : ''}) ${qualifiedIdentifier(relation)}`;
-        await client.query(sql);
+        try {
+          await client.query(sql);
+        } catch (error) {
+          const current = await database.admin.query<{ name: string }>('SELECT current_database() AS name');
+          throw new GrowthSettleInfrastructureError(
+            `Could not settle database ${current.rows[0]!.name} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     } finally {
       client.removeListener('notice', captureNotice);
@@ -845,7 +965,7 @@ export async function settle(
   let dirty: Awaited<ReturnType<typeof verify>> = [];
   let lastNotices: string[] = [];
   for (let round = 0; round < 3; round++) {
-    await waitForHorizon(database, horizon, deadline, pollMs);
+    await waitForHorizon(database, horizon, deadline, pollMs, options.operationBackends);
     const targets = round === 0 ? names : dirty.length > 0 ? dirty.map(({ relation }) => relation) : names;
     lastNotices = await vacuum(targets, {
       disablePageSkipping: round > 0,
@@ -874,8 +994,26 @@ export async function settle(
 
 export function settleAdmin(admin: pg.Pool, options: Parameters<typeof settle>[1] = {}): Promise<number> {
   const database = databasesByAdmin.get(admin);
-  if (!database) throw new Error('Growth admin pool was not opened by openGrowthDatabase');
-  return settle(database, options);
+  if (database) return settle(databaseForName(database, poolDatabaseName(admin) ?? databaseName(database)), options);
+  const connectionString = (admin as pg.Pool & { options?: { connectionString?: string } }).options?.connectionString;
+  if (!connectionString) throw new Error('Growth admin pool must have a connection string');
+  const target: GrowthDatabase = {
+    url: connectionString,
+    pool: admin,
+    admin,
+    openPool: () => {
+      throw new Error('An external growth admin pool cannot open instrumented pools');
+    },
+    close: async () => {},
+  };
+  return settle(target, options);
+}
+
+function poolDatabaseName(pool: pg.Pool): string | undefined {
+  const connectionString = (pool as pg.Pool & { options?: { connectionString?: string } }).options?.connectionString;
+  if (connectionString) return new URL(connectionString).pathname.slice(1);
+  const database = (pool as pg.Pool & { options?: { database?: unknown } }).options?.database;
+  return typeof database === 'string' ? database : undefined;
 }
 
 /**

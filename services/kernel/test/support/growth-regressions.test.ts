@@ -1,0 +1,159 @@
+import pg from 'pg';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { capture, checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from './growth.ts';
+import { seed, type Population } from './growth-seed.ts';
+
+const schema = 'growth_regressions_test';
+const table = `${schema}.written`;
+const cloneName = `growth_regressions_${Bun.randomUUIDv7().replaceAll('-', '').slice(0, 16)}`;
+let db: GrowthDatabase;
+let cloneUrl: string;
+let clonePool: pg.Pool;
+let cloneAdmin: pg.Pool;
+
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  await db.admin.query(`CREATE SCHEMA ${schema}`);
+  await db.admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY, payload text NOT NULL)`);
+  const clone = new URL(db.url);
+  clone.pathname = `/${cloneName}`;
+  cloneUrl = clone.toString();
+  await db.admin.query(`CREATE DATABASE "${cloneName}"`);
+  cloneAdmin = new pg.Pool({ connectionString: cloneUrl, max: 2 });
+  await cloneAdmin.query(`CREATE SCHEMA ${schema}`);
+  await cloneAdmin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY, payload text NOT NULL)`);
+  await cloneAdmin.query(`INSERT INTO ${table} SELECT i, repeat('x', 100) FROM generate_series(1, 3000) i`);
+  clonePool = db.openPool({ max: 2 });
+  clonePool.options.connectionString = cloneUrl;
+});
+
+afterAll(async () => {
+  if (!db) return;
+  await cloneAdmin?.end();
+  await db.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+  await db.close();
+  const cleanup = new pg.Pool({ connectionString: db.url, max: 1 });
+  try {
+    await cleanup.query(`DROP DATABASE IF EXISTS "${cloneName}" WITH (FORCE)`);
+  } finally {
+    await cleanup.end();
+  }
+});
+
+test('a warmup capture is allowed and its writes settle before the first measured repetition', async () => {
+  let id = 10_000;
+  await checkGrowth(db, {
+    name: 'nested warmup capture settles',
+    scales: [1, 4, 16],
+    repetitions: 1,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    warmup: async (database) => {
+      await capture(database, async () => {
+        await clonePool.query(`INSERT INTO ${table} VALUES ($1, repeat('w', 100))`, [id++]);
+      });
+    },
+    operation: async () => {
+      const result = await cloneAdmin.query<{ pages: number; visible: number }>(
+        `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+        [table],
+      );
+      expect(result.rows[0]!.visible).toBe(result.rows[0]!.pages);
+    },
+  });
+});
+
+test('writes through a connection to another database settle there, not by relation name in the growth database', async () => {
+  let id = 20_000;
+  await checkGrowth(db, {
+    name: 'other database write targets',
+    scales: [1, 4, 16],
+    repetitions: 2,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    warmup: async () => {
+      await clonePool.query(`INSERT INTO ${table} VALUES ($1, 'warmup')`, [id++]);
+    },
+    operation: async () => {
+      const state = await cloneAdmin.query<{ pages: number; visible: number }>(
+        `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+        [table],
+      );
+      expect(state.rows[0]!.visible).toBe(state.rows[0]!.pages);
+      await clonePool.query(`INSERT INTO ${table} VALUES ($1, 'other database')`, [id++]);
+    },
+  });
+  const stats = await cloneAdmin.query<{ pages: number; visible: number }>(
+    `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+    [table],
+  );
+  expect(stats.rows[0]!.visible).toBe(stats.rows[0]!.pages);
+});
+
+test('seed settles a redirected database handed out by openPool', async () => {
+  const population: Population = {
+    name: 'external pool seed',
+    hotPartition: 4,
+    rows: ({ ordinal }) => ({ [table]: [{ id: 30_000 + ordinal, payload: 'seeded' }] }),
+  };
+  await seed({ pool: clonePool, admin: clonePool }, population, { from: 0, to: 8 });
+  const rows = await cloneAdmin.query<{ count: string; pages: number; visible: number }>(
+    `SELECT (SELECT count(*)::text FROM ${table} WHERE id >= 30000) AS count,
+            c.relpages AS pages,c.relallvisible AS visible FROM pg_class c WHERE c.oid=$1::regclass`,
+    [table],
+  );
+  expect(rows.rows[0]!.count).toBe('8');
+  expect(rows.rows[0]!.visible).toBe(rows.rows[0]!.pages);
+});
+
+test('a missing relation is an infrastructure error naming its database and relation', async () => {
+  await expect(settle(db, { relations: [`${schema}.missing`] })).rejects.toMatchObject({
+    name: 'GrowthSettleInfrastructureError',
+    message: expect.stringContaining(`database ${new URL(db.url).pathname.slice(1)} relation ${schema}.missing`),
+  });
+});
+
+test('the transaction horizon orders full xids across an epoch wrap', async () => {
+  const result = await db.admin.query<{ older: boolean }>(
+    `WITH sample AS (
+       SELECT 4294967300::numeric AS current_xid,
+              4294967294::numeric AS backend_xid,
+              4294967297::numeric AS horizon
+     ), xid_parts AS (
+       SELECT current_xid - mod(current_xid, 4294967296) AS epoch,
+              mod(current_xid, 4294967296) AS low,
+              backend_xid,horizon
+       FROM sample
+     )
+     SELECT epoch + backend_xid - CASE WHEN backend_xid > low THEN 4294967296 ELSE 0 END < horizon AS older
+       FROM xid_parts`,
+  );
+  expect(result.rows[0]!.older).toBe(true);
+});
+
+test('a measured backend holding its transaction across repetitions fails immediately with commit guidance', async () => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await expect(
+      checkGrowth(db, {
+        name: 'operation transaction spans repetitions',
+        scales: [1, 4, 16],
+        repetitions: 2,
+        bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+        grow: async () => {},
+        async operation() {
+          await client.query(
+            `INSERT INTO ${table} VALUES (900001, 'held') ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload`,
+          );
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'GrowthSettleInfrastructureError',
+      message: expect.stringContaining('each repetition must commit'),
+    });
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+});
