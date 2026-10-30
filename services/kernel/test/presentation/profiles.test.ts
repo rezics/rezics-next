@@ -245,18 +245,20 @@ test('native concurrent reads reuse one snapshot and eviction is LRU without ret
     }
     const read = (n: number) => readProfile(pool, records[n]!.digest);
     const concurrent = await Promise.all(Array.from({ length: 8 }, () => read(0)));
-    expect(concurrent.every((body) => body === concurrent[0])).toBe(true);
+    const shared = concurrent[0];
+    if (!shared) throw new Error('Concurrent reads must return the stored profile');
+    expect(concurrent.every((body) => body === shared)).toBe(true);
     const second = await read(1);
     await read(2);
     await read(3);
-    expect(await read(0)).toBe(concurrent[0]);
+    expect(await read(0)).toBe(shared);
     await read(4);
-    expect(await read(0)).toBe(concurrent[0]);
+    expect(await read(0)).toBe(shared);
     expect(await read(1)).not.toBe(second);
     for (let n = 5; n < 9; n++) expect(await read(n)).toEqual(records[n]!.body);
     const cold = await read(0);
     expect(cold).toEqual(records[0]!.body);
-    expect(cold).not.toBe(concurrent[0]);
+    expect(cold).not.toBe(shared);
     expect(Object.isFrozen((cold!.generic as CompositionDocument).content[0]!.props)).toBe(true);
     expect(
       (
