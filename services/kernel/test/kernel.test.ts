@@ -159,6 +159,7 @@ const typed = [
   'GET /v1/review-candidates',
   'POST /v1/review-candidates/$prepare',
   'GET /v1/subjects/:id/revisions',
+  'GET /v1/subjects/:id/revisions/:revision',
   'GET /v1/subjects/:id/links',
   'GET /v1/subjects/:id/counts',
   'GET /v1/subjects/:id/figure',
