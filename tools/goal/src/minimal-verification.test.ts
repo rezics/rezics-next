@@ -16,6 +16,7 @@ test('minimal verification mode replaces acceptance checks with a local type che
     const protocol = workerCheckProtocol(state, brief, state);
     expect(protocol).toContain('Verification is minimal');
     expect(protocol).toContain('typecheck');
+    expect(protocol).toContain('compiler database');
     expect(protocol).not.toContain('Run the acceptance command once');
     expect(protocol).not.toContain('--wait <id>`, poll');
   } finally {
