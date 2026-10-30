@@ -4,6 +4,35 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
+## Construction compatibility in source archives
+
+`bun run --cwd packages/definitions check` includes `test/construction-archive.test.ts`.
+It copies the current workspace graph and committed historical sources into `os.tmpdir()`,
+checks that the archive and every ancestor lack `.git`, and runs the unchanged
+`publication-construction-compatibility.test.ts` and `publication-construction.test.ts`
+with an offline preload. That preload denies Git, other subprocesses and network calls;
+the existing instrumented `--probe` child alone is allowed and inherits the preload.
+Only installed third-party dependencies may resolve outside the archive. Workspace
+module loads, including the materialized historical graph, must stay inside it.
+
+The original pin is `2c86ce30efc2aabc94a7683bfea367a69263aa39`. All 14 manifest
+identities remain verified without Git. Archive-only corruption witnesses independently
+exercise the SHA256 and Git-blob guards for every identity and restore the copied bytes.
+The existing suites retain all 119 instrumented outcome comparisons, pattern cases,
+72 uniqueness comparisons, historical 4097-base/257-mapping compatibility, eight-node
+diagnostic order and outer 64-result cap. The archive test prints its complete child
+commands and raw outputs. Evidence is also saved under `.temp/publication-construction/`;
+failures retain the copied checkout there before deterministic temporary cleanup.
+
+### Archive construction cost
+
+- Touches: the copied Definitions/Filter source graph, 14 pinned source identities and
+  the existing native construction matrices; no product services or network.
+- Bound: one archive run of the existing suites with unchanged inputs, caps, counters
+  and failed work; copying is linear in the selected source and dependency bytes.
+- Growth check: the existing `[64, 512, 4096]` construction series runs unchanged in
+  the real archive-local instrumented child as part of the complete package check.
+
 Use `validateRelease(input)` before storing a release. An empty array means valid;
 otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
