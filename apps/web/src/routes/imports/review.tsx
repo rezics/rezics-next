@@ -39,11 +39,10 @@ function ViewerQueue({ state, csrfToken, viewer }: { state: string; csrfToken: s
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const result: ProviderQueueRead | { ok: false; reason: 'loading' } = query.data ?? { ok: false, reason: query.isError ? 'unavailable' : 'loading' };
-  return () => {
-      active = false;
-    };
-  }, [state, csrfToken]);
+  const result: ProviderQueueRead | { ok: false; reason: 'loading' } = query.data ?? {
+    ok: false,
+    reason: query.isError ? 'unavailable' : 'loading',
+  };
   return (
     <ProviderQueueView
       locale={getLocale()}
