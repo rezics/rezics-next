@@ -81,7 +81,7 @@ slots:
 `,
     },
     presentation: {
-      'lists/en': `types:\n  schema:Movie: movie\n${Array.from({ length: n }, (_, i) => `  schema:Item${i}: item ${i}`).join('\n')}\n`,
+      'lists/en': `types:\n  schema:Movie: movie\n${Array.from({ length: n }, (_, i) => `  schema:Item${i}: item ${i}`).join('\n')}\nproperties:\n  schema:datePublished: publication date\n`,
     },
   });
 }
