@@ -256,6 +256,16 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
 /** Resolve the one subject named by the page when no listed session embeds it. */
 async function readSelectedSubject(client: KernelClient, subjectId: string, authorization: string) {
   const result = await client.subjects({ id: subjectId }).get({ headers: { authorization } });
+  const status = callStatus(result);
+  const problem = callBody(result.error);
+  if (
+    status === 404 &&
+    typeof problem === 'object' &&
+    problem !== null &&
+    'code' in problem &&
+    problem.code === 'not_found'
+  )
+    return null;
   const body = readData<{
     subject: { id: string; type: string };
     summary?: { id: string; type: string; types?: readonly string[]; label?: LibraryLabel; cover?: unknown } | null;
