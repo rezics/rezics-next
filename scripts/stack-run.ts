@@ -215,7 +215,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     const interval = pollMs(env);
     const outcome = await remoteCheckUnlessUnreachable(
       {
-        cancellation,
+        ...(cancellation === undefined ? {} : { cancellation }),
         hosts: readHosts(reason.hostsFile),
         hostsFile: reason.hostsFile,
         workspace: run.root,

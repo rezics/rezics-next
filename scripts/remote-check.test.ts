@@ -871,6 +871,7 @@ type HostConfig = {
   stallSlotTakes?: number;
   stalledControlProbes?: number;
   failedControlProbes?: number;
+  refuseControlSession?: boolean;
   vanishedFiles?: string[];
   rsyncFailures?: number;
   rsyncFailureCode?: number;
@@ -881,7 +882,7 @@ type HostConfig = {
   silentHang?: boolean;
   hangRuns?: number;
   runDurationMs?: number;
-  present?: string[];
+  present?: readonly string[];
   ordinaryBusySlots?: number[];
   base?: string;
   baseAgeSeconds?: number;
@@ -985,11 +986,11 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         name,
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
-        memoryMaxGiB: hosts[name].memoryMaxGiB ?? 16,
-        cpuQuotaPercent: hosts[name].cpuQuotaPercent ?? 800,
-        slots: hosts[name].slots ?? 2,
-        ...(hosts[name].fallback ? { fallback: true } : {}),
-        ...(hosts[name].processorsPerSlot === undefined ? {} : { processorsPerSlot: hosts[name].processorsPerSlot }),
+        memoryMaxGiB: hosts[name]!.memoryMaxGiB ?? 16,
+        cpuQuotaPercent: hosts[name]!.cpuQuotaPercent ?? 800,
+        slots: hosts[name]!.slots ?? 2,
+        ...(hosts[name]!.fallback ? { fallback: true } : {}),
+        ...(hosts[name]!.processorsPerSlot === undefined ? {} : { processorsPerSlot: hosts[name]!.processorsPerSlot }),
       })),
     }),
   );
@@ -1158,11 +1159,17 @@ function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<strin
   return { ...process.env, PATH: `${bin}:${process.env.PATH}`, TASKS_CURRENT: String(tasksCurrent) };
 }
 
-async function waitForSlotToken(holder: ReturnType<typeof Bun.spawn>, count: number): Promise<void> {
+async function waitForSlotToken(
+  holder: Pick<Bun.Subprocess<'pipe', 'pipe', 'pipe'>, 'stdout'>,
+  count: number,
+): Promise<void> {
   await waitForOutput(holder, `SLOTS ${count}\n`);
 }
 
-async function waitForOutput(holder: ReturnType<typeof Bun.spawn>, token: string): Promise<void> {
+async function waitForOutput(
+  holder: Pick<Bun.Subprocess<'pipe', 'pipe', 'pipe'>, 'stdout'>,
+  token: string,
+): Promise<void> {
   const reader = holder.stdout.getReader();
   let output = '';
   while (!output.includes(token)) {
@@ -1322,7 +1329,7 @@ test('the /bin/sh slot entry delegates multi-digit descriptors to provisioned Ba
   expect(provision).toContain('for package in git rsync unzip xz-utils curl ca-certificates util-linux bash; do');
   expect(slotScriptFor(hostRoot, 2)).toMatch(/^exec bash -c /);
 
-  const shellFamily = realpathSync('/bin/sh').split('/').at(-1);
+  const shellFamily = realpathSync('/bin/sh').split('/').at(-1)!;
   expect(['bash', 'dash']).toContain(shellFamily);
   if (shellFamily === 'dash') {
     const rawMultiDigitRedirection = spawnSync('/bin/sh', ['-c', 'exec 10>/dev/null'], { encoding: 'utf8' });
@@ -1486,7 +1493,8 @@ test('a live landing head gets one bounded fitting opportunity, then native admi
       env: slotScriptEnvironment(testRoot),
     },
   );
-  staleTake.stdin.end('stale-marker-reap\n');
+  staleTake.stdin.write('stale-marker-reap\n');
+  await staleTake.stdin.end();
   expect(await staleTake.exited).toBe(0);
   expect(existsSync(marker)).toBe(false);
 });
@@ -1782,7 +1790,7 @@ test('cache-shared installed package files use one host package cache walk', () 
     mkdirSync(join(runFile, '..'), { recursive: true });
     writeFileSync(cacheFile, 'original');
     linkSync(cacheFile, runFile);
-    entries.push(scoped ? join(cache, entry.split('/')[0], entry.split('/')[1]) : join(cache, entry));
+    entries.push(scoped ? join(cache, entry.split('/')[0]!, entry.split('/')[1]!) : join(cache, entry));
   }
 
   const installedTime = new Date(Date.now() - 5_000);
@@ -4944,7 +4952,7 @@ test('the docker wrapper calls the docker behind it, not a shim that called the 
     timeout: 20_000,
   });
   expect(result.status).toBe(99);
-  expect(readFileSync(join(env.FAKE_DIR, 'shim.log'), 'utf8')).toBe('shim\n');
+  expect(readFileSync(join(env.FAKE_DIR!, 'shim.log'), 'utf8')).toBe('shim\n');
   expect(events().filter((event) => event.kind === 'docker')).toEqual([
     { kind: 'docker', args: ['run', '--cgroup-parent=rezics-check.slice', 'image'] },
   ]);
@@ -5506,7 +5514,7 @@ exec /usr/bin/flock "$@"
   });
   take.stdin.write('replacement-race\n');
   await take.stdin.flush();
-  let replacement: ReturnType<typeof Bun.spawn> | undefined;
+  let replacement: Bun.Subprocess<'pipe', 'pipe', 'pipe'> | undefined;
   try {
     await waitFor(() => existsSync(ready));
     rmSync(marker);
@@ -5546,7 +5554,11 @@ test('admission backfill: capacity, memory, gate and express reservations remain
   const environment = slotScriptEnvironment(testRoot);
   const sentinel = join(hostRoot, 'slots', 'unrelated-held-marker.lock');
   mkdirSync(join(hostRoot, 'slots'), { recursive: true });
-  const sentinelHolder = spawn('flock', ['-n', sentinel, 'sh', '-c', 'sleep 30']);
+  const sentinelHolder = Bun.spawn(['flock', '-n', sentinel, 'cat'], {
+    stdin: 'pipe',
+    stdout: 'ignore',
+    stderr: 'pipe',
+  });
   await Bun.sleep(25);
 
   const concurrent = [0, 1].map(() =>
@@ -5583,7 +5595,7 @@ test('admission backfill: capacity, memory, gate and express reservations remain
       await holder.exited;
     }
     const sentinelLockStatus = spawnSync('/usr/bin/flock', ['-n', sentinel, '-c', 'true']).status;
-    sentinelHolder.kill();
+    await sentinelHolder.stdin.end();
     await sentinelHolder.exited;
     expect(sentinelLockStatus).not.toBe(0);
   }
@@ -5602,8 +5614,8 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     ],
     { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
   );
-  let priorityTake: ReturnType<typeof Bun.spawn> | undefined;
-  let backfillTake: ReturnType<typeof Bun.spawn> | undefined;
+  let priorityTake: Bun.Subprocess<'pipe', 'pipe', 'pipe'> | undefined;
+  let backfillTake: Bun.Subprocess<'pipe', 'pipe', 'pipe'> | undefined;
   try {
     await waitForOutput(landingMarker, 'LANDING_MARKER\n');
     const beforeOpportunity = spawnSync(
@@ -5699,7 +5711,7 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     ],
     { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
   );
-  let legacyTake: ReturnType<typeof Bun.spawn> | undefined;
+  let legacyTake: Bun.Subprocess<'pipe', 'pipe', 'pipe'> | undefined;
   try {
     await waitForOutput(legacyMarker, 'LANDING_MARKER\n');
     legacyTake = Bun.spawn(
@@ -6358,7 +6370,7 @@ print('exact native output')`,
   expect(result.stdout).toContain('exact native output');
   const resources = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
   const physical = {
-    schema: 1,
+    schema: 1 as const,
     host: 'native-host',
     run: resources.run,
     exitCode: 0,
@@ -6536,9 +6548,9 @@ test('ordinary, multi-slot, gate and try-once callers pass the same lifetime pol
 
 test('run-lifetime classification requires the named schema, never a native exit 124 or test-own timeout', () => {
   const receipt = {
-    schema: 1,
-    status: 'infrastructure-failure',
-    phase: 'run-lifetime',
+    schema: 1 as const,
+    status: 'infrastructure-failure' as const,
+    phase: 'run-lifetime' as const,
     host: 'native-host',
     run: 'native-run',
     limitMs: 900,

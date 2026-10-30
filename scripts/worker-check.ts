@@ -263,7 +263,7 @@ function overloadFailure(output: string): OverloadFailure | undefined {
     if (/^\s*\(fail\)\s+/.test(line)) {
       if (currentFailure) failures.push(currentFailure);
       currentFailure = {
-        file: currentFile,
+        ...(currentFile === undefined ? {} : { file: currentFile }),
         detail: `${failures.length === 0 ? `${preamble.join('\n')}\n` : ''}${line}`,
       };
     } else if (currentFailure) currentFailure.detail += `\n${line}`;

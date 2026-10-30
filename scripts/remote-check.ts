@@ -3535,7 +3535,7 @@ async function boundedTextChild(
       expire();
     }, noProgressMs);
   };
-  const read = async (stream: ReadableStream<Uint8Array> | null): Promise<void> => {
+  const read = async (stream: typeof child.stdout): Promise<void> => {
     if (!(stream instanceof ReadableStream)) return;
     const reader = stream.getReader();
     const decoder = new TextDecoder();
@@ -4407,9 +4407,10 @@ function parse(argv: string[]): RemoteCheck {
     process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
+  const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
-    cancellation: executionCancellationFromEnvironment(),
+    ...(cancellation === undefined ? {} : { cancellation }),
     completed: cliPhysicalReceipt,
     workspace,
     command: rest,
