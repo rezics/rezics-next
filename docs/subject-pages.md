@@ -64,7 +64,33 @@ Library state, reader preferences, own reactions, own ratings and imported sugge
 preparation and hydration; their requests use the existing private BFF and `no-store`. Anonymous HTML and its
 dehydrated data carry no private values. Public failure never initiates a privileged fallback.
 
-### Open owner joins
+#### Selected-fact sources
+
+The overview's Sources entry also opens `/subjects/{id}/{slug}/sources`, a companion reader outside the
+Composition view template. It uses the ordinary anonymous `GET /v1/subjects/{id}` with the existing language chain,
+current disclosure and one-hop merge handling. Stale identities redirect to the current subject and retain the
+query and fragment. Missing and hidden subjects use the same concealed not-found state. Denied, invalid, changed
+selection and unavailable responses remain failures; retry reads the same address again.
+
+The page groups the currently disclosed selected facts by field, using emitted property labels and released Type
+labels with the existing locale fallback. It follows the overview's selected rank, summary-language and safe spoiler
+rules. Citation parts belong to the individual selected value; a citation is supporting material, not a verification
+badge. Values with no citations remain visible with an explicit notice. Related values use only supplied public
+labels, with no per-field target reads. Document and media locators are reading pointers, never rendered IDs, prose
+or externally fetched images.
+
+Reuse the existing Sources presentation for any actually returned reviewed provider name, URL, licence and
+attribution and for separate cover credit. Provider metadata remains subject-level metadata, never evidence of a
+particular field's support. Missing metadata and unknown cover rights are explicit; a structured-data licence does
+not license authored text or images. This reader does not create a metadata producer or infer provider identity from
+a citation URL.
+
+A supported descriptive field links to the existing Details candidate comparison with `candidateField` selected.
+The private review remains explicitly opened after session preparation and uses its existing CSRF-protected BFF;
+no candidate or authenticated overlay enters the public sources response. Back to subject returns to that same
+public subject. Relation-edge slots continue through their existing target-aware readers.
+
+## Open owner joins
 
 These joins complete the adopted journey; naming one here does not claim it is implemented:
 

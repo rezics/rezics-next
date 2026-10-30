@@ -25,15 +25,17 @@ export function CandidateReview({
   id,
   locale,
   transport,
+  initialProperty,
 }: {
   id: string;
   locale: string;
   transport: CandidateTransport;
+  initialProperty?: string | undefined;
 }) {
   const options = { locale: locale as never };
   const [opened, setOpened] = useState(false);
   const [read, setRead] = useState<CandidateRead>();
-  const [property, setProperty] = useState('');
+  const [property, setProperty] = useState(initialProperty ?? '');
   const [candidate, setCandidate] = useState<Candidate>();
   const [confirmation, setConfirmation] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,6 +113,7 @@ export function CandidateReview({
 
   return (
     <section
+      id="candidate-review"
       aria-label={m.candidate_title({}, options)}
       className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
     >

@@ -182,6 +182,7 @@ export function SubjectFrame({
   view,
   base: tabBase,
   realm,
+  navigation,
 }: {
   frame: SubjectFrameData;
   locale: string;
@@ -194,6 +195,8 @@ export function SubjectFrame({
   tabs: readonly ViewTab[];
   tabLabels: ViewTabLabels;
   view: View;
+  /** Optional companion-view navigation, retaining the shared compact subject header. */
+  navigation?: ReactNode;
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
   realm?: string | undefined;
@@ -236,6 +239,7 @@ export function SubjectFrame({
           )}
         </div>
       </header>
+      {navigation ?? (
       <ViewTabs
         tabs={withCurrent(tabs, view)}
         active={view}
@@ -244,6 +248,7 @@ export function SubjectFrame({
         labels={tabLabels}
         realm={realm}
       />
+      )}
     </div>
   );
 }

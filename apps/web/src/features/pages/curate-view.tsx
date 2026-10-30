@@ -1,5 +1,5 @@
 import { platformRegistry, validateProfile, type CompositionDocument } from '@rezics/composition';
-import { ClientOnly } from '@tanstack/react-router';
+import { ClientOnly, useLocation } from '@tanstack/react-router';
 import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { ErrorPage } from '../../shell/shell';
@@ -16,10 +16,13 @@ import { useSession } from '../../session/query';
 /** The subject's private curation region shares the existing prepared BFF transport. */
 export function SubjectCandidateCuration({ id, locale }: { id: string; locale: string }) {
   const { state } = useSession();
+  const field = new URLSearchParams(useLocation().searchStr).get('candidateField') ?? undefined;
+  const initialProperty = field && field.length <= 256 ? field : undefined;
   if (state !== 'signed-in') return null;
   return (
     <CandidateReview
-      key={`${id}:${locale}`}
+      key={`${id}:${locale}:${initialProperty ?? ''}`}
+      initialProperty={initialProperty}
       id={id}
       locale={locale}
       transport={{

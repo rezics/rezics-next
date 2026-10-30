@@ -17,7 +17,7 @@ import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
-import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
+import { dataComponents, PageData, pageText, SubjectSources, SubjectSourcesLink, type PageMessages } from './data';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
 import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
@@ -414,6 +414,7 @@ export function SubjectPage({
               />
             </SubjectCommunityContext.Provider>
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
+            {overview && <SubjectSourcesLink />}
             {curation}
           </div>
         </PageData>

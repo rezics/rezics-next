@@ -813,6 +813,15 @@ export function SubjectSources() {
   return <overview.SourcesSection value={value} sources={sources} />;
 }
 
+/** Entry to the current, public per-field explanation, even when no citations were supplied. */
+export function SubjectSourcesLink() {
+  const { subject, locale, link: Link } = useContext(PageContext);
+  const value = useContext(overview.OverviewContext);
+  if (!subject) return null;
+  const href = subjectHref({ id: subject, label: value?.subjectLabel ?? '' }, locale).href;
+  return <p className="text-sm"><Link href={`${href}/sources`}>{m.sources_open_detail({}, { locale: locale as never })}</Link></p>;
+}
+
 function useNodeRead(id: unknown) {
   return useContext(PageContext).nodes.get(typeof id === 'string' ? id : '');
 }
