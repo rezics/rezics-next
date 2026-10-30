@@ -121,8 +121,8 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
     void f.delete(creator).catch(() => {});
     await eventually(
       async () =>
-        (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
-          .rows[0]?.pending_code === 'native-stage',
+        (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [creator.accountId])).rows[0]
+          ?.pending_code === 'native-stage',
     );
   } finally {
     f.bindings.workflowPorts.redirectHandle = redirect;
