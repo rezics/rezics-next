@@ -57,9 +57,11 @@ function ThreadCard({
           {title}
         </ThreadCardLink>
         <div className="flex items-start justify-between gap-2">
-          <ListRowControl className="min-w-0">
-            <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" />
-          </ListRowControl>
+          {available ? (
+            <ListRowControl className="min-w-0">
+              <Byline author={authors?.[thread.authorId]} createdAt={thread.createdAt} now={now} size="sm" />
+            </ListRowControl>
+          ) : null}
           <ListRowControl className="shrink-0">
             <Menu
               title={m.thread_content_more_actions()}

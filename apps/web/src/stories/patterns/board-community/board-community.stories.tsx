@@ -4,6 +4,7 @@ import { BoardCommunity, BoardCommunityStatus } from '../../../threads/board-com
 import { m } from '../../../paraglide/messages.js';
 import threads from '../../../kernel/recorded/board-threads.json';
 import realmBoard from '../../../kernel/recorded/board-realm.json';
+import realm from '../../../kernel/recorded/board-realm-realm.json';
 import { ContinueHot as continuation } from '../../board-continuation.stories';
 import { PageStory, pagePaths } from '../../page';
 import { CommunityFixture } from './board-community-fixtures';
@@ -123,5 +124,6 @@ export const NoOptionals: Story = {
     await expect(view.getByText(m.board_community_rules_none())).toBeVisible();
     await expect(view.queryByRole('link', { name: m.board_community_rules_revision() })).toBeNull();
     await expect(view.queryByText(m.board_community_global())).toBeNull();
+    await expect(view.queryByText(realm.realm.summary)).toBeNull();
   },
 };
