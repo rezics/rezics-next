@@ -8,7 +8,8 @@ import { createDriverClient, type DriverClient } from './support/driver-client.t
 
 const clients = new Set<DriverClient>();
 function fixture(endpoint = process.env.OPENSEARCH_URL!) {
-  const client = createDriverClient(endpoint);
+  // This suite exercises the original advanced outcomes, including live relation filters.
+  const client = createDriverClient(endpoint, { advancedSearch: true });
   clients.add(client);
   return client;
 }
@@ -122,6 +123,93 @@ async function withKernelDatabase<T>(client: DriverClient, read: (pool: Pool) =>
     await pool.end();
   }
 }
+
+test('independent search factories use the real default semantic worker and release their acknowledged resources', async () => {
+  const basic = createDriverClient();
+  clients.add(basic);
+  const original = fixture();
+  const [basicDriver, originalDriver] = await Promise.all([basic.init(), original.init()]);
+  const [basicObservation, originalObservation] = await Promise.all([composition(basic), composition(original)]);
+  expect(basicObservation.authIssuer).not.toBe(originalObservation.authIssuer);
+  for (const observation of [basicObservation, originalObservation]) {
+    expect(observation.workerStats!.registrationCounts).toEqual(
+      Object.fromEntries(observation.workerStats!.defaultModules.map((name) => [name, 1])),
+    );
+  }
+  for (const resource of original.ledger().resources) expect(basic.ledger().resources).not.toContainEqual(resource);
+
+  const openings = (client: DriverClient) =>
+    withKernelDatabase(client, async (pool) => {
+      const result = await pool.query<{ group: string }>(
+        'SELECT "group" FROM access.exposure_opening WHERE valid @> clock_timestamp() ORDER BY "group"',
+      );
+      return result.rows.map((row) => row.group);
+    });
+  expect(await openings(basic)).toEqual(['collections', 'search']);
+  expect(await openings(original)).toEqual(['collections', 'search', 'search_advanced']);
+
+  const text = marker();
+  const basicBook = await create(basicDriver, `${text} basic`);
+  const author = await create(originalDriver, `${text} author`, 'schema:Person');
+  const originalBook = await create(originalDriver, `${text} original`, 'schema:Book', author.id);
+  const filter = {
+    and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:author', in: [author.id] } }],
+  };
+  await eventually(
+    () => search(basicDriver, text),
+    (response) => ids(response).includes(basicBook.id),
+  );
+  await eventually(
+    () => search(originalDriver, text, { filter }),
+    (response) => ids(response).includes(originalBook.id),
+  );
+  for (const persona of ['anonymous', 'editor'] as const) {
+    const closed = await basicDriver.request(persona, 'POST', '/v1/subjects:search', { text, filter });
+    expect(closed.status).toBe(403);
+    expect(closed.headers.get('content-type')).toContain('application/problem+json');
+    expect(closed.body).toMatchObject({ status: 403, code: 'platform_closed' });
+    const admitted = await originalDriver.request(persona, 'POST', '/v1/subjects:search', { text, filter });
+    expect(ids(admitted)).toEqual([originalBook.id]);
+    expect(admitted.body).not.toHaveProperty('total');
+  }
+  for (const driver of [basicDriver, originalDriver]) {
+    const revoked = await driver.request('suspended', 'POST', '/v1/subjects:search', { text });
+    expect(revoked.status).toBe(401);
+    expect(revoked.body).toMatchObject({ status: 401, code: 'invalid_credentials' });
+    expect(revoked.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+  }
+
+  await drained(original);
+  expect(ids(await search(basicDriver, text))).toEqual([basicBook.id]);
+  expect(await openings(basic)).toEqual(['collections', 'search']);
+  await composition(basic);
+  await drained(basic);
+
+  const later = createDriverClient(undefined, { advancedSearch: false });
+  clients.add(later);
+  const laterDriver = await later.init();
+  await composition(later);
+  expect(await openings(later)).toEqual(['collections', 'search']);
+  for (const book of [basicBook, originalBook])
+    expect((await laterDriver.request('editor', 'GET', `/v1/subjects/${book.id}`)).status).toBe(404);
+  const closed = await laterDriver.request('anonymous', 'POST', '/v1/subjects:search', { text, filter });
+  expect(closed.status).toBe(403);
+  expect(closed.body.code).toBe('platform_closed');
+  await drained(later);
+}, 600_000);
+
+test('invalid private advanced Search metadata is rejected before resource allocation', async () => {
+  for (const advancedSearch of [null, 'true', 1, [], {}]) {
+    const client = createDriverClient(undefined, { advancedSearch: advancedSearch as unknown as boolean });
+    clients.add(client);
+    await expect(client.init()).rejects.toThrow('advancedSearch must be a boolean');
+    const ledger = client.ledger();
+    expect(ledger.resources).toEqual([]);
+    expect(ledger.exited).toBe(true);
+    expect(ledger.exit).toEqual({ code: 0, signal: null });
+    clients.delete(client);
+  }
+}, 180_000);
 
 test('two concurrent factories isolate real credentials, grants, sessions, cursors and owned resources', async () => {
   const left = fixture();

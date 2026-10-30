@@ -256,7 +256,7 @@ function supervise(parent: OutcomeRpc) {
       }
     })());
   }
-  async function init(endpoint: string): Promise<SupervisorReady> {
+  async function init(endpoint: string, advancedSearch: boolean): Promise<SupervisorReady> {
     try {
       await own({ kind: 'index_prefix', name: prefix });
       proxy = await searchProxy(endpoint);
@@ -281,7 +281,7 @@ function supervise(parent: OutcomeRpc) {
         { linkProjection: 'external', strictCleanup: true, onOwnedResource: own, beforeClose },
       );
       const fixtures = semantic.fixtures;
-      await fixtures.openFeatures(['search']);
+      await fixtures.openFeatures(advancedSearch ? ['search', 'search_advanced'] : ['search']);
       observation.authIssuer = fixtures.runtime.authIssuer;
       operator = await fixtures.person('search_operator');
       await fixtures.grantAccount(operator, ['moderation:hide', 'moderation:takedown']);
@@ -520,14 +520,16 @@ function supervise(parent: OutcomeRpc) {
       }
       if (sealed) throw new Error('Search supervisor is closing');
       if (method === 'init') {
-        exact(params, ['endpoint']);
+        exact(params, ['endpoint', 'advancedSearch']);
         if (typeof params.endpoint !== 'string') throw new Error('init requires endpoint');
+        if (params.advancedSearch !== undefined && typeof params.advancedSearch !== 'boolean')
+          throw new Error('advancedSearch must be a boolean');
         const endpoint = new URL(params.endpoint);
         if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password)
           throw new Error('Invalid OpenSearch endpoint');
         if (initialized) throw new Error('Search supervisor init already attempted');
         initialized = true;
-        return (starting = init(endpoint.href));
+        return (starting = init(endpoint.href, params.advancedSearch === true));
       }
       if (
         ![

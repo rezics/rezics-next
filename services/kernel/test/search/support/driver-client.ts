@@ -29,6 +29,10 @@ export interface NativeVoter {
   voter: string;
   accountId: string;
 }
+export interface DriverClientOptions {
+  /** Explicit opt-in for the original outcome suites; ordinary fixtures open only Search. */
+  advancedSearch?: boolean;
+}
 export interface DriverClient {
   /** Fixture-local names: 1..48 lowercase letters, digits or underscores; personas are reserved. */
   nativeVoter(name: string): Promise<NativeVoter>;
@@ -93,7 +97,10 @@ function ownedResource(value: unknown): OwnedResource {
 }
 
 /** Private per-factory transport. No runtime-owning module is imported into this process. */
-export function createDriverClient(endpoint = process.env.OPENSEARCH_URL): DriverClient {
+export function createDriverClient(
+  endpoint = process.env.OPENSEARCH_URL,
+  { advancedSearch = false }: DriverClientOptions = {},
+): DriverClient {
   if (!endpoint) throw new Error('OPENSEARCH_URL must name the real test node');
   const actualEndpoint = endpoint;
   const child = fork(`${import.meta.dir}/outcome-supervisor.ts`, [], {
@@ -345,7 +352,7 @@ export function createDriverClient(endpoint = process.env.OPENSEARCH_URL): Drive
     init() {
       return (initializing ??= (async () => {
         try {
-          const ready = await admit<SupervisorReady>('init', { endpoint: actualEndpoint }, STARTUP_MS);
+          const ready = await admit<SupervisorReady>('init', { endpoint: actualEndpoint, advancedSearch }, STARTUP_MS);
           return {
             globalContext: ready.globalContext,
             async request(persona, method, path, body, headers) {
