@@ -174657,7 +174657,7 @@
           {}
         ],
         "x-action": "subject:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:search_advanced"
       }
     },
     "/v1/subjects:merge": {
@@ -175400,6 +175400,10 @@
                     "type": "boolean"
                   },
                   "filter": {},
+                  "kindCursor": {
+                    "maxLength": 4864,
+                    "type": "string"
+                  },
                   "languages": {
                     "items": {
                       "type": "string"
@@ -175453,6 +175457,79 @@
                       "format": "date-time",
                       "type": "string"
                     },
+                    "kinds": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "values": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "count": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "exact": {
+                                    "type": "boolean"
+                                  },
+                                  "value": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "exact"
+                                ],
+                                "type": "object"
+                              },
+                              "icon": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "label": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "label",
+                              "icon"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "values",
+                        "next"
+                      ],
+                      "type": "object"
+                    },
                     "next": {
                       "type": [
                         "string",
@@ -175463,6 +175540,243 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "base": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "image": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "aspect": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "height": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "width",
+                                      "height"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "credit": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "license": {
+                                        "type": "string"
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "rightsHolder": {
+                                        "type": "string"
+                                      },
+                                      "via": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "url"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "rightsHolder",
+                                      "via",
+                                      "license",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "focalPoint": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "x": {
+                                        "type": "number"
+                                      },
+                                      "y": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "x",
+                                      "y"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "height": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "media": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "placeholder": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "color": {
+                                        "type": "string"
+                                      },
+                                      "thumbhash": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "thumbhash",
+                                      "color"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "variants": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "format": {
+                                          "enum": [
+                                            "avif",
+                                            "webp"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "width": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "format",
+                                        "width"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "width": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "media",
+                                  "width",
+                                  "height",
+                                  "placeholder",
+                                  "variants",
+                                  "focalPoint",
+                                  "credit",
+                                  "aspect"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "kindLabel": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "title": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "url": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "kindLabel",
+                              "title",
+                              "image",
+                              "url"
+                            ],
+                            "type": "object"
+                          },
                           "descriptions": {
                             "patternProperties": {
                               "^.*$": {
@@ -175570,6 +175884,9 @@
                           },
                           "id": {
                             "format": "uuid",
+                            "type": "string"
+                          },
+                          "kind": {
                             "type": "string"
                           },
                           "labels": {
@@ -175768,6 +176085,8 @@
                         "required": [
                           "id",
                           "type",
+                          "kind",
+                          "base",
                           "labels",
                           "summary",
                           "figure"
@@ -176338,7 +176657,7 @@
           {}
         ],
         "x-action": "subject:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:search"
       }
     },
     "/v1/subjects:suggest": {
@@ -176993,7 +177312,7 @@
           {}
         ],
         "x-action": "subject:read",
-        "x-exposure": "public"
+        "x-exposure": "gate:search"
       }
     },
     "/v1/threads": {

@@ -341,7 +341,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(contextual), realmRoleReader }),
   });
-  const searched = searchRoutes(contextual, { ...dependencies, clock });
+  let searched: ReturnType<typeof searchRoutes>;
+  searched = searchRoutes(contextual, {
+    ...dependencies,
+    clock,
+    gateAccess: () => resolveAccess({ actions: actionCatalogue(searched), realmRoleReader }),
+  });
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;

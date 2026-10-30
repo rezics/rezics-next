@@ -5,26 +5,12 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
-export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"item">;
-    id: import("typebox").TString;
-    labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"time">;
-    year: import("typebox").TInteger;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"quantity">;
-    amount: import("typebox").TNumber;
-    unit: import("typebox").TString;
-}>, import("typebox").TObject<{
-    kind: import("typebox").TLiteral<"code">;
-    value: import("typebox").TString;
-}>]>;
-export declare function searchRoutes<App>(app: App, { pool, routeKey, search, access, clock, }: {
+export declare function searchRoutes<App>(app: App, { pool, routeKey, search, access, gateAccess, clock, }: {
     pool: Pool;
     routeKey: Uint8Array;
     search?: SearchService;
     access?: Access | AccessFactory;
+    gateAccess?: () => Access;
     clock?: KernelClock;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {
@@ -82,6 +68,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                         sort?: "collections" | "id" | "name" | "rating" | "relevance";
                         limit?: number;
                         cursor?: string;
+                        kindCursor?: string;
                         descriptions?: boolean;
                         languages?: string[];
                         properties?: string[];
@@ -94,6 +81,56 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                             subjects: {
                                 id: string;
                                 type: string;
+                                kind: string;
+                                base: {
+                                    id: string;
+                                    kind: string;
+                                    kindLabel: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    title: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    image: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                        aspect: {
+                                            width: number;
+                                            height: number;
+                                        };
+                                    } | null;
+                                    url: {
+                                        id: string;
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                    };
+                                };
                                 labels: Record<string, string>;
                                 summary: {
                                     id: string;
@@ -161,6 +198,21 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                                     score: number | null;
                                 };
                             }[];
+                            kinds?: {
+                                values: {
+                                    value: string;
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    icon: string | null;
+                                    count?: {
+                                        value: number;
+                                        exact: boolean;
+                                    };
+                                }[];
+                                next: string | null;
+                            };
                             next: string | null;
                             as_of: string;
                         };

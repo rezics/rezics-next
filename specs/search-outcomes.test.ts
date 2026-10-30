@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -67,6 +68,8 @@ function unsupported(response: HttpResponse, pointer: string, descendants = fals
   ).toBe(true);
 }
 interface Hit {
+  kind?: string;
+  base?: ReturnType<typeof fixtureBase>;
   id: string;
   type: string;
   labels: Labels;
@@ -115,12 +118,23 @@ function fixtureSummary(subject: Pick<Hit, 'id' | 'type' | 'labels'>): Hit['summ
     cover: null,
   };
 }
+function fixtureBase(subject: Pick<Hit, 'id' | 'type' | 'labels'>) {
+  const title = { value: subject.labels.en!, language: 'en' };
+  return {
+    id: subject.id,
+    kind: subject.type,
+    kindLabel: { value: bundledRelease.types[subject.type]!.labels.en!, language: 'en' },
+    title,
+    image: null,
+    url: { id: subject.id, label: title },
+  };
+}
 interface Page {
   subjects: SearchHit[];
   next: string | null;
   as_of: string;
 }
-function hits(response: HttpResponse, limit: number, includeFigure = false) {
+function hits(response: HttpResponse, limit: number, includeFigure = false, generic = false) {
   const received = Date.now();
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');
@@ -134,6 +148,7 @@ function hits(response: HttpResponse, limit: number, includeFigure = false) {
       type: expect.any(String),
       labels: expect.any(Object),
       summary: fixtureSummary(hit),
+      ...(generic ? { kind: hit.type, base: fixtureBase(hit) } : {}),
     };
     expect(hit).toEqual(includeFigure ? { ...expected, figure: missingPublicFigure } : expected);
     for (const label of Object.values(hit.labels)) expect(typeof label).toBe('string');
@@ -146,17 +161,18 @@ function hits(response: HttpResponse, limit: number, includeFigure = false) {
   return subjects;
 }
 function page(response: HttpResponse, limit = 20): Page {
-  hits(response, limit, true);
+  hits(response, limit, true, true);
   expect(response.body).not.toHaveProperty('total');
   expect(response.body.next === null || typeof response.body.next === 'string').toBe(true);
   return response.body as unknown as Page;
 }
 const ids = (result: { subjects: Hit[] }) => result.subjects.map((hit) => hit.id);
-const hit = (subject: Subject): Hit => ({
+const hit = (subject: Subject, generic = true): Hit => ({
   id: subject.id,
   type: subject.type,
   labels: subject.labels,
   summary: fixtureSummary(subject),
+  ...(generic ? { kind: subject.type, base: fixtureBase(subject) } : {}),
 });
 const searchHit = (subject: Subject): SearchHit => ({ ...hit(subject), figure: missingPublicFigure });
 async function create(
@@ -281,7 +297,7 @@ test('New subjects become searchable and suggestible within fifteen seconds with
     (result) => ids(result.result).includes(book.id) && result.suggestions.some((item) => item.id === book.id),
   );
   expect(visible.result.subjects).toContainEqual(searchHit(book));
-  expect(visible.suggestions).toContainEqual(hit(book));
+  expect(visible.suggestions).toContainEqual(hit(book, false));
   expect(Date.parse(visible.result.as_of)).toBeGreaterThanOrEqual(started);
   expect(Date.parse(visible.suggestion.body.as_of as string)).toBeGreaterThanOrEqual(started);
   const read = await get(subjectPath(book.id));
@@ -350,14 +366,14 @@ test('Committed takedown and hiding remove stale hits immediately and refill pag
     const check = async (removed: Subject[], survivors: Subject[]) => {
       for (const persona of ['anonymous', 'editor'] as const) {
         const result = page(await search({ text: marker, sort: 'name', limit: 3 }, persona), 3);
-        expect(result.subjects).toEqual(survivors.slice(0, 3).map(hit));
+        expect(result.subjects).toEqual(survivors.slice(0, 3).map((subject) => hit(subject)));
         const suggestions = hits(await suggest(marker, 10, persona), 10);
         for (const subject of removed) {
           expect(ids(result)).not.toContain(subject.id);
           expect(suggestions.map((item) => item.id)).not.toContain(subject.id);
           problem(await get(subjectPath(subject.id), persona), 404, 'not_found');
         }
-        for (const subject of survivors) expect(suggestions).toContainEqual(hit(subject));
+        for (const subject of survivors) expect(suggestions).toContainEqual(hit(subject, false));
       }
     };
     await driver.remove(taken.id, 'taken_down');
@@ -390,7 +406,7 @@ test('Name paging has stable ties and request principal and signature bound toke
   for (const result of [one, two, three]) expect(result).not.toHaveProperty('total');
   expect([one.subjects.length, two.subjects.length, three.subjects.length]).toEqual([2, 2, 1]);
   const all = [...one.subjects, ...two.subjects, ...three.subjects];
-  expect(all).toEqual(expected.map(hit));
+  expect(all).toEqual(expected.map((subject) => hit(subject)));
   expect(new Set(all.map((item) => item.id)).size).toBe(5);
   expect(three.next).toBeNull();
   const token = one.next!;
@@ -401,7 +417,7 @@ test('Name paging has stable ties and request principal and signature bound toke
   // Default name sort without text and explicit id sort use the same five hits.
   const byName = page(await search({ filter: typeFilter() }));
   expect(byName.subjects.filter((item) => subjects.some((subject) => subject.id === item.id))).toEqual(
-    expected.map(hit),
+    expected.map((subject) => hit(subject)),
   );
   const byId = page(await search({ text: marker, sort: 'id' }));
   expect(ids(byId)).toEqual(subjects.map((subject) => subject.id).sort());
@@ -434,13 +450,13 @@ test('Typeahead matches word prefixes in Latin Chinese and aliases and rejects i
     async () => hits(await suggest('Koko'), 8),
     (result) => [kokoro, alias].every((subject) => result.some((item) => item.id === subject.id)),
   );
-  expect(latin).toContainEqual(hit(kokoro));
-  expect(latin).toContainEqual(hit(alias));
+  expect(latin).toContainEqual(hit(kokoro, false));
+  expect(latin).toContainEqual(hit(alias, false));
   const chinese = await eventually(
     async () => hits(await suggest('魔法'), 8),
     (result) => result.some((item) => item.id === magic.id),
   );
-  expect(chinese).toContainEqual(hit(magic));
+  expect(chinese).toContainEqual(hit(magic, false));
   expect(chinese.map((item) => item.id)).not.toContain(kokoro.id);
   expect(hits(await suggest('okor'), 8).map((item) => item.id)).not.toContain(kokoro.id);
   expect(hits(await suggest('Koko', 1), 1)).toHaveLength(1);

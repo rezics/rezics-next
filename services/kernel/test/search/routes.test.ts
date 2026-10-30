@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
@@ -9,6 +9,14 @@ import { AuthenticationError, type Access, type AccountActor, type Resource } fr
 import type { SearchService } from '../../src/search/http/routes.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { readExposure } from '../../src/access/gates/catalogue.ts';
+import { bulkLines, documentActions } from '../../src/search/document.ts';
+import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
+import { compileKinds, kindDigest } from '../../src/search/query.ts';
+import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { createSearchService } from '../../src/search/service.ts';
+import type { IndexedSubject } from '../../src/search/source.ts';
+import { createFakeSource } from './support/fake-source.ts';
 
 const missingFigure: PublicFigureView = {
   questionId: STANDARD_QUESTION_ID,
@@ -23,7 +31,27 @@ const missingFigure: PublicFigureView = {
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
-afterAll(() => pool.end());
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  // These dispatch cases use stub actors, not native write identities. Set only their
+  // exposure fixture; release-exposure.test.ts proves real governor admission separately.
+  for (const group of ['search', 'search_advanced']) {
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open) {
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+    }
+  }
+});
+afterAll(async () => {
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
+});
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
 const routeKey = new Uint8Array(32).fill(13);
@@ -113,7 +141,22 @@ test('search and suggest pass the caller, the body and the query to the service,
   const anonymous = await call(kernel, 'POST', '/v1/subjects:search', { body });
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.body).toEqual({
-    subjects: [{ ...result, figure: missingFigure, summary: null }],
+    subjects: [
+      {
+        ...result,
+        summary: null,
+        figure: missingFigure,
+        kind: result.type,
+        base: {
+          id: result.id,
+          kind: result.type,
+          kindLabel: { value: result.type, language: 'und' },
+          title: { value: 'Kokoro', language: 'en' },
+          image: null,
+          url: { id: result.id, label: { value: 'Kokoro', language: 'en' } },
+        },
+      },
+    ],
     next: null,
     as_of: asOf,
   });
@@ -332,4 +375,168 @@ test('HTTP forwards one resolved kernel instant to hits, ratings and facets whil
   const count = forwarded.length;
   expect((await call(app, 'POST', '/v1/subjects:search', { token: 'denied', body: {} })).response.status).toBe(403);
   expect(forwarded).toHaveLength(count);
+});
+
+describe('bounded native kind metadata and checked-hit witnesses', () => {
+  const database = process.env.DATABASE_URL;
+  const url = process.env.OPENSEARCH_URL;
+  if (!database || !url) throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
+  const pool = createPool(database);
+  const native = createOpenSearch(url);
+  const prefix = `kinds-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = subjectIndexName(prefix, 1);
+  const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
+  const release = {
+    properties: {},
+    types: Object.fromEntries<{ bases: string[]; labels: Record<string, string> }>(
+      Array.from({ length: 25 }, (_, n) => [
+        n === 0 ? 'schema:Book' : `kind:Kind${n}`,
+        { bases: [], labels: n === 2 ? {} : { en: `Kind ${n}`, fr: `Genre ${n}` } },
+      ]),
+    ),
+  };
+  let version = release;
+  const fake = createFakeSource();
+  let queries = 0;
+  let reads = 0;
+  let countReads = 0;
+  const engine: OpenSearch = {
+    bulk: native.bulk,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      if (args[1].endsWith('/_search/template')) queries++;
+      return native.request<T>(...args);
+    },
+  };
+  const source = {
+    ...fake,
+    async read(...args: Parameters<typeof fake.read>) {
+      reads++;
+      return fake.read(...args);
+    },
+    async count(): Promise<never> {
+      countReads++;
+      throw new Error('dirty count must not block hits');
+    },
+  };
+  const service = createSearchService({
+    pool,
+    client: engine,
+    prefix,
+    source,
+    cursors: ring,
+    release: async () => version,
+  });
+  const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
+  const subjects: IndexedSubject[] = Array.from({ length: 5 }, (_, n) => ({
+    id: id(n),
+    type: n < 3 ? 'schema:Book' : 'kind:Kind1',
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 1,
+    labels: [{ language: 'en', value: `Book ${n}` }],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  }));
+  beforeAll(async () => {
+    await createSubjectIndex(native, prefix, 1);
+    for (const subject of subjects) fake.put(subject);
+    await native.bulk(
+      bulkLines(
+        index,
+        documentActions(
+          { partition: 10, position: 5n, subjects },
+          subjects.map((s) => s.id),
+        ),
+      ),
+      { query: { refresh: 'wait_for' } },
+    );
+    await native.request('POST', '/_aliases', { actions: [{ add: { index, alias: subjectAlias(prefix) } }] });
+  });
+  afterAll(async () => {
+    await native.request('DELETE', `/${index}`);
+    for (const name of ['subjects-hits-v1', 'subjects-search-v2', 'subjects-suggest-v1', 'subjects-facets-v1'])
+      await native.request('DELETE', `/_scripts/${prefix}${name}`);
+    await pool.end();
+  });
+  const request = { sort: 'id' as const, languages: ['en'], limit: 4 };
+  test('initial counts reuse at most two unique current hits, once, without count reads or extra engine execution', async () => {
+    const before = queries;
+    const beforeReads = reads;
+    const initial = await service.search('anonymous', request);
+    expect(initial.subjects).toHaveLength(4);
+    expect(initial.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
+    expect(initial.kinds!.values.filter((v) => v.count).reduce((n, v) => n + v.count!.value, 0)).toBe(2);
+    expect(queries - before).toBe(1);
+    expect(reads - beforeReads).toBe(1);
+    expect(countReads).toBe(0);
+    expect(new TextEncoder().encode(JSON.stringify(initial)).length).toBeLessThan(16_384);
+    const next = await service.search('anonymous', { ...request, cursor: initial.next! });
+    expect(next.kinds!.values.every((v) => v.count === undefined)).toBe(true);
+  });
+  test('a stricter top-level type query witnesses the disjunctive dimension, retaining nested NOT', async () => {
+    const result = await service.search('anonymous', {
+      ...request,
+      filter: { and: [{ type: { in: ['schema:Book'] } }, { not: { type: { in: ['kind:Kind1'] } } }] },
+    });
+    expect(result.subjects).toHaveLength(3);
+    expect(result.kinds!.values[0]!.count).toEqual({ value: 2, exact: false });
+    expect(result.kinds!.values[1]!.count).toBeUndefined();
+  });
+  test('opaque metadata continuation returns normal hits, no count recomputation, and rejects tamper/query/viewer changes and release restart', async () => {
+    const initial = await service.search('anonymous', request);
+    const before = queries;
+    const more = await service.search('anonymous', { ...request, kindCursor: initial.kinds!.next! });
+    expect(more.subjects).toEqual(initial.subjects);
+    expect(more.kinds!.values).toHaveLength(8);
+    expect(more.kinds!.values.every((v) => v.count === undefined)).toBe(true);
+    expect(more.kinds!.values.every((v) => !initial.kinds!.values.some((first) => first.value === v.value))).toBe(true);
+    expect(queries - before).toBe(1);
+    for (const [principal, body] of [
+      ['anonymous', { ...request, kindCursor: 'schema:Book' }],
+      ['anonymous', { ...request, kindCursor: initial.kinds!.next!.slice(0, -5) + 'aaaaa' }],
+      ['anonymous', { ...request, limit: 3, kindCursor: initial.kinds!.next! }],
+      ['anonymous', { ...request, languages: ['fr'], kindCursor: initial.kinds!.next! }],
+      ['account:018f0000-0000-7000-8000-00a000000099', { ...request, kindCursor: initial.kinds!.next! }],
+    ] as const)
+      await expect(service.search(principal, { ...body, languages: [...body.languages] })).rejects.toMatchObject({
+        code: 'invalid_request',
+      });
+    version = { ...release, types: { ...release.types, last: { bases: [], labels: { en: 'Last' } } } };
+    try {
+      await expect(service.search('anonymous', { ...request, kindCursor: initial.kinds!.next! })).rejects.toMatchObject(
+        {
+          code: 'search_restart_required',
+        },
+      );
+    } finally {
+      version = release;
+    }
+  });
+  test('compiled metadata owns rows, uses actual language fallback, direct lookups and eight-row pages without reenumerating the release', () => {
+    let enumerations = 0;
+    const raw = structuredClone(release);
+    raw.types['kind:Kind24']!.labels.en = 'Owned snapshot';
+    const digest = kindDigest(raw);
+    const types = new Proxy(raw.types, {
+      ownKeys(target) {
+        enumerations++;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const snapshot = compileKinds({ ...raw, types }, digest);
+    expect(enumerations).toBe(1);
+    raw.types['schema:Book']!.labels.en = 'Mutated';
+    expect(snapshot.label('schema:Book', ['fr-CA'])).toEqual({ value: 'Genre 0', language: 'fr' });
+    expect(snapshot.label('kind:Kind2', ['fr'])).toEqual({ value: 'kind:Kind2', language: 'und' });
+    expect(snapshot.label('unknown', ['fr'])).toEqual({ value: 'unknown', language: 'und' });
+    const first = snapshot.page(undefined, ['en']);
+    expect(first.values).toHaveLength(8);
+    expect(first.values[0]!.label.value).toBe('Kind 0');
+    first.values[0]!.label.value = 'Caller mutation';
+    expect(snapshot.page(undefined, ['en']).values[0]!.label.value).toBe('Kind 0');
+    expect(snapshot.page(first.after!, ['en']).values[0]!.value).toBe('kind:Kind8');
+    expect(compileKinds({ ...raw, types }, digest)).toBe(snapshot);
+    expect(enumerations).toBe(1);
+  });
 });

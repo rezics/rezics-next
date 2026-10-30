@@ -11,9 +11,10 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { compileKinds, kindDigest, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { decodeSearchCursor, encodeSearchCursor } from './cursor.ts';
+import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import {
   admitFacets,
@@ -43,6 +44,7 @@ export type SearchRequest = {
   sort?: SearchPlan['sort'];
   limit?: number;
   cursor?: string;
+  kindCursor?: string;
   descriptions?: boolean;
   languages?: string[];
   properties?: string[];
@@ -154,6 +156,23 @@ function validate(request: SearchRequest) {
   };
 }
 
+/** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
+export function requiresAdvancedSearch(request: SearchRequest): boolean {
+  const { text, filter, sort } = validate(request);
+  const basicText = (node: NonNullable<typeof text>): boolean =>
+    node.kind === 'term' ||
+    node.kind === 'phrase' ||
+    ((node.kind === 'and' || node.kind === 'or') && node.children.every(basicText));
+  const basicFilter = (node: NonNullable<typeof filter>): boolean =>
+    'type' in node || ('and' in node && node.and.every(basicFilter)) || ('or' in node && node.or.every(basicFilter));
+  return (
+    sort === 'rating' ||
+    sort === 'collections' ||
+    (text !== undefined && !basicText(text)) ||
+    (filter !== undefined && !basicFilter(filter))
+  );
+}
+
 export function createSearchService({
   pool,
   client,
@@ -164,7 +183,7 @@ export function createSearchService({
   clock = systemClock,
   facetSample = 10_000,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
-  release = async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null,
+  release: releaseOverride,
 }: {
   pool: Pool;
   client: OpenSearch;
@@ -176,6 +195,8 @@ export function createSearchService({
   release?: () => Promise<FilterRelease | null>;
   facetSample?: number;
 }) {
+  const release =
+    releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
@@ -325,14 +346,25 @@ export function createSearchService({
   }
 
   return {
-    async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = clock().getTime()) {
+    async search(
+      principal: 'anonymous' | `account:${string}`,
+      request: SearchRequest,
+      now = clock().getTime(),
+      active?: { digest: string; release: FilterRelease } | null,
+    ) {
       const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
       // One lookup serves filter admission and the requested properties.
-      const current = filter || hitOptions.properties ? await release() : undefined;
+      const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+      const current = native?.release ?? (releaseOverride ? await release() : undefined);
+      const kinds: KindSnapshot | undefined = current
+        ? compileKinds(current, native?.digest ?? kindDigest(current))
+        : undefined;
       if ((filter || hitOptions.properties) && !current)
         throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       const admitted = await admitQuery(text, filter, current ?? undefined);
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
+      if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
+        invalid('/kindCursor', 'invalid_type');
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
@@ -398,12 +430,22 @@ export function createSearchService({
         ...(overflowProperties.length ? { overflowProperties } : {}),
         sort,
       };
+      const kindAfter =
+        request.kindCursor === undefined
+          ? undefined
+          : kinds
+            ? await decodeKindCursor(cursors, binding, request.kindCursor, generation!, kinds.digest, now)
+            : (() => {
+                throw new ProblemError('search_restart_required');
+              })();
       let after = cursor?.after;
       let overflow = false;
       let exhausted = false;
       const results: SearchHit[] = [];
       const shown: IndexedSubject[] = [];
       const emitted = new Set<string>();
+      const witnesses = new Map<string, number>();
+      let witnessCount = 0;
       // Observe every checked snapshot, including rejected candidates: current overflow can
       // precede its indexed marker, so an exact candidate total would also be unsafe there.
       const sourcePositions = new Map<number, bigint>();
@@ -467,6 +509,10 @@ export function createSearchService({
           consumed++;
           if (subject) {
             emitted.add(hit.id);
+            if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
+              witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+              witnessCount++;
+            }
             results.push(projectHit(subject, hitOptions));
             shown.push(subject);
           }
@@ -493,8 +539,20 @@ export function createSearchService({
           throw new ProblemError('search_restart_required');
       }
       const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
+      const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
       const response = {
         subjects: publicResults,
+        ...(metadata
+          ? {
+              kinds: {
+                values: metadata.values,
+                next:
+                  metadata.after === null
+                    ? null
+                    : await encodeKindCursor(cursors, binding, generation!, kinds!.digest, metadata.after, now),
+              },
+            }
+          : {}),
         next: exhausted
           ? null
           : rating
@@ -607,4 +665,35 @@ export function createSearchService({
       return response;
     },
   };
+}
+
+const bindingFor = (binding: SearchCursorBinding) => ({ ...binding, operation: 'subjects.search.kinds' });
+function encodeKindCursor(
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  generation: number,
+  digest: string,
+  after: string,
+  now: number,
+) {
+  return encodeSearchCursor(ring, bindingFor(binding), { generation, after: [digest, after] }, now);
+}
+async function decodeKindCursor(
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  token: string,
+  generation: number,
+  digest: string,
+  now: number,
+): Promise<string> {
+  const decoded = await decodeSearchCursor(ring, bindingFor(binding), token, now);
+  if (!decoded.ok) {
+    if (decoded.reason === 'expired') throw new ProblemError('search_restart_required');
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
+  }
+  if (decoded.generation !== generation || decoded.after[0] !== digest)
+    throw new ProblemError('search_restart_required');
+  if (decoded.after.length !== 2 || typeof decoded.after[1] !== 'string')
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
+  return decoded.after[1];
 }

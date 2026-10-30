@@ -44,6 +44,14 @@ function matchesText(subject: Fixtures['subjects'][number], query: string): bool
   return labels.some((label) => typeof label === 'string' && label.toLocaleLowerCase().includes(needle));
 }
 
+function coverWithAspect(value: unknown): unknown | null {
+  if (!isRecord(value)) return null;
+  const width = typeof value.width === 'number' ? value.width : 0;
+  const height = typeof value.height === 'number' ? value.height : 0;
+  if (!Number.isSafeInteger(width) || width < 1 || !Number.isSafeInteger(height) || height < 1) return null;
+  return { ...value, aspect: { width, height } };
+}
+
 function matchesStatements(
   subject: Fixtures['subjects'][number],
   filters: { property: string; values: string[] }[],
@@ -71,6 +79,15 @@ function subjectHit(
   return {
     id: subject.id,
     type: subject.type,
+    kind: subject.type,
+    base: {
+      id: subject.id,
+      kind: subject.type,
+      kindLabel: { value: subject.type, language: 'und' },
+      title: Object.keys(labels).length ? { value: labels[language]!, language } : null,
+      image: coverWithAspect(subject.cover),
+      url: { id: subject.id, label: Object.keys(labels).length ? { value: labels[language]!, language } : null },
+    },
     labels,
     descriptions: chosenLabels(subject.descriptions, languages, original),
     summary: {
@@ -102,7 +119,23 @@ function fixtureSearch(fixtures: Fixtures, body: Record<string, unknown>): Searc
     typeof body.limit === 'number' && Number.isInteger(body.limit) ? Math.max(1, Math.min(body.limit, 100)) : 20;
   const response = {
     subjects: matched.slice(0, limit).map((subject) => subjectHit(fixtures, subject, languages)),
-    total: { value: matched.length, relation: 'exact' as const },
+    kinds: {
+      values: Object.keys(fixtures.types)
+        .slice(0, 8)
+        .map((value) => {
+          const count =
+            body.cursor === undefined && body.kindCursor === undefined
+              ? matched.slice(0, 2).filter((subject) => subject.type === value).length
+              : 0;
+          return {
+            value,
+            label: { value, language: 'und' },
+            icon: null,
+            ...(count > 0 ? { count: { value: count, exact: false } } : {}),
+          };
+        }),
+      next: null,
+    },
     next: null,
     as_of: '2026-10-27T00:00:00Z',
   };
@@ -117,7 +150,10 @@ function fixtureSuggestions(fixtures: Fixtures, request: Request): SuggestionRes
   const subjects = fixtures.subjects
     .filter((subject) => matchesText(subject, query))
     .slice(0, limit)
-    .map((subject) => subjectHit(fixtures, subject, languages));
+    .map((subject) => {
+      const { kind: _kind, base: _base, ...hit } = subjectHit(fixtures, subject, languages);
+      return hit;
+    });
   return { subjects, as_of: '2026-10-27T00:00:00Z' } as SuggestionResponse;
 }
 

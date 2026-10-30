@@ -8,7 +8,7 @@ import { routeOf } from '../../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
-import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
+import { SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
 import { createSearchService } from '../../../src/search/service.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { closeOwnedSemanticAuth, type OwnedSemanticResource } from '../../semantic/outcome-auth.ts';
@@ -221,7 +221,7 @@ function supervise(parent: OutcomeRpc) {
               }
             });
             // Stored scripts also carry this factory's exact prefix.
-            for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE]) {
+            for (const name of [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE]) {
               await deleting(async () => {
                 try {
                   await search.request('DELETE', `/_scripts/${prefix}${name}`);
@@ -281,7 +281,7 @@ function supervise(parent: OutcomeRpc) {
         { linkProjection: 'external', strictCleanup: true, onOwnedResource: own, beforeClose },
       );
       const fixtures = semantic.fixtures;
-      await fixtures.openFeatures(['personal_library']);
+      await fixtures.openFeatures(['search']);
       observation.authIssuer = fixtures.runtime.authIssuer;
       operator = await fixtures.person('search_operator');
       await fixtures.grantAccount(operator, ['moderation:hide', 'moderation:takedown']);
@@ -299,9 +299,13 @@ function supervise(parent: OutcomeRpc) {
       });
       worker = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
         execPath: process.execPath,
-        env: Object.fromEntries(
-          Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
-        ),
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
+          ),
+          // SQL modules load before the IPC init handler: use this same world's database at import time too.
+          ...env,
+        },
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       });
       const output = (chunk: unknown) => {

@@ -1,19 +1,24 @@
+import { chooseLabel } from '../../semantic/language.ts';
+import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../../semantic/summaries.ts';
-import { SubjectSummarySchema } from '../../semantic/http/summaries.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import { relatedReadEligibility } from '../../semantic/eligibility.ts';
 import { routeOf } from '../../route/route.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import type { createApp } from '../../http/app.ts';
+import { actionCatalogue } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
-import { createSearchService } from '../service.ts';
+import { admitGroup } from '../../access/gates/admission.ts';
+import { createSearchService, requiresAdvancedSearch } from '../service.ts';
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
@@ -39,10 +44,53 @@ export const FactSchema = t.Union([
   t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, object),
   t.Object({ kind: t.Literal('code'), value: t.String() }, object),
 ]);
+const publicLabel = t.Object({ value: t.String(), language: t.String() }, object);
+const nullableLabel = t.Union([publicLabel, t.Null()]);
+const publicImage = t.Union([
+  t.Object(
+    {
+      ...CoverSummarySchema.anyOf[0].properties,
+      aspect: t.Object({ width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }) }, object),
+    },
+    object,
+  ),
+  t.Null(),
+]);
+const genericBase = t.Object(
+  {
+    id: t.String({ format: 'uuid' }),
+    kind: t.String(),
+    kindLabel: publicLabel,
+    title: nullableLabel,
+    image: publicImage,
+    url: t.Object({ id: t.String({ format: 'uuid' }), label: nullableLabel }, object),
+  },
+  object,
+);
+const kindPage = t.Object(
+  {
+    values: t.Array(
+      t.Object(
+        {
+          value: t.String(),
+          label: publicLabel,
+          icon: t.Union([t.String(), t.Null()]),
+          count: t.Optional(t.Object({ value: t.Integer({ minimum: 1 }), exact: t.Boolean() }, object)),
+        },
+        object,
+      ),
+      { maxItems: 8 },
+    ),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  object,
+);
 const searchHit = t.Object(
   {
     id: t.String({ format: 'uuid' }),
     type: t.String(),
+    kind: t.String(),
+    base: genericBase,
     labels: t.Record(t.String(), t.String()),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
@@ -54,11 +102,14 @@ const searchHit = t.Object(
 const searchResponse = t.Object(
   {
     subjects: t.Array(searchHit),
+    kinds: t.Optional(kindPage),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
   },
   object,
 );
+type SearchHttpResponse = Static<typeof searchResponse>;
+type SearchHttpBase = Static<typeof genericBase>;
 const facetResponse = t.Object(
   {
     facets: t.Array(
@@ -94,8 +145,16 @@ export function searchRoutes<App>(
     routeKey,
     search,
     access,
+    gateAccess,
     clock = systemClock,
-  }: { pool: Pool; routeKey: Uint8Array; search?: SearchService; access?: Access | AccessFactory; clock?: KernelClock },
+  }: {
+    pool: Pool;
+    routeKey: Uint8Array;
+    search?: SearchService;
+    access?: Access | AccessFactory;
+    gateAccess?: () => Access;
+    clock?: KernelClock;
+  },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -103,8 +162,9 @@ export function searchRoutes<App>(
     page: T,
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
+    active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
   ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
-    const active = await activeRelease(pool);
+    active = active === undefined ? await activeRelease(pool) : active;
     const summaries = active
       ? await readSubjectSummaries(
           {
@@ -128,6 +188,44 @@ export function searchRoutes<App>(
       subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),
     };
   }
+  function publicBases<
+    T extends {
+      subjects: { id: string; type: string; labels: Record<string, string>; summary: SubjectSummary | null }[];
+    },
+  >(
+    page: T,
+    languages: readonly string[],
+    active: Awaited<ReturnType<typeof activeRelease>>,
+  ): Omit<T, 'subjects'> & {
+    subjects: (T['subjects'][number] & { kind: string; base: SearchHttpBase })[];
+  } {
+    return {
+      ...page,
+      subjects: page.subjects.map((subject) => {
+        const title = subject.summary?.label ?? chooseLabel(subject.labels, languages) ?? null;
+        return {
+          ...subject,
+          kind: subject.type,
+          base: {
+            id: subject.id,
+            kind: subject.type,
+            kindLabel: active
+              ? compileKinds(active.release, active.digest).label(subject.type, languages)
+              : { value: subject.type, language: 'und' },
+            title,
+            image: subject.summary?.cover
+              ? {
+                  ...subject.summary.cover,
+                  aspect: { width: subject.summary.cover.width, height: subject.summary.cover.height },
+                }
+              : null,
+            url: { id: subject.id, label: title },
+          },
+        };
+      }),
+    };
+  }
+
   const routed = (app as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
     .post(
@@ -148,6 +246,7 @@ export function searchRoutes<App>(
             ),
             limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
             cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
+            kindCursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
             descriptions: t.Optional(t.Boolean()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
             properties: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 4 })),
@@ -165,12 +264,24 @@ export function searchRoutes<App>(
         },
         detail: {
           operationId: 'subject.search',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:search',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
       },
       async ({ body, authorize, admission, job, actor }) => {
+        if (requiresAdvancedSearch(body))
+          await admitGroup({
+            pool,
+            access:
+              gateAccess ??
+              (() => (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access!)),
+            actor,
+            group: 'search_advanced',
+            clientAction: 'subject:read',
+            deadline: job.deadline,
+            clock,
+          });
         const check = await authorize({
           ...resource,
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
@@ -178,15 +289,19 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return fill(
+          const active = await activeRelease(pool);
+          const page = await fill(
             await search.search(
               actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
               body,
               clock().getTime(),
+              active,
             ),
             authorize,
             body.languages,
+            active,
           );
+          return publicBases(page, body.languages ?? [], active) satisfies SearchHttpResponse;
         });
       },
     )
@@ -223,7 +338,7 @@ export function searchRoutes<App>(
           operationId: 'subject.facets',
           description:
             'Optional languages selects one label per facet value in preference order. Omit it to return all labels.',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:search_advanced',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -266,7 +381,7 @@ export function searchRoutes<App>(
           operationId: 'subject.suggest',
           description:
             'Repeat languages in preference order to select one label per suggestion. Omit it to return all labels.',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:search',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },

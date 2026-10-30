@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import type { FilterRelease } from '@rezics/filter';
+import { chooseLabel } from '../semantic/language.ts';
 import { readFileSync } from 'node:fs';
 import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
@@ -10,16 +13,14 @@ import {
   validateSearchAfter,
 } from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
-import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import type { OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
-import { searchRatingSubjectHits, searchRatingSubjects } from './rating-query.ts';
+import { searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
-export type { RatingQueryPlan } from './rating-query.ts';
-
 // Released templates keep their source and id; changes require a new version of both.
-export const SEARCH_TEMPLATE = 'subjects-search-v2';
 export const HIT_TEMPLATE = 'subjects-hits-v1';
+export const SEARCH_TEMPLATE = 'subjects-search-v2';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
@@ -75,12 +76,6 @@ export type SearchHit = SubjectHit & {
   sort: SortValue[];
 };
 
-export type HitResult = {
-  generation?: number;
-  hits: SearchHit[];
-  overflow?: boolean;
-};
-
 export type SearchResult = {
   generation?: number;
   hits: SearchHit[];
@@ -88,17 +83,14 @@ export type SearchResult = {
   overflow?: boolean;
 };
 
+export type HitResult = Omit<SearchResult, 'total'>;
+
 type StoredHit = {
   _id: string;
   _index: string;
   _source: { partition: number; security_revision: number };
   matched_queries?: string[];
   sort: SortValue[];
-};
-
-type HitResponse = {
-  hits: { hits: StoredHit[] };
-  aggregations?: { overflow: { doc_count: number } };
 };
 
 type SearchResponse = {
@@ -129,43 +121,22 @@ export async function installTemplates(search: OpenSearch, prefix: string): Prom
 }
 
 export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult> {
-  validateSize(plan.size, 200);
-  if (plan.sort === 'rating')
-    return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
-  return subjectSearch<SearchResponse>(search, prefix, plan, SEARCH_TEMPLATE).then((body) => {
-    admitSearchPayload(body, plan, prefix);
-    return {
-      ...hitResult(body, plan),
-      total: { value: body.hits.total.value, relation: body.hits.total.relation === 'gte' ? 'lower_bound' : 'exact' },
-    };
-  });
+  return executeSubjects(search, prefix, plan, true) as Promise<SearchResult>;
 }
 
-/** Ordinary candidate reads do not compute or require native totals. */
 export function searchSubjectHits(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<HitResult> {
-  validateSize(plan.size, 200);
-  if (plan.sort === 'rating') return searchRatingSubjectHits(search, prefix, { ...plan, rating: plan.rating! });
-  return subjectSearch<HitResponse>(search, prefix, plan, HIT_TEMPLATE).then((body) => {
-    admitHitPayload(body, plan, prefix);
-    return hitResult(body, plan);
-  });
+  return executeSubjects(search, prefix, plan, false);
 }
 
-function hitResult(body: HitResponse, plan: SearchPlan): HitResult {
-  const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
-  return {
-    ...(plan.generation === undefined ? {} : { generation: plan.generation }),
-    hits: body.hits.hits.map((hit) => ({ ...subjectHit(hit), matched: hit.matched_queries ?? [], sort: hit.sort })),
-    ...(hasOverflow ? { overflow: requireSearchOverflow(body) } : {}),
-  };
-}
-
-function subjectSearch<T extends HitResponse>(
+function executeSubjects(
   search: OpenSearch,
   prefix: string,
   plan: SearchPlan,
-  template: string,
-): Promise<T> {
+  counted: boolean,
+): Promise<HitResult | SearchResult> {
+  validateSize(plan.size, 200);
+  if (plan.sort === 'rating')
+    return searchRatingSubjects(search, prefix, { ...plan, rating: plan.rating! }, SEARCH_TEMPLATE);
   validateSearchAfter(plan);
   const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const hasOverflow = (plan.overflowProperties?.length ?? 0) > 0;
@@ -179,11 +150,11 @@ function subjectSearch<T extends HitResponse>(
           : [{ id: 'asc' }];
 
   return search
-    .request<T>(
+    .request<SearchResponse>(
       'POST',
       `/${target}/_search/template`,
       {
-        id: `${prefix}${template}`,
+        id: `${prefix}${counted ? SEARCH_TEMPLATE : HIT_TEMPLATE}`,
         params: {
           query: plan.query,
           has_query: plan.query !== undefined,
@@ -203,11 +174,28 @@ function subjectSearch<T extends HitResponse>(
       },
       { query: { allow_partial_search_results: false } },
     )
-    .then(({ status, body }) => {
-      if (!Number.isInteger(status) || status < 200 || status >= 300)
-        throw new SearchUnavailableError('OpenSearch search status is missing or unsuccessful');
+    .then(({ body }) => {
       assertCompleteSearch(body);
-      return body;
+      if (counted) admitSearchPayload(body, plan, prefix);
+      else admitHitPayload(body, plan, prefix);
+      const overflow = hasOverflow ? requireSearchOverflow(body) : false;
+      return {
+        ...(plan.generation === undefined ? {} : { generation: plan.generation }),
+        hits: body.hits.hits.map((hit) => ({
+          ...subjectHit(hit),
+          matched: hit.matched_queries ?? [],
+          sort: hit.sort,
+        })),
+        ...(counted
+          ? {
+              total: {
+                value: body.hits.total.value,
+                relation: body.hits.total.relation === 'gte' ? ('lower_bound' as const) : ('exact' as const),
+              },
+            }
+          : {}),
+        ...(hasOverflow ? { overflow } : {}),
+      };
     });
 }
 
@@ -359,4 +347,65 @@ export async function countFacets(
       };
     }),
   };
+}
+
+type PublicLabel = { value: string; language: string };
+export type KindValue = {
+  value: string;
+  label: PublicLabel;
+  icon: string | null;
+  count?: { value: number; exact: false };
+};
+type Row = { value: string; labels: Readonly<Record<string, string>>; icon: string | null };
+export type KindSnapshot = {
+  digest: string;
+  label: (kind: string, languages: readonly string[]) => PublicLabel;
+  page: (
+    after: string | undefined,
+    languages: readonly string[],
+    witnesses?: ReadonlyMap<string, number>,
+  ) => { values: KindValue[]; after: string | null };
+};
+const snapshots = new Map<string, KindSnapshot>();
+
+/** Mutable injected releases have no identity authority. Native callers supply the immutable release digest. */
+export function kindDigest(release: FilterRelease): string {
+  return createHash('sha256').update(JSON.stringify(release)).digest('hex');
+}
+
+/** Own every row and label map; request work is one direct lookup plus at most eight rows. */
+export function compileKinds(release: FilterRelease, digest: string): KindSnapshot {
+  const cached = snapshots.get(digest);
+  if (cached) return cached;
+  const rows: Row[] = Object.entries(release.types).map(([value, raw]) => {
+    const definition = raw as typeof raw & { labels?: Record<string, string>; icon?: string };
+    return Object.freeze({ value, labels: Object.freeze({ ...definition.labels }), icon: definition.icon ?? null });
+  });
+  const positions = new Map(rows.map((row, index) => [row.value, index]));
+  const labels = (row: Row | undefined, kind: string, languages: readonly string[]) =>
+    chooseLabel(row?.labels ?? {}, languages) ?? { value: kind, language: 'und' };
+  const snapshot: KindSnapshot = Object.freeze({
+    digest,
+    label(kind, languages) {
+      return labels(rows[positions.get(kind) ?? -1], kind, languages);
+    },
+    page(after, languages, witnesses) {
+      const start = after === undefined ? 0 : (positions.get(after) ?? rows.length) + 1;
+      const selected = rows.slice(start, start + 8);
+      return {
+        values: selected.map((row) => {
+          const value = witnesses?.get(row.value);
+          return {
+            value: row.value,
+            label: labels(row, row.value, languages),
+            icon: row.icon,
+            ...(value && value > 0 ? { count: { value, exact: false as const } } : {}),
+          };
+        }),
+        after: start + selected.length < rows.length ? selected.at(-1)!.value : null,
+      };
+    },
+  });
+  snapshots.set(digest, snapshot);
+  return snapshot;
 }

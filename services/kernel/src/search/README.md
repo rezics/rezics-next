@@ -3,8 +3,10 @@
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
-[Retained public-filter custody](public-filter-custody.md) owns immutable observation/use/PIT lifecycle, bounded
-drain revalidation and accepted release-width retention through the original immutable meaning authority.
+The first released subject search slice, generic public hit bases and bounded kind metadata are built but
+closed behind `search` platform grants. Advanced filters/scopes, facets and rating remain behind
+`search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
+deferred; this closed slice does not complete the Search Goal.
 
 The optional `languages` request field is the reader's language chain, in priority order. Search follows semantic's
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
@@ -15,41 +17,6 @@ count-free continuation wire, with additive types in `facet-discovery-contract.t
 sampled, count-ordered preview with unsafe count metadata. Count removal is separate work; complete count-free
 continuation, admission, Source/privacy integration and preparation remain **UNIMPLEMENTED**. This specification
 adoption supplies no runtime or native acceptance evidence.
-
-## Mixed-kind foundation
-
-[discovery.ts](discovery.ts) is the shared type home for `AccountDiscoverySource`, `AccountSnapshot`,
-`IndexedAccount`, the owner-discriminated registry/document/summary unions, `KindCountEvidence`, and the opt-in
-`DiscoveryRequest`/`DiscoveryPage` (`representation: 'discovery-v1'`). It reuses native Subject, avatar, reader
-deadline/authorization and token types. The [Accounts source contract](../access/account-discovery-contract.md)
-continues to own eligibility, current-T exact claims and the native census. Source reads/pages are bounded to
-100 Account keys; `count` is generation census only and cannot supply query kind-count evidence.
-
-`createDiscoveryRegistry` in [discovery-registry.ts](discovery-registry.ts) registers the pinned release's actual
-catalogue type IDs and the reserved `account` kind. Each entry carries its owner source, current summary hydrator,
-localized labels/icon, summary discriminator and supported domains. Account supports text/kind; Subject domains
-retain their meanings. `evaluateDiscoveryCondition` consumes an expanded, admitted planner tree with domain-tagged
-leaves and preserves `not_applicable`/`not_proven` through NOT. It is predicate evaluation, never permission:
-resource authorization and current whole-query/native eligibility remain mandatory outside this pure boundary.
-
-[discovery-documents.ts](discovery-documents.ts) constructs bounded actions from an already authorized source
-snapshot, without additional source enumeration or profile reads. Account projection copies only native ID,
-account kind, current claim-approved handle, displayName and revision plus internal identity/position fields.
-A null handle retains displayName. Revisions and snapshot positions remain exact bigint internally and canonical
-decimal strings in documents. `discoveryBulkBody` serializes the exact native signed-bigint external version as
-raw NDJSON; do not send that string through the legacy `OpenSearch.bulk` JSON-value serializer.
-
-The inert [discovery.json](../../db/search/indices/discovery.json) defines one strict native family with the existing
-`cjk_bigram_v2` analyzer. Mapping `_meta.discovery_document_format = 1` pairs with `_source.document_format = 1`
-and native `_id = discovery-v1:<encodeURIComponent(kind)>:<canonical UUID>`. `discoveryDocumentId`,
-`parseDiscoveryDocumentId` and `parseDiscoveryHitIdentity` share that identity contract; the mixed parser rejects
-owner/kind/route/document disagreement and legacy raw UUID receipts. Global mixed ties can use `kind, id`.
-`validateDiscoveryDocument` enforces per-owner field allowlists that the union mapping alone cannot enforce.
-
-This foundation performs no index creation, mixed generation activation, population integration or HTTP route
-activation. Existing SubjectSource, IndexedSubject, document actions and UUID receipts retain their meaning.
-Native source/disclosure, comparable mixed ordering, query/count assembly and current summary hydration remain
-consumer integration work; these exports make no native availability claim.
 
 ## Deletion lifecycle
 
@@ -237,7 +204,7 @@ equivalent to scored-first ordering only for a fixed indexed state and the valid
 uses no per-match rating script or fetched-prefix reranking. See the pinned OpenSearch 3.9.0
 [field sort implementation](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/search/sort/FieldSortBuilder.java#L410-L449).
 
-Resolve and pin one concrete physical generation before either phase and use it for both phases
+Resolve and pin one concrete physical generation before either phase and use it for both phases, count-only searches
 and every refill, including searches returning zero hits. Read the selected native epoch before discovery, keep it
 fixed throughout the response and read it again before returning. An observed epoch or active-generation change
 restarts with HTTP 409; unavailable evidence fails closed. A null epoch at both ends proves only that the current
@@ -245,7 +212,7 @@ ordering rule is unscored at both reads: it does not prove that no eligible inte
 transition-history field is introduced.
 
 The existing phase implementation below retains its native request quotas; these do not admit a complete list
-plan or replace Performance allowances. Each ordinary refill round uses at most two necessary native hit searches and never a count-only search. A shared raw-hit budget
+plan or replace Performance allowances. Each refill round uses at most two native searches, including any count-only search. A shared raw-hit budget
 `q = min(200, 2 * remaining_page_slots + 1)` applies across A and B; the page uses at most three rounds and 600
 raw hits. Search advances from the last consumed native hit, including stale or rejected hits, and leaves an
 acceptable lookahead unconsumed. Do not advance through an unconsumed A hit, strip the score from an A tuple to
@@ -263,21 +230,9 @@ phase counts nor a disclosed-hit row-length fallback supplies a safe aggregate. 
 aggregate contract may admit counts. A subject can move between phases between searches even when epoch and
 generation are unchanged.
 
-Ordinary `searchSubjectHits` dispatches rating reads to `searchRatingSubjectHits`, returning the shared `HitResult`
-without any total. Both phases use the immutable `subjects-hits-v1` template with native total tracking disabled.
-A full scored response returns immediately. Only a short scored response searches the exact unscored complement,
-with its size reduced by the actual scored hits returned. An unscored continuation never revisits scored rows.
-A known null prior searches only the all-unscored phase. A short or empty scored phase alone is never a successful
-exhaustion result while the complement remains unread. Tuples strictly advance beyond the supplied frontier and
-within each native phase; duplicate IDs, malformed payloads, incomplete shards and missing overflow receipts fail
-closed. Current figure and final alias/epoch checks remain in the caller.
-
-Keep released `subjects-search-v2` source and ID unchanged. Explicit `searchRatingSubjects` and `searchSubjects`
-retain their counted result and native count-only counterpart/prior-phase searches. They do not supply the ordinary
-candidate path. For a full scored page, mixed boundary, unscored continuation and null prior respectively, ordinary
-native request counts versus the counted helper are 1 versus 2, 2 versus 2, 1 versus 2 and 1 versus 1. This removes
-unused total work without changing candidate, refill, byte or Source limits; it does not bound Lucene postings or
-sorting work and does not establish complete current-native order or privacy.
+Keep released `subjects-search-v2` source and ID unchanged. Reuse it if the fixed server-built phase filters, sorts,
+physical target and zero-size count request fit its existing template contract; introduce a new template version
+only if the stored source must change.
 
 ## Confidential cursor and bounded name sort
 
@@ -657,17 +612,11 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 ### Global rating phases
 
 - Touches: Each page resolves one physical generation and brackets its native epoch context; each refill round sends
-  at most two necessary hit-only phase searches, then checks current figures in bounded source batches.
+  at most two phase searches, including count-only work, then checks current figures in bounded source batches.
 - Bound: At most 200 combined raw hits per round and 600 per three-round response; current-figure reads are batched
   by anchor partition, at most 256 figure IDs per source call. The initial public response omits totals, including
-  verified `lower_bound` ratings. OpenSearch sorting work remains match-dependent;
+  verified `lower_bound` ratings. OpenSearch sort and count work is match-dependent;
   no SQL, latency or O(1) engine-work claim follows from these request bounds.
-- Hit-only evidence: additive native cases in `test/search/rating-query.test.ts` cover scored fill, exact quota,
-  mixed boundary, stale/all-unscored and null prior, normalized and null-name ties, deep traversal, consumed-frontier
-  replay, empty/after-exhaustion, alias switches, deleted pins, overflow and malformed/partial native receipts.
-  They retain the real node version, request bodies and original native tuples in `.temp/rating-hit-evidence-*.json`.
-  Three unrelated populations exercise phase/deep/sparse request, candidate and iterator bounds. These cases are
-  pending integration execution; the frozen hit test and all original counted/phase/cursor assertions remain.
 - Growth check: [test/search/growth-rating-query.test.ts](../../test/search/growth-rating-query.test.ts): “native rating
   candidate delivery remains within shared phase quotas as the real indexed matching population grows”. The test is
   present; its runtime pass status is unverified here. Its native phase request and returned-key quotas do not prove

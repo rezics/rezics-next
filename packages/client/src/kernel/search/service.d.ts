@@ -13,6 +13,7 @@ export type SearchRequest = {
     sort?: SearchPlan['sort'];
     limit?: number;
     cursor?: string;
+    kindCursor?: string;
     descriptions?: boolean;
     languages?: string[];
     properties?: string[];
@@ -24,6 +25,8 @@ type Result = {
 };
 /** The standalone result-slot bound, also used before aggregate dispatch. */
 export declare function validateSearchLimit(value: unknown): number;
+/** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
+export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
 export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release, }: {
     pool: Pool;
     client: OpenSearch;
@@ -35,8 +38,15 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     release?: () => Promise<FilterRelease | null>;
     facetSample?: number;
 }): {
-    search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
+    search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
+        digest: string;
+        release: FilterRelease;
+    } | null): Promise<{
         subjects: import("./public-figures.ts").PublicSearchHit[];
+        kinds?: {
+            values: import("./query.ts").KindValue[];
+            next: string | null;
+        };
         next: string | null;
         as_of: string;
     }>;

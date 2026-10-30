@@ -28,7 +28,12 @@ import { sharedAuth, type OwnedResourceObserver } from './outcome-auth.ts';
 import { isolatedOutcomeAuth } from './isolated-outcome-auth.ts';
 
 type Account = { accountId: string; bearer: string };
-export const releasedDiscoveryFeatures = Object.freeze(['personal_library', 'reading_progress'] as const);
+export const releasedDiscoveryFeatures = Object.freeze([
+  'personal_library',
+  'reading_progress',
+  'search',
+  'search_advanced',
+] as const);
 export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number];
 
 const password = 'semantic outcome registration password with enough entropy';
@@ -555,7 +560,7 @@ async function startDriver(
         async openFeatures(groups) {
           if (completion) throw new Error('Semantic outcome fixture is closed');
           if (!Array.isArray(groups) || groups.some((group) => !releasedDiscoveryFeatures.includes(group)))
-            throw new Error('Released discovery features must be personal_library or reading_progress');
+            throw new Error('Unknown released discovery feature');
           for (const group of new Set(groups)) {
             const response = await send(governor, 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
               'Idempotency-Key': key(),

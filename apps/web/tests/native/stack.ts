@@ -13,6 +13,7 @@ import {
   inspectNativeProcess,
   nativeProcessIsSame,
   settledWithin,
+  NativeTestLifecycle,
   type NativeProcessIdentity,
   type NativeProcessOwnership,
 } from './lifecycle.ts';
@@ -20,6 +21,7 @@ import { createCommerceWork } from '../../../../services/kernel/src/commerce/enq
 import { readCommerceConfig } from '../../../../services/kernel/src/commerce/config.ts';
 import { createStripePort } from '../../../../services/kernel/src/commerce/stripe.ts';
 import { createWorkClient, type WorkClient } from '../../../../services/kernel/src/work/client.ts';
+import type { OpenSearch } from '../../../../services/kernel/src/search/opensearch.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
@@ -398,6 +400,8 @@ async function startStack(): Promise<
   let closeAuth: (() => Promise<void>) | undefined;
   let closePageWorkflows: (() => Promise<void>) | undefined;
   let commerceWorkClient: Promise<WorkClient> | undefined;
+  let search: OpenSearch | undefined;
+  const searchPrefix = `native-web-${randomBytes(12).toString('hex')}-`;
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
@@ -477,6 +481,36 @@ async function startStack(): Promise<
       webProcess = undefined;
       kernelServer = undefined;
       durableWorker = undefined;
+      if (search) {
+        // Both the HTTP service and the default worker are now drained. Resolve
+        // only this stack's namespace, and delete explicit physical index names.
+        await attempt(async () => {
+          const { body } = await search!.request<{ indices: { name: string }[] }>(
+            'GET',
+            `/_resolve/index/${searchPrefix}*`,
+            undefined,
+            { query: { expand_wildcards: 'all' } },
+          );
+          for (const { name } of body.indices) {
+            await attempt(async () => {
+              if (!name.startsWith(searchPrefix)) throw new Error('Index escaped native stack prefix');
+              await search!.request('DELETE', `/${encodeURIComponent(name)}`);
+            });
+          }
+        });
+        const { OpenSearchError } = await import('../../../../services/kernel/src/search/opensearch.ts');
+        const { SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } =
+          await import('../../../../services/kernel/src/search/query.ts');
+        for (const name of [SEARCH_TEMPLATE, HIT_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE]) {
+          await attempt(async () => {
+            try {
+              await search!.request('DELETE', `/_scripts/${searchPrefix}${name}`);
+            } catch (error) {
+              if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+            }
+          });
+        }
+      }
       // Auth holds the harness's kernel Access and registration ports. Drain it
       // while those ports and their pool still exist, then release the kernel.
       console.info('Native web stack cleanup: closing Auth fixture');
@@ -655,29 +689,49 @@ async function startStack(): Promise<
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
+    const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
+    const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });
+    const { createOpenSearch } = await import('../../../../services/kernel/src/search/opensearch.ts');
+    const { createSearchService } = await import('../../../../services/kernel/src/search/service.ts');
+    const { subjectSource } = await import('../../../../services/kernel/src/semantic/search-source.ts');
+    if (searchConfig) search = createOpenSearch(searchConfig.url);
     let kernel: ReturnType<typeof createKernel> | undefined;
     reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
-        if (!commerce) {
-          kernel = createKernel(dependencies);
-          return kernel;
+        if (search && !dependencies.tokens) throw new Error('Native kernel did not supply session keys');
+        if (commerce) {
+          const databaseUrl = dependencies.pool.options.connectionString;
+          if (typeof databaseUrl !== 'string') throw new Error('Native Commerce needs the owned kernel database URL');
+          commerceWorkClient = createWorkClient(databaseUrl);
+          void commerceWorkClient.catch(() => {});
         }
-        const databaseUrl = dependencies.pool.options.connectionString;
-        if (typeof databaseUrl !== 'string') throw new Error('Native Commerce needs the owned kernel database URL');
-        commerceWorkClient = createWorkClient(databaseUrl);
-        void commerceWorkClient.catch(() => {});
         kernel = createKernel({
           ...dependencies,
-          commerce: {
-            ...commerce,
-            stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
-            work: {
-              async enqueueStripeEvent(ref) {
-                await createCommerceWork(await commerceWorkClient!).enqueueStripeEvent(ref);
-              },
-            },
-          },
+          ...(commerce
+            ? {
+                commerce: {
+                  ...commerce,
+                  stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
+                  work: {
+                    async enqueueStripeEvent(ref) {
+                      await createCommerceWork(await commerceWorkClient!).enqueueStripeEvent(ref);
+                    },
+                  },
+                },
+              }
+            : {}),
+          ...(search === undefined || searchConfig === undefined
+            ? {}
+            : {
+                search: createSearchService({
+                  pool: dependencies.pool,
+                  client: search,
+                  prefix: searchConfig.prefix,
+                  source: subjectSource(dependencies.pool, dependencies.routeKey),
+                  cursors: dependencies.tokens!,
+                }),
+              }),
         });
         return kernel;
       },
@@ -688,6 +742,7 @@ async function startStack(): Promise<
     );
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
 
+    await driver.fixtures.openFeatures(['search']);
     authServer = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
@@ -718,6 +773,8 @@ async function startStack(): Promise<
         NATIVE_MEDIA_STORAGE_ORIGIN: webOrigin,
         NATIVE_MEDIA_STORAGE_TOKEN: nativeMediaStorageToken,
         ...(testWriteRateOverrides ? { KERNEL_WRITE_RATE_OVERRIDES: testWriteRateOverrides } : {}),
+        OPENSEARCH_URL: searchConfig?.url,
+        KERNEL_SEARCH_PREFIX: searchPrefix,
       }),
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
       KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
@@ -1094,7 +1151,20 @@ function reportOwnedProcessGroup(label: string, child: ChildProcess, stateDirect
 
 export async function startNativeWebStack(options: NativeWebStackOptions = {}): Promise<NativeWebStack> {
   const lifecycle = currentNativeLifecycle();
-  if (!lifecycle) throw new Error('Native web stack startup requires an active native test lifecycle');
+  if (!lifecycle) {
+    const standalone = new NativeTestLifecycle('standalone native web stack');
+    const stack = await standalone.run('start native web stack', 360_000, () => startNativeWebStack(options), false);
+    return {
+      ...stack,
+      async stop() {
+        try {
+          await stack.stop();
+        } finally {
+          await standalone.close();
+        }
+      },
+    };
+  }
   lifecycle.assertOpen('start native web stack');
   if (options.issuerOrigin !== undefined) {
     const issuer = new URL(options.issuerOrigin);
