@@ -169,10 +169,12 @@ async function select(
   let page = await port.reviewedCandidates(subject, query, signal);
   ensure(page.next === null, 'Reviewed catalogue candidate page exceeds its bound');
   const row = page.candidates.find((c) => c.id === candidate);
-  ensure(row && currentSource(row.source, seed) && row.retracted === null && row.retraction === null);
+  ensure(
+    row && 'statement' in row && currentSource(row.source, seed) && row.retracted === null && row.retraction === null,
+  );
   ensure(row.decision !== 'rejected' && row.rank !== 'deprecated');
   ensure(
-    !page.candidates.some((c) => c.id !== candidate && c.rank !== null),
+    !page.candidates.some((c) => 'statement' in c && c.id !== candidate && c.rank !== null),
     'Existing editorial selection must not be replaced',
   );
   ensure(
@@ -192,10 +194,11 @@ async function select(
   ensure(acceptance.acceptance.candidate === candidate && acceptance.acceptance.decision === 'accept');
   // Read the actual adoption head after acceptance; never derive it from a write revision.
   page = await port.reviewedCandidates(subject, query, signal);
-  ensure(page.next === null && !page.candidates.some((c) => c.id !== candidate && c.rank !== null));
+  ensure(page.next === null && !page.candidates.some((c) => 'statement' in c && c.id !== candidate && c.rank !== null));
   ensure(
     !page.adoption ||
-      (page.adoption.mode === 'replace' && page.candidates.some((c) => c.id === candidate && c.rank !== null)),
+      (page.adoption.mode === 'replace' &&
+        page.candidates.some((c) => 'statement' in c && c.id === candidate && c.rank !== null)),
   );
   const adoption = await port.adoptReviewedCandidates(
     subject,
@@ -393,6 +396,7 @@ export async function readReviewedBangumiBinding(
         const content = expected.value.content;
         const selected = page.candidates.filter(
           (c) =>
+            'statement' in c &&
             c.decision === 'accepted' &&
             (c.rank === 'preferred' || c.rank === 'normal') &&
             c.retracted === null &&
