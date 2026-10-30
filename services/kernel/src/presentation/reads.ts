@@ -9,7 +9,9 @@ import type { KeyRing } from '../tokens/seal.ts';
 
 export { MAX_PAGE_READS } from '@rezics/composition';
 
-export type PageRead = Exclude<import('@rezics/composition').PageRead, { kind: 'search' }> | { kind: 'search'; body: object };
+export type PageRead =
+  | Exclude<import('@rezics/composition').PageRead, { kind: 'search' }>
+  | { kind: 'search'; body: object };
 
 export class PageReadError extends Error {
   readonly errors: FieldError[];
@@ -24,7 +26,7 @@ export class PageReadError extends Error {
 }
 
 type SessionKeys = { ring: KeyRing; scope: string };
-type ForwardedCredentials = { authorization: string | null; session: string | null };
+type ForwardedCredentials = { authorization: string | null; session: string | null; language: string | null };
 type PageResult = { status: number; body: unknown };
 type PreparedRead = {
   key: string;
@@ -319,6 +321,7 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   const headers = new Headers();
   if (credentials.authorization !== null) headers.set('authorization', credentials.authorization);
   if (credentials.session !== null) headers.set(SESSION_HEADER, credentials.session);
+  if (credentials.language !== null) headers.set('accept-language', credentials.language);
 
   const init: RequestInit = { method: descriptor.kind === 'search' ? 'POST' : 'GET', headers, redirect: 'manual' };
   if (descriptor.kind === 'search') {
@@ -459,6 +462,7 @@ export async function readPage(options: {
   const credentials = {
     authorization: options.incoming.headers.get('authorization'),
     session: options.incoming.headers.get(SESSION_HEADER),
+    language: options.languages?.join(',') ?? options.incoming.headers.get('accept-language'),
   };
   const completed = new Array<DispatchResult | undefined>(distinctReads.length);
   const failures = new Array<{ error: unknown } | undefined>(distinctReads.length);

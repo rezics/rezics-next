@@ -239,9 +239,15 @@ function SubjectViewError({ error, reset }: { error: Error; reset: () => void })
   const search = new URLSearchParams(location.searchStr);
   search.delete('cursor');
   const query = search.toString();
-  return <div className="space-y-4 p-6">
-    <p>{error.message === 'dependency_unavailable' ? 'This page changed. Try again.' : 'This page is unavailable.'}</p>
-    <button type="button" onClick={reset}>Try again</button>
-    <a href={`${location.pathname}${query ? `?${query}` : ''}`}>Start again</a>
-  </div>;
+  return (
+    <div className="space-y-4 p-6">
+      <p>
+        {error.message === 'dependency_unavailable' ? 'This page changed. Try again.' : 'This page is unavailable.'}
+      </p>
+      <button type="button" onClick={reset}>
+        Try again
+      </button>
+      <a href={`${location.pathname}${query ? `?${query}` : ''}`}>Start again</a>
+    </div>
+  );
 }

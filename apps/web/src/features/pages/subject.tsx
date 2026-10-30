@@ -120,7 +120,11 @@ export async function loadSubjectPage(
   id: string,
   view?: View,
   locale = 'en',
-  options: { realm?: string | undefined; continuation?: PageContinuation | undefined; authorization?: string | undefined } = {},
+  options: {
+    realm?: string | undefined;
+    continuation?: PageContinuation | undefined;
+    authorization?: string | undefined;
+  } = {},
 ): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
   const result = await client.pages.$read.post(
@@ -161,7 +165,13 @@ export async function loadSubjectPage(
 /** The properties the page's inverse reads follow, for the definitions that label them. */
 export function pageRelationProperties(page: SubjectPageData): string[] {
   const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
-  return [...new Set(Object.values(reads).flatMap((read) => (read.kind === 'links' || read.kind === 'relations' ? [read.property] : [])))];
+  return [
+    ...new Set(
+      Object.values(reads).flatMap((read) =>
+        read.kind === 'links' || read.kind === 'relations' ? [read.property] : [],
+      ),
+    ),
+  ];
 }
 
 /** The subject's label, chosen with the same fallback the page heading uses. */

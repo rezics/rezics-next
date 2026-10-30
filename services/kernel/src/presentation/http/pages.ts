@@ -306,7 +306,14 @@ export function pageRoutes<App>(
       };
       let selected: SelectedPage | undefined;
       const authority = {
-        deps: { pool, access: typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access ?? createAccess({ actions: actionCatalogue(routed) }), routeKey },
+        deps: {
+          pool,
+          access:
+            typeof access === 'function'
+              ? access({ actions: actionCatalogue(routed) })
+              : (access ?? createAccess({ actions: actionCatalogue(routed) })),
+          routeKey,
+        },
         actor,
         deadline: job.deadline,
         run: <T>(work: () => Promise<T>) => admission.run('normal', job, work),
@@ -336,8 +343,9 @@ export function pageRoutes<App>(
           subjectTarget = target.subject;
           if (target.realm) {
             // Agent addresses always resolve through Global. This native identity point reads no facts or candidates.
-            const types = await admission.run('normal', job, () => withConnection(pool, (client) =>
-              readItemTypes(deadlineClient(client, job.deadline), [target.subject])));
+            const types = await admission.run('normal', job, () =>
+              withConnection(pool, (client) => readItemTypes(deadlineClient(client, job.deadline), [target.subject])),
+            );
             const roots = new Set(['schema:Person', 'schema:Organization', 'schema:SoftwareApplication']);
             const visited = new Set<string>();
             const agentType = (type: string): boolean => {
@@ -403,7 +411,12 @@ export function pageRoutes<App>(
         views = definedViews(active.profile, template);
       }
 
-      probeSession = mergedSession(tokens, scope, probeSession, encodeSession(tokens, scope, requestSession.components));
+      probeSession = mergedSession(
+        tokens,
+        scope,
+        probeSession,
+        encodeSession(tokens, scope, requestSession.components),
+      );
       return pageAnswer({
         ...(selected
           ? {
@@ -431,7 +444,12 @@ export function pageRoutes<App>(
                 )
                   throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
                 await guardSelectedPage(authority, selected);
-                return mergedSession(tokens, scope, current.session, encodeSession(tokens, scope, requestSession.components));
+                return mergedSession(
+                  tokens,
+                  scope,
+                  current.session,
+                  encodeSession(tokens, scope, requestSession.components),
+                );
               },
             }
           : {}),

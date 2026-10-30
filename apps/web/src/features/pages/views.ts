@@ -1,4 +1,13 @@
-import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View, type SelectedContext, type PageContinuation } from '@rezics/composition';
+import {
+  isView,
+  planReads,
+  platformRegistry,
+  VIEWS,
+  type CompositionDocument,
+  type View,
+  type SelectedContext,
+  type PageContinuation,
+} from '@rezics/composition';
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
 import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
@@ -119,9 +128,10 @@ function previewCount(
   }
   if (read.kind === 'subjectThreads' && Array.isArray(body.threads)) return { items: body.threads.length };
   if (read.kind === 'relations' && Array.isArray(body.relations)) {
-    const count = isRecord(body.count) && typeof body.count.value === 'number'
-      ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, body.relations.length)
-      : undefined;
+    const count =
+      isRecord(body.count) && typeof body.count.value === 'number'
+        ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, body.relations.length)
+        : undefined;
     return { items: Math.min(body.relations.length, previewLimit(node, read)), ...(count ? { count } : {}) };
   }
   if (read.kind === 'search' && Array.isArray(body.subjects)) {
@@ -187,7 +197,8 @@ export function subjectTabs(page: {
   const defined = new Set((page.views ?? ['overview', 'discussion', 'details']).filter(isView));
   const document = page.document as CompositionDocument;
   const plan = planReads(platformRegistry, document, {
-    subject: page.subject, account: page.account ?? null,
+    subject: page.subject,
+    account: page.account ?? null,
     ...(page.context ? { context: page.context } : {}),
     ...(page.continuation ? { continuation: page.continuation } : {}),
   });
@@ -222,7 +233,8 @@ export function subjectTabs(page: {
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
-    if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200))) openReads.add(view);
+    if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200)))
+      openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
     if (counted) {
       sum.counted += 1;

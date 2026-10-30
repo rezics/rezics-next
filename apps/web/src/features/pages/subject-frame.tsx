@@ -112,7 +112,10 @@ export async function loadViewPages(
     const read = plan.reads[key];
     return (
       (!options.node || options.node === node) &&
-      (read?.kind === 'links' || read?.kind === 'relations' || read?.kind === 'subjectThreads' || read?.kind === 'collections')
+      (read?.kind === 'links' ||
+        read?.kind === 'relations' ||
+        read?.kind === 'subjectThreads' ||
+        read?.kind === 'collections')
     );
   });
   let result = first;
@@ -127,12 +130,12 @@ export async function loadViewPages(
       if (response.status === 400) return { kind: 'missing' };
       first.page.reads[primary[1]] = { status: response.status, body: response.error ? {} : response.data };
     } else {
-    const continued = await loadSubjectPage(client, id, view, locale, {
-      ...options,
-      continuation: { node: primary[0], cursor },
-    });
-    if (continued.kind !== 'page') return continued;
-    result = continued;
+      const continued = await loadSubjectPage(client, id, view, locale, {
+        ...options,
+        continuation: { node: primary[0], cursor },
+      });
+      if (continued.kind !== 'page') return continued;
+      result = continued;
     }
   }
   const overview = await loadSubjectPage(client, id, undefined, locale, options);
