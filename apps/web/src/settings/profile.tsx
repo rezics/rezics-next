@@ -106,6 +106,7 @@ export function ProfileCard({ editor, writable = true }: { editor: ProfileEditor
   async function pickAvatar(file: File | undefined) {
     if (!file || !profile || closed || uploadLock.current) return;
     uploadLock.current = true;
+    editor.edit({});
     setUploading(true);
     setUploadError(false);
     try {
