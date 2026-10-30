@@ -3,10 +3,7 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 /** Global directory rows consume board metadata without Realm community enrichment. */
-export type DirectoryBoard = Omit<
-  NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'],
-  'community'
->;
+export type DirectoryBoard = Omit<NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'], 'community'>;
 export type BoardPurpose = DirectoryBoard['purpose'];
 export type BoardDirectoryRequest = { purpose: BoardPurpose; cursor?: string; limit: number };
 export type BoardDirectoryResult =
