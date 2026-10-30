@@ -618,6 +618,7 @@ async function withRecoveryRunner(
   root: string,
   reruns: 0 | 1,
   run: (record: ReturnType<typeof readWorkerCheckRecord>, interrupt: () => Promise<void>) => Promise<void>,
+  replacementSource = `fs.appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, ${JSON.stringify('rerun\n')});`,
 ): Promise<void> {
   await withIsolatedTask(root, async () =>
     withQuietAdmission(async () => {
@@ -642,7 +643,7 @@ if (n === ${reruns + 1}) {
   await Bun.sleep(4000);
   process.exit(90);
 }
-fs.appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, 'rerun\\\\n');
+${replacementSource}
 `,
         ],
         root,
@@ -689,34 +690,30 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-stalled-runner-'));
   dirs.push(root);
-  const log = '.temp/goal/checks/stalled.log';
-  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
-  writeFileSync(join(root, log), '');
-  const stale = new Date(Date.now() - 25);
-  utimesSync(join(root, log), stale, stale);
-  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
-  await new Promise<void>((resolveRunner) => runner.once('spawn', resolveRunner));
-  const id = '00000000-0000-4000-8000-000000000002';
-  writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
-  const out: string[] = [];
-  try {
-    await withQuietAdmission(async () =>
-      expect(
-        await waitWorkerCheck(id, root, 5_000, {
-          pollMs: 5,
-          stallMs: 10,
-          rerunStallMs: 1_000,
-          write: (chunk) => out.push(chunk),
-        }),
-      ).toBe(0),
-    );
-  } finally {
-    runner.kill('SIGKILL');
-  }
-  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
-  expect(out.join('')).toContain('infrastructure failure (log did not grow for 10 ms) on stall-host-b');
-  expect(out.join('')).toContain('check: exit status 0');
-  expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
+  await withRecoveryRunner(root, 0, async ({ id, log, runnerHost, runnerIdentity, physicalRunId }) => {
+    const stale = new Date(Date.now() - 25);
+    utimesSync(join(root, log), stale, stale);
+    const out: string[] = [];
+    expect(
+      await waitWorkerCheck(id, root, 5_000, {
+        pollMs: 5,
+        stallMs: 10,
+        rerunStallMs: 1_000,
+        write: (chunk) => out.push(chunk),
+      }),
+    ).toBe(0);
+    expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+    expect(out.join('')).toContain(`infrastructure failure (log did not grow for 10 ms) on ${runnerHost}`);
+    expect(out.join('')).toContain('check: exit status 0');
+    expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
+    expect(readWorkerCheckRecord(id, root).reruns).toBe(1);
+    expect(readWorkerCheckHistory(id, physicalRunId!, root)?.terminalProof).toMatchObject({
+      local: true,
+      resultKnown: true,
+    });
+    expect(sameProcess(runnerIdentity!)).toBe(false);
+    expect(processGroupMembers(runnerIdentity!.group)).toEqual([]);
+  });
 });
 
 test('a second interrupted runner finishes as infrastructure failure without a third run', async () => {
@@ -2726,28 +2723,43 @@ test('a quiet local command with no CPU progress is stopped by the stall rule', 
 
 test('a detached recovery survives a bounded wait and returns its own failing exit status on the same id', async () => {
   const root = recoveryFixture();
-  const id = '00000000-0000-4000-8000-000000000007';
-  const log = '.temp/goal/checks/original.log';
-  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
-  writeFileSync(join(root, log), 'original output\n');
-  writeRunningRecord(root, id, log, 2_000_000_000, hostname());
-  const resultPath = join(root, '.temp/goal/checks/results', `${id}.json`);
-  const initial = JSON.parse(readFileSync(resultPath, 'utf8'));
-  initial.argv = ['bun', '-e', 'await Bun.sleep(300); console.error("rerun failed"); process.exit(7)'];
-  writeFileSync(resultPath, JSON.stringify(initial));
-  await withQuietAdmission(async () => {
-    const out: string[] = [];
-    expect(await waitWorkerCheck(id, root, 50, { pollMs: 5, write: (line) => out.push(line) })).toBe(75);
-    expect(out.join('')).toContain('check: still running');
-    const rerun = JSON.parse(readFileSync(resultPath, 'utf8'));
-    expect(rerun.runnerPid).not.toBe(process.pid);
-    expect(readFileSync(`/proc/${rerun.runnerPid}/cmdline`, 'utf8')).toContain(`--run\0${id}\0`);
-    out.length = 0;
-    expect(await waitWorkerCheck(id, root, 5_000, { write: (line) => out.push(line) })).toBe(7);
-    expect(out.join('')).toContain('infrastructure failure');
-    expect(out.join('')).toContain('check: exit status 7');
-    expect(JSON.parse(readFileSync(resultPath, 'utf8')).reruns).toBe(1);
-  });
+  await withRecoveryRunner(
+    root,
+    0,
+    async (initial, interrupt) => {
+      const { id } = initial;
+      const resultPath = join(root, '.temp/goal/checks/results', `${id}.json`);
+      await interrupt();
+      const out: string[] = [];
+      expect(await waitWorkerCheck(id, root, 50, { pollMs: 5, write: (line) => out.push(line) })).toBe(75);
+      expect(out.join('')).toContain('check: still running');
+      const rerun = JSON.parse(readFileSync(resultPath, 'utf8'));
+      expect(rerun.runnerPid).not.toBe(process.pid);
+      expect(readFileSync(`/proc/${rerun.runnerPid}/cmdline`, 'utf8')).toContain(`--run\0${id}\0`);
+      expect(rerun.id).toBe(id);
+      expect(rerun.argv).toEqual(initial.argv);
+      expect(rerun.physicalRunId).not.toBe(initial.physicalRunId);
+      out.length = 0;
+      expect(await waitWorkerCheck(id, root, 5_000, { write: (line) => out.push(line) })).toBe(7);
+      expect(out.join('')).toContain('infrastructure failure');
+      expect(out.join('')).toContain('check: exit status 7');
+      expect(JSON.parse(readFileSync(resultPath, 'utf8')).reruns).toBe(1);
+      expect(readFileSync(join(root, 'physical-attempts'), 'utf8')).toBe('2');
+      expect(readWorkerCheckHistory(id, initial.physicalRunId!, root)).toMatchObject({
+        argv: initial.argv,
+        runnerIdentity: initial.runnerIdentity,
+        terminalProof: { local: true, resultKnown: false },
+      });
+      expect(readWorkerCheckHistory(id, rerun.physicalRunId, root)).toMatchObject({
+        id,
+        argv: initial.argv,
+        runnerIdentity: rerun.runnerIdentity,
+        status: 'finished',
+        exitCode: 7,
+      });
+    },
+    'await Bun.sleep(300); console.error("rerun failed"); process.exit(7)',
+  );
 });
 
 test('a second silent runner finishes with infrastructure failure and no third command', async () => {
