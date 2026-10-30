@@ -443,7 +443,11 @@
 
 /* Adapt generated Rhea states without changing their text, focus rings or control behavior. */
 [data-slot='button'].text-destructive,
-:is([data-slot='dropdown-menu-item'], [data-slot='context-menu-item'], [data-slot='menubar-item'])[data-variant='destructive']:is(:focus, [data-highlighted]) {
+:is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='context-menu-item'],
+    [data-slot='menubar-item']
+  )[data-variant='destructive']:is(:focus, [data-highlighted]) {
   background-color: color-mix(in srgb, var(--destructive-solid) 10%, transparent);
   @variant dark {
     background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
@@ -458,7 +462,12 @@
 }
 
 :is([data-slot='button'], [data-slot='alert']).text-destructive > svg,
-:is([data-slot='dropdown-menu-item'], [data-slot='context-menu-item'], [data-slot='menubar-item'])[data-variant='destructive'] > svg {
+:is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='context-menu-item'],
+    [data-slot='menubar-item']
+  )[data-variant='destructive']
+  > svg {
   stroke: var(--destructive-solid);
 }
 

@@ -110,9 +110,7 @@ test('destructive action and error text use the existing text-safe ink in both t
     for (const token of ['destructive', 'destructive-foreground'])
       expect(tokens[token], `${name} --${token}`).toBe(tokens['accent-foreground']);
     expect(tokens.brand, `${name} logo red`).toBe(name === 'light' ? '#df3d35' : '#f0524c');
-    expect(tokens['destructive-solid'], `${name} non-text danger red`).toBe(
-      name === 'light' ? '#c42840' : '#d63a50',
-    );
+    expect(tokens['destructive-solid'], `${name} non-text danger red`).toBe(name === 'light' ? '#c42840' : '#d63a50');
   }
 });
 
