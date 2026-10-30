@@ -83,6 +83,49 @@ IDs stay readable as stored raw values with their historic provenance; they are 
 must be supported by the active profile at its acceptance point. It cannot add an unknown ID, supply a legacy pin, or
 submit an old pin to bypass a missing capability. API request bodies do not accept pin metadata.
 
+### Owner session display and current recording
+
+`GET /v1/progressSessions/{sessionId}?presentation=FULL` adds only
+`progressSession.presentation = {meaning, unitLabel?, unitLabelLanguage?, unitCountForms?, dimension?,
+structure: 'unverified', recording: {state, inputRules?}}`. This is independent of `view=FULL`, which continues to
+control current subject/version summaries under their own disclosure. All responses use private, no-store.
+BASIC, ordinary FULL without the opt-in, Continue, events and published snapshots retain their existing DTOs.
+No accepting type, profile ID, release digest or stored pin is exposed.
+
+Meaning is `known` only when the exact private accepted pin resolves in its original immutable release and declares
+the stored mode/unit pair. Display uses that release's English label and English count forms, with
+`unitLabelLanguage: 'en'`; no active-head or fixed legacy label fallback is allowed. A missing required release or
+unresolvable pin is `unavailable`. An unpinned fact or unknown original pair is `unknown`, with raw values retained
+and no invented label. `unitCountForms` uses the existing Library count-form shape, including required `other`.
+The accepted profile is vocabulary/validation, not a verified content structure; an explicit `versionSubjectId` is
+only a readable subject reference, not an immutable edition digest or an equivalence claim.
+
+`recording.state` is advisory descriptor compatibility, never permission or a write token. A fresh readable native
+source/profile proves `unsupported` only when its profile/pair is absent or its dimension/identity/structure is
+incompatible with the accepted pair. Changed numeric bounds alone do not convert historic values: a compatible
+pair is `supported` with current descriptor `inputRules = {min?, max?, step, total}`. These map directly to the
+existing minimum, maximum, precision and totalPolicy fields (`step: 'any'` when precision is absent). Hidden,
+missing or failed current evidence is `unavailable`, without an inferred retirement or deletion. A missing original
+release cannot establish recording support. The writer independently reauthorizes at its command observation,
+requires compatible accepted/current meaning and validates incoming values against both native descriptors.
+Completion and abandonment retain their own lifecycle authority and require no new profile value.
+
+The read captures one owner-authorized session and its private pin in one account snapshot, releases it, reads one
+exact accepted release and one current profile, and checks current original/terminal source identities, epochs and
+source components before returning. Subject and explicit version summaries cannot rescue a hidden source. After
+foreign reads it rechecks current account/principal/scopes/denials, owner partition epoch and exact session/pin.
+A changed final source fails closed; it never returns a stale allow or a reassociated summary. Work shares one
+fixed request deadline and releases each home before visiting another. The read creates no migration/preparation,
+receipt, reserve, activation or other write.
+
+Scalar captured totals remain frozen. Cursor text stays opaque, with no CFI interpretation. Sparse IDs remain exact
+session-local keys: `{1,3,7}` has cardinality three, and completion never fills a range. New reading/version choices
+create a distinct session with empty values; they never repoint, rescale, clamp, copy or repin earlier history.
+Multiple active sessions remain possible, and abandonment plus a new start are independent commands.
+
+The focused presentation and native session cases cover this seam. Local typechecking establishes the DTO and
+implementation's compiler validity only; native/full privacy, growth and promoted-main proof remain deferred.
+
 ### Profile-aware write validation
 
 For a NEW profiled value (not clearing/deleting an own fact), resolve the subject's authoritative current accepting type and the active immutable release at

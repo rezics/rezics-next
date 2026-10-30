@@ -2,11 +2,11 @@ import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, type CommandTransaction } from '../command/command.ts';
+import { authoritativeTimeValue, mintReadTime, releaseOperationalTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -20,14 +20,16 @@ import {
   type ProgressAction,
   type ProgressOutcome,
 } from './progress.ts';
-import type { ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
+import type { ProgressPresentation, ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
 import * as store from './progress-store.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
-import { progressUnit, resolveLibraryProfilePin, type LibraryProfileDescriptor } from './profile.ts';
+import { compatibleProgressUnits, nativeProgressUnit, resolveLibraryProfilePin, type LibraryProfileDescriptor } from './profile.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
+import { prepareProgressPresentation } from './progress-presentation.ts';
 import sessionLock from './session-lock.sql';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 
@@ -81,19 +83,14 @@ function event(session: ProgressSession) {
 /** Private progress commands and snapshot/keyset reads on the owning account's partition. */
 export function createSessionCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({ pool, access, ...(clock === undefined ? {} : { clock }) });
 
   const heads = createShelfHeads();
   const activity = createProgressActivity();
 
   function descriptor(profile: LibraryProfileDescriptor, session: Pick<ProgressSession, 'mode' | 'unit'>) {
-    const unit = progressUnit(profile, session.mode, session.unit);
-    if (
-      !unit ||
-      unit.structure.kind !== 'none' ||
-      unit.identity.kind !== (session.mode === 'completed_units' ? 'session_local' : 'none')
-    )
-      throw new ProblemError('unsupported_library_profile');
+    const unit = nativeProgressUnit(profile, session);
+    if (!unit) throw new ProblemError('unsupported_library_profile');
     return unit;
   }
 
@@ -259,7 +256,11 @@ export function createSessionCommands(config: Dependencies) {
             const source = prepared.source;
             if (!source) throw new LibraryNotFoundError();
             if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
-            const admitted = parseRecord(current.mode, record, current, descriptor(source.profile, current));
+            const originalUnit = descriptor(prepared.original, current);
+            const currentUnit = descriptor(source.profile, current);
+            if (!compatibleProgressUnits(originalUnit, currentUnit))
+              throw new ProblemError('unsupported_library_profile');
+            const admitted = parseRecord(current.mode, record, current, currentUnit);
             if (!admitted.ok) throw new ProblemError('unsupported_library_profile');
           }
           intent = changeIntent(parsed);
@@ -318,6 +319,54 @@ export function createSessionCommands(config: Dependencies) {
 
   const readSession = (actor: Actor, sessionId: string) =>
     snapshot(actor, 'progress_session:read', (client, owner) => load(client, owner, sessionId));
+
+  /** Presentation owns no stored state. Rendering runs between released reads and final native checks. */
+  async function readPresentedSession<T>(
+    actor: Actor,
+    sessionId: string,
+    render: (session: ProgressSession, presentation: ProgressPresentation,
+      disclosure: { subject: boolean; versionSubject: boolean }) => Promise<T>,
+  ): Promise<T> {
+    const owner = account(actor, 'progress_session:read');
+    const route = sameAccountRoute(owner.accountId, sessionId);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return withRequestDeadline(deadline, () => within(deadline, async () => {
+      async function time() {
+        return withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
+      }
+      async function observed(at: AuthoritativeTime) {
+        // Preparation may visit principal/denial homes; finish it before taking the owner snapshot.
+        const check = await accessCheck(access, owner, 'progress_session:read',
+          { route, id: owner.accountId }, { pool, deadline, time: at });
+        return snapshot(owner, 'progress_session:read', async (client) => {
+          const bounded = deadlineClient(client, deadline);
+          if (!(await check(bounded, at))) throw new GrantDeniedError();
+          const partition = await readPartition(bounded, partitionOf(route));
+          const fact = await store.readSessionFact(bounded, route, sessionId);
+          if (!partition || !fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+          return { fact, epoch: partition.epoch };
+        });
+      }
+      const at = await time();
+      try {
+        const before = await observed(at);
+        const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
+        const result = await render(before.fact.session, prepared.presentation, prepared.disclosure);
+        const finalTime = await time();
+        try {
+          await prepared.verify(finalTime);
+          const after = await observed(finalTime);
+          if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
+            throw new ProgressConflictError();
+        } finally {
+          releaseOperationalTime(finalTime);
+        }
+        return result;
+      } finally {
+        releaseOperationalTime(at);
+      }
+    }));
+  }
 
   async function page<T>(
     client: Client,
@@ -432,6 +481,7 @@ export function createSessionCommands(config: Dependencies) {
     completeSession,
     abandonSession,
     readSession,
+    readPresentedSession,
     listSessions,
     listUnits,
     listChanges,

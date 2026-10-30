@@ -1578,6 +1578,24 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit and begin and commit.
 - Growth check: `test/library/growth-personal-reads.test.ts`: `Session read has constant rows and statements as sessions grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's sessions, other accounts' sessions in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
+The owner detail additionally accepts `presentation=FULL`, independently of summary `view=FULL`. The
+[profile consumer contract](../../../../docs/library-profile-consumers.md#owner-session-display-and-current-recording)
+owns the exact display/advisory DTO and preservation rules. `progress-presentation.ts` uses the stored pin's exact
+immutable release for historic English labels/count forms and the existing current source/profile and native
+validators for recording hints. It never relabels from the active head, exposes pins, or changes old values.
+Missing original release means unavailable; unknown old pair means raw unknown; only actual readable current
+profile/pair absence or incompatible meaning proves unsupported. Source uncertainty remains unavailable.
+
+Opt-in cost: two owner snapshots with exact session/pin, partition epoch and native owner Access; one exact release
+lookup, one current source/profile lookup, and fixed original/terminal identity/type/component checks before/final.
+An explicit version adds independent fixed source disclosure checks. FULL summary work retains its independent
+existing authorization and bounded projection. All homes are released between reads under one fixed deadline.
+There is no history walk, unit scan, structure resolution or GET write. Statements/rows are fixed and indexed block
+work is logarithmic, plus bounded immutable release bytes and existing Access/summary costs. The BASIC bound and
+its measured growth result above are unchanged; this opt-in path's native/full privacy and inclusive growth proof
+remain deferred. `test/library/progress-presentation.test.ts` and additional native cases in
+`test/library/profile-session-command.test.ts` describe its outcomes; compiler success alone is not native proof.
+
 ### Session page
 
 - Touches: A snapshot, an admit, a partition-epoch read, and one keyset on `progress_session_account_subject` `(route, account_id, subject_id, started_at, session_id)`. Two `LIMIT` branches fetch at most `min(100, s + 1)` rows. When `s` is 100 and the page is non-empty, a second limit-1 probe runs, because the first fetch is capped at 100. The cursor binds the operation, the account and the subject.

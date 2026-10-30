@@ -12,12 +12,14 @@ import { activeRelease } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
+import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
 import { readItemTypes, type SubjectComponent } from '../semantic/subject.ts';
 import { selectLibraryProfile, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { resolveSubject } from './subject-anchor.ts';
 
-type Dependencies = { pool: Pool; access: Access; actor: Actor; at: AuthoritativeTime; deadline: number };
+export type LibraryProfileSourceDependencies = { pool: Pool; access: Access; actor: Actor; at: AuthoritativeTime; deadline: number };
 type Source = { subjectId: string; requestedSubjectId: string | null; component: SubjectComponent };
+export type LibraryProfileAnchor = Source & { acceptingType: string; identityEpoch: bigint };
 export type LibraryProfileSource =
   | (Source & {
       kind: 'supported';
@@ -28,83 +30,86 @@ export type LibraryProfileSource =
   | null;
 
 /** Private, current observations only: native T binds Access, not historical SQL snapshots. */
-export function readLibraryProfileSource(deps: Dependencies, subjectId: string): Promise<LibraryProfileSource> {
+export async function readLibraryProfileSource(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<LibraryProfileSource> {
+  return (await readLibraryProfileSourceObservation(deps, subjectId))?.source ?? null;
+}
+
+/** The same source producer with its private before/final fence retained for a bounded detail. */
+export function readLibraryProfileSourceObservation(deps: LibraryProfileSourceDependencies, subjectId: string) {
   return withRequestDeadline(deps.deadline, () => readSource(deps, subjectId));
 }
 
-async function readSource(deps: Dependencies, subjectId: string): Promise<LibraryProfileSource> {
+async function readSource(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<{
+  source: NonNullable<LibraryProfileSource>; anchor: LibraryProfileAnchor;
+} | null> {
+  const anchor = await readLibraryProfileAnchor(deps, subjectId);
+  if (!anchor) return null;
+  const { acceptingType, identityEpoch: _identityEpoch, ...source } = anchor;
+  // The source RR has ended before Global's independently anchored observation.
+  requireAccessDeadline(deps.deadline);
+  const active = await activeRelease(deps.pool);
+  requireAccessDeadline(deps.deadline);
+  if (!active) throw new ProblemError('semantic_not_ready');
+  const profile = selectLibraryProfile(active.release, acceptingType);
+  if (!profile) return { anchor, source: { ...source, kind: 'unsupported', acceptingType } };
+  const profileId = active.release.types[acceptingType]!.library!.profileId;
+  return { anchor, source: {
+    ...source,
+    kind: 'supported',
+    profile,
+    pin: { provenance: 'profile', releaseDigest: active.digest, acceptingType, profileId },
+  } };
+}
+
+/** Current source/type/disclosure only. No profile or release lookup; each foreign home is released. */
+export async function readLibraryProfileAnchor(
+  deps: LibraryProfileSourceDependencies,
+  subjectId: string,
+): Promise<LibraryProfileAnchor | null> {
   const { pool, access, actor, at, deadline } = deps;
   authoritativeTimeValue(at);
   requireAccessDeadline(deadline);
-  // A previously authenticated actor may have been suspended since admission.
-  // Release this point read before checking out any subject or Global anchor.
   if (actor.kind === 'account') {
     const accountRoute = routeOf(actor.accountId);
     if (accountRoute === null) return null;
     const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId);
-    if (
-      !account ||
-      account.kind !== 'actor' ||
-      account.state !== 'active' ||
-      account.fenced ||
-      actor.authnEpoch === undefined ||
-      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-    )
-      return null;
+    if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
+      !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
+      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch) return null;
   }
-  const visited = new Set<string>();
-  while (true) {
+  const before = await identityEpochStore.readMapping(pool, subjectId);
+  if (before.state !== 'mapped') return null;
+  const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, { pool, deadline, time: at });
+  if (!resolved || resolved.subjectId !== before.terminal) return null;
+  const route = routeOf(resolved.subjectId)!;
+  const check = await accessCheck(access, actor, 'subject:read', {
+    route, id: resolved.subjectId,
+    eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
+  }, { pool, deadline, time: at });
+  let acceptingType: string | undefined;
+  try {
+    const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
+      requireAccessDeadline(deadline);
+      if (!(await check(client, at))) return false;
+      acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(resolved.subjectId);
+      return acceptingType !== undefined;
+    });
+    if (!reference || acceptingType === undefined) return null;
+    const after = await identityEpochStore.readMapping(pool, subjectId);
     requireAccessDeadline(deadline);
-    const resolved = await resolveSubject({ pool, access }, actor, subjectId, at);
-    if (!resolved || visited.has(resolved.subjectId)) return null;
-    visited.add(resolved.subjectId);
-    const route = routeOf(resolved.subjectId)!;
-    const check = await accessCheck(
-      access,
-      actor,
-      'subject:read',
-      {
-        route,
-        id: resolved.subjectId,
-        eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
-      },
-      { pool, deadline },
-    );
-    let acceptingType: string | undefined;
-    try {
-      const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
-        requireAccessDeadline(deadline);
-        if (!(await check(client, at))) return false;
-        acceptingType = (await readItemTypes(client, [resolved.subjectId])).get(resolved.subjectId);
-        requireAccessDeadline(deadline);
-        return acceptingType !== undefined;
-      });
-      if (!reference || acceptingType === undefined) return null;
-      // The source RR has ended before Global's independently anchored observation.
-      requireAccessDeadline(deadline);
-      const active = await activeRelease(pool);
-      requireAccessDeadline(deadline);
-      if (!active) throw new ProblemError('semantic_not_ready');
-      const source = { ...resolved, component: reference.component };
-      const profile = selectLibraryProfile(active.release, acceptingType);
-      if (!profile) return { ...source, kind: 'unsupported', acceptingType };
-      const profileId = active.release.types[acceptingType]!.library!.profileId;
-      return {
-        ...source,
-        kind: 'supported',
-        profile,
-        pin: {
-          provenance: 'profile',
-          releaseDigest: active.digest,
-          acceptingType,
-          profileId,
-        },
-      };
-    } catch (error) {
-      if (!(error instanceof SubjectRedirectError) || error.from !== resolved.subjectId) throw error;
-      // Reuse the resolver, including its source/survivor authorization and cycle rules.
-    }
+    if (after.state !== 'mapped' || after.epoch !== before.epoch || after.terminal !== before.terminal) return null;
+    return { ...resolved, component: reference.component, identityEpoch: after.epoch, acceptingType };
+  } catch (error) {
+    if (error instanceof SubjectRedirectError) return null;
+    throw error;
   }
+}
+
+export function sameLibraryProfileAnchor(before: LibraryProfileAnchor, after: LibraryProfileAnchor | null): boolean {
+  return after !== null && before.subjectId === after.subjectId &&
+    before.requestedSubjectId === after.requestedSubjectId && before.acceptingType === after.acceptingType &&
+    before.identityEpoch === after.identityEpoch && before.component.partition === after.component.partition &&
+    before.component.epoch === after.component.epoch && before.component.position === after.component.position;
 }
 
 /** Read-only rollout boundary. Existing fixed-contract DTOs can expose an unpinned

@@ -56,3 +56,23 @@ export function progressUnit(
   const allowedMode = profile.progress?.allowed.find((candidate) => candidate.mode === mode);
   return allowedMode?.units.find((unit) => unit.id === unitId) ?? null;
 }
+
+/** These are the only native manual structures and identities, shared by reads and writes. */
+export function nativeProgressUnit(
+  profile: LibraryProfileDescriptor,
+  session: { mode: LibraryProgressMode; unit: string },
+): LibraryProgressUnitDescriptor | null {
+  const unit = progressUnit(profile, session.mode, session.unit);
+  return unit?.structure.kind === 'none' &&
+    unit.identity.kind === (session.mode === 'completed_units' ? 'session_local' : 'none')
+    ? unit : null;
+}
+
+/** Bounds may change admission, but a dimension/identity change cannot reinterpret a session. */
+export function compatibleProgressUnits(
+  original: LibraryProgressUnitDescriptor,
+  current: LibraryProgressUnitDescriptor,
+): boolean {
+  return original.id === current.id && original.dimension === current.dimension &&
+    original.identity.kind === current.identity.kind && original.structure.kind === current.structure.kind;
+}

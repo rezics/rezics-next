@@ -548,3 +548,137 @@ test('native guards conceal sessions and source failures and fence old receipts 
     await expect(commands.startSession(limited.actor, create(subject), entryKey())).rejects.toBeDefined();
   }, limited.actor.accountId);
 });
+
+// Additional opt-in owner-detail cases; the existing BASIC/privacy oracles above remain unchanged.
+async function presentationHead(dimension?: string) {
+  const profile = libraryProfile('fixture.presentation');
+  profile.progress.allowed = [{ mode: 'scalar_amount', units: [{
+    ...unitData('page'), maximum: '10', precision: 0,
+    ...(dimension === undefined ? {} : { dimension }),
+  }] }];
+  const input = fixture(profile);
+  const schema = JSON.parse(input.schemas['fixture.yaml']!);
+  schema.version = dimension ?? 'presentation-rename';
+  input.schemas['fixture.yaml'] = JSON.stringify(schema);
+  for (const [key, text] of Object.entries(input.presentation)) {
+    const labels = JSON.parse(text);
+    labels.libraryProfiles[profile.id].units.scalar_amount.page = 'new sheet';
+    input.presentation[key] = JSON.stringify(labels);
+  }
+  return native.publish(compileCatalogue(input));
+}
+
+test('Owner session detail exposes exact resolved historic display and advisory current recording rules without private pins current-label fallback or progress conversion', async () => {
+  const subject = await native.createSubject('game');
+  const s = await start(subject, 'scalar_amount', 'page', { total: '999' });
+  await record(s.id, 1, { amount: '950' });
+  const original = await fact(s.id);
+  const history = await contents(s.id);
+  await native.activate(await presentationHead());
+  await noSessionEffects(s.id)(async () => {
+    const basic = (await json(await send('GET', path(s.id)), 200)).progressSession;
+    expect(basic).not.toHaveProperty('presentation');
+    const full = (await json(await send('GET', `${path(s.id)}?view=FULL`), 200)).progressSession;
+    expect(full).not.toHaveProperty('presentation');
+    const response = await send('GET', `${path(s.id)}?presentation=FULL`);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    const detail = (await json(response, 200)).progressSession;
+    const { presentation, ...raw } = detail;
+    expect(raw).toEqual(basic);
+    expect(presentation).toMatchObject({
+      meaning: 'known', unitLabel: 'page', unitLabelLanguage: 'en', structure: 'unverified',
+      recording: { state: 'supported', inputRules: { min: '0', max: '10', step: '1', total: 'optional' } },
+    });
+    expect(presentation.unitLabel).not.toBe('new sheet');
+    expect(presentation.unitCountForms).toHaveProperty('other');
+  });
+  await problem(await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '11' }), 422, 'unsupported_library_profile');
+  expect(await fact(s.id)).toEqual(original);
+  expect(await contents(s.id)).toEqual(history);
+  await native.activate(await presentationHead('duration'));
+  await noSessionEffects(s.id)(async () => {
+    const p = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession.presentation;
+    expect(p).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unsupported' } });
+    await problem(await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '1' }), 422, 'unsupported_library_profile');
+  });
+  await native.activate(removed);
+  await noSessionEffects(s.id)(async () => {
+    const p = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession.presentation;
+    expect(p).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unsupported' } });
+  });
+  await json(await native.send('steward', 'POST', `/v1/subjects/${subject}:hide`, { reason: 'Presentation source concealment' }), 200);
+  await noSessionEffects(s.id)(async () => {
+    const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL&view=FULL`), 200)).progressSession;
+    expect(detail.subject).toBeNull();
+    expect(detail.presentation).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unavailable' } });
+    expect(detail.amount).toBe('950');
+    expect(detail.total).toBe('999');
+  });
+  await json(await send('POST', `${path(s.id)}:complete`, { revision: 2 }), 200);
+});
+
+test('opt-in owner presentation conceals foreign anonymous reduced-scope suspended and revoked readers without effects', async () => {
+  const subject = await native.createSubject('game');
+  const s = await start(subject);
+  const url = `${path(s.id)}?presentation=FULL&view=FULL`;
+  await noSessionEffects(s.id, other.actor.accountId)(async () => {
+    await problem(await send('GET', url, undefined, entryKey(), other.bearer), 404, 'not_found', 'not_applicable');
+    const anonymous = await native.send('anonymous', 'GET', url);
+    expect([401, 404]).toContain(anonymous.status);
+    privateFree(await anonymous.json());
+  });
+  const limited = await accountToken({ accountId: owner.actor.accountId, clientId: owner.actor.clientId, scopes: ['subject:read'] });
+  await noSessionEffects(s.id)(async () => {
+    await problem(await send('GET', url, undefined, entryKey(), limited), 404, 'not_found', 'not_applicable');
+  });
+  for (const fence of ['suspension', 'authn'] as const) {
+    const identity = await native.identity(scopes);
+    const own = (await json(await send('POST', '/v1/progressSessions', create(subject), entryKey(), identity.bearer), 201)).progressSession;
+    if (fence === 'suspension') await native.suspend(identity.actor.accountId);
+    else await native.revokeIdentity(identity.actor.accountId);
+    await noEffects(async () => {
+      const response = await send('GET', `${path(own.id)}?presentation=FULL`, undefined, entryKey(), identity.bearer);
+      expect([401, 404]).toContain(response.status);
+      const body = await response.json();
+      privateFree(body);
+      expect(body).not.toHaveProperty('progressSession');
+    }, identity.actor.accountId);
+  }
+});
+
+test('native opt-in missing immutable release and transient current source remain distinct and sparse keys stay exact', async () => {
+  const subject = await native.createSubject('game');
+  const s = await start(subject, 'completed_units', 'episode');
+  await record(s.id, 1, { add: ['1', '3', '7'] });
+  const query = native.pool.query;
+  // Read-only persistence fault at the native exact-release lookup, including its cache-existence probe.
+  native.pool.query = function (...args: unknown[]) {
+    const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
+    if (/definitions-(?:read|exists)\.sql/.test(text)) return Promise.resolve({ rows: [], rowCount: 0 });
+    return Reflect.apply(query, native.pool, args);
+  } as typeof query;
+  try {
+    await noSessionEffects(s.id)(async () => {
+      const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession;
+      expect(detail.presentation).toEqual({ meaning: 'unavailable', structure: 'unverified', recording: { state: 'unavailable' } });
+      expect(detail.completedUnitCount).toBe(3);
+    });
+  } finally {
+    native.pool.query = query;
+  }
+  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  const { AccessUnavailableError } = await import('../../src/access/unavailable.ts');
+  const { createSessionCommands } = await import('../../src/library/sessions.ts');
+  const access = deriveAccess(native.access, {
+    async prepare(actor, action, resource, context) {
+      if (action === 'subject:read') throw new AccessUnavailableError('overloaded');
+      return native.access.prepare?.(actor, action, resource, context);
+    },
+  });
+  const unavailable = createSessionCommands({ ...native, access });
+  await noSessionEffects(s.id)(async () => {
+    const p = await unavailable.readPresentedSession(owner.actor, s.id, async (_, presentation) => presentation);
+    expect(p).toMatchObject({ meaning: 'known', unitLabel: 'episode', recording: { state: 'unavailable' } });
+    expect((await contents(s.id)).units.map((row) => row.unitId)).toEqual(['1', '3', '7']);
+  });
+});

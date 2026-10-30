@@ -1,3 +1,5 @@
+import type { LibraryCountForms } from '@rezics/definitions';
+import type { LibraryProgressUnitDescriptor } from './profile.ts';
 import type { ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
 
 export type { ProgressIntent, ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
@@ -89,3 +91,25 @@ export type ProgressChangePage = {
 
 export const MAX_PROGRESS_PAGE_SIZE = 100;
 export const MAX_PROGRESS_UNIT_IDS = 100;
+
+/** Current descriptor hints for the existing native decimal/total validators; never permission. */
+export type ProgressInputRules = Readonly<{
+  min?: LibraryProgressUnitDescriptor['minimum'];
+  max?: LibraryProgressUnitDescriptor['maximum'];
+  step: string;
+  total: NonNullable<LibraryProgressUnitDescriptor['totalPolicy']>;
+}>;
+
+/** Opt-in owner detail only. No source identity or private accepting pin enters this DTO. */
+export type ProgressPresentation = Readonly<{
+  meaning: 'known' | 'unknown' | 'unavailable';
+  unitLabel?: string;
+  unitLabelLanguage?: string;
+  unitCountForms?: Readonly<LibraryCountForms>;
+  dimension?: string;
+  structure: 'unverified';
+  recording: Readonly<
+    | { state: 'supported'; inputRules: ProgressInputRules }
+    | { state: 'unsupported' | 'unavailable' }
+  >;
+}>;

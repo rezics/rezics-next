@@ -134707,6 +134707,15 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "presentation",
+            "required": false,
+            "schema": {
+              "const": "FULL",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -134759,6 +134768,126 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "presentation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "dimension": {
+                              "type": "string"
+                            },
+                            "meaning": {
+                              "enum": [
+                                "known",
+                                "unknown",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "recording": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "inputRules": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "max": {
+                                          "type": "string"
+                                        },
+                                        "min": {
+                                          "type": "string"
+                                        },
+                                        "step": {
+                                          "type": "string"
+                                        },
+                                        "total": {
+                                          "enum": [
+                                            "optional",
+                                            "required",
+                                            "forbidden"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "step",
+                                        "total"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "state": {
+                                      "const": "supported",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "inputRules"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "enum": [
+                                        "unsupported",
+                                        "unavailable"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "structure": {
+                              "const": "unverified",
+                              "type": "string"
+                            },
+                            "unitCountForms": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "few": {
+                                  "type": "string"
+                                },
+                                "many": {
+                                  "type": "string"
+                                },
+                                "one": {
+                                  "type": "string"
+                                },
+                                "other": {
+                                  "type": "string"
+                                },
+                                "two": {
+                                  "type": "string"
+                                },
+                                "zero": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "other"
+                              ],
+                              "type": "object"
+                            },
+                            "unitLabel": {
+                              "type": "string"
+                            },
+                            "unitLabelLanguage": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "meaning",
+                            "structure",
+                            "recording"
+                          ],
+                          "type": "object"
                         },
                         "revision": {
                           "maximum": 2147483646,
@@ -135513,6 +135642,103 @@
               }
             },
             "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "conflict",
+                        "stale_cursor"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Conflict",
+                        "Stale Cursor"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/conflict",
+                        "https://rezics.com/problems/stale_cursor"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conflict; Stale cursor"
           },
           "503": {
             "content": {
