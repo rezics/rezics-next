@@ -910,3 +910,6 @@ export function InlinePostEditor({
     </div>
   );
 }
+
+// Shared localized controls for catalogue and community document authoring.
+export { editorLabels };

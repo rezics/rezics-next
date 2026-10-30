@@ -109,6 +109,41 @@ store. The research's Wikibase statement model, Open Library work/edition/author
 annotation and Omeka resource templates support these choices; they do not supply a REZICS API or permission.
 Research observations describe their inspected revision, so delivered native fixes take precedence.
 
+### Original authored catalogue text
+
+`/{locale}/subjects/{id}/{slug}/authored` opens from the existing subject header actions. It retains the exact
+canonical subject identity and offers only document-valued fields admitted by the active emitted Type metadata.
+The private, noindex composer prepares the current session before its CSRF-protected server actions run. Field
+labels follow the existing locale fallback; the authored text's BCP 47 language is a separate explicit input.
+An unavailable or concealed read never supplies a cached document or a privileged public fallback.
+
+The shared rich-text editor starts with an empty Text-profile document for a **new replacement candidate**. It
+never preloads, flattens or edits the current document. Existing candidates and all their formatting remain intact.
+The contributor declares authorship, enters an SPDX licence or LicenseRef and supplies the supporting citation URL
+required by the native statement contract. A citation supports the field; it does not license copied text. Provider
+names never determine a licence. Withheld text, user posts and recipe-site methods are not authoring inputs.
+
+Submission uses the existing generated `POST /v1/subjects/{id}/candidates` statement input with inline
+`value.content: {document, licence, language}`. The public `@rezics/document` snapshot and native validation govern
+shape, language, licence and the 2 MiB canonical byte limit; authored media nodes are refused. There is no new body,
+upload or Source-metadata writer. A returned candidate means proposed and awaiting review, never published.
+Draft, validation, saving, denied, conflict and unavailable outcomes remain distinct. An uncertain retry freezes the
+exact document, statement and idempotency key. A key conflict requires explicit draft review before a new request.
+Refreshing definitions or public reading retains the draft.
+
+Review opens the existing candidate comparison for the exact returned candidate and field. Its actual statement's
+document locator is read through `GET /v1/documents/{id}` with the viewer identity and native session position.
+Candidate, subject, language and digest must match before the body renders. Missing, hidden or erased documents
+share the neutral unavailable notice. Candidate pagination stays explicit; an absent candidate on a page supplies no
+invented body. Acceptance and selection keep their independent native heads and confirmation controls.
+
+The current public text is read independently without the editor's bearer, using the selected rank and existing
+language fallback. Its body also comes from the ordinary document endpoint, with current Content disclosure and
+rights. Current citations render separately from the work's actual document licence. After a decision the composer
+reloads that public statement and body; a receipt or the editor draft never becomes public truth. The overview link
+continues to the actual canonical public reader. Story states live under `Pages/Catalogue/Authored text` and use the
+shared locale, theme and viewport globals.
+
 ### Identity and navigation
 
 The [native subject reader](../services/kernel/src/semantic/http/subjects.ts) owns merges, disclosure and the
