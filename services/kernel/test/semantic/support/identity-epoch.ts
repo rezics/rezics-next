@@ -43,7 +43,7 @@ export async function epochFixture(url = process.env.DATABASE_URL) {
   }
   async function create(label = 'Duplicate catalogue record', route = 0x5d10) {
     const key = randomUUID();
-    return createSubject(pool, {
+    const created = await createSubject(pool, {
       actor: await actor(),
       target: { route, id: newId(route) },
       item: { type: 'schema:Person', labels: { en: label } },
@@ -52,6 +52,7 @@ export async function epochFixture(url = process.env.DATABASE_URL) {
       release,
       authorization: await authorization('subject:create'),
     });
+    return { ...created, id: created.subject.id };
   }
   async function merge(
     redirected: string,
