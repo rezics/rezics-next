@@ -515,7 +515,7 @@ export async function openApiRuntime(
           const response = await time(`HTTP: ${req.method} ${new URL(req.url).pathname}`, () => app.handle(req));
           // Detach the actual response bytes before a simulated transport loss
           // aborts the request and its connected response streams.
-          const captured = new Response(await response.clone().arrayBuffer(), {
+          const captured = new Response(response.status === 204 ? null : await response.clone().arrayBuffer(), {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
@@ -600,6 +600,10 @@ export async function openApiRuntime(
           batchWrite: (body) => transport.batch(body, current?.abort.signal),
           ...(options.sourceStatistics === 'vndb'
             ? {
+                clearSourceStatistic: (
+                  input: Parameters<typeof transport.clearSourceStatistic>[0],
+                  signal?: AbortSignal,
+                ) => transport.clearSourceStatistic(input, signal ?? current?.abort.signal),
                 writeSourceStatistic: (
                   input: Parameters<typeof transport.writeSourceStatistic>[0],
                   signal?: AbortSignal,

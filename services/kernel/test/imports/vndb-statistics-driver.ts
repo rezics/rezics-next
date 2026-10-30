@@ -58,7 +58,7 @@ export function captureVndbStatistics(runtime: ApiRuntime) {
     const saved = request.clone();
     const body = request.body === null ? null : await request.clone().text();
     const response = await runtime.replay(request);
-    const value: unknown = await response.clone().json();
+    const value: unknown = response.status === 204 ? null : await response.clone().json();
     const path = new URL(request.url).pathname;
     let committed: Receipt | null = null;
     if (response.status === 200 && path === '/v1/subjects:batchWrite') {
@@ -88,13 +88,21 @@ export function captureVndbStatistics(runtime: ApiRuntime) {
         anchors.set(identity(row), anchor);
       }
     }
-    if (response.status === 200 && request.method === 'PUT' && path.endsWith('/source-statistics/vndb')) {
+    if (
+      (response.status === 200 && request.method === 'PUT' && path.endsWith('/source-statistics/vndb')) ||
+      (response.status === 204 && request.method === 'POST' && path.endsWith('/source-statistics/vndb:clear'))
+    ) {
       const subject = path.split('/')[3]!;
       if (![...subjects.values()].includes(subject))
         throw new Error('Statistic subject was not resolved by public bulk');
       const key: unknown = JSON.parse(request.headers.get('idempotency-key')!);
       if (typeof key !== 'string') throw new Error('Missing native statistic key');
-      const anchor = { partition: partitionOf(routeOf(subject)!), kind: 'rating.source_statistic.write', key, subject };
+      const anchor = {
+        partition: partitionOf(routeOf(subject)!),
+        kind: path.endsWith(':clear') ? 'rating.source_statistic.clear' : 'rating.source_statistic.write',
+        key,
+        subject,
+      };
       committed = await receipt(anchor);
       if (!committed) throw new Error('Successful native statistic command has no receipt');
       anchors.set(identity(committed), anchor);
@@ -148,6 +156,21 @@ export function captureVndbStatistics(runtime: ApiRuntime) {
         rows.push(identity(row));
       }
       return rows.sort();
+    },
+    /** Full immutable semantic receipts, including tuple-routed bootstrap receipts. */
+    async bulkReceiptRows() {
+      const rows: unknown[] = [];
+      for (const anchor of anchors.values()) {
+        if (!anchor.kind.startsWith('subject.batch_')) continue;
+        const result = await runtime.database.admin.query(
+          `SELECT * FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+           AND command_kind=$3 AND idempotency_key=$4`,
+          [anchor.partition, runtime.identity.bulk.accountId, anchor.kind, anchor.key],
+        );
+        if (result.rows.length !== 1) throw new Error('Native semantic receipt disappeared');
+        rows.push(result.rows[0]);
+      }
+      return rows.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     },
     async observe(baseline: Observation['baseline']): Promise<Observation> {
       const subjectId = subjects.get('v123') ?? null;
@@ -266,6 +289,7 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
           readFence: (tuple) =>
             transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
           writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
+          clearSourceStatistic: (input, signal) => transport.clearSourceStatistic(input, signal),
         },
       });
     importer = open();

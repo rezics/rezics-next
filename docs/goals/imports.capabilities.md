@@ -836,3 +836,28 @@ retains its existing scope and acknowledgement requirements.
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts
 ```
+
+### Authoritative VNDB zero-vote refresh
+
+The importer derives an explicit removal intent from sanitized VNDB zero count with a present admitted paired
+average, without changing converter/native revisions, digest, rights or mappings. The production transport
+uses the installed `rating.source_statistic_clear` operation and generated `$clear.post` client, strict
+`{sourceRecordId,count:0,asOf}` body, keyed POST budget and ordinary session continuity. Positive PUT remains
+unchanged and suppressed behind the exact facts fence; removal may address its own binding even fenced.
+UNKNOWN/no-request projections can complete only with the existing VNDB statistic-refresh proof extended to
+exact unchanged semantic candidates, same native/converter revision and an already acknowledged record.
+General metadata acknowledgement remains deferred.
+
+The frozen `services/kernel/test/imports/vndb-zero-refresh.test.ts` is unchanged and binds the adjacent native
+fixture. It exercises ordinary account-key CLI/archive input, exact clear/read/receipt/event, unchanged reopen,
+0/null and 0/0, same-world adjacent registered-source UNKNOWN and malformed pair, response loss after actual
+commit, revoked original replay, restoration and sealed-first recovery. It observes full immutable semantic
+receipts/candidates, independent imported statistics and existing supported native vote/worker controls.
+Required caller closure forwards real clears only under explicit VNDB runtime composition; positive receipt
+observations remain separate, while physical clear exchanges are retained. All previous capability rows,
+peer sections and Cost bounds remain in place.
+
+Native command reserved for integration (not executed in this attempt):
+`bun run --cwd services/kernel check test/imports/vndb-zero-refresh.test.ts`.
+Local verification is limited to the importer and kernel workspace typechecks and the new stack-free protocol
+suite, under the current worker instruction. No native/database acceptance or promotion result is claimed.

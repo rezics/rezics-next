@@ -247,7 +247,11 @@ export async function runJourney() {
             }
             expect(url.origin).toBe(api);
             expect(request.headers.has('cookie')).toBe(false);
-            expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
+            expect(
+              ['/v1/subjects:batchWrite', '/v1/sourceFences:check'].includes(url.pathname) ||
+                (request.method === 'POST' &&
+                  /^\/v1\/subjects\/[^/]+\/source-statistics\/vndb:clear$/.test(url.pathname)),
+            ).toBe(true);
             if (url.pathname !== '/v1/subjects:batchWrite') return runtime.replay(request);
             expect(acquired).toBe(true);
             const saved = request.clone(),

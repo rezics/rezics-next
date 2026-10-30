@@ -18,7 +18,12 @@ import {
 } from '@rezics/conversion/open-library';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
-import type { ImportConversion, ImportSourceStatistic, SourceRegistration } from './import-contract.ts';
+import type {
+  ImportConversion,
+  ImportSourceStatistic,
+  ImportSourceStatisticClear,
+  SourceRegistration,
+} from './import-contract.ts';
 
 /** Typed source asset leaves are passed through from modules that define them. */
 export type SourceAssets = {
@@ -82,9 +87,18 @@ function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
   let sourceStatistic: ImportSourceStatistic | undefined;
+  let sourceStatisticClear: ImportSourceStatisticClear | undefined;
   if (result.source === 'vndb' && 'vn' in result.normalizedRecord) {
     const count = result.normalizedRecord.vn.c_votecount;
     const average = result.normalizedRecord.vn.c_average;
+    if (count === 0 && average !== undefined) {
+      sourceStatisticClear = {
+        source: 'vndb',
+        sourceRecordId: result.normalizedRecord.vn.id,
+        count: 0,
+        asOf: VNDB_DUMP_AS_OF,
+      };
+    }
     if (count !== undefined && count > 0 && average !== undefined && average !== null && average >= 100) {
       sourceStatistic = {
         source: 'vndb',
@@ -104,6 +118,7 @@ function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
     coverAssets,
     mediaImportIntents,
     ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
+    ...(sourceStatisticClear === undefined ? {} : { sourceStatisticClear }),
   };
 }
 

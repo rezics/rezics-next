@@ -60,6 +60,8 @@ function transportFor(
     batchWrite: (body: Parameters<typeof transport.batch>[0]) => transport.batch(body),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
+    clearSourceStatistic: (input: Parameters<typeof transport.clearSourceStatistic>[0], signal?: AbortSignal) =>
+      transport.clearSourceStatistic(input, signal),
     writeSourceStatistic: (input: Parameters<typeof transport.writeSourceStatistic>[0], signal?: AbortSignal) =>
       transport.writeSourceStatistic(input, signal),
   };
@@ -352,9 +354,28 @@ export async function createVndbTablesDriver(
   }
 }
 
-async function* archive(lateDuplicate = false): AsyncGenerator<Uint8Array> {
+export async function* archive(
+  lateDuplicate = false,
+  statistics: Readonly<Record<string, { count: number; average: number | null }>> = {},
+): AsyncGenerator<Uint8Array> {
   for (const name of [...names, ...(lateDuplicate ? ['entry_meta'] : [])]) {
-    const body = new TextEncoder().encode(text(name));
+    let content = text(name);
+    if (name === 'vn') {
+      const columns = text('vn.header').trimEnd().split('\t');
+      content = content
+        .split('\n')
+        .map((line) => {
+          const values = line.split('\t');
+          const statistic = statistics[values[0]!];
+          if (statistic) {
+            values[columns.indexOf('c_votecount')] = String(statistic.count);
+            values[columns.indexOf('c_average')] = statistic.average === null ? '\\N' : String(statistic.average);
+          }
+          return values.join('\t');
+        })
+        .join('\n');
+    }
+    const body = new TextEncoder().encode(content);
     const header = new Uint8Array(512);
     const put = (offset: number, value: string) => header.set(new TextEncoder().encode(value), offset);
     put(0, `db/${name}`);

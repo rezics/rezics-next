@@ -631,6 +631,29 @@ export class Importer {
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       statisticWritten = true;
     }
+    // Removal addresses only this exact binding and remains permitted behind a facts fence.
+    if (subject && conversion?.sourceStatisticClear) {
+      const { source, ...value } = conversion.sourceStatisticClear;
+      const clear = this.options.transport.clearSourceStatistic;
+      if (!clear) throw new Error('Source statistic clear transport is unavailable');
+      await write(() =>
+        clear.call(
+          this.options.transport,
+          {
+            subjectId: subject,
+            source,
+            value,
+            idempotencyKey: operationKey(
+              owner,
+              `${run.id}:source-statistic-clear:${hash(JSON.stringify(conversion.sourceStatisticClear))}`,
+            ),
+          },
+          signal,
+        ),
+      );
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      statisticWritten = true;
+    }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();
     for (const candidate of candidates) {
@@ -662,7 +685,11 @@ export class Importer {
       }
     }
     const statisticOnly =
-      statisticWritten &&
+      (statisticWritten ||
+        (registration.sourceKind === 'vndb' && !conversion?.sourceStatistic && !conversion?.sourceStatisticClear)) &&
+      acknowledged?.state === 'present' &&
+      acknowledged.recordRevision === row.recordRevision &&
+      acknowledged.converter_revision === row.converter_revision &&
       !skipCover &&
       candidates.length > 0 &&
       retainedCandidates.size === candidates.length &&

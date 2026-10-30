@@ -14,7 +14,7 @@ import { createApiPopulation } from './api-population.ts';
 
 /** The sole composition owner for public import outcomes and native observations. */
 export async function openImportApiFixture(options: DriverOptions): Promise<ImportApiDriver> {
-  const runtime = await openApiRuntime(options);
+  const runtime = await openApiRuntime({ ...options, sourceStatistics: 'vndb' });
   try {
     const observer = await runtime.time('governance observer', () => openApiObserver(runtime));
     const population = createApiPopulation(runtime);

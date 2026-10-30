@@ -24,7 +24,7 @@ import {
   type ImportHttpOptions,
   type ImportRetryState,
 } from './import-fetch.ts';
-import type { ImportSourceStatisticValue } from './import-contract.ts';
+import type { ImportSourceStatisticValue, ImportSourceStatisticClearValue } from './import-contract.ts';
 
 export interface FenceTuple {
   source: string;
@@ -216,6 +216,10 @@ async function response(call: () => Promise<ClientResponse>, expected: number, s
   }
   signal?.throwIfAborted();
   if (!reply.response || reply.error || reply.status !== expected) throw httpFailure(reply);
+  if (expected === 204) {
+    ensure(reply.data === undefined || reply.data === null || reply.data === '');
+    return { status: reply.status, body: null };
+  }
   return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES) };
 }
 
@@ -321,6 +325,42 @@ export function createImportTransport(options: ImportTransportOptions) {
     );
     const expected = JSON.parse(JSON.stringify({ source: input.source, ...body }));
     ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(reply.body)), expected));
+  }
+  async function clearSourceStatistic(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticClearValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
+    const value = snapshot(input.value, BODY_BYTES) as Record<string, unknown>;
+    ensure(value !== null && typeof value === 'object' && !Array.isArray(value));
+    ensure(Object.keys(value).sort().join(',') === 'asOf,count,sourceRecordId');
+    ensure(
+      typeof value.sourceRecordId === 'string' &&
+        value.sourceRecordId.length > 0 &&
+        Buffer.byteLength(value.sourceRecordId) <= 1024 &&
+        value.count === 0 &&
+        typeof value.asOf === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value.asOf) &&
+        new Date(`${value.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === value.asOf,
+    );
+    // The generated client maps the registered custom method to the public :clear URL.
+    await response(
+      () =>
+        client
+          .subjects({ id: input.subjectId })
+          ['source-statistics']({ source: input.source })
+          .$clear.post(value as ImportSourceStatisticClearValue, {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          }),
+      204,
+      signal,
+    );
   }
   async function batch(input: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     return sendBatch(requestBody(input, bodyLimit), signal);
@@ -467,6 +507,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     batches,
     fence,
     writeSourceStatistic,
+    clearSourceStatistic,
     refreshCover,
     media,
     importFromUrl,

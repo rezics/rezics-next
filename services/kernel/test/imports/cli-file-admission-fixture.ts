@@ -386,16 +386,18 @@ export async function runCliFileAdmissionJourney() {
               }
             }
             if (
-              request.method === 'PUT' &&
-              url.pathname.endsWith('/source-statistics/vndb') &&
-              response.status === 200
+              (request.method === 'PUT' || request.method === 'POST') &&
+              ((url.pathname.endsWith('/source-statistics/vndb') && response.status === 200) ||
+                (url.pathname.endsWith('/source-statistics/vndb:clear') && response.status === 204))
             ) {
               const id = url.pathname.split('/')[3]!;
               const key = JSON.parse(request.headers.get('idempotency-key')!) as string;
               anchors.set(key, {
                 source,
                 partition: partitionOf(routeOf(id)!),
-                kind: 'rating.source_statistic.write',
+                kind: url.pathname.endsWith(':clear')
+                  ? 'rating.source_statistic.clear'
+                  : 'rating.source_statistic.write',
                 key,
               });
             }

@@ -269,7 +269,7 @@ export async function runReviewedProviderReduction() {
             expect(
               url.pathname === '/v1/subjects:batchWrite' ||
                 url.pathname === '/v1/sourceFences:check' ||
-                (source === 'vndb' && /^\/v1\/subjects\/[^/]+\/source-statistics\/vndb$/.test(url.pathname)),
+                (source === 'vndb' && /^\/v1\/subjects\/[^/]+\/source-statistics\/vndb(?::clear)?$/.test(url.pathname)),
             ).toBe(true);
             const saved = request.clone();
             const bodyBytes = request.body === null ? '' : await request.clone().text();

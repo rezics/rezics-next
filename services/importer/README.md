@@ -83,10 +83,35 @@ exact configured source and external ID, including previously bound VNDB records
 statistic write; metadata still completes through ordinary omission/reconciliation without acknowledging a
 statistic effect. Cover and summary groups remain independent. Every refresh reads current fences before the
 unchanged shortcut, and prepared bulk dispatch retains its late fence check. This is a client publication guard:
-clearing stored statistics and enforcing final disclosure belong to Content and require separate native proof.
+the exact clear operation and final disclosure remain owned by Content. Positive publication stays suppressed;
+exact zero-vote removal may still run behind the facts fence.
 The frozen [caller test](tests/source-statistic-fence.test.ts) binds first, then fences changed and unchanged
 refreshes through the production importer and source registration with a fake external transport.
 [Source-statistic tests](tests/source-statistics.test.ts) retain public-route, acknowledgement and retry coverage.
+
+Explicit sanitized VNDB `c_votecount: 0` with its admitted paired `c_average` produces an exact removal
+intent, including `0/null` and `0/0`. The ordinary seven-scope CLI calls the installed
+`rating.source_statistic_clear` operation, `POST /v1/subjects/{id}/source-statistics/vndb:clear`,
+with strict `{sourceRecordId, count: 0, asOf}` and expects 204 with ordinary session continuity.
+It removes only that subject/source/record binding. It uses the existing bounded write coordinator,
+keyed POST retry budget and run-derived identity; reopening a sealed run reuses the original bytes/key
+before reading replacement input. An uncertain or denied clear preserves the previous complete baseline.
+Both missing fields mean UNKNOWN and send no statistic request; a partial pair remains invalid. A positive
+count with unavailable mean also sends no statistic request. No mean, vote, mapping or revision is invented.
+For the same native/converter revision, the statistic-refresh completion proof requires an existing
+acknowledged VNDB record and exhaustive retention of every semantic candidate/proposal, including when the
+source-specific statistic omission requires no request. It advances only the input projection, without a
+fabricated receipt or changes to old semantic requests/receipts. General metadata acknowledgement remains deferred.
+
+The frozen [zero-refresh journey](../kernel/test/imports/vndb-zero-refresh.test.ts) now has an adjacent genuine
+native CLI fixture. It uses pinned headers/COPY archive input, real account-key credential effects, public
+clear/read/receipt/event observation, same-state response-loss recovery and current grant denial. UNKNOWN
+is explicitly a registered-source/coordinator branch in the same imports world, since the pinned archive
+cannot omit those columns. The existing native figure fixture supplies a separate real vote/worker control.
+The caller also preserves an independent imported tuple/subject, semantic candidate IDs and full old receipts.
+This implementation has no native execution receipt yet: native acceptance is reserved for integration by
+the current verification instruction. Local verification commands/results and tested revision are recorded
+in the capability manifest; they do not claim native acceptance or promotion.
 
 The native archive binding and real account-key CLI caller are exercised by
 `services/kernel/test/imports/vndb-statistics-outcomes.test.ts` and `vndb-cli-native.test.ts`.
@@ -480,6 +505,12 @@ state while effects remain unresolved. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Explicit source statistic removal
+
+- Touches: the existing bounded source projection/own binding and one public exact-subject/source/record clear command per changed zero intent; no extra global lookup.
+- Bound: at most one native clear effect per source record/run under existing logical-write/transport budgets. UNKNOWN sends zero statistic requests; source rows/candidates remain indexed and bounded. Physical retries remain visible in native HTTP captures, separately from positive PUTs and votes.
+- Growth check: existing importer counted/store/transport bounds remain unchanged. Content owns native exact-key clear/read/fence growth. The connected native journey observes effect/receipt/recovery; it adds no synthetic PostgreSQL growth series and has not been run in this attempt.
 
 ### Source-only provenance refresh
 

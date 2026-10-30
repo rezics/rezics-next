@@ -719,7 +719,7 @@ export class RunStore<Projection = BatchStatement[]> {
     if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates') fail();
     this.acknowledgeEmpty(run, key, false);
   }
-  /** Trusted coordinator proof: a confirmed VNDB statistic write and exhaustive
+  /** Trusted coordinator proof: a confirmed VNDB statistic write/removal or source-specific omission, and exhaustive
    * bounded comparison retained every current semantic candidate and proposal.
    * This acknowledges only the staged input projection, never a server receipt.
    */

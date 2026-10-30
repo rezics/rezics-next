@@ -640,6 +640,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   const signalTransport = {
     batchWrite: (request: Parameters<typeof importTransport.batch>[0]) =>
       track(() => importTransport.batch(request, signal)),
+    clearSourceStatistic: (input: Parameters<typeof importTransport.clearSourceStatistic>[0]) =>
+      track(() => importTransport.clearSourceStatistic(input, signal)),
     writeSourceStatistic: (input: Parameters<NonNullable<typeof importTransport.writeSourceStatistic>>[0]) =>
       track(() => importTransport.writeSourceStatistic(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>

@@ -18,6 +18,14 @@ export type ImportSourceStatistic = Readonly<{
 
 export type ImportSourceStatisticValue = Omit<ImportSourceStatistic, 'source'>;
 
+export type ImportSourceStatisticClear = Readonly<{
+  source: 'vndb';
+  sourceRecordId: string;
+  count: 0;
+  asOf: string;
+}>;
+export type ImportSourceStatisticClearValue = Omit<ImportSourceStatisticClear, 'source'>;
+
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
   readFence(tuple: {
@@ -25,6 +33,15 @@ export interface ImportTransport {
     external_id: string;
     field_group: FieldGroup;
   }): Promise<{ fenced: boolean; securityRevision: string | null }>;
+  clearSourceStatistic?(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticClearValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
   writeSourceStatistic?(
     input: {
       subjectId: string;
@@ -52,6 +69,7 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   normalized: unknown;
   sourceMetadata?: unknown;
   sourceStatistic?: ImportSourceStatistic;
+  sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;
 
 export type RunOptions = Readonly<{
