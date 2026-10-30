@@ -4,6 +4,12 @@ import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
 import { encodeLocator, validateScope, type AccountReference, type HistoryScope } from './locator.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import insert from './record.sql';
+import {
+  beginRecordHistorySerialization,
+  commandRecordSources,
+  recordRecordHistoryCopy,
+  releaseCommandRecordSources,
+} from './record-source.ts';
 
 /** Permanent numeric namespace. Append explicit IDs; never assign IDs by registration order. */
 export const COMMAND_HISTORY_KINDS = Object.freeze({
@@ -97,7 +103,10 @@ export function validateCommandHistoryScope(
   kind: string | undefined,
   events: readonly { type: string }[],
 ): void {
+  beginRecordHistorySerialization(tx);
   const declaration = declarations.get(tx);
+  if (!declaration && commandRecordSources(tx).length)
+    throw new TypeError('Record sources require native command history serialization');
   if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
     throw new TypeError('Missing or mismatched command history declaration');
@@ -111,6 +120,8 @@ export function validateCommandHistory(
   events: readonly unknown[],
 ): void {
   const declaration = declarations.get(tx);
+  if (!declaration && commandRecordSources(tx).length)
+    throw new TypeError('Record sources require native command history serialization');
   if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
     throw new TypeError('Missing or mismatched command history declaration');
@@ -147,13 +158,16 @@ export async function recordCommandHistory(
     keyVersion: Number(version),
     keyToken: token.toString('hex'),
   });
-  const write = (scope: HistoryScope, locator: Uint8Array) =>
-    insert.run(tx, {
+  const write = async (scope: HistoryScope, locator: Uint8Array) => {
+    await insert.run(tx, {
       partition_no: declaration.partition,
       artifact_type: scope.artifactType,
       locator: Buffer.from(locator),
       accounts: scope.accounts,
     });
+    const { decodeLocator } = await import('./locator.ts');
+    await recordRecordHistoryCopy(tx, decodeLocator(scope.artifactType, locator), input.position);
+  };
   await write(declaration.response, receipt);
   for (let eventSeq = 0; eventSeq < declaration.events.length; eventSeq++)
     await write(
@@ -168,6 +182,7 @@ export async function recordCommandHistory(
 }
 
 export function releaseCommandHistory(tx: CommandTransaction): void {
+  releaseCommandRecordSources(tx);
   identities.delete(tx);
   declarations.delete(tx);
 }

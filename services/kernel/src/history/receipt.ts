@@ -1,3 +1,4 @@
+import { lockRecordHistoryCopy, type RecordHistoryLocalJob } from './record-source-lock.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import type { CommandTransaction } from '../command/command.ts';
@@ -29,11 +30,13 @@ type Job = {
 
 export async function minimizeHistoryReceipt(
   tx: CommandTransaction,
-  job: Pick<Job, 'partition_no' | 'account_route' | 'account_id'>,
+  job: Pick<Job, 'partition_no' | 'account_route' | 'account_id'> | RecordHistoryLocalJob,
   locator: Buffer,
   registry?: HistoryRegistry,
   barrier?: HistoryBarrier,
 ): Promise<string | null> {
+  const record = 'authority' in job;
+  if (record && !(await lockRecordHistoryCopy(tx, job, 'command-receipt/v1', locator))) return 'record-source-stale';
   const key = decodeLocator('command-receipt/v1', locator);
   if (key.artifactType !== 'command-receipt/v1' || key.partitionNo !== job.partition_no)
     throw new TypeError('Receipt owner disposition unavailable');
@@ -49,13 +52,16 @@ export async function minimizeHistoryReceipt(
   );
   if (
     associations.rows.length > 64 ||
-    !associations.rows.some(
-      (row) =>
-        row.account_route === job.account_route && row.account_id === job.account_id && row.minimizer_version === 1,
-    )
+    associations.rows.some((row) => row.minimizer_version !== 1) ||
+    (!record &&
+      !associations.rows.some((row) => row.account_route === job.account_route && row.account_id === job.account_id))
   )
     throw new TypeError('Receipt source scope proof unavailable');
-  if (registry) {
+  if (record) {
+    // These native dispositions explicitly have no response consumers, including living work.
+    // An account-erasure readiness callback is never reused as ordinary-record permission.
+    if (!Object.hasOwn(RECEIPT_OWNER_DISPOSITIONS, kind)) return 'receipt-record-consumer-proof-unavailable';
+  } else if (registry) {
     const owner = registry.owner('command-receipt/v1', kind);
     if (!owner || !barrier) return 'receipt-consumer-proof-unavailable';
     const readiness = await owner.readiness(
@@ -93,12 +99,13 @@ export async function minimizeHistoryReceipt(
   } else if (source.rows[0].payload_state !== 'minimized') throw new TypeError('Unknown receipt payload state');
   // A live account's association remains pending until its own committed barrier exists. This
   // account's proof and the physical response mutation always commit or roll back together.
-  await tx.query(
-    `UPDATE core.history_locator SET state='minimized',proof_barrier=$3
+  if (!record)
+    await tx.query(
+      `UPDATE core.history_locator SET state='minimized',proof_barrier=$3
     WHERE partition_no=$1 AND account_route=$2 AND account_id=$3
       AND artifact_type='command-receipt/v1' AND locator=$4`,
-    [job.partition_no, job.account_route, job.account_id, locator],
-  );
+      [job.partition_no, job.account_route, job.account_id, locator],
+    );
   return null;
 }
 

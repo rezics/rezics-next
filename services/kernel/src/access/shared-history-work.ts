@@ -1,3 +1,4 @@
+import { advanceOutstandingRecordHistory } from '../history/work.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { withConnection } from '../database/pool.ts';
 import { admitSharedHistory, advanceSharedHistory } from './shared-history.ts';
@@ -63,6 +64,7 @@ export const sharedHistoryWorkModule: WorkModule = {
       const tick = () => {
         running = (async () => {
           try {
+            await advanceOutstandingRecordHistory(context.pool, context.clock);
             // Reopen one dependency-pending job per unit when the actual registry changes.
             await context.pool.query(
               `UPDATE core.preference_history_job SET phase='scan',scan_partition=0,verify_partition=0,

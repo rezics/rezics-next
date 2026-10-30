@@ -3,20 +3,33 @@ import { routeOf } from '../route/route.ts';
 
 /** Original immutable source identity, before any deletion generation exists. */
 export type RecordHistorySourceReference =
-  | Readonly<{ kind: 'contribution'; subjectId: string; candidateId: string; revision: number; documentId: string | null }>
+  | Readonly<{
+      kind: 'contribution';
+      subjectId: string;
+      candidateId: string;
+      revision: number;
+      documentId: string | null;
+    }>
   | Readonly<{ kind: 'context'; contextId: string }>
   | Readonly<{ kind: 'zone'; zoneId: string }>;
 
 export const MAX_COMMAND_RECORD_SOURCES = 16;
 const declarations = new WeakMap<CommandTransaction, readonly RecordHistorySourceReference[]>();
+const serializing = new WeakSet<CommandTransaction>();
 
 export function recordHistorySourceKey(input: RecordHistorySourceReference): string {
-  const uuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id);
+  const uuid = (id: string) => routeOf(id) !== null;
   if (input.kind === 'contribution') {
-    if (Object.keys(input).length !== 5 || !uuid(input.subjectId) || !uuid(input.candidateId) ||
-      routeOf(input.subjectId) !== routeOf(input.candidateId) || !Number.isSafeInteger(input.revision) ||
-      input.revision < 1 || (input.documentId !== null && (!uuid(input.documentId) ||
-      routeOf(input.documentId) !== routeOf(input.subjectId)))) throw new TypeError('Invalid original record source');
+    if (
+      Object.keys(input).length !== 5 ||
+      !uuid(input.subjectId) ||
+      !uuid(input.candidateId) ||
+      routeOf(input.subjectId) !== routeOf(input.candidateId) ||
+      !Number.isSafeInteger(input.revision) ||
+      input.revision < 1 ||
+      (input.documentId !== null && (!uuid(input.documentId) || routeOf(input.documentId) !== routeOf(input.subjectId)))
+    )
+      throw new TypeError('Invalid original record source');
     return JSON.stringify(['contribution', input.subjectId, input.candidateId, input.revision, input.documentId]);
   }
   if (input.kind === 'context' && Object.keys(input).length === 2 && uuid(input.contextId))
@@ -34,11 +47,12 @@ export function declareCommandRecordSources(
   sources: readonly RecordHistorySourceReference[],
 ): void {
   currentCommand(tx);
-  if (declarations.has(tx) || sources.length < 1 || sources.length > MAX_COMMAND_RECORD_SOURCES)
+  if (declarations.has(tx) || serializing.has(tx) || sources.length < 1 || sources.length > MAX_COMMAND_RECORD_SOURCES)
     throw new TypeError('Invalid or repeated command record source declaration');
-  const keys = sources.map(recordHistorySourceKey);
+  const copied = sources.map((source) => Object.freeze({ ...source }));
+  const keys = copied.map(recordHistorySourceKey);
   if (new Set(keys).size !== sources.length) throw new TypeError('Repeated original record source');
-  declarations.set(tx, Object.freeze(sources.map((source) => Object.freeze({ ...source }))));
+  declarations.set(tx, Object.freeze(copied));
 }
 
 export function commandRecordSources(tx: CommandTransaction): readonly RecordHistorySourceReference[] {
@@ -47,4 +61,47 @@ export function commandRecordSources(tx: CommandTransaction): readonly RecordHis
 
 export function releaseCommandRecordSources(tx: CommandTransaction): void {
   declarations.delete(tx);
+  serializing.delete(tx);
+}
+
+/** Called before any producer serializes a durable request or command history payload. */
+export function beginRecordHistorySerialization(tx: CommandTransaction): void {
+  currentCommand(tx);
+  serializing.add(tx);
+}
+
+/** Actual serializer hook; only the codec/SDK-generated locator is accepted here. */
+export async function recordRecordHistoryCopy(
+  tx: CommandTransaction,
+  locator: import('./locator.ts').HistoryLocator,
+  position: bigint | null = null,
+): Promise<void> {
+  const command = currentCommand(tx);
+  const { encodeLocator } = await import('./locator.ts');
+  const encoded = Buffer.from(encodeLocator(locator));
+  for (const source of commandRecordSources(tx))
+    await tx.query(
+      `INSERT INTO core.record_history_locator
+       (source_key,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
+       VALUES($1,$2,$3,$4,$5,$6,1) ON CONFLICT DO NOTHING`,
+      [
+        recordHistorySourceKey(source),
+        command.partition,
+        locator.artifactType,
+        encoded,
+        command.transactionId,
+        position?.toString() ?? null,
+      ],
+    );
+}
+
+/** The fence closes native provenance for work staged before the generated log position existed. */
+export async function finalizeCommandRecordSources(tx: CommandTransaction, position: bigint): Promise<void> {
+  if (!commandRecordSources(tx).length) return;
+  const command = currentCommand(tx);
+  await tx.query(
+    `UPDATE core.record_history_locator SET original_position=$3
+     WHERE partition_no=$1 AND original_transaction=$2 AND original_position IS NULL`,
+    [command.partition, command.transactionId, position.toString()],
+  );
 }

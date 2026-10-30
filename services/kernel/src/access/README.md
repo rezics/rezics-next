@@ -2603,6 +2603,28 @@ producer/minimizer closure; this implementation emits no participant ACK and
 introduces no final-ACK dependency cycle. The global participant inventory and
 Search's explicitly undelivered cleanup are preserved.
 
+## Private account management reads
+
+`GET /v1/me/managedAccounts` (`account.list_managed`, `account:read`) reads the current human's own identity,
+organization memberships and personal operator responsibility holds. It accepts `organizationsCursor` and
+`operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
+section, while independently available identity and responsibility sections remain readable.
+
+`GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
+`operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
+reject operated identities. Organization details require current native membership. Private holders and operator
+responsibilities additionally require `account:manage` on that organization; an ordinary member receives a denied
+holders section. An automated target requires current management of its native current operator, including current
+organization membership where applicable. Attribution and coordination rows never confer management authority.
+
+Reads use one authoritative read time, 20 scanned candidates per section and viewer/target/feed-bound signed
+cursors. The inverse is bounded by its existing 1000-membership cap; every candidate is checked against current
+organization membership. Member candidates seek the native live-membership slot index and each verifies its authoritative temporal role; responsibility seeks
+reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor relation read; `current` means the
+operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
+state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
+credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
+
 ## Delivered preference history coverage
 
 `createPreferenceCommands.setPreferences` is the first converted command producer. Before reading or changing
@@ -2652,10 +2674,44 @@ mark delivery complete. This is historical provenance, never current permission 
 absence. Existing historical rows have no backfill, and Access's own provenance retention/cleanup remains its
 separate obligation.
 
-Ordinary record purge uses the agreed Semantic `record-purge-authority.ts` opaque source owner and Content's
-`purgeAuthoredFieldForDeletedRecord`, independently of account erasure. The Semantic module currently exposes only
-unavailable source methods, and Content's owner minimizer is absent. Accounts publishes the selected
-`history/record-purge.ts` signatures, but they fail closed because the source-bound record-to-copy inventory and
-receiving custody are not delivered. No account-role locator, caller list or released source read substitutes for
-them. Cross-home source serialization with hold/restore/generation changes also remains unavailable. These are code
-and custody dependencies, not a pending approval of the selected contract. No record or global completion is claimed.
+Ordinary record purge imports Semantic's actual opaque `RecordPurgeAuthority` and its native read/lock ports,
+independently of account erasure. `prepareRecordHistoryPurge` captures the exact immutable source bindings and a
+fixed request deadline in a private process handle; `minimizeRecordHistoryPurge` rereads and locks the native
+source through one physical effect and its local progress. Hold, restore, generation/version changes, original
+committed deletion/expiry and current home epoch remain the source owner's authority. Source read failures
+propagate; only actual source ineligibility returns null. The native issuer in this checkout exposes contribution
+references; Context/Zone source authority remains the Semantic owner's dependency.
+
+Original source writers enroll with the exact export
+`declareCommandRecordSources(tx: CommandTransaction, sources: readonly RecordHistorySourceReference[]): void`
+from `history/record-source.ts`, before history serialization. The closed reference is
+`{kind:'contribution',subjectId,candidateId,revision,documentId}`,
+`{kind:'context',contextId}` or `{kind:'zone',zoneId}`. A command declares at most sixteen distinct immutable
+references, including old/new/current versions when each is copied. There is no deletion generation at original
+copy creation. This port associates ownership only; it confers no permission, validates no native source and
+asserts no completeness. Source owners retain native writer/lifecycle locking and source eligibility. Semantic
+owns adoption in its actual writers. No original command is inferred from a body, account role or guessed UUID.
+
+Receipt/outbox codec hooks and scoped durable staging record the actual generated locator with its original
+transaction, fence position and producer version before commit, preserving existing account associations.
+Durable receiving copies exact original associations after releasing the source checkout. Converted associations
+have explicit partial coverage. An empty page or one converted command cannot certify historical absence, a
+sealed original inventory or a finite source cut; unconverted older producers remain pending. The current
+implementation does not seal enrollment or claim late-copy exclusion: later real enrolled copies remain visible
+through the pending index rather than disappearing behind a completed cursor.
+
+Each segment reads at most eight exact locator keys and applies one physical minimizer. Known co-located receipt
+responses with native no-consumer dispositions, the closed Library entry-purged outbox event after actual effect
+consumer closure, and native work already retired with verified SDK absence can make local progress. Other
+consumer families remain pending until their actual owner supplies record-compatible closure. Receipt identity,
+request digest and the existing minimized-result 410/no-reexecution behavior survive. Existing irreversible
+payload/retirement seals still apply, and living accounts acquire no fabricated erasure barrier or receipt proof.
+Active work requires source-bound native retirement before SDK payload changes; this port does not treat a DBOS
+status as authority. Foreign copies remain pending with `record-source-bound-foreign-custody-unavailable`: their
+receiving home needs durable source-bound custody that serializes current hold/restore/generation through mutation.
+
+The existing default history worker redrives one outstanding native record job per unit from its durable source
+locator and reissues Semantic authority after restart. It adds no DBOS purge queue, account/global/participant ACK,
+aggregate coverage certificate or second cleanup algorithm. No record completion is issued while original/receiving
+inventory, source cut, late-copy exclusion or native consumer closure remains unsealed. These delivered local
+capabilities retain all preference-history and Cost qualifications above; full native acceptance remains required.

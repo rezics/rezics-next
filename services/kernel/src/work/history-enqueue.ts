@@ -1,3 +1,4 @@
+import { beginRecordHistorySerialization, recordRecordHistoryCopy } from '../history/record-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -77,11 +78,13 @@ async function persist(
 /** Origin intent and exact role-union custody commit with the source command. The caller releases
  * that transaction before receiveHistoryWork checks out the DBOS destination. No SDK call occurs here. */
 export async function stageHistoryWork(tx: CommandTransaction, input: ScopedWorkRequest): Promise<void> {
+  beginRecordHistorySerialization(tx);
   const request = structuredClone(input);
   const digest = validate(request);
   const command = currentCommand(tx);
   await guardHistoryAccounts(tx, command.partition, request.scope.accounts);
   await persist(tx, command.partition, command.partition, command.transactionId, request, digest);
+  await recordRecordHistoryCopy(tx, { artifactType: 'durable-work/v1', workId: request.intent.workflowId });
 }
 
 /** Kernel DBOS is schema dbos in this same configured database. Partition zero is its fixed
@@ -101,7 +104,14 @@ export async function receiveHistoryWork(
     );
     const row = result.rows[0];
     if (!row) throw new TypeError('Scoped work origin unavailable');
-    return row;
+    const locator = Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId }));
+    const copies = await tx.query(
+      `SELECT source_key,original_transaction,original_position,producer_version FROM core.record_history_locator
+       WHERE partition_no=$1 AND artifact_type='durable-work/v1' AND locator=$2 ORDER BY source_key LIMIT 17`,
+      [sourcePartition, locator],
+    );
+    if (copies.rows.length > 16) throw new TypeError('Too many original work record sources');
+    return { ...row, recordCopies: copies.rows, recordLocator: locator };
   });
   if (source.state === 'retired') return 'retired';
   const request: ScopedWorkRequest = { owner: source.owner, intent: source.request, scope: source.scope };
@@ -124,6 +134,19 @@ export async function receiveHistoryWork(
       }
       await guardHistoryAccounts(tx, 0, request.scope.accounts);
       const stored = await persist(tx, 0, sourcePartition, source.source_transaction, request, digest);
+      for (const copy of source.recordCopies)
+        await tx.query(
+          `INSERT INTO core.record_history_locator
+           (source_key,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
+           VALUES($1,0,'durable-work/v1',$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+          [
+            copy.source_key,
+            source.recordLocator,
+            copy.original_transaction,
+            copy.original_position,
+            copy.producer_version,
+          ],
+        );
       if (!stored.retired && !stored.admitted) {
         await enqueueWorkIntent(work, tx, request.intent);
         await tx.query('UPDATE core.history_work SET admitted=true WHERE partition_no=0 AND work_id=$1', [workId]);

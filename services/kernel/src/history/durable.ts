@@ -185,3 +185,25 @@ export async function minimizeHistoryWork(
   });
   return null;
 }
+
+/** Ordinary record cleanup can acknowledge an execution already retired by its native owner.
+ * Active SDK payload mutation needs source-bound retirement custody; a released read cannot supply it. */
+export async function minimizeRecordHistoryWork(
+  tx: import('../command/command.ts').CommandTransaction,
+  job: import('./record-source-lock.ts').RecordHistoryLocalJob,
+  locator: Buffer,
+): Promise<string | null> {
+  const { lockRecordHistoryCopy } = await import('./record-source-lock.ts');
+  if (!(await lockRecordHistoryCopy(tx, job, 'durable-work/v1', locator))) return 'record-source-stale';
+  const key = decodeLocator('durable-work/v1', locator);
+  if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
+  const rows = await tx.query(
+    `SELECT state,absence_verified,request,scope FROM core.history_work
+     WHERE partition_no=$1 AND work_id=$2 FOR UPDATE`,
+    [job.partition_no, key.workId],
+  );
+  const work = rows.rows[0];
+  if (!work) return 'work-native-custody-missing';
+  if (work.state === 'retired' && work.absence_verified && work.request === null && work.scope === null) return null;
+  return 'record-work-source-bound-retirement-unavailable';
+}

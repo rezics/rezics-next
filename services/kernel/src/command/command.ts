@@ -1,3 +1,4 @@
+import { finalizeCommandRecordSources } from '../history/record-source.ts';
 export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
@@ -705,6 +706,7 @@ async function executeCommand<T>(
               storageKey: receipt.key as string,
               position: BigInt(row[0]!.position),
             });
+          await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
           await measureCommandPhase('commit', () => client.query('COMMIT'));
           sealEventTypes();
           return {
