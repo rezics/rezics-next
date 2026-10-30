@@ -545,7 +545,20 @@ with at most 66,047 bytes when joined by single spaces. Auth and Access share th
 512 at composition, reporting its count and the bound before serving requests. Snapshot capture retains
 the session's complete scope ceiling; it does not narrow it to the operation's actions.
 
-`readAuthConsentConfig(env)` in `auth-consent.ts` owns the shared configuration for every module that restores an initiator: `KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. The group is optional and all or nothing. The URL must be the exact private HTTPS `/internal/v1/consents:read` endpoint, without credentials, query or fragment. Values retain the visible-ASCII limit of 1024 characters. A partial or invalid group fails startup with a variable name, never its value. Content erasure and the Realm adapter use this same Access reader; the worker reports the consent group when absent.
+`readAuthConsentConfig(env)` in `auth-consent.ts` owns the shared configuration for every module that restores an initiator: `KERNEL_AUTH_CONSENT_URL`, `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. The group is optional and all or nothing. The URL must be the exact private HTTPS `/internal/v1/consents:read` endpoint, without credentials, query or fragment. Values retain the visible-ASCII limit of 1024 characters. A partial or invalid group fails startup with a variable name, never its value. Content erasure and the Realm adapter use this same Access reader.
+
+`WorkContext.getAuthorization()` lazily memoizes one `WorkerAuthorization` containing `access` and `readConsent`.
+`createWorkerAuthorization` composes `createKernel` with the worker's actual pool, enqueue client, domain clock,
+validated membership route/reference/Auth configuration and dedicated receipt keys. It captures Access through
+`onAccessReady` only after canonical routes, native container actions and resource-role validation finish. The
+kernel resolver supplies current Realm roles and native edition buyer facts; action names and anonymous metadata
+come from mounted declarations. This constructs no listener, request, extra pool/client or DBOS launch. The getter
+and configuration confer no authority. Accounts uses this same Access and reader for its existing membership
+restorer; Content edition sale restoration receives the identical reader through the pool's existing registry.
+Consent configuration is read once for this composition. An absent group installs a reader that throws typed,
+retryable `AccessUnavailableError('overloaded')` when invoked; partial configuration still throws `ConfigError`.
+Current restoration, grants, scopes, floors, assignments and denials remain the durable initiator and Access formula's
+responsibility at each step's time.
 
 Successful restoration publishes rate identity from its existing anchored account
 facts: route, creation time, private tier and operator. It applies authentication's
@@ -2602,28 +2615,6 @@ completion. Shared-history acknowledgement requires that fact and kernel's own
 producer/minimizer closure; this implementation emits no participant ACK and
 introduces no final-ACK dependency cycle. The global participant inventory and
 Search's explicitly undelivered cleanup are preserved.
-
-## Private account management reads
-
-`GET /v1/me/managedAccounts` (`account.list_managed`, `account:read`) reads the current human's own identity,
-organization memberships and personal operator responsibility holds. It accepts `organizationsCursor` and
-`operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
-section, while independently available identity and responsibility sections remain readable.
-
-`GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
-`operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
-reject operated identities. Organization details require current native membership. Private holders and operator
-responsibilities additionally require `account:manage` on that organization; an ordinary member receives a denied
-holders section. An automated target requires current management of its native current operator, including current
-organization membership where applicable. Attribution and coordination rows never confer management authority.
-
-Reads use one authoritative read time, 20 scanned candidates per section and viewer/target/feed-bound signed
-cursors. The inverse is bounded by its existing 1000-membership cap; every candidate is checked against current
-organization membership. Member candidates seek the native live-membership slot index and each verifies its authoritative temporal role; responsibility seeks
-reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor relation read; `current` means the
-operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
-state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
-credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
 
 ## Delivered preference history coverage
 

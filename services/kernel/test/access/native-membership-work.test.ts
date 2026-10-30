@@ -43,6 +43,9 @@ const context = {
   queues: WORK_QUEUES,
   env,
   clock: systemClock,
+  getAuthorization() {
+    throw new Error('Membership component fixture does not consume worker authorization');
+  },
   addEffects() {},
   addService() {},
 };

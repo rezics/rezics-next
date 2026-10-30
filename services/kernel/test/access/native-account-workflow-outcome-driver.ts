@@ -379,6 +379,9 @@ async function buildHost() {
       pool: kernel,
       queues: WORK_QUEUES,
       client: fenceClient,
+      getAuthorization() {
+        throw new Error('Fence fixture does not consume worker authorization');
+      },
       env: process.env,
       clock: () => new Date(),
       addEffects: (effects) => {

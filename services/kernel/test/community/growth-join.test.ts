@@ -232,6 +232,9 @@ beforeAll(async () => {
     client: work,
     env: workerEnv,
     clock: systemClock,
+    getAuthorization() {
+      throw new Error('Realm growth fixture supplies its membership adapter directly');
+    },
     addEffects(items) {
       effects.push(...items);
     },

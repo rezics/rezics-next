@@ -5,6 +5,8 @@ import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
 import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
 import { HistoryRegistry } from '../history/registry.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
 
 export type WorkService = { stop(): Promise<void> };
 
@@ -15,6 +17,7 @@ export type WorkContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly clock: KernelClock;
   readonly history?: HistoryRegistry;
+  getAuthorization(): WorkerAuthorization;
   addEffects(effects: Effect[]): void;
   addNativeEffects?(effects: NativeEffect[]): void;
   addService(start: () => WorkService | Promise<WorkService>): void;
@@ -28,6 +31,7 @@ export type WorkOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   /** Trusted service composition only. */
   clock?: KernelClock;
+  receiptKeys?: KeyRing;
 };
 
 let composed = false;
@@ -62,6 +66,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   const serviceStarters: Array<() => WorkService | Promise<WorkService>> = [];
   const started: WorkService[] = [];
   let accepting = true;
+  let authorization: WorkerAuthorization | undefined;
   const context: WorkContext = Object.freeze({
     pool: options.pool,
     queues: WORK_QUEUES,
@@ -69,6 +74,15 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     env: options.env ?? process.env,
     clock,
     history,
+    getAuthorization() {
+      return (authorization ??= createWorkerAuthorization({
+        pool: options.pool,
+        client: options.client,
+        env: options.env ?? process.env,
+        clock,
+        ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),
+      }));
+    },
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');
       collectedEffects.push(...effects);

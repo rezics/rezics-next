@@ -356,6 +356,9 @@ test('default Semantic composition registers its real locator and bounded local 
       clock: () => new Date(),
       queues: WORK_QUEUES,
       client,
+      getAuthorization() {
+        throw new Error('Semantic fixture does not consume worker authorization');
+      },
       addEffects(registered) {
         effects.push(...registered);
       },
