@@ -547,7 +547,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             'deadline_exceeded',
           ),
         },
-        detail: detail('copy.get', 'copy:read'),
+        detail: {
+          ...detail('copy.get', 'copy:read'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': Object.keys(bundledRelease.types),
+        },
       },
       async ({ actor, params, query, admission, job, request, set }) => {
         point(actor, params.copyId, 'copy:read');

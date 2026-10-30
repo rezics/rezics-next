@@ -593,7 +593,7 @@ test('same-route foreign owner, missing scope and revoked principal cannot expos
   await expect(commands.readPresentedCopy(sameRoute.actor, created.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
   for (const bearer of [sameRoute.bearer, noScope, 'anonymous']) {
     const response = await native.send(bearer, 'GET', `${path(created.value.id)}?view=FULL&presentation=FULL`);
-    expect([401, 404]).toContain(response.status);
+    expect([401, 403, 404]).toContain(response.status);
     const raw = await response.text();
     for (const secret of ['Private licence', 'installation', 'licensed', originalDigest, 'presentation', '"copy":']) expect(raw).not.toContain(secret);
   }
@@ -621,4 +621,37 @@ test('detail final fence refuses a changed copy, a changed source or a revoked o
     if (change === 'source') await expect(read).rejects.toMatchObject({ code: 'semantic_not_ready' });
     if (change === 'owner') await expect(read).rejects.toBeInstanceOf(GrantDeniedError);
   }
+});
+
+test('missing exact immutable Copy release never borrows current labels and transient source failure never proves retirement', async () => {
+  const subjectId = await native.createSubject('game');
+  const created = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+  const before = await inspect();
+  const query = native.pool.query;
+  // Read-only fault at the existing exact-release lookup and its cache-existence probe.
+  native.pool.query = function (...args: unknown[]) {
+    const text = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
+    if (/definitions-(?:read|exists)\.sql/.test(text)) return Promise.resolve({ rows: [], rowCount: 0 });
+    return Reflect.apply(query, native.pool, args);
+  } as typeof query;
+  try {
+    const detail = await commands.readPresentedCopy(owner.actor, created.value.id);
+    expect(detail.presentation).toEqual({ meaning: 'unavailable', statusEditing: { state: 'unavailable' } });
+    expect(detail).toMatchObject({ id: created.value.id, kind: 'installation', status: 'licensed', revision: 1 });
+  } finally {
+    native.pool.query = query;
+  }
+  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  const { AccessUnavailableError } = await import('../../src/access/unavailable.ts');
+  const access = deriveAccess(native.access, {
+    async prepare(actor, action, resource, context) {
+      if (action === 'subject:read') throw new AccessUnavailableError('overloaded');
+      return native.access.prepare?.(actor, action, resource, context);
+    },
+  });
+  const unavailable = createCopyCommands({ pool: native.pool, tokens: native.tokens, access });
+  expect((await unavailable.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
+    meaning: 'known', kindLabel: 'installation', statusEditing: { state: 'unavailable' },
+  });
+  expect(await inspect()).toEqual(before);
 });

@@ -34,7 +34,7 @@ import { decodeLibraryProfilePin } from './profile-pin.ts';
 import retentionRead from './copy-retention-read.sql';
 import retentionRestore from './copy-retention-restore.sql';
 import { readLibraryProfileSource } from './profile-source.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within as withinDeadline } from '../access/authenticate.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import { prepareCopyPresentation } from './copy-presentation.ts';
 import copyDetailRead from './copy-store-read.sql';
@@ -511,9 +511,10 @@ export function createCopyCommands(config: Dependencies) {
     const route = sameAccountRoute(owner.accountId, copyId);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     return withRequestDeadline(deadline, () =>
-      within(deadline, async () => {
+      withinDeadline(deadline, async () => {
         const time = () => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
         async function observed(at: AuthoritativeTime) {
+          requireActor(owner, 'copy:read');
           const check = await accessCheck(
             access,
             owner,
