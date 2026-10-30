@@ -6,10 +6,11 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { EntryState } from './entry-model.ts';
 import type { ProgressSession } from './progress-model.ts';
+import type { ShelfMaintenanceCheckpoint, ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
- * `shelf-contract.md`. Nothing here is behaviour: every exported function that is not a pure rule throws until its
- * owning task replaces it. Entry and progress storage layouts stay unchanged; the shelf types are additive.
+ * `shelf-contract.md`. Read services and admission are concrete re-exports; uninstalled write/projection factories
+ * below remain specification ports. Entry and progress storage layouts stay unchanged; shelf types are additive.
  */
 type Client = Pick<PoolClient, 'query'>;
 export declare class ShelfContractNotImplementedError extends Error {
@@ -248,14 +249,23 @@ export type ShelfReadDependencies = {
     pageReader: ShelfPageReader;
     summaryReader: ShelfSummaryReader;
     facetReader: ShelfFacetReader;
-    typeKeys: ShelfTypeKeys;
+    typeKeys: Pick<ShelfTypeKeys, 'lookup'>;
     cursors: ShelfCursorCodec;
+    /** Native maintenance initialization, in an ordinary currently authorized owner command. */
+    maintenance?: Pick<ShelfMaintenanceOps, 'initialize'>;
+    /**
+     * Reload the current native gate in the read's RR snapshot. The maintenance producer must supply this
+     * adapter with its gate DDL; neither an initialization receipt nor caller metadata proves currentness.
+     */
+    generation?: ShelfReadGenerationReader;
 };
+export type ShelfReadGeneration = Pick<ShelfMaintenanceCheckpoint, 'epoch' | 'activeGeneration'> & Pick<Awaited<ReturnType<ShelfMaintenanceOps['initialize']>>, 'readiness'>;
+export type ShelfReadGenerationReader = (client: Client, owner: ShelfMaintenanceCheckpoint['owner']) => Promise<ShelfReadGeneration>;
 /**
  * Domain-level read service. `listShelf` requires `library_entry:list` and `progress_session:list`; the other two
  * require `library_entry:list` only. It admits the owner as `listEntries` does and reads at repeatable read.
  */
-export declare function createShelfReads(_dependencies: ShelfReadDependencies): ShelfReads;
+export { createShelfReads } from './shelf-reads.ts';
 export declare function createShelfHeads(): ShelfHeads;
 export declare function createProgressActivity(): ProgressActivity;
 export declare function createShelfCounters(): ShelfCounters;
@@ -369,7 +379,7 @@ export declare const SHELF_PROGRESS_GATE = "reading_progress";
  * is the route's own and is not repeated here.
  */
 export type ShelfAdmissionDependencies = Pick<ShelfReadDependencies, 'pool' | 'access' | 'clock'>;
-export declare function admitShelfRead(_dependencies: ShelfAdmissionDependencies, _actor: Actor, _deadline: number): Promise<void>;
+export { admitShelfRead } from './shelf-admission.ts';
 export type ShelfListQuery = {
     state?: EntryState;
     orderBy?: ShelfOrder;
@@ -379,4 +389,3 @@ export type ShelfListQuery = {
     limit?: number;
     cursor?: string;
 };
-export {};

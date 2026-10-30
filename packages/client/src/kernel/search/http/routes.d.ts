@@ -1,4 +1,3 @@
-import { type SubjectSummary } from '../../semantic/summaries.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
 import type { Access, AccessFactory } from '../../request/access.ts';
@@ -1062,21 +1061,49 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
     };
     readonly authorize: (resource: Resource) => Promise<AccessCheck>;
     readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<Omit<{
+}) => Promise<{
     subjects: {
         id: string;
         type: string;
         labels: Record<string, string>;
+        summary: {
+            id: string;
+            type: string;
+            types: string[];
+            label: {
+                value: string;
+                language: string;
+            } | null;
+            creativeWork: boolean;
+            cover: {
+                media: string;
+                width: number;
+                height: number;
+                placeholder: {
+                    thumbhash: string;
+                    color: string;
+                };
+                variants: {
+                    format: "avif" | "webp";
+                    width: number;
+                }[];
+                focalPoint: {
+                    x: number;
+                    y: number;
+                } | null;
+                credit: {
+                    rightsHolder: string;
+                    via: {
+                        name: string;
+                        url: string;
+                    };
+                    license: string;
+                    obligations: string[];
+                };
+            } | null;
+        } | null;
     }[];
     as_of: string;
-}, "subjects"> & {
-    subjects: ({
-        id: string;
-        type: string;
-        labels: Record<string, string>;
-    } & {
-        summary: SubjectSummary | null;
-    })[];
 }>, {
     query: import("typebox").TObject<{
         q: import("typebox").TString;

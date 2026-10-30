@@ -4008,6 +4008,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     quantity: 1;
                                 } | null;
                                 id: string;
+                                revision: number;
                                 targetSubjectId: string;
                                 subject: {
                                     id: string;
@@ -4673,6 +4674,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             post: {
                 body: {
                     offerId: string;
+                    expectedOfferRevision: number;
                 };
                 params: {};
                 query: unknown;

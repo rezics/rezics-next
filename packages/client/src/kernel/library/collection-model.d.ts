@@ -17,6 +17,9 @@ export type CollectionRow = {
     createdAt: string;
     updatedAt: string;
     transactionId: string;
+    membershipKind?: 'curated' | 'dynamic';
+    builtinKind?: string | null;
+    hasSavedRule?: boolean;
 };
 /** Collection view exposed to module callers. */
 export type Collection = Omit<CollectionRow, 'route' | 'collectionId' | 'transactionId'> & {

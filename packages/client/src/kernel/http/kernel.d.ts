@@ -19,6 +19,7 @@ import { noticeRoutes } from '../content/notice-routes.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
+import { type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -34,6 +35,8 @@ import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
+    /** Trusted post-catalogue binding; runs before the host admits any request. */
+    onAccessReady?: (access: Access) => void;
     /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
     receiptKeys?: KeyRing;
     /** Trusted modules mount declarations before composition validation. */
@@ -45,6 +48,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     commerce?: CommerceDependencies;
     content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
     search?: SearchService;
+    /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
+    shelves?: ShelfNativeReadBindings;
     /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
     reports?: {
         anonymousVerifier?: TurnstileVerifier;

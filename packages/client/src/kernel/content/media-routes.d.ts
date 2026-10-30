@@ -3997,7 +3997,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                             uploaderId: string;
                             key: string;
                             reservationRequestId: string;
-                            purpose: "avatar";
+                            purpose: "avatar" | "realm-banner" | "realm-icon";
                         };
                     };
                     400: {
@@ -4133,6 +4133,183 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
     };
 } & {
     v1: {
+        realms: {
+            ":realmId": {
+                media: {
+                    post: {
+                        body: {
+                            mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+                            byteCount: number;
+                            sha256?: string;
+                            purpose: "realm-banner" | "realm-icon";
+                        };
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            201: {
+                                media: {
+                                    id: string;
+                                    state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
+                                    byteCount: number;
+                                    mediaType: string;
+                                    sha256: string | null;
+                                    containerId: string;
+                                    uploaderId: string;
+                                    key: string;
+                                    reservationRequestId: string;
+                                } | {
+                                    id: string;
+                                    state: "available" | "erased" | "rejected" | "reserved" | "uploaded";
+                                    byteCount: number;
+                                    mediaType: string;
+                                    sha256: string | null;
+                                    containerId: string;
+                                    uploaderId: string;
+                                    key: string;
+                                    reservationRequestId: string;
+                                    purpose: "avatar" | "realm-banner" | "realm-icon";
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         media: {
             ":id": {
                 get: {
@@ -4164,7 +4341,7 @@ export declare function mediaRoutes(app: ReturnType<typeof definitionRoutes>, de
                                 uploaderId: string;
                                 key: string;
                                 reservationRequestId: string;
-                                purpose: "avatar";
+                                purpose: "avatar" | "realm-banner" | "realm-icon";
                             };
                         };
                         400: {

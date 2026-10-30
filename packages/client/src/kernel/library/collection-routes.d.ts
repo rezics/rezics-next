@@ -52,6 +52,124 @@ export declare const collectionSchema: import("typebox").TObject<{
     createdAt: import("typebox").TString;
     updatedAt: import("typebox").TString;
 }>;
+export declare const savedDynamicCollectionSchema: import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    title: import("typebox").TString;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        media: import("typebox").TString;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+        placeholder: import("typebox").TObject<{
+            thumbhash: import("typebox").TString;
+            color: import("typebox").TString;
+        }>;
+        variants: import("typebox").TArray<import("typebox").TObject<{
+            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+            width: import("typebox").TInteger;
+        }>>;
+        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+            x: import("typebox").TNumber;
+            y: import("typebox").TNumber;
+        }>, import("typebox").TNull]>;
+        credit: import("typebox").TObject<{
+            rightsHolder: import("typebox").TString;
+            via: import("typebox").TObject<{
+                name: import("typebox").TString;
+                url: import("typebox").TString;
+            }>;
+            license: import("typebox").TString;
+            obligations: import("typebox").TArray<import("typebox").TString>;
+        }>;
+    }>, import("typebox").TNull]>>;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
+    coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    revision: import("typebox").TInteger;
+    membershipKind: import("typebox").TLiteral<"dynamic">;
+}>;
+export declare const collectionResourceSchema: import("typebox").TUnion<[import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    title: import("typebox").TString;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        media: import("typebox").TString;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+        placeholder: import("typebox").TObject<{
+            thumbhash: import("typebox").TString;
+            color: import("typebox").TString;
+        }>;
+        variants: import("typebox").TArray<import("typebox").TObject<{
+            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+            width: import("typebox").TInteger;
+        }>>;
+        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+            x: import("typebox").TNumber;
+            y: import("typebox").TNumber;
+        }>, import("typebox").TNull]>;
+        credit: import("typebox").TObject<{
+            rightsHolder: import("typebox").TString;
+            via: import("typebox").TObject<{
+                name: import("typebox").TString;
+                url: import("typebox").TString;
+            }>;
+            license: import("typebox").TString;
+            obligations: import("typebox").TArray<import("typebox").TString>;
+        }>;
+    }>, import("typebox").TNull]>>;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
+    coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    revision: import("typebox").TInteger;
+    memberCount: import("typebox").TInteger;
+    createdAt: import("typebox").TString;
+    updatedAt: import("typebox").TString;
+}>, import("typebox").TObject<{
+    id: import("typebox").TString;
+    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    title: import("typebox").TString;
+    description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
+    presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        media: import("typebox").TString;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+        placeholder: import("typebox").TObject<{
+            thumbhash: import("typebox").TString;
+            color: import("typebox").TString;
+        }>;
+        variants: import("typebox").TArray<import("typebox").TObject<{
+            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+            width: import("typebox").TInteger;
+        }>>;
+        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+            x: import("typebox").TNumber;
+            y: import("typebox").TNumber;
+        }>, import("typebox").TNull]>;
+        credit: import("typebox").TObject<{
+            rightsHolder: import("typebox").TString;
+            via: import("typebox").TObject<{
+                name: import("typebox").TString;
+                url: import("typebox").TString;
+            }>;
+            license: import("typebox").TString;
+            obligations: import("typebox").TArray<import("typebox").TString>;
+        }>;
+    }>, import("typebox").TNull]>>;
+    coverSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"member">, import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">]>;
+    coverMediaId: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>;
+    revision: import("typebox").TInteger;
+    membershipKind: import("typebox").TLiteral<"dynamic">;
+}>]>;
 /** Validate original JSON without Elysia's removal of undeclared body properties. */
 export declare function strict<S extends TSchema>(schema: S): {
     '~standard': {
@@ -4158,6 +4276,17 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     visibility: "private" | "public" | "unlisted";
                     presentationKind?: string | null;
                     coverMediaId?: string | null;
+                } | {
+                    title: string;
+                    description?: string | null;
+                    visibility: "private" | "public" | "unlisted";
+                    presentationKind?: string | null;
+                    coverMediaId?: string | null;
+                    membershipKind: "dynamic";
+                    rule: {
+                        filter: unknown;
+                        sort?: string;
+                    };
                 };
                 params: {};
                 query: unknown;
@@ -4177,9 +4306,34 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: import("./collection-model.ts").CollectionVisibility;
                             revision: number;
+                            membershipKind: 'dynamic';
+                        } | {
+                            presentationKind: string | null;
+                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            coverSource: 'owner' | 'member' | 'none' | 'pending';
+                            id: string;
+                            curatorAccountId: string | null;
+                            title: string;
+                            description: string | null;
+                            visibility: import("./collection-model.ts").CollectionVisibility;
+                            revision: number;
                             memberCount: number;
                             createdAt: string;
                             updatedAt: string;
+                        } | {
+                            presentationKind: string | null;
+                            presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+                            cover: import("../semantic/summaries.ts").CoverSummary | null;
+                            coverSource: 'owner' | 'member' | 'none' | 'pending';
+                            id: string;
+                            curatorAccountId: string | null;
+                            title: string;
+                            description: string | null;
+                            visibility: import("./collection-model.ts").CollectionVisibility;
+                            revision: number;
+                            membershipKind: 'dynamic';
+                            coverMediaId: string;
                         } | {
                             presentationKind: string | null;
                             presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
@@ -4238,6 +4392,44 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             memberCount: number;
                             createdAt: string;
                             updatedAt: string;
+                        } | {
+                            id: string;
+                            curatorAccountId: string | null;
+                            title: string;
+                            description: string | null;
+                            visibility: "private" | "public" | "unlisted";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            cover?: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            coverSource: "member" | "none" | "owner" | "pending";
+                            coverMediaId?: string | null;
+                            revision: number;
+                            membershipKind: "dynamic";
                         };
                     };
                     400: {
@@ -4358,7 +4550,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 headers: unknown;
                 response: {
                     200: {
-                        collections: {
+                        collections: ({
                             curator?: {
                                 id: string;
                                 handle: string | null;
@@ -4403,7 +4595,50 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             memberCount: number;
                             createdAt: string;
                             updatedAt: string;
-                        }[];
+                        } | {
+                            curator?: {
+                                id: string;
+                                handle: string | null;
+                                displayName: string | null;
+                            } | null;
+                            id: string;
+                            curatorAccountId: string | null;
+                            title: string;
+                            description: string | null;
+                            visibility: "private" | "public" | "unlisted";
+                            presentationKind: string | null;
+                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            cover?: {
+                                media: string;
+                                width: number;
+                                height: number;
+                                placeholder: {
+                                    thumbhash: string;
+                                    color: string;
+                                };
+                                variants: {
+                                    format: "avif" | "webp";
+                                    width: number;
+                                }[];
+                                focalPoint: {
+                                    x: number;
+                                    y: number;
+                                } | null;
+                                credit: {
+                                    rightsHolder: string;
+                                    via: {
+                                        name: string;
+                                        url: string;
+                                    };
+                                    license: string;
+                                    obligations: string[];
+                                };
+                            } | null;
+                            coverSource: "member" | "none" | "owner" | "pending";
+                            coverMediaId?: string | null;
+                            revision: number;
+                            membershipKind: "dynamic";
+                        })[];
                         next: string | null;
                     };
                     400: {
@@ -4527,7 +4762,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         headers: unknown;
                         response: {
                             200: {
-                                collections: {
+                                collections: ({
                                     curator?: {
                                         id: string;
                                         handle: string | null;
@@ -4572,7 +4807,50 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     memberCount: number;
                                     createdAt: string;
                                     updatedAt: string;
-                                }[];
+                                } | {
+                                    curator?: {
+                                        id: string;
+                                        handle: string | null;
+                                        displayName: string | null;
+                                    } | null;
+                                    id: string;
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    membershipKind: "dynamic";
+                                })[];
                                 next: string | null;
                             };
                             400: {
@@ -4740,6 +5018,49 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 memberCount: number;
                                 createdAt: string;
                                 updatedAt: string;
+                            } | {
+                                curator?: {
+                                    id: string;
+                                    handle: string | null;
+                                    displayName: string | null;
+                                } | null;
+                                id: string;
+                                curatorAccountId: string | null;
+                                title: string;
+                                description: string | null;
+                                visibility: "private" | "public" | "unlisted";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                                coverSource: "member" | "none" | "owner" | "pending";
+                                coverMediaId?: string | null;
+                                revision: number;
+                                membershipKind: "dynamic";
                             };
                         };
                         400: {
@@ -4850,6 +5171,211 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
     v1: {
         collections: {
             ":collectionId": {
+                rule: {
+                    put: {
+                        body: {
+                            filter: unknown;
+                            sort?: string;
+                            revision: number;
+                        };
+                        params: {
+                            collectionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                collection: {
+                                    id: string;
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    memberCount: number;
+                                    createdAt: string;
+                                    updatedAt: string;
+                                } | {
+                                    id: string;
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    membershipKind: "dynamic";
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        collections: {
+            ":collectionId": {
                 patch: {
                     body: {
                         revision: number;
@@ -4908,6 +5434,44 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 memberCount: number;
                                 createdAt: string;
                                 updatedAt: string;
+                            } | {
+                                id: string;
+                                curatorAccountId: string | null;
+                                title: string;
+                                description: string | null;
+                                visibility: "private" | "public" | "unlisted";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                                coverSource: "member" | "none" | "owner" | "pending";
+                                coverMediaId?: string | null;
+                                revision: number;
+                                membershipKind: "dynamic";
                             };
                         };
                         400: {
@@ -5149,6 +5713,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             view?: "BASIC" | "FULL";
                             cursor?: string;
                             limit?: string | number;
+                            filter?: string;
+                            sort?: string;
                         };
                         headers: unknown;
                         response: {

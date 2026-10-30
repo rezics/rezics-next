@@ -774,6 +774,38 @@ declare const productEventTypes: {
         realmId: Type.TString;
         realmEpoch: Type.TString;
     }>;
+    readonly 'com.rezics.community.space.removed.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.space.restored.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.removed.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.restored.v1': Type.TObject<{
+        kind: Type.TLiteral<"realm" | "space">;
+        id: Type.TString;
+        state: Type.TLiteral<"active" | "removed">;
+        headRevisionId: Type.TString;
+        version: Type.TString;
+        at: Type.TString;
+    }>;
     readonly 'com.rezics.community.realm.membership.cancelled.v1': Type.TObject<{
         realmId: Type.TString;
         accountId: Type.TString;
@@ -939,6 +971,14 @@ declare const productEventTypes: {
         predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
         subjectRevisionId: Type.TNull;
         publishedAt: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm-discovery.applied.v1': Type.TObject<{
+        realmId: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm-discovery.expired.v1': Type.TObject<{
+        realmId: Type.TString;
+        kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
     }>;
     readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
         realmId: Type.TString;
@@ -1141,6 +1181,10 @@ declare const productEventTypes: {
     readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
+    readonly 'com.rezics.library.follow-count.applied.v1': Type.TObject<{
+        targetId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.follow-count.withdrawn.v1': Type.TObject<{}>;
     readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TString;
@@ -1304,6 +1348,7 @@ declare const productEventTypes: {
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
+    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;
     }>;

@@ -5,7 +5,7 @@ import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
-export type MediaPurpose = 'post-image' | 'cover' | 'avatar';
+export type MediaPurpose = 'post-image' | 'cover' | 'avatar' | 'realm-icon' | 'realm-banner';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
     format: 'webp' | 'avif';
@@ -38,7 +38,7 @@ type MediaMetadataBase = Readonly<{
 /** Browser reservations describe post images and avatars with measured-size inputs. Imported covers
  * remain unmeasured until the trusted fetch and processing path observes the bytes. */
 export type MediaMetadata = (MediaMetadataBase & Readonly<{
-    purpose: 'post-image' | 'avatar';
+    purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
     mediaType: string;
     byteCount: number;
 }>) | (MediaMetadataBase & Readonly<{
@@ -49,7 +49,7 @@ export type MediaMetadata = (MediaMetadataBase & Readonly<{
     source: ImportedSource;
 }>);
 type MediaReservationFields = Readonly<{
-    purpose: 'post-image' | 'avatar';
+    purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
     mediaType: string;
     byteCount: number;
     sha256?: string;
