@@ -1,3 +1,4 @@
+import { collectionPresentationOf, type CollectionPresentationData } from './collection-presentation';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -7,7 +8,7 @@ import type { LibraryAccount, CollectionVisibility } from './reads';
 type CollectionRead = NonNullable<Awaited<ReturnType<KernelClient['collections']['get']>>['data']>;
 type RawCollection = CollectionRead['collections'][number];
 
-export type MineCollection = {
+export type MineCollection = CollectionPresentationData & {
   id: string;
   title: string | null;
   membershipKind?: 'curated' | 'dynamic';
@@ -51,6 +52,7 @@ function present(collection: RawCollection): MineCollection {
   const memberCount = raw.memberCount;
   const updatedAt = raw.updatedAt;
   return {
+    ...collectionPresentationOf(collection),
     id: collection.id,
     title: dynamic.title === undefined ? (collection.title ?? null) : dynamic.title,
     ...(dynamic.membershipKind ? { membershipKind: dynamic.membershipKind } : {}),

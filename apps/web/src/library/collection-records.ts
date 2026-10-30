@@ -6,8 +6,24 @@ import { prepareSession, viewerCredential } from '../session/request';
 import type { CollectionVisibility } from './reads';
 
 export type CollectionWriteResult =
-  | { ok: true; id: string }
-  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'full' | 'invalid' | 'unauthorized' | 'unavailable' };
+  | { ok: true; id: string; revision?: number; undo?: CollectionMemberUndo }
+  | {
+      ok: false;
+      reason:
+        | 'closed'
+        | 'conflict'
+        | 'forbidden'
+        | 'full'
+        | 'invalid'
+        | 'unauthorized'
+        | 'unavailable'
+        | 'expired'
+        | 'occupied';
+    };
+
+/** Receipt-bound deletion episode. The native restore command owns the original 720-hour deadline. */
+export type CollectionMemberUndo = { collectionId: string; memberId: string; deletionId: string; revision: number };
+export type CollectionPresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 
 type LibraryFailure = {
   data?: unknown;
@@ -58,6 +74,8 @@ function fromKernel(result: LibraryFailure, id: string): CollectionWriteResult {
   const body = result.error?.value;
   if (isPlatformClosedProblem(status, body)) throw new PlatformClosedError(status ?? 403, body);
   const code = problemCode(body);
+  if (code === 'member_restore_expired') return { ok: false, reason: 'expired' };
+  if (code === 'member_restore_occupied') return { ok: false, reason: 'occupied' };
   if (code === 'collection_full') return { ok: false, reason: 'full' };
   const succeeded = status === 204 || (!result.error && status !== undefined && status < 400);
   if (succeeded) return id.length > 0 ? { ok: true, id } : { ok: false, reason: 'unavailable' };
@@ -90,7 +108,12 @@ export async function createCollectionRecord(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { title: string; description: string; visibility: string; idempotencyKey: string },
+  input: {
+    title: string;
+    description: string;
+    visibility: string;
+    idempotencyKey: string;
+  } & CollectionPresentationSelection,
 ): Promise<CollectionWriteResult> {
   const visibility = visibilityOf(input.visibility);
   if (!input.title.trim() || input.title.length > 512 || !visibility || !uuid.test(input.idempotencyKey)) {
@@ -104,6 +127,7 @@ export async function createCollectionRecord(
         title: input.title,
         description: input.description.length > 0 ? input.description : null,
         visibility,
+        ...selectionOf(input),
       },
       { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
     );
@@ -124,7 +148,8 @@ export async function updateCollectionRecord(
     description: string;
     visibility: string;
     idempotencyKey: string;
-  },
+  } & CollectionPresentationSelection,
+  includeRevision = false,
 ): Promise<CollectionWriteResult> {
   const visibility = visibilityOf(input.visibility);
   if (
@@ -146,13 +171,25 @@ export async function updateCollectionRecord(
         title: input.title,
         description: input.description.length > 0 ? input.description : null,
         visibility,
+        ...selectionOf(input),
       },
       { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
     );
-    return fromKernel(result, input.collectionId);
+    const outcome = fromKernel(result, input.collectionId);
+    const revision = result.data?.collection.revision;
+    return outcome.ok && includeRevision && Number.isSafeInteger(revision) && revision! > 0
+      ? { ...outcome, revision }
+      : outcome;
   } catch (error) {
     return refused(error);
   }
+}
+
+function selectionOf(input: CollectionPresentationSelection): CollectionPresentationSelection {
+  return {
+    ...(input.presentationKind === undefined ? {} : { presentationKind: input.presentationKind }),
+    ...(input.coverMediaId === undefined ? {} : { coverMediaId: input.coverMediaId }),
+  };
 }
 
 export async function addCollectionMemberRecord(
@@ -200,8 +237,6 @@ export async function deleteCollectionRecord(
     });
     return fromKernel(result, input.collectionId);
   } catch (error) {
-    // A 204 whose JSON body was dropped still means the delete was applied.
-    if (error instanceof SyntaxError) return { ok: true, id: input.collectionId };
     return refused(error);
   }
 }
@@ -252,7 +287,7 @@ export async function updateMemberNoteRecord(
   }
 }
 
-export async function removeCollectionMemberRecord(
+export async function removeCollectionMemberWithUndoRecord(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
@@ -277,6 +312,54 @@ export async function removeCollectionMemberRecord(
         query: { revision: input.revision },
         headers: kernelHeaders(session.authorization, input.idempotencyKey),
       });
+    const outcome = fromKernel(result, input.memberId);
+    if (!outcome.ok) return outcome;
+    const deletionId = result.response.headers.get('Library-Collection-Member-Deletion-Id');
+    const revision = Number(result.response.headers.get('Library-Collection-Member-Deletion-Revision'));
+    return deletionId && uuid.test(deletionId) && Number.isSafeInteger(revision) && revision > 0
+      ? {
+          ...outcome,
+          revision,
+          undo: { collectionId: input.collectionId, memberId: input.memberId, deletionId, revision },
+        }
+      : outcome;
+  } catch (error) {
+    return refused(error);
+  }
+}
+
+export async function removeCollectionMemberRecord(
+  ...args: Parameters<typeof removeCollectionMemberWithUndoRecord>
+): Promise<CollectionWriteResult> {
+  const result = await removeCollectionMemberWithUndoRecord(...args);
+  return result.ok ? { ok: true, id: result.id } : result;
+}
+
+export async function restoreCollectionMemberRecord(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: CollectionMemberUndo & { idempotencyKey: string },
+): Promise<CollectionWriteResult> {
+  if (
+    !input.collectionId ||
+    !input.memberId ||
+    !uuid.test(input.deletionId) ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 1 ||
+    !uuid.test(input.idempotencyKey)
+  )
+    return { ok: false, reason: 'invalid' };
+  const session = await writeSession(request, sessionEnv);
+  if (!asSession(session)) return session;
+  try {
+    const result = await client
+      .collections({ collectionId: input.collectionId })
+      .members({ memberId: input.memberId })
+      .$restore.post(
+        { deletionId: input.deletionId, revision: input.revision },
+        { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
+      );
     return fromKernel(result, input.memberId);
   } catch (error) {
     return refused(error);

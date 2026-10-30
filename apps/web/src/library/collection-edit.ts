@@ -2,6 +2,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { readCollectionTypeOptions } from './collection-presentation';
+import { readRelease } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import {
   addCollectionMemberRecord,
@@ -10,7 +12,8 @@ import {
   followCollectionRecord,
   isRecord,
   moveCollectionMemberRecord,
-  removeCollectionMemberRecord,
+  removeCollectionMemberWithUndoRecord,
+  restoreCollectionMemberRecord,
   unfollowCollectionRecord,
   updateCollectionRecord,
   updateMemberNoteRecord,
@@ -47,9 +50,22 @@ function record(input: unknown): Record<string, unknown> {
   return input;
 }
 
+function selection(value: Record<string, unknown>) {
+  const selected: { presentationKind?: string | null; coverMediaId?: string | null } = {};
+  for (const key of ['presentationKind', 'coverMediaId'] as const) {
+    const choice = value[key];
+    if (choice === undefined) continue;
+    if (choice !== null && (typeof choice !== 'string' || choice.length === 0 || choice.length > 128))
+      throw new Error('Invalid collection input');
+    selected[key] = choice;
+  }
+  return selected;
+}
+
 function validateCreate(input: unknown) {
   const value = record(input);
   return {
+    ...selection(value),
     title: text(value, 'title'),
     description: text(value, 'description'),
     visibility: text(value, 'visibility'),
@@ -62,6 +78,7 @@ function validateUpdate(input: unknown) {
   return {
     collectionId: identifier(value, 'collectionId'),
     revision: revision(value),
+    ...selection(value),
     title: text(value, 'title'),
     description: text(value, 'description'),
     visibility: text(value, 'visibility'),
@@ -139,7 +156,8 @@ function validateFollow(input: unknown) {
 
 export const readNewCollection = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('cache-control', 'private, no-store');
-  return { idempotencyKey: crypto.randomUUID() };
+  const types = await readRelease().then(readCollectionTypeOptions, () => null);
+  return { idempotencyKey: crypto.randomUUID(), types };
 });
 
 export const createCollection = createServerFn({ method: 'POST' })
@@ -153,7 +171,7 @@ export const updateCollection = createServerFn({ method: 'POST' })
   .validator(validateUpdate)
   .handler(async ({ data }): Promise<CollectionWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return updateCollectionRecord(kernelClient(), getRequest(), serverEnv(), data);
+    return updateCollectionRecord(kernelClient(), getRequest(), serverEnv(), data, true);
   });
 
 export const addCollectionMember = createServerFn({ method: 'POST' })
@@ -188,7 +206,7 @@ export const removeCollectionMember = createServerFn({ method: 'POST' })
   .validator(validateMember)
   .handler(async ({ data }): Promise<CollectionWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return removeCollectionMemberRecord(kernelClient(), getRequest(), serverEnv(), data);
+    return removeCollectionMemberWithUndoRecord(kernelClient(), getRequest(), serverEnv(), data);
   });
 
 export const setCollectionFollow = createServerFn({ method: 'POST' })
@@ -199,4 +217,14 @@ export const setCollectionFollow = createServerFn({ method: 'POST' })
     return follow
       ? followCollectionRecord(kernelClient(), getRequest(), serverEnv(), input)
       : unfollowCollectionRecord(kernelClient(), getRequest(), serverEnv(), input);
+  });
+
+export const restoreCollectionMember = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const value = record(input);
+    return { ...validateMember(value), deletionId: identifier(value, 'deletionId') };
+  })
+  .handler(async ({ data }): Promise<CollectionWriteResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return restoreCollectionMemberRecord(kernelClient(), getRequest(), serverEnv(), data);
   });

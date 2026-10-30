@@ -1,3 +1,4 @@
+import { readCollectionTypeOptions } from './collection-presentation';
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
@@ -128,16 +129,30 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       data.credentialMode,
     );
     await nameSubjectTypes(page.members.map((member) => member.subject));
-    const typeRatios = await readRelease().then(
-      (release) =>
-        Object.fromEntries(
+    const release = await readRelease().catch(() => null);
+    const typeRatios = release
+      ? Object.fromEntries(
           Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),
-        ),
-      () => ({}),
-    );
+        )
+      : {};
+    const listPresentations = release
+      ? Object.fromEntries(
+          Object.entries(release.types).flatMap(([id, type]) =>
+            type.listPresentation ? [[id, type.listPresentation]] : [],
+          ),
+        )
+      : {};
     return {
       ...page,
       typeRatios,
+      ...(!('preparing' in page)
+        ? {
+            listPresentations,
+            ...(page.visibility !== null
+              ? { presentationTypes: release ? readCollectionTypeOptions(release) : null }
+              : {}),
+          }
+        : {}),
       ...(filtersOn
         ? { filterProperties, filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] } }
         : {}),

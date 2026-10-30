@@ -977,5 +977,13 @@
   "library_collection_move_unavailable": "Le déplacement des membres vers une autre collection n’est pas encore disponible.",
   "library_collection_builtin_rule": "Les règles des collections intégrées sont fixes. Les filtres modifient uniquement cette vue.",
   "library_collection_remove_selected": "Retirer la sélection",
-  "library_collection_select_member": "Sélectionner {title}"
+  "library_collection_select_member": "Sélectionner {title}",
+  "library_collection_kind": "Type de présentation",
+  "library_collection_auto": "Automatique",
+  "library_collection_types_unavailable": "Les types sont indisponibles. Le choix enregistré est conservé.",
+  "library_collection_current_cover": "Couverture actuelle",
+  "library_collection_cover_existing": "Choisissez une couverture déjà importée parmi les éléments chargés, ou effacez le choix.",
+  "library_collection_kind_pending": "La présentation automatique est en préparation.",
+  "library_collection_batch_unavailable": "Le retrait groupé des éléments sélectionnés est indisponible.",
+  "library_collection_undo_note": "Un retrait peut être annulé dans les 720 heures suivant le retrait initial, si la collection et les œuvres restent accessibles."
 }

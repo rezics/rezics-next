@@ -1,3 +1,9 @@
+import {
+  collectionPresentationOf,
+  type CollectionPresentationData,
+  type CollectionTypeOption,
+  type CollectionListPresentations,
+} from './collection-presentation';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
@@ -155,29 +161,33 @@ export async function loadDynamicMembers(
   };
 }
 
-export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> & {
-  /** The count is withheld when the authorized member page cannot prove the complete public set. */
-  memberCount: number | null;
-  /** The requested page, retained for its indexing policy. */
-  cursor?: string;
-  /** The revision the page was read at; a revisioned write sends it back. */
-  revision: number;
-  /** The first member page, where a member can move to the top. */
-  firstPage: boolean;
-  /** The viewer's follow state, or null when the viewer cannot follow this collection. */
-  following: boolean | null;
-  filter?: FilterDocument;
-  filterIgnored?: string[];
-  filterType?: string;
-  filterStatus?: 'unsupported' | 'preparing' | 'failed';
-  filterProperties?: CollectionFilterProperty[];
-  filterParams?: CollectionFilterParams;
-  /** Whether the visible first member page can be exported as a complete public ItemList. */
-  publicExport: boolean;
-  typeRatios?: Record<string, string>;
-  /** Public visibility can be shown without granting owner controls. */
-  disclosedVisibility?: 'public' | 'unlisted';
-};
+export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
+  CollectionPresentationData & {
+    coverMediaId?: string | null;
+    presentationTypes?: CollectionTypeOption[] | null;
+    listPresentations?: CollectionListPresentations;
+    /** The count is withheld when the authorized member page cannot prove the complete public set. */
+    memberCount: number | null;
+    /** The requested page, retained for its indexing policy. */
+    cursor?: string;
+    /** The revision the page was read at; a revisioned write sends it back. */
+    revision: number;
+    /** The first member page, where a member can move to the top. */
+    firstPage: boolean;
+    /** The viewer's follow state, or null when the viewer cannot follow this collection. */
+    following: boolean | null;
+    filter?: FilterDocument;
+    filterIgnored?: string[];
+    filterType?: string;
+    filterStatus?: 'unsupported' | 'preparing' | 'failed';
+    filterProperties?: CollectionFilterProperty[];
+    filterParams?: CollectionFilterParams;
+    /** Whether the visible first member page can be exported as a complete public ItemList. */
+    publicExport: boolean;
+    typeRatios?: Record<string, string>;
+    /** Public visibility can be shown without granting owner controls. */
+    disclosedVisibility?: 'public' | 'unlisted';
+  };
 
 function accountOf(account: { handle: string | null; displayName: string | null } | null | undefined) {
   return account
@@ -340,6 +350,10 @@ export async function loadEditableCollectionPage(
       ? visibleMembers.length
       : null;
   return {
+    ...collectionPresentationOf(collectionEnvelope.collection),
+    ...(owner && collectionEnvelope.collection.coverMediaId !== undefined
+      ? { coverMediaId: collectionEnvelope.collection.coverMediaId }
+      : {}),
     id: curatedCollection.id,
     title: curatedCollection.title,
     description: curatedCollection.description,

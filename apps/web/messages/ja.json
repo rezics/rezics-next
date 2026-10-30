@@ -977,5 +977,13 @@
   "library_collection_move_unavailable": "他のコレクションへのメンバー移動には、まだ対応していません。",
   "library_collection_builtin_rule": "組み込みコレクションのルールは固定されています。フィルターは現在の表示にのみ適用されます。",
   "library_collection_remove_selected": "選択した項目を削除",
-  "library_collection_select_member": "{title}を選択"
+  "library_collection_select_member": "{title}を選択",
+  "library_collection_kind": "表示タイプ",
+  "library_collection_auto": "自動",
+  "library_collection_types_unavailable": "タイプを取得できません。保存済みの選択は保持されます。",
+  "library_collection_current_cover": "現在の表紙",
+  "library_collection_cover_existing": "読み込み済みのメンバーから既存のインポート表紙を選ぶか、選択を解除します。",
+  "library_collection_kind_pending": "自動表示を準備中です。",
+  "library_collection_batch_unavailable": "選択したメンバーの一括削除はまだ利用できません。",
+  "library_collection_undo_note": "元の削除から720時間以内で、コレクションと作品を引き続き利用できる場合に元に戻せます。"
 }

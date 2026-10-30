@@ -20,7 +20,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Writes are independently receipted. Cover selection and native cross-Collection transfer await the generated producer; built-in dynamic rules remain immutable.',
+          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Atomic selected removal and cross-Collection transfer await the generated producer; built-in dynamic rules remain immutable.',
       },
     },
   },
@@ -165,5 +165,61 @@ export const DynamicRule: Story = {
   play: async ({ canvasElement }) => {
     await userEvent.click(await within(canvasElement).findByRole('button', { name: m.collection_filters() }));
     await expect(await within(document.body).findByRole('button', { name: m.collection_filter_apply() })).toBeVisible();
+  },
+};
+
+export const Presentation: Story = {
+  render: () => renderEditor('presentation'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    const kind = canvas.getByRole('combobox', { name: m.library_collection_kind() });
+    await expect(kind).toHaveValue('schema:Book');
+    await userEvent.selectOptions(kind, '');
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.subject_cover() }), '');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
+    await openEditor(canvasElement);
+    await expect(canvas.getByRole('combobox', { name: m.library_collection_kind() })).toHaveValue('');
+    await expect(canvas.getByRole('combobox', { name: m.subject_cover() })).toHaveValue('');
+    await expect(canvas.getByText(m.library_collection_kind_pending())).toBeVisible();
+  },
+};
+
+export const RemovalAndUndo: Story = {
+  render: () => renderEditor(),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: m.library_collection_title() }), ' — revised');
+    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
+    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
+    await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
+    await expect(canvas.queryByText('The Tale of Genji', { exact: true })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: `${m.editor_undo()} 1` }));
+    await expect(await canvas.findByText('Snow Country', { exact: true })).toBeVisible();
+  },
+};
+
+export const ExpiredUndo: Story = {
+  render: () => renderEditor('expired-undo'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.editor_undo(), exact: true }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_restore_expired());
+    await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
+  },
+};
+
+export const SelectionUnavailable: Story = {
+  render: () => renderEditor(),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
+    await expect(canvas.getByRole('button', { name: m.library_collection_remove_selected() })).toBeDisabled();
+    await expect(canvas.getByText(m.library_collection_batch_unavailable())).toBeVisible();
+    await expect(canvas.getByText(m.library_collection_move_unavailable())).toBeVisible();
   },
 };

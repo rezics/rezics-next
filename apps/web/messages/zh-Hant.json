@@ -977,5 +977,13 @@
   "library_collection_move_unavailable": "目前尚無法將成員移至其他收藏集。",
   "library_collection_builtin_rule": "內建收藏集的規則固定。篩選只會變更目前的檢視。",
   "library_collection_remove_selected": "移除所選成員",
-  "library_collection_select_member": "選取{title}"
+  "library_collection_select_member": "選取{title}",
+  "library_collection_kind": "顯示類型",
+  "library_collection_auto": "自動",
+  "library_collection_types_unavailable": "類型選項暫時無法使用。已儲存的選擇會保留。",
+  "library_collection_current_cover": "目前封面",
+  "library_collection_cover_existing": "選擇已載入成員的現有匯入封面，或清除選擇。",
+  "library_collection_kind_pending": "自動顯示正在準備中。",
+  "library_collection_batch_unavailable": "暫不支援一次移除所選成員。",
+  "library_collection_undo_note": "原始移除後 720 小時內可復原，集合和作品須仍可存取。"
 }

@@ -10,6 +10,7 @@ import { buttonClass, fieldClass, VisibilityField } from '../../library/collecti
 import type { CollectionVisibility } from '../../library/reads';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { CollectionPresentationFields } from '../../library/collection-editor';
 import { PageHeading } from '../../shell/page-heading';
 
 export const Route = createFileRoute('/collections/new')({
@@ -27,6 +28,7 @@ function NewCollectionPage() {
   const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
+  const [kind, setKind] = useState<string | null>(null);
   const [failure, setFailure] = useState('');
   useEffect(() => setHydrated(true), []);
   useEffect(() => setIdempotencyKey(loaded.idempotencyKey), [loaded.idempotencyKey]);
@@ -43,6 +45,7 @@ function NewCollectionPage() {
           title: String(form.get('title') ?? ''),
           description: String(form.get('description') ?? ''),
           visibility,
+          presentationKind: kind,
           idempotencyKey,
         },
         headers: { 'X-CSRF-Token': csrfToken ?? '' },
@@ -78,6 +81,13 @@ function NewCollectionPage() {
             {m.library_collection_description()}
             <textarea className={fieldClass} name="description" rows={4} />
           </label>
+          <CollectionPresentationFields
+            types={loaded.types}
+            kind={kind}
+            onKindChange={setKind}
+            coverMediaId={null}
+            disabled={pending}
+          />
           <VisibilityField onChange={setVisibility} value={visibility} />
           {failure ? <p role="alert">{failure}</p> : null}
           <button className={buttonClass} disabled={!hydrated || pending || visibility === ''} type="submit">

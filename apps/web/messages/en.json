@@ -978,5 +978,13 @@
   "library_collection_move_unavailable": "Moving members to another Collection is not available yet.",
   "library_collection_builtin_rule": "Built-in Collection rules are fixed. Filters change this view only.",
   "library_collection_remove_selected": "Remove selected",
-  "library_collection_select_member": "Select {title}"
+  "library_collection_select_member": "Select {title}",
+  "library_collection_kind": "Presentation type",
+  "library_collection_auto": "Automatic",
+  "library_collection_types_unavailable": "Type choices are unavailable. The stored choice is preserved.",
+  "library_collection_current_cover": "Current cover",
+  "library_collection_cover_existing": "Choose an existing imported cover from the loaded members, or clear the choice.",
+  "library_collection_kind_pending": "Automatic presentation is preparing.",
+  "library_collection_batch_unavailable": "Removing a selection in one operation is not available yet.",
+  "library_collection_undo_note": "Removed members can be undone within 720 hours of the original removal, while the Collection and subjects remain available."
 }

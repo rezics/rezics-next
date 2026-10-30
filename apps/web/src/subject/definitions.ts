@@ -1,5 +1,5 @@
 import { pickText } from '@rezics/composition';
-import type { LibraryProfile, LibraryProfileReference } from '@rezics/definitions';
+import type { LibraryProfile, LibraryProfileReference, TypeDefinition } from '@rezics/definitions';
 import type { FilterRelease } from '@rezics/filter';
 import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { env } from 'cloudflare:workers';
@@ -16,6 +16,7 @@ export type Release = FilterRelease & {
       facets?: readonly string[];
       schemaOrgType?: string;
       coverRatio?: string;
+      listPresentation?: TypeDefinition['listPresentation'];
       library?: LibraryProfileReference;
     }
   >;

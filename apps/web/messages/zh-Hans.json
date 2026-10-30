@@ -978,5 +978,13 @@
   "library_collection_move_unavailable": "暂不支持将成员移动到其他收藏集。",
   "library_collection_builtin_rule": "内置收藏集的规则固定。筛选仅更改当前视图。",
   "library_collection_remove_selected": "移除所选成员",
-  "library_collection_select_member": "选择{title}"
+  "library_collection_select_member": "选择{title}",
+  "library_collection_kind": "展示类型",
+  "library_collection_auto": "自动",
+  "library_collection_types_unavailable": "类型选项暂不可用。已保存的选择会保留。",
+  "library_collection_current_cover": "当前封面",
+  "library_collection_cover_existing": "选择已加载成员的现有导入封面，或清除选择。",
+  "library_collection_kind_pending": "自动展示正在准备中。",
+  "library_collection_batch_unavailable": "暂不支持一次移除所选成员。",
+  "library_collection_undo_note": "移除后 720 小时内可撤销，集合和作品须仍可访问。"
 }

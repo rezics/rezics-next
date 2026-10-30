@@ -1,3 +1,4 @@
+import { Cover } from '@rezics/ui/cover';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { Menu } from '@rezics/ui/menu';
@@ -22,12 +23,14 @@ import {
   deleteCollection,
   moveCollectionMember,
   removeCollectionMember,
+  restoreCollectionMember,
   setCollectionFollow,
   updateCollection,
   updateMemberNote,
   type CollectionWriteResult,
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
+import type { CollectionMemberUndo } from './collection-records';
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { pageHead, type HeadContext } from '../shell/head';
 import { LibraryNavigation } from './library-nav';
@@ -39,9 +42,10 @@ import { env } from 'cloudflare:workers';
 import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { EllipsisIcon, Share2Icon } from 'lucide-react';
-import { reorderCollectionMembers } from './collection-presentation';
+import { collectionMemberRatio, reorderCollectionMembers } from './collection-presentation';
 import {
   CollectionMemberList,
+  CollectionPresentationFields,
   applyCollectionMemberEditPlan,
   buildCollectionMemberEditPlan,
 } from './collection-editor';
@@ -240,6 +244,10 @@ export function CollectionPage({
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(page.title);
+  const storedKind = page.presentationKindSource === 'owner' ? (page.presentationKind ?? null) : null;
+  const [kind, setKind] = useState(storedKind);
+  const [coverMediaId, setCoverMediaId] = useState(page.coverMediaId ?? null);
+  const [undo, setUndo] = useState<(CollectionMemberUndo & { key: string })[]>([]);
   const [description, setDescription] = useState(page.description ?? '');
   const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'public');
   const [conflict, setConflict] = useState(false);
@@ -252,6 +260,10 @@ export function CollectionPage({
     page.title,
     page.description ?? '',
     page.following,
+    page.presentationKind,
+    page.presentationKindSource,
+    page.coverMediaId,
+    page.visibility,
     page.members.map((member) => `${member.id}:${member.note ?? ''}`).join('\n'),
   ].join('\n');
 
@@ -263,6 +275,8 @@ export function CollectionPage({
     }
     setMembers(page.members);
     setTitle(page.title);
+    setKind(storedKind);
+    setCoverMediaId(page.coverMediaId ?? null);
     setDescription(page.description ?? '');
     setVisibility(page.visibility ?? 'public');
     setFollowing(page.following);
@@ -282,6 +296,8 @@ export function CollectionPage({
     setConflict(false);
     setMembers(page.members);
     setTitle(page.title);
+    setKind(storedKind);
+    setCoverMediaId(page.coverMediaId ?? null);
     setDescription(page.description ?? '');
     setVisibility(page.visibility ?? 'public');
     setSelectedIds(new Set());
@@ -291,6 +307,8 @@ export function CollectionPage({
   function cancelEditing() {
     setMembers(page.members);
     setTitle(page.title);
+    setKind(storedKind);
+    setCoverMediaId(page.coverMediaId ?? null);
     setDescription(page.description ?? '');
     setVisibility(page.visibility ?? 'public');
     setSelectedIds(new Set());
@@ -306,6 +324,7 @@ export function CollectionPage({
     setFailure('');
     setConflict(false);
     let committed = 0;
+    let currentRevision: number | undefined = page.revision;
 
     const keyFor = (operation: unknown) => {
       const fingerprint = JSON.stringify(operation);
@@ -318,7 +337,13 @@ export function CollectionPage({
     };
     try {
       const plan = buildCollectionMemberEditPlan(page.members, members, page.firstPage);
-      if (title !== page.title || description !== (page.description ?? '') || visibility !== page.visibility) {
+      if (
+        title !== page.title ||
+        description !== (page.description ?? '') ||
+        visibility !== page.visibility ||
+        kind !== storedKind ||
+        coverMediaId !== (page.coverMediaId ?? null)
+      ) {
         const result = await updateCollection({
           data: {
             collectionId: page.id,
@@ -326,7 +351,9 @@ export function CollectionPage({
             title,
             description,
             visibility,
-            idempotencyKey: keyFor([page.id, page.revision, title, description, visibility]),
+            ...(kind !== storedKind ? { presentationKind: kind } : {}),
+            ...(coverMediaId !== (page.coverMediaId ?? null) ? { coverMediaId } : {}),
+            idempotencyKey: keyFor([page.id, page.revision, title, description, visibility, kind, coverMediaId]),
           },
           headers: csrfHeaders(),
         });
@@ -335,16 +362,30 @@ export function CollectionPage({
           else setFailure(writeMessage(result));
           return;
         }
+        currentRevision = result.revision;
         committed += 1;
       }
 
       const applied = await applyCollectionMemberEditPlan(plan, async (operation) => {
-        const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation]) };
-        if (operation.kind === 'remove')
-          return removeCollectionMember({
-            data: { ...common, memberId: operation.memberId, revision: page.revision },
+        const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
+        if (operation.kind === 'remove') {
+          if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
+          const result = await removeCollectionMember({
+            data: { ...common, memberId: operation.memberId, revision: currentRevision },
             headers: csrfHeaders(),
           });
+          if (result.ok) {
+            currentRevision = result.revision;
+            const episode = result.undo;
+            if (episode)
+              setUndo((current) =>
+                current.some((item) => item.deletionId === episode.deletionId)
+                  ? current
+                  : [...current, { ...episode, key: crypto.randomUUID() }],
+              );
+          }
+          return result;
+        }
         if (operation.kind === 'move')
           return moveCollectionMember({
             data: { ...common, memberId: operation.memberId, after: operation.after },
@@ -382,6 +423,27 @@ export function CollectionPage({
         setConflict(false);
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function undoRemoval(episode: CollectionMemberUndo & { key: string }) {
+    if (pending || !owner) return;
+    setPending(true);
+    setFailure('');
+    try {
+      const { key, ...deletion } = episode;
+      const result = await restoreCollectionMember({
+        data: { ...deletion, idempotencyKey: key },
+        headers: csrfHeaders(),
+      });
+      if (result.ok || (!result.ok && result.reason === 'expired'))
+        setUndo((current) => current.filter((item) => item.deletionId !== episode.deletionId));
+      if (result.ok) await reloadCollection();
+      else setFailure(result.reason === 'expired' ? m.library_restore_expired() : writeMessage(result));
+    } catch {
+      setFailure(m.error_message());
     } finally {
       setPending(false);
     }
@@ -440,7 +502,30 @@ export function CollectionPage({
       <article className="w-full min-w-0 space-y-7">
         <header className="flex min-w-0 flex-col gap-4 rounded-2xl bg-card px-4 py-5 sm:px-6 sm:py-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
+            {page.cover ? (
+              <div className="w-24 sm:w-40" data-collection-cover-source={page.coverSource}>
+                <Cover
+                  subject={{ id: page.id, title: page.title, types: [] }}
+                  cover={page.cover}
+                  size="fill"
+                  src={coverSrc}
+                  decorative
+                  ratio={collectionMemberRatio(
+                    page.presentationKind ? { type: page.presentationKind } : null,
+                    page.typeRatios,
+                    page.listPresentations,
+                  )}
+                />
+              </div>
+            ) : null}
             <PageHeading>{page.title}</PageHeading>
+            {page.presentationKind ? (
+              <p className="text-sm text-muted-foreground" data-collection-kind-source={page.presentationKindSource}>
+                {m.library_collection_kind()}:{' '}
+                {page.presentationTypes?.find((type) => type.id === page.presentationKind)?.label ??
+                  page.presentationKind}
+              </p>
+            ) : null}
             {page.curator ? (
               <a
                 href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
@@ -521,6 +606,26 @@ export function CollectionPage({
           </div>
         </header>
 
+        {owner && undo.length ? (
+          <div
+            role="status"
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 p-3"
+            data-collection-undo
+          >
+            <p className="basis-full text-sm">{m.library_collection_undo_note()}</p>
+            {undo.map((episode, index) => (
+              <Button
+                key={episode.deletionId}
+                variant="outline"
+                type="button"
+                disabled={pending || editing}
+                onClick={() => void undoRemoval(episode)}
+              >
+                {m.editor_undo()} {undo.length > 1 ? index + 1 : ''}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         {failure ? <p role="alert">{failure}</p> : null}
         {conflict ? (
           <p role="alert">
@@ -567,9 +672,20 @@ export function CollectionPage({
                 value={description}
               />
             </label>
-            <p className="text-sm text-muted-foreground" role="note">
-              {m.library_collection_cover_unavailable()}
-            </p>
+            <CollectionPresentationFields
+              types={page.presentationTypes}
+              kind={kind}
+              onKindChange={setKind}
+              coverMediaId={coverMediaId}
+              onCoverChange={setCoverMediaId}
+              members={page.members}
+              disabled={pending}
+            />
+            {page.presentationKindSource === 'pending' ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.library_collection_kind_pending()}
+              </p>
+            ) : null}
             <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
             <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -607,23 +723,19 @@ export function CollectionPage({
               <p className="me-auto self-center text-sm text-muted-foreground">
                 {m.library_collection_selection_count({ count: selectedIds.size })}
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending || selectedIds.size === 0}
-                onClick={() => {
-                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
-                  setSelectedIds(new Set());
-                }}
-              >
+              <Button type="button" variant="outline" disabled aria-describedby="collection-batch-unavailable">
                 {m.library_collection_remove_selected()}
               </Button>
+              <p id="collection-batch-unavailable" className="basis-full text-sm text-muted-foreground">
+                {m.library_collection_batch_unavailable()}
+              </p>
               <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
             </div>
           ) : null}
           <CollectionMemberList
             members={members}
             typeRatios={page.typeRatios}
+            listPresentations={page.listPresentations}
             editing={editing && owner}
             firstPage={page.firstPage}
             busy={pending}
@@ -631,7 +743,7 @@ export function CollectionPage({
             onSelectionChange={(memberId, selected) =>
               setSelectedIds((current) => {
                 const next = new Set(current);
-                if (selected) next.add(memberId);
+                if (selected && next.size < 100 && members.some((member) => member.id === memberId)) next.add(memberId);
                 else next.delete(memberId);
                 return next;
               })

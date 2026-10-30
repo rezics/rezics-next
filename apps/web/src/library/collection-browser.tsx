@@ -55,6 +55,20 @@ function privateCollection(collection: MineCollection): boolean {
 
 function CollectionCover({ collection, subject }: { collection: MineCollection; subject?: LibrarySubject | null }) {
   const title = browseCollectionTitle(collection);
+  if (collection.coverSource !== undefined) {
+    if (collection.cover)
+      return (
+        <Cover
+          subject={{ id: collection.id, title, types: [] }}
+          cover={collection.cover}
+          size="fill"
+          ratio={collectionMemberRatio(collection.presentationKind ? { type: collection.presentationKind } : null)}
+          src={coverSrc}
+          decorative
+        />
+      );
+    subject = null;
+  }
   if (subject) {
     const label = displayLibraryTitle(subject.label, getLocale()).text;
     return (

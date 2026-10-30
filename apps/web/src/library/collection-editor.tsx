@@ -13,6 +13,7 @@ import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
+import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
 import type { CollectionMember, LibrarySubject } from './reads';
 
 const dragType = 'application/x-rezics-collection-member';
@@ -22,8 +23,10 @@ export function CollectionSubjectList({
   subjects,
   onCopy,
   typeRatios,
+  listPresentations,
 }: {
   typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
   subjects: readonly (LibrarySubject | null)[];
   onCopy?: (subject: LibrarySubject) => void | Promise<void>;
 }) {
@@ -39,7 +42,11 @@ export function CollectionSubjectList({
             className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4"
           >
             <div className="w-24 shrink-0 sm:w-40">
-              <SubjectCover subject={subject} ratio={collectionMemberRatio(subject, typeRatios)} size="fill" />
+              <SubjectCover
+                subject={subject}
+                ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+                size="fill"
+              />
             </div>
             <div className="min-w-24 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
@@ -149,8 +156,10 @@ export function CollectionMemberList({
   onRemove,
   onCopy,
   typeRatios,
+  listPresentations,
 }: {
   typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
   members: readonly CollectionMember[];
   editing: boolean;
   firstPage: boolean;
@@ -169,7 +178,7 @@ export function CollectionMemberList({
         const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), getLocale()) : null;
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
-        const rowRatio = collectionMemberRatio(member.subject, typeRatios);
+        const rowRatio = collectionMemberRatio(member.subject, typeRatios, listPresentations);
         const moveUpAfter = index === 1 && firstPage ? null : index >= 2 ? members[index - 2]!.id : undefined;
         const nextAfter = index < members.length - 1 ? members[index + 1]!.id : undefined;
         const beginDrag = (event: DragEvent<HTMLElement>) => {
@@ -304,5 +313,84 @@ export function CollectionMemberList({
         );
       })}
     </ul>
+  );
+}
+
+/** Select exact released Types and already imported, authorized member covers from this loaded page. */
+export function CollectionPresentationFields({
+  types,
+  kind,
+  onKindChange,
+  coverMediaId,
+  onCoverChange,
+  members = [],
+  disabled = false,
+}: {
+  types: readonly CollectionTypeOption[] | null | undefined;
+  kind: string | null;
+  onKindChange: (kind: string | null) => void;
+  coverMediaId: string | null;
+  onCoverChange?: (id: string | null) => void;
+  members?: readonly CollectionMember[];
+  disabled?: boolean;
+}) {
+  const covers = new Map(
+    members.flatMap(({ subject }) => {
+      const cover = subject?.cover;
+      return subject &&
+        cover &&
+        !cover.withheld &&
+        cover.variants.some((v) => v.format === 'avif' || v.format === 'webp')
+        ? [[cover.media, pageText(libraryTitleValue(subject.label), getLocale()).text] as const]
+        : [];
+    }),
+  );
+  return (
+    <div className="grid max-w-3xl gap-4 sm:grid-cols-2" data-collection-presentation-fields>
+      <label className="space-y-1">
+        <span>{m.library_collection_kind()}</span>
+        <select
+          className="block min-h-10 w-full rounded-lg border border-border bg-background px-3"
+          value={kind ?? ''}
+          disabled={disabled}
+          onChange={(event) => onKindChange(event.target.value || null)}
+        >
+          <option value="">{m.library_collection_auto()}</option>
+          {kind && !types?.some((type) => type.id === kind) ? <option value={kind}>{kind}</option> : null}
+          {types?.map((type) => (
+            <option key={type.id} value={type.id}>
+              {type.label}
+            </option>
+          ))}
+        </select>
+        {types == null ? (
+          <span role="status" className="block text-sm text-muted-foreground">
+            {m.library_collection_types_unavailable()}
+          </span>
+        ) : null}
+      </label>
+      {onCoverChange ? (
+        <label className="space-y-1">
+          <span>{m.subject_cover()}</span>
+          <select
+            className="block min-h-10 w-full rounded-lg border border-border bg-background px-3"
+            value={coverMediaId ?? ''}
+            disabled={disabled}
+            onChange={(event) => onCoverChange(event.target.value || null)}
+          >
+            <option value="">{m.library_collection_auto()}</option>
+            {coverMediaId && !covers.has(coverMediaId) ? (
+              <option value={coverMediaId}>{m.library_collection_current_cover()}</option>
+            ) : null}
+            {[...covers].map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span className="block text-sm text-muted-foreground">{m.library_collection_cover_existing()}</span>
+        </label>
+      ) : null}
+    </div>
   );
 }

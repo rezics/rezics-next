@@ -977,5 +977,13 @@
   "library_collection_move_unavailable": "Mitglieder können noch nicht in eine andere Sammlung verschoben werden.",
   "library_collection_builtin_rule": "Die Regeln integrierter Sammlungen sind festgelegt. Filter ändern nur diese Ansicht.",
   "library_collection_remove_selected": "Ausgewählte entfernen",
-  "library_collection_select_member": "{title} auswählen"
+  "library_collection_select_member": "{title} auswählen",
+  "library_collection_kind": "Darstellungstyp",
+  "library_collection_auto": "Automatisch",
+  "library_collection_types_unavailable": "Typen sind nicht verfügbar. Die gespeicherte Auswahl bleibt erhalten.",
+  "library_collection_current_cover": "Aktuelles Cover",
+  "library_collection_cover_existing": "Wähle ein bereits importiertes Cover der geladenen Einträge oder lösche die Auswahl.",
+  "library_collection_kind_pending": "Die automatische Darstellung wird vorbereitet.",
+  "library_collection_batch_unavailable": "Das gemeinsame Entfernen der Auswahl ist noch nicht verfügbar.",
+  "library_collection_undo_note": "Entfernte Einträge können innerhalb von 720 Stunden nach dem ursprünglichen Entfernen wiederhergestellt werden, solange Sammlung und Werke zugänglich bleiben."
 }
