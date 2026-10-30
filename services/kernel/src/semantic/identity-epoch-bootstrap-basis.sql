@@ -1,6 +1,7 @@
 SELECT coalesce((SELECT jsonb_agg(jsonb_build_object('original',g.original,'epoch',g.epoch::text))
  FROM jsonb_to_recordset($5::jsonb) r(original uuid,terminal uuid,present boolean)
- JOIN semantic.identity_epoch_home_gate g ON g.route/16=b.partition_no AND g.destination=r.terminal
+ JOIN semantic.identity_epoch_home_gate g ON g.route=(get_byte(uuid_send(r.terminal),10)*256+get_byte(uuid_send(r.terminal),11))
+  AND g.route/16=b.partition_no AND g.destination=r.terminal
   AND g.original=r.original AND g.recorded_transaction_id=b.transaction_id WHERE r.present),'[]'::jsonb) mapping
 FROM semantic.identity_epoch_bootstrap_basis b
 JOIN semantic.identity_epoch_native_commit c ON

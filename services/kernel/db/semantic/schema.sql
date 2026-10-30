@@ -30,40 +30,33 @@ CREATE SCHEMA semantic;
 CREATE FUNCTION semantic.acquire_identity_epoch_admission(p_home integer, p_job uuid, p_epoch bigint, p_scope text) RETURNS void
     LANGUAGE plpgsql
     AS $$
-DECLARE a semantic.identity_epoch_admission_attempt; c semantic.identity_epoch_control;
+DECLARE a semantic.identity_epoch_admission_attempt;c semantic.identity_epoch_control;h semantic.identity_epoch_admission_handoff;
 BEGIN
-  SELECT * INTO c FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
-  SELECT * INTO a FROM semantic.identity_epoch_admission_attempt
-    WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
-  IF FOUND THEN
-    IF a.state='closed' OR a.job_epoch<>p_epoch OR a.scope_digest<>p_scope THEN
-      RAISE EXCEPTION 'identity_effect_stale';
-    END IF;
-    RETURN;
-  END IF;
-  IF NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_plan
-    WHERE job_id=p_job AND resource_home=p_home) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
-  PERFORM 1 FROM semantic.identity_epoch_group g JOIN semantic.identity_epoch_input i
-    ON (i.control_partition,i.terminal)=(g.partition_no,g.terminal)
-    WHERE i.job_id=p_job AND g.partition_no=p_home ORDER BY g.terminal FOR UPDATE OF g;
-  IF EXISTS(SELECT 1 FROM semantic.identity_epoch_group g JOIN semantic.identity_epoch_input i
-    ON (i.control_partition,i.terminal)=(g.partition_no,g.terminal)
-    WHERE i.job_id=p_job AND g.partition_no=p_home AND g.pending_job IS NOT NULL AND g.pending_job<>p_job)
-    THEN RAISE EXCEPTION 'identity_epoch_busy'; END IF;
-  IF c.pending_job IS NOT NULL AND c.pending_job<>p_job THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
-  IF EXISTS(SELECT 1 FROM semantic.identity_epoch_input i LEFT JOIN semantic.identity_epoch_group g
-    ON (g.partition_no,g.terminal,g.generation,g.version,g.owner_epoch)=
-       (i.control_partition,i.terminal,i.generation,i.basis_version,i.owner_epoch)
-    LEFT JOIN core.partition o ON o.partition_no=i.control_partition AND o.epoch=i.owner_epoch AND o.write_state='active'
-    WHERE i.job_id=p_job AND i.control_partition=p_home AND (g.terminal IS NULL OR o.partition_no IS NULL))
-    THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
-  INSERT INTO semantic.identity_epoch_admission_attempt VALUES(p_home,p_job,p_epoch,p_scope,'acquired');
-  UPDATE semantic.identity_epoch_group SET pending_job=p_job,pending_epoch=p_epoch
-    WHERE partition_no=p_home AND terminal IN
-      (SELECT terminal FROM semantic.identity_epoch_input WHERE job_id=p_job AND control_partition=p_home);
-  UPDATE semantic.identity_epoch_control SET pending_job=p_job,pending_epoch=p_epoch,
-    allocated_epoch=greatest(allocated_epoch,p_epoch) WHERE partition_no=p_home;
+ SELECT * INTO c FROM semantic.identity_epoch_control WHERE partition_no=p_home FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ SELECT * INTO a FROM semantic.identity_epoch_admission_attempt WHERE partition_no=p_home AND job_id=p_job FOR UPDATE;
+ IF FOUND THEN
+  IF a.state='closed' OR a.job_epoch<>p_epoch OR a.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+  RETURN;
+ END IF;
+ SELECT * INTO h FROM semantic.identity_epoch_admission_handoff WHERE partition_no=p_home AND job_id=p_job;
+ IF NOT FOUND OR h.job_epoch<>p_epoch OR h.scope_digest<>p_scope THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ PERFORM 1 FROM semantic.identity_epoch_group g
+ JOIN jsonb_to_recordset(h.inputs) i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
+ ON g.partition_no=p_home AND g.terminal=i.terminal ORDER BY g.terminal FOR UPDATE OF g;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_group g
+ JOIN jsonb_to_recordset(h.inputs) i(terminal uuid) ON g.partition_no=p_home AND g.terminal=i.terminal
+ WHERE g.pending_job IS NOT NULL AND g.pending_job<>p_job) THEN RAISE EXCEPTION 'identity_epoch_busy'; END IF;
+ IF c.pending_job IS NOT NULL AND c.pending_job<>p_job THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ IF EXISTS(SELECT 1 FROM jsonb_to_recordset(h.inputs) i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
+ LEFT JOIN semantic.identity_epoch_group g ON (g.partition_no,g.terminal,g.generation,g.version,g.owner_epoch)=
+ (p_home,i.terminal,i.generation,i.basis_version,i.owner_epoch)
+ LEFT JOIN core.partition o ON o.partition_no=p_home AND o.epoch=i.owner_epoch AND o.write_state='active'
+ WHERE g.terminal IS NULL OR o.partition_no IS NULL) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ INSERT INTO semantic.identity_epoch_admission_attempt VALUES(p_home,p_job,p_epoch,p_scope,'acquired');
+ UPDATE semantic.identity_epoch_group SET pending_job=p_job,pending_epoch=p_epoch WHERE partition_no=p_home
+ AND terminal IN (SELECT i.terminal FROM jsonb_to_recordset(h.inputs) i(terminal uuid));
+ UPDATE semantic.identity_epoch_control SET pending_job=p_job,pending_epoch=p_epoch,allocated_epoch=greatest(allocated_epoch,p_epoch) WHERE partition_no=p_home;
 END; $$;
 
 
@@ -75,11 +68,15 @@ CREATE FUNCTION semantic.capture_identity_epoch_key(r integer, id uuid) RETURNS 
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=r/16;
-  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
-  ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
-  UPDATE semantic.identity_epoch_group SET ready=false,version=version+1
-  WHERE partition_no=r/16 AND terminal=id AND pending_job IS NULL;
+ -- All structural writers already use this native trigger. Locking the dirty key orders a
+ -- final source hold against an in-flight writer, including a writer predating the hold.
+ PERFORM 1 FROM semantic.identity_epoch_dirty WHERE route=r AND original=id FOR UPDATE;
+ IF EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_source_hold WHERE partition_no=r/16 AND route=r AND original=id AND NOT closed)
+ THEN RAISE EXCEPTION 'identity_epoch_unavailable'; END IF;
+ UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=r/16;
+ INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
+ ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
+ UPDATE semantic.identity_epoch_group SET ready=false,version=version+1 WHERE partition_no=r/16 AND terminal=id AND pending_job IS NULL;
 END; $$;
 
 
@@ -164,6 +161,21 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: keep_identity_epoch_accepted_binding(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.keep_identity_epoch_accepted_binding() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF OLD.state='accepted' AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ IF (OLD.partition_no,OLD.receipt_key,OLD.account_id,OLD.intent_digest) IS DISTINCT FROM
+    (NEW.partition_no,NEW.receipt_key,NEW.account_id,NEW.intent_digest) THEN RAISE EXCEPTION 'identity_effect_stale'; END IF;
+ RETURN NEW;
+END; $$;
 
 
 --
@@ -572,6 +584,21 @@ CREATE TABLE semantic.identity_epoch_admission_attempt (
 
 
 --
+-- Name: identity_epoch_admission_handoff; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_admission_handoff (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope_digest text NOT NULL,
+    job_home integer NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    inputs jsonb NOT NULL
+);
+
+
+--
 -- Name: identity_epoch_admission_plan; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -625,6 +652,53 @@ CREATE TABLE semantic.identity_epoch_admission_source (
     source_transaction_id uuid NOT NULL,
     owner_epoch integer NOT NULL,
     source_owner_epoch integer NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_admission_source_hold; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_admission_source_hold (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    original uuid NOT NULL,
+    route integer NOT NULL,
+    scope_digest text NOT NULL,
+    basis jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    closed boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_admission_validation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_admission_validation (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    original uuid NOT NULL,
+    source_home integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_bootstrap_basis; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_bootstrap_basis (
+    partition_no integer NOT NULL,
+    source_partition integer NOT NULL,
+    source_generation bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL
 );
 
 
@@ -719,6 +793,8 @@ CREATE TABLE semantic.identity_epoch_bootstrap_topology (
 CREATE TABLE semantic.identity_epoch_bootstrap_topology_home (
     source_partition integer CONSTRAINT identity_epoch_bootstrap_topology_hom_source_partition_not_null NOT NULL,
     closed boolean DEFAULT false NOT NULL,
+    partition_no integer NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_topology_home_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_bootstrap_topology_home_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
 );
 
@@ -940,6 +1016,75 @@ CREATE TABLE semantic.identity_epoch_original (
 
 
 --
+-- Name: identity_epoch_receipt_binding; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_receipt_binding (
+    partition_no integer NOT NULL,
+    receipt_key text NOT NULL,
+    account_id uuid NOT NULL,
+    intent_digest text NOT NULL,
+    generation bigint NOT NULL,
+    state text NOT NULL,
+    accepted_job uuid,
+    accepted_epoch bigint,
+    CONSTRAINT identity_epoch_receipt_binding_check CHECK (((accepted_job IS NULL) = (accepted_epoch IS NULL))),
+    CONSTRAINT identity_epoch_receipt_binding_check1 CHECK (((state = 'accepted'::text) = (accepted_job IS NOT NULL))),
+    CONSTRAINT identity_epoch_receipt_binding_generation_check CHECK ((generation > 0)),
+    CONSTRAINT identity_epoch_receipt_binding_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_receipt_binding_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'accepted'::text, 'not-applied'::text])))
+);
+
+
+--
+-- Name: identity_epoch_receipt_claim; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_receipt_claim (
+    partition_no integer NOT NULL,
+    receipt_key text NOT NULL,
+    generation bigint NOT NULL,
+    intent_digest text NOT NULL,
+    receipt jsonb NOT NULL,
+    intent jsonb NOT NULL,
+    job_id uuid NOT NULL,
+    job_home integer NOT NULL,
+    job_epoch bigint NOT NULL,
+    scope_digest text NOT NULL,
+    sources jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    imported boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_receipt_claim_commit; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_receipt_claim_commit (
+    partition_no integer NOT NULL,
+    receipt_key text NOT NULL,
+    generation bigint NOT NULL,
+    transaction_id uuid NOT NULL
+);
+
+
+--
+-- Name: identity_epoch_receipt_closure; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_receipt_closure (
+    partition_no integer NOT NULL,
+    receipt_key text NOT NULL,
+    generation bigint NOT NULL,
+    resource_home integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_epoch integer NOT NULL,
+    native_position bigint NOT NULL
+);
+
+
+--
 -- Name: identity_epoch_step; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -973,6 +1118,8 @@ CREATE TABLE semantic.identity_epoch_topology_custody (
     source_epoch integer NOT NULL,
     source_transaction_id uuid NOT NULL,
     source_position bigint NOT NULL,
+    partition_no integer NOT NULL,
+    CONSTRAINT identity_epoch_topology_custody_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT identity_epoch_topology_custody_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
 );
 
@@ -1428,7 +1575,7 @@ ALTER TABLE ONLY semantic.hidden_candidate
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_ack
-    ADD CONSTRAINT identity_epoch_ack_pkey PRIMARY KEY (job_id, step);
+    ADD CONSTRAINT identity_epoch_ack_pkey PRIMARY KEY (partition_no, job_id, step);
 
 
 --
@@ -1440,11 +1587,19 @@ ALTER TABLE ONLY semantic.identity_epoch_admission_attempt
 
 
 --
+-- Name: identity_epoch_admission_handoff identity_epoch_admission_handoff_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_admission_handoff
+    ADD CONSTRAINT identity_epoch_admission_handoff_pkey PRIMARY KEY (partition_no, job_id);
+
+
+--
 -- Name: identity_epoch_admission_plan identity_epoch_admission_plan_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_admission_plan
-    ADD CONSTRAINT identity_epoch_admission_plan_pkey PRIMARY KEY (job_id, resource_home);
+    ADD CONSTRAINT identity_epoch_admission_plan_pkey PRIMARY KEY (partition_no, job_id, resource_home);
 
 
 --
@@ -1456,11 +1611,35 @@ ALTER TABLE ONLY semantic.identity_epoch_admission_receipt
 
 
 --
+-- Name: identity_epoch_admission_source_hold identity_epoch_admission_source_hold_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_admission_source_hold
+    ADD CONSTRAINT identity_epoch_admission_source_hold_pkey PRIMARY KEY (partition_no, job_id, original);
+
+
+--
 -- Name: identity_epoch_admission_source identity_epoch_admission_source_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_admission_source
-    ADD CONSTRAINT identity_epoch_admission_source_pkey PRIMARY KEY (job_id, original);
+    ADD CONSTRAINT identity_epoch_admission_source_pkey PRIMARY KEY (partition_no, job_id, original);
+
+
+--
+-- Name: identity_epoch_admission_validation identity_epoch_admission_validation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_admission_validation
+    ADD CONSTRAINT identity_epoch_admission_validation_pkey PRIMARY KEY (partition_no, job_id, original);
+
+
+--
+-- Name: identity_epoch_bootstrap_basis identity_epoch_bootstrap_basis_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_basis
+    ADD CONSTRAINT identity_epoch_bootstrap_basis_pkey PRIMARY KEY (partition_no, source_partition, source_generation);
 
 
 --
@@ -1508,7 +1687,7 @@ ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_bootstrap_topology_home
-    ADD CONSTRAINT identity_epoch_bootstrap_topology_home_pkey PRIMARY KEY (source_partition);
+    ADD CONSTRAINT identity_epoch_bootstrap_topology_home_pkey PRIMARY KEY (partition_no, source_partition);
 
 
 --
@@ -1524,7 +1703,7 @@ ALTER TABLE ONLY semantic.identity_epoch_bootstrap_topology
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_change
-    ADD CONSTRAINT identity_epoch_change_pkey PRIMARY KEY (job_id, original);
+    ADD CONSTRAINT identity_epoch_change_pkey PRIMARY KEY (partition_no, job_id, original);
 
 
 --
@@ -1548,7 +1727,7 @@ ALTER TABLE ONLY semantic.identity_epoch_dirty
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
-    ADD CONSTRAINT identity_epoch_effect_receipt_pkey PRIMARY KEY (job_id, step, effect_key);
+    ADD CONSTRAINT identity_epoch_effect_receipt_pkey PRIMARY KEY (partition_no, job_id, step, effect_key);
 
 
 --
@@ -1556,7 +1735,7 @@ ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_group
-    ADD CONSTRAINT identity_epoch_group_pkey PRIMARY KEY (terminal);
+    ADD CONSTRAINT identity_epoch_group_pkey PRIMARY KEY (partition_no, terminal);
 
 
 --
@@ -1572,7 +1751,7 @@ ALTER TABLE ONLY semantic.identity_epoch_home_gate
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_input
-    ADD CONSTRAINT identity_epoch_input_pkey PRIMARY KEY (job_id, terminal);
+    ADD CONSTRAINT identity_epoch_input_pkey PRIMARY KEY (partition_no, job_id, terminal);
 
 
 --
@@ -1580,15 +1759,7 @@ ALTER TABLE ONLY semantic.identity_epoch_input
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_job
-    ADD CONSTRAINT identity_epoch_job_pkey PRIMARY KEY (job_id);
-
-
---
--- Name: identity_epoch_job identity_epoch_job_receipt_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.identity_epoch_job
-    ADD CONSTRAINT identity_epoch_job_receipt_key_key UNIQUE (receipt_key);
+    ADD CONSTRAINT identity_epoch_job_pkey PRIMARY KEY (partition_no, job_id);
 
 
 --
@@ -1596,7 +1767,7 @@ ALTER TABLE ONLY semantic.identity_epoch_job
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_legacy_member
-    ADD CONSTRAINT identity_epoch_legacy_member_pkey PRIMARY KEY (terminal, original);
+    ADD CONSTRAINT identity_epoch_legacy_member_pkey PRIMARY KEY (partition_no, terminal, original);
 
 
 --
@@ -1636,7 +1807,39 @@ ALTER TABLE ONLY semantic.identity_epoch_native_commit
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_original
-    ADD CONSTRAINT identity_epoch_original_pkey PRIMARY KEY (generation, original);
+    ADD CONSTRAINT identity_epoch_original_pkey PRIMARY KEY (partition_no, generation, original);
+
+
+--
+-- Name: identity_epoch_receipt_binding identity_epoch_receipt_binding_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_binding
+    ADD CONSTRAINT identity_epoch_receipt_binding_pkey PRIMARY KEY (partition_no, receipt_key);
+
+
+--
+-- Name: identity_epoch_receipt_claim_commit identity_epoch_receipt_claim_commit_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_claim_commit
+    ADD CONSTRAINT identity_epoch_receipt_claim_commit_pkey PRIMARY KEY (partition_no, receipt_key, generation);
+
+
+--
+-- Name: identity_epoch_receipt_claim identity_epoch_receipt_claim_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_claim
+    ADD CONSTRAINT identity_epoch_receipt_claim_pkey PRIMARY KEY (partition_no, receipt_key, generation);
+
+
+--
+-- Name: identity_epoch_receipt_closure identity_epoch_receipt_closure_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_closure
+    ADD CONSTRAINT identity_epoch_receipt_closure_pkey PRIMARY KEY (partition_no, receipt_key, generation, resource_home);
 
 
 --
@@ -1652,7 +1855,7 @@ ALTER TABLE ONLY semantic.identity_epoch_step
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_topology_custody
-    ADD CONSTRAINT identity_epoch_topology_custody_pkey PRIMARY KEY (source_partition);
+    ADD CONSTRAINT identity_epoch_topology_custody_pkey PRIMARY KEY (partition_no, source_partition);
 
 
 --
@@ -1869,17 +2072,17 @@ CREATE INDEX identity_epoch_dirty_pending ON semantic.identity_epoch_dirty USING
 
 
 --
--- Name: identity_epoch_generation_original; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX identity_epoch_generation_original ON semantic.identity_epoch_original USING btree (generation, original) WHERE present;
-
-
---
 -- Name: identity_epoch_job_home_epoch; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE UNIQUE INDEX identity_epoch_job_home_epoch ON semantic.identity_epoch_job USING btree (partition_no, epoch);
+
+
+--
+-- Name: identity_epoch_job_receipt; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_job_receipt ON semantic.identity_epoch_job USING btree (partition_no, receipt_key);
 
 
 --
@@ -1918,10 +2121,24 @@ CREATE INDEX identity_epoch_preparing_home ON semantic.identity_epoch_job USING 
 
 
 --
+-- Name: identity_epoch_receipt_account; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_receipt_account ON semantic.identity_epoch_receipt_binding USING btree (partition_no, account_id, receipt_key);
+
+
+--
 -- Name: identity_epoch_scoped_generation_original; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX identity_epoch_scoped_generation_original ON semantic.identity_epoch_original USING btree (generation, terminal, original) WHERE present;
+CREATE INDEX identity_epoch_scoped_generation_original ON semantic.identity_epoch_original USING btree (partition_no, generation, terminal, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_source_hold_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_source_hold_key ON semantic.identity_epoch_admission_source_hold USING btree (partition_no, route, original) WHERE (NOT closed);
 
 
 --
@@ -2128,10 +2345,31 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 
 
 --
+-- Name: identity_epoch_admission_handoff identity_epoch_admission_handoff_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_admission_handoff_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_handoff FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: identity_epoch_admission_receipt identity_epoch_admission_receipt_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER identity_epoch_admission_receipt_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_receipt FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_admission_validation identity_epoch_admission_validation_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_admission_validation_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_validation FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_bootstrap_basis identity_epoch_bootstrap_basis_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_bootstrap_basis_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_basis FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -2195,6 +2433,34 @@ CREATE TRIGGER identity_epoch_job_immutable BEFORE DELETE OR UPDATE ON semantic.
 --
 
 CREATE TRIGGER identity_epoch_native_commit_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_native_commit FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_receipt_binding identity_epoch_receipt_binding_stable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_receipt_binding_stable BEFORE UPDATE ON semantic.identity_epoch_receipt_binding FOR EACH ROW EXECUTE FUNCTION semantic.keep_identity_epoch_accepted_binding();
+
+
+--
+-- Name: identity_epoch_receipt_claim_commit identity_epoch_receipt_claim_commit_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_receipt_claim_commit_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_receipt_claim_commit FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_receipt_claim identity_epoch_receipt_claim_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_receipt_claim_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_receipt_claim FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_receipt_closure identity_epoch_receipt_closure_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_receipt_closure_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_receipt_closure FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -2381,19 +2647,19 @@ ALTER TABLE ONLY semantic.hidden_candidate
 
 
 --
--- Name: identity_epoch_ack identity_epoch_ack_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_ack identity_epoch_ack_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_ack
-    ADD CONSTRAINT identity_epoch_ack_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_ack_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
 
 
 --
--- Name: identity_epoch_admission_plan identity_epoch_admission_plan_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_admission_plan identity_epoch_admission_plan_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_admission_plan
-    ADD CONSTRAINT identity_epoch_admission_plan_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_admission_plan_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
 
 
 --
@@ -2405,11 +2671,35 @@ ALTER TABLE ONLY semantic.identity_epoch_admission_receipt
 
 
 --
--- Name: identity_epoch_admission_source identity_epoch_admission_source_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_admission_source_hold identity_epoch_admission_sourc_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_admission_source_hold
+    ADD CONSTRAINT identity_epoch_admission_sourc_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_admission_source identity_epoch_admission_source_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_admission_source
-    ADD CONSTRAINT identity_epoch_admission_source_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_admission_source_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
+
+
+--
+-- Name: identity_epoch_admission_validation identity_epoch_admission_validation_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_admission_validation
+    ADD CONSTRAINT identity_epoch_admission_validation_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
+
+
+--
+-- Name: identity_epoch_bootstrap_basis identity_epoch_bootstrap_basi_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_bootstrap_basis
+    ADD CONSTRAINT identity_epoch_bootstrap_basi_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position");
 
 
 --
@@ -2429,27 +2719,27 @@ ALTER TABLE ONLY semantic.identity_epoch_bootstrap_row
 
 
 --
--- Name: identity_epoch_change identity_epoch_change_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_change identity_epoch_change_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_change
-    ADD CONSTRAINT identity_epoch_change_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_change_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
 
 
 --
--- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_effect_receipt
-    ADD CONSTRAINT identity_epoch_effect_receipt_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_effect_receipt_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
 
 
 --
--- Name: identity_epoch_input identity_epoch_input_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+-- Name: identity_epoch_input identity_epoch_input_partition_no_job_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.identity_epoch_input
-    ADD CONSTRAINT identity_epoch_input_job_id_fkey FOREIGN KEY (job_id) REFERENCES semantic.identity_epoch_job(job_id);
+    ADD CONSTRAINT identity_epoch_input_partition_no_job_id_fkey FOREIGN KEY (partition_no, job_id) REFERENCES semantic.identity_epoch_job(partition_no, job_id);
 
 
 --
@@ -2458,6 +2748,38 @@ ALTER TABLE ONLY semantic.identity_epoch_input
 
 ALTER TABLE ONLY semantic.identity_epoch_mapping
     ADD CONSTRAINT identity_epoch_mapping_route_original_fkey FOREIGN KEY (route, original) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: identity_epoch_receipt_claim_commit identity_epoch_receipt_claim__partition_no_receipt_key_gen_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_claim_commit
+    ADD CONSTRAINT identity_epoch_receipt_claim__partition_no_receipt_key_gen_fkey FOREIGN KEY (partition_no, receipt_key, generation) REFERENCES semantic.identity_epoch_receipt_claim(partition_no, receipt_key, generation);
+
+
+--
+-- Name: identity_epoch_receipt_claim_commit identity_epoch_receipt_claim_c_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_claim_commit
+    ADD CONSTRAINT identity_epoch_receipt_claim_c_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_receipt_claim identity_epoch_receipt_claim_partition_no_receipt_key_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_claim
+    ADD CONSTRAINT identity_epoch_receipt_claim_partition_no_receipt_key_fkey FOREIGN KEY (partition_no, receipt_key) REFERENCES semantic.identity_epoch_receipt_binding(partition_no, receipt_key);
+
+
+--
+-- Name: identity_epoch_receipt_closure identity_epoch_receipt_closur_partition_no_receipt_key_gen_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_receipt_closure
+    ADD CONSTRAINT identity_epoch_receipt_closur_partition_no_receipt_key_gen_fkey FOREIGN KEY (partition_no, receipt_key, generation) REFERENCES semantic.identity_epoch_receipt_claim(partition_no, receipt_key, generation);
 
 
 --

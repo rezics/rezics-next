@@ -261,10 +261,10 @@ async function closeUnreservedBinding(
     await tx.query(selectControl.sql, [data.home]);
     const job = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
     if (job) return noEffect(false);
-    await tx.query(close.sql, [data.home, data.job.jobId, data.job.epoch.toString(), data.scope]);
     const duplicate = (await tx.query(receipt.sql, [data.home, data.job.jobId, data.job.epoch.toString(), 'closed']))
       .rows[0];
     if (duplicate) return noEffect(true);
+    await tx.query(close.sql, [data.home, data.job.jobId, data.job.epoch.toString(), data.scope]);
     recordIdentityEpochNativeCommit(tx, 'admission');
     registerCommandCallback(tx, async (id) => {
       await tx.query(record.sql, [data.home, id, data.job.jobId, 'closed']);
