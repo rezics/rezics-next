@@ -156,8 +156,9 @@ writers serialize on that source gate until actual receiver completion. There is
 Receiver lock revalidates its committed accepted binding and current epoch in the effect transaction; completion
 uses the native command callback and a deferred same-command basis/position proof. Release verifies that exact
 committed target completion before changing the source hold. Restart retains native locators and reissues handles.
-Moved/unproven homes remain errors or pending; moving a source must preserve its outstanding native holds and
-cannot discard them or change source eligibility. Receiving transfer is not inferred from absence.
+A Source-owned trigger on the native partition incarnation fields refuses source-home fencing/movement while
+any durable receiving hold is outstanding. Ordinary command position updates remain available. Moved/unproven
+receiving homes remain errors or pending; transfer cannot discard holds or change source eligibility. Receiving transfer is not inferred from absence.
 
 Original Context creation/lifecycle/extension and Zone commands declare only their actual resource roots once,
 before history serialization, through `declareCommandRecordSources`, under its existing maximum of 16. Source

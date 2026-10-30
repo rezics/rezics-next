@@ -7340,3 +7340,16 @@ CREATE TRIGGER context_extension_record_purge_gate BEFORE INSERT OR UPDATE OR DE
  FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
 CREATE TRIGGER context_activation_record_purge_gate BEFORE INSERT OR UPDATE OR DELETE ON semantic.context_extension_activation
  FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
+
+-- Source-owned partition fence: a released-home hold pins its source incarnation until
+-- verified receiving completion. Ordinary command position fences do not touch these columns.
+CREATE INDEX record_purge_hold_source_home ON semantic.record_purge_hold(partition_no) WHERE NOT released;
+CREATE FUNCTION semantic.record_purge_source_home_gate() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF (NEW.epoch,NEW.write_state,NEW.moved_to) IS DISTINCT FROM (OLD.epoch,OLD.write_state,OLD.moved_to)
+ AND EXISTS(SELECT 1 FROM semantic.record_purge_hold h WHERE h.partition_no=OLD.partition_no AND NOT h.released LIMIT 1)
+ THEN RAISE EXCEPTION 'record_purge_source_home_hold_outstanding' USING ERRCODE='55P03'; END IF;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER record_purge_source_home_gate BEFORE UPDATE OF epoch,write_state,moved_to ON core.partition
+ FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_home_gate();
