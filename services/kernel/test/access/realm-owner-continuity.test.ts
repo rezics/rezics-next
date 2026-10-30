@@ -358,7 +358,7 @@ test('only the authorized locked native sole-owner refusal exposes realm_last_ow
   expect(await f.snapshot()).toEqual(before);
 });
 
-for (const missing of ['target', 'source', 'command-time', 'resource'] as const) {
+for (const missing of ['target', 'source', 'command-time', 'resource', 'transaction'] as const) {
   test(`the locked leave guard keeps missing ${missing} generic without effects`, async () => {
     if (missing === 'target')
       await f.reader.query('DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2', [
@@ -384,7 +384,7 @@ for (const missing of ['target', 'source', 'command-time', 'resource'] as const)
         denied: () => new GrantDeniedError(),
       },
       async (tx) => {
-        await assertRealmOwnerMayLeave(tx, {
+        await assertRealmOwnerMayLeave(missing === 'transaction' ? f.pool : tx, {
           resource: missing === 'resource' ? f.otherResource : f.resource,
           accountId: f.actor,
           at: missing === 'command-time' ? otherTime : currentCommand(tx).time,
