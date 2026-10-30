@@ -1550,3 +1550,31 @@ only in generation maintenance. Publication adopts an unfiltered full-population
 query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
 engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical
 recreation and lost alias response recovery; existing generation growth bounds remain applicable.
+
+Native consumer repair settlement is retained under the existing custody execution. The exact storage is:
+`public_filter_execution.repair_settlement` holds `{id, bootstrap, covered, execution, pages, frontier, closed, fence}`;
+`public_filter_repair_page`, keyed by `(partition_no, observation, execution, ordinal)`, holds immutable
+`{predecessor, frontier, complete, repairs}` (each repair retains kind, locator, own-home Source observation
+and projection, without serializing Source's private receipt brand). `public_filter_repair_effect`, keyed by the same execution plus page/item, retains each actual native
+writer receipt before advancing the scalar page frontier. The existing `identity_writer` row
+holds `repair_locator`, `repair_action` and `repair_receipt` beside its ordinary enrollment, dispatch,
+owner epoch, incarnation and visible/settled command positions. The locator binds observation, execution,
+page and item. No repair writes bypass this writer. Native bulk receipts or exact winner/refresh recovery
+are retained there; a lost response retains the dispatched token until recovery.
+
+`readPublicFilterRepairSettlement(pool, {queried, execution}, context)` in `public-filter-custody.ts`
+returns `PublicFilterRepairSettlementResult`; its settled value contains the retained definition, queried
+observation, original `CustodyExecution`, opaque `NativePublicFilterRepairSettlement` locator and actual
+`CustodyCost`. Its private producer brand lives only in the canonical custody type module. The reader
+uses the configured native `OPENSEARCH_URL`, never a process receipt cache. It verifies the immutable
+page chain from the original bootstrap cut, finished retained-copy work, every actual writer receipt and
+current searchable winner, physical allocation and final locked writer/owner state before returning.
+This proves Search dispatch closure only. FAA must join its own durable Source step/window verifier,
+creation/change bridge and original/start/final checks; the Account owner remains independent.
+The final native fence is persisted on that same settlement record only after the reader's complete
+revalidation. It contains the actual SQL transaction, physical UUID/write alias, Source registration epoch
+and native refresh response. Re-reading a locator always repeats the guard; a previously stored fence
+cannot establish current readiness. Effectful pages use a partial execution-leading index; empty Source
+scan pages do not require rescanning all native homes. Every effect lookup, owner/writer lock, engine
+request and byte is charged against the consumer's existing allowance. An over-allowance closure remains
+unavailable rather than receiving a second verification budget.

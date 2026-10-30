@@ -12,6 +12,7 @@ import type {
   PublicFilterProjectionMeaning,
 } from '../semantic/public-filter-source-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
+import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
@@ -75,6 +76,35 @@ export type CustodyRetained = Readonly<{
   cost: CustodyCost;
 }>;
 export type CustodyRead = Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>;
+/** Only the native reader may return this opaque locator. It is never caller evidence. */
+declare const privateProducerBrand: unique symbol;
+export type NativePublicFilterRepairSettlement = Readonly<{ id: string; [privateProducerBrand]: true }>;
+export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
+  status: 'settled';
+  definition: CustodyRetainedDefinition;
+  queried: PublicFilterQueriedObservation;
+  execution: CustodyExecution;
+  settlement: NativePublicFilterRepairSettlement;
+  cost: CustodyCost;
+}>;
+/** Internal native storage shapes. Source's in-process receipt is deliberately never persisted as authority. */
+export type RetainedRepairPage = Readonly<{
+  predecessor: string | null;
+  frontier: string | null;
+  complete: boolean;
+  repairs: readonly Omit<PublicSourceRepair, 'receipt'>[];
+}>;
+export type RetainedRepairSettlement = Readonly<{
+  id: string;
+  bootstrap: string;
+  covered: PrivacyReductionStart;
+  execution: CustodyExecution;
+  pages: number;
+  frontier: string | null;
+  closed: boolean;
+  fence: Readonly<{ transaction: string; incarnation: string; writeAlias: string; sourceEpoch: number;
+    refresh: unknown }> | null;
+}>;
 export interface PublicFilterCustody {
   register(
     request: Readonly<{

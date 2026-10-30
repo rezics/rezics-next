@@ -25,7 +25,102 @@ import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
-import { writeIndexActions } from './write-actions.ts';
+import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
+import { assertCompleteSearch } from './complete-search.ts';
+
+/** Durable native evidence retained by the existing writer, never supplied by Source callers. */
+export type SearchRepairWriterReceipt = Readonly<{
+  locator: string;
+  subject: string;
+  partition: number;
+  epoch: number;
+  incarnation: string;
+  writeAlias: string;
+  consumer: string;
+  action: IndexAction;
+  enrollment: IdentityNativeReceipt;
+  completion: IdentityNativeReceipt;
+  native: unknown;
+}>;
+const repairEncode = (value: unknown) => JSON.stringify(value, (_key, item) =>
+  typeof item === 'bigint' ? { nativeBigint: String(item) } : item);
+export const decodeSearchRepairWriterReceipt = (value: string): SearchRepairWriterReceipt =>
+  JSON.parse(value, (_key, item) => item && typeof item === 'object' &&
+    Object.keys(item).length === 1 && typeof item.nativeBigint === 'string'
+    ? BigInt(item.nativeBigint) : item);
+
+/** Search-visible keyed readback; absence alone never recovers an uncertain delete. */
+export async function readSearchRepairWinner(search: OpenSearch, index: string, action: IndexAction) {
+  const response = await search.request('POST', `/${index}/_search`, {
+    size: 1, version: true, track_total_hits: false, query: { ids: { values: [action.id] } },
+  }, { query: { allow_partial_search_results: false } });
+  assertCompleteSearch(response.body);
+  const body = response.body as { hits?: { hits?: { _id: string; _index: string; _version: number; _source: unknown }[] } };
+  const hits = body.hits?.hits;
+  if (response.status !== 200 || !Array.isArray(hits) ||
+    (action.op === 'delete' ? hits.length !== 0 : hits.length !== 1 ||
+      hits[0]!._id !== action.id || hits[0]!._index !== index ||
+      !Number.isSafeInteger(hits[0]!._version) || BigInt(hits[0]!._version) !== action.version ||
+      !isDeepStrictEqual(hits[0]!._source, action.document)))
+    throw unavailable('Native repair winner changed or is not visible');
+  return response.body;
+}
+
+/** Validate only a native record loaded by custody; this is not a settlement producer. */
+export function validateSearchRepairWriterEvidence(index: string, receipt: SearchRepairWriterReceipt): void {
+  const fail = () => { throw unavailable('Native repair receipt or final writer fence changed'); };
+  if (subjectPartition(receipt.subject) !== receipt.partition || receipt.action.id !== receipt.subject ||
+    receipt.enrollment.partition !== receipt.partition || receipt.completion.partition !== receipt.partition ||
+    receipt.enrollment.epoch !== receipt.epoch || receipt.completion.epoch !== receipt.epoch ||
+    receipt.completion.position <= receipt.enrollment.position) fail();
+  const nativeEvidence = receipt.native as { evidence?: { kind?: string; bulk?: unknown; current?: {
+    _version?: number; _source?: unknown }; refresh?: unknown }; winner?: unknown };
+  const evidence = nativeEvidence?.evidence;
+  if (evidence?.kind === 'bulk') validateIndexWriteReceipt(evidence.bulk, index, [receipt.action]);
+  else if (evidence?.kind === 'recovered' && receipt.action.op === 'index') {
+    validateRefreshResponse(200, evidence.refresh);
+    if (!Number.isSafeInteger(evidence.current?._version) ||
+      BigInt(evidence.current!._version!) !== receipt.action.version ||
+      !isDeepStrictEqual(evidence.current?._source, receipt.action.document)) fail();
+  } else fail();
+}
+
+/** Recheck retained evidence and lock the actual existing writer through the reader boundary. */
+export async function verifySearchRepairWriterReceipt(
+  db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: SearchRepairWriterReceipt,
+): Promise<void> {
+  validateSearchRepairWriterEvidence(index, receipt);
+  const fail = () => { throw unavailable('Native repair receipt or final writer fence changed'); };
+  // Each query is anchored to one native home; never join observation and subject partitions.
+  const gate = (await db.query(`SELECT consumer,incarnation,owner_epoch,write_alias,closed_token
+    FROM search.identity_writer_gate WHERE partition_no=$1 AND physical_target=$2 FOR SHARE`,
+    [receipt.partition, index])).rows[0];
+  if (!gate || gate.consumer !== receipt.consumer || gate.incarnation !== receipt.incarnation ||
+    gate.owner_epoch !== receipt.epoch || gate.write_alias !== receipt.writeAlias || gate.closed_token) fail();
+  const writer = (await db.query(`SELECT writer_token,dispatch_state,closed_job,repair_locator,repair_receipt,
+    owner_epoch,incarnation,source_position,visible_position,visible_transaction_id,
+    settled_position,settled_transaction_id,writer_transaction_id,writer_position
+    FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 FOR SHARE`,
+    [receipt.partition, index, receipt.subject])).rows[0];
+  if (!writer || writer.writer_token !== null || writer.dispatch_state !== 'settled' || writer.closed_job ||
+    writer.owner_epoch !== receipt.epoch || writer.incarnation !== receipt.incarnation ||
+    writer.repair_locator !== receipt.locator || !writer.repair_receipt ||
+    !isDeepStrictEqual(decodeSearchRepairWriterReceipt(writer.repair_receipt), receipt) ||
+    BigInt(writer.source_position ?? -1) !== receipt.action.version ||
+    writer.writer_transaction_id !== receipt.enrollment.transactionId ||
+    BigInt(writer.writer_position ?? -1) !== receipt.enrollment.position ||
+    writer.visible_transaction_id !== receipt.completion.transactionId ||
+    writer.settled_transaction_id !== receipt.completion.transactionId ||
+    BigInt(writer.settled_position ?? -1) !== receipt.completion.position ||
+    BigInt(writer.visible_position ?? -1) !== receipt.completion.position) fail();
+  const owner = (await db.query(`SELECT epoch,write_state,position FROM core.partition
+    WHERE partition_no=$1 FOR SHARE`, [receipt.partition])).rows[0];
+  if (!owner || owner.write_state !== 'active' || owner.epoch !== receipt.epoch ||
+    BigInt(owner.position) < receipt.completion.position) fail();
+  const physical = await readSearchWriterPhysicalTarget(search, index);
+  if (physical.incarnation !== receipt.incarnation || physical.writeAlias !== receipt.writeAlias) fail();
+  await readSearchRepairWinner(search, index, receipt.action);
+}
 
 export const SEARCH_IDENTITY_WRITER_CHUNK = 100;
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
@@ -76,6 +171,13 @@ export type SearchWriterGuard = Readonly<{
 }>;
 export type SearchWriterNativeCustody = SearchWriterGuard &
   Readonly<{
+    /** Retained native repair, using the ordinary Source, serializer and writer enrollment. */
+    repair(
+      subject: string,
+      obligation: bigint,
+      locator: string,
+      context: PublicFilterConsumerContext,
+    ): Promise<SearchRepairWriterReceipt>;
     /** No caller body/version or saved positive can be submitted. */
     write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
@@ -655,6 +757,133 @@ export function createSearchWriterGuard(options: {
         return revocable.length ? { value: progress, events: changed() } : noEffect(progress);
       });
       return result.value;
+    },
+    async repair(subject, obligation, repairLocator, context) {
+      if (!repairLocator || repairLocator.length > 8192 || obligation < 0n)
+        throw new TypeError('Repair requires its retained native step and own-home Source obligation');
+      const partition = subjectPartition(subject);
+      keys(partition, [subject]);
+      const commandOptions = { partition, deadline: context.deadline };
+      const physical = await readSearchWriterPhysicalTarget(options.search, options.index);
+      type RepairRow = {
+        repair_locator: string | null; repair_action: string | null; repair_receipt: string | null;
+        writer_token: string | null; writer_transaction_id: string; writer_position: string;
+        owner_epoch: number; incarnation: string; dispatch_state: string; closed_job: string | null;
+      };
+      const readWriter = async () => (await options.pool.query<RepairRow>(
+        `SELECT repair_locator,repair_action,repair_receipt,writer_token,writer_transaction_id,
+        writer_position,owner_epoch,incarnation,dispatch_state,closed_job FROM search.identity_writer
+        WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+        [partition, options.index, subject],
+      )).rows[0];
+      let row = await readWriter();
+      if (row?.repair_locator !== repairLocator) {
+        // Ordinary current Source, counts and serializer; never splice a stale engine document.
+        const snapshot = await options.source.read(partition, [subject]);
+        const subjects = validateIndexObservation(snapshot, partition, [subject], obligation);
+        const sourceSubject = subjects.get(subject);
+        const counts = sourceSubject?.visibility === 'visible' && sourceSubject.redirect === null
+          ? await options.listing.read(partition, [subject]) : undefined;
+        const actions = await prepareBoundedSortKeys(options.search, options.index,
+          documentActions(snapshot, [subject], counts));
+        const action = actions[0];
+        if (!action || action.version < obligation || action.version > BigInt(Number.MAX_SAFE_INTEGER))
+          throw unavailable('Repair Source version is not an ordinary exact native version');
+        const encoded = repairEncode(action);
+        if (Buffer.byteLength(encoded) > 1048576) throw unavailable('Repair action exceeds native custody');
+        const token = crypto.randomUUID();
+        await runCommand(options.pool, commandOptions, async (tx, command) => {
+          const receipt = await native(tx, command.transactionId);
+          await publicationAdmission(tx);
+          const target = await gate(tx, receipt, physical.incarnation, physical.writeAlias);
+          if (target.closed_token) throw unavailable('Search generation is closed to repair enrollment');
+          const enrolled = await tx.query(enroll.sql, [partition, options.index, physical.incarnation,
+            receipt.epoch, token, receipt.transactionId, receipt.position.toString(), [subject]]);
+          if (enrolled.rowCount !== 1) throw unavailable('Repair writer is pending or structurally fenced');
+          await tx.query(`UPDATE search.identity_writer SET repair_locator=$4,repair_action=$5,repair_receipt=NULL
+            WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3`,
+            [partition, options.index, subject, repairLocator, encoded]);
+          await tx.query(`UPDATE search.identity_writer_gate SET enrollment_generation=enrollment_generation+1
+            WHERE partition_no=$1 AND physical_target=$2`, [partition, options.index]);
+          return { value: null, events: changed() };
+        });
+        row = await readWriter();
+      }
+      if (!row || row.repair_locator !== repairLocator || !row.repair_action || row.closed_job ||
+        row.incarnation !== physical.incarnation)
+        throw unavailable('Retained repair writer changed');
+      if (row.dispatch_state === 'settled' && row.writer_token === null && row.repair_receipt)
+        return decodeSearchRepairWriterReceipt(row.repair_receipt);
+      if (!row.writer_token || !['enrolled', 'dispatched'].includes(row.dispatch_state))
+        throw unavailable('Repair writer was cancelled or lost');
+      const action = JSON.parse(row.repair_action, (_key, item) => item && typeof item === 'object' &&
+        Object.keys(item).length === 1 && typeof item.nativeBigint === 'string' ? BigInt(item.nativeBigint) : item) as IndexAction;
+      const token = row.writer_token;
+      const enrollment: IdentityNativeReceipt = { partition, epoch: row.owner_epoch,
+        transactionId: row.writer_transaction_id, position: BigInt(row.writer_position) };
+      let evidence: unknown;
+      if (row.dispatch_state === 'enrolled') {
+        await runCommand(options.pool, commandOptions, async (tx, command) => {
+          const receipt = await native(tx, command.transactionId);
+          if (receipt.epoch !== enrollment.epoch) throw unavailable('Repair owner moved before dispatch');
+          await gate(tx, receipt, physical.incarnation, physical.writeAlias);
+          const dispatched = await tx.query(dispatchSql.sql,
+            [partition, options.index, physical.incarnation, receipt.epoch, token, [subject]]);
+          if (dispatched.rowCount !== 1) throw unavailable('Repair dispatch was revoked');
+          return { value: null, events: changed() };
+        });
+        let bulk: unknown;
+        const transport: OpenSearch = { ...options.search, async bulk(lines, opts) {
+          const response = await options.search.bulk(lines, opts);
+          bulk = response;
+          return response as never;
+        } };
+        // A throw after this boundary retains dispatched custody. No finally releases uncertainty.
+        await writeIndexActions(transport, options.index, [action], { rejectConflicts: true, writeAlias: physical.writeAlias });
+        evidence = { kind: 'bulk', bulk };
+      } else {
+        if (action.op === 'delete') throw unavailable('An uncertain delete has no exact native item receipt');
+        const current = await options.search.request<{ _version?: number; _source?: unknown }>('GET',
+          `/${options.index}/_doc/${subject}`);
+        if (current.status !== 200 || !Number.isSafeInteger(current.body._version))
+          throw unavailable('Repair response recovery has no current native winner');
+        const version = BigInt(current.body._version!);
+        if (version < action.version) {
+          let bulk: unknown;
+          const transport: OpenSearch = { ...options.search, async bulk(lines, opts) {
+            const response = await options.search.bulk(lines, opts); bulk = response; return response as never;
+          } };
+          await writeIndexActions(transport, options.index, [action], { rejectConflicts: true, writeAlias: physical.writeAlias });
+          evidence = { kind: 'bulk', bulk };
+        } else {
+          if (version !== action.version || !isDeepStrictEqual(current.body._source, action.document))
+            throw unavailable('Uncertain repair has a different current winner');
+          const refreshed = await options.search.request('POST', `/${options.index}/_refresh`);
+          validateRefreshResponse(refreshed.status, refreshed.body);
+          evidence = { kind: 'recovered', current: current.body, refresh: refreshed.body };
+        }
+      }
+      const winner = await readSearchRepairWinner(options.search, options.index, action);
+      const finalPhysical = await readSearchWriterPhysicalTarget(options.search, options.index);
+      if (!isDeepStrictEqual(finalPhysical, physical)) throw unavailable('Repair allocation changed after dispatch');
+      const completed = await runCommand(options.pool, commandOptions, async (tx, command) => {
+        const completion = await native(tx, command.transactionId);
+        if (completion.epoch !== enrollment.epoch) throw unavailable('Repair owner moved before final fence');
+        const target = await gate(tx, completion, physical.incarnation, physical.writeAlias);
+        if (target.closed_token) throw unavailable('Repair generation closed before final fence');
+        const receipt: SearchRepairWriterReceipt = { locator: repairLocator, subject, partition,
+          epoch: enrollment.epoch, incarnation: physical.incarnation, writeAlias: physical.writeAlias,
+          consumer: options.consumer, action, enrollment, completion, native: { evidence, winner } };
+        const settled = await tx.query(settle.sql, [partition, options.index, physical.incarnation, enrollment.epoch,
+          token, enrollment.transactionId, enrollment.position.toString(), [subject], completion.transactionId,
+          completion.position.toString(), action.version.toString()]);
+        if (settled.rowCount !== 1) throw unavailable('Repair writer changed at final fence');
+        await tx.query(`UPDATE search.identity_writer SET repair_receipt=$4
+          WHERE partition_no=$1 AND physical_target=$2 AND original_id=$3 AND repair_locator=$5`,
+          [partition, options.index, subject, repairEncode(receipt), repairLocator]);
+        return { value: receipt, events: changed() };
+      });
+      return completed.value;
     },
     async write(partition, input, obligation) {
       if (typeof obligation !== 'bigint' || obligation < 0n)

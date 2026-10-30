@@ -480,7 +480,7 @@ export async function applyPublicFilterConsumerActions(
     throw new SearchUnavailableError('Repair physical incarnation changed');
 }
 
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type {
   PublicFilterCost,
@@ -506,9 +506,15 @@ import type {
   PublicFilterConsumerStatus,
 } from './public-filter-consumer-contract.ts';
 import type { CustodyRegistration, CustodyUse, CustodyCost } from './public-filter-custody-contract.ts';
-import { createPublicFilterCustody } from './public-filter-custody.ts';
+import { createPublicFilterCustody, encodePublicFilterNativeState as encodeNative,
+  decodePublicFilterNativeState as decodeNative, readPublicFilterRepairSettlement } from './public-filter-custody.ts';
+import type { RetainedRepairSettlement, RetainedRepairPage } from './public-filter-custody-contract.ts';
+import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
+import { createRatedSubjectSource } from './rated-source.ts';
+import { subjectListingSource } from '../library/listing-counts.ts';
+import { createSearchWriterGuard, type SearchRepairWriterReceipt } from './writer-guard.ts';
 import { validatePublicSuggestionInput, compilePublicSuggestion } from './public-suggestion-input.ts';
-import { documentActions, type SubjectDocument } from './document.ts';
+import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
@@ -587,7 +593,7 @@ type ConsumerWork = {
   frontier: string | null;
   repair: Omit<PublicSourceRepair, 'receipt'> | null;
   repairPage: {
-    repairs: readonly PublicSourceRepair[];
+    repairs: readonly Omit<PublicSourceRepair, 'receipt'>[];
     next: number;
     frontier: string | null;
     complete: boolean;
@@ -695,7 +701,34 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return result as any;
       },
     };
-    return { cost, add, check, sql, unavailable, take, native };
+    const wrapQuery = (db: Pick<Pool, 'query'>) => async (query: string | import('pg').QueryConfig, values?: unknown[]) => {
+      const text = typeof query === 'string' ? query : query.text;
+      const cleanup = /^ROLLBACK\b/.test(text);
+      if (!cleanup) check();
+      const parameters = values ?? (typeof query === 'string' ? [] : query.values ?? []);
+      cost.statements++;
+      cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
+      const result = await db.query({ text, values: parameters, query_timeout: remaining(context) });
+      cost.rows += result.rows.length;
+      cost.bytes += Buffer.byteLength(encodeState(result.rows));
+      if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
+      if (!cleanup) check();
+      return result;
+    };
+    const pool = new Proxy(config.pool, { get(db, key) {
+      if (key === 'query') return wrapQuery(db);
+      if (key === 'connect') return async () => {
+        const client = await db.connect();
+        return new Proxy(client, { get(connection, property) {
+          if (property === 'query') return wrapQuery(connection);
+          const value = Reflect.get(connection, property);
+          return typeof value === 'function' ? value.bind(connection) : value;
+        } });
+      };
+      const value = Reflect.get(db, key);
+      return typeof value === 'function' ? value.bind(db) : value;
+    } });
+    return { cost, add, check, sql, unavailable, take, native, pool };
   }
   type Meter = ReturnType<typeof meter>;
   async function mixedGeneration(m: Meter): Promise<void> {
@@ -1412,6 +1445,25 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return failure(error, m);
     }
   }
+  async function saveRepair(work: ConsumerWork, old: string, state: RetainedRepairSettlement,
+    previous: string | null, m: Meter): Promise<string> {
+    const next = encodeState(work);
+    if (Buffer.byteLength(next) > 1048576) throw new ConsumerFailure('source_pending');
+    const q = work.queried!;
+    const saved = await m.sql(`WITH locked AS (
+      SELECT observation FROM search.public_filter_observation
+      WHERE (partition_no,observation)=($1,$2) AND state='open' AND consumer_work=$3 FOR UPDATE
+    ), advanced AS (
+      UPDATE search.public_filter_execution SET repair_settlement=$6
+      WHERE (partition_no,observation,id)=($1,$2,$5) AND repair_settlement IS NOT DISTINCT FROM $7
+        AND EXISTS (SELECT 1 FROM locked) RETURNING id
+    ) UPDATE search.public_filter_observation SET consumer_work=$4
+      WHERE (partition_no,observation)=($1,$2) AND EXISTS (SELECT 1 FROM advanced) RETURNING observation`,
+      [work.registration.partition, q.snapshot.observation, old, next, work.execution, encodeNative(state), previous]);
+    if (saved.rowCount !== 1) throw new ConsumerFailure('source_pending');
+    m.cost.frontierWrites++;
+    return next;
+  }
   async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext) {
     const job = structuredClone(input);
     const m = meter(context);
@@ -1461,41 +1513,68 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         work.execution = execution;
         encoded = await save(work, encoded, false, m);
       }
-      if (!work.repairPage) {
-        const page = m.take(
-          await binding.repairPage(
-            {
-              bootstrap: work.bootstrap.id,
-              queried: q,
-              execution: work.execution,
-              frontier: work.frontier,
-              inputLimit: Math.max(1, 1000 - m.cost.inputKeys),
-            },
-            context,
-          ),
-        );
-        if (page.status !== 'progress' && page.status !== 'complete') return m.unavailable('source_pending');
-        work.repairPage = {
-          repairs: page.repairs,
-          next: 0,
-          frontier: page.frontier,
-          complete: page.status === 'complete',
-        };
-        encoded = await save(work, encoded, false, m);
+      const retained = m.take(await custody.read({ queried: q, execution: work.execution }, context));
+      if (retained.status !== 'found' || !retained.execution) return m.unavailable('observation_lost');
+      const current = (await m.sql<{ repair_settlement: string | null }>(
+        'SELECT repair_settlement FROM search.public_filter_execution WHERE (partition_no,observation,id)=($1,$2,$3)',
+        [work.registration.partition, q.snapshot.observation, work.execution])).rows[0];
+      if (!current) return m.unavailable('observation_lost');
+      let previous = current.repair_settlement;
+      let state: RetainedRepairSettlement = previous ? decodeNative(previous) : {
+        id: randomUUID(), bootstrap: work.bootstrap.id, covered: work.bootstrap.covered,
+        execution: retained.execution, pages: 0, frontier: null, closed: false, fence: null,
+      };
+      if (!isDeepStrictEqual(state.execution, retained.execution) ||
+        !isDeepStrictEqual(state.covered, retained.covered) || state.bootstrap !== work.bootstrap.id)
+        return m.unavailable('observation_lost');
+      if (!previous) {
+        encoded = await saveRepair(work, encoded, state, null, m);
+        previous = encodeNative(state);
       }
-      // Persist the entire bounded page before its first dispatch. Each item's completion and page
-      // ordinal commit together, so recovery neither repeats completed projection rows nor skips work.
-      while (work.repairPage.next < work.repairPage.repairs.length) {
-        const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
-        encoded = await applyRepair(repair, work, encoded, m, context);
+      if (!state.closed) {
+        const keys = [work.registration.partition, q.snapshot.observation, work.execution, state.pages];
+        let page = (await m.sql<{ intent: string }>(
+          'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)', keys)).rows[0];
+        if (!page) {
+          const sourcePage = m.take(await binding.repairPage({ bootstrap: work.bootstrap.id, queried: q,
+            execution: work.execution, frontier: state.frontier,
+            inputLimit: Math.min(256, Math.max(1, 1000 - m.cost.inputKeys)) }, context));
+          if (sourcePage.status !== 'progress' && sourcePage.status !== 'complete') return m.unavailable('source_pending');
+          const intent: RetainedRepairPage = { predecessor: state.frontier, frontier: sourcePage.frontier,
+            complete: sourcePage.status === 'complete',
+            repairs: sourcePage.repairs.map(({ kind, locator, source, projection }) => ({ kind, locator, source, projection })) };
+          const body = encodeNative(intent);
+          await m.sql(`INSERT INTO search.public_filter_repair_page
+            (partition_no,observation,execution,ordinal,has_repairs,intent) VALUES ($1,$2,$3,$4,$5,$6)
+            ON CONFLICT DO NOTHING`, [...keys, intent.repairs.length > 0, body]);
+          page = (await m.sql<{ intent: string }>(
+            'SELECT intent FROM search.public_filter_repair_page WHERE (partition_no,observation,execution,ordinal)=($1,$2,$3,$4)', keys)).rows[0];
+          if (!page || page.intent !== body) return m.unavailable('source_pending');
+        }
+        const intent = decodeNative<RetainedRepairPage>(page.intent);
+        if (intent.predecessor !== state.frontier || (intent.complete ? intent.frontier !== null : !intent.frontier))
+          return m.unavailable('source_pending');
+        if (!work.repairPage) {
+          work.repairPage = { repairs: intent.repairs, next: 0, frontier: intent.frontier, complete: intent.complete };
+          encoded = await save(work, encoded, false, m);
+        } else if (!isDeepStrictEqual(work.repairPage.repairs, intent.repairs)) return m.unavailable('source_pending');
+        while (work.repairPage.next < work.repairPage.repairs.length) {
+          const repair = work.repair ?? work.repairPage.repairs[work.repairPage.next]!;
+          encoded = await applyRepair(repair, work, state.pages, encoded, m, context);
+        }
+        const complete = intent.complete;
+        if (complete && (work.projectionSource || work.records.length || work.repair || work.dispatch))
+          return m.unavailable('source_pending');
+        work.frontier = intent.frontier;
+        work.repairPage = null;
+        state = { ...state, pages: state.pages + 1, frontier: intent.frontier, closed: complete };
+        encoded = await saveRepair(work, encoded, state, previous, m);
+        if (!complete) return { status: 'progress' as const, job, cost: m.cost };
       }
-      const complete = work.repairPage.complete;
-      work.frontier = work.repairPage.frontier;
-      work.repairPage = null;
-      encoded = await save(work, encoded, false, m);
-      if (!complete) return { status: 'progress' as const, job, cost: m.cost };
-      if (work.projectionSource || work.records.length || work.repair || work.dispatch)
-        return m.unavailable('source_pending');
+      // The canonical reader is the native guard. FAA's separate settle joins its own Source verifier.
+      const nativeSettlement = m.take(await readPublicFilterRepairSettlement(config.pool,
+        { queried: q, execution: work.execution }, context));
+      if (nativeSettlement.status !== 'settled') return m.unavailable('source_pending');
       const settled = m.take(
         await binding.settle({ bootstrap: work.bootstrap.id, queried: q, execution: work.execution }, context),
       );
@@ -1515,172 +1594,59 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
   }
   async function applyRepair(
-    repair: Omit<PublicSourceRepair, 'receipt'>,
-    work: ConsumerWork,
-    encoded: string,
-    m: Meter,
-    context: PublicFilterConsumerContext,
+    repair: Omit<PublicSourceRepair, 'receipt'>, work: ConsumerWork, page: number, encoded: string,
+    m: Meter, context: PublicFilterConsumerContext,
   ): Promise<string> {
     const q = work.queried!;
     const projection = repair.projection;
-    if (
-      (projection.status !== 'complete' && projection.status !== 'progress') ||
-      !isDeepStrictEqual(projection.source, repair.source) ||
-      repair.source.subject !== repair.locator.subject ||
-      repair.source.partition !== subjectPartition(repair.source.subject)
-    )
+    if ((projection.status !== 'complete' && projection.status !== 'progress') ||
+      !isDeepStrictEqual(projection.source, repair.source) || repair.source.subject !== repair.locator.subject ||
+      repair.source.partition !== subjectPartition(repair.source.subject) ||
+      (work.projectionSource && !isDeepStrictEqual(work.projectionSource, repair.source)))
       throw new ConsumerFailure('source_pending');
-    if (work.projectionSource && !isDeepStrictEqual(work.projectionSource, repair.source))
-      throw new ConsumerFailure('source_pending');
-    work.projectionSource = repair.source;
     const recovering = work.repair !== null;
+    work.projectionSource = repair.source;
     work.repair = structuredClone(repair);
-    if (!work.dispatch) {
-      if (!recovering) work.records.push(...projection.records);
-      encoded = await save(work, encoded, false, m);
-      if (projection.status === 'progress') {
-        work.repair = null;
-        work.repairPage!.next++;
-        return save(work, encoded, false, m);
-      }
-      if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
-      // A source-own committed position is the ONLY replacement external version, including FOREIGN causes.
-      const version = repair.source.position;
-      if (version < 1n || version > BigInt(Number.MAX_SAFE_INTEGER)) throw new ConsumerFailure('source_pending');
-      const current = await m.native.request<{ _version?: number; _source?: SubjectDocument }>(
-        'GET',
-        `/${target}/_doc/${repair.source.subject}`,
-      );
-      const document = current.body._source;
-      if (
-        current.status !== 200 ||
-        !document ||
-        document.id !== repair.source.subject ||
-        document.partition !== repair.source.partition
-      )
-        throw new ConsumerFailure('source_pending');
-      if (!Number.isSafeInteger(current.body._version) || BigInt(current.body._version!) >= version)
-        throw new ConsumerFailure('source_pending');
-      const securityRevision = Number(repair.source.securityRevision);
-      if (!Number.isSafeInteger(securityRevision) || securityRevision < 0) throw new ConsumerFailure('source_pending');
-      const [action] = documentActions(
-        {
-          partition: repair.source.partition,
-          position: version,
-          subjects: [
-            {
-              id: document.id,
-              type: document.type,
-              visibility: 'visible',
-              redirect: null,
-              securityRevision,
-              labels: [],
-              aliases: [],
-              descriptions: [],
-              statements: work.records.map((row) => row.indexed!),
-            },
-          ],
-        },
-        [document.id],
-      );
-      if (action?.op !== 'index') throw new ConsumerFailure('source_pending');
-      const replacement = {
-        ...document,
-        ...action.document,
-        names: document.names,
-        descriptions: document.descriptions,
-        name_sort: document.name_sort,
-      };
-      work.dispatch = { id: document.id, version, document: replacement, state: 'uncertain' };
-      encoded = await save(work, encoded, false, m);
-      // Persist uncertain custody BEFORE invoking any external mutation. An exception never disposes it.
-      await applyPublicFilterConsumerActions(
-        m.native,
-        q.consumer,
-        [{ op: 'index', id: document.id, version, document: replacement }],
-        context,
-      );
-    } else if (work.dispatch.state === 'uncertain') {
-      const dispatch = work.dispatch;
-      const current = await m.native.request<{ _version?: number; _source?: SubjectDocument }>(
-        'GET',
-        `/${target}/_doc/${dispatch.id}`,
-      );
-      if (current.status !== 200 || !Number.isSafeInteger(current.body._version))
-        throw new ConsumerFailure('source_pending');
-      const version = BigInt(current.body._version!);
-      if (version < dispatch.version) {
-        // A lost request may have had no effect. Retry only its retained body and own-home version.
-        await applyPublicFilterConsumerActions(
-          m.native,
-          q.consumer,
-          [{ op: 'index', id: dispatch.id, version: dispatch.version, document: dispatch.document }],
-          context,
-        );
-      } else {
-        if (version !== dispatch.version || !isDeepStrictEqual(current.body._source, dispatch.document))
-          throw new ConsumerFailure('source_pending');
-        const refreshed = await m.native.request<unknown>('POST', `/${target}/_refresh`);
-        if (
-          refreshed.status !== 200 ||
-          !record(refreshed.body) ||
-          !record(refreshed.body._shards) ||
-          refreshed.body._shards.failed !== 0 ||
-          typeof refreshed.body._shards.total !== 'number' ||
-          refreshed.body._shards.total < 1 ||
-          refreshed.body._shards.successful !== refreshed.body._shards.total
-        )
-          throw new ConsumerFailure('source_pending');
-      }
-    }
-    const dispatch = work.dispatch!;
-    // Native non-realtime search readback establishes actual searchable current-winner body and version.
-    const visible = await m.native.request<unknown>(
-      'POST',
-      `/${target}/_search`,
-      {
-        size: 1,
-        version: true,
-        query: { ids: { values: [dispatch.id] } },
-        track_total_hits: false,
-      },
-      { query: { allow_partial_search_results: false } },
-    );
-    assertCompleteSearch(visible.body);
-    if (
-      !record(visible.body) ||
-      !record(visible.body.hits) ||
-      !Array.isArray(visible.body.hits.hits) ||
-      visible.body.hits.hits.length !== 1
-    )
-      throw new ConsumerFailure('source_pending');
-    const winner = visible.body.hits.hits[0];
-    if (
-      !record(winner) ||
-      winner._index !== target ||
-      winner._id !== dispatch.id ||
-      !Number.isSafeInteger(winner._version) ||
-      BigInt(winner._version as number) !== dispatch.version ||
-      !isDeepStrictEqual(winner._source, dispatch.document)
-    )
-      throw new ConsumerFailure('source_pending');
-    await physical(q, m, context);
-    work.dispatch = { ...dispatch, state: 'visible' };
+    if (!recovering) work.records.push(...projection.records);
     encoded = await save(work, encoded, false, m);
-    // Keep the visible receipt in native execution custody before allowing another page to overwrite work.
-    await m.sql(
-      `UPDATE search.public_filter_execution SET consumer_repair=(COALESCE(consumer_repair::jsonb,'{}'::jsonb)||jsonb_build_object($5::text,$4::jsonb))::text
-      WHERE (partition_no,observation,id)=($1,$2,$3)`,
-      [
-        locatorHome(q.snapshot.observation),
-        q.snapshot.observation,
-        work.execution,
-        encodeState({ source: repair.source, locator: repair.locator, kind: repair.kind, dispatch: work.dispatch }),
-        createHash('sha256')
-          .update(encodeState({ source: repair.source, locator: repair.locator }))
-          .digest('hex'),
-      ],
-    );
+    if (projection.status === 'progress') {
+      work.repair = null;
+      work.repairPage!.next++;
+      return save(work, encoded, false, m);
+    }
+    if (work.records.some((row) => row.indexed === null)) throw new ConsumerFailure('source_pending');
+    const origin = publicFilterSourceOrigin(config.source);
+    const targetMatch = /^(.*)subjects-g([1-9][0-9]*)$/.exec(target);
+    if (!origin || !targetMatch)
+      throw new ConsumerFailure('source_pending');
+    const consumer = `search_${targetMatch[1]!.replaceAll('-', '_')}subjects_g${targetMatch[2]}`;
+    const nativeSource = createRatedSubjectSource(m.pool, origin.routeKey).source;
+    const guard = createSearchWriterGuard({ pool: m.pool, search: m.native, index: target, consumer,
+      source: nativeSource, listing: subjectListingSource(m.pool) });
+    const locator = encodeNative({ observation: q.snapshot.observation, execution: work.execution,
+      page, item: work.repairPage!.next });
+    m.cost.inputKeys++;
+    m.cost.candidates++;
+    m.cost.accessPoints++;
+    m.cost.dependencyPoints++;
+    let receipt: SearchRepairWriterReceipt;
+    try {
+      receipt = await guard.repair(repair.source.subject, repair.source.position, locator, context);
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) throw error;
+      throw new ConsumerFailure('source_pending');
+    }
+    if (receipt.epoch !== repair.source.epoch || receipt.incarnation !== q.consumer.incarnation ||
+      receipt.action.version < repair.source.position) throw new ConsumerFailure('source_pending');
+    await physical(q, m, context);
+    const body = encodeNative(receipt);
+    const keys = [work.registration.partition, q.snapshot.observation, work.execution, page, work.repairPage!.next];
+    await m.sql(`INSERT INTO search.public_filter_repair_effect
+      (partition_no,observation,execution,page,item,receipt) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+      [...keys, body]);
+    const retained = (await m.sql<{ receipt: string }>(`SELECT receipt FROM search.public_filter_repair_effect
+      WHERE (partition_no,observation,execution,page,item)=($1,$2,$3,$4,$5)`, keys)).rows[0];
+    if (!retained || retained.receipt !== body) throw new ConsumerFailure('source_pending');
     work.repair = null;
     work.dispatch = null;
     work.records = [];

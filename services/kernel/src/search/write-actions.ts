@@ -121,6 +121,11 @@ function validateBulkResponse(
   return hasConflict;
 }
 
+/** Revalidate a retained actual native item response, including its physical key and external version. */
+export function validateIndexWriteReceipt(response: unknown, target: string, actions: readonly IndexAction[]): void {
+  if (validateBulkResponse(response, target, actions)) throw new IndexWriteError([response]);
+}
+
 /** Native mixed writer. A conflict settles only an identical, actually search-visible keyed winner. */
 export async function writeDiscoveryActions(
   search: OpenSearch,
