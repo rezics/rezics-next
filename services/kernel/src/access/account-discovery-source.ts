@@ -60,7 +60,10 @@ async function requireHomes(client: Pick<PoolClient, 'query'>, routes: readonly 
 }
 async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType<typeof keys>) {
   if (!requested.length) return [];
-  await requireHomes(client, requested.map(({ route }) => route));
+  await requireHomes(
+    client,
+    requested.map(({ route }) => route),
+  );
   return (
     await client.query<AccountRow>(
       `SELECT ${columns} FROM access.account

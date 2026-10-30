@@ -18,7 +18,9 @@ export type PublicAccountCanonicalTarget = {
 type Pointer = { subjectId: string; accountId: string; receiptId: string };
 type Binding = Awaited<ReturnType<typeof readAccountDiscoveryBindings>> extends Map<string, infer T> ? T : never;
 type Proven = { pointer: Pointer; binding: Binding; epochs: readonly bigint[] };
-type AccountSummary = NonNullable<Awaited<ReturnType<typeof readAccountDiscoverySummaries>> extends Map<string, infer T> ? T : never>;
+type AccountSummary = NonNullable<
+  Awaited<ReturnType<typeof readAccountDiscoverySummaries>> extends Map<string, infer T> ? T : never
+>;
 
 function homes(ids: readonly string[]) {
   const groups = new Map<number, string[]>();
@@ -85,9 +87,14 @@ async function observe(deps: SummaryReaderDependencies, ids: readonly string[]) 
   }
   const candidates = reciprocal.filter((page) => {
     const link = links.get(page.subjectId);
-    return link?.verified && link.subject === page.subjectId && link.account === page.accountId &&
-      link.route === routeOf(page.accountId) && link.agent_id === accountAgentId(page.accountId) &&
-      link.receipt_id === page.receiptId;
+    return (
+      link?.verified &&
+      link.subject === page.subjectId &&
+      link.account === page.accountId &&
+      link.route === routeOf(page.accountId) &&
+      link.agent_id === accountAgentId(page.accountId) &&
+      link.receipt_id === page.receiptId
+    );
   });
   const originals = [...new Set(candidates.flatMap((page) => [accountAgentId(page.accountId), page.subjectId]))];
   const mappings = new Map<string, Awaited<ReturnType<typeof readIdentityMappings>>[number]>();
@@ -102,28 +109,42 @@ async function observe(deps: SummaryReaderDependencies, ids: readonly string[]) 
   for (const page of candidates) {
     const mapping = mappings.get(accountAgentId(page.accountId));
     const target = mappings.get(page.subjectId);
-    if (!mapping || !target || mapping.state === 'unavailable' || target.state === 'unavailable' ||
-        mapping.state === 'pending' || target.state === 'pending')
+    if (
+      !mapping ||
+      !target ||
+      mapping.state === 'unavailable' ||
+      target.state === 'unavailable' ||
+      mapping.state === 'pending' ||
+      target.state === 'pending'
+    )
       throw new AccessUnavailableError('contention');
     // A reciprocal native link with missing publication authority is unavailable,
     // including a legacy merge whose mapping has never been installed.
     if (mapping.state !== 'mapped' || target.state !== 'mapped') throw new AccessUnavailableError('contention');
     if (mapping.epoch <= 0n || target.epoch <= 0n) throw new AccessUnavailableError('contention');
-    if (mapping.terminal !== page.subjectId || target.terminal !== page.subjectId ||
-        mapping.epoch !== target.epoch) continue;
-    result.set(page.subjectId, { pointer: page, binding: bindings.get(page.accountId)!, epochs: [mapping.epoch, target.epoch] });
+    if (mapping.terminal !== page.subjectId || target.terminal !== page.subjectId || mapping.epoch !== target.epoch)
+      continue;
+    result.set(page.subjectId, {
+      pointer: page,
+      binding: bindings.get(page.accountId)!,
+      epochs: [mapping.epoch, target.epoch],
+    });
   }
   requireAccessDeadline(deps.deadline);
   return result;
 }
 
 function unchanged(before: Proven, after: Proven) {
-  return before.pointer.accountId === after.pointer.accountId && before.pointer.receiptId === after.pointer.receiptId &&
-    before.binding.revision === after.binding.revision && before.binding.handle === after.binding.handle &&
+  return (
+    before.pointer.accountId === after.pointer.accountId &&
+    before.pointer.receiptId === after.pointer.receiptId &&
+    before.binding.revision === after.binding.revision &&
+    before.binding.handle === after.binding.handle &&
     before.binding.claim?.route === after.binding.claim?.route &&
     before.binding.claim?.revision === after.binding.claim?.revision &&
     before.binding.consumedClaimRevision === after.binding.consumedClaimRevision &&
-    before.epochs.every((epoch, index) => epoch === after.epochs[index]);
+    before.epochs.every((epoch, index) => epoch === after.epochs[index])
+  );
 }
 
 /** Null means no positive Account target was proven. Subject listability remains Semantic's fact. */

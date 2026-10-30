@@ -1397,6 +1397,8 @@ after released foreign hydration; a changed candidate is withheld. Active unfenc
 pending, missing or foreign claims remain valid identities with null handle/navigation. Only an exact current
 active claim supplies `/@${encodeURIComponent(handle)}`. A handleless identity has no public URL. These are
 readonly facts, with no writer, disclosure-policy, catalogue-identity or operator-identity substitution.
+Native Account and exact-claim reads also require current active partition homes; missing, fenced or moved
+homes retain typed unavailability instead of supplying absent rows or apparently missing claims.
 
 ### Public activity view port
 
