@@ -1023,6 +1023,9 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.entry.deleted.v1': Type.TObject<{
         subjectId: Type.TString;
     }>;
+    readonly 'com.rezics.library.label.changed.v1': Type.TObject<{
+        labelId: Type.TString;
+    }>;
     readonly 'com.rezics.library.progress_session.updated.v1': Type.TObject<{
         sessionId: Type.TString;
     }>;

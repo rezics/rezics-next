@@ -561,5 +561,4 @@ test('all native catalogue operations keep point and limit-first costs at 64/512
   );
   if (priorProfile === undefined) delete process.env.GROWTH_PROFILE;
   else process.env.GROWTH_PROFILE = priorProfile;
-  await reader.end();
 }, 1800000);
