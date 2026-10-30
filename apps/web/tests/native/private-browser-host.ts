@@ -27,7 +27,13 @@ const server = createServer((request, response) => {
   }
   void forward(request, response).catch((error) => {
     if (response.headersSent) response.destroy(error instanceof Error ? error : undefined);
-    else response.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }).end('Private bridge failed');
+    else {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      const code = (failure as NodeJS.ErrnoException).code ?? 'unclassified';
+      response
+        .writeHead(502, { 'content-type': 'text/plain; charset=utf-8' })
+        .end(`Private bridge failed (${failure.name}:${code})`);
+    }
   });
 });
 server.on('connect', (_request, socket) => {
