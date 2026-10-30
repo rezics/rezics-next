@@ -83,7 +83,11 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
       partition: partitionOf(resource.route),
       deadline: Date.now() + 120_000,
       authorization,
-      basis: { actorAccountId: freshActor.accountId, clientId: freshActor.clientId, requestedBy: freshActor.requestedBy },
+      basis: {
+        actorAccountId: freshActor.accountId,
+        clientId: freshActor.clientId,
+        requestedBy: freshActor.requestedBy,
+      },
     },
     async (tx) => ({ value: await work(tx), events: [{ type: 'com.rezics.test.imported.v1', data: {} }] }),
   );
@@ -113,18 +117,28 @@ test('new commands reauthenticate after an earlier observation expires and expir
   const earlier = await authenticateAccount(access, earlierContext, actor);
   await new Promise((resolve) => setTimeout(resolve, Math.max(1, earlierContext.deadline - Date.now() + 1)));
   const authorization = await accessCommandAuthorization(
-    access, earlier, action, { route, id: subject },
-    { pool: db.pool, deadline: Date.now() + 5000 }, () => new Denied(),
+    access,
+    earlier,
+    action,
+    { route, id: subject },
+    { pool: db.pool, deadline: Date.now() + 5000 },
+    () => new Denied(),
   );
   let executed = false;
-  await expect(runCommand(db.pool, {
-    partition: partitionOf(route),
-    authorization,
-    basis: { actorAccountId: earlier.accountId, clientId: earlier.clientId, requestedBy: earlier.requestedBy },
-  }, async () => {
-    executed = true;
-    return { value: null, events: [] };
-  })).rejects.toThrow();
+  await expect(
+    runCommand(
+      db.pool,
+      {
+        partition: partitionOf(route),
+        authorization,
+        basis: { actorAccountId: earlier.accountId, clientId: earlier.clientId, requestedBy: earlier.requestedBy },
+      },
+      async () => {
+        executed = true;
+        return { value: null, events: [] };
+      },
+    ),
+  ).rejects.toThrow();
   expect(executed).toBe(false);
   await expect(authenticateAccount(access, earlierContext, actor)).rejects.toThrow();
   const result = await command((tx) => appendImportedField(tx, input()));

@@ -92,11 +92,15 @@ test('writes through a connection to another database settle there, not by relat
 
 test('seed settles an admin pool handed out by openPool', async () => {
   const admin = db.openPool({ max: 2 });
-  await seed({ pool: admin, admin }, {
-    name: 'open pool seed',
-    hotPartition: 4,
-    rows: ({ ordinal }) => ({ [table]: [{ id: 40_000 + ordinal, payload: 'seeded' }] }),
-  }, { from: 0, to: 8 });
+  await seed(
+    { pool: admin, admin },
+    {
+      name: 'open pool seed',
+      hotPartition: 4,
+      rows: ({ ordinal }) => ({ [table]: [{ id: 40_000 + ordinal, payload: 'seeded' }] }),
+    },
+    { from: 0, to: 8 },
+  );
   const result = await db.admin.query<{ count: string; pages: number; visible: number }>(
     `SELECT (SELECT count(*)::text FROM ${table} WHERE id >= 40000) AS count,
             c.relpages AS pages,c.relallvisible AS visible FROM pg_class c WHERE c.oid=$1::regclass`,
@@ -169,8 +173,9 @@ test('a measured backend holding its transaction across repetitions fails immedi
     expect(failures.length).toBeGreaterThan(0);
     expect(
       failures.some(
-        (failure) => failure.includes(`Backend ${backend} from the measured operation`)
-          && failure.includes('each repetition must commit'),
+        (failure) =>
+          failure.includes(`Backend ${backend} from the measured operation`) &&
+          failure.includes('each repetition must commit'),
       ),
     ).toBe(true);
   } finally {
