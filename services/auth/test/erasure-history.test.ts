@@ -265,6 +265,7 @@ test('default recovery consumes an ordinary committed native result after caller
       accountId: person.accountId,
       handle: `lost_${key.replaceAll('-', '')}`,
       expectedHandle: current!.handle,
+      authorization: 'approval-request',
     };
     const approval = await f.approvals.approve(person.bearer, { operationKey: key, operation }, f.context());
     let interrupted = false;
@@ -392,6 +393,7 @@ test('a live native result consumer stays pending; lawful disclosure refusal aft
       accountId: person.accountId,
       handle: `denied_${key.replaceAll('-', '')}`,
       expectedHandle: current!.handle,
+      authorization: 'approval-request',
     };
     const approval = await f.approvals.approve(person.bearer, { operationKey: key, operation }, f.context());
     ports.completeHandleTransition = async (input) => {
