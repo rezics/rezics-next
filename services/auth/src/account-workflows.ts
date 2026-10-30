@@ -270,20 +270,14 @@ export function clientAuthority(
           );
           if (pending.rowCount) deny();
         }
-        const rows: { account_id: string; traversal_ordinal: string }[] = [];
-        while (rows.length <= input.limit) {
-          const batchLimit = Math.min(34, input.limit + 1 - rows.length);
-          const batch = (
-            await connection.query<{ account_id: string; traversal_ordinal: string }>(
-              `SELECT account_id,traversal_ordinal FROM auth_consent
-               WHERE client_id=$1 AND traversal_ordinal>$2
-               ORDER BY traversal_ordinal LIMIT $3`,
-              [input.clientId, rows.at(-1)?.traversal_ordinal ?? after, batchLimit],
-            )
-          ).rows;
-          rows.push(...batch);
-          if (batch.length < batchLimit) break;
-        }
+        const rows = (
+          await connection.query<{ account_id: string; traversal_ordinal: string }>(
+            `SELECT account_id,traversal_ordinal FROM auth_consent
+             WHERE client_id=$1 AND traversal_ordinal>$2
+             ORDER BY client_id,traversal_ordinal LIMIT $3`,
+            [input.clientId, after, input.limit + 1],
+          )
+        ).rows;
         const page = rows.slice(0, input.limit);
         await connection.query(
           `UPDATE auth_client_reduction_progress SET after_ordinal=$2,page_after=$2,page_end=$4,
