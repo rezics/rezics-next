@@ -5,12 +5,14 @@ import { resolve } from 'node:path';
 import {
   currentNativeLifecycle,
   inspectNativeProcess,
+  inspectNativeProcessGroup,
   nativeProcessGroupIsGone,
   nativeProcessIsSame,
   nativeTest,
   processGroupObservationIsGone,
   settledWithin,
   type NativeProcessIdentity,
+  type ProcessGroupObservation,
 } from './native/lifecycle.ts';
 
 const worktreeRoot = resolve(import.meta.dir, '../../..');
@@ -25,7 +27,11 @@ type LifecycleReceipt = {
   browserNetworkNamespace?: string;
   resistantLeader?: NativeProcessIdentity;
   resistantDescendant?: NativeProcessIdentity;
+  browserGroup?: ProcessGroupObservation;
+  devServerGroup?: ProcessGroupObservation;
+  resistantGroup?: ProcessGroupObservation;
   child?: NativeProcessIdentity;
+  childGroup?: ProcessGroupObservation;
   pageVisited?: boolean;
   receivedTimeout?: boolean;
   expectedFailure?: boolean;
@@ -148,9 +154,19 @@ nativeTest(
     expect(await listenerIsClosed(timedOut.devServerPort!)).toBe(true);
     expect(await listenerIsClosed(partial.listenerPort)).toBe(true);
     expect(await eventuallyGone(timedOut.browser)).toBe(true);
-    expect(await eventuallyGroupGone(timedOut.browser)).toBe(true);
+    const browserGroupGone = await eventuallyGroupGone(timedOut.browser);
+    if (!browserGroupGone)
+      throw new Error(
+        `Owned browser process group remained: ${JSON.stringify(inspectNativeProcessGroup(timedOut.browser!))}`,
+      );
+    expect(browserGroupGone).toBe(true);
     expect(await eventuallyGone(timedOut.devServer)).toBe(true);
-    expect(await eventuallyGroupGone(timedOut.devServer)).toBe(true);
+    const devServerGroupGone = await eventuallyGroupGone(timedOut.devServer);
+    if (!devServerGroupGone)
+      throw new Error(
+        `Owned dev server process group remained: ${JSON.stringify(inspectNativeProcessGroup(timedOut.devServer!))}`,
+      );
+    expect(devServerGroupGone).toBe(true);
     expect(await eventuallyGone(timedOut.resistantLeader)).toBe(true);
     expect(await eventuallyGone(timedOut.resistantDescendant)).toBe(true);
     expect(await eventuallyGone(partial.child)).toBe(true);

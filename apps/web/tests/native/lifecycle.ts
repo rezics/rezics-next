@@ -396,6 +396,10 @@ export function nativeProcessGroupIsGone(identity: NativeProcessIdentity): boole
   );
 }
 
+export function inspectNativeProcessGroup(identity: NativeProcessIdentity): ProcessGroupObservation {
+  return processGroupIdentities(identity);
+}
+
 function readProcessIdentity(pid: number | undefined): NativeProcessIdentity | undefined {
   if (!pid) return;
   try {

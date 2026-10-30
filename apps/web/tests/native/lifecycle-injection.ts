@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readlinkSync } from 'node:fs';
-import { inspectNativeProcess, NativeTestLifecycle } from './lifecycle.ts';
+import { inspectNativeProcess, inspectNativeProcessGroup, NativeTestLifecycle } from './lifecycle.ts';
 import { launchPrivateBrowser } from './private-browser.ts';
 
 function report(name: string, value: unknown): void {
@@ -166,6 +166,9 @@ async function deadlineFailure(): Promise<void> {
     browserNetworkNamespace,
     resistantLeader,
     resistantDescendant,
+    browserGroup: privateBrowser ? inspectNativeProcessGroup(privateBrowser.processIdentity) : undefined,
+    devServerGroup: devServerIdentity ? inspectNativeProcessGroup(devServerIdentity) : undefined,
+    resistantGroup: resistantLeader ? inspectNativeProcessGroup(resistantLeader) : undefined,
     pageVisited,
   });
 }
@@ -211,6 +214,7 @@ async function partialSetupFailure(): Promise<void> {
     expectedFailure,
     listenerPort,
     child: childIdentity,
+    childGroup: childIdentity ? inspectNativeProcessGroup(childIdentity) : undefined,
   });
 }
 
