@@ -32,7 +32,8 @@ export const Route = createFileRoute('/organizations/members')({
   component: MembershipRoute,
 });
 function MembershipRoute() {
-  return <OrganizationMembersPage organizationId={Route.useSearch().organizationId} />;
+  const { organizationId } = Route.useSearch();
+  return <OrganizationMembersPage key={organizationId} organizationId={organizationId} />;
 }
 function statusMessage(kind: string) {
   switch (kind) {
@@ -378,7 +379,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                     onChange={(event) => setPassword(event.target.value)}
                   />
                 </Field>
-                <Button type="submit" disabled={busy} pending={busy}>
+                <Button type="submit" disabled={busy} aria-busy={busy}>
                   {m.auth_members_reauthenticate()}
                 </Button>
               </form>
@@ -395,7 +396,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                 </label>
                 <Button
                   type="submit"
-                  pending={busy}
+                  aria-busy={busy}
                   disabled={busy || !confirmed || observed || page?.kind !== 'ready'}
                 >
                   {command.unresolved ? m.auth_members_retry_exact() : m.auth_members_submit()}
