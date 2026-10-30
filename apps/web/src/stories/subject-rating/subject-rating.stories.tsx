@@ -62,10 +62,10 @@ function Vote({ failed = false }: { failed?: boolean }) {
 
 const meta = {
   title: 'Patterns/Subjects/Subject Rating',
-  component: RatingsView,
+  component: Figures,
   parameters: { layout: 'fullscreen' },
   render: () => <Figures />,
-} satisfies Meta<typeof RatingsView>;
+} satisfies Meta<typeof Figures>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

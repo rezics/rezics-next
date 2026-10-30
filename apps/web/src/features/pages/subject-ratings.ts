@@ -164,7 +164,7 @@ export async function writeOwnRating(
       const question = await readRatingQuestion(client);
       if (!question || !validRatingUnits(units, question.scale)) return false;
     }
-    const result = units === null ? await vote.delete({ headers }) : await vote.put({ units }, { headers });
+    const result = units === null ? await vote.delete(undefined, { headers }) : await vote.put({ units }, { headers });
     return units === null ? result.status === 204 : result.status === 200;
   } catch {
     return false;
