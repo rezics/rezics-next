@@ -144,10 +144,10 @@ typed `native-pending` result, not the served default.
 
 The isolated adapter follows the original `content/edition-routes.ts` path/parameter declarations and the closed
 `ContentEditionView` / `ContentEditionRevisionView` field sets declared in `content/edition-model.ts`. It retains
-the existing strict Web decoders without importing database-backed Kernel source into the Web compiler. The native route implementation
-and regenerated client declarations are not yet in this checkout. Eden's installed runtime proxy already transports
-these declared paths without casting an undelivered client type; a deployed missing route returns unavailable.
-The same default will reach the native producer when it lands, without a mock success or empty document.
+the existing strict Web decoders without importing database-backed Kernel source into the Web compiler. The native
+route implementation is mounted by `content/routes.ts`; the installed generated client declarations still await
+these endpoints. Eden's installed runtime proxy transports the mounted paths without casting an undelivered client
+type. The served default reaches this native producer; a deployed missing route returns unavailable.
 Native Content and Access own entitlement, stored seller restoration, current source/ancestry/subject/version and final disclosure.
 Web never turns Commerce capture, an ownership badge or an opaque benefit into permission or a licence grant.
 This interface alone proves no real buyer use, native integration or reviewed visual result.
