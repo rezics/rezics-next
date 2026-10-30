@@ -14,6 +14,15 @@ import type {
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { JoinedPopulationRequest, PublicFilterNativeSource } from './public-filter-source-binding.ts';
 import type { PublicFilterConsumerContext, PublicCanonicalCaptureInput } from '../search/public-filter-consumer-contract.ts';
+import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
+
+type SourceConfiguration = Parameters<PublicFilterSourceFactory>[0];
+const origins = new WeakMap<PublicFilterSource, SourceConfiguration>();
+
+/** Internal constructor routing only. The binding independently validates persisted owner rows. */
+export function publicFilterSourceOrigin(source: PublicFilterSource): SourceConfiguration | undefined {
+  return origins.get(source);
+}
 
 const cost = () => ({
   inputKeys: 0,
@@ -41,13 +50,17 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
   const unavailable = { status: 'unready' as const, reason: 'metadata_missing' as const, cost: cost() };
   const source: PublicFilterNativeSource = {
     async resolvePublicFilterDefinition(
-      _request: Readonly<{ meaning: PublicFilterProjectionMeaning; capture: PublicCanonicalCaptureInput }>,
-      _context: PublicFilterConsumerContext,
+      request: Readonly<{ meaning: PublicFilterProjectionMeaning; capture: PublicCanonicalCaptureInput }>,
+      context: PublicFilterConsumerContext,
     ) {
+      const native = origins.get(source)!;
+      const result = await createPublicFilterSourceBinding(native.pool, native.routeKey, native.access)
+        .resolve({ source, ...request }, context);
+      if (result.status === 'resolved') return { status: 'bound', definition: result.definition, cost: result.cost };
       return {
-        status: 'unavailable',
-        reason: 'source_pending',
-        cost: cost(),
+        status: result.status,
+        reason: result.reason === 'deadline' ? 'deadline' : 'source_pending',
+        cost: result.cost,
       };
     },
     async readPublicFilterProjectionPage(_request: PublicFilterProjectionRequest) {
@@ -63,6 +76,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       return unavailable;
     },
   };
+  origins.set(source, Object.freeze({ ...config, routeKey: new Uint8Array(config.routeKey) }));
   return Object.freeze(source);
 };
 

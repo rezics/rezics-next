@@ -703,3 +703,32 @@ and foreign routing, including partial projection frontiers. Only committed own-
 external replacement version. `settle` validates the original bootstrap, same old cut/execution, Source receipts,
 all configured owner domains and real Search dispatch/visible-winner/retained-copy custody. Neither a generic
 caller receipt nor a successful engine callback certifies completion. Account proof stays with Accounts.
+
+### Native Source metadata ownership
+
+`public-filter-source-binding.ts` exports the synchronous
+`createPublicFilterSourceBinding(pool, routing: Uint8Array, access): PublicFilterSourceBootstrapBinding`.
+Its closed declarations are `NativePublicSource`, `PublicFilterSourceDefinition`,
+`PublicFilterBindingFailure`, `PublicFilterSourceBinding`, `PublicSourceCaptureInput`,
+`PublicSourceBootstrap`, `PublicSourceBootstrapResult`, `PublicSourceBootstrapRecovery`,
+`NativeSourceRepairReceipt`, `PublicSourceRepair`, `PublicSourceRepairPage` and
+`PublicFilterSourceBootstrapBinding`. `PublicFilterSourceCaptureInput` remains a compatibility alias;
+`PublicFilterNativeSource` and `JoinedPopulationRequest` remain exported. The capture is the canonical
+Search Subject/mixed/prefix union; queried observations are imported from Search.
+
+Migration `20261031000000_public_filter_binding.sql` owns Source tables in `semantic`:
+`public_filter_source` has `(partition_no,source_id)` identity and an independently stored configuration,
+route fingerprint and owner epoch; `public_filter_read_definition` has
+`(partition_no,read_definition)` and immutable configuration/release/type/root/compiler keys.
+The internal constructor association routes only to that actual configuration. A structural copy,
+foreign pool/Access/route key, unpublished meaning or substituted retained input cannot establish it.
+`resolve` registers these Source-owned rows and rereads their native identity before returning.
+This is metadata, not a current disclosure or permission result. Source's three privacy/projection
+readers retain their independent contracts and budgets.
+
+`public_filter_bootstrap`, keyed by `(partition_no,bootstrap)`, owns pre-PIT native cuts and atomic
+adoption intent. `public_filter_bootstrap_account` retains original Account/claim owner heads under
+`(partition_no,bootstrap,account_partition)`. `public_filter_repair_step` owns bounded retained Source
+repair continuations; `public_filter_repair_advance` owns only subject-home Source advancement.
+Neither table is a Search definition/observation/execution registry. Search remains sole writer of
+its canonical custody, physical incarnation, PIT/prepared and visible engine receipts.

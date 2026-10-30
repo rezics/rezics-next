@@ -1,8 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
-import type { PublicCanonicalCaptureInput, PublicFilterConsumerUnavailable } from '../search/public-filter-consumer-contract.ts';
-import type { PrivacyReductionObservation, PrivacyReductionObservationRequest } from './public-filter-source-contract.ts';
-import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
+import { publicFilterSourceOrigin } from './public-filter-source.ts';
+import { readRelease, freeze } from './definitions.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
+import registerSource from './public-filter-source-binding-register.sql';
+import defineSource from './public-filter-source-binding-define.sql';
+import readDefinition from './public-filter-source-binding-definition.sql';
+import type { Pool, PoolClient } from 'pg';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import type { Access } from '../request/access.ts';
@@ -10,28 +15,15 @@ import type { CustodyDefinition } from '../search/public-filter-custody-contract
 import { compileFilter } from '../search/filter.ts';
 import { compileText } from '../search/text.ts';
 import { validateSearchAfter } from '../search/query-payload.ts';
+import { compileDiscoveryConsumerCapture, type DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
+import { validatePublicSuggestionInput } from '../search/public-suggestion-input.ts';
 import { readPublicFilterConsumerCustody } from '../search/public-filter-custody.ts';
-import type { DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
-import type {
-  PublicFilterConsumerCaptureInput,
-  PublicFilterConsumerContext,
-  PublicCanonicalCaptureInput,
-  PublicFilterConsumerUnavailable,
-  PublicFilterQueriedObservation,
-  PublicSuggestionCaptureInput,
+import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicCanonicalCaptureInput,
+  PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput,
 } from '../search/public-filter-consumer-contract.ts';
-import type {
-  PublicFilterCost,
-  PublicFilterDependencyKey,
-  PublicFilterProjectionMeaning,
-  PublicFilterSource,
-  PublicFilterConsumer,
-  PublicFilterProjectionObservation,
-  PublicFilterProjectionPage,
-  PublicFilterRepairLocator,
-  PrivacyReductionStart,
-  PrivacyReductionObservation,
-  PrivacyReductionObservationRequest,
+import type { PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning, PublicFilterSource,
+  PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator,
+  PrivacyReductionStart, PrivacyReductionObservation, PrivacyReductionObservationRequest,
 } from './public-filter-source-contract.ts';
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
 export type JoinedPopulationRequest =
@@ -59,24 +51,6 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
 }
 
 export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-
-/** Legacy internal native Source shape consumed by the prefix adapter. */
-export type JoinedPopulationRequest =
-  | Readonly<{ kind: 'queried'; phase: 'start' | 'status'; queried: PublicFilterQueriedObservation }>
-  | Readonly<{ kind: 'queried'; phase: 'final'; queried: PublicFilterQueriedObservation; execution: string }>;
-
-export interface PublicFilterNativeSource extends Omit<PublicFilterSource, 'readPrivacyReductionHeads'> {
-  resolvePublicFilterDefinition(
-    request: Readonly<{ meaning: PublicFilterProjectionMeaning; capture: PublicCanonicalCaptureInput }>,
-    context: PublicFilterConsumerContext,
-  ): Promise<
-    | Readonly<{ status: 'bound'; definition: CustodyDefinition<PublicCanonicalCaptureInput>; cost: PublicFilterCost }>
-    | PublicFilterConsumerUnavailable
-  >;
-  readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
-  readPrivacyReductionHeads(request: JoinedPopulationRequest, context?: PublicFilterConsumerContext): Promise<PrivacyReductionObservation>;
-}
-
 export type NativePublicSource = Readonly<{
   id: string;
   partition: number;
@@ -88,6 +62,7 @@ export type PublicFilterSourceCaptureInput =
   | PublicFilterConsumerCaptureInput
   | DiscoveryConsumerCaptureInput
   | PublicSuggestionCaptureInput;
+export type PublicSourceCaptureInput = PublicFilterSourceCaptureInput;
 export type PublicFilterSourceDefinition = Readonly<{
   source: NativePublicSource;
   readDefinition: string;
@@ -218,20 +193,69 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding &
     ): ReturnType<PublicFilterSourceBinding['join']>;
   }>;
 
-function publicFilterBindingCost(): PublicFilterCost {
-  return {
-    inputKeys: 0,
-    candidates: 0,
-    accessPoints: 0,
-    dependencyPoints: 0,
-    engineSearches: 0,
-    engineIteratorSteps: 0,
-    outputSlots: 0,
-    resultWrites: 0,
-    frontierWrites: 0,
-  };
+type BindingCost = { -readonly [K in keyof PublicFilterCost]: number } & {
+  statements: number; rows: number; bytes: number;
+};
+function publicFilterBindingCost(): BindingCost {
+  return { statements: 0, rows: 0, bytes: 0, inputKeys: 0, candidates: 0, accessPoints: 0,
+    dependencyPoints: 0, engineSearches: 0, engineIteratorSteps: 0, outputSlots: 0,
+    resultWrites: 0, frontierWrites: 0 };
 }
-
+function addCost(target: BindingCost, value: PublicFilterCost): void {
+  for (const key of Object.keys(target) as (keyof BindingCost)[]) {
+    const amount = (value as Partial<BindingCost>)[key];
+    if (amount !== undefined) target[key] += amount;
+  }
+}
+// Tagged, sorted encoding preserves explicit undefined and bigint without reserving caller JSON keys.
+function encode(value: unknown): string {
+  function pack(entry: unknown): unknown {
+    if (entry === undefined) return ['undefined'];
+    if (typeof entry === 'bigint') return ['bigint', String(entry)];
+    if (Array.isArray(entry)) return ['array', entry.map(pack)];
+    if (entry !== null && typeof entry === 'object')
+      return ['object', Object.keys(entry).sort().map(key => [key, pack((entry as Record<string, unknown>)[key])])];
+    if (typeof entry === 'number' && !Number.isFinite(entry)) throw new TypeError('Finite input required');
+    if (typeof entry === 'function' || typeof entry === 'symbol') throw new TypeError('Data input required');
+    return ['value', entry];
+  }
+  return JSON.stringify(pack(value));
+}
+function decode<T>(value: string): T {
+  function unpack(entry: any): unknown {
+    if (entry[0] === 'undefined') return undefined;
+    if (entry[0] === 'bigint') return BigInt(entry[1]);
+    if (entry[0] === 'array') return entry[1].map(unpack);
+    if (entry[0] === 'object') return Object.fromEntries(entry[1].map(([key, child]: [string, unknown]) => [key, unpack(child)]));
+    if (entry[0] === 'value') return entry[1];
+    throw new TypeError('Invalid stored Source data');
+  }
+  return unpack(JSON.parse(value)) as T;
+}
+const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+class BindingError extends Error {
+  constructor(readonly reason: PublicFilterBindingFailure['reason']) { super(reason); }
+}
+function checkDeadline(context: PublicFilterConsumerContext): void {
+  if (!Number.isFinite(context.deadline) || context.deadline <= Date.now()) throw new BindingError('deadline');
+}
+/** Charge native release lookups as well as Source SQL, including failed submissions. */
+function measuredPool(pool: Pool, cost: BindingCost): Pool {
+  return new Proxy(pool, { get(target, key) {
+    if (key === 'query') return async (text: string, values?: unknown[]) => {
+      cost.statements++; cost.inputKeys += values?.length ?? 0;
+      cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(values));
+      const result = await target.query(text, values);
+      cost.rows += result.rowCount ?? 0; cost.dependencyPoints += result.rowCount ?? 0;
+      cost.bytes += Buffer.byteLength(encode(result.rows));
+      if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
+      return result;
+    };
+    const value = Reflect.get(target, key, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
+}
 /** Shared constructor validation; routing is the existing native routeKey, never a callback. */
 function validatePublicFilterBindingConfiguration(pool: Pool, routing: Uint8Array, access: Access): void {
   if (!pool || typeof pool.connect !== 'function' || typeof pool.query !== 'function')
@@ -304,43 +328,90 @@ function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilter
   return keys.filter((key, index) => keys.findIndex((other) => isDeepStrictEqual(key, other)) === index);
 }
 
-/**
- * Provisional native-origin adapter: the actual three-reader producer has not landed.
- * Search custody is consumed through its committed primitive, but cannot establish Source origin.
- * No Source registry or constructor association is fabricated here. Replace this unavailable
- * branch with the producer's agreed native registration when that implementation is delivered.
- */
+function allCaptureKeys(meaning: PublicFilterProjectionMeaning, input: PublicSourceCaptureInput): PublicFilterDependencyKey[] {
+  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
+    throw new TypeError('Unknown native meaning');
+  let keys: readonly PublicFilterDependencyKey[];
+  if ('purpose' in input) {
+    validatePublicSuggestionInput(input);
+    keys = [{kind: 'type'}, {kind: 'field', field: 'id'}, {kind: 'field', field: 'labels'},
+      {kind: 'field', field: 'aliases'}, {kind: 'field', field: 'name_sort'},
+      {kind: 'order', order: 'name'}, {kind: 'order', order: 'id'}];
+  } else if ('representation' in input) {
+    keys = [...compileDiscoveryConsumerCapture(input, meaning, undefined).dependencyKeys,
+      {kind: 'field', field: 'id'},
+      ...(input.sort === 'name' ? [{kind: 'field' as const, field: 'name_sort' as const},
+        {kind: 'field' as const, field: 'labels' as const}, {kind: 'field' as const, field: 'aliases' as const}] : [])];
+  } else keys = captureKeys(meaning, input);
+  return keys.filter((key, i) => keys.findIndex(other => isDeepStrictEqual(key, other)) === i);
+}
+
+/** Native Source-owned registration; the origin association only locates the constructor configuration. */
 export function createPublicFilterSourceBinding(
-  pool: Pool,
-  routing: Uint8Array,
-  access: Access,
+  pool: Pool, routing: Uint8Array, access: Access,
 ): PublicFilterSourceBootstrapBinding {
   validatePublicFilterBindingConfiguration(pool, routing, access);
-  const fail = (
-    reason: PublicFilterBindingFailure['reason'],
-    cost = publicFilterBindingCost(),
-  ): PublicFilterBindingFailure => ({ status: reason === 'source_missing' ? 'unready' : 'unavailable', reason, cost });
+  const routeDigest = hash(new Uint8Array(routing));
+  const fail = (reason: PublicFilterBindingFailure['reason'], cost: PublicFilterCost = publicFilterBindingCost()): PublicFilterBindingFailure =>
+    ({ status: ['source_missing', 'definition_missing', 'identity_pending'].includes(reason) ? 'unready' : 'unavailable', reason, cost });
+  async function run<T>(context: PublicFilterConsumerContext, work: (cost: BindingCost, db: Pool) => Promise<T>): Promise<T | PublicFilterBindingFailure> {
+    const cost = publicFilterBindingCost();
+    const deadline = context.deadline;
+    try {
+      checkDeadline({deadline});
+      const result = await withRequestDeadline(deadline, () => work(cost, measuredPool(pool, cost)));
+      checkDeadline({deadline});
+      return result;
+    } catch (error) {
+      if (error instanceof BindingError) return fail(error.reason, cost);
+      if (error instanceof TypeError || error instanceof RangeError) return fail('binding_mismatch', cost);
+      const reason = classifyUnavailability(error);
+      if (reason !== undefined || (error && typeof error === 'object' && 'code' in error))
+        return fail(Date.now() >= deadline ? 'deadline' : 'owner_unavailable', cost);
+      throw error;
+    }
+  }
+  async function loadDefinition(id: string, db: Pool): Promise<PublicFilterSourceDefinition> {
+    if (!uuid.test(id)) throw new BindingError('definition_missing');
+    const row = await readDefinition.run(db, {read_definition: id});
+    if (!row) throw new BindingError('definition_missing');
+    if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
+    const release = await readRelease(db, row.release_digest);
+    if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
+    const capture = decode<PublicSourceCaptureInput>(row.capture);
+    const meaning = {digest: row.release_digest, release, type: row.subject_type};
+    const keys = allCaptureKeys(meaning, capture);
+    if (!isDeepStrictEqual(keys, row.dependency_keys)) throw new BindingError('binding_mismatch');
+    return {source: {id: row.source_id, partition: 0, epoch: row.owner_epoch, configuration: row.configuration},
+      readDefinition: id, meaning, capture, dependencyKeys: keys};
+  }
   const binding: PublicFilterSourceBinding = {
     async resolve(request, context) {
-      const deadline = context.deadline;
-      if (!Number.isFinite(deadline) || deadline <= Date.now()) return fail('deadline');
-      // Copy before the first suspension. Neither caller mutation nor a reader-shaped clone is an origin proof.
-      try {
-        const meaning = structuredClone(request.meaning);
-        const capture = structuredClone(request.capture);
-        // These agreed inputs require actual Search admission/compiler and owner bindings.
-        // A mixed kind tree must never be cast to the Subject-only filter compiler.
-        if ('representation' in capture || 'purpose' in capture) {
-          if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
-            return fail('binding_mismatch');
-          return fail(deadline <= Date.now() ? 'deadline' : 'source_missing');
-        }
-        captureKeys(meaning, capture);
-      } catch {
-        return fail('binding_mismatch');
-      }
-      if (deadline <= Date.now()) return fail('deadline');
-      return fail('source_missing');
+      // Capture all caller data and constructor identity before the first suspension.
+      let meaning: PublicFilterProjectionMeaning, capture: PublicSourceCaptureInput;
+      const origin = publicFilterSourceOrigin(request.source);
+      if (!origin || origin.pool !== pool || origin.access !== access || hash(origin.routeKey) !== routeDigest)
+        return fail('source_missing');
+      try { meaning = structuredClone(request.meaning); capture = structuredClone(request.capture); }
+      catch { return fail('binding_mismatch'); }
+      return run(context, async (cost, db) => {
+        const keys = allCaptureKeys(meaning, capture);
+        const encoded = encode(capture);
+        if (Buffer.byteLength(encoded) > 1048576) throw new BindingError('binding_mismatch');
+        // Caller digest equality is checked again against the actual immutable release owner.
+        const release = await readRelease(db, meaning.digest);
+        if (!release || !isDeepStrictEqual(release, meaning.release) || !release.types[meaning.type])
+          throw new BindingError('definition_missing');
+        const source = await registerSource.run(db, {route_digest: routeDigest});
+        if (!source) throw new BindingError('owner_unavailable');
+        const definition = await defineSource.run(db, {source_id: source.source_id,
+          configuration: source.configuration, route_digest: routeDigest, release_digest: meaning.digest,
+          subject_type: meaning.type, capture_digest: hash(encoded), capture: encoded, dependency_keys: keys});
+        if (!definition) throw new BindingError('configuration_changed');
+        const native = await loadDefinition(definition.read_definition, db);
+        freeze(native);
+        return {status: 'resolved' as const, definition: native, cost};
+      });
     },
     async join(request, context) {
       const deadline = context.deadline;

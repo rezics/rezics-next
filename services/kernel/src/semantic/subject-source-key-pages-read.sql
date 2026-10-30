@@ -35,7 +35,7 @@ LEFT JOIN LATERAL (
 -- Only unredirected native originals can be candidates, so their terminal control home is local.
 -- No foreign control group is read, even when a stale/mutated mapping names one.
 LEFT JOIN LATERAL (
-  SELECT owner_epoch, published_epoch, pending_job FROM semantic.identity_epoch_group
+  SELECT owner_epoch, published_epoch, pending_job, ready FROM semantic.identity_epoch_group
   WHERE (partition_no, terminal) = (input.home, raw.subject_id) LIMIT 1
 ) identity_group ON true
 ORDER BY raw.route, raw.subject_id;
