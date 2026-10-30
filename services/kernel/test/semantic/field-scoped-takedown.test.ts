@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createAccess } from '../../src/access/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
@@ -367,7 +368,7 @@ test('field restore cannot clear the real current provider source fence while co
 test('native expired command deadline leaves the current mask and statement unchanged', async () => {
   const record = await selected();
   const original = (await candidate(record))!.statement;
-  const access = createAccess({ actions: f.actions, auth: f.auth, clock: f.clock });
+  const access = createAccess({ actions: actionCatalogue(f.kernel), auth: f.auth, clock: f.clock });
   const actor = await access.authenticate(await f.bearer(f.accounts.platform, f.actions), {
     pool: db.pool,
     deadline: Date.now() + 5000,

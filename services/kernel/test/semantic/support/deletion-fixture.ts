@@ -218,6 +218,7 @@ export async function createDeletionFixture(database?: Pick<GrowthDatabase, 'poo
   return {
     pool,
     admin,
+    kernel,
     accounts,
     clock,
     auth,
