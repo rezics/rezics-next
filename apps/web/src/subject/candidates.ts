@@ -3,8 +3,9 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 type Endpoint = ReturnType<KernelClient['subjects']>;
 export type CandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
 export type Candidate = CandidatePage['candidates'][number];
-export type CandidateField = { id: string; label: string };
+export type CandidateField = { id: string; label: string; multivalued?: boolean };
 export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
+export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
 export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
 export type CandidateRead =
   | CandidateFailure
@@ -20,18 +21,20 @@ export type CandidateCommand = {
   id: string;
   property: string;
   candidate: string;
-  operation: 'accept' | 'adopt';
+  operation: 'accept' | 'reject' | 'adopt';
   head: number | null;
   key: string;
   slot?: CandidateSlot;
   rank?: 'normal' | 'preferred';
+  /** Explicit whole-slot replacement; omitted only by existing single-candidate callers. */
+  selection?: CandidateSelection[];
   session?: string;
 };
 export type CandidateResult =
   | CandidateFailure
   | {
       ok: true;
-      kind: 'accepted' | 'selected' | 'pending';
+      kind: 'accepted' | 'rejected' | 'selected' | 'pending';
       public: SubjectRead | null;
       session?: string;
     };
@@ -90,59 +93,28 @@ export async function readCandidates(
   session?: string,
 ): Promise<CandidateRead> {
   try {
-    if (slot) {
-      // A relation comparison needs no per-candidate hydration: use supplied related summaries.
-      const [current, result] = await Promise.all([
-        client.subjects({ id }).get(),
-        client.subjects({ id }).candidates.get({
-          query: { property: property!, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
-          headers: { authorization },
-        }),
-      ]);
-      if (!current.data || current.status !== 200) return candidateFailure(current.status);
-      if (current.data.subject.id !== id || current.data.subject.context !== candidateContext)
-        return candidateFailure(400);
-      if (!result.data || result.status !== 200) return candidateFailure(result.status);
-      return { ok: true, public: current.data, fields: [], names: {}, page: result.data };
-    }
-    // This ordinary reader intentionally has no viewer authorization or private overlay.
-    const current = await client
-      .subjects({ id })
-      .get(session ? { headers: { 'rezics-session-token': session } } : undefined);
+    // Public reading and private competition are independent. Neither uses per-value hydration.
+    const [current, result] = await Promise.all([
+      client.subjects({ id }).get(session ? { headers: { 'rezics-session-token': session } } : undefined),
+      property
+        ? client.subjects({ id }).candidates.get({
+            query: { property, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
+            headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
+          })
+        : undefined,
+    ]);
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
-    if (!property) return { ok: true, public: current.data, fields: [], names: {}, page: null };
-    const result = await client.subjects({ id }).candidates.get({
-      query: { property, context: candidateContext, limit: 20, ...(cursor ? { cursor } : {}) },
-      headers: { authorization },
-    });
-    if (!result.data || result.status !== 200) return candidateFailure(result.status);
-    // At most one target per returned candidate (20). These are public point reads, never a catalogue scan.
-    const targets = new Set(
-      result.data.candidates.flatMap(({ statement }) =>
-        statement.property.data_type === 'wikibase-item' &&
-        statement.value.type === 'value' &&
-        typeof statement.value.content === 'string' &&
-        !current.data.related[statement.value.content]
-          ? [statement.value.content]
-          : [],
-      ),
-    );
-    for (const target of targets) {
-      const read = await client.subjects({ id: target }).get();
-      if (read.status === 200 && read.data)
-        current.data.related[target] = {
-          labels: read.data.subject.labels,
-        } as SubjectRead['related'][string];
-    }
+    if (current.data.subject.id !== id || current.data.subject.context !== candidateContext)
+      return candidateFailure(400);
+    if (result && (!result.data || result.status !== 200)) return candidateFailure(result.status);
+    const token = result ? new Headers(result.headers).get('rezics-session-token') : null;
     return {
       ok: true,
       public: current.data,
       fields: [],
       names: {},
-      page: result.data,
-      ...(new Headers(result.headers).get('rezics-session-token')
-        ? { session: new Headers(result.headers).get('rezics-session-token')! }
-        : {}),
+      page: result?.data ?? null,
+      ...(token ? { session: token } : {}),
     };
   } catch {
     return candidateFailure(503);
@@ -150,7 +122,41 @@ export async function readCandidates(
 }
 
 export function candidateIsPublic(current: SubjectRead, property: string, candidate: string): boolean {
-  return current.subject.statements[property]?.some((statement) => statement.id === candidate) ?? false;
+  return publicCandidateSelection(current, property).some((entry) => entry.candidate === candidate);
+}
+
+/** Only disclosed, admitted selected ranks from the ordinary reader establish public selection. */
+export function publicCandidateSelection(
+  current: SubjectRead,
+  property: string,
+  slot?: CandidateSlot,
+): CandidateSelection[] {
+  return (current.subject.statements[property] ?? []).flatMap((statement) => {
+    if (statement.rank !== 'normal' && statement.rank !== 'preferred') return [];
+    if (slot?.target && (statement.value.type !== 'value' || statement.value.content !== slot.target)) return [];
+    if (
+      slot?.sameAs &&
+      (statement.value.type !== 'somevalue' ||
+        !statement.qualifiers.some(
+          (snak) =>
+            snak.property.id === 'schema:sameAs' && snak.value.type === 'value' && snak.value.content === slot.sameAs,
+        ))
+    )
+      return [];
+    if (
+      slot?.key &&
+      !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === slot.key)
+    )
+      return [];
+    return [{ candidate: statement.id, rank: statement.rank }];
+  });
+}
+
+export function sameCandidateSelection(left: CandidateSelection[], right: CandidateSelection[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((entry) => right.some((other) => entry.candidate === other.candidate && entry.rank === other.rank))
+  );
 }
 
 /** One confirmed native command, followed by one ordinary public read; never substitute proposal JSON. */
@@ -161,6 +167,14 @@ export async function selectCandidate(
 ): Promise<CandidateResult> {
   try {
     const endpoint = client.subjects({ id: input.id });
+    const selection = input.selection ?? [{ candidate: input.candidate, rank: input.rank ?? 'normal' }];
+    if (
+      input.operation === 'adopt' &&
+      (selection.length > 32 ||
+        new Set(selection.map((entry) => entry.candidate)).size !== selection.length ||
+        selection.some((entry) => entry.rank !== 'normal' && entry.rank !== 'preferred'))
+    )
+      return candidateFailure(400);
     const options = {
       headers: {
         authorization,
@@ -168,42 +182,48 @@ export async function selectCandidate(
         ...(input.session ? { 'rezics-session-token': input.session } : {}),
       } as { 'idempotency-key': string },
     };
+    const decision = { context: candidateContext, expected_head: input.head };
     const result =
       input.operation === 'accept'
-        ? await endpoint
-            .candidates({ candidate: input.candidate })
-            .$accept.post({ context: candidateContext, expected_head: input.head }, options)
-        : await endpoint.$adopt.post(
-            {
-              context: candidateContext,
-              property: input.property,
-              ...input.slot,
-              mode: 'replace',
-              selection: [{ candidate: input.candidate, rank: input.rank ?? 'normal' }],
-              expected_head: input.head,
-            },
-            options,
-          );
+        ? await endpoint.candidates({ candidate: input.candidate }).$accept.post(decision, options)
+        : input.operation === 'reject'
+          ? await endpoint.candidates({ candidate: input.candidate }).$reject.post(decision, options)
+          : await endpoint.$adopt.post(
+              {
+                context: candidateContext,
+                property: input.property,
+                ...input.slot,
+                mode: 'replace',
+                selection,
+                expected_head: input.head,
+              },
+              options,
+            );
     if (result.status !== 200 || !result.data) return candidateFailure(result.status);
+    const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {
-      const read = await endpoint.get();
-      if (read.status === 200 && read.data) current = read.data;
+      const read = await endpoint.get(session ? { headers: { 'rezics-session-token': session } } : undefined);
+      if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
+        current = read.data;
     } catch {
       /* A committed command does not prove that the public reader is ready. */
     }
     return {
       ok: true,
       kind:
-        current && candidateIsPublic(current, input.property, input.candidate)
-          ? 'selected'
+        input.operation === 'reject'
+          ? 'rejected'
           : input.operation === 'accept'
-            ? 'accepted'
-            : 'pending',
+            ? current && candidateIsPublic(current, input.property, input.candidate)
+              ? 'selected'
+              : 'accepted'
+            : current &&
+                sameCandidateSelection(publicCandidateSelection(current, input.property, input.slot), selection)
+              ? 'selected'
+              : 'pending',
       public: current,
-      ...(new Headers(result.headers).get('rezics-session-token')
-        ? { session: new Headers(result.headers).get('rezics-session-token')! }
-        : {}),
+      ...(session ? { session } : {}),
     };
   } catch {
     return candidateFailure(503);

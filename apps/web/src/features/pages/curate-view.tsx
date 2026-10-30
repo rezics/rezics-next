@@ -26,7 +26,8 @@ export function SubjectCandidateCuration({ id, locale }: { id: string; locale: s
       id={id}
       locale={locale}
       transport={{
-        read: (property, cursor) => readSubjectCandidates({ data: { id, property, cursor }, headers: csrfHeaders() }),
+        read: (property, cursor, session) =>
+          readSubjectCandidates({ data: { id, property, cursor, session }, headers: csrfHeaders() }),
         confirm: (data) => confirmSubjectCandidate({ data, headers: csrfHeaders() }),
       }}
     />

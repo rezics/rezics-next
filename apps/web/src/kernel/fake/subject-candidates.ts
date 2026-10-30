@@ -14,7 +14,17 @@ import definitions from '../recorded/definitions-release.json';
 import { pickText } from '@rezics/composition';
 
 export const candidateProperty = 'schema:datePublished';
-export type CandidateScenario = 'ready' | 'pending' | 'stale' | 'denied' | 'unavailable';
+export type CandidateScenario =
+  | 'ready'
+  | 'pending'
+  | 'stale'
+  | 'denied'
+  | 'unavailable'
+  | 'multiple'
+  | 'stale-selection'
+  | 'empty'
+  | 'loading'
+  | 'invalid';
 
 /** A small native-shaped fake for the review region; it changes public facts only after adoption. */
 export function candidateFixture(scenario: CandidateScenario = 'ready', locale = 'en') {
@@ -60,6 +70,24 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
       rezics: { release: publicRead.subject.release, revision: 2 },
     },
   };
+  const multiple = scenario === 'multiple' || scenario === 'stale-selection';
+  const property = multiple ? 'schema:inLanguage' : candidateProperty;
+  const candidates = [candidate];
+  if (multiple) {
+    candidate.decision = 'accepted';
+    candidate.head = 2;
+    candidate.statement.property = { id: property, data_type: 'string' };
+    candidate.statement.value = { type: 'value', content: 'de' };
+    publicRead.subject.statements[property] = ['en', 'fr'].map((language, index) => {
+      const selected = structuredClone(candidate);
+      selected.id = `${id.slice(0, -3)}88${index}`;
+      selected.statement.id = selected.id;
+      selected.statement.value = { type: 'value', content: language };
+      selected.rank = 'normal';
+      candidates.push(selected);
+      return structuredClone(selected.statement);
+    });
+  }
   Object.assign(publicRead.subject, {
     sourceRecords: [
       {
@@ -71,7 +99,11 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
     ],
   });
   const fields = [
-    { id: candidateProperty, label: pickText(definitions.release.properties[candidateProperty].labels, locale).text },
+    {
+      id: property,
+      label: pickText(definitions.release.properties[property as typeof candidateProperty].labels, locale).text,
+      multivalued: multiple,
+    },
   ];
   const calls: {
     method: string;
@@ -82,6 +114,7 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
     key: string | null;
   }[] = [];
   let adoptionHead = 1;
+  let staleSelection = scenario === 'stale-selection';
   const receipts = new Map<string, unknown>();
   const json = (value: unknown, status = 200) =>
     new Response(JSON.stringify(value), {
@@ -106,34 +139,89 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
     });
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}`) return json(publicRead);
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}/candidates`) {
+      if (scenario === 'loading') return new Promise<Response>(() => {});
       if (scenario === 'unavailable') return json({ code: 'semantic_not_ready' }, 503);
-      return json({ candidates: [candidate], adoption: { mode: 'replace', head: adoptionHead }, next: null });
+      const continued = url.searchParams.has('cursor');
+      return json({
+        candidates:
+          scenario === 'empty'
+            ? []
+            : multiple
+              ? continued
+                ? candidates.slice(2)
+                : candidates.slice(0, 2)
+              : candidates,
+        adoption: { mode: 'replace', head: adoptionHead },
+        next: multiple && !continued ? 'next-visible' : null,
+      });
     }
     if (!request.headers.has('authorization')) return json({ code: 'authentication_required' }, 401);
     if (scenario === 'denied') return json({ code: 'forbidden' }, 403);
     if (scenario === 'stale') return json({ code: 'stale_editorial_head' }, 409);
+    if (scenario === 'invalid') return json({ code: 'invalid_request' }, 400);
     if (key && receipts.has(key)) return json(receipts.get(key));
-    if (request.method === 'POST' && url.pathname === `/v1/subjects/${id}/candidates/${candidate.id}:accept`) {
+    const decided = candidates.find(
+      (item) =>
+        url.pathname === `/v1/subjects/${id}/candidates/${item.id}:accept` ||
+        url.pathname === `/v1/subjects/${id}/candidates/${item.id}:reject`,
+    );
+    if (request.method === 'POST' && decided) {
+      const candidate = decided;
+      const rejecting = url.pathname.endsWith(':reject');
       if (body?.expected_head !== candidate.head) return json({ code: 'stale_editorial_head' }, 409);
-      candidate.decision = 'accepted';
+      candidate.decision = rejecting ? 'rejected' : 'accepted';
+      if (rejecting) {
+        for (const statement of publicRead.subject.statements[property] ?? [])
+          if (statement.id === candidate.id) statement.rank = 'deprecated';
+        candidate.rank = candidate.rank ? 'deprecated' : null;
+      }
       candidate.head = (candidate.head ?? 0) + 1;
       const result = {
-        acceptance: { context: candidateContext, candidate: candidate.id, decision: 'accept', head: candidate.head },
+        acceptance: {
+          context: candidateContext,
+          candidate: candidate.id,
+          decision: rejecting ? 'reject' : 'accept',
+          head: candidate.head,
+        },
         revision: 3,
       };
       if (key) receipts.set(key, result);
       return json(result);
     }
     if (request.method === 'POST' && url.pathname === `/v1/subjects/${id}:adopt`) {
-      if (candidate.decision !== 'accepted' || body?.expected_head !== adoptionHead)
-        return json({ code: 'conflict' }, 409);
+      if (staleSelection) {
+        staleSelection = false;
+        adoptionHead++;
+        return json({ code: 'stale_editorial_head' }, 409);
+      }
+      if (body?.expected_head !== adoptionHead) return json({ code: 'stale_editorial_head' }, 409);
+      const selection = body?.selection as { candidate: string; rank: 'normal' | 'preferred' }[];
+      const previous = publicRead.subject.statements[property] ?? [];
+      if (
+        !Array.isArray(selection) ||
+        selection.length > (multiple ? 32 : 1) ||
+        new Set(selection.map((entry) => entry.candidate)).size !== selection.length ||
+        selection.some((entry) => entry.rank !== 'normal' && entry.rank !== 'preferred')
+      )
+        return json({ code: 'invalid_request' }, 400);
+      const statements = selection.flatMap((entry) => {
+        const item = candidates.find((item) => item.id === entry.candidate);
+        if (item && (item.decision !== 'accepted' || item.retracted !== null)) return [];
+        const statement =
+          item?.statement ??
+          previous.find((statement) => statement.id === entry.candidate && statement.rank !== 'deprecated');
+        return statement ? [{ ...structuredClone(statement), rank: entry.rank }] : [];
+      });
+      if (statements.length !== selection.length) return json({ code: 'invalid_request' }, 400);
       adoptionHead++;
-      if (scenario !== 'pending')
-        publicRead.subject.statements[candidateProperty] = [structuredClone(candidate.statement)];
+      if (scenario !== 'pending') {
+        publicRead.subject.statements[property] = statements;
+        for (const item of candidates) item.rank = selection.find((entry) => entry.candidate === item.id)?.rank ?? null;
+      }
       const result = {
         adoption: {
           context: candidateContext,
-          property: candidateProperty,
+          property,
           mode: 'replace',
           selection: body.selection,
           head: adoptionHead,
@@ -147,13 +235,13 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
   }) as typeof fetch;
   const client = createKernelClient('https://candidate.test', { fetch: fetcher });
   const transport: CandidateTransport = {
-    read: async (property, cursor): Promise<CandidateRead> => {
-      const result = await readCandidates(client, 'Bearer fixture', id, property, cursor);
+    read: async (property, cursor, session): Promise<CandidateRead> => {
+      const result = await readCandidates(client, 'Bearer fixture', id, property, cursor, undefined, session);
       return result.ok ? { ...result, fields, names: {} } : result;
     },
     confirm: (command: CandidateCommand) => selectCandidate(client, 'Bearer fixture', command),
   };
-  return { id, candidate, client, publicRead, transport, calls, fetcher };
+  return { id, property, candidate, candidates, client, publicRead, transport, calls, fetcher };
 }
 
 // Component and page stories use isolated instances; this module adds no global route override.

@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
+import { editCandidateDraft, refreshCandidateDraft } from '../src/subject/candidate-draft';
 import { candidateFixture, candidateProperty } from '../src/kernel/fake/subject-candidates';
 import {
   candidateContext,
   candidateIsPublic,
+  publicCandidateSelection,
   readCandidates,
   selectCandidate,
   type CandidateCommand,
@@ -99,4 +101,112 @@ test('a submitted selection remains pending until the public reader actually inc
   if (!result.ok || !result.public) throw new Error('Expected unchanged public reader');
   expect(candidateIsPublic(result.public, candidateProperty, fixture.candidate.id)).toBe(false);
   expect(fixture.calls.filter((call) => call.method === 'GET').length).toBe(2);
+});
+
+test('a reviewer rejects a candidate without deleting its assertion or inventing public selection', async () => {
+  const fixture = candidateFixture();
+  const rejected = await selectCandidate(fixture.client, 'Bearer reviewer', {
+    ...command(fixture, 'accept', null),
+    operation: 'reject',
+  });
+  expect(rejected.ok && rejected.kind).toBe('rejected');
+  const comparison = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, candidateProperty);
+  if (!comparison.ok || !comparison.page) throw new Error('Expected retained assertion');
+  expect(comparison.page.candidates[0]).toMatchObject({
+    id: fixture.candidate.id,
+    decision: 'rejected',
+    head: 1,
+    retracted: null,
+  });
+  expect(candidateIsPublic(comparison.public, candidateProperty, fixture.candidate.id)).toBe(false);
+  expect(fixture.calls.filter((call) => call.method === 'POST')).toMatchObject([
+    {
+      path: `/v1/subjects/${fixture.id}/candidates/${fixture.candidate.id}:reject`,
+      body: { context: candidateContext, expected_head: null },
+    },
+  ]);
+  expect(fixture.calls[1]).toMatchObject({ authorization: null, session: 'candidate-session' });
+});
+
+test('a reviewer explicitly selects valid values and ranks through existing APIs and observes the actual public reading across candidate pages', async () => {
+  const fixture = candidateFixture('multiple');
+  const first = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, fixture.property);
+  if (!first.ok || !first.page?.next) throw new Error('Expected continued comparison');
+  let draft = refreshCandidateDraft(undefined, publicCandidateSelection(first.public, fixture.property));
+  expect(draft.selection).toHaveLength(2);
+  // The second current value is absent from this candidate page and must still be retained.
+  expect(first.page.candidates.some((item) => item.id === draft.selection[1]!.candidate)).toBe(false);
+  draft = editCandidateDraft(draft, fixture.candidate.id, 'preferred');
+  const next = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, fixture.property, first.page.next);
+  if (!next.ok || !next.page) throw new Error('Expected next page');
+  draft = refreshCandidateDraft(draft, publicCandidateSelection(next.public, fixture.property));
+  expect(draft.selection).toHaveLength(3);
+  const input: CandidateCommand = {
+    ...command(fixture, 'adopt', first.page.adoption!.head),
+    property: fixture.property,
+    selection: draft.selection,
+  };
+  const selected = await selectCandidate(fixture.client, 'Bearer reviewer', input);
+  if (!selected.ok || !selected.public) throw new Error('Expected ordinary public result');
+  expect(selected.kind).toBe('selected');
+  expect(publicCandidateSelection(selected.public, fixture.property)).toEqual(draft.selection);
+  expect(fixture.calls.filter((call) => call.method === 'POST')).toMatchObject([
+    {
+      path: `/v1/subjects/${fixture.id}:adopt`,
+      body: {
+        context: candidateContext,
+        mode: 'replace',
+        property: fixture.property,
+        selection: draft.selection,
+        expected_head: 1,
+      },
+    },
+  ]);
+  expect(fixture.calls.at(-1)).toMatchObject({ authorization: null, session: 'candidate-session' });
+  // Native rank/cardinality limits cannot become successful selections.
+  const posts = fixture.calls.filter((call) => call.method === 'POST').length;
+  expect(
+    await selectCandidate(fixture.client, 'Bearer reviewer', {
+      ...input,
+      selection: [{ candidate: fixture.candidate.id, rank: 'deprecated' as 'normal' }],
+    }),
+  ).toMatchObject({ ok: false, reason: 'invalid' });
+  expect(
+    await selectCandidate(fixture.client, 'Bearer reviewer', {
+      ...input,
+      selection: Array.from({ length: 33 }, () => ({ candidate: fixture.candidate.id, rank: 'normal' as const })),
+    }),
+  ).toMatchObject({ ok: false, reason: 'invalid' });
+  expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(posts);
+});
+
+test('a reviewer preserves a stale ranked selection draft and reloads comparison before an explicit new confirmation and key', async () => {
+  const fixture = candidateFixture('stale-selection');
+  const read = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, fixture.property);
+  if (!read.ok || !read.page) throw new Error('Expected comparison');
+  let draft = refreshCandidateDraft(undefined, publicCandidateSelection(read.public, fixture.property));
+  const removed = draft.selection[0]!.candidate;
+  draft = editCandidateDraft(draft, removed, null);
+  draft = editCandidateDraft(draft, fixture.candidate.id, 'preferred');
+  const original = structuredClone(draft);
+  const old: CandidateCommand = {
+    ...command(fixture, 'adopt', read.page.adoption!.head),
+    property: fixture.property,
+    selection: draft.selection,
+  };
+  expect(await selectCandidate(fixture.client, 'Bearer reviewer', old)).toMatchObject({ ok: false, reason: 'stale' });
+  expect(draft).toEqual(original);
+  expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+  expect(candidateIsPublic(fixture.publicRead, fixture.property, fixture.candidate.id)).toBe(false);
+  const fresh = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, fixture.property);
+  if (!fresh.ok || !fresh.page) throw new Error('Expected fresh comparison');
+  draft = refreshCandidateDraft(draft, publicCandidateSelection(fresh.public, fixture.property));
+  expect(draft).toEqual(original);
+  const confirmed = { ...old, head: fresh.page.adoption!.head, key: crypto.randomUUID(), selection: draft.selection };
+  expect(confirmed.key).not.toBe(old.key);
+  const result = await selectCandidate(fixture.client, 'Bearer reviewer', confirmed);
+  if (!result.ok || !result.public) throw new Error('Expected actual public reading');
+  expect(result.kind).toBe('selected');
+  expect(publicCandidateSelection(result.public, fixture.property)).toEqual(original.selection);
+  expect(candidateIsPublic(result.public, fixture.property, removed)).toBe(false);
 });

@@ -26,3 +26,13 @@ export const ReviewImportedSuggestion: Story = {
     expect(canvas.getByRole('heading', { level: 1 })).toBeTruthy();
   },
 };
+
+// Page states reuse the review pattern's interactions and the ordinary subject shell.
+import {
+  RejectSuggestion as reject,
+  RankedSelection as ranked,
+  StaleRankedSelection as stale,
+} from '../subject/candidate-review.stories';
+export const RejectSuggestion: Story = { ...reject, args: { ...reject.args, page: true } };
+export const RankedSelection: Story = { ...ranked, args: { ...ranked.args, page: true } };
+export const StaleRankedSelection: Story = { ...stale, args: { ...stale.args, page: true } };

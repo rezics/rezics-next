@@ -12,6 +12,8 @@ import {
   readCandidates,
   selectCandidate,
   type CandidateCommand,
+  type CandidateSlot,
+  type CandidateSelection,
   type CandidateRead,
   type CandidateResult,
 } from '../../subject/candidates';
@@ -103,7 +105,32 @@ function candidateAddress(input: unknown) {
     throw new Error('Invalid field');
   if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 8192))
     throw new Error('Invalid continuation');
-  return { id: input.id, property: value.property as string | undefined, cursor: value.cursor as string | undefined };
+  let slot: CandidateSlot | undefined;
+  if (value.slot !== undefined) {
+    if (!value.slot || typeof value.slot !== 'object' || Array.isArray(value.slot)) throw new Error('Invalid slot');
+    const address = value.slot as Record<string, unknown>;
+    if (
+      Object.keys(address).some((key) => !['target', 'sameAs', 'key'].includes(key)) ||
+      (address.target !== undefined && (typeof address.target !== 'string' || !uuid.test(address.target))) ||
+      (address.sameAs !== undefined &&
+        (typeof address.sameAs !== 'string' ||
+          address.sameAs.length > 8192 ||
+          !/^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(address.sameAs))) ||
+      (address.target !== undefined && address.sameAs !== undefined) ||
+      (address.key !== undefined && (typeof address.key !== 'string' || !uuid.test(address.key) || !address.target))
+    )
+      throw new Error('Invalid slot');
+    slot = address as CandidateSlot;
+  }
+  if (value.session !== undefined && (typeof value.session !== 'string' || value.session.length > 8192))
+    throw new Error('Invalid session continuity');
+  return {
+    id: input.id,
+    property: value.property as string | undefined,
+    cursor: value.cursor as string | undefined,
+    ...(slot ? { slot } : {}),
+    ...(typeof value.session === 'string' ? { session: value.session } : {}),
+  };
 }
 
 // Candidate data is an explicitly opened, session-scoped region, never part of public SSR or its query cache.
@@ -114,19 +141,23 @@ export const readSubjectCandidates = createServerFn({ method: 'POST', strict: fa
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
       const locale = (await import('../../kernel/client')).requestLocale() ?? 'en';
-      const release = await readRelease();
+      const [release, result] = await Promise.all([
+        readRelease(),
+        readCandidates(kernelClient(), authorization, data.id, data.property, data.cursor, data.slot, data.session),
+      ]);
+      if (!result.ok) return result;
       // Relation slots require a target address; this picker lists descriptive property slots only.
+      const admitted = new Set(release.types[result.public.subject.type]?.properties ?? []);
       const fields = Object.entries(release.properties)
         .flatMap(([id, definition]) => {
-          if (definition.relation && definition.relation.group !== 'classification') return [];
+          if (!admitted.has(id)) return [];
+          if (!data.slot && definition.relation && definition.relation.group !== 'classification') return [];
           const label = pickText(definition.labels ?? {}, locale).text;
-          return label ? [{ id, label }] : [];
+          return label ? [{ id, label, multivalued: definition.multivalued === true }] : [];
         })
         .sort((a, b) => a.label.localeCompare(b.label, locale));
       if (data.property && !fields.some((field) => field.id === data.property))
         return { ok: false, reason: 'unavailable' };
-      const result = await readCandidates(kernelClient(), authorization, data.id, data.property, data.cursor);
-      if (!result.ok) return result;
       return {
         ...result,
         fields,
@@ -147,10 +178,32 @@ export const confirmSubjectCandidate = createServerFn({ method: 'POST', strict: 
       !uuid.test(value.candidate) ||
       typeof value.key !== 'string' ||
       !uuid.test(value.key) ||
-      (value.operation !== 'accept' && value.operation !== 'adopt') ||
+      (value.operation !== 'accept' && value.operation !== 'reject' && value.operation !== 'adopt') ||
       (value.head !== null && (!Number.isSafeInteger(value.head) || Number(value.head) < 1))
     )
       throw new Error('Invalid candidate confirmation');
+    let selection: CandidateSelection[] | undefined;
+    if (value.selection !== undefined) {
+      if (value.operation !== 'adopt' || !Array.isArray(value.selection) || value.selection.length > 32)
+        throw new Error('Invalid selection');
+      selection = value.selection.map((entry: unknown) => {
+        if (
+          !entry ||
+          typeof entry !== 'object' ||
+          !('candidate' in entry) ||
+          typeof entry.candidate !== 'string' ||
+          !uuid.test(entry.candidate) ||
+          !('rank' in entry) ||
+          (entry.rank !== 'normal' && entry.rank !== 'preferred')
+        )
+          throw new Error('Invalid selected value or rank');
+        return { candidate: entry.candidate, rank: entry.rank };
+      });
+      if (new Set(selection.map((entry) => entry.candidate)).size !== selection.length)
+        throw new Error('Duplicate selected value');
+    }
+    if (value.rank !== undefined && value.rank !== 'normal' && value.rank !== 'preferred')
+      throw new Error('Invalid rank');
     return {
       id: address.id,
       property: address.property,
@@ -158,6 +211,10 @@ export const confirmSubjectCandidate = createServerFn({ method: 'POST', strict: 
       operation: value.operation,
       head: value.head as number | null,
       key: value.key,
+      ...(address.slot ? { slot: address.slot } : {}),
+      ...(address.session ? { session: address.session } : {}),
+      ...(selection ? { selection } : {}),
+      ...(value.rank === 'normal' || value.rank === 'preferred' ? { rank: value.rank } : {}),
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {

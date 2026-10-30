@@ -170,23 +170,42 @@ reading content. Opening it loads a private, uncached review through the prepare
 anonymous reads contain no candidate data. A public subject never implies permission to accept or adopt. The
 native command checks the current account's permission, and refusal removes the review data from the region.
 
-Choose a released, named descriptive field, then traverse its native candidate pages, twenty suggestions at a
-time. The review compares the ordinary public field values with one proposed value and its qualifiers, references
-and available source-record licence/attribution. Import details disclose the source record and source/converter
-revision. Missing attribution stays missing; the browser does not infer a licence from the provider.
+Choose a named descriptive field admitted by the subject's emitted Type, then traverse its native candidate
+pages, twenty suggestions at a time. The review compares the ordinary public field values with a proposed value
+and its qualifiers, references and available source-record licence/attribution. Related labels use supplied public
+summaries, without per-value hydration. Import details disclose the source record and source/converter revision.
+Missing attribution stays missing; the browser does not infer a licence or permission from the provider.
 
-Acceptance and selection are separate confirmations. An unaccepted suggestion uses native candidate acceptance
-with its observed decision head. Reloading then permits public selection through native Global adoption with its
-observed adoption head. Selection replaces that field's entire selection with one normal-rank candidate; the
-confirmation states this explicitly. This is a field replacement, including for multivalued fields. Both commands
-carry independent idempotency keys, and an uncertain retry retains the exact request and key. A stale/conflicting
-review requires a reload and another review. No command grants permission or changes account scopes.
+Acceptance, rejection and selection are separate confirmations. Accept and reject use the observed candidate
+decision head; rejection retains the assertion. The comparison distinguishes awaiting-decision, rejected,
+accepted-but-unselected, actually public-selected and retracted suggestions. A native selected rank without its
+ordinary public reading remains unconfirmed. Deprecated assertions do not establish successful selection.
 
-After either command the browser reads the ordinary public subject once without viewer authorization. Only a
-returned public statement with the selected candidate's identity establishes selection. An accepted suggestion
-can still need adoption; a submitted adoption whose public read is not yet confirmed remains pending. Manual
-reloads check again; there is no polling or replacement of public page data with a proposal. A confirmed selection
-links back through the ordinary canonical subject reader, preserving merge and language handling.
+The public-selection draft starts with all currently disclosed selected values, including those outside the
+displayed candidate page. Reviewers explicitly include or remove values and choose normal or preferred rank.
+The emitted property's multiplicity limits a single-valued field to one selection; multivalued fields permit at
+most 32. Rejected, retracted, deprecated and unresolved draft choices cannot be submitted. A draft choice that
+has not been redisclosed after reload needs a fresh comparison or explicit removal. Loading another candidate
+page, changing fields or reloading does not silently discard the draft, removed choices or edited ranks; newly
+disclosed public selections join the draft unless explicitly removed. No hidden count or hidden value is inferred.
+
+Selection uses native Global adoption in replace mode with the observed slot adoption head and the complete
+explicit selection. Confirmation shows its values and ranks and explains that unchecked values are replaced;
+an empty replacement explicitly clears the field's selection. No per-row action substitutes one candidate for a
+multivalued field. Optional exact target, sameAs and qualifier-key addresses remain available to existing relation
+callers; browser Context overrides and community editing are not introduced.
+
+Each confirmation carries an independent idempotency key. An uncertain retry retains the exact request, draft,
+heads and key and freezes editing until that request is resolved. A 409 retains the selection draft, requires a
+reload of the comparison, then another explicit confirmation with a new key. Reload never automatically resubmits.
+No command grants permission or changes account scopes; a current refusal removes the review data from display.
+
+After a confirmed command the browser reads the ordinary public subject once without viewer authorization,
+carrying the native session consistency token. Only the returned exact selection and its normal/preferred ranks
+establish successful public replacement. An accepted suggestion can still need adoption; a submitted adoption
+whose public read is not yet confirmed remains pending. Manual reloads check again; there is no polling or
+replacement of public page data with proposal or mutation JSON. A confirmed selection links back through the
+ordinary canonical subject reader, preserving merge and language handling.
 
 The current native candidate read requires a property and, for relation slots, a target address. There is no
 subject-wide candidate or relation-slot discovery read. This region therefore covers descriptive property slots,

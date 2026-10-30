@@ -15,6 +15,7 @@ export type Release = FilterRelease & {
       labels?: Record<string, string>;
       descriptions?: Record<string, string>;
       bases?: readonly string[];
+      properties?: readonly string[];
       facets?: readonly string[];
       schemaOrgType?: string;
       coverRatio?: string;
@@ -27,6 +28,7 @@ export type Release = FilterRelease & {
     {
       labels?: Record<string, string>;
       datatype: string;
+      multivalued?: boolean;
       targets?: readonly string[];
       units?: readonly string[];
       value?: { pattern?: string };

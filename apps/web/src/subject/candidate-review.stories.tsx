@@ -12,11 +12,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function candidates(canvasElement: HTMLElement) {
+async function candidates(canvasElement: HTMLElement, property = candidateProperty) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.candidate_entry() }));
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.candidate_field() }), candidateProperty);
-  await canvas.findByRole('button', { name: m.candidate_review() });
+  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.candidate_field() }), property);
+  await canvas.findAllByRole('button', { name: m.candidate_review() });
   return canvas;
 }
 async function review(canvasElement: HTMLElement) {
@@ -33,14 +33,22 @@ async function confirmation(canvasElement: HTMLElement) {
   await canvas.findByRole('heading', { name: m.candidate_confirm_title({ action: m.candidate_accept() }) });
   return canvas;
 }
+function confirmationButton(canvasElement: HTMLElement, action: string) {
+  const canvas = within(canvasElement);
+  const heading = canvas.getByRole('heading', { name: m.candidate_confirm_title({ action }) });
+  return within(heading.parentElement!).getByRole('button', { name: action });
+}
 async function adopt(canvasElement: HTMLElement) {
   const canvas = await confirmation(canvasElement);
-  await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
+  await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
   await canvas.findByText(m.candidate_accepted());
   await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
-  await userEvent.click(await canvas.findByRole('button', { name: m.candidate_review() }));
+  await canvas.findByRole('button', { name: m.candidate_review() });
+  const choices = canvas.getAllByRole('checkbox');
+  for (const choice of choices) if (choice.getAttribute('aria-checked') === 'true') await userEvent.click(choice);
+  await userEvent.click(choices.at(-1)!);
   await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
-  await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+  await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
   return canvas;
 }
 
@@ -88,17 +96,17 @@ export const StaleConflict: Story = {
   args: { scenario: 'stale' },
   play: async ({ canvasElement }) => {
     const canvas = await confirmation(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
-    await canvas.findByText(m.candidate_stale());
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
+    await canvas.findByText(m.candidate_draft_stale());
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
-    await canvas.findByRole('button', { name: m.candidate_review() });
+    await canvas.findAllByRole('button', { name: m.candidate_review() });
   },
 };
 export const Denied: Story = {
   args: { scenario: 'denied' },
   play: async ({ canvasElement }) => {
     const canvas = await confirmation(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
     await canvas.findByText(m.candidate_denied());
     expect(canvas.queryByRole('heading', { name: m.candidate_proposed() })).toBeNull();
   },
@@ -115,5 +123,100 @@ export const Unavailable: Story = {
     await canvas.findByText(m.candidate_unavailable());
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
     await canvas.findByText(m.candidate_unavailable());
+  },
+};
+
+export const AcceptedUnselected: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await confirmation(canvasElement);
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
+    await canvas.findByText(m.candidate_accepted());
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
+    await canvas.findByText(m.candidate_unselected());
+  },
+};
+export const RejectSuggestion: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await review(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_reject() }));
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_reject()));
+    await canvas.findByText(m.candidate_rejected());
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
+    await canvas.findByText(m.candidate_rejected_state());
+  },
+};
+async function rankedDraft(canvasElement: HTMLElement) {
+  const canvas = await candidates(canvasElement, 'schema:inLanguage');
+  const choices = canvas.getAllByRole('checkbox');
+  expect(choices.filter((choice) => choice.getAttribute('aria-checked') === 'true')).toHaveLength(2);
+  await userEvent.click(choices.at(-1)!);
+  const ranks = canvas.getAllByRole('combobox', { name: m.candidate_rank() });
+  await userEvent.selectOptions(ranks.at(-1)!, 'preferred');
+  await userEvent.click(canvas.getByRole('button', { name: m.candidate_more() }));
+  await canvas.findByText(m.candidate_unselected());
+  expect(
+    canvas.getAllByRole('checkbox').filter((choice) => choice.getAttribute('aria-checked') === 'true'),
+  ).toHaveLength(3);
+  await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+  return canvas;
+}
+export const RankedSelection: Story = {
+  args: { scenario: 'multiple' },
+  play: async ({ canvasElement }) => {
+    const canvas = await rankedDraft(canvasElement);
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
+    await canvas.findByText(m.candidate_selection_confirmed());
+    expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toBeTruthy();
+  },
+};
+export const StaleRankedSelection: Story = {
+  args: { scenario: 'stale-selection' },
+  play: async ({ canvasElement }) => {
+    const canvas = await rankedDraft(canvasElement);
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
+    await canvas.findByText(m.candidate_draft_stale());
+    expect(
+      canvas.getAllByRole('checkbox').filter((choice) => choice.getAttribute('aria-checked') === 'true'),
+    ).toHaveLength(3);
+    expect(canvas.getByRole('button', { name: m.candidate_adopt() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
+    await canvas.findAllByRole('button', { name: m.candidate_review() });
+    const ranks = canvas.getAllByRole('combobox', { name: m.candidate_rank() });
+    expect((ranks.at(-1)! as HTMLSelectElement).value).toBe('preferred');
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
+    await canvas.findByText(m.candidate_selection_confirmed());
+  },
+};
+export const Empty: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
+    await userEvent.selectOptions(
+      await canvas.findByRole('combobox', { name: m.candidate_field() }),
+      candidateProperty,
+    );
+    await canvas.findByText(m.candidate_empty());
+  },
+};
+export const Loading: Story = {
+  args: { scenario: 'loading' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
+    await userEvent.selectOptions(
+      await canvas.findByRole('combobox', { name: m.candidate_field() }),
+      candidateProperty,
+    );
+    await canvas.findByText(m.candidate_loading());
+  },
+};
+export const Invalid: Story = {
+  args: { scenario: 'invalid' },
+  play: async ({ canvasElement }) => {
+    const canvas = await confirmation(canvasElement);
+    await userEvent.click(confirmationButton(canvasElement, m.candidate_accept()));
+    await canvas.findByText(m.candidate_invalid());
   },
 };

@@ -1,11 +1,17 @@
 import { useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { CandidateValue, pageText } from '../features/pages/data';
 import { webUrl } from '../features/pages/shared';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from './subject-href';
+import { candidateCanSelect, editCandidateDraft, refreshCandidateDraft, type CandidateDraft } from './candidate-draft';
 import {
   candidateIsPublic,
   candidateSourceRecords,
+  publicCandidateSelection,
   type Candidate,
   type CandidateCommand,
   type CandidateFailure,
@@ -14,11 +20,9 @@ import {
 } from './candidates';
 
 export type CandidateTransport = {
-  read: (property?: string, cursor?: string) => Promise<CandidateRead>;
+  read: (property?: string, cursor?: string, session?: string) => Promise<CandidateRead>;
   confirm: (command: CandidateCommand) => Promise<CandidateResult>;
 };
-const button =
-  'min-h-11 rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50';
 
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
 export function CandidateReview({
@@ -39,34 +43,79 @@ export function CandidateReview({
   const [read, setRead] = useState<CandidateRead>();
   const [property, setProperty] = useState(initialProperty ?? '');
   const [candidate, setCandidate] = useState<Candidate>();
-  const [confirmation, setConfirmation] = useState(false);
+  const [confirmation, setConfirmation] = useState<CandidateCommand['operation'] | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, CandidateDraft>>({});
   const [busy, setBusy] = useState(false);
+  const [requiresReload, setRequiresReload] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure>();
   const [result, setResult] = useState<CandidateResult & { ok: true }>();
   const request = useRef<CandidateCommand | null>(null);
   const running = useRef(false);
+  const session = useRef<string | undefined>(undefined);
   const current = read?.ok ? read : undefined;
-  const publicRead = result?.public ?? current?.public;
-  const selected = !!candidate && !!publicRead && candidateIsPublic(publicRead, property, candidate.id);
-  const operation = candidate?.decision === 'accepted' ? 'adopt' : 'accept';
-  const action = operation === 'accept' ? m.candidate_accept({}, options) : m.candidate_adopt({}, options);
+  const publicRead = result ? result.public : current?.public;
+  const draft = drafts[property];
+  const maximum = current?.fields.find((field) => field.id === property)?.multivalued ? 32 : 1;
+  const locked = busy || confirmation !== null || !!request.current || !!result;
+  const publicStatements = (publicRead?.subject.statements[property] ?? []).filter(
+    (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
+  );
+  // Public values outside this page remain choices. No page ever stands in for the whole selection.
+  const choices = new Map(publicStatements.map((statement) => [statement.id, { statement, eligible: true }]));
+  for (const item of current?.page?.candidates ?? [])
+    choices.set(item.id, { statement: item.statement, eligible: candidateCanSelect(item) });
+  const valid =
+    !!draft &&
+    draft.selection.length <= maximum &&
+    draft.selection.every((entry) => choices.get(entry.candidate)?.eligible);
+  const action =
+    confirmation === 'reject'
+      ? m.candidate_reject({}, options)
+      : confirmation === 'adopt'
+        ? m.candidate_adopt({}, options)
+        : m.candidate_accept({}, options);
 
   async function load(field = property, cursor?: string) {
-    if (running.current) return;
+    if (running.current || request.current) return;
     running.current = true;
     setOpened(true);
     setBusy(true);
     setFailure(undefined);
-    setConfirmation(false);
+    setConfirmation(null);
     setCandidate(undefined);
     setResult(undefined);
-    request.current = null;
     try {
-      const next = await transport.read(field || undefined, cursor);
-      setRead(next);
-      if (next.ok && exactCandidate)
+      const next = await transport.read(field || undefined, cursor, session.current);
+      if (!next.ok) {
+        setRead(undefined);
+        setFailure(next);
+        if (next.reason === 'denied') setDrafts({});
+        return;
+      }
+      session.current = next.session ?? session.current;
+      setRead(
+        cursor && current?.page && next.page
+          ? {
+              ...next,
+              page: {
+                ...next.page,
+                candidates: [
+                  ...new Map(
+                    [...current.page.candidates, ...next.page.candidates].map((item) => [item.id, item]),
+                  ).values(),
+                ],
+              },
+            }
+          : next,
+      );
+      setRequiresReload(false);
+      if (field)
+        setDrafts((previous) => ({
+          ...previous,
+          [field]: refreshCandidateDraft(previous[field], publicCandidateSelection(next.public, field)),
+        }));
+      if (exactCandidate)
         setCandidate(next.page?.candidates.find((item) => item.id === exactCandidate && item.retracted === null));
-      if (!next.ok) setFailure(next);
     } catch {
       setRead(undefined);
       setFailure({ ok: false, reason: 'unavailable' });
@@ -77,35 +126,49 @@ export function CandidateReview({
   }
 
   async function confirm() {
-    if (!candidate || !current?.page || running.current || selected) return;
+    if (
+      !current?.page ||
+      !confirmation ||
+      running.current ||
+      requiresReload ||
+      (confirmation === 'adopt' ? !valid : !candidate)
+    )
+      return;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
     request.current ??= {
       id,
       property,
-      candidate: candidate.id,
-      operation,
-      head: operation === 'accept' ? candidate.head : (current.page.adoption?.head ?? null),
+      // Adoption uses selection; candidate is retained for compatibility with existing scalar callers.
+      candidate: candidate?.id ?? draft?.selection[0]?.candidate ?? id,
+      operation: confirmation,
+      head: confirmation === 'adopt' ? (current.page.adoption?.head ?? null) : candidate!.head,
       key: crypto.randomUUID(),
+      ...(confirmation === 'adopt' ? { selection: structuredClone(draft!.selection) } : {}),
+      ...(session.current ? { session: session.current } : {}),
     };
     try {
       const next = await transport.confirm(request.current);
       if (!next.ok) {
         setFailure(next);
-        // Keep the exact request on an uncertain outcome so Retry uses the native receipt.
+        // An uncertain retry keeps the exact payload, old heads and key. A conflict never retries itself.
         if (next.reason !== 'unavailable') {
-          setConfirmation(false);
+          setConfirmation(null);
           request.current = null;
+          setRequiresReload(true);
         }
         if (next.reason === 'denied') {
           setRead(undefined);
           setCandidate(undefined);
+          setDrafts({});
         }
       } else {
+        session.current = next.session ?? session.current;
         setResult(next);
-        setConfirmation(false);
+        setConfirmation(null);
         request.current = null;
+        setRequiresReload(true);
       }
     } catch {
       setFailure({ ok: false, reason: 'unavailable' });
@@ -115,6 +178,19 @@ export function CandidateReview({
     }
   }
 
+  function edit(choice: string, rank: 'normal' | 'preferred' | null) {
+    if (locked || !draft) return;
+    setDrafts((previous) => ({ ...previous, [property]: editCandidateDraft(previous[property]!, choice, rank) }));
+  }
+
+  function state(item: Candidate) {
+    if (item.retracted !== null) return m.candidate_retracted({}, options);
+    if (item.decision === 'rejected') return m.candidate_rejected_state({}, options);
+    if (publicRead && candidateIsPublic(publicRead, property, item.id)) return m.candidate_selected({}, options);
+    if (item.rank === 'normal' || item.rank === 'preferred') return m.candidate_pending({}, options);
+    return item.decision === 'accepted' ? m.candidate_unselected({}, options) : m.candidate_unresolved({}, options);
+  }
+
   return (
     <section
       id="candidate-review"
@@ -122,13 +198,13 @@ export function CandidateReview({
       className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
     >
       <div className="space-y-1">
-        <h2 className="font-serif text-xl font-semibold">{m.candidate_title({}, options)}</h2>
+        <h2 className="text-xl font-semibold">{m.candidate_title({}, options)}</h2>
         <p className="text-sm text-muted-foreground">{m.candidate_intro({}, options)}</p>
       </div>
       {!opened ? (
-        <button type="button" className={button} onClick={() => load()}>
+        <Button variant="outline" className="min-h-11" onClick={() => void load()}>
           {m.candidate_entry({}, options)}
-        </button>
+        </Button>
       ) : (
         <>
           {busy && <p role="status">{m.candidate_loading({}, options)}</p>}
@@ -136,31 +212,33 @@ export function CandidateReview({
             <div role="alert" className="space-y-2 rounded-lg border border-destructive/50 p-3">
               <p>
                 {failure.reason === 'stale'
-                  ? m.candidate_stale({}, options)
+                  ? m.candidate_draft_stale({}, options)
                   : failure.reason === 'denied'
                     ? m.candidate_denied({}, options)
                     : failure.reason === 'invalid'
                       ? m.candidate_invalid({}, options)
                       : m.candidate_unavailable({}, options)}
               </p>
-              <button
-                type="button"
-                className={button}
+              <Button
+                variant="outline"
+                className="min-h-11"
                 disabled={busy}
-                onClick={() => (confirmation && request.current ? confirm() : load())}
+                onClick={() => void (request.current ? confirm() : load())}
               >
-                {confirmation && request.current ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
-              </button>
+                {request.current ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
+              </Button>
             </div>
           )}
           {result && (
             <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
               <p>
                 {result.kind === 'selected'
-                  ? m.candidate_selected({}, options)
+                  ? m.candidate_selection_confirmed({}, options)
                   : result.kind === 'accepted'
                     ? m.candidate_accepted({}, options)
-                    : m.candidate_pending({}, options)}
+                    : result.kind === 'rejected'
+                      ? m.candidate_rejected({}, options)
+                      : m.candidate_pending({}, options)}
               </p>
               {result.kind === 'selected' && result.public && (
                 <a
@@ -175,166 +253,265 @@ export function CandidateReview({
                   {m.candidate_view_public({}, options)}
                 </a>
               )}
-              <button type="button" className={button} disabled={busy} onClick={() => load()}>
+              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
                 {m.candidate_reload({}, options)}
-              </button>
+              </Button>
             </div>
           )}
           {current && (
             <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{m.candidate_field({}, options)}</span>
-                <select
-                  className={`${button} block w-full`}
+              <Field>
+                <FieldLabel htmlFor="candidate-field">{m.candidate_field({}, options)}</FieldLabel>
+                <NativeSelect
+                  id="candidate-field"
+                  className="min-h-11 w-full"
                   value={property}
-                  disabled={busy || confirmation || !!exactCandidate}
+                  disabled={locked || !!exactCandidate}
                   onChange={(event) => {
                     setProperty(event.target.value);
                     void load(event.target.value);
                   }}
                 >
-                  <option value="">{m.candidate_choose_field({}, options)}</option>
+                  <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
                   {current.fields.map((field) => (
-                    <option key={field.id} value={field.id}>
+                    <NativeSelectOption key={field.id} value={field.id}>
                       {field.label}
-                    </option>
+                    </NativeSelectOption>
                   ))}
-                </select>
-              </label>
-              {current.page && !candidate && (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{m.candidate_list_hint({}, options)}</p>
-                  {(!current.page.candidates.length ||
-                    (exactCandidate && !current.page.candidates.some((item) => item.id === exactCandidate))) && (
-                    <p>{exactCandidate ? m.correction_exact_missing({}, options) : m.candidate_empty({}, options)}</p>
-                  )}
-                  <ul className="space-y-3">
-                    {current.page.candidates
-                      .filter((item) => !exactCandidate || item.id === exactCandidate)
-                      .map((item) => (
-                        <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
-                          <CandidateValue snak={item.statement} related={current.public.related} locale={locale} />
-                          <CandidateProvenance candidate={item} read={current} locale={locale} />
-                          <button
-                            type="button"
-                            className={button}
-                            disabled={busy || item.retracted !== null}
-                            onClick={() => {
-                              setCandidate(item);
-                              setResult(undefined);
-                              setFailure(undefined);
-                              request.current = null;
-                            }}
-                          >
-                            {item.retracted !== null
-                              ? m.candidate_retracted({}, options)
-                              : m.candidate_review({}, options)}
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                  {current.page.next && (
-                    <button
-                      type="button"
-                      className={button}
-                      disabled={busy}
-                      onClick={() => load(property, current.page!.next!)}
-                    >
-                      {m.candidate_more({}, options)}
-                    </button>
-                  )}
-                </div>
-              )}
-              {candidate && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">{current.fields.find((field) => field.id === property)?.label}</h3>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3">
-                      <h4 className="text-sm font-semibold">{m.candidate_current({}, options)}</h4>
-                      {publicRead?.subject.statements[property]?.length ? (
-                        publicRead.subject.statements[property]!.map((statement) => (
-                          <div key={statement.id}>
-                            <CandidateValue snak={statement} related={publicRead.related} locale={locale} />
-                          </div>
-                        ))
-                      ) : (
-                        <p>{m.candidate_no_current({}, options)}</p>
-                      )}
-                    </div>
-                    <div className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3">
-                      <h4 className="text-sm font-semibold">{m.candidate_proposed({}, options)}</h4>
-                      <CandidateValue snak={candidate.statement} related={current.public.related} locale={locale} />
-                      {candidate.statement.qualifiers.map((snak, index) => (
-                        <p key={index}>
-                          <span className="text-sm text-muted-foreground">
-                            {pageText(current.names[snak.property.id], locale).text ||
-                              m.subject_value_unlabelled({}, options)}
-                            :{' '}
-                          </span>
-                          <CandidateValue snak={snak} related={current.public.related} locale={locale} />
-                        </p>
-                      ))}
-                      <CandidateProvenance candidate={candidate} read={current} locale={locale} />
-                    </div>
+                </NativeSelect>
+              </Field>
+              {current.page && (
+                <>
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">{m.candidate_compare_hint({}, options)}</p>
+                    {(!current.page.candidates.length ||
+                      (exactCandidate && !current.page.candidates.some((item) => item.id === exactCandidate))) && (
+                      <p>{exactCandidate ? m.correction_exact_missing({}, options) : m.candidate_empty({}, options)}</p>
+                    )}
+                    {!candidate && (
+                      <ul className="space-y-3">
+                        {current.page.candidates
+                          .filter((item) => !exactCandidate || item.id === exactCandidate)
+                          .map((item) => (
+                            <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
+                              <CandidateValue snak={item.statement} related={current.public.related} locale={locale} />
+                              <p className="text-sm text-muted-foreground">{state(item)}</p>
+                              <CandidateProvenance candidate={item} read={current} locale={locale} />
+                              <Button
+                                variant="outline"
+                                className="min-h-11"
+                                disabled={locked || item.retracted !== null}
+                                onClick={() => setCandidate(item)}
+                              >
+                                {m.candidate_review({}, options)}
+                              </Button>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                    {current.page.next && (
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={locked}
+                        onClick={() => void load(property, current.page!.next!)}
+                      >
+                        {m.candidate_more({}, options)}
+                      </Button>
+                    )}
                   </div>
-                  {selected ? (
-                    <p>{m.candidate_selected({}, options)}</p>
-                  ) : result ? null : confirmation ? (
-                    <div className="space-y-3 rounded-lg border border-border p-4">
-                      <h4 className="font-semibold">{m.candidate_confirm_title({ action }, options)}</h4>
-                      <p className="text-sm">
-                        {operation === 'accept'
-                          ? m.candidate_confirm_accept({}, options)
-                          : m.candidate_confirm_adopt({}, options)}
-                      </p>
+                  {candidate && (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">{current.fields.find((field) => field.id === property)?.label}</h3>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3">
+                          <h4 className="text-sm font-semibold">{m.candidate_current({}, options)}</h4>
+                          {!publicRead ? (
+                            <p>{m.candidate_public_unconfirmed({}, options)}</p>
+                          ) : publicStatements.length ? (
+                            publicStatements.map((statement) => (
+                              <div key={statement.id}>
+                                <CandidateValue snak={statement} related={publicRead.related} locale={locale} />
+                              </div>
+                            ))
+                          ) : (
+                            <p>{m.candidate_no_current({}, options)}</p>
+                          )}
+                        </div>
+                        <div className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3">
+                          <h4 className="text-sm font-semibold">{m.candidate_proposed({}, options)}</h4>
+                          <CandidateValue snak={candidate.statement} related={current.public.related} locale={locale} />
+                          <p className="text-sm text-muted-foreground">{state(candidate)}</p>
+                          {candidate.statement.qualifiers.map((snak, index) => (
+                            <div key={index}>
+                              <span className="text-sm text-muted-foreground">
+                                {pageText(current.names[snak.property.id], locale).text ||
+                                  m.subject_value_unlabelled({}, options)}
+                                :{' '}
+                              </span>
+                              <CandidateValue snak={snak} related={current.public.related} locale={locale} />
+                            </div>
+                          ))}
+                          <CandidateProvenance candidate={candidate} read={current} locale={locale} />
+                        </div>
+                      </div>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className={button}
-                          disabled={busy || (!!failure && failure.reason !== 'unavailable')}
-                          onClick={confirm}
+                        {candidate.retracted === null && candidate.decision !== 'accepted' && (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            disabled={locked || requiresReload}
+                            onClick={() => setConfirmation('accept')}
+                          >
+                            {m.candidate_accept({}, options)}
+                          </Button>
+                        )}
+                        {candidate.retracted === null && candidate.decision !== 'rejected' && (
+                          <Button
+                            variant="outline"
+                            className="min-h-11"
+                            disabled={locked || requiresReload}
+                            onClick={() => setConfirmation('reject')}
+                          >
+                            {m.candidate_reject({}, options)}
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={locked}
+                          onClick={() => setCandidate(undefined)}
                         >
-                          {action}
-                        </button>
-                        <button
-                          type="button"
-                          className={button}
-                          disabled={busy || !!request.current}
-                          onClick={() => setConfirmation(false)}
-                        >
-                          {m.candidate_cancel({}, options)}
-                        </button>
+                          {m.candidate_back({}, options)}
+                        </Button>
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className={button}
-                      disabled={busy || failure?.reason === 'stale'}
-                      onClick={() => setConfirmation(true)}
-                    >
-                      {action}
-                    </button>
                   )}
-                  <button
-                    type="button"
-                    className={button}
-                    disabled={busy || confirmation}
-                    onClick={() => {
-                      setCandidate(undefined);
-                      setResult(undefined);
-                    }}
-                  >
-                    {m.candidate_back({}, options)}
-                  </button>
-                </div>
+                  {draft && (
+                    <section
+                      aria-label={m.candidate_selection_draft({}, options)}
+                      className="space-y-3 rounded-lg border border-border p-3"
+                    >
+                      <h3 className="font-semibold">{m.candidate_selection_draft({}, options)}</h3>
+                      <p className="text-sm text-muted-foreground">{m.candidate_replace_hint({}, options)}</p>
+                      <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
+                      <ul className="space-y-3">
+                        {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
+                          (choice) => {
+                            const value = choices.get(choice);
+                            const entry = draft.selection.find((entry) => entry.candidate === choice);
+                            return (
+                              <li key={choice} className="space-y-2 rounded-lg bg-muted/30 p-3">
+                                <Field orientation="horizontal">
+                                  <Checkbox
+                                    id={`include-${choice}`}
+                                    checked={!!entry}
+                                    disabled={
+                                      locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
+                                    }
+                                    onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
+                                  />
+                                  <FieldLabel htmlFor={`include-${choice}`} className="min-h-11 flex-wrap">
+                                    <span>{m.candidate_include({}, options)}</span>
+                                    {value ? (
+                                      <CandidateValue
+                                        snak={value.statement}
+                                        related={current.public.related}
+                                        locale={locale}
+                                      />
+                                    ) : (
+                                      <span>{m.candidate_choice_unresolved({}, options)}</span>
+                                    )}
+                                  </FieldLabel>
+                                </Field>
+                                {entry && (
+                                  <Field>
+                                    <FieldLabel htmlFor={`rank-${choice}`}>{m.candidate_rank({}, options)}</FieldLabel>
+                                    <NativeSelect
+                                      id={`rank-${choice}`}
+                                      className="min-h-11"
+                                      value={entry.rank}
+                                      disabled={locked || !value?.eligible}
+                                      onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
+                                    >
+                                      <NativeSelectOption value="normal">
+                                        {m.candidate_rank_normal({}, options)}
+                                      </NativeSelectOption>
+                                      <NativeSelectOption value="preferred">
+                                        {m.candidate_rank_preferred({}, options)}
+                                      </NativeSelectOption>
+                                    </NativeSelect>
+                                  </Field>
+                                )}
+                              </li>
+                            );
+                          },
+                        )}
+                      </ul>
+                      {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
+                      {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        disabled={locked || requiresReload || !valid}
+                        onClick={() => setConfirmation('adopt')}
+                      >
+                        {m.candidate_adopt({}, options)}
+                      </Button>
+                    </section>
+                  )}
+                </>
               )}
             </>
           )}
-          <button
-            type="button"
-            className={button}
-            disabled={busy || confirmation}
+          {confirmation && (
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <h4 className="font-semibold">{m.candidate_confirm_title({ action }, options)}</h4>
+              <p className="text-sm">
+                {confirmation === 'accept'
+                  ? m.candidate_confirm_accept({}, options)
+                  : confirmation === 'reject'
+                    ? m.candidate_confirm_reject({}, options)
+                    : m.candidate_confirm_replace({}, options)}
+              </p>
+              {confirmation === 'adopt' && (
+                <ul className="space-y-2">
+                  {draft?.selection.map((entry) => {
+                    const value = choices.get(entry.candidate);
+                    return (
+                      <li key={entry.candidate}>
+                        {value && (
+                          <CandidateValue snak={value.statement} related={current!.public.related} locale={locale} />
+                        )}
+                        <span className="ml-2 text-sm">
+                          {entry.rank === 'preferred'
+                            ? m.candidate_rank_preferred({}, options)
+                            : m.candidate_rank_normal({}, options)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button className="min-h-11" disabled={busy} onClick={() => void confirm()}>
+                  {action}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={busy || !!request.current}
+                  onClick={() => setConfirmation(null)}
+                >
+                  {m.candidate_cancel({}, options)}
+                </Button>
+              </div>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            className="min-h-11"
+            disabled={locked}
             onClick={() => {
               setOpened(false);
               setRead(undefined);
@@ -342,11 +519,10 @@ export function CandidateReview({
               setResult(undefined);
               setFailure(undefined);
               setProperty(initialProperty ?? '');
-              request.current = null;
             }}
           >
             {m.candidate_close({}, options)}
-          </button>
+          </Button>
         </>
       )}
     </section>
