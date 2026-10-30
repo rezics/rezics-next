@@ -6,6 +6,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { SearchPage } from '../search/search';
 import { searchLoaderDeps } from '../search/search-params';
 import type { RealmDiscoveryReader } from '../search/realm-discovery-loader';
+import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const firstCursor = 'native+/= first';
@@ -41,25 +42,27 @@ type Story = StoryObj<typeof meta>;
 function FixturePage({ initial, read }: { initial: RealmDiscoveryState; read: RealmDiscoveryReader }) {
   return (
     <PatternStory path="/search">
-      <SearchPage
-        query=""
-        data={{
-          queryState: searchLoaderDeps({}),
-          hitTypes: {},
-          yearProperties: [],
-          typeChoices: [],
-          groups: [],
-          selectedFacets: {},
-          selectedFacetLabels: {},
-          facetsAvailable: false,
-          facetRetry: false,
-          facetIndexNotReady: false,
-          staleCursorRestarted: false,
-          sort: 'relevance',
-        }}
-        realmDiscovery={initial}
-        realmDiscoveryRead={read}
-      />
+      <AppShell>
+        <SearchPage
+          query=""
+          data={{
+            queryState: searchLoaderDeps({}),
+            hitTypes: {},
+            yearProperties: [],
+            typeChoices: [],
+            groups: [],
+            selectedFacets: {},
+            selectedFacetLabels: {},
+            facetsAvailable: false,
+            facetRetry: false,
+            facetIndexNotReady: false,
+            staleCursorRestarted: false,
+            sort: 'relevance',
+          }}
+          realmDiscovery={initial}
+          realmDiscoveryRead={read}
+        />
+      </AppShell>
     </PatternStory>
   );
 }
@@ -76,8 +79,9 @@ export const EmptyQuery: Story = {
 export const SparseContinuation: Story = {
   render: () => <FixturePage initial={{ kind: 'ready', realms: [], next: firstCursor }} read={sparseRead} />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const more = await canvas.findByRole('button', { name: m.search_more() });
+    await pageReady({ canvasElement });
+    const canvas = within(within(canvasElement).getByRole('main'));
+    const more = await canvas.findByRole('button', { name: m.realm_discovery_continue() });
     await expect(sparseRead).not.toHaveBeenCalled();
     await userEvent.click(more);
     await expect(more).toBeEnabled();
@@ -88,7 +92,7 @@ export const SparseContinuation: Story = {
       cursor: firstCursor,
     });
     await userEvent.click(more);
-    await expect(canvas.queryByRole('button', { name: m.search_more() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_discovery_continue() })).toBeNull();
     await expect(sparseRead).toHaveBeenCalledTimes(2);
     await expect(sparseRead.mock.calls[1]?.[0].data.cursor).toBe(nextCursor);
   },
@@ -97,27 +101,29 @@ export const SparseContinuation: Story = {
 export const UnavailableRetry: Story = {
   render: () => <FixturePage initial={{ kind: 'unavailable' }} read={retryRead} />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.search_facet_retry() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.search_facet_retry() }));
+    await pageReady({ canvasElement });
+    const canvas = within(within(canvasElement).getByRole('main'));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_discovery_retry() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_discovery_retry() }));
     await expect(retryRead).toHaveBeenCalledTimes(2);
     await expect(retryRead.mock.calls.map(([call]) => call.data)).toEqual([
       { locale: getLocale(), sort: 'popular' },
       { locale: getLocale(), sort: 'popular' },
     ]);
-    await expect(canvas.queryByRole('button', { name: m.search_facet_retry() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_discovery_retry() })).toBeNull();
   },
 };
 
 export const ContinuationRetry: Story = {
   render: () => <FixturePage initial={{ kind: 'ready', realms: [], next: firstCursor }} read={retryRead} />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.search_more() }));
+    await pageReady({ canvasElement });
+    const canvas = within(within(canvasElement).getByRole('main'));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_discovery_continue() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.search_facet_retry() }));
     await expect(retryRead).toHaveBeenCalledTimes(2);
     await expect(retryRead.mock.calls.map(([call]) => call.data.cursor)).toEqual([firstCursor, firstCursor]);
     await expect(canvas.queryByRole('button', { name: m.search_facet_retry() })).toBeNull();
-    await expect(canvas.queryByRole('button', { name: m.search_more() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_discovery_continue() })).toBeNull();
   },
 };
