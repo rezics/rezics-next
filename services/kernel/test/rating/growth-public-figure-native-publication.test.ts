@@ -4,7 +4,9 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
 import {
-  body, createNativePublicationFixture, PUBLICATION_GROWTH_SCALES,
+  body,
+  createNativePublicationFixture,
+  PUBLICATION_GROWTH_SCALES,
 } from './public-figure-native-publication-fixture.ts';
 
 test('Original documented privacy, replay and raw growth bounds remain strict', async () => {
@@ -77,8 +79,13 @@ test('Original documented privacy, replay and raw growth bounds remain strict', 
           // This is only the declared exact public read operation. All required native producers ran
           // during grow; no asynchronous producer or unrelated startup work is moved out of this capture.
           const expectedFigure = {
-            questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id,
-            scale: { min: 0, max: 20, displayStep: 1 }, count: 5, state: 'ready', mean: 8, score: 8,
+            questionId: STANDARD_QUESTION_ID,
+            populationId: GLOBAL_CONTEXT.id,
+            scale: { min: 0, max: 20, displayStep: 1 },
+            count: 5,
+            state: 'ready',
+            mean: 8,
+            score: 8,
           };
           const responses = [];
           const etags = [];
@@ -93,26 +100,49 @@ test('Original documented privacy, replay and raw growth bounds remain strict', 
           const snapshot = await fixture.source.read(partition, [fixture.target]);
           expect(snapshot.partition).toBe(partition);
           expect(snapshot.position).toBeGreaterThan(0n);
-          expect([...snapshot.figures]).toEqual([[fixture.target, {
-            questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, subjectId: fixture.target,
-            count: 5, mean: 8, score: 8, priorEpoch: epoch,
-            revision: expect.stringMatching(/^[1-9][0-9]*$/), asOf: expect.any(String),
-          }]]);
+          expect([...snapshot.figures]).toEqual([
+            [
+              fixture.target,
+              {
+                questionId: STANDARD_QUESTION_ID,
+                populationId: GLOBAL_CONTEXT.id,
+                subjectId: fixture.target,
+                count: 5,
+                mean: 8,
+                score: 8,
+                priorEpoch: epoch,
+                revision: expect.stringMatching(/^[1-9][0-9]*$/),
+                asOf: expect.any(String),
+              },
+            ],
+          ]);
           const sourceFigure = snapshot.figures.get(fixture.target)!;
           expect(etags).toEqual([`"${sourceFigure.revision}"`, `"${sourceFigure.revision}"`]);
           expect(await fixture.source.epoch()).toEqual({
-            questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: epoch,
+            questionId: STANDARD_QUESTION_ID,
+            populationId: GLOBAL_CONTEXT.id,
+            priorEpoch: epoch,
           });
           return { responses, snapshot, etags };
         },
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...PUBLICATION_GROWTH_SCALES]);
-      const relations = [...new Set(report.samples.flatMap((sample) =>
-        sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)),
-      ))];
-      expect(relations).toEqual(expect.arrayContaining([
-        'semantic.subject', 'rating.question', 'rating.public_figure', 'rating.population_prior_epoch', 'core.partition',
-      ]));
+      const relations = [
+        ...new Set(
+          report.samples.flatMap((sample) =>
+            sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)),
+          ),
+        ),
+      ];
+      expect(relations).toEqual(
+        expect.arrayContaining([
+          'semantic.subject',
+          'rating.question',
+          'rating.public_figure',
+          'rating.population_prior_epoch',
+          'core.partition',
+        ]),
+      );
       // Use every actual touched relation and unmodified raw metrics/footprints, including Access and catalogue work.
       assertGrowthAccessPaths(name, report.samples, relations);
       for (const sample of report.samples) {

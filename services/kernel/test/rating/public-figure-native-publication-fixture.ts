@@ -93,24 +93,34 @@ export async function createNativePublicationFixture() {
         ).bearer;
       }
       const headers = new Headers(options.headers);
-      if (options.bearer !== undefined || actor) headers.set('authorization', `Bearer ${options.bearer ?? actor!.bearer}`);
+      if (options.bearer !== undefined || actor)
+        headers.set('authorization', `Bearer ${options.bearer ?? actor!.bearer}`);
       if (options.key !== undefined) headers.set('idempotency-key', JSON.stringify(options.key));
       if (options.body !== undefined) headers.set('content-type', 'application/json');
-      return app.handle(new Request(`https://content.test${path}`, {
-        method,
-        headers,
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-      }));
+      return app.handle(
+        new Request(`https://content.test${path}`, {
+          method,
+          headers,
+          ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        }),
+      );
     };
     const command = async (method: string, path: string, actor: Account, value?: unknown, status = 200) =>
-      body(await request(method, path, {
-        actor, key: randomUUID(), ...(value === undefined ? {} : { body: value }),
-      }), status);
+      body(
+        await request(method, path, {
+          actor,
+          key: randomUUID(),
+          ...(value === undefined ? {} : { body: value }),
+        }),
+        status,
+      );
 
     const vote = async (subjectId: string, voter: Account, units: number | null): Promise<NativeVote> => {
       const key = randomUUID();
       const response = await request(units === null ? 'DELETE' : 'PUT', votePath(subjectId), {
-        actor: voter, key, ...(units === null ? {} : { body: { units } }),
+        actor: voter,
+        key,
+        ...(units === null ? {} : { body: { units } }),
       });
       const session = response.headers.get(SESSION_HEADER);
       const value = await body(response, units === null ? 204 : 200);
@@ -125,38 +135,76 @@ export async function createNativePublicationFixture() {
       const receipt = receipts.rows[0]!;
       const components = decodeSession(system.tokenKeys, `account:${voter.id}`, session!);
       expect(components).toContainEqual({
-        partition: receipt.partition_no, epoch: receipt.epoch, position: BigInt(receipt.position),
+        partition: receipt.partition_no,
+        epoch: receipt.epoch,
+        position: BigInt(receipt.position),
       });
-      const events = await database.admin.query<{ event_seq: number; data: { revision: number; units: number | null } }>(
+      const events = await database.admin.query<{
+        event_seq: number;
+        data: { revision: number; units: number | null };
+      }>(
         `SELECT event_seq, data FROM core.outbox WHERE partition_no = $1 AND epoch = $2 AND position = $3
            AND type = 'com.rezics.rating.vote.changed.v1'`,
         [receipt.partition_no, receipt.epoch, receipt.position],
       );
       expect(events.rows).toHaveLength(1);
       const event = events.rows[0]!;
-      expect(event.data).toMatchObject({ voterId: voter.id, questionId: STANDARD_QUESTION_ID, targetId: subjectId, units });
+      expect(event.data).toMatchObject({
+        voterId: voter.id,
+        questionId: STANDARD_QUESTION_ID,
+        targetId: subjectId,
+        units,
+      });
       if (units !== null) expect(value).toMatchObject({ units, revision: event.data.revision });
       return {
-        subjectId, voter, units, key, value, session: session!, revision: event.data.revision,
-        partition: receipt.partition_no, epoch: receipt.epoch, position: receipt.position, eventSeq: event.event_seq,
+        subjectId,
+        voter,
+        units,
+        key,
+        value,
+        session: session!,
+        revision: event.data.revision,
+        partition: receipt.partition_no,
+        epoch: receipt.epoch,
+        position: receipt.position,
+        eventSeq: event.event_seq,
       };
     };
 
-    const workerSuccess = async (partition: number, epoch: number, position: string, eventSeq: number, name: string) => {
+    const workerSuccess = async (
+      partition: number,
+      epoch: number,
+      position: string,
+      eventSeq: number,
+      name: string,
+    ) => {
       const id = `fx:${epoch}:${partition}:${position}:${eventSeq}:${name}`;
       const result = await database.admin.query<{ status: string }>(
-        'SELECT status FROM dbos.workflow_status WHERE workflow_uuid = $1', [id],
+        'SELECT status FROM dbos.workflow_status WHERE workflow_uuid = $1',
+        [id],
       );
       expect(result.rows, `Actual worker completion for ${id}`).toEqual([{ status: 'SUCCESS' }]);
     };
 
     const applied = async (nativeVote: NativeVote) => {
       await base.drain();
-      await workerSuccess(nativeVote.partition, nativeVote.epoch, nativeVote.position, nativeVote.eventSeq, 'rating_aggregate');
+      await workerSuccess(
+        nativeVote.partition,
+        nativeVote.epoch,
+        nativeVote.position,
+        nativeVote.eventSeq,
+        'rating_aggregate',
+      );
       const result = await database.admin.query<{ units: number | null; revision: number }>(
         `SELECT units, revision FROM rating.population_vote
          WHERE route = $1 AND question_id = $2 AND population_id = $3 AND target_id = $4 AND voter_id = $5`,
-        [routeOf(nativeVote.subjectId), STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id, nativeVote.subjectId, nativeVote.voter.id],
+        [
+          routeOf(nativeVote.subjectId),
+          STANDARD_QUESTION_ID,
+          GLOBAL_CONTEXT.id,
+          nativeVote.subjectId,
+          nativeVote.voter.id,
+        ],
       );
       expect(result.rows).toEqual([{ units: nativeVote.units, revision: nativeVote.revision }]);
     };
@@ -164,12 +212,17 @@ export async function createNativePublicationFixture() {
     const current = async (subjectId: string, populationId = GLOBAL_CONTEXT.id) => {
       await base.drain();
       const result = await readPublicFigures(database.pool, {
-        partition: partitionOf(routeOf(subjectId)!), questionId: STANDARD_QUESTION_ID, populationId, subjectIds: [subjectId],
+        partition: partitionOf(routeOf(subjectId)!),
+        questionId: STANDARD_QUESTION_ID,
+        populationId,
+        subjectIds: [subjectId],
       });
       expect(result).toHaveLength(1);
       const figure = result[0]!;
       const physical = await database.admin.query<{
-        pending_position: string | null; pending_prior_generation: string | null; published_prior_generation: string;
+        pending_position: string | null;
+        pending_prior_generation: string | null;
+        published_prior_generation: string;
       }>(
         `SELECT pending_position::text, pending_prior_generation::text, published_prior_generation::text
          FROM rating.public_figure WHERE route = $1 AND question_id = $2 AND population_id = $3 AND subject_id = $4`,
@@ -184,8 +237,13 @@ export async function createNativePublicationFixture() {
         [partitionOf(routeOf(subjectId)!), figure.position],
       );
       expect(source.rows).toHaveLength(1);
-      await workerSuccess(partitionOf(routeOf(subjectId)!), source.rows[0]!.epoch, figure.position,
-        source.rows[0]!.event_seq, 'rating_public_figure');
+      await workerSuccess(
+        partitionOf(routeOf(subjectId)!),
+        source.rows[0]!.epoch,
+        figure.position,
+        source.rows[0]!.event_seq,
+        'rating_public_figure',
+      );
       const events = await database.admin.query<{ data: unknown }>(
         `SELECT data FROM core.outbox WHERE partition_no = $1
            AND type = 'com.rezics.rating.public_figure.changed.v1'
@@ -201,18 +259,29 @@ export async function createNativePublicationFixture() {
         );
         expect(prior.rows).toHaveLength(1);
         expect(prior.rows[0]!).toMatchObject({ epoch: figure.priorEpoch, m: figure.m, c: figure.C });
-        expect(BigInt(physical.rows[0]!.published_prior_generation)).toBeGreaterThanOrEqual(BigInt(prior.rows[0]!.generation));
+        expect(BigInt(physical.rows[0]!.published_prior_generation)).toBeGreaterThanOrEqual(
+          BigInt(prior.rows[0]!.generation),
+        );
       }
       return figure;
     };
 
     const createSubject = async (partition?: number): Promise<string> => {
       let key: string;
-      do { key = randomUUID(); }
-      while (partition !== undefined && partitionOf(subjectTarget(system.routeKey, governance.id, key).route) !== partition);
-      const result = await body(await request('POST', '/v1/subjects', {
-        actor: governance, key, body: { type: 'schema:Book', labels: { en: `Native figure ${randomUUID()}` } },
-      }), 201);
+      do {
+        key = randomUUID();
+      } while (
+        partition !== undefined &&
+        partitionOf(subjectTarget(system.routeKey, governance.id, key).route) !== partition
+      );
+      const result = await body(
+        await request('POST', '/v1/subjects', {
+          actor: governance,
+          key,
+          body: { type: 'schema:Book', labels: { en: `Native figure ${randomUUID()}` } },
+        }),
+        201,
+      );
       const id = result.subject.id as string;
       expect(routeOf(id)).not.toBeNull();
       if (partition !== undefined) expect(partitionOf(routeOf(id)!)).toBe(partition);
@@ -224,13 +293,21 @@ export async function createNativePublicationFixture() {
     const privateTarget = base.subjectIds[11]!;
     const source = createPublicRatingSource(database.pool);
     const establishPrior = async (units = 4) => {
-      expect(await source.epoch()).toEqual({ questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: null });
+      expect(await source.epoch()).toEqual({
+        questionId: STANDARD_QUESTION_ID,
+        populationId: GLOBAL_CONTEXT.id,
+        priorEpoch: null,
+      });
       let counted = 0;
       for (const subjectId of priorSubjects) {
         for (const voter of base.realmMembers) {
           await applied(await vote(subjectId, voter, units));
           if (++counted === 49) {
-            expect(await source.epoch()).toEqual({ questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: null });
+            expect(await source.epoch()).toEqual({
+              questionId: STANDARD_QUESTION_ID,
+              populationId: GLOBAL_CONTEXT.id,
+              priorEpoch: null,
+            });
             const totals = await database.admin.query(
               `SELECT sum(count)::integer AS count, sum(sum)::integer AS sum FROM rating.population_total_component
                WHERE route = $1 AND question_id = $2 AND population_id = $3`,
@@ -240,25 +317,48 @@ export async function createNativePublicationFixture() {
           }
         }
       }
-      expect(await source.epoch()).toEqual({ questionId: STANDARD_QUESTION_ID, populationId: GLOBAL_CONTEXT.id, priorEpoch: 1 });
+      expect(await source.epoch()).toEqual({
+        questionId: STANDARD_QUESTION_ID,
+        populationId: GLOBAL_CONTEXT.id,
+        priorEpoch: 1,
+      });
       const prior = await database.admin.query(
         `SELECT start_count::integer, m::float8, c::integer, epoch FROM rating.population_prior_epoch
          WHERE route = $1 AND question_id = $2 AND population_id = $3`,
         [routeOf(GLOBAL_CONTEXT.id), STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
       );
       expect(prior.rows).toEqual([{ start_count: 50, m: units / 2, c: 5, epoch: 1 }]);
-      for (const subjectId of priorSubjects) expect(await current(subjectId)).toMatchObject({ count: 5, mean: units / 2, score: units / 2, m: units / 2, C: 5, priorEpoch: 1 });
+      for (const subjectId of priorSubjects)
+        expect(await current(subjectId)).toMatchObject({
+          count: 5,
+          mean: units / 2,
+          score: units / 2,
+          m: units / 2,
+          C: 5,
+          priorEpoch: 1,
+        });
     };
 
     const realm = (await body(await request('GET', `/v1/realms/${base.realmId}`, { actor: owner }))).realm;
     const createHistoricalPopulation = async (subjectId: string, voter: Account) => {
-      const created = await command('POST', '/v1/realms', owner, {
-        spaceId: realm.spaceId, contextId: realm.contextId, title: `Native population ${randomUUID()}`, visibility: 'protected',
-      }, 201);
+      const created = await command(
+        'POST',
+        '/v1/realms',
+        owner,
+        {
+          spaceId: realm.spaceId,
+          contextId: realm.contextId,
+          title: `Native population ${randomUUID()}`,
+          visibility: 'protected',
+        },
+        201,
+      );
       const realmId: string = created.realm.realmId;
       await command('POST', `/v1/realms/${realmId}/members`, owner, { accountId: voter.id }, 202);
       await base.drain();
-      expect(await body(await request('GET', `/v1/realms/${realmId}/members/me`, { actor: voter }))).toMatchObject({ state: 'member' });
+      expect(await body(await request('GET', `/v1/realms/${realmId}/members/me`, { actor: voter }))).toMatchObject({
+        state: 'member',
+      });
       expect(await current(subjectId, realmId)).toMatchObject({ count: 1, mean: null, score: null, priorEpoch: null });
       await command('DELETE', `/v1/realms/${realmId}/membership`, voter, undefined, 202);
       await base.drain();
@@ -267,18 +367,42 @@ export async function createNativePublicationFixture() {
     };
 
     return {
-      database, app, owner, reader, governance, target, privateTarget, priorSubjects, source,
-      realmId: base.realmId, members: base.realmMembers, outsiders: base.globalVoters,
-      request, command, vote, applied, current, createSubject, establishPrior, createHistoricalPopulation,
-      joinMembers: base.joinMembers, settle: base.drain,
+      database,
+      app,
+      owner,
+      reader,
+      governance,
+      target,
+      privateTarget,
+      priorSubjects,
+      source,
+      realmId: base.realmId,
+      members: base.realmMembers,
+      outsiders: base.globalVoters,
+      request,
+      command,
+      vote,
+      applied,
+      current,
+      createSubject,
+      establishPrior,
+      createHistoricalPopulation,
+      joinMembers: base.joinMembers,
+      settle: base.drain,
       async close() {
-        try { await work?.close(); }
-        finally { await base.close(); }
+        try {
+          await work?.close();
+        } finally {
+          await base.close();
+        }
       },
     };
   } catch (error) {
-    try { await work?.close(); }
-    finally { await base.close(); }
+    try {
+      await work?.close();
+    } finally {
+      await base.close();
+    }
     throw error;
   }
 }
