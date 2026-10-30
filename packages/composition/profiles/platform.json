@@ -37,6 +37,14 @@
             }
           },
           {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "edition-work",
+              "property": "schema:exampleOfWork",
+              "limit": 12
+            }
+          },
+          {
             "type": "RelationGroups",
             "props": {
               "id": "side-stories",
@@ -144,6 +152,15 @@
           "props": {}
         },
         "content": [
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "edition-work",
+              "property": "schema:exampleOfWork",
+              "limit": 12,
+              "paged": true
+            }
+          },
           {
             "type": "RelationGroups",
             "props": {
