@@ -70,24 +70,24 @@ brief, skip a case, invent an export or report native closure.
 
 The following declarations actually exist. A type is not a runtime implementation.
 
-| Surface | Existing callable or declared type | What must still be connected |
-| --- | --- | --- |
-| Original Search | `createSearchDriver(): Promise<SearchDriver>` in `test/search/outcome-driver.ts` | Expanded native personas, released whole-row fixtures and new consumers |
-| Search supervisor | `createDriverClient()` in `test/search/support/driver-client.ts` | New controls must cross its RPC/supervisor/worker boundary |
-| Released discovery | `createReleasedDiscoveryFixture({version: 1})` in `test/support/released-discovery.ts` | Existing books/classification/diet/recipes and real personas; declared personal/source/privacy/profile/platform prerequisites remain open |
-| Released import slice | `DriverClient.importReleasedBook(input)` | Reuse its real import receipt; it is not the complete fixture builder |
-| Original Pages | `createPagesDriver(): Promise<PagesDriver>` in `test/presentation/outcome-driver.ts` | Shares Semantic fixture behavior, not Search's isolated worker world |
-| Structural admission | `parseFilter`, `admitFilter`, `validateFilter`, `walkFilter` in `@rezics/filter` | Native public/owner execution, pins and full dependency closure |
-| Public source | `PublicFilterSourceFactory` in `src/semantic/public-filter-source-contract.ts` | Future `publicFilterSource` runtime and default composition |
-| Public consumer | `PublicFilterConsumerOperationsFactory` in `src/search/public-filter-consumer-contract.ts` | Future `createPublicFilterConsumerOperations` runtime and HTTP integration |
-| Collection source | `createCollectionSource({pool, access, clock})` in `src/library/collection-source.ts` | Present implementation throws `dependency_unavailable` for every method |
-| Native Collection primitives | `readNativeCollectionMetadata`, `authorizeNativeCollectionMetadata`, `readNativeCollectionRawPage`, `probeNativeCollectionOriginal` | Compose canonical source protocol; primitives alone are not a complete source |
-| Preparation provenance | `readPreparationNativeHeader` in `src/library/preparation-native-reader.ts` | Validates origin/receipt only; not plan execution or publication authority |
-| Common presentation | `readPage` in `src/presentation/reads.ts` | Shared native whole-page work and final safety, beyond descriptor dispatch |
-| Static Zone | `readStaticZonePage` in `src/zones/page-runtime.ts` | Current source-dependent branch returns readiness, not union execution |
-| Dynamic fixture contract | `DynamicCollectionsDriver` in `specs/dynamic-collections-driver.ts` | Prospective contract explicitly has no registered production binding |
-| SQL capture | `openGrowthDatabase`, `capture`, `captureMeasuredRun` in `test/support/growth-capture.ts` | Owner pools and child process captures must participate in the same measured operation |
-| Classification | `costOf`, `catalogStatementBound`, `withoutCatalogTexts` in `test/support/growth-cost.ts` | Reuse classification; do not make a second SQL-cost calculator |
+| Surface                      | Existing callable or declared type                                                                                                  | What must still be connected                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Original Search              | `createSearchDriver(): Promise<SearchDriver>` in `test/search/outcome-driver.ts`                                                    | Expanded native personas, released whole-row fixtures and new consumers                                                                   |
+| Search supervisor            | `createDriverClient()` in `test/search/support/driver-client.ts`                                                                    | New controls must cross its RPC/supervisor/worker boundary                                                                                |
+| Released discovery           | `createReleasedDiscoveryFixture({version: 1})` in `test/support/released-discovery.ts`                                              | Existing books/classification/diet/recipes and real personas; declared personal/source/privacy/profile/platform prerequisites remain open |
+| Released import slice        | `DriverClient.importReleasedBook(input)`                                                                                            | Reuse its real import receipt; it is not the complete fixture builder                                                                     |
+| Original Pages               | `createPagesDriver(): Promise<PagesDriver>` in `test/presentation/outcome-driver.ts`                                                | Shares Semantic fixture behavior, not Search's isolated worker world                                                                      |
+| Structural admission         | `parseFilter`, `admitFilter`, `validateFilter`, `walkFilter` in `@rezics/filter`                                                    | Native public/owner execution, pins and full dependency closure                                                                           |
+| Public source                | `PublicFilterSourceFactory` in `src/semantic/public-filter-source-contract.ts`                                                      | Future `publicFilterSource` runtime and default composition                                                                               |
+| Public consumer              | `PublicFilterConsumerOperationsFactory` in `src/search/public-filter-consumer-contract.ts`                                          | Future `createPublicFilterConsumerOperations` runtime and HTTP integration                                                                |
+| Collection source            | `createCollectionSource({pool, access, clock})` in `src/library/collection-source.ts`                                               | Present implementation throws `dependency_unavailable` for every method                                                                   |
+| Native Collection primitives | `readNativeCollectionMetadata`, `authorizeNativeCollectionMetadata`, `readNativeCollectionRawPage`, `probeNativeCollectionOriginal` | Compose canonical source protocol; primitives alone are not a complete source                                                             |
+| Preparation provenance       | `readPreparationNativeHeader` in `src/library/preparation-native-reader.ts`                                                         | Validates origin/receipt only; not plan execution or publication authority                                                                |
+| Common presentation          | `readPage` in `src/presentation/reads.ts`                                                                                           | Shared native whole-page work and final safety, beyond descriptor dispatch                                                                |
+| Static Zone                  | `readStaticZonePage` in `src/zones/page-runtime.ts`                                                                                 | Current source-dependent branch returns readiness, not union execution                                                                    |
+| Dynamic fixture contract     | `DynamicCollectionsDriver` in `specs/dynamic-collections-driver.ts`                                                                 | Prospective contract explicitly has no registered production binding                                                                      |
+| SQL capture                  | `openGrowthDatabase`, `capture`, `captureMeasuredRun` in `test/support/growth-capture.ts`                                           | Owner pools and child process captures must participate in the same measured operation                                                    |
+| Classification               | `costOf`, `catalogStatementBound`, `withoutCatalogTexts` in `test/support/growth-cost.ts`                                           | Reuse classification; do not make a second SQL-cost calculator                                                                            |
 
 Paths in this table are relative to `services/kernel/` unless qualified otherwise.
 The two future public-filter exports are named by their existing contracts. No
@@ -114,13 +114,7 @@ existing imports, exports or public endpoints:
 
 ```ts
 // Proposed fixture additions; illustrative declarations, not an executable module.
-type WholeRowSurface =
-  | 'catalogue'
-  | 'curated'
-  | 'everything'
-  | 'own-state'
-  | 'mounted-zone'
-  | 'configured-typelist';
+type WholeRowSurface = 'catalogue' | 'curated' | 'everything' | 'own-state' | 'mounted-zone' | 'configured-typelist';
 
 type WholeRowObservation = {
   response: HttpResponse; // actual status, Headers and parsed body
@@ -164,30 +158,30 @@ an actual request. No title matching or test-only invented Concept qualifies.
 Proposed additive receipt map, for producer adoption beside the existing
 `release`, `meaning`, `personas` and group receipts (not a replacement builder):
 
-| Receipt field | Actual value required |
-| --- | --- |
-| `releases.first`, `releases.second` | Immutable real release bodies and producer-declared digest/pin |
-| `properties.words`, `properties.form`, `properties.diet` | Released property identities and datatype/unit declarations |
-| `concepts.ln`, `concepts.harem`, `concepts.vegetarian` | Actual adopted public Concept IDs, scheme and labels |
-| `profiles.recipe` | Actual profile, state-set, state, cooking-session and holding pins |
-| `subjects` | Logical-name to created routed UUID map |
-| `sources` | Created public/unlisted/private Collections, mounts and scope configurations |
-| `imports` | Reviewed source records, exact native selected candidates and attribution |
-| `personas` | Native local handles to distinct accounts/tokens, never SQL authority rows |
-| `dependencies` | Actual original/terminal, tuple/target/consent links used by race controls |
+| Receipt field                                            | Actual value required                                                        |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `releases.first`, `releases.second`                      | Immutable real release bodies and producer-declared digest/pin               |
+| `properties.words`, `properties.form`, `properties.diet` | Released property identities and datatype/unit declarations                  |
+| `concepts.ln`, `concepts.harem`, `concepts.vegetarian`   | Actual adopted public Concept IDs, scheme and labels                         |
+| `profiles.recipe`                                        | Actual profile, state-set, state, cooking-session and holding pins           |
+| `subjects`                                               | Logical-name to created routed UUID map                                      |
+| `sources`                                                | Created public/unlisted/private Collections, mounts and scope configurations |
+| `imports`                                                | Reviewed source records, exact native selected candidates and attribution    |
+| `personas`                                               | Native local handles to distinct accounts/tokens, never SQL authority rows   |
+| `dependencies`                                           | Actual original/terminal, tuple/target/consent links used by race controls   |
 
 ### Catalogue records
 
-| Logical record | Released facts | Discriminator |
-| --- | --- | --- |
-| B-long | Book, LN, HAREM, words 1,200,001 | Matches all three Book jobs |
-| B-edge | Book, LN, HAREM, words 1,000,000 | Exact threshold excluded from long words |
-| B-short | Book, LN, no HAREM, words 999,999 | Negative HAREM known, below threshold |
-| B-unknown | Book, HAREM, unknown form, absent/somevalue words variants | Unknown cannot become positive or negative evidence |
-| B-characters | Book, LN, HAREM, no words; separate character property 1,400,000 is a declared producer prerequisite | Characters do not supply words |
-| B-tag-only | Book, different known form, HAREM | Tag alone does not imply LN |
-| B-form-only | Book, LN, known no HAREM | Form alone does not imply tag |
-| B-edition | Edition with page-count control | Pages and editions do not become work words |
+| Logical record | Released facts                                                                                       | Discriminator                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| B-long         | Book, LN, HAREM, words 1,200,001                                                                     | Matches all three Book jobs                         |
+| B-edge         | Book, LN, HAREM, words 1,000,000                                                                     | Exact threshold excluded from long words            |
+| B-short        | Book, LN, no HAREM, words 999,999                                                                    | Negative HAREM known, below threshold               |
+| B-unknown      | Book, HAREM, unknown form, absent/somevalue words variants                                           | Unknown cannot become positive or negative evidence |
+| B-characters   | Book, LN, HAREM, no words; separate character property 1,400,000 is a declared producer prerequisite | Characters do not supply words                      |
+| B-tag-only     | Book, different known form, HAREM                                                                    | Tag alone does not imply LN                         |
+| B-form-only    | Book, LN, known no HAREM                                                                             | Form alone does not imply tag                       |
+| B-edition      | Edition with page-count control                                                                      | Pages and editions do not become work words         |
 
 Use separate B-unknown variants for missing and somevalue so neither is hidden by
 one other predicate. Add a withheld selected candidate in the privacy fixture;
@@ -196,16 +190,16 @@ name ordering distinguishable from IDs and source occurrence order.
 
 ### Recipe and release records
 
-| Logical record | Actual facts and owner history | Expected quick/not-cooked job |
-| --- | --- | --- |
-| R-quick | Vegetarian, cookTime 25 minutes, Alice support | Included |
-| R-edge | Vegetarian, cookTime 30 minutes, Alice support | Included |
-| R-slow | Vegetarian, cookTime 31 minutes | Excluded |
-| R-meat | Known nonvegetarian, 20 minutes | Excluded |
-| R-unknown | Unknown diet, 20 minutes | Excluded |
-| R-cooked | Vegetarian, 20 minutes, Alice completed cooking session | Excluded for Alice |
-| R-other-cooked | Vegetarian, 20 minutes, Bob completed, Alice support | Included for Alice |
-| R-time-unknown | Vegetarian, unknown cookTime, Alice support | Excluded |
+| Logical record | Actual facts and owner history                          | Expected quick/not-cooked job |
+| -------------- | ------------------------------------------------------- | ----------------------------- |
+| R-quick        | Vegetarian, cookTime 25 minutes, Alice support          | Included                      |
+| R-edge         | Vegetarian, cookTime 30 minutes, Alice support          | Included                      |
+| R-slow         | Vegetarian, cookTime 31 minutes                         | Excluded                      |
+| R-meat         | Known nonvegetarian, 20 minutes                         | Excluded                      |
+| R-unknown      | Unknown diet, 20 minutes                                | Excluded                      |
+| R-cooked       | Vegetarian, 20 minutes, Alice completed cooking session | Excluded for Alice            |
+| R-other-cooked | Vegetarian, 20 minutes, Bob completed, Alice support    | Included for Alice            |
+| R-time-unknown | Vegetarian, unknown cookTime, Alice support             | Excluded                      |
 
 Represent `schema:cookTime` using the actual fixture integer-minute unit
 `http://www.wikidata.org/entity/Q7727` (`meaning.minuteStorage`/`minuteFilter`),
@@ -279,17 +273,17 @@ executed import. Measurement-association grammar remains its separately declared
 prerequisite; this plan does not reopen that deferred specification work.
 The frozen expected sets are semantic logical sets resolved to actual IDs:
 
-| Job | Expected readable canonical IDs in the complete base fixture |
-| --- | --- |
-| LN and HAREM | B-long, B-edge, B-characters |
-| Words > 1,000,000 | B-long |
-| LN and HAREM and long words | B-long |
-| Quick vegetarian catalogue | R-quick, R-edge, R-cooked, R-other-cooked |
-| Alice quick vegetarian not completed | R-quick, R-edge, R-other-cooked |
-| Known NOT HAREM within Book root | B-short, B-form-only; unknown/withheld evidence never passes |
-| Own NOT state X within supported population | Supported subjects without live X, including no entry |
-| Switch with Japanese on one release | Switch/Japanese release only |
-| Switch with English on one release | Empty, with genuine exhaustion |
+| Job                                         | Expected readable canonical IDs in the complete base fixture |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| LN and HAREM                                | B-long, B-edge, B-characters                                 |
+| Words > 1,000,000                           | B-long                                                       |
+| LN and HAREM and long words                 | B-long                                                       |
+| Quick vegetarian catalogue                  | R-quick, R-edge, R-cooked, R-other-cooked                    |
+| Alice quick vegetarian not completed        | R-quick, R-edge, R-other-cooked                              |
+| Known NOT HAREM within Book root            | B-short, B-form-only; unknown/withheld evidence never passes |
+| Own NOT state X within supported population | Supported subjects without live X, including no entry        |
+| Switch with Japanese on one release         | Switch/Japanese release only                                 |
+| Switch with English on one release          | Empty, with genuine exhaustion                               |
 
 If additional support fixtures qualify for a job, isolate them into a different
 fixture population instead of silently weakening exact membership assertions.
@@ -307,16 +301,16 @@ those, plus Semantic `fixtures.person`, native grants and ordinary token flow;
 neither original Search/Pages driver exposes the complete union yet. Add genuine
 delegation and revocation controls without replacing those native identities.
 
-| Persona | Fixture construction | Frozen assertion |
-| --- | --- | --- |
-| Anonymous | No Authorization header or account session | Public facts only; private/unlisted source discovery follows owner rules |
-| Editor | Existing actual editor bearer | Same public Search membership as anonymous; no private authority borrowing |
-| Alice | Distinct active owner and ordinary bearer | Her admitted facts/pins only; next-read visibility after her writes |
-| Bob | Distinct other owner and ordinary bearer | Cannot read Alice's owner facts or reuse her cursor |
-| Delegated | Actual native delegation/consent and scoped token | Only admitted self-context; withdrawal invalidates continuation |
-| Unscoped | Actual scoped Alice/Bob or unscoped fixture bearer | Existing library control: `403 forbidden`; preserve native `insufficient_scope` where that owner route declares it; no owner read/cache/preparation write |
-| Suspended old bearer | Issue while active, then real suspension | `401 invalid_credentials`, exact Bearer invalid_token challenge |
-| Revoked | Issue active token, then ordinary native revocation | Separate `401 invalid_credentials` control; never anonymous fallback |
+| Persona              | Fixture construction                                | Frozen assertion                                                                                                                                          |
+| -------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anonymous            | No Authorization header or account session          | Public facts only; private/unlisted source discovery follows owner rules                                                                                  |
+| Editor               | Existing actual editor bearer                       | Same public Search membership as anonymous; no private authority borrowing                                                                                |
+| Alice                | Distinct active owner and ordinary bearer           | Her admitted facts/pins only; next-read visibility after her writes                                                                                       |
+| Bob                  | Distinct other owner and ordinary bearer            | Cannot read Alice's owner facts or reuse her cursor                                                                                                       |
+| Delegated            | Actual native delegation/consent and scoped token   | Only admitted self-context; withdrawal invalidates continuation                                                                                           |
+| Unscoped             | Actual scoped Alice/Bob or unscoped fixture bearer  | Existing library control: `403 forbidden`; preserve native `insufficient_scope` where that owner route declares it; no owner read/cache/preparation write |
+| Suspended old bearer | Issue while active, then real suspension            | `401 invalid_credentials`, exact Bearer invalid_token challenge                                                                                           |
+| Revoked              | Issue active token, then ordinary native revocation | Separate `401 invalid_credentials` control; never anonymous fallback                                                                                      |
 
 No valid suspended bearer is requested. Accounts' correct-password suspended
 sign-in must separately return `403 ACCOUNT_SUSPENDED` with no session, while
@@ -350,14 +344,14 @@ The owner [query contract](library-owner-queries.md),
 
 ### Six surface bindings
 
-| Surface | Actual request boundary | Required native execution |
-| --- | --- | --- |
-| Catalogue | `POST /v1/subjects:search` | Shared admitted public AST, direct catalogue/prepared public plan |
-| Curated | `GET /v1/collections/{id}/members` | Existing occurrence route plus proposed shared filtered canonical browse admission |
-| Everything without state | Same members route for Alice's Everything | Actual owner population and public catalogue predicates, no state prerequisite |
-| Own state | Same members route for Alice's accepted state Collection | Accepted state identity plus the same catalogue AST and optional owner leaves |
-| Mounted Zone | `POST /v1/zones/{id}:readPage` | Eligible native scope/mount union, shared whole-page executor |
-| Configured TypeList | Published profile/Zone document read through page aggregate | Shared Search descriptor from configured filter, same release and privacy scope |
+| Surface                  | Actual request boundary                                     | Required native execution                                                          |
+| ------------------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Catalogue                | `POST /v1/subjects:search`                                  | Shared admitted public AST, direct catalogue/prepared public plan                  |
+| Curated                  | `GET /v1/collections/{id}/members`                          | Existing occurrence route plus proposed shared filtered canonical browse admission |
+| Everything without state | Same members route for Alice's Everything                   | Actual owner population and public catalogue predicates, no state prerequisite     |
+| Own state                | Same members route for Alice's accepted state Collection    | Accepted state identity plus the same catalogue AST and optional owner leaves      |
+| Mounted Zone             | `POST /v1/zones/{id}:readPage`                              | Eligible native scope/mount union, shared whole-page executor                      |
+| Configured TypeList      | Published profile/Zone document read through page aggregate | Shared Search descriptor from configured filter, same release and privacy scope    |
 
 Current members admission is not claimed to accept the full owner query. Proposed
 wire adoption: add `filter` as one URL-encoded JSON FilterDocument on the existing
@@ -464,16 +458,16 @@ The file is future native acceptance, not created as a broken import by this pla
 Each title expands over the six surface cells and all applicable persona/source
 combinations from the map, with an explicit assertion for denied combinations.
 
-| Frozen title | Arrange and act | Required observation |
-| --- | --- | --- |
-| Released LN and HAREM have identical meaning across six native surfaces | Provision base books, publish sources/configuration, execute lnHarem | Exact three-ID set in native order; no unknown/form/tag-only substitution |
-| Genuine integer words exclude threshold unknown characters and edition controls | Execute longWords then combined on every surface | Exact B-long; boundary one million excluded; same unit and pin |
-| Quick vegetarian and own completed cooking use separate public and owner meaning | Execute catalogue quickVegetarian everywhere; ownerRecipeJob in owner context | Four public matches; Alice three; Bob history isolated |
-| Same-statement release qualifiers agree in compact and expanded storage | Execute Switch/Japanese and crossed Switch/English | Correct tuple matches; crossed tuple genuinely exhausted |
-| Everything supports no-state facts without inventing entries | Read after label/session/history/holding writes and clear state | Supported no-entry rows included; empty shell/follow-only excluded |
-| Accepted first-release pins survive second-release rename and retirement | Pin facts under first, activate second, read same owner query | Historical meaning stable; writes follow current owner rules |
-| Public editors never lend private authority to source filters | Same query as anonymous/editor across source visibilities | Identical public fact membership; authorized private source remains independently checked |
-| Original and terminal checks precede canonical page disclosure | Browse aliases with each endpoint independently denied | Neither denied path leaks; surviving cards unique and ordered |
+| Frozen title                                                                     | Arrange and act                                                               | Required observation                                                                      |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Released LN and HAREM have identical meaning across six native surfaces          | Provision base books, publish sources/configuration, execute lnHarem          | Exact three-ID set in native order; no unknown/form/tag-only substitution                 |
+| Genuine integer words exclude threshold unknown characters and edition controls  | Execute longWords then combined on every surface                              | Exact B-long; boundary one million excluded; same unit and pin                            |
+| Quick vegetarian and own completed cooking use separate public and owner meaning | Execute catalogue quickVegetarian everywhere; ownerRecipeJob in owner context | Four public matches; Alice three; Bob history isolated                                    |
+| Same-statement release qualifiers agree in compact and expanded storage          | Execute Switch/Japanese and crossed Switch/English                            | Correct tuple matches; crossed tuple genuinely exhausted                                  |
+| Everything supports no-state facts without inventing entries                     | Read after label/session/history/holding writes and clear state               | Supported no-entry rows included; empty shell/follow-only excluded                        |
+| Accepted first-release pins survive second-release rename and retirement         | Pin facts under first, activate second, read same owner query                 | Historical meaning stable; writes follow current owner rules                              |
+| Public editors never lend private authority to source filters                    | Same query as anonymous/editor across source visibilities                     | Identical public fact membership; authorized private source remains independently checked |
+| Original and terminal checks precede canonical page disclosure                   | Browse aliases with each endpoint independently denied                        | Neither denied path leaks; surviving cards unique and ordered                             |
 
 For each positive case, record the actual request and raw response before extracting
 ID/order assertions. Also assert requested field values, labels, figure and source
@@ -627,20 +621,20 @@ Proposed new file: `test/search/whole-query-privacy-outcomes.test.ts`.
 The following frozen schedules retain actual raw requests, responses, query
 results before final disclosure, and the inclusive SQL/engine capture.
 
-| Frozen title | Native schedule | Required result |
-| --- | --- | --- |
-| Withheld HAREM protects both positive and excluded negative subjects | Capture positive and Book AND NOT HAREM on separate observations; pause ordinary indexing; withdraw selected tag through owner command | Both reads prepare until full repair, including the formerly excluded readable book |
-| Order-only reduction invalidates the whole result | Capture name/order query; reduce an ordering label or declared sort dependency on a nonreturned row | No stale order/cursor/metadata disclosed; safe fresh execution eventually serves |
-| Original and terminal own-row reductions survive irrelevant-key narrowing | Use irrelevant filter-key change plus independent original or terminal hide between query and final | Relevant own-row blocks; no original/terminal/private field leakage |
-| Foreign target restriction routes to the source property | Reduce actual relation target or source tuple/consent at its native home, ordinary relay held | Dependent source positive/negative/order reads prepare without unrelated edits |
-| Relevant reduction repaired and ACKed between start and final remains detected | Hold after native query start, commit reduction, finish real local/foreign repair and ACK, release final | Old execution prepares even when current pending set is empty |
-| Old covered cut remains unsafe for a new execution | Retain old PIT/prepared observation; reduce, repair and ACK before the new query starts | Query cannot borrow newer live ACK; fresh safe observation is required |
-| Rollback replay and noEffect cannot manufacture privacy progress | Roll back owner reduction, then commit once, replay same receipt, issue genuine noEffect | No rollback entry; exactly one real reduction; no duplicate ACK basis |
-| A later irrelevant change cannot erase an earlier relevant change | After start commit relevant key K then irrelevant key L on same home, repair in controlled order | K remains blocking/detectable through final; latest-key-only narrowing fails |
-| Lower allocated transaction commits after the retained start | Hold actual lower-XID command, take start, commit reduction, then final | Reduction detected regardless of allocation/commit order |
-| Missing moved and unavailable homes are never pristine zero | Remove reachability through real fixture transport or owner relocation boundary | No observed-clean result; raw retryable failure/preparation and full charged work |
-| Foreign routing registered late cannot acknowledge an incomplete prefix | Commit dependency reduction while registration is incomplete; complete registration later | ACK waits for full dependent repair; fresh result only after real settlement |
-| Lost CAS ambiguous refresh and same-name replacement cannot publish ACK | Use real consumer transport holds/disconnects/recreate controls | Old registration/observation unavailable; no unsafe result or fabricated ACK |
+| Frozen title                                                                   | Native schedule                                                                                                                        | Required result                                                                     |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Withheld HAREM protects both positive and excluded negative subjects           | Capture positive and Book AND NOT HAREM on separate observations; pause ordinary indexing; withdraw selected tag through owner command | Both reads prepare until full repair, including the formerly excluded readable book |
+| Order-only reduction invalidates the whole result                              | Capture name/order query; reduce an ordering label or declared sort dependency on a nonreturned row                                    | No stale order/cursor/metadata disclosed; safe fresh execution eventually serves    |
+| Original and terminal own-row reductions survive irrelevant-key narrowing      | Use irrelevant filter-key change plus independent original or terminal hide between query and final                                    | Relevant own-row blocks; no original/terminal/private field leakage                 |
+| Foreign target restriction routes to the source property                       | Reduce actual relation target or source tuple/consent at its native home, ordinary relay held                                          | Dependent source positive/negative/order reads prepare without unrelated edits      |
+| Relevant reduction repaired and ACKed between start and final remains detected | Hold after native query start, commit reduction, finish real local/foreign repair and ACK, release final                               | Old execution prepares even when current pending set is empty                       |
+| Old covered cut remains unsafe for a new execution                             | Retain old PIT/prepared observation; reduce, repair and ACK before the new query starts                                                | Query cannot borrow newer live ACK; fresh safe observation is required              |
+| Rollback replay and noEffect cannot manufacture privacy progress               | Roll back owner reduction, then commit once, replay same receipt, issue genuine noEffect                                               | No rollback entry; exactly one real reduction; no duplicate ACK basis               |
+| A later irrelevant change cannot erase an earlier relevant change              | After start commit relevant key K then irrelevant key L on same home, repair in controlled order                                       | K remains blocking/detectable through final; latest-key-only narrowing fails        |
+| Lower allocated transaction commits after the retained start                   | Hold actual lower-XID command, take start, commit reduction, then final                                                                | Reduction detected regardless of allocation/commit order                            |
+| Missing moved and unavailable homes are never pristine zero                    | Remove reachability through real fixture transport or owner relocation boundary                                                        | No observed-clean result; raw retryable failure/preparation and full charged work   |
+| Foreign routing registered late cannot acknowledge an incomplete prefix        | Commit dependency reduction while registration is incomplete; complete registration later                                              | ACK waits for full dependent repair; fresh result only after real settlement        |
+| Lost CAS ambiguous refresh and same-name replacement cannot publish ACK        | Use real consumer transport holds/disconnects/recreate controls                                                                        | Old registration/observation unavailable; no unsafe result or fabricated ACK        |
 
 Run positive and negative HAREM with both PIT and prepared observations. Run
 order-only with the actual supported name/collections/rating declaration where
@@ -737,19 +731,19 @@ For a ready result, at most two index reads examine `2s + 2` candidates. Ready
 results are already filtered and canonical; stale disclosure rejection is repaired
 through preparation when that bound cannot fill or prove final exhaustion.
 
-| Unit | Single read at actual c | All-direct R=16, S=128 ceiling |
-| --- | --- | --- |
-| Candidates | `min(600,6s+3)` direct; `2s+2` ready | `6*128 + 3*16 = 816` |
-| Access plus dependency points | `16 + 8c` | `16*16 + 8*816 = 6784` |
-| PostgreSQL examined/removed rows | `64 + 16c` | `64*16 + 16*816 = 14080` |
-| Shared blocks | Six per budgeted examined row | `6*14080 = 84480` |
-| PostgreSQL statements/backend | 12 | `8 + 4*16 = 72` |
-| Catalogue engine searches | At most 6 | `6*16 = 96` |
-| Owner keyset seeks | At most 3 | `3*16 = 48`, within SQL cap |
-| Connections/backend | 1 | 1 shared, not 16 |
-| PostgreSQL plus engine response bytes | `16 KiB + 4 KiB*c` | `256 + 3264 = 3520 KiB` |
-| PostgreSQL plus engine request bytes | `64 KiB + 1 KiB*c` | `1024 + 816 = 1840 KiB` |
-| Output slots | s | 128 |
+| Unit                                  | Single read at actual c              | All-direct R=16, S=128 ceiling |
+| ------------------------------------- | ------------------------------------ | ------------------------------ |
+| Candidates                            | `min(600,6s+3)` direct; `2s+2` ready | `6*128 + 3*16 = 816`           |
+| Access plus dependency points         | `16 + 8c`                            | `16*16 + 8*816 = 6784`         |
+| PostgreSQL examined/removed rows      | `64 + 16c`                           | `64*16 + 16*816 = 14080`       |
+| Shared blocks                         | Six per budgeted examined row        | `6*14080 = 84480`              |
+| PostgreSQL statements/backend         | 12                                   | `8 + 4*16 = 72`                |
+| Catalogue engine searches             | At most 6                            | `6*16 = 96`                    |
+| Owner keyset seeks                    | At most 3                            | `3*16 = 48`, within SQL cap    |
+| Connections/backend                   | 1                                    | 1 shared, not 16               |
+| PostgreSQL plus engine response bytes | `16 KiB + 4 KiB*c`                   | `256 + 3264 = 3520 KiB`        |
+| PostgreSQL plus engine request bytes  | `64 KiB + 1 KiB*c`                   | `1024 + 816 = 1840 KiB`        |
+| Output slots                          | s                                    | 128                            |
 
 The block and byte aggregate numbers are arithmetic consequences of the existing
 per-read ceilings, not new allowances. `3520 KiB = 3604480` bytes and
@@ -826,16 +820,16 @@ presentation endpoint; do not silently change all pages to Zone continuation.
 Proposed native file: `test/presentation/composed-filtered-lists.test.ts`.
 Use actual published documents and real Search/owner/Zone factories, not fakeKernel.
 
-| Frozen title | Input and schedule | Required output and work |
-| --- | --- | --- |
-| Sixteen distinct eight-slot native reads complete under the common page ceilings | Publish 16 valid distinct effective descriptors, all fully matching | 128 useful slots, R=16, actual backend/engine totals below the table |
-| Aliases share one validated native dispatch and preserve raw admission limits | Publish valid aliases, then invalid alias and seventeenth raw descriptor controls | Exact shared result/session for aliases; reject invalid/overflow before dispatch |
-| Mixed direct and ready plans use actual slot sums | Run k=0,8,16 direct eight-slot reads with remaining ready plans | All complete; each actual mixed capture meets its derived tighter envelope |
-| An aggregate cannot publish its first read while its second prepares | Hold second admitted plan before native completion after first is ready | Zone returns only 202 next; no first-read subjects/document fragment |
-| Source revocation after an earlier read prevents final aggregate disclosure | Hold before final after real first result; revoke mount/source via owner API | Honest denied/readiness response; no borrowed first-read authority |
-| Every descriptor uses the final local and foreign privacy barrier | Reduce a matching excluded/order dependency after a read, repair later | No partial page before all required native repair and final safety |
-| Standalone and aggregate filters preserve native meaning and credentials | Send same expanded job/source/language as native single and composed read | Same safe canonical IDs/order/fields and session custody |
-| Composed cursor restart never preserves withdrawn source authority | Obtain real 202/next, change source/principal/session per transport contract | Restart or denial as owned; no replay of stale grant or build rows |
+| Frozen title                                                                     | Input and schedule                                                                | Required output and work                                                         |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Sixteen distinct eight-slot native reads complete under the common page ceilings | Publish 16 valid distinct effective descriptors, all fully matching               | 128 useful slots, R=16, actual backend/engine totals below the table             |
+| Aliases share one validated native dispatch and preserve raw admission limits    | Publish valid aliases, then invalid alias and seventeenth raw descriptor controls | Exact shared result/session for aliases; reject invalid/overflow before dispatch |
+| Mixed direct and ready plans use actual slot sums                                | Run k=0,8,16 direct eight-slot reads with remaining ready plans                   | All complete; each actual mixed capture meets its derived tighter envelope       |
+| An aggregate cannot publish its first read while its second prepares             | Hold second admitted plan before native completion after first is ready           | Zone returns only 202 next; no first-read subjects/document fragment             |
+| Source revocation after an earlier read prevents final aggregate disclosure      | Hold before final after real first result; revoke mount/source via owner API      | Honest denied/readiness response; no borrowed first-read authority               |
+| Every descriptor uses the final local and foreign privacy barrier                | Reduce a matching excluded/order dependency after a read, repair later            | No partial page before all required native repair and final safety               |
+| Standalone and aggregate filters preserve native meaning and credentials         | Send same expanded job/source/language as native single and composed read         | Same safe canonical IDs/order/fields and session custody                         |
+| Composed cursor restart never preserves withdrawn source authority               | Obtain real 202/next, change source/principal/session per transport contract      | Restart or denial as owned; no replay of stale grant or build rows               |
 
 For limit admission include 16/128 exactly, 17 raw descriptors, 129 slots, a
 zero/fractional/101 list limit and a duplicate whose body becomes invalid before
@@ -864,14 +858,14 @@ than reverting to the older empty-success inventory wording.
 
 Use this fixed finite fixture for each of the four actual plan kinds:
 
-| Fixture | Native input | Expected completed sequence at s=8 |
-| --- | --- | --- |
-| First/final | 17 eligible canonical matches, stable distinct order keys | 8, 8, 1; only final next is null |
-| Deep | N eligible matches; reach the cursor after at least N/2 by real continuations | Next eight correct IDs without offset/replaying the prefix |
-| Sparse | N nonmatches before nine qualifying matches, fixed same source | Useful first eight then final one; no empty/short intermediate 200 |
-| Hidden/rejected | Eligible tail plus native hidden original, terminal and lookahead candidates | Same useful tail; rejects counted and confidential cursor preserved |
-| Empty | Complete known zero matches with ready source/coverage | One genuinely exhausted empty page, next null |
-| Unknown | Essential source coverage or authority unavailable | Readiness/preparation, never an empty success |
+| Fixture         | Native input                                                                  | Expected completed sequence at s=8                                  |
+| --------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| First/final     | 17 eligible canonical matches, stable distinct order keys                     | 8, 8, 1; only final next is null                                    |
+| Deep            | N eligible matches; reach the cursor after at least N/2 by real continuations | Next eight correct IDs without offset/replaying the prefix          |
+| Sparse          | N nonmatches before nine qualifying matches, fixed same source                | Useful first eight then final one; no empty/short intermediate 200  |
+| Hidden/rejected | Eligible tail plus native hidden original, terminal and lookahead candidates  | Same useful tail; rejects counted and confidential cursor preserved |
+| Empty           | Complete known zero matches with ready source/coverage                        | One genuinely exhausted empty page, next null                       |
+| Unknown         | Essential source coverage or authority unavailable                            | Readiness/preparation, never an empty success                       |
 
 N is 64, 512 or 4,096, independently of the fixed requested slots. Matching and
 nonmatching populations are varied on separate axes. Deep setup follows actual
@@ -914,14 +908,14 @@ fails, even if every individual response is a valid 202/503.
 
 Frozen future additions, only if not already covered by the dynamic/Zone suites:
 
-| Frozen title | Act | Required assertion |
-| --- | --- | --- |
-| Four native plan kinds fill first deep sparse and final pages | Run the five ready fixture shapes above for each plan | Exact native IDs/order/next and bounded raw work |
-| Retained native preparation survives crash before and after frontier commit | Use the two real third-step crash schedules | Resume retained progress, reread at most one step, no duplicate rows |
-| Privacy reduction during a retained build cannot publish an old result | Commit matching local/foreign reduction before building-to-ready publication | Old generation withheld; actual repair settles and fresh result serves |
-| Stable owner input finishes while disjoint canonical jobs continue | Keep affected input fixed and run unrelated native identity jobs | No universal page gate; finite useful completion and scoped cursor validity |
-| Prepared owner admission deduplicates and bounds retained state | Repeat same-basis requests, then admit 33 distinct live definitions | Same-basis reuse; existing 32-live limit and least-recently-read eviction |
-| Public building generations and idle expiry retain native cleanup bounds | Replace one public build; expire an owner result after existing idle TTL | One current/one building public generation; idle owner expires at 24 hours |
+| Frozen title                                                                | Act                                                                          | Required assertion                                                          |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Four native plan kinds fill first deep sparse and final pages               | Run the five ready fixture shapes above for each plan                        | Exact native IDs/order/next and bounded raw work                            |
+| Retained native preparation survives crash before and after frontier commit | Use the two real third-step crash schedules                                  | Resume retained progress, reread at most one step, no duplicate rows        |
+| Privacy reduction during a retained build cannot publish an old result      | Commit matching local/foreign reduction before building-to-ready publication | Old generation withheld; actual repair settles and fresh result serves      |
+| Stable owner input finishes while disjoint canonical jobs continue          | Keep affected input fixed and run unrelated native identity jobs             | No universal page gate; finite useful completion and scoped cursor validity |
+| Prepared owner admission deduplicates and bounds retained state             | Repeat same-basis requests, then admit 33 distinct live definitions          | Same-basis reuse; existing 32-live limit and least-recently-read eviction   |
+| Public building generations and idle expiry retain native cleanup bounds    | Replace one public build; expire an owner result after existing idle TTL     | One current/one building public generation; idle owner expires at 24 hours  |
 
 Do not synthesize time by mutating native authority fields. Use the owner's
 trusted clock fixture where available, preserving real request deadlines and
@@ -1009,17 +1003,17 @@ Use native-created authorities; production-shaped bulk seed is allowed only for
 inert growing data according to the kernel Growth checks README. No SQL token,
 suspension, grant, permission truth or fake public completion is seeded.
 
-| Axis | Scale construction | What distinguishes a correct native plan |
-| --- | --- | --- |
-| Catalogue population | Add N unrelated eligible subjects | Rows/bytes constant; blocks and engine work at most logarithmic |
-| Matching population | N subjects actually satisfy the selected predicate | Direct plan cannot scan/sort/count all matches |
-| Sparse matches | N preceding nonmatches and fixed nine-match tail | Finite preparation yields useful eight then final one |
-| History | N unrelated revisions/retractions/suppressions | No history walk or newest-row scan in the measured read |
-| Owner pools | N owners, then N entries/labels/holdings/sessions for Alice separately | Viewer-self indexed access, every private family charged |
-| Aliases/duplicates | Actual N-original canonical group and duplicate occurrences | Largest scale really has 4096 originals; unique canonical page without group expansion |
-| Depth | Reach a native cursor after >=N/2 eligible rows | Seek from retained key, no offset/prefix replay |
-| Privacy traffic | N independent relevant/irrelevant reductions with actual owner repair | Relevant safety blocks; unrelated safe read remains usable |
-| Active XIDs, conditional | 1/8/64 allocated transactions, data fixed | No active-transaction term hidden in final coverage cost |
+| Axis                     | Scale construction                                                     | What distinguishes a correct native plan                                               |
+| ------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Catalogue population     | Add N unrelated eligible subjects                                      | Rows/bytes constant; blocks and engine work at most logarithmic                        |
+| Matching population      | N subjects actually satisfy the selected predicate                     | Direct plan cannot scan/sort/count all matches                                         |
+| Sparse matches           | N preceding nonmatches and fixed nine-match tail                       | Finite preparation yields useful eight then final one                                  |
+| History                  | N unrelated revisions/retractions/suppressions                         | No history walk or newest-row scan in the measured read                                |
+| Owner pools              | N owners, then N entries/labels/holdings/sessions for Alice separately | Viewer-self indexed access, every private family charged                               |
+| Aliases/duplicates       | Actual N-original canonical group and duplicate occurrences            | Largest scale really has 4096 originals; unique canonical page without group expansion |
+| Depth                    | Reach a native cursor after >=N/2 eligible rows                        | Seek from retained key, no offset/prefix replay                                        |
+| Privacy traffic          | N independent relevant/irrelevant reductions with actual owner repair  | Relevant safety blocks; unrelated safe read remains usable                             |
+| Active XIDs, conditional | 1/8/64 allocated transactions, data fixed                              | No active-transaction term hidden in final coverage cost                               |
 
 For privacy served share, proposal: use one fixed measurement window duration T
 at every scale; choose T once from the existing native harness deadline, never
@@ -1054,18 +1048,18 @@ results to improve the fraction fails. Every schedule drains its own work in
 These are required consumers of the same native fixtures and protocols, not
 new parallel specification projects or permission mechanisms.
 
-| Manifest row | Native acceptance retained or extended | Missing connection to close |
-| --- | --- | --- |
-| catalogue-jobs | Predicate map and released-discovery suites above | All six consumers, actual owner completion and released controls |
-| query-privacy | Existing consumer/projection/log/custody suites plus whole-query HTTP schedules | Default worker and public routes use actual immutable observation/final barrier |
-| freshness-and-recovery | Original fifteen-second new-subject case; shared healthy 60s/max five-minute lag | End-to-end relay/dependency/prepare/refresh lag, owner next read and retained recovery |
-| canonical-keysets-and-generation | Original ties/principal/signature/rebuild, bounded-name and native identity cases | All source dependencies including NOT/excluded/order; 4096-original canonical groups |
-| global-rating-order | Existing native Global vote-to-worker-to-HTTP outcomes | Genuine extreme private Realm population proves isolation on aggregate/context consumers |
-| typeahead-and-invalid-requests | Original prefix/operator/filter-limit cases | Expanded real credentials and current hidden/taken-down sources; no new equivalent suggest suite |
-| index-and-default-runtime | Original outage/rebuild and real-source composition | New whole-row fixtures use the actual registered default kernel work modules |
-| composition-and-profile-governance | Original six Pages cases and native read/session/admission suites | Proposed TypeList filter schema and actual shared whole-page backend work |
-| subject-context-and-traversal | Native relations/editions/credits and actual Workers publication cases | Current public context and continuations from owner APIs to aggregate/SSR/JSON-LD |
-| composed-cost-and-progress | Dynamic counted useful-page cases plus new composed matrix | Actual factories, native counters and finite retained progress on every plan |
+| Manifest row                       | Native acceptance retained or extended                                            | Missing connection to close                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| catalogue-jobs                     | Predicate map and released-discovery suites above                                 | All six consumers, actual owner completion and released controls                                 |
+| query-privacy                      | Existing consumer/projection/log/custody suites plus whole-query HTTP schedules   | Default worker and public routes use actual immutable observation/final barrier                  |
+| freshness-and-recovery             | Original fifteen-second new-subject case; shared healthy 60s/max five-minute lag  | End-to-end relay/dependency/prepare/refresh lag, owner next read and retained recovery           |
+| canonical-keysets-and-generation   | Original ties/principal/signature/rebuild, bounded-name and native identity cases | All source dependencies including NOT/excluded/order; 4096-original canonical groups             |
+| global-rating-order                | Existing native Global vote-to-worker-to-HTTP outcomes                            | Genuine extreme private Realm population proves isolation on aggregate/context consumers         |
+| typeahead-and-invalid-requests     | Original prefix/operator/filter-limit cases                                       | Expanded real credentials and current hidden/taken-down sources; no new equivalent suggest suite |
+| index-and-default-runtime          | Original outage/rebuild and real-source composition                               | New whole-row fixtures use the actual registered default kernel work modules                     |
+| composition-and-profile-governance | Original six Pages cases and native read/session/admission suites                 | Proposed TypeList filter schema and actual shared whole-page backend work                        |
+| subject-context-and-traversal      | Native relations/editions/credits and actual Workers publication cases            | Current public context and continuations from owner APIs to aggregate/SSR/JSON-LD                |
+| composed-cost-and-progress         | Dynamic counted useful-page cases plus new composed matrix                        | Actual factories, native counters and finite retained progress on every plan                     |
 
 For lag, retain original stronger fifteen-second fixture assertion unchanged.
 Additionally timestamp actual committed source position through relay, dependencies,
@@ -1136,19 +1130,19 @@ method and count its throw as a completed owner job.
 
 ### Adoption-ready scenario and fixture allocation
 
-| Acceptance file or family | Fixture/port adoption | New coverage versus retained coverage |
-| --- | --- | --- |
-| Existing Search/relation/Pages originals | Existing factories; same native Auth, Access and default indexing | Retain all 13+6+6 scenarios below, no assertion/title edits |
-| Existing released-discovery fixture/capability suites | Actual version-1 builder and native setup/scoped controls | Reuse landed records and receipts; extend only declared missing groups |
-| Proposed `test/search/whole-row-predicates.test.ts` | Same-world group builder, expanded native personas, adopted members/TypeList admission | Eight frozen predicate rows, six-surface bindings and exact sets |
-| Existing projection/log/consumer/custody suites | Actual PublicFilterSource and consumer operations | Reuse protocol assertions; do not duplicate their production writers |
-| Proposed `test/search/whole-query-privacy-outcomes.test.ts` | Existing real transport controls plus HTTP/surface bindings | Twelve frozen schedules; existing protocol rows reused where already executable |
-| Existing dynamic-Collections outcomes | Actual DynamicCollectionsDriver native factory | Preserve useful-page and counted-work assertions already landed |
-| Proposed `test/search/filtered-list-native-growth.test.ts` | Search native plan/capture controls and shared growth harness | Direct catalogue/prepared public first/deep/sparse/final and independent axes |
-| Proposed `test/library/filtered-list-native-growth.test.ts` | Native owner factory and existing Measurement/PreparationMeasurement | Direct/prepared owner axes and missing retained crash schedules |
-| Proposed `test/presentation/composed-filtered-lists.test.ts` | Same-world published profiles, actual common executor/Zone union | Eight frozen aggregate schedules, real 16/128/mixed captures |
-| Existing Zone user-site/membership/continuation suites | Real owner source and durable work ports | Preserve static/route/direct target; add missing >4-step retained journey only |
-| Existing rating/context/Workers suites | Content's genuine private producer and owner context APIs | Retain native producer/publication cases; bind missing whole-row context |
+| Acceptance file or family                                    | Fixture/port adoption                                                                  | New coverage versus retained coverage                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Existing Search/relation/Pages originals                     | Existing factories; same native Auth, Access and default indexing                      | Retain all 13+6+6 scenarios below, no assertion/title edits                     |
+| Existing released-discovery fixture/capability suites        | Actual version-1 builder and native setup/scoped controls                              | Reuse landed records and receipts; extend only declared missing groups          |
+| Proposed `test/search/whole-row-predicates.test.ts`          | Same-world group builder, expanded native personas, adopted members/TypeList admission | Eight frozen predicate rows, six-surface bindings and exact sets                |
+| Existing projection/log/consumer/custody suites              | Actual PublicFilterSource and consumer operations                                      | Reuse protocol assertions; do not duplicate their production writers            |
+| Proposed `test/search/whole-query-privacy-outcomes.test.ts`  | Existing real transport controls plus HTTP/surface bindings                            | Twelve frozen schedules; existing protocol rows reused where already executable |
+| Existing dynamic-Collections outcomes                        | Actual DynamicCollectionsDriver native factory                                         | Preserve useful-page and counted-work assertions already landed                 |
+| Proposed `test/search/filtered-list-native-growth.test.ts`   | Search native plan/capture controls and shared growth harness                          | Direct catalogue/prepared public first/deep/sparse/final and independent axes   |
+| Proposed `test/library/filtered-list-native-growth.test.ts`  | Native owner factory and existing Measurement/PreparationMeasurement                   | Direct/prepared owner axes and missing retained crash schedules                 |
+| Proposed `test/presentation/composed-filtered-lists.test.ts` | Same-world published profiles, actual common executor/Zone union                       | Eight frozen aggregate schedules, real 16/128/mixed captures                    |
+| Existing Zone user-site/membership/continuation suites       | Real owner source and durable work ports                                               | Preserve static/route/direct target; add missing >4-step retained journey only  |
+| Existing rating/context/Workers suites                       | Content's genuine private producer and owner context APIs                              | Retain native producer/publication cases; bind missing whole-row context        |
 
 Generated matrix keys are `(scenario title, surface, persona, source visibility,
 observation kind, scale, plan)` restricted only by the explicitly applicable
