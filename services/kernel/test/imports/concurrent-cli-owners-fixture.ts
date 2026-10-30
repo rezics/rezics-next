@@ -350,7 +350,9 @@ export async function runConcurrentCliOwnersJourney() {
     }
     async function relationValue(source: string) {
       const id = claim(source, edition.key);
-      const rows = (await candidates(id, relation)).filter((c) => c.retracted === null);
+      const rows = (await candidates(id, relation, undefined, claim(source, work.key))).filter(
+        (c) => c.retracted === null,
+      );
       expect(rows).toHaveLength(1);
       expect(rows[0]!.source.source).toBe(source);
       const value = rows[0]!.statement.value;
@@ -370,7 +372,8 @@ export async function runConcurrentCliOwnersJourney() {
           subject,
           revisions,
           names: await candidates(id, 'schema:name'),
-          relations: await candidates(id, relation),
+          unresolvedRelations: await candidates(id, relation),
+          resolvedRelations: await candidates(id, relation, undefined, claim(source, work.key)),
         });
       }
       return { local, receipts: await receipts(source), nativeRows };
