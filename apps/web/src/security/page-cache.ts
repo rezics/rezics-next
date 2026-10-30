@@ -1,8 +1,10 @@
 import { dehydrate } from '@tanstack/react-query';
 import { createNonce, requestNonce } from './nonce.ts';
 
-export const publicPageCacheControl = 'public, max-age=0, s-maxage=60';
+export const publicPageCacheControl = 'public, max-age=0, s-maxage=0, must-revalidate';
 export const pageCacheTtlSeconds = 60;
+// Internal retention only. This header must never authorize an HTTP client to skip revalidation.
+const storedPageCacheControl = `public, max-age=0, s-maxage=${pageCacheTtlSeconds}`;
 export const cachedNoncePlaceholder = '__REZICS_CACHED_PAGE_NONCE__';
 
 type PublicCacheRoute = { staticData?: { publicCache?: boolean } };
@@ -136,27 +138,8 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
     try {
       if (!isPublicPageGetRequest(request)) return privateNoStore(await options.render());
       const eligible = isPageCacheRequest(request);
-      const key = pageCacheKey(request);
-      let cached: Response | undefined;
-      if (eligible && options.cache) {
-        try {
-          cached = await options.cache.match(key);
-        } catch {
-          // A Cache API outage leaves the normal request path available.
-        }
-      }
-      if (
-        cached &&
-        !(isCollectionPage(request) && cached.status !== 200) &&
-        !isSubjectFailure(request, cached) &&
-        isPublicCacheableResponse(cached) &&
-        cached.headers.get('cache-control') === publicPageCacheControl
-      ) {
-        if (matchesIfNoneMatch(request.headers.get('if-none-match'), cached.headers.get('etag')))
-          return notModified(cached);
-        return rewriteNonce(cached, (options.freshNonce ?? (() => createNonce(request)))());
-      }
-
+      // No owner-native fence currently covers every rendered dependency. The ordinary public
+      // renderer must run exactly once, even with a warm body or a matching client validator.
       const response = await options.render();
       const failureStatus = publicPageFailures.get(request);
       if (failureStatus !== undefined)
@@ -167,20 +150,61 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
         return privateNoStore(response);
       if (!isPublicCacheableResponse(response)) return privateNoStore(response);
 
-      const etag = await createPageEtag(request.url, options.buildId, options.dehydratedData());
-      const headed = withHeaders(response, (headers) => {
+      const normalized = await rewriteNonce(response, cachedNoncePlaceholder);
+      const html = await normalized.text();
+      // Streamed rendering can record a restrictive read or a caught failure while draining HTML.
+      const completedFailure = publicPageFailures.get(request);
+      if (
+        completedFailure !== undefined ||
+        privatePageReads.has(request) ||
+        (isCollectionPage(request) && publicPagePolicies.get(request) !== 'public')
+      ) {
+        const current = await rewriteNonce(
+          new Response(html, normalized),
+          (options.freshNonce ?? (() => requestNonce(request) ?? createNonce(request)))(),
+        );
+        return privateNoStore(
+          current,
+          completedFailure === 403 || response.status === 200 ? completedFailure : undefined,
+        );
+      }
+      // Cover the complete current HTML as well as loader/query data. A title-only validator
+      // cannot establish that a withdrawn document, relation or image is still rendered.
+      const etag = await createPageEtag(request.url, options.buildId, {
+        data: options.dehydratedData(),
+        status: normalized.status,
+        html,
+      });
+      const key = pageCacheKey(request);
+      let cached: Response | undefined;
+      if (options.cache) {
+        try {
+          cached = await options.cache.match(key);
+        } catch {
+          // A Cache API outage leaves the current rendered response available.
+        }
+      }
+      const reusable =
+        cached !== undefined &&
+        cached.status === normalized.status &&
+        isPublicCacheableResponse(cached) &&
+        cached.headers.get('cache-control') === storedPageCacheControl &&
+        cached.headers.get('etag') === etag;
+      // Use current headers even when the complete representation still matches a stored body.
+      const headed = withHeaders(new Response(reusable && cached ? cached.body : html, normalized), (headers) => {
         headers.set('cache-control', publicPageCacheControl);
         headers.set('etag', etag);
       });
-      if (eligible && options.cache) {
+      if (!reusable && options.cache) {
         try {
-          const stored = await rewriteNonce(headed.clone(), cachedNoncePlaceholder);
+          const stored = withHeaders(headed.clone(), (headers) => headers.set('cache-control', storedPageCacheControl));
           await options.cache.put(key, stored);
         } catch {
           // Rendering succeeds even if the shared edge cache cannot store this response.
         }
       }
-      if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) return notModified(headed);
+      if (headed.status === 200 && matchesIfNoneMatch(request.headers.get('if-none-match'), etag))
+        return notModified(headed);
 
       const nonce = (options.freshNonce ?? (() => requestNonce(request) ?? createNonce(request)))();
       return rewriteNonce(headed, nonce);
@@ -285,10 +309,10 @@ function matchesIfNoneMatch(value: string | null, etag: string | null): boolean 
 
 function notModified(response: Response): Response {
   const headers = new Headers();
-  const etag = response.headers.get('etag');
-  const cacheControl = response.headers.get('cache-control');
-  if (etag) headers.set('etag', etag);
-  if (cacheControl) headers.set('cache-control', cacheControl);
+  for (const name of ['etag', 'cache-control', 'vary', 'content-location', 'expires']) {
+    const value = response.headers.get(name);
+    if (value) headers.set(name, value);
+  }
   return new Response(null, { status: 304, headers });
 }
 

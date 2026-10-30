@@ -503,6 +503,7 @@ async function fetchRequest(request: Request): Promise<Response> {
 const worker = {
   async fetch(request: Request) {
     const publicRoute = isPublicCacheRequest(request);
+    // Route opt-in permits anonymous classification, never reuse without the current public render.
     return cachePublicPage(request, {
       publicRoute,
       cache: (caches as CacheStorage & { default: Cache }).default,

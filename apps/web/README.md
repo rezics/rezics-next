@@ -393,7 +393,7 @@ The search route keeps its schema in `search/search-params.ts`; its query key in
 
 **Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
 
-**Caching**: [SEO](../../docs/seo.md#public-html-cache) owns disclosure and withdrawal policy. The Worker promotes only eligible anonymous public HTML results to `Cache-Control: public, max-age=0, s-maxage=60` with a weak build/data `ETag`. Native private/no-store directives and failures survive classification; cookie/Authorization requests bypass shared reuse and remain private/no-store. Session-reading server functions remain private/no-store. The unresolved warm-cache invalidation/fence decision is routed to Root and source owners in [SEO](../../docs/seo.md#waiting-on-withdrawal-policy); the TTL does not prove immediate privacy withdrawal.
+**Caching**: [SEO](../../docs/seo.md#public-html-cache) owns disclosure and withdrawal policy. Eligible anonymous public routes receive `Cache-Control: public, max-age=0, s-maxage=0, must-revalidate` with a weak URL/build/data/status/normalized-HTML `ETag`. Every request first runs the ordinary anonymous renderer and its current owner reads once, including warm entries and conditional GETs. Only a current eligible public 200 can answer 304; stored bodies also require the same current status and complete representation validator, with current headers. Native private/no-store directives and failures survive classification; the Worker never promotes `Set-Cookie`. Cookie/Authorization requests bypass shared reuse and remain private/no-store. Server functions that read a session remain `private, no-store`. Internal 60-second body retention does not grant independent proxies public freshness. No complete owner-native currentness provider is installed, so rendering cannot be skipped. Immutable assets and sitemap shards retain their separate policies.
 
 **Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.
 
@@ -457,7 +457,7 @@ Web stores no records of its own, so it soft-deletes, restores and purges nothin
 References to deleted, withheld or unavailable records render with `Tombstone`; a withheld part renders with
 `Withheld`, leaving the other fields visible. A deleted or withheld page answers 404, following
 [the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export; they never authorize page disclosure.
-The warm-cache withdrawal decision remains [with Root and source owners](../../docs/seo.md#waiting-on-withdrawal-policy).
+Warm HTML and validators require [current public rendering](../../docs/seo.md#public-html-cache) before reuse; a TTL never authorizes withdrawn content.
 Restore and Undo call the owner's restore route only once
 that route exists.
 
@@ -502,9 +502,9 @@ action needs no additional session read.
 
 ### Page cache
 
-- **Touches:** One Cache API lookup per anonymous GET of an opted-in route; on a miss, the page's usual reads and at most one Cache API put for an eligible public result. Credentialed requests do neither cache operation.
-- **Bound:** A valid hit makes no kernel request; the HTML rewrite is linear in the page's bytes. This describes the existing mechanism, subject to the [unresolved withdrawal fence](../../docs/seo.md#waiting-on-withdrawal-policy), and does not establish immediate privacy withdrawal.
-- **Growth check:** The acceptance test counts kernel requests for two GETs of an opted-in page within the TTL: the first makes the page's reads, the second none.
+- **Touches:** The page's usual anonymous reads/render once on every opted-in request, including a warm cache or conditional GET. After current public classification, at most one Cache API lookup and one put for a new representation. Credentialed requests do neither cache operation.
+- **Bound:** No extra source/detail read, duplicate renderer or per-row probe. Existing composition limits remain 16 reads/128 cost and subject-read bounds are unchanged. Nonce normalization, HTML buffering and ETag hashing are linear in rendered page bytes. Internal retention is 60 seconds; HTTP clients must revalidate every reuse. A native fence covering all rendered dependencies remains unbound.
+- **Growth check:** The focused cache tests require one current render per GET and retain nonce, credential, native-policy and error guards. Warm positive/negative entries cannot mask current withdrawal, closure or preparation; complete-HTML/status validators distinguish changed dependencies and restoration.
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,
 `src/session/` and `src/media/`; they count outbound work, not the kernel's internal query cost.

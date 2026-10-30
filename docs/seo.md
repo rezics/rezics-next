@@ -72,7 +72,7 @@ is pending. Web neither evaluates private predicates for publication nor creates
 Only an explicitly disclosed public, ready first page without active or ignored filters permits public HTML
 caching. Unlisted/private, filtered, later, preparing and error results are noindex and private/no-store.
 Concealed public 404s retain that status and no metadata, while an authorized reader can recover private content
-after hydration. The existing public HTML cache lifetime remains unchanged.
+after hydration. Public HTML requires current disclosure before every reuse, including conditional requests.
 
 A complete ItemList is emitted only for the first unfiltered fully completed public curated result with
 `next: null`. Preview rows never stand in for a full count or export; unsafe or pending totals stay absent.
@@ -222,12 +222,20 @@ shift content when they hydrate.
 
 ## Public HTML cache
 
+Immediate current disclosure takes precedence over ordinary public freshness after hide, erasure, revocation,
+grant closure and private transitions. TTL is retention, never authorization. Mutable public HTML runs the existing
+anonymous public renderer and its authoritative owner reads once on every request, before any stored body or 304
+can be reused. There is no delivered owner-native currentness fence covering all rendered dependencies, so there
+is no warm-cache path that skips those reads. A cached public status, title, copied proof or request header cannot
+supply current authority.
+
 Only genuinely anonymous, publicly disclosed HTML from an opted-in public route can receive
-`Cache-Control: public, max-age=0, s-maxage=60` and the public weak ETag. Route opt-in and an HTML 200 or 404 are
-necessary mechanics, not a grant to override the native result. Native `private`, `no-store` or revalidation
-directives, `Set-Cookie`, `Vary: *` and router failures exclude promotion. A private or unknown
-Collection's concealed 404 remains private/no-store. Public negative caching must not bypass the owner's current
-disclosure or restoration rules.
+`Cache-Control: public, max-age=0, s-maxage=0, must-revalidate` and the public weak ETag. Independent HTTP caches
+must revalidate every reuse and cannot serve stale payload on an origin failure. Route opt-in and an HTML 200 or
+404 are necessary mechanics, not permission to override the current native result. Native `private`, `no-store`
+or revalidation directives, `Set-Cookie`, `Vary: *` and router failures exclude promotion. A private or unknown
+Collection's concealed 404 remains private/no-store. Current subject/profile failures also remain private/no-store.
+A previously stored positive or negative response never overrides a current withdrawal or restoration.
 
 Cookie or Authorization requests bypass shared lookup, storage and public conditional responses and receive
 private/no-store headers. Public SSR still uses anonymous data; credentials do not permit personal data in its
@@ -241,28 +249,33 @@ alone make that anonymous representation personal.
 Preparing, unavailable, error and closed fallbacks retain their native status, private/no-store and noindex;
 they must not become cacheable successful HTML. A router error or pending fallback that would otherwise be 200
 gets a failure status; platform closure is 403. Source owners supply truthful native preparation/unavailability
-outcomes. A public ETag or 304 is produced only for an eligible public result, including on cache hits. Cache
-lookup failure falls through to normal rendering without changing disclosure requirements.
+outcomes. These current results are classified before shared lookup or validator calculation. An uncaught current
+read/render error propagates rather than falling back to a stored page. Cache API outages use the current render.
 
-Public HTML cache mechanics retain URL keys, build/data ETags and the 60-second shared TTL. Stored HTML has a
-nonce placeholder; every served body gets a fresh nonce in CSP, marked attributes and the nonce meta element.
-A 304 has no CSP nonce. This mechanism neither changes native authorization nor adds source/detail requests.
+ETags cover the URL, build, current dehydrated data, response status and complete nonce-normalized rendered HTML.
+This prevents unchanged titles or omitted loader fields from validating an earlier document or dependency. A
+matching public 200 can answer 304 only after current rendering; a current 404 retains its status even with
+`If-None-Match: *`. A 304 carries current cache/variant headers and no body or CSP nonce. Stored bodies are reused
+only when status and the complete current representation's ETag match, and always with current response headers.
+Stored HTML has a nonce placeholder; every served body gets a fresh nonce in CSP, marked attributes and the nonce
+meta element.
 
-### Waiting on withdrawal policy
+The Workers Cache API may retain those bodies internally for 60 seconds. Its positive retention header is never
+sent to HTTP clients. That retention neither establishes current disclosure nor eliminates a request's normal
+render. The mechanism adds no owner reads, per-row probes, duplicate render or identity verifier; existing
+composition limits of 16 reads/128 cost and subject-read bounds remain unchanged. Normalizing and hashing HTML
+requires work and buffering proportional to that rendered page's bytes.
 
-**Root, with Web and the Access, Semantic, Commerce and Content owners, must resolve the warm-cache withdrawal
-boundary.** Native privacy reductions require current disclosure immediately; the existing 60-second public
-cache can reuse an earlier positive response or validator without contacting its owner. Its TTL bounds cache
-freshness, not proof of immediate withdrawal, and is not an adopted exception to native privacy requirements.
-Sending a new no-store response does not remove an existing public entry.
+A future optimization that skips current rendering requires a real source-owner currentness provider bound to
+**all** rendered dependencies, including nested documents, metadata and disclosure reductions. It must use a small
+server-owned typed adapter with a safe fresh-render default; request-supplied authority, fabricated epochs and
+guessed backend exports are not bindings. No such provider is currently installed. Content, Subject, Accounts
+and Collection owners retain disclosure/currentness and publication authority. Web introduces no metadata or
+custody engine, publication table, purge service or native erasure acknowledgement.
 
-The remaining decision is which owner-authorized invalidation or current-authority fence must precede reuse of
-warm HTML and 304s after a privacy/security reduction, how that decision reaches every affected public family,
-and how restoration invalidates old negative decisions. The same decision must cover already cached mutable
-alias redirects and define retained sitemap artifact policy separately. No purge API, timestamp table or
-background coordinator is specified here. Keep the existing valid public cache mechanism while this decision
-is routed to Root; do not claim zero stale disclosure or completed withdrawal proof from the TTL. Implementing
-per-result private/no-store classification does not settle this cross-owner policy.
+Mutable aliases continue to resolve afresh with private/no-store. Digest-addressed immutable assets and retained
+immutable sitemap shards keep their existing separate cache policies; sitemap discovery/export cannot authorize
+live HTML disclosure. This policy does not purge public responses already held by clients under an older policy.
 
 ## Producer and consumer boundaries
 
@@ -272,7 +285,7 @@ per-result private/no-store classification does not settle this cross-owner poli
 | Collection source and export              | [Collection source](collection-source.md), [dynamic Collections](dynamic-collections.md) and [Collection presentation](collection-presentation.md) own completed source generations, complete current dependency authorization and canonical export readiness. SSR consumes only delivered contracts; a public header or preview does not prove source completeness.                                |
 | Community families                        | Content/Community own public eligibility and meaningful shown-change times. Their family consumers must reconcile carried Realm/Space destinations with the canonical-only inventory; this document does not choose an additional destination contract. Unknown times stay omitted.                                                                                                                 |
 | Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The generated placeholder card requirement remains; a static default card does not prove it. No native fields or permissions are invented to fill a missing producer.                                                                                                      |
-| Withdrawal and restoration                | Root and source owners resolve the warm HTML/304 and alias invalidation decision above. The existing daily offline exporter remains discovery infrastructure and cannot substitute for live authorization.                                                                                                                                                                                          |
+| Withdrawal and restoration                | Web requires a current public render before mutable HTML/304 reuse; a source-owner fence that could safely skip it remains an outstanding binding. Mutable aliases resolve afresh. The daily offline exporter is discovery infrastructure, never live authorization.                                                                                                                                |
 
 Reuse the current keyset exporter, immutable shards and atomic index publication. A native feed that is preparing
 or unavailable fails the export and preserves the previous inventory; it never becomes a successful empty feed.

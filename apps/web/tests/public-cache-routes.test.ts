@@ -82,7 +82,7 @@ test('the generated router marks only the public page routes for shared caching'
   }
 });
 
-test('a recorded public thread uses the fake shared cache after its first anonymous render', async () => {
+test('a recorded public thread renders current disclosure on every anonymous request', async () => {
   globalThis.HTMLRewriter = FakeHtmlRewriter as never;
   const request = new Request(`https://rezics.test${publicCacheGrowthSample}`);
   let renderCalls = 0;
@@ -105,8 +105,8 @@ test('a recorded public thread uses the fake shared cache after its first anonym
     const second = await cachePublicPage(request, options);
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    expect(second.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60');
-    expect(renderCalls).toBe(1);
+    expect(second.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=0, must-revalidate');
+    expect(renderCalls).toBe(2);
   } finally {
     if (originalHtmlRewriter === undefined) delete (globalThis as { HTMLRewriter?: unknown }).HTMLRewriter;
     else globalThis.HTMLRewriter = originalHtmlRewriter;

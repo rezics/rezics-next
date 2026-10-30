@@ -207,7 +207,7 @@ test(
 
     const response = await fetch(`${origin}${canonicalPath}`);
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=0, must-revalidate');
 
     const page = await open(`/en/subjects/${kokoro.id}`, { javaScriptEnabled: false });
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.en);

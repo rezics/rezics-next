@@ -1,10 +1,27 @@
-import { expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { dehydrate, QueryClient } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
 import type { SessionEnv } from '../src/session/client';
 import { collectionRenderPolicy, loadEditableCollectionPage } from '../src/library/collection-load';
 import { cachePublicPage, duringPublicCacheRender, recordPublicPageCachePolicy } from '../src/security/page-cache';
+
+// The conditional fixture has no nonce attributes; current HTML is still normalized before its ETag.
+const originalHtmlRewriter = globalThis.HTMLRewriter;
+beforeEach(() => {
+  globalThis.HTMLRewriter = class {
+    on(): this {
+      return this;
+    }
+    transform(response: Response): Response {
+      return response;
+    }
+  } as never;
+});
+afterEach(() => {
+  if (originalHtmlRewriter === undefined) delete (globalThis as { HTMLRewriter?: unknown }).HTMLRewriter;
+  else globalThis.HTMLRewriter = originalHtmlRewriter;
+});
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.com' } }));
 const { collectionPageHead } = await import('../src/library/collection-page');
@@ -234,7 +251,7 @@ test('the public route loader stays anonymous and cache promotion needs a disclo
       },
     });
     expect(response.headers.get('cache-control')).toBe(
-      policy === 'public' ? 'public, max-age=0, s-maxage=60' : 'private, no-store',
+      policy === 'public' ? 'public, max-age=0, s-maxage=0, must-revalidate' : 'private, no-store',
     );
     expect(response.status).toBe(policy === 'public' ? 304 : 200);
     expect(response.headers.has('etag')).toBe(policy === 'public');
