@@ -38,6 +38,7 @@ export async function readOrganizationMembershipCommandState(
   const { pool, access } = deps;
   const { organizationId, memberAccountId } = selection;
   if (actor.kind !== 'account') throw new AuthBindingDeniedError();
+  const { accountId, authnEpoch } = actor;
   const route = routeOf(organizationId);
   const memberRoute = routeOf(memberAccountId);
   if (route === null || memberRoute === null) throw new AuthBindingDeniedError();
@@ -46,14 +47,14 @@ export async function readOrganizationMembershipCommandState(
     requireAccessDeadline(context.deadline);
     const time = await withConnection(pool, (client) => mintReadTime(client, deps.clock ?? accessClock(access)));
     try {
-      const human = await actorSource.run(pool, { route: routeOf(actor.accountId)!, account_id: actor.accountId });
+      const human = await actorSource.run(pool, { route: routeOf(accountId)!, account_id: accountId });
       if (
         !human ||
         human.kind !== 'actor' ||
         human.state !== 'active' ||
         human.fenced ||
         human.operatorAccountId !== null ||
-        BigInt(actor.authnEpoch) < BigInt(human.floor)
+        BigInt(authnEpoch) < BigInt(human.floor)
       )
         throw new AuthBindingDeniedError();
       const check = await accessCheck(
@@ -75,14 +76,13 @@ export async function readOrganizationMembershipCommandState(
       });
       const source = await withConnection(pool, async (client) => {
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
-        const rows = await organizationSource.run(client, {
+        const org = await organizationSource.run(client, {
           route: route!,
           organization_id: organizationId,
           member_id: memberAccountId,
           at: authoritativeTimeValue(time),
           reservation_id: member?.reservationId ?? null,
         });
-        const org = rows[0];
         if (!org || org.kind !== 'organization' || org.state !== 'active' || org.fenced)
           throw new AuthBindingDeniedError();
         if (
@@ -90,8 +90,7 @@ export async function readOrganizationMembershipCommandState(
           !member.complete ||
           member.state !== 'active' ||
           member.fenced ||
-          (member.reservationId !== null && !member.reservationTransactionId) ||
-          rows.length !== 1
+          (member.reservationId !== null && !member.reservationTransactionId)
         )
           throw new AccessUnavailableError('overloaded');
         if (
@@ -109,8 +108,8 @@ export async function readOrganizationMembershipCommandState(
       // Re-read the human anchor after releasing organization checkout: an Access
       // preparation must not conceal a concurrent session-floor/fencing change.
       const finalHuman = await actorSource.run(pool, {
-        route: routeOf(actor.accountId)!,
-        account_id: actor.accountId,
+        route: routeOf(accountId)!,
+        account_id: accountId,
       });
       if (JSON.stringify(human) !== JSON.stringify(finalHuman)) throw new AccessUnavailableError('contention');
       requireAccessDeadline(context.deadline);

@@ -87,7 +87,7 @@ export type NativeAccountBindingsConfig = {
 };
 
 export type NativeAccountBindings = {
-  trustedAccess: TrustedAccessPorts & ManagementMembershipAccess;
+  trustedAccess: TrustedAccessPorts;
   workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
   lifecycle: ReturnType<typeof createLifecycleCommands>;
   internalLifecycle: ReturnType<typeof createLifecycleInternals>;
