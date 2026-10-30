@@ -387,15 +387,15 @@ export function SubjectPage({
           context={page.context?.id ?? read.subject.context}
           realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
         >
-        {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
-        <CreateSubjectEntry locale={locale} />
-        <AuthoredFieldEntry id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
-        <SubjectFactsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
-        {read.subject.type === 'schema:Recipe' && (
-          <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
-        )}
-        <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
-        <SubjectChangesLink id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
+          {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
+          <CreateSubjectEntry locale={locale} />
+          <AuthoredFieldEntry id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
+          <SubjectFactsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          {read.subject.type === 'schema:Recipe' && (
+            <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          <SubjectChangesLink id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
         </EditorialEntry>
       </>
     ) : (

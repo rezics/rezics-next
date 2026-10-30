@@ -260,13 +260,13 @@ export function SubjectFrame({
         </div>
         <div data-slot="actions">
           <EditorialEntry id={frame.id} label={title} locale={locale} context={context ?? frame.context} realm={realm}>
-          {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
-          <CreateSubjectEntry locale={locale} />
-          <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
-          <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
-          {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
-          <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
-          <SubjectChangesLink id={frame.id} title={title} locale={locale} />
+            {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
+            <CreateSubjectEntry locale={locale} />
+            <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
+            <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
+            {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
+            <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+            <SubjectChangesLink id={frame.id} title={title} locale={locale} />
           </EditorialEntry>
         </div>
       </header>
