@@ -422,6 +422,12 @@ test('native keyed lifecycle binds ordered multi-key index, replacement, delete 
 test('equal and newer independent native winners retain their bodies behind aligned conflict receipts', async () => {
   await fixture(async (index, owned) => {
     const winners = [action('equal', 10n), action('newer', 12n)];
+    for (const winner of winners) {
+      if (winner.op === 'index') {
+        winner.document.names = [`Independent native winner ${winner.id}`];
+        winner.document.descriptions = ['The submitted losing body must never replace this body'];
+      }
+    }
     const pending = await pendingWinner(index, winners, owned);
     const control = await recordedWrite(index, [action('equal', 10n), action('newer', 11n)]);
     expect(control.requests).toEqual([`POST /${index}/_refresh`]);
