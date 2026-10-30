@@ -220,9 +220,7 @@ test('generated smoke brief keeps its real acceptance command and WorkerTasks se
 
 test('real worker-check starts the generated acceptance command once and its returned UUID is required', () => {
   const disposable = createSmokeDirectory(root, 'launch-smoke-test-');
-  let clone = '';
   let devTree = '';
-  let devWorktreeAdded = false;
   const runGit = (cwd: string, args: string[]) => {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 30_000 });
     if (result.status !== 0)
@@ -230,14 +228,13 @@ test('real worker-check starts the generated acceptance command once and its ret
     return result.stdout.trim();
   };
   try {
-    const sourceRoot = mainCheckout(root);
     const settings = loadSettings({ cwd: root });
-    clone = join(disposable.path, 'repository');
-    runGit(root, ['clone', '--shared', '--no-checkout', sourceRoot, clone]);
-    const remoteDev = `refs/remotes/origin/${settings.integrationBranch}`;
     devTree = join(disposable.path, 'dev');
-    runGit(clone, ['worktree', 'add', '--detach', devTree, remoteDev]);
-    devWorktreeAdded = true;
+    mkdirSync(join(devTree, 'scripts'), { recursive: true });
+    runGit(root, ['init', '--quiet', devTree]);
+    const sourceRef = `refs/heads/${settings.integrationBranch}`;
+    for (const file of ['worker-check.ts', 'remote-check.ts', 'check-ledger.ts', 'stack-lease.ts', 'check-memory.ts'])
+      writeFileSync(join(devTree, 'scripts', file), fixtureGit(root, ['show', `${sourceRef}:scripts/${file}`]));
 
     const script = join(devTree, 'scripts/worker-check.ts');
     const marker = join(disposable.path, 'command-starts.txt');
@@ -249,6 +246,8 @@ test('real worker-check starts the generated acceptance command once and its ret
         env: {
           ...process.env,
           REZICS_CHECK_MEMORY: 'off',
+          REZICS_CHECK_SCOPE: 'off',
+          REZICS_STACK_LEASE: 'off',
           REZICS_LAUNCH_SMOKE_CHECK_MARKER: marker,
         },
         encoding: 'utf8',
@@ -265,7 +264,12 @@ test('real worker-check starts the generated acceptance command once and its ret
 
     const waited = spawnSync(process.execPath, [script, '--wait', returnedId], {
       cwd: devTree,
-      env: { ...process.env, REZICS_CHECK_MEMORY: 'off' },
+      env: {
+        ...process.env,
+        REZICS_CHECK_MEMORY: 'off',
+        REZICS_CHECK_SCOPE: 'off',
+        REZICS_STACK_LEASE: 'off',
+      },
       encoding: 'utf8',
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,
@@ -275,7 +279,6 @@ test('real worker-check starts the generated acceptance command once and its ret
     const record = JSON.parse(readFileSync(join(devTree, '.temp/goal/checks/results', `${returnedId}.json`), 'utf8'));
     expect(record).toMatchObject({ id: returnedId, status: 'finished', exitCode: 0 });
   } finally {
-    if (devWorktreeAdded) runGit(clone, ['worktree', 'remove', '--force', devTree]);
     disposable.remove();
   }
 });

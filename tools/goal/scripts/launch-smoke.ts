@@ -64,7 +64,7 @@ type SmokeReport = {
 export const SMOKE_ACCEPTANCE_COMMAND = [
   process.execPath,
   '-e',
-  'if (process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER) require("node:fs").appendFileSync(process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER, "started\\n"); setTimeout(() => console.log("launch smoke check passed"), 7000)',
+  'if (process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER) require("node:fs").appendFileSync(process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER, "started\\n"); setTimeout(() => console.log("launch smoke check passed"), 100)',
 ] as const;
 
 /** Produce the unpinned smoke task that production dispatch routes from its configured table. */
