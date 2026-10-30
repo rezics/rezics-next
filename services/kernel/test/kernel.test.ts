@@ -410,6 +410,7 @@ test('subject HTTP refuses an unlicensed document and any media value before att
 });
 
 test('trending Search keeps the adopted Search exposure group', () => {
-  const operation = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths['/v1/trendingSearches']?.get;
+  const operation = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths['/v1/trendingSearches']
+    ?.get;
   expect(operation).toMatchObject({ 'x-exposure': 'gate:search', 'x-action': 'subject:read' });
 });

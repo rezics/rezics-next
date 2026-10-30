@@ -58,10 +58,10 @@ export const searchWorkModule: WorkModule = {
         input,
       );
     };
-    const continueWithdrawal = DBOS.registerStep(
-      enqueueWithdrawal,
-      { name: 'search.continueTrendingWithdrawal', ...COMMAND_STEP_RETRIES },
-    );
+    const continueWithdrawal = DBOS.registerStep(enqueueWithdrawal, {
+      name: 'search.continueTrendingWithdrawal',
+      ...COMMAND_STEP_RETRIES,
+    });
     const withdrawSegment = async (input: Withdrawal) => {
       // Bound both each command and its durable workflow history; ACK follows the final committed page.
       for (let page = 0; page < 100; page++) {
