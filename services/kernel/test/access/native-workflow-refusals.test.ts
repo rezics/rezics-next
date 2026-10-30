@@ -19,13 +19,13 @@ const workflowId = (key: string) =>
     .digest('hex')}`;
 async function stepError(key: string, name: string) {
   const row = (
-    await f.authPool.query<{ error: unknown }>(
-      'SELECT error FROM auth_dbos.operation_outputs WHERE workflow_uuid=$1 AND function_name=$2',
+    await f.authPool.query<{ output: unknown; error: unknown }>(
+      'SELECT output,error FROM auth_dbos.operation_outputs WHERE workflow_uuid=$1 AND function_name=$2',
       [workflowId(key), `accounts.${name}`],
     )
   ).rows[0];
   expect(row).toBeDefined();
-  const envelope = JSON.parse(String(row!.error)) as { json: unknown };
+  const envelope = JSON.parse(String(row!.output ?? row!.error)) as { json: unknown };
   return JSON.stringify(envelope.json);
 }
 async function bearer(key: string) {
@@ -101,6 +101,40 @@ test('a last owner tombstone is the same sanitized native refusal', async () => 
   expect(persisted).toContain('"status":403');
   expect(persisted).not.toContain('Account lifecycle command denied');
   expect(persisted).not.toContain(owner.accountId);
+});
+
+test('differently named typed native refusals restore without a private payload or an effect', async () => {
+  class NativeBoundaryRefusal extends Error {
+    constructor(readonly status: 401 | 403) {
+      super('private-native-refusal');
+    }
+  }
+  for (const status of [401, 403] as const) {
+    const key = `native-typed-refusal-${status}`;
+    const account = await f.person(key);
+    const operationKey = `${key}-delete`;
+    const input = await approveDelete(operationKey, account.accountId, await bearer(key));
+    const prepare = f.access.prepare!.bind(f.access);
+    let calls = 0;
+    f.access.prepare = async (...args) => {
+      if (++calls === 2) throw new NativeBoundaryRefusal(status);
+      return prepare(...args);
+    };
+    const before = await workflowReceipts();
+    try {
+      await expect(f.host.workflows.deleteAccount(input)).rejects.toMatchObject({ status });
+      const persisted = await stepError(operationKey, 'authorize-account-operation');
+      expect(JSON.parse(persisted)).toEqual({ authStepOutcome: 'refused-v1', status });
+      expect(persisted).not.toContain('private-native-refusal');
+      expect(persisted).not.toContain('NativeBoundaryRefusal');
+    } finally {
+      f.access.prepare = prepare;
+    }
+    await f.restart();
+    await expect(f.host.workflows.deleteAccount(input)).rejects.toMatchObject({ status });
+    expect((await stateOf(account.accountId))!.state).toBe('active');
+    expect(await workflowReceipts()).toBe(before);
+  }
 });
 
 test('other native denials are sanitized while ordinary failures have no status', async () => {

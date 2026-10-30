@@ -115,6 +115,11 @@ function isUniqueViolation(error: unknown): boolean {
  * the binding rewrites the kernel's own error classes. */
 type Refusal = { readonly status: 401 | 403 };
 type WorkflowBoundaryStatus = { readonly status: 401 | 403 | 503 };
+/** Private native step result, with no caller input or reusable authority. */
+type StepRefusal = { authStepOutcome: 'refused-v1'; status: 401 | 403 };
+function isStepRefusal(value: unknown): value is StepRefusal {
+  return isRefusal(value) && 'authStepOutcome' in value && value.authStepOutcome === 'refused-v1';
+}
 export function isRefusal(error: unknown): error is Refusal {
   return (
     typeof error === 'object' && error !== null && 'status' in error && (error.status === 401 || error.status === 403)
@@ -342,14 +347,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const context = await approved(request);
     return access.stableCommandKey?.(context, phase) ?? commandKey(phase);
   }
-  const step = <A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) =>
-    DBOS.registerStep(
+  const step = <A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) => {
+    const native = DBOS.registerStep(
       async (...args: A) => {
         try {
           return await fn(...args);
         } catch (error) {
+          // Journal an explicit native refusal before SDK error serialization.
+          // Successful legacy results remain unchanged; legacy untyped errors
+          // stay errors and are never inferred to be authorization refusals.
+          if (isRefusal(error))
+            return { authStepOutcome: 'refused-v1', status: error.status } satisfies StepRefusal;
           const failure = new Error(stepFailureMessage(name));
-          // Persist only a refusal or unavailable status, never the command's
+          // Persist only unavailable status, never the command's
           // secret input, permission context or original error in a durable step.
           if (isWorkflowBoundaryStatus(error)) throw Object.assign(failure, { status: error.status });
           throw failure;
@@ -357,6 +367,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       },
       { name: `accounts.${name}`, retriesAllowed: false },
     );
+    return async (...args: A): Promise<R> => {
+      const result = await native(...args);
+      if (isStepRefusal(result)) throw Object.assign(new Error(stepFailureMessage(name)), { status: result.status });
+      return result;
+    };
+  };
 
   // Functions are registered on start, and recreated after a clean SDK shutdown.
   let registration: (input: RegistrationInput) => Promise<{ accountId: string; expired?: true }>;
@@ -1360,7 +1376,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const status = await DBOS.getWorkflowStatus(id);
       let result: ReductionResult;
       if (status?.status === 'ERROR') {
-        const failed = required((await DBOS.listWorkflowSteps(id))?.find((s) => s.error !== null));
+        const failed = required(
+          (await DBOS.listWorkflowSteps(id))?.find((s) => s.error !== null || isStepRefusal(s.output)),
+        );
         result = await (await DBOS.rewindWorkflow<ReductionResult>(id, { startStep: failed.functionID })).getResult();
       } else result = await DBOS.retrieveWorkflow<ReductionResult>(id).getResult();
       if (!result.nextWorkflowId) return { clientId: result.clientId };
@@ -1389,7 +1407,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       skipInitial && input.kind === 'revoke' ? Promise.resolve() : discloseUnderCurrentAuthority(input);
     if (status?.status === 'ERROR') {
       const steps = required(await DBOS.listWorkflowSteps(id));
-      const failed = required(steps.find((step) => step.error !== null));
+      const failed = required(steps.find((step) => step.error !== null || isStepRefusal(step.output)));
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
       const result = await answerOperation(input, async () =>

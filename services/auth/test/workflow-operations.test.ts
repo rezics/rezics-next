@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts, type WorkflowResponsibility } from '../src/workflows.ts';
@@ -576,27 +577,57 @@ test('a refusal is recognized by its status, whatever class the binding gives it
 }, 15000);
 
 test('DBOS preserves only typed boundary status while sanitizing the original failure', async () => {
-  for (const status of [401, 403, 503] as const) {
+  class DifferentlyNamedBoundaryFailure extends Error {
+    constructor(message: string, readonly status: number | undefined) {
+      super(message);
+    }
+  }
+  for (const status of [401, 403, 503, 500, undefined] as const) {
     const key = `boundary-status-${status}`;
     const secret = `private-boundary-${status}`;
-    const failure = Object.assign(new Error(secret), { status });
+    const failure = new DifferentlyNamedBoundaryFailure(secret, status);
     authorizationFailure = failure;
     authorizationCalls = 0;
     failAuthorizationAt = 2;
     try {
-      await expect(
-        workflows.createOrganization({ key, authorization: 'approved-organization', handle: `boundary-${status}` }),
-      ).rejects.toMatchObject({ status });
+      const before = calls.length;
+      const outcome = workflows.createOrganization({
+        key,
+        authorization: 'approved-organization',
+        handle: `boundary-${status}`,
+      });
+      if (status === 401 || status === 403 || status === 503) await expect(outcome).rejects.toMatchObject({ status });
+      else await expect(outcome).rejects.toThrow('Account workflow step failed: organization-key');
+      expect(calls.length).toBe(before);
       const row = (
-        await system.query<{ error: unknown }>(
-          `SELECT error FROM dbos.operation_outputs WHERE workflow_uuid=$1 AND function_name='accounts.organization-key'`,
+        await system.query<{ output: unknown; error: unknown }>(
+          `SELECT output,error FROM dbos.operation_outputs WHERE workflow_uuid=$1 AND function_name='accounts.organization-key'`,
           [workflowId(key)],
         )
       ).rows[0];
       expect(row).toBeDefined();
-      const persisted = String(row!.error);
-      expect(persisted).toContain(`"status":${status}`);
+      const persisted = String(row!.output ?? row!.error);
+      if (status === 401 || status === 403 || status === 503) expect(persisted).toContain(`"status":${status}`);
+      else expect(persisted).not.toContain('"status"');
       expect(persisted).not.toContain(secret);
+      expect(persisted).not.toContain('DifferentlyNamedBoundaryFailure');
+      if (status === 401 || status === 403) {
+        expect(row!.error).toBeNull();
+        const saved = (await DBOS.listWorkflowSteps(workflowId(key)))!.find(
+          (step) => step.name === 'accounts.organization-key',
+        )!;
+        expect(saved.output).toEqual({ authStepOutcome: 'refused-v1', status });
+        // Restart and replay the durable result, with the failing source removed.
+        // Replaying this refusal must not execute the source or a later effect.
+        failAuthorizationAt = undefined;
+        await restart();
+        const authorizationCount = authorizationCalls;
+        await expect(
+          (await DBOS.rewindWorkflow(workflowId(key), { startStep: saved.functionID + 1 })).getResult(),
+        ).rejects.toMatchObject({ status });
+        expect(authorizationCalls).toBe(authorizationCount);
+        expect(calls.length).toBe(before);
+      } else expect(row!.output).toBeNull();
     } finally {
       failAuthorizationAt = undefined;
       authorizationFailure = undefined;
