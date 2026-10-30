@@ -73,6 +73,38 @@ relabels that result as a pass. The point-read repair checks the source fence on
 exists. A null imported reference adds no suppression policy for other supported media kinds; the common
 projection and its existing readers retain their contracts.
 
+## Corrected-oracle native verification
+
+The focused command passed on code revision `b305e166efc6a465c4f0d927ddb88094b385f964`:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/bangumi-cli-media.test.ts
+```
+
+It exited 0 with one native case, 581 assertions, zero failures and no load rerun. The selected kernel compiler
+and quality phases passed, with 911 Reylo analyses. This is neither a root typecheck nor a whole-kernel gate.
+The raw log is `.temp/goal/checks/worker-check-2026-10-30T08-40-29.905Z-9268262f.log`.
+The earlier failed byte-oracle run remains historical failure evidence.
+
+This execution observed subject `01a18bfc-6508-7399-a742-b8ab29402307` and media
+`01a18bfc-657b-7595-9517-b8ab816781c4` / `01a18bfc-6a7a-744e-84d8-b8ab68be0715`.
+Its registered children were exactly two `content.importFromUrl` and two `content.image` executions, at epoch 1,
+partition 2954, positions 2/3 and 17/18, event index 0. Sixteen native write receipt identities were read; the
+bootstrap anchor was partition 2954, account `764ada75-62ac-8c41-a37c-aebe8c0cfe2a`, command
+`subject.batch_create`, key `bangumi:424242:333c04dd151a2a6831c039cb9a651df29198be8a04e16ce861d4b6a34a11c954`.
+
+The actual converter, record revision, bundle, three source digests and both original/source hashes matched
+the values recorded above. Both available images retained their supplied private originals and produced actual
+AVIF/WebP variants different from those PNGs. The ordinary CLI and editor/public calls proved licensed summary,
+separate cover credit, changed pixels, unchanged no-op, late cover suppression and download denial, no post-fence
+source requests, independent summary fencing and immutable bootstrap/community metadata. The corrected frozen
+test was installed by its owner and was not edited by the implementation.
+
+Local preflight passed edited-file formatting, the direct importer compiler (147 files), native caller/subject
+TypeScript parsing and the importer-local CLI test (one case, 139 assertions). The capability manifest separately
+inventories existing operator/safety callers and their named historical/scoped receipts; no extra native command
+was run for that prose. No Content production, shared interface, harness, SQL or literal bound changed.
+
 ## Bounds and evidence
 
 - Touches: supplied JSONL and two source images, the exact source/key/run journal, captured public requests,
