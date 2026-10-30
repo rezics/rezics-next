@@ -20,7 +20,7 @@ import { AppShell } from '../shell/shell';
 import { PageHeading } from '../shell/page-heading';
 
 const meta = {
-  title: 'Pages/Thread Mentions',
+  title: 'Pages/Community/Thread',
   parameters: { layout: 'fullscreen', a11y: { test: 'error' } },
 } satisfies Meta;
 export default meta;

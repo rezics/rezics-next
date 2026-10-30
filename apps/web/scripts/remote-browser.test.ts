@@ -51,7 +51,7 @@ test('browser-driven web checks, screenshots and recordings run on a check host 
   localRuns.length = 0;
   remoteCode = 0;
   await placeBrowserCheck(['tests/page-stories.test.ts'], { testScript: 'bun run test' });
-  await runScreenshots(['--story', 'pages-missing-subject--signed-out', '--out', join(root, '.temp/shots')]);
+  await runScreenshots(['--story', 'pages-subjects-missing-subject--signed-out', '--out', join(root, '.temp/shots')]);
   await runScreenshots([]);
   await runRecord(['offer', 'order-paid']);
 
@@ -75,7 +75,7 @@ test('browser-driven web checks, screenshots and recordings run on a check host 
       'bun',
       'scripts/screenshots.ts',
       '--story',
-      'pages-missing-subject--signed-out',
+      'pages-subjects-missing-subject--signed-out',
       '--out',
       '../../.temp/shots',
     ],

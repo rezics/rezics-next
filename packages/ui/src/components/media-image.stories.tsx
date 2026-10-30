@@ -5,7 +5,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MediaImage } from './media-image.tsx';
 
 const meta = {
-  title: 'Rezics UI/Media image',
+  title: 'Components/Media image',
   component: MediaImage,
   tags: ['autodocs'],
   args: {

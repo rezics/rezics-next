@@ -1,8 +1,9 @@
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { StoryObj } from '@storybook/react-vite';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { useMemo } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
@@ -43,6 +44,14 @@ import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
+
+const PatternChildren = createContext<ReactNode>(null);
+
+function PatternRoot() {
+  return useContext(PatternChildren);
+}
+
+const patternRoute = createRootRoute({ component: PatternRoot });
 
 export const pagePaths = {
   home: '/',
@@ -156,8 +165,54 @@ export function PageStory({
   );
 }
 
+/** Render a connected region with the same request, query, locale and theme context as a page story, without the site shell. */
+export function PatternStory({
+  children,
+  visitor = 'Signed Out',
+  path = '/',
+}: {
+  children: React.ReactNode;
+  visitor?: 'Signed In' | 'Signed Out';
+  path?: string;
+}) {
+  const entry = localizedEntry(path);
+  setStoryRequestContext({ visitor, url: entry });
+  const { router, queryClient } = useMemo(() => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
+    const router = createRouter({
+      routeTree: patternRoute,
+      history: createMemoryHistory({ initialEntries: [entry] }),
+      parseSearch,
+      stringifySearch,
+      ssr: {},
+      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
+    });
+    return { router, queryClient };
+  }, [entry]);
+  return (
+    <PatternChildren.Provider value={children}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </PatternChildren.Provider>
+  );
+}
+
 export async function pageReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await within(canvasElement).findByRole('main');
+}
+
+export function exposureStory(path: string, closed = false): StoryObj {
+  return {
+    name: closed ? 'Exposure closed' : 'Exposure open',
+    tags: ['exposure'],
+    ...(closed ? { parameters: { admitted: [] } } : {}),
+    play: async ({ canvasElement }) => {
+      await pageReady({ canvasElement });
+      await within(canvasElement).findByRole('button', { name: m.account_menu() });
+    },
+    render: () => <PageStory visitor="Signed In" path={path} />,
+  };
 }
 
 function viewOf({ canvasElement }: { canvasElement: HTMLElement }) {

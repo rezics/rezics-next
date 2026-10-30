@@ -3,6 +3,7 @@ import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { sharedRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { subjectHref } from '../subject/subject-href';
+import { PatternStory } from './page';
 
 type Tile = {
   subject: CoverSubject;
@@ -118,7 +119,7 @@ function imageSrc(media: string): string {
 }
 
 const ratio = sharedRatio(tiles.map(({ subject }) => subject));
-const meta = { title: 'Rezics UI/Cover wall', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Patterns/Library/Cover wall', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -144,6 +145,23 @@ function Wall({ density }: { density?: CoverDensity }) {
   );
 }
 
-export const Default: Story = { render: () => <Wall /> };
-export const Small: Story = { render: () => <Wall density="small" /> };
-export const Large: Story = { render: () => <Wall density="large" /> };
+export const Default: Story = {
+  name: 'Mixed media wall',
+  render: () => <PatternStory><Wall /></PatternStory>,
+};
+export const Small: Story = {
+  name: 'Small cards',
+  render: () => (
+    <PatternStory>
+      <Wall density="small" />
+    </PatternStory>
+  ),
+};
+export const Large: Story = {
+  name: 'Large cards',
+  render: () => (
+    <PatternStory>
+      <Wall density="large" />
+    </PatternStory>
+  ),
+};

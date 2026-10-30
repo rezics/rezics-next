@@ -4,7 +4,7 @@ import { LocaleProvider, useLocale } from './locale.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'UI/Locale',
+  title: 'Components/Locale',
   component: LocaleProvider,
   tags: ['autodocs'],
   args: { locale: 'en-US' },

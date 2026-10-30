@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory, boardReady, pagePaths } from './page';
 
-const meta = { title: 'Pages/Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {

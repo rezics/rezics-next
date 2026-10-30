@@ -7,7 +7,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { ReportDialog } from './report-dialog.tsx';
 
 const meta = {
-  title: 'Rezics UI/Report Dialog',
+  title: 'Components/Report Dialog',
   component: ReportDialog,
   tags: ['autodocs'],
   decorators: [withSurface],

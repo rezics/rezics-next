@@ -3,44 +3,18 @@ import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
-import { PageHeading } from '../shell/page-heading';
-import { SignInPrompt } from '../threads/composer';
 import { PageStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Settings',
+  title: 'Pages/Account/Settings',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        settingsPhone: { name: 'Settings · 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        settingsDesktop: { name: 'Settings · 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 const levelTitles = [m.settings_spoiler_0_title, m.settings_spoiler_1_title, m.settings_spoiler_2_title] as const;
-
-function SignedOutSettingsPreview() {
-  return (
-    <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
-      <div className="mx-auto w-full max-w-5xl">
-        <article className="max-w-2xl space-y-8 text-foreground">
-          <header>
-            <PageHeading>{m.settings_heading()}</PageHeading>
-          </header>
-          <div className="space-y-3">
-            <p className="text-muted-foreground">{m.settings_signed_out()}</p>
-            <SignInPrompt returnTo="/settings" />
-          </div>
-        </article>
-      </div>
-    </main>
-  );
-}
 
 function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
@@ -100,14 +74,13 @@ function verificationStory(state: 'none' | 'pending' | 'approved' | 'rejected') 
 }
 
 export const SignedIn: Story = {
-  name: 'Signed In · 1280',
-  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
+  name: 'Owner',
   play: settingsReady,
   render: () => verificationStory('none'),
 };
 
 export const VerificationPending: Story = {
-  name: 'Verification Pending',
+  name: 'Owner, verification pending',
   render: () => verificationStory('pending'),
   play: async (context) => {
     await settingsReady(context);
@@ -118,7 +91,7 @@ export const VerificationPending: Story = {
 };
 
 export const VerificationApproved: Story = {
-  name: 'Verification Approved',
+  name: 'Owner, verification approved',
   render: () => verificationStory('approved'),
   play: async (context) => {
     await settingsReady(context);
@@ -129,7 +102,7 @@ export const VerificationApproved: Story = {
 };
 
 export const VerificationRejected: Story = {
-  name: 'Verification Rejected',
+  name: 'Owner, verification rejected',
   render: () => verificationStory('rejected'),
   play: async (context) => {
     await settingsReady(context);
@@ -140,7 +113,8 @@ export const VerificationRejected: Story = {
 };
 
 export const VerificationRequestFiveLinks: Story = {
-  name: 'Verification Request with Five Links',
+  name: 'Owner, verification request with five links',
+  tags: ['!dev'],
   render: () => verificationStory('none'),
   play: async (context) => {
     await settingsReady(context);
@@ -152,7 +126,8 @@ export const VerificationRequestFiveLinks: Story = {
 };
 
 export const VerificationGateClosed: Story = {
-  name: 'Verification Gate Closed',
+  name: 'Owner, verification unavailable',
+  tags: ['!dev'],
   parameters: { admitted: ['collections'] },
   render: () => verificationStory('none'),
   play: async (context) => {
@@ -166,34 +141,8 @@ export const VerificationGateClosed: Story = {
   },
 };
 
-export const Phone: Story = {
-  name: 'Phone · 390',
-  parameters: { viewport: { defaultViewport: 'settingsPhone' } },
-  play: settingsReady,
-  render: () => <PageStory visitor="Signed In" path="/settings" />,
-};
-
 export const StaleVisibility: Story = {
-  name: 'Stale visibility · 390',
-  parameters: { viewport: { defaultViewport: 'settingsPhone' } },
-  play: async (context) => {
-    await settingsReady(context);
-    const view = within(within(context.canvasElement).getByRole('main'));
-    const link = view.getByRole('link', { name: /unusually long Collection title/i });
-    const row = link.closest('li');
-    if (!row) throw new Error('Collection row missing');
-    const select = within(row).getByRole('combobox');
-    await userEvent.selectOptions(select, 'private');
-    await view.findByText(m.settings_privacy_conflict_text());
-    await view.findByRole('button', { name: m.settings_privacy_reload_row() });
-    await expect(select).toHaveValue('public');
-  },
-  render: () => <PageStory visitor="Signed In" path="/settings" />,
-};
-
-export const StaleVisibilityDesktop: Story = {
-  name: 'Stale visibility · 1280',
-  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
+  name: 'Owner, visibility conflict',
   play: async (context) => {
     await settingsReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
@@ -210,8 +159,7 @@ export const StaleVisibilityDesktop: Story = {
 };
 
 export const SavedVisibility: Story = {
-  name: 'Saved visibility',
-  parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
+  name: 'Owner, visibility saved',
   play: async (context) => {
     await settingsReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
@@ -226,7 +174,7 @@ export const SavedVisibility: Story = {
 };
 
 export const CollectionsClosed: Story = {
-  name: 'Collections closed',
+  name: 'Owner, Collections closed',
   parameters: { admitted: ['personal_library', 'reading_progress'] },
   play: async (context) => {
     await pageReady(context);
@@ -238,26 +186,15 @@ export const CollectionsClosed: Story = {
   render: () => <PageStory visitor="Signed In" path="/settings" />,
 };
 
-export const SignedOut: Story = {
-  name: 'Signed Out',
-  play: async (context) => {
-    await pageReady(context);
-    const view = within(within(context.canvasElement).getByRole('main'));
-    await view.findByRole('heading', { level: 1, name: m.settings_heading() });
-    await view.findByRole('link', { name: m.account_sign_in() });
-    await expect(view.queryByRole('radio')).toBeNull();
-  },
-  render: () => <SignedOutSettingsPreview />,
-};
-
 export const PersonProfileWithAvatarAndFiveLinks: Story = {
-  name: 'Person / Long Biography / Avatar / Five Links',
+  name: 'Person, avatar and five links',
+  tags: ['!dev'],
   play: settingsReady,
   render: () => <PageStory visitor="Signed In" path="/settings?profile=extended" />,
 };
 
 export const OrganizationProfile: Story = {
-  name: 'Organization / Speakers Listed',
+  name: 'Organization owner',
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
@@ -268,7 +205,8 @@ export const OrganizationProfile: Story = {
 };
 
 export const OrganizationWithAvatarAndFiveLinks: Story = {
-  name: 'Organization / Long Biography / Avatar / Five Links',
+  name: 'Organization owner, avatar and five links',
+  tags: ['!dev'],
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));

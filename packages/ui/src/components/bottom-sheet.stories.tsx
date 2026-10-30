@@ -45,16 +45,16 @@ function Example({ kind, locale = 'en' }: { kind: Kind; locale?: 'en' | 'ja' }) 
   );
 }
 
-const meta = { title: 'Rezics UI/Bottom sheet', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Components/Bottom sheet', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const phone = { viewport: { defaultViewport: 'phone' } };
 
 function story(kind: Kind, locale: 'en' | 'ja', theme: 'light' | 'dark'): Story {
   return {
     args: { kind, locale },
-    parameters: phone,
-    globals: { theme },
+    name: kind === 'short' ? 'Short content' : kind === 'tall' ? 'Scrollable content' : 'Back action available',
+    ...(locale !== 'en' || theme !== 'light' ? { tags: ['!dev'] } : {}),
+    globals: { viewport: { value: 'phone' }, theme },
     play: async () => {
       await userEvent.click(
         await screen.findByRole('button', { name: locale === 'ja' ? 'シートを開く' : 'Open sheet' }),

@@ -5,7 +5,7 @@ import { settled, withSurface } from '../stories/support.tsx';
 import { applyReactionChange, Reactions, type ReactionKind } from './reactions.tsx';
 
 const meta = {
-  title: 'Rezics UI/Reactions',
+  title: 'Components/Reactions',
   component: Reactions,
   tags: ['autodocs'],
   args: {
@@ -138,7 +138,7 @@ export const ChooseReaction: Story = {
 };
 export const MenuOpenPhone: Story = {
   render: () => <PendingReactions initialCounts={{ upvote: 8 }} initialValue={null} />,
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const choices = await openChoices(canvasElement);
     await expect(within(choices).getByRole('button', { name: 'Like' })).toBeVisible();

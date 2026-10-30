@@ -27,7 +27,7 @@ const cards = () =>
     />
   ));
 const meta = {
-  title: 'Rezics UI/Cover Card',
+  title: 'Components/Cover Card',
   component: CoverCard,
   decorators: [withSurface],
   args: { href: '/book', title: subjects[0]!.title, cover: { subject: subjects[0]!, cover: null, src: () => '' } },
@@ -77,7 +77,7 @@ export const Grid: Story = {
 };
 export const MenuOpenPhone: Story = {
   render: () => <CoverGrid ratio={ratio}>{cards()}</CoverGrid>,
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /More actions for/ }));
     await expect(await screen.findByRole('dialog')).toBeVisible();

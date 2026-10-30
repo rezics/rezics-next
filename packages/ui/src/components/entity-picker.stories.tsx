@@ -51,7 +51,7 @@ const fakeSearch =
   };
 
 const meta = {
-  title: 'Rezics UI/Entity picker',
+  title: 'Components/Entity picker',
   component: EntityPicker,
   tags: ['autodocs'],
   args: { label: 'Subject', placeholder: 'Search the catalogue', src: coverSrc, search: fakeSearch(), debounce: 40 },

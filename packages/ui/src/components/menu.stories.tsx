@@ -30,14 +30,14 @@ function RadioExample() {
     />
   );
 }
-const meta = { title: 'Rezics UI/Menu', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Components/Menu', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const open: Story['play'] = async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
   await waitFor(() => expect(screen.queryByRole('menu') ?? screen.queryByRole('dialog')).not.toBeNull());
 };
-const phone = { viewport: { defaultViewport: 'phone' } };
+const phone = { viewport: { value: 'phone' } };
 const plain: MenuEntry[] = [
   { type: 'item', label: 'Open', onSelect: () => {} },
   { type: 'link', label: 'Visit subject', href: '/subjects/example' },
@@ -46,7 +46,7 @@ const plain: MenuEntry[] = [
 ];
 export const PlainEntries: Story = {
   args: { entries: plain },
-  parameters: phone,
+  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const panel = await screen.findByRole('dialog');
@@ -61,7 +61,7 @@ export const SubmenuPage: Story = {
       { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
     ],
   },
-  parameters: phone,
+  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Status' }));
@@ -75,7 +75,7 @@ export const BrowserBack: Story = {
       { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
     ],
   },
-  parameters: phone,
+  globals: phone,
   play: async () => {
     const trigger = await screen.findByRole('button', { name: 'Open menu' });
     const route = window.location.href;
@@ -93,7 +93,7 @@ export const BrowserBack: Story = {
 export const RadioEntries: Story = {
   args: { entries: [] },
   render: () => <RadioExample />,
-  parameters: phone,
+  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const planned = await screen.findByRole('radio', { name: 'Planned' });
@@ -107,7 +107,7 @@ export const RadioEntries: Story = {
 export const RadioDropdown: Story = {
   args: { entries: [] },
   render: () => <RadioExample />,
-  parameters: { viewport: { defaultViewport: 'desktop' } },
+  globals: { viewport: { value: 'desktop' } },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     await expect(await screen.findByRole('menuitemradio', { name: 'Planned' })).toBeChecked();
@@ -118,7 +118,7 @@ export const RadioDropdown: Story = {
 };
 export const DestructiveEntry: Story = {
   args: { entries: [{ type: 'destructive', label: 'Remove', onSelect: () => {} }] },
-  parameters: phone,
+  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const remove = await screen.findByRole('button', { name: 'Remove' });
@@ -127,7 +127,7 @@ export const DestructiveEntry: Story = {
 };
 export const DesktopDropdown: Story = {
   args: { entries: plain },
-  parameters: { viewport: { defaultViewport: 'desktop' } },
+  globals: { viewport: { value: 'desktop' } },
   play: open,
 };
 export const DesktopDropdownDark: Story = { ...DesktopDropdown, globals: { theme: 'dark' } };

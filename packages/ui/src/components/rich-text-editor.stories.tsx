@@ -47,7 +47,7 @@ function checkedSnapshot(latest: { current: DocumentSnapshot | null }, fallback:
 }
 
 const meta = {
-  title: 'Rezics UI/RichTextEditor',
+  title: 'Components/RichTextEditor',
   component: RichTextEditor,
   args: {
     value: fromPlainText(''),

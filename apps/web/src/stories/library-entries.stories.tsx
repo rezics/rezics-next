@@ -3,47 +3,19 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { displayLibraryTitle } from '../library/title';
-import { PageStory, libraryEntriesReady, pageReady, pagePaths } from './page';
+import { PageStory, exposureStory, libraryEntriesReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
 
-const meta = { title: 'Pages/Library/Personal Library', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Library/Entries', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {
-  name: 'Signed In',
+  name: 'Owner',
   play: libraryEntriesReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
 };
-export const StatusTab: Story = {
-  name: 'Status Tab',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=in_progress`} />,
-};
-export const ListLayout: Story = {
-  name: 'List Layout',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=list`} />,
-};
-export const TableLayout: Story = {
-  name: 'Table Layout',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=table`} />,
-};
-export const SmallGrid: Story = {
-  name: 'Small Grid',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=s`} />,
-};
-export const MediumGrid: Story = {
-  name: 'Medium Grid',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=m`} />,
-};
-export const LargeGrid: Story = {
-  name: 'Large Grid',
-  play: libraryEntriesReady,
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?size=l`} />,
-};
+export const ExposureOpen: Story = exposureStory(pagePaths['library-entries']);
+export const ExposureClosed: Story = exposureStory(pagePaths['library-entries'], true);
 
 async function removeFromShelf(
   context: { canvasElement: HTMLElement },
@@ -78,31 +50,36 @@ function removalStory(title: string, refusal: 'occupied' | 'stale' | 'expired') 
 }
 
 export const UndoAfterShelfRemoval: Story = {
-  name: 'Undo after shelf removal',
+  tags: ['!dev'],
+  name: 'Owner, entry removed',
   play: (context) => removeFromShelf(context),
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
 };
 
 export const RestoreOccupied: Story = {
-  name: 'Restore refused / entry already exists',
+  tags: ['!dev'],
+  name: 'Restore blocked by existing entry',
   play: removalStory('I Am a Cat', 'occupied'),
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=dropped&layout=list`} />,
 };
 
 export const RestoreStale: Story = {
-  name: 'Restore refused / stale removal',
+  tags: ['!dev'],
+  name: 'Restore blocked by changed entry',
   play: removalStory('The Tale of Genji', 'stale'),
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=paused&layout=list`} />,
 };
 
 export const RestoreExpired: Story = {
-  name: 'Restore refused / expired removal',
+  tags: ['!dev'],
+  name: 'Restore window expired',
   play: removalStory('Norwegian Wood', 'expired'),
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=planned&layout=list`} />,
 };
 
 export const UndoRestored: Story = {
-  name: 'Undo / restored entry',
+  tags: ['!dev'],
+  name: 'Owner, entry restored',
   play: async (context) => {
     await removeFromShelf(context);
     await userEvent.click(await within(document.body).findByRole('button', { name: m.editor_undo() }));

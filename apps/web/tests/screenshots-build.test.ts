@@ -86,11 +86,11 @@ test(
     try {
       const result = await run(
         'bun',
-        ['run', 'screenshots', '--story', 'pages-missing-subject--*', '--locale', 'en', '--out', out],
+        ['run', 'screenshots', '--story', 'pages-subjects-missing-subject--*', '--locale', 'en', '--out', out],
         app,
       );
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
-      const screenshot = 'pages-missing-subject--signed-out.en.light.png';
+      const screenshot = 'pages-subjects-missing-subject--signed-out.en.light.png';
       expect(readFileSync(join(out, screenshot)).subarray(0, 8)).toEqual(
         Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       );

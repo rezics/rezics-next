@@ -21,9 +21,9 @@ export function CollectionFilterFeedback({
   buttonClass,
 }: {
   id: string;
-  filter?: FilterDocument;
-  ignored?: string[];
-  status?: 'unsupported' | 'preparing' | 'failed';
+  filter?: FilterDocument | undefined;
+  ignored?: string[] | undefined;
+  status?: 'unsupported' | 'preparing' | 'failed' | undefined;
   empty: boolean;
   unavailable?: boolean;
   emptyLabel: string;

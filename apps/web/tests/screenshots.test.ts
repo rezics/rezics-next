@@ -8,7 +8,7 @@ const root = resolve(app, '../..');
 // Documented names are `<story id>.<locale>.<theme>.png`.
 // The documented viewport is 1280×720 CSS pixels. A full-page capture of a page that fits the viewport, such as the
 // missing-subject page, is 1280×720: the shell fills the viewport exactly, so a short page does not scroll.
-const story = 'pages-missing-subject--signed-out';
+const story = 'pages-subjects-missing-subject--signed-out';
 const pngSize = { width: 1280, height: 720 };
 const names = ['en', 'ja'].flatMap((locale) =>
   (['light', 'dark'] as const).map((theme) => `${story}.${locale}.${theme}.png`),

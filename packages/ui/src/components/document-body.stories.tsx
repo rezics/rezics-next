@@ -8,7 +8,7 @@ const snapshot = (profile: 'text' | 'blocks', content: DocumentSnapshot['doc']['
   profile,
   doc: { type: 'doc', content },
 });
-const meta = { title: 'Rezics UI/Document Body', component: DocumentBody } satisfies Meta<typeof DocumentBody>;
+const meta = { title: 'Components/Document Body', component: DocumentBody } satisfies Meta<typeof DocumentBody>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

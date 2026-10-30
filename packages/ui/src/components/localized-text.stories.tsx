@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { LocalizedText } from './localized-text.tsx';
 
 const meta = {
-  title: 'Rezics UI/LocalizedText',
+  title: 'Components/LocalizedText',
   component: LocalizedText,
   tags: ['autodocs'],
   decorators: [

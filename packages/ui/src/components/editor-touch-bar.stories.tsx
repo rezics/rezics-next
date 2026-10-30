@@ -65,7 +65,7 @@ function plainText(snapshot: DocumentSnapshot): string {
 }
 
 const meta = {
-  title: 'Rezics UI/Editor Touch Bar',
+  title: 'Components/Editor Touch Bar',
   component: RichTextEditor,
   args: { value: fromPlainText('Touch formatting'), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

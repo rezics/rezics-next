@@ -132,7 +132,7 @@ function Page({ initial = 'all' }: { initial?: string }) {
     </main>
   );
 }
-const meta = { title: 'Rezics UI/Shelf Page', component: Page, decorators: [withSurface] } satisfies Meta<typeof Page>;
+const meta = { title: 'Components/Shelf Page', component: Page, decorators: [withSurface] } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Overview: Story = {
@@ -142,7 +142,7 @@ export const Overview: Story = {
 };
 export const MenuOpenPhone: Story = {
   render: () => <Page />,
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
     await expect(await screen.findByRole('dialog', { name: 'Sort' })).toBeVisible();

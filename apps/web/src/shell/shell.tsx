@@ -230,7 +230,7 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
     </noscript>
   );
 }
-function NavigationToggle({
+export function NavigationToggle({
   collapsed,
   onToggle,
   pathname,
@@ -410,7 +410,7 @@ function LanguageControl() {
   );
 }
 // The account slot is reserved while the browser reads its private session.
-function SessionControl({ session, csrfToken }: { session: ShellSession; csrfToken: string | null }) {
+export function AccountMenu({ session, csrfToken }: { session: ShellSession; csrfToken: string | null }) {
   const location = useLocation();
   const [securitySettingsHref, setSecuritySettingsHref] = useState('/security');
   const canOpenLibrary = useOperation('library_entry.list');
@@ -596,7 +596,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <LanguageControl />
             <ThemeControl />
             <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
-              <SessionControl session={session} csrfToken={csrfToken} />
+              <AccountMenu session={session} csrfToken={csrfToken} />
               <noscript>
                 <a
                   href={`/${getLocale()}/settings`}

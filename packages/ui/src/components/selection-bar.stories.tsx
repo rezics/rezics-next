@@ -33,7 +33,7 @@ function Example() {
     </div>
   );
 }
-const meta = { title: 'Rezics UI/Shelf/Selection', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Components/Shelf/Selection', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Selection: Story = {
@@ -61,5 +61,5 @@ export const Selection: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'More' }));
     await expect(await screen.findByRole('dialog')).toBeVisible();
   },
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
 };

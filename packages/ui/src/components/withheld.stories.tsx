@@ -5,7 +5,7 @@ import { Withheld } from './withheld.tsx';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'Content/Withheld',
+  title: 'Components/Content/Withheld',
   component: Withheld,
   args: { shape: 'passage' },
   decorators: [withSurface],

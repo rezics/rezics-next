@@ -6,7 +6,7 @@ import { settled, withSurface } from '../stories/support.tsx';
 import { ContentActions } from './content-actions.tsx';
 
 const meta = {
-  title: 'Rezics UI/Content Actions',
+  title: 'Components/Content Actions',
   component: ContentActions,
   tags: ['autodocs'],
   decorators: [withSurface],
@@ -83,7 +83,7 @@ export const MenuKeyboard: Story = {
 export const MenuOpenPhone: Story = {
   args: { onCopyLink: fn(), onReport: fn(async () => undefined), ownsContent: false, verified: true },
   render: () => <StrangerActions />,
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
     await expect(await screen.findByRole('dialog')).toBeVisible();

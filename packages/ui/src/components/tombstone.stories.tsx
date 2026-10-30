@@ -6,7 +6,7 @@ import { Tombstone } from './tombstone.tsx';
 import { withSurface } from '../stories/support.tsx';
 
 const meta = {
-  title: 'Content/Tombstone',
+  title: 'Components/Content/Tombstone',
   component: Tombstone,
   args: { shape: 'post' },
   decorators: [withSurface],

@@ -7,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { threadHref } from '../threads/thread-href';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Realm Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Realm Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

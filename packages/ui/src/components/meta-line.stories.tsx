@@ -3,7 +3,7 @@ import { withSurface } from '../stories/support.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'Rezics UI/Meta Line',
+  title: 'Components/Meta Line',
   component: MetaLine,
   args: { items: [] },
   decorators: [withSurface],

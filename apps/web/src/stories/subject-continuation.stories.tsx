@@ -4,7 +4,7 @@ import { continuationSubject } from '../kernel/fake/view-continuation';
 import { subjectViewHref } from '../subject/subject-href';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Subject Continuation', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Subjects/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const path = subjectViewHref(continuationSubject, 'en', 'editions').replace(/^\/en/, '');
@@ -18,10 +18,14 @@ async function continuationReady(context: { canvasElement: HTMLElement }, later:
 }
 
 export const Editions: Story = {
+  name: 'Editions, first page',
+  tags: ['!dev'],
   play: (context) => continuationReady(context, false),
   render: () => <PageStory visitor="Signed Out" path={path} />,
 };
 export const EditionsSecondPage: Story = {
+  name: 'Editions, next page',
+  tags: ['!dev'],
   play: (context) => continuationReady(context, true),
   render: () => <PageStory visitor="Signed Out" path={`${path}?cursor=continuation-next`} />,
 };

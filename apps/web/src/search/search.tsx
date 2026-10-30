@@ -367,9 +367,21 @@ function searchHref(
 
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 
-export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
+export function SearchPage({
+  query,
+  cursor,
+  data,
+  filtersOnly = false,
+  initiallyOpen = false,
+}: {
+  query: string;
+  cursor?: string;
+  data?: SearchPageData;
+  filtersOnly?: boolean;
+  initiallyOpen?: boolean;
+}) {
   const [hydrated, setHydrated] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(initiallyOpen);
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
@@ -524,45 +536,56 @@ export function SearchPage({ query, cursor, data }: { query: string; cursor?: st
     </div>
   );
 
+  const filterControls = (
+    <>
+      <form
+        id="desktop-filter-form"
+        method="get"
+        action={`/${locale}/search`}
+        className="hidden lg:block lg:col-start-1 lg:row-start-1"
+      >
+        <Collapsible
+          open={filtersOpen}
+          onOpenChange={setFiltersOpen}
+          className="rounded-xl border border-border/60 p-4"
+        >
+          <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
+          <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
+        </Collapsible>
+      </form>
+      <button
+        type="button"
+        className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
+        style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
+        aria-label={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+        onClick={() => setFiltersOpen(true)}
+      >
+        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+        {m.search_filters()} ({number.format(activeFilterCount)})
+      </button>
+      <BottomSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+      >
+        <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
+          {filterContents('mobile')}
+        </form>
+      </BottomSheet>
+    </>
+  );
+
+  if (filtersOnly) {
+    if (!hasFilterPanel) return null;
+    return <div className="w-full">{filterControls}</div>;
+  }
+
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading()}</PageHeading>
       {hasFilterPanel ? (
         <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-          <form
-            id="desktop-filter-form"
-            method="get"
-            action={`/${locale}/search`}
-            className="hidden lg:block lg:col-start-1 lg:row-start-1"
-          >
-            <Collapsible
-              open={filtersOpen}
-              onOpenChange={setFiltersOpen}
-              className="rounded-xl border border-border/60 p-4"
-            >
-              <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
-              <CollapsibleContent>{filterContents('desktop')}</CollapsibleContent>
-            </Collapsible>
-          </form>
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
-            style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
-            aria-label={`${m.search_filters()} (${number.format(activeFilterCount)})`}
-            onClick={() => setFiltersOpen(true)}
-          >
-            <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-            {m.search_filters()} ({number.format(activeFilterCount)})
-          </button>
-          <BottomSheet
-            open={filtersOpen}
-            onOpenChange={setFiltersOpen}
-            title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
-          >
-            <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
-              {filterContents('mobile')}
-            </form>
-          </BottomSheet>
+          {filterControls}
           <div className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1">{results}</div>
         </div>
       ) : (

@@ -15,7 +15,7 @@ const examples = [
   { id: 'book', title: subject.title, ratio: '2:3' as const, types: ['schema:Book'] },
   { id: 'game', title: '星を越えて — 彼方の記憶をたどる旅', ratio: '16:9' as const, types: ['schema:VideoGame'] },
 ];
-const meta = { title: 'Rezics UI/Shelf List', component: ShelfList, decorators: [withSurface] } satisfies Meta<
+const meta = { title: 'Components/Shelf List', component: ShelfList, decorators: [withSurface] } satisfies Meta<
   typeof ShelfList
 >;
 export default meta;
@@ -37,7 +37,7 @@ export const Entries: Story = {
 export const MenusOpenPhone: Story = {
   args: { children: null },
   render: () => <Example />,
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reading' }));
     await expect(

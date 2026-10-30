@@ -19,9 +19,8 @@ const ready = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await within(canvasElement).findByRole('heading', { level: 1, name: /Copies|复本/ });
 };
 
-export const None: Story = { render: () => <CopiesStory mode="none" />, play: ready };
-export const OneCopy: Story = { render: () => <CopiesStory mode="one" />, play: ready };
 export const ManyCopies: Story = {
+  name: 'Owner',
   render: () => <CopiesStory mode="many" />,
   async play(args) {
     await ready(args);
@@ -43,41 +42,15 @@ export const ManyCopies: Story = {
     await userEvent.hover(kokoro);
   },
 };
-export const AddFormOpen: Story = {
-  render: () => <CopiesStory mode="one" />,
-  async play(args) {
-    await ready(args);
-    const canvas = within(args.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /Add a copy|新增一份复本/ }));
-    await within(document.body).findByRole('dialog');
-  },
+export const None: Story = {
+  name: 'Owner, empty',
+  render: () => <CopiesStory mode="none" />,
+  play: ready,
 };
-export const EditFormOpen: Story = {
+export const OneCopy: Story = {
+  name: 'Owner, one copy',
   render: () => <CopiesStory mode="one" />,
-  async play(args) {
-    await ready(args);
-    const canvas = within(args.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /More actions|更多操作/ }));
-    await userEvent.click(within(document.body).getByRole('menuitem', { name: /Edit copy|编辑复本/ }));
-    await within(document.body).findByRole('dialog');
-  },
-};
-
-export const Refusal: Story = {
-  render: () => <CopiesStory mode="refusal" />,
-  async play(args) {
-    await ready(args);
-    const canvas = within(args.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /Add a copy|新增一份复本/ }));
-    const dialog = within(document.body);
-    await dialog.findByRole('dialog');
-    await userEvent.type(
-      dialog.getByLabelText<HTMLInputElement>(/Edition|版本/),
-      '0192f3a0-6c1e-7b2a-9d4e-000000000021',
-    );
-    await userEvent.click(dialog.getByRole('button', { name: /Add copy|新增复本/ }));
-    await expect(dialog.findByRole('alert')).resolves.toBeVisible();
-  },
+  play: ready,
 };
 
 function ProfileStory({ retired = false }: { retired?: boolean }) {
@@ -85,16 +58,8 @@ function ProfileStory({ retired = false }: { retired?: boolean }) {
   setCopyKindsStory(retired);
   return <PageStory visitor="Signed In" path="/library/copies?subjectId=01a17a3b-0884-721b-91ef-d7ffd7bb58e4" />;
 }
-export const TwoKinds: Story = {
-  render: () => <ProfileStory />,
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
-    await userEvent.click(canvas.getByRole('button', { name: m.library_copy_add() }));
-    await within(document.body).findByRole('combobox', { name: m.library_copy_kind() });
-  },
-};
 export const NoLongerOffered: Story = {
+  name: 'Owner, copy type unavailable',
   render: () => <ProfileStory retired />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

@@ -4,6 +4,9 @@ See [Storybook for web and UI](storybook.md) for review catalogue rules and the 
 
 Every route has page stories on recorded or fake API responses for every state a user can meet: populated, empty, long content, preparing or unavailable, error; for each viewer that applies: anonymous, member, owner or curator, suspended; on desktop and phone. Complex surfaces cover every control state. Every interface brief lists the stories it adds. Primitive component stories (shadcn wrappers) are not required.
 
+A state that changes only one region of a page belongs in a shell-free pattern story, using the same recorded or fake data
+as the page. A coverage-map cell may name a pattern story export when that export demonstrates the cell's outcome.
+
 Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `missing`, or `planned: <dependency>`. A reference is coverage only for the state the named story actually renders. `missing` means no page story yet. `planned` means the outcome has no API yet and names the capability it waits for. A recording that fabricates a missing outcome is never coverage. Route file headings are the route inventory; `__root.tsx` is the shared shell, not a route-specific page.
 
 | Route | State | Viewer | Desktop | Phone |

@@ -7,7 +7,7 @@ import { chosenLabels, isRecord, languageList } from './languages.ts';
 
 export const searchFacetStoryPaths = {
   results: '/search?q=Prince&type=schema%3ABook',
-  active: '/search?q=Prince&type=schema%3ABook&f.schema%3Agenre=wd%3AQ24925',
+  active: '/search?q=Prince&type=schema%3ABook&f.schema%3Agenre=01a17dfd-5da5-76da-bc50-a1fb5dbc87d2',
   noResults: `/search?q=${encodeURIComponent(emptySearch.query)}`,
   emptyQuery: '/search',
 };
@@ -19,7 +19,9 @@ const storyValues: Record<string, { value: string; labels: Record<string, string
       labels: { en: 'Antoine de Saint-Exupéry', 'zh-Hans': '安托万·德·圣埃克苏佩里' },
     },
   ],
-  'schema:genre': [{ value: 'wd:Q24925', labels: { en: 'Fantasy', 'zh-Hans': '奇幻' } }],
+  'schema:genre': [
+    { value: '01a17dfd-5da5-76da-bc50-a1fb5dbc87d2', labels: { en: 'Fable', 'zh-Hans': '寓言' } },
+  ],
   'schema:datePublished': [],
 };
 

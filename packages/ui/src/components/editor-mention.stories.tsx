@@ -52,7 +52,7 @@ function inserted(instance: ReturnType<typeof demo>) {
   expect(JSON.stringify(instance.latest.current)).not.toContain(handle);
 }
 const meta = {
-  title: 'Rezics UI/Editor Mention',
+  title: 'Components/Editor Mention',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded', a11y: { test: 'error' } },

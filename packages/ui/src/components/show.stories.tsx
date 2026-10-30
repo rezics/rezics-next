@@ -4,7 +4,7 @@ import { Show } from './show.tsx';
 import { MetaLine } from './meta-line.tsx';
 
 const meta = {
-  title: 'UI/Show',
+  title: 'Components/Show',
   component: Show,
   tags: ['autodocs'],
   args: { children: <MetaLine items={['4.6 out of 5', '287 member ratings']} />, when: true },

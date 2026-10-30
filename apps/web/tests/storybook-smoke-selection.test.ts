@@ -21,18 +21,22 @@ function story(id: string, title: string, name: string): SmokeStoryEntry {
 const webIndex: SmokeStoryIndex = {
   entries: Object.fromEntries(
     [
-      story('pages-subject--count-unavailable', 'Pages/Subject', 'Count Unavailable'),
-      story('pages-subject--signed-in', 'Pages/Subject', 'Signed In'),
+      story('pages-subjects-subject--count-unavailable', 'Pages/Subjects/Subject', 'Count Unavailable'),
+      story('pages-subjects-subject--signed-in', 'Pages/Subjects/Subject', 'Member'),
       story('pages-library-copies--none', 'Pages/Library/Copies', 'None'),
-      story('pages-library-copies--many-copies', 'Pages/Library/Copies', 'Many Copies'),
-      story('pages-shell--signed-out', 'Pages/Shell', 'Signed Out'),
-      story('pages-shell--signed-in', 'Pages/Shell', 'Signed In'),
+      story('pages-library-copies--many-copies', 'Pages/Library/Copies', 'Owner'),
+      story('patterns-account-shell--signed-out', 'Patterns/Account/Shell', 'Signed out, account menu open'),
+      story(
+        'patterns-account-shell--member-account-menu-open',
+        'Patterns/Account/Shell',
+        'Member, account menu open',
+      ),
     ].map((entry) => [entry.id, entry] as const),
   ),
 };
 const uiIndex: SmokeStoryIndex = {
   entries: {
-    'rezics-ui-cover-card--default': story('rezics-ui-cover-card--default', 'Rezics UI/Cover Card', 'Default'),
+    'components-cover-card--default': story('components-cover-card--default', 'Components/Cover Card', 'Default'),
   },
 };
 
@@ -44,7 +48,10 @@ test('selects named full-page stories for the null-cover subject and recorded-co
   const stories = selectSmokeStories(webIndex, uiIndex, copyRecording);
 
   expect(subjectPage.reads.r0?.body?.summary?.cover).toBeNull();
-  expect(stories.subject.id).toBe('pages-subject--signed-in');
+  expect(stories.shell.id).toBe('patterns-account-shell--signed-out');
+  expect(stories.signedInShell.id).toBe('patterns-account-shell--member-account-menu-open');
+  expect(stories.uiCoverCard.id).toBe('components-cover-card--default');
+  expect(stories.subject.id).toBe('pages-subjects-subject--signed-in');
   expect(stories.copies.id).toBe('pages-library-copies--many-copies');
   expect(stories.coverMedia).toBe(copyRecording.copies?.[1]?.subject?.cover?.media);
 });

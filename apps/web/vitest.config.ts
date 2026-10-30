@@ -12,22 +12,21 @@ export default defineConfig({
   },
   test: {
     maxWorkers: Number(process.env.STORYBOOK_MAX_WORKERS) || 4,
-    projects: [
-      {
-        plugins: [storybookTest({ configDir: fileURLToPath(new URL('./.storybook', import.meta.url)) })],
-        test: {
-          name: 'storybook',
-          testTimeout: 30_000,
-          hookTimeout: 60_000,
-          env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },
-          browser: {
-            enabled: true,
-            headless: true,
-            provider: playwright({ launchOptions: { args: ['--disable-dev-shm-usage'] } }),
-            instances: [{ browser: 'chromium' }],
-          },
+    projects: [390, 1280].map((width) => ({
+      plugins: [storybookTest({ configDir: fileURLToPath(new URL('./.storybook', import.meta.url)) })],
+      test: {
+        name: width === 390 ? 'storybook-phone' : 'storybook-desktop',
+        testTimeout: 30_000,
+        hookTimeout: 60_000,
+        env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },
+        browser: {
+          enabled: true,
+          headless: true,
+          viewport: { width, height: width === 390 ? 844 : 900 },
+          provider: playwright({ launchOptions: { args: ['--disable-dev-shm-usage'] } }),
+          instances: [{ browser: 'chromium' }],
         },
       },
-    ],
+    })),
   },
 });

@@ -3,11 +3,18 @@ import { expect, userEvent, within } from 'storybook/test';
 import { setContinueStorySize } from '../kernel/fake/library-continue';
 import { PageStory, pagePaths, pageReady } from './page';
 
-const viewports = {
-  phone: { name: '390 phone', styles: { width: '390px', height: '844px' }, type: 'mobile' as const },
-  desktop: { name: '1280 desktop', styles: { width: '1280px', height: '900px' }, type: 'desktop' as const },
-};
-const meta = { title: 'Pages/Home', parameters: { layout: 'fullscreen', viewport: { viewports } } } satisfies Meta;
+const meta = {
+  title: 'Pages/Discovery/Home',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
+        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -21,16 +28,9 @@ const homeAdmissions = [
   'collections',
 ];
 
-function home(
-  visitor: 'Signed In' | 'Signed Out',
-  size: number,
-  viewport: keyof typeof viewports,
-  menu = false,
-): Story {
+function home(visitor: 'Signed In' | 'Signed Out', size: number, menu = false): Story {
   return {
-    name: `${visitor} · ${size} Continue · ${viewports[viewport].name}${menu ? ' · menu open' : ''}`,
     parameters: {
-      viewport: { defaultViewport: viewport },
       ...(visitor === 'Signed In' ? { admitted: homeAdmissions } : {}),
     },
     render: () => {
@@ -51,14 +51,29 @@ function home(
   };
 }
 
-export const SignedInOnePhone = home('Signed In', 1, 'phone');
-export const SignedInOneDesktop = home('Signed In', 1, 'desktop');
-export const SignedInTwoPhone = home('Signed In', 2, 'phone');
-export const SignedInTwoDesktop = home('Signed In', 2, 'desktop');
-export const SignedInSixPhone = home('Signed In', 6, 'phone');
-export const SignedInSixDesktop = home('Signed In', 6, 'desktop');
-export const SignedInSixMenuPhone = home('Signed In', 6, 'phone', true);
-export const SignedInNonePhone = home('Signed In', 0, 'phone');
-export const SignedInNoneDesktop = home('Signed In', 0, 'desktop');
-export const SignedOutPhone = home('Signed Out', 0, 'phone');
-export const SignedOutDesktop = home('Signed Out', 0, 'desktop');
+export const SignedInOnePhone: Story = {
+  name: 'Member, one in-progress title',
+  ...home('Signed In', 1),
+};
+export const SignedInTwoPhone: Story = {
+  name: 'Member, two in-progress titles',
+  ...home('Signed In', 2),
+};
+export const SignedInSixPhone: Story = {
+  name: 'Member, six in-progress titles',
+  ...home('Signed In', 6),
+};
+export const SignedInSixMenuPhone: Story = {
+  name: 'Member, item actions open',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  ...home('Signed In', 6, true),
+};
+export const SignedInNonePhone: Story = {
+  name: 'Member, no in-progress titles',
+  ...home('Signed In', 0),
+};
+export const SignedOutPhone: Story = {
+  name: 'Signed out',
+  ...home('Signed Out', 0),
+};

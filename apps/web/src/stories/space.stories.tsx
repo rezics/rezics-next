@@ -4,7 +4,7 @@ import realmBoardsRecording from '../kernel/recorded/realm-boards.json';
 import spaceRecording from '../kernel/recorded/space.json';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Space', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Space', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

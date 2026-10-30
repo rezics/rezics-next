@@ -42,7 +42,7 @@ function checked(snapshot: DocumentSnapshot) {
   return snapshot.doc.content?.[0];
 }
 const meta = {
-  title: 'Rezics UI/Editor Selection Menu',
+  title: 'Components/Editor Selection Menu',
   component: RichTextEditor,
   args: { value: fromPlainText('Selected words'), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

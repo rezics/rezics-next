@@ -1,75 +1,61 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect } from 'react';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { Suspense } from 'react';
 import { expect, within } from 'storybook/test';
-import { PageStory, pagePaths, pageReady, searchEmptyReady, searchTypedReady } from './page';
+import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
+import { getLocale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
+import { SearchPage } from '../search/search';
+import { searchQueryOptions } from '../search/search-queries';
+import { searchLoaderDeps } from '../search/search-params';
+import { PatternStory } from './page';
 
-const meta = { title: 'Pages/Search Facets', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const viewports = {
+  phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
+  desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
+};
+
+const meta = {
+  title: 'Patterns/Discovery/Search filters',
+  parameters: { viewport: { options: viewports } },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ResultsWithFacets: Story = {
-  name: 'Results with facets',
-  play: searchTypedReady,
-  render: () => <PageStory visitor="Signed Out" path={pagePaths['search-facets']} />,
-};
+const filterStoryParams = searchLoaderDeps({
+  q: 'Prince',
+  type: 'schema:Book',
+  'f.schema:genre': '01a17dfd-5da5-76da-bc50-a1fb5dbc87d2',
+});
 
-export const ActiveFacet: Story = {
-  name: 'Active facet',
-  play: async (context) => {
-    await searchTypedReady(context);
-    await expect(within(context.canvasElement).getByRole('checkbox', { name: 'Fantasy' })).toBeChecked();
-  },
-  render: () => <PageStory visitor="Signed Out" path={pagePaths['search-facet-active']} />,
-};
-
-export const NoResults: Story = {
-  name: 'No results',
-  play: searchEmptyReady,
-  render: () => <PageStory visitor="Signed Out" path={pagePaths['search-no-results']} />,
-};
-
-export const EmptyQuery: Story = {
-  name: 'Empty query',
-  play: async (context) => {
-    await pageReady(context);
-    const view = within(context.canvasElement).getByRole('main');
-    await expect(within(view).getByRole('textbox')).toHaveValue('');
-  },
-  render: () => <PageStory visitor="Signed Out" path={pagePaths['search-empty-query']} />,
-};
-
-export const PhoneFilterSheetOpen: Story = {
-  name: 'Phone filter sheet open',
-  play: async (context) => {
-    await searchTypedReady(context);
-    const view = within(context.canvasElement);
-    const trigger = view.queryByRole('button', { name: /Filters/ });
-    const dialog = within(document.body).queryByRole('dialog');
-    if (trigger && !dialog && getComputedStyle(trigger).display !== 'none') await trigger.click();
-    if (window.innerWidth < 1024) await expect(within(document.body).getByRole('dialog')).toBeVisible();
-  },
-  render: () => <PhoneFilterSheetStory />,
-};
-
-function PhoneFilterSheetStory() {
-  useEffect(() => {
-    if (window.innerWidth >= 1024) return;
-    const open = () => {
-      const trigger = document.querySelector<HTMLButtonElement>('main button[aria-label^="Filters"]');
-      if (!trigger) return false;
-      trigger.click();
-      return true;
-    };
-    if (open()) return;
-    const observer = new MutationObserver(() => {
-      if (open()) observer.disconnect();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    const timeout = window.setTimeout(() => observer.disconnect(), 10_000);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timeout);
-    };
-  }, []);
-  return <PageStory visitor="Signed Out" path={pagePaths['search-facets']} />;
+function SearchFilterPattern() {
+  const { data } = useSuspenseQuery(searchQueryOptions(getLocale(), filterStoryParams));
+  return <SearchPage query={filterStoryParams.query} data={data} filtersOnly initiallyOpen />;
 }
+
+export const FilterSheetOpen: Story = {
+  name: 'Filter sheet open',
+  globals: { viewport: { value: 'phone' } },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.queryByRole('banner')).toBeNull();
+    await expect(view.queryByRole('navigation')).toBeNull();
+
+    const dialog = await within(document.body).findByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await within(dialog).getByText(m.search_filters(), { exact: false });
+    const fableLabel = getLocale() === 'zh-Hans' || getLocale() === 'zh-Hant' ? '寓言' : 'Fable';
+    const fable = within(dialog).getByRole('checkbox', { name: fableLabel });
+    await expect(fable).toBeChecked();
+    await expect(fable).toBeEnabled();
+  },
+  render: () => (
+    <PatternStory path={searchFacetStoryPaths.active}>
+      <Suspense fallback={null}>
+        <div className="w-full max-w-xs p-4">
+          <SearchFilterPattern />
+        </div>
+      </Suspense>
+    </PatternStory>
+  ),
+};

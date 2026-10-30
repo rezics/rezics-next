@@ -3,16 +3,8 @@ import type { DecisionPage } from '../moderation/decision-read';
 import { DecisionPageView } from '../moderation/decision-page';
 
 const meta = {
-  title: 'Pages/Moderation decision',
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
-  },
+  title: 'Pages/Community/Moderation decision',
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -53,28 +45,44 @@ function story(state: 'open' | 'pending' | 'expired') {
   return <DecisionPageView page={page(state)} now={now} />;
 }
 
-function makeStory(
-  state: 'open' | 'pending' | 'expired',
-  locale: 'en' | 'zh-Hans',
-  viewport: 'phone390' | 'desktop1280',
-) {
+function makeStory(state: 'open' | 'pending' | 'expired', locale: 'en' | 'zh-Hans' = 'en', regression = false) {
   return {
-    name: `${state} appeal · ${locale} · ${viewport}`,
-    globals: { locale },
-    parameters: { viewport: { defaultViewport: viewport } },
+    ...(regression ? { tags: ['!dev'] } : {}),
+    ...(locale !== 'en' ? { globals: { locale } } : {}),
     render: () => story(state),
   } satisfies Story;
 }
 
-export const OpenEnglishPhone: Story = makeStory('open', 'en', 'phone390');
-export const OpenEnglishDesktop: Story = makeStory('open', 'en', 'desktop1280');
-export const OpenChinesePhone: Story = makeStory('open', 'zh-Hans', 'phone390');
-export const OpenChineseDesktop: Story = makeStory('open', 'zh-Hans', 'desktop1280');
-export const PendingEnglishPhone: Story = makeStory('pending', 'en', 'phone390');
-export const PendingEnglishDesktop: Story = makeStory('pending', 'en', 'desktop1280');
-export const PendingChinesePhone: Story = makeStory('pending', 'zh-Hans', 'phone390');
-export const PendingChineseDesktop: Story = makeStory('pending', 'zh-Hans', 'desktop1280');
-export const ExpiredEnglishPhone: Story = makeStory('expired', 'en', 'phone390');
-export const ExpiredEnglishDesktop: Story = makeStory('expired', 'en', 'desktop1280');
-export const ExpiredChinesePhone: Story = makeStory('expired', 'zh-Hans', 'phone390');
-export const ExpiredChineseDesktop: Story = makeStory('expired', 'zh-Hans', 'desktop1280');
+export const Open: Story = { name: 'Appeal open', ...makeStory('open') };
+export const Pending: Story = { name: 'Appeal pending', ...makeStory('pending') };
+export const Expired: Story = { name: 'Appeal expired', ...makeStory('expired') };
+export const OpenChinese: Story = {
+  name: 'Appeal open',
+  tags: ['!dev'],
+  ...makeStory('open', 'zh-Hans', true),
+};
+export const OpenDesktopRegression: Story = {
+  name: 'Appeal open',
+  tags: ['!dev'],
+  ...makeStory('open', 'en', true),
+};
+export const PendingChinese: Story = {
+  name: 'Appeal pending',
+  tags: ['!dev'],
+  ...makeStory('pending', 'zh-Hans', true),
+};
+export const PendingDesktopRegression: Story = {
+  name: 'Appeal pending',
+  tags: ['!dev'],
+  ...makeStory('pending', 'en', true),
+};
+export const ExpiredChinese: Story = {
+  name: 'Appeal expired',
+  tags: ['!dev'],
+  ...makeStory('expired', 'zh-Hans', true),
+};
+export const ExpiredDesktopRegression: Story = {
+  name: 'Appeal expired',
+  tags: ['!dev'],
+  ...makeStory('expired', 'en', true),
+};

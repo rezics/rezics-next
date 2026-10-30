@@ -34,7 +34,7 @@ const chinese = {
 };
 
 const meta = {
-  title: 'Rezics UI/Editor Text',
+  title: 'Components/Editor Text',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: '投稿', onChange: () => undefined },
   parameters: { layout: 'padded' },

@@ -389,11 +389,11 @@ function PostSlot({
         post={post}
         authors={authors}
         now={now}
-        {...(viewerId === undefined ? {} : { viewerId })}
+        {...(viewerId !== undefined ? { viewerId } : {})}
         anchorId={anchorId}
         itemRef={itemElement}
         menuButton={menuButton}
-        {...(removedMinHeight === undefined ? {} : { minHeight: removedMinHeight })}
+        {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
         restoreError={restoreError}
         onCopyLink={copyLink}
         {...(post.availability === 'erased' && post.restorableUntil

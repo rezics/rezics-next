@@ -3,7 +3,7 @@ import { userEvent, within } from 'storybook/test';
 import myRealmsRecording from '../kernel/recorded/my-realms.json';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Realms', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Realms', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

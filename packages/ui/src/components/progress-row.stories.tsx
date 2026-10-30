@@ -4,7 +4,7 @@ import { withSurface } from '../stories/support.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 const meta = {
-  title: 'Rezics UI/Progress Row',
+  title: 'Components/Progress Row',
   component: ProgressRow,
   decorators: [withSurface],
   args: { value: 0, label: '0%' },

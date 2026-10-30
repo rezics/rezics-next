@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ShelfTypeChips } from './shelf-toolbar.tsx';
 const meta = {
-  title: 'Rezics UI/Shelf Toolbar',
+  title: 'Components/Shelf Toolbar',
   component: ShelfTypeChips,
   args: {
     label: 'Type',

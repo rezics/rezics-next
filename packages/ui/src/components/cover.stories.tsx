@@ -80,7 +80,7 @@ const classic: CoverSubject = {
 const sizes: CoverSize[] = ['xs', 'sm', 'md', 'lg', 'xl'];
 
 const meta = {
-  title: 'Rezics UI/Cover',
+  title: 'Components/Cover',
   component: Cover,
   tags: ['autodocs'],
   args: { subject: book, cover: null, size: 'md', src: artSrc },
@@ -209,7 +209,7 @@ const darkFrame: Decorator = (Story) => (
 
 /** A phone-width screen: six small covers in a row, and a grid whose `fill` frames show a neutral image icon. */
 export const Phone: Story = {
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   decorators: [darkFrame],
   render: () => {
     const row = sharedRatio([book, person, album, recipe, game, classic].map((subject) => subject));

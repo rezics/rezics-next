@@ -41,7 +41,7 @@ async function select(canvasElement: HTMLElement) {
   return canvas;
 }
 const meta = {
-  title: 'Rezics UI/Editor Link',
+  title: 'Components/Editor Link',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

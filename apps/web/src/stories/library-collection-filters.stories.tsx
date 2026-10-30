@@ -1,79 +1,141 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PageStory, pageReady, pagePaths } from './page';
-import libraryCollectionRecording from '../kernel/recorded/library-collection.json';
-import { userEvent, within } from 'storybook/test';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { Suspense } from 'react';
+import { expect, userEvent, within } from 'storybook/test';
+import { CollectionFilterFeedback, CollectionFilters } from '../library/collection-filters';
+import { collectionPageQuery } from '../library/collection';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { PatternStory, pagePaths } from './page';
 
-const id = libraryCollectionRecording.collection.id;
-const tag = '00000000-0000-4000-8000-000000000123';
-const base = pagePaths['library-collection'];
-const viewports = {
-  phone390: { name: '390', styles: { width: '390px', height: '844px' }, type: 'mobile' as const },
-  desktop1280: { name: '1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' as const },
-};
-const meta = {
-  title: 'Pages/Library/Collection Filters',
-  parameters: { layout: 'fullscreen', viewport: { viewports } },
-} satisfies Meta;
+const meta = { title: 'Patterns/Library/Collection filters' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function story(path: string, viewport: keyof typeof viewports, openFilters = false): Story {
-  return {
-    name: `${path.includes('/zh-Hans/') ? 'Chinese' : 'English'} · ${path.includes('f.schema') ? 'Harem' : path.includes('r.schema') ? 'Word range' : 'No filter'} · ${viewports[viewport].name}`,
-    parameters: { viewport: { defaultViewport: viewport } },
-    play: async ({ canvasElement }) => {
-      await pageReady({ canvasElement });
-      if (openFilters && window.innerWidth <= 600) {
-        await userEvent.click(within(canvasElement).getByRole('button', { name: m.collection_filters() }));
-        await within(document.body).findByRole('dialog');
-      }
-      if (openFilters) await within(canvasElement).findByDisplayValue(getLocale() === 'zh-Hans' ? '后宫' : 'Harem');
-    },
-    render: () => <PageStory visitor="Signed Out" path={path} />,
-  };
+const id = pagePaths['library-collection'].split('/').at(-1)!;
+const path = pagePaths['library-collection'];
+const harem = '00000000-0000-4000-8000-000000000123';
+
+const states = {
+  reference: {},
+  concept: { 'f.schema:keywords': harem, 'l.schema:keywords': 'Harem' },
+  range: { 'r.schema:wordCount': '1000001,' },
+  combined: {
+    'f.schema:keywords': harem,
+    'l.schema:keywords': 'Harem',
+    'r.schema:wordCount': '1000001,',
+  },
+  noMatch: {
+    'f.schema:keywords': '00000000-0000-4000-8000-000000000999',
+    'l.schema:keywords': 'Harem',
+  },
+  preparing: {
+    'f.schema:keywords': '00000000-0000-4000-8000-000000000998',
+    'l.schema:keywords': 'Preparing',
+  },
+} satisfies Record<string, Record<string, string>>;
+
+function FilterRegion({ search }: { search: Record<string, string> }) {
+  const { data } = useSuspenseQuery(collectionPageQuery(id, undefined, 'anonymous', search));
+  if (!data.filterProperties || !data.filterParams)
+    throw new Error('Collection filters are not enabled in the Storybook runtime.');
+  return (
+    <section className="w-full max-w-3xl space-y-4 p-4 text-foreground">
+      <CollectionFilters
+        id={data.id}
+        type={data.filterType ?? 'schema:Book'}
+        properties={data.filterProperties}
+        params={data.filterParams}
+      />
+      <CollectionFilterFeedback
+        id={data.id}
+        {...(data.filter ? { filter: data.filter } : {})}
+        {...(data.filterIgnored ? { ignored: data.filterIgnored } : {})}
+        {...(data.filterStatus ? { status: data.filterStatus } : {})}
+        empty={data.members.length === 0}
+        unavailable={'unavailable' in data && data.unavailable}
+        emptyLabel={m.library_collection_empty()}
+      />
+    </section>
+  );
 }
 
-const en = {
-  noFilter: base,
-  harem: `${base}?f.schema%3Akeywords=${tag}&l.schema%3Akeywords=Harem`,
-  range: `${base}?r.schema%3AwordCount=1000001%2C`,
-  both: `${base}?f.schema%3Akeywords=${tag}&l.schema%3Akeywords=Harem&r.schema%3AwordCount=1000001%2C`,
-  noMatch: `${base}?f.schema%3Akeywords=00000000-0000-4000-8000-000000000999&l.schema%3Akeywords=Harem`,
-  preparing: `${base}?f.schema%3Akeywords=00000000-0000-4000-8000-000000000998&l.schema%3Akeywords=Preparing`,
-};
-const zh = {
-  noFilter: `/zh-Hans/collections/${id}`,
-  harem: `/zh-Hans/collections/${id}?f.schema%3Akeywords=${tag}&l.schema%3Akeywords=后宫`,
-  range: `/zh-Hans/collections/${id}?r.schema%3AwordCount=1000001%2C`,
-  both: `/zh-Hans/collections/${id}?f.schema%3Akeywords=${tag}&l.schema%3Akeywords=后宫&r.schema%3AwordCount=1000001%2C`,
-  noMatch: `/zh-Hans/collections/${id}?f.schema%3Akeywords=00000000-0000-4000-8000-000000000999&l.schema%3Akeywords=后宫`,
-  preparing: `/zh-Hans/collections/${id}?f.schema%3Akeywords=00000000-0000-4000-8000-000000000998&l.schema%3Akeywords=准备中`,
+function render(search: Record<string, string>) {
+  return (
+    <PatternStory path={path}>
+      <Suspense fallback={null}>
+        <FilterRegion search={search} />
+      </Suspense>
+    </PatternStory>
+  );
+}
+
+async function regionReady(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  if (window.innerWidth < 1024) {
+    await userEvent.click(await canvas.findByRole('button', { name: m.collection_filters() }));
+    const dialog = await within(document.body).findByRole('dialog');
+    await expect(dialog).toBeVisible();
+    return { canvas, fields: within(dialog) };
+  }
+  return { canvas, fields: canvas };
+}
+
+async function selectedState(
+  canvasElement: HTMLElement,
+  kind: 'reference' | 'concept' | 'range' | 'combined' | 'noMatch' | 'preparing',
+) {
+  const { canvas, fields } = await regionReady(canvasElement);
+  if (kind === 'concept' || kind === 'combined' || kind === 'noMatch' || kind === 'preparing') {
+    const label =
+      kind === 'preparing'
+        ? getLocale() === 'zh-Hans'
+          ? '准备中'
+          : 'Preparing'
+        : getLocale() === 'zh-Hans'
+          ? '后宫'
+          : 'Harem';
+    await expect(await fields.findByDisplayValue(label)).toBeVisible();
+  }
+  if (kind === 'range' || kind === 'combined') await expect(await fields.findByDisplayValue('1000001')).toBeVisible();
+  if (kind === 'noMatch') await expect(await canvas.findByText(m.collection_filter_no_match())).toBeVisible();
+  if (kind === 'preparing') await expect(await canvas.findByText(m.collection_filter_preparing())).toBeVisible();
+  if (kind === 'reference')
+    await expect(fields.getByRole('button', { name: m.collection_filter_apply() })).toBeVisible();
+}
+
+export const Reference: Story = {
+  name: 'No filters selected',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'reference'),
+  render: () => render(states.reference),
 };
 
-export const NoFilterEnglishPhone = story(en.noFilter, 'phone390');
-export const NoFilterEnglishDesktop = story(en.noFilter, 'desktop1280');
-export const HaremEnglishPhone = story(en.harem, 'phone390', true);
-export const HaremEnglishDesktop = story(en.harem, 'desktop1280', true);
-export const RangeEnglishPhone = story(en.range, 'phone390');
-export const RangeEnglishDesktop = story(en.range, 'desktop1280');
-export const BothEnglishPhone = story(en.both, 'phone390');
-export const BothEnglishDesktop = story(en.both, 'desktop1280');
-export const NoMatchEnglishPhone = story(en.noMatch, 'phone390');
-export const NoMatchEnglishDesktop = story(en.noMatch, 'desktop1280');
-export const PreparingEnglishPhone = story(en.preparing, 'phone390');
-export const PreparingEnglishDesktop = story(en.preparing, 'desktop1280');
+export const ConceptSelected: Story = {
+  name: 'Concept selected',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'concept'),
+  render: () => render(states.concept),
+};
 
-export const NoFilterChinesePhone = story(zh.noFilter, 'phone390');
-export const NoFilterChineseDesktop = story(zh.noFilter, 'desktop1280');
-export const HaremChinesePhone = story(zh.harem, 'phone390', true);
-export const HaremChineseDesktop = story(zh.harem, 'desktop1280', true);
-export const RangeChinesePhone = story(zh.range, 'phone390');
-export const RangeChineseDesktop = story(zh.range, 'desktop1280');
-export const BothChinesePhone = story(zh.both, 'phone390');
-export const BothChineseDesktop = story(zh.both, 'desktop1280');
-export const NoMatchChinesePhone = story(zh.noMatch, 'phone390');
-export const NoMatchChineseDesktop = story(zh.noMatch, 'desktop1280');
-export const PreparingChinesePhone = story(zh.preparing, 'phone390');
-export const PreparingChineseDesktop = story(zh.preparing, 'desktop1280');
+export const WordRangeApplied: Story = {
+  name: 'Word range applied',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'range'),
+  render: () => render(states.range),
+};
+
+export const CombinedFilters: Story = {
+  name: 'Concept and word range applied',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'combined'),
+  render: () => render(states.combined),
+};
+
+export const NoMatches: Story = {
+  name: 'No matching results',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'noMatch'),
+  render: () => render(states.noMatch),
+};
+
+export const Preparing: Story = {
+  name: 'Results preparing',
+  play: ({ canvasElement }) => selectedState(canvasElement, 'preparing'),
+  render: () => render(states.preparing),
+};

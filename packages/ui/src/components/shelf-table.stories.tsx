@@ -23,7 +23,7 @@ const labels: Record<ShelfColumnId, string> = {
   finished: 'Finished',
   lastActivity: 'Last activity',
 };
-const meta = { title: 'Rezics UI/Shelf Table', component: ShelfTable, decorators: [withSurface] } satisfies Meta<
+const meta = { title: 'Components/Shelf Table', component: ShelfTable, decorators: [withSurface] } satisfies Meta<
   typeof ShelfTable
 >;
 export default meta;

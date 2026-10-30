@@ -110,7 +110,7 @@ function drop(textbox: HTMLElement, files: File[], offset = 0) {
   );
 }
 const meta = {
-  title: 'Rezics UI/Editor Image',
+  title: 'Components/Editor Image',
   component: RichTextEditor,
   args: { value: fromPlainText('', 'blocks'), onChange: () => undefined, label: 'Post' },
   parameters: { layout: 'padded' },

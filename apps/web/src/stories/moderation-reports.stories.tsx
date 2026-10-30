@@ -2,16 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ModerationReportsView } from '../moderation/reports-page';
 
 const meta = {
-  title: 'Pages/Moderation reports',
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
-  },
+  title: 'Pages/Community/Moderation reports',
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -69,9 +61,9 @@ const targets = [
 
 function makeStory(
   state: 'open' | 'resolved',
-  locale: 'en' | 'zh-Hans',
-  theme: 'light' | 'dark',
-  viewport: 'phone390' | 'desktop1280',
+  locale: 'en' | 'zh-Hans' = 'en',
+  theme: 'light' | 'dark' = 'light',
+  regression = false,
 ) {
   const reports =
     state === 'open'
@@ -81,28 +73,43 @@ function makeStory(
           { ...threadReport, outcome: 'dismissed' as const, resolvedAt: '2026-10-29T08:45:00.000Z' },
         ];
   return {
-    name: `${state} reports · ${locale} · ${theme} · ${viewport}`,
     globals: { locale, theme },
-    parameters: { viewport: { defaultViewport: viewport } },
+    ...(regression ? { tags: ['!dev'] } : {}),
     render: () => (
       <ModerationReportsView reports={reports} targets={targets} next={state === 'open' ? 'cursor-next' : null} />
     ),
   } satisfies Story;
 }
 
-export const OpenEnglishLightPhone: Story = makeStory('open', 'en', 'light', 'phone390');
-export const OpenEnglishLightDesktop: Story = makeStory('open', 'en', 'light', 'desktop1280');
-export const OpenEnglishDarkPhone: Story = makeStory('open', 'en', 'dark', 'phone390');
-export const OpenEnglishDarkDesktop: Story = makeStory('open', 'en', 'dark', 'desktop1280');
-export const OpenChineseLightPhone: Story = makeStory('open', 'zh-Hans', 'light', 'phone390');
-export const OpenChineseLightDesktop: Story = makeStory('open', 'zh-Hans', 'light', 'desktop1280');
-export const OpenChineseDarkPhone: Story = makeStory('open', 'zh-Hans', 'dark', 'phone390');
-export const OpenChineseDarkDesktop: Story = makeStory('open', 'zh-Hans', 'dark', 'desktop1280');
-export const ResolvedEnglishLightPhone: Story = makeStory('resolved', 'en', 'light', 'phone390');
-export const ResolvedEnglishLightDesktop: Story = makeStory('resolved', 'en', 'light', 'desktop1280');
-export const ResolvedEnglishDarkPhone: Story = makeStory('resolved', 'en', 'dark', 'phone390');
-export const ResolvedEnglishDarkDesktop: Story = makeStory('resolved', 'en', 'dark', 'desktop1280');
-export const ResolvedChineseLightPhone: Story = makeStory('resolved', 'zh-Hans', 'light', 'phone390');
-export const ResolvedChineseLightDesktop: Story = makeStory('resolved', 'zh-Hans', 'light', 'desktop1280');
-export const ResolvedChineseDarkPhone: Story = makeStory('resolved', 'zh-Hans', 'dark', 'phone390');
-export const ResolvedChineseDarkDesktop: Story = makeStory('resolved', 'zh-Hans', 'dark', 'desktop1280');
+export const OpenReports: Story = { name: 'Open reports', ...makeStory('open') };
+export const OpenReportsDark: Story = {
+  name: 'Open reports',
+  tags: ['!dev'],
+  ...makeStory('open', 'en', 'dark', true),
+};
+export const OpenReportsChinese: Story = {
+  name: 'Open reports',
+  tags: ['!dev'],
+  ...makeStory('open', 'zh-Hans', 'light', true),
+};
+export const OpenReportsChineseDark: Story = {
+  name: 'Open reports',
+  tags: ['!dev'],
+  ...makeStory('open', 'zh-Hans', 'dark', true),
+};
+export const ResolvedReports: Story = { name: 'Resolved reports', ...makeStory('resolved') };
+export const ResolvedReportsDark: Story = {
+  name: 'Resolved reports',
+  tags: ['!dev'],
+  ...makeStory('resolved', 'en', 'dark', true),
+};
+export const ResolvedReportsChinese: Story = {
+  name: 'Resolved reports',
+  tags: ['!dev'],
+  ...makeStory('resolved', 'zh-Hans', 'light', true),
+};
+export const ResolvedReportsChineseDark: Story = {
+  name: 'Resolved reports',
+  tags: ['!dev'],
+  ...makeStory('resolved', 'zh-Hans', 'dark', true),
+};

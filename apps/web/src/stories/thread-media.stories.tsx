@@ -19,7 +19,7 @@ const initialBody: DocumentSnapshot = {
   },
 };
 
-const meta = { title: 'Pages/Thread Media', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Thread', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

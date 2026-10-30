@@ -3,7 +3,7 @@ import agentPageRecording from '../kernel/recorded/agent-page.json';
 import agentPageReaderRecording from '../kernel/recorded/agent-page-reader.json';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Agent', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Agent', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

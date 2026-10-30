@@ -1,11 +1,35 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { PageStory, pagePaths, pageReady } from './page';
+import { AccountMenu, NavigationToggle } from '../shell/shell';
+import { PatternStory, pagePaths, pageReady } from './page';
 
-const meta = { title: 'Pages/Shell', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Patterns/Account/Shell',
+  parameters: {
+    viewport: {
+      options: {
+        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
+        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+function ShellPattern({ visitor }: { visitor: 'Signed In' | 'Signed Out' }) {
+  const session = visitor === 'Signed In' ? 'signed-in' : 'signed-out';
+  return (
+    <PatternStory visitor={visitor} path={pagePaths.shell}>
+      <main className="flex w-full max-w-4xl items-center gap-3 p-4" aria-label="Shell controls">
+        <NavigationToggle collapsed={false} onToggle={() => undefined} pathname="/" session={session} />
+        <AccountMenu session={session} csrfToken={visitor === 'Signed In' ? 'story-csrf-token' : null} />
+      </main>
+    </PatternStory>
+  );
+}
+
 async function accountMenu(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
@@ -17,32 +41,40 @@ async function accountMenu(context: { canvasElement: HTMLElement }) {
   await waitFor(() => expect(content).toBeVisible());
   return content;
 }
+
 export const SignedIn: Story = {
-  name: 'Signed In',
-  play: async (context) => {
-    const menu = await accountMenu(context);
-    await within(menu).findByRole('link', { name: m.account_security_settings() });
-    await within(menu).findByRole('button', { name: m.account_sign_out() });
-  },
-  render: () => <PageStory visitor="Signed In" path={pagePaths.shell} />,
+  name: 'Member',
+  play: pageReady,
+  render: () => <ShellPattern visitor="Signed In" />,
 };
+
 export const SignedOut: Story = {
-  name: 'Signed Out',
+  name: 'Signed out, account menu open',
   play: async (context) => {
     const menu = await accountMenu(context);
     await within(menu).findByRole('link', { name: m.account_sign_in() });
-    const canvas = within(context.canvasElement);
-    // Interface links are plain at rest, whether the underline sits on the link or on text inside it.
-    const links = [...context.canvasElement.querySelectorAll('main a')];
+    const links = [...menu.querySelectorAll('a')];
     await expect(links.length).toBeGreaterThan(0);
     for (const link of links)
       for (const element of [link, ...link.querySelectorAll('*')])
         await expect(getComputedStyle(element).textDecorationLine).not.toContain('underline');
   },
-  render: () => <PageStory visitor="Signed Out" path={pagePaths.shell} />,
+  render: () => <ShellPattern visitor="Signed Out" />,
 };
-// On a phone the navigation opens as a sheet from the header button; on a desktop it is the column beside the page.
+
+export const MemberAccountMenuOpen: Story = {
+  name: 'Member, account menu open',
+  play: async (context) => {
+    const menu = await accountMenu(context);
+    await within(menu).findByRole('link', { name: m.account_security_settings() });
+    await within(menu).findByRole('button', { name: m.account_sign_out() });
+  },
+  render: () => <ShellPattern visitor="Signed In" />,
+};
+
+// The navigation control is phone-only here and opens its menu as a sheet.
 export const Navigation: Story = {
+  name: 'Navigation available',
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -53,5 +85,6 @@ export const Navigation: Story = {
       await expect(await canvas.findByRole('navigation', { name: m.shell_navigation() })).toBeVisible();
     }
   },
-  render: () => <PageStory visitor="Signed In" path={pagePaths.shell} />,
+  globals: { viewport: { value: 'phone' } },
+  render: () => <ShellPattern visitor="Signed In" />,
 };

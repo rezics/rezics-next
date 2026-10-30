@@ -4,7 +4,7 @@ import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { m } from '../paraglide/messages.js';
 import { pagePaths, pageReady, PageStory } from './page';
 
-const meta = { title: 'Pages/Library/Collection details', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Library/Collection', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -25,7 +25,8 @@ async function detailReady(context: { canvasElement: HTMLElement }) {
 }
 
 export const Curator: Story = {
-  name: 'Curator',
+  name: 'Owner, private collection',
+  tags: ['!dev'],
   render: () => render('private'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -35,7 +36,8 @@ export const Curator: Story = {
 };
 
 export const PrivateCurator: Story = {
-  name: 'Private collection, curator',
+  name: 'Owner, private visibility',
+  tags: ['!dev'],
   render: () => render('private'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -44,7 +46,8 @@ export const PrivateCurator: Story = {
 };
 
 export const PrivateNotFound: Story = {
-  name: 'Private collection, other visitor',
+  name: 'Signed out, private collection unavailable',
+  tags: ['!dev'],
   render: () => render('hidden', 'Signed Out'),
   play: async (context) => {
     await pageReady(context);
@@ -53,7 +56,8 @@ export const PrivateNotFound: Story = {
 };
 
 export const UnknownNotFound: Story = {
-  name: 'Unknown collection',
+  name: 'Signed out, unknown collection',
+  tags: ['!dev'],
   render: () => render('hidden', 'Signed Out', '/collections/00000000-0000-4000-8000-000000000000'),
   play: async (context) => {
     await pageReady(context);
@@ -62,7 +66,8 @@ export const UnknownNotFound: Story = {
 };
 
 export const UnlistedVisitor: Story = {
-  name: 'Unlisted collection, direct visitor',
+  name: 'Signed out, unlisted collection',
+  tags: ['!dev'],
   render: () => render('unlisted', 'Signed Out'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -72,7 +77,8 @@ export const UnlistedVisitor: Story = {
 };
 
 export const PublicVisitor: Story = {
-  name: 'Public collection, visitor',
+  name: 'Signed out, public collection',
+  tags: ['!dev'],
   render: () => render('public', 'Signed Out'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -81,7 +87,8 @@ export const PublicVisitor: Story = {
 };
 
 export const Empty: Story = {
-  name: 'Empty collection',
+  name: 'Owner, empty collection',
+  tags: ['!dev'],
   render: () => render('empty'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -90,7 +97,8 @@ export const Empty: Story = {
 };
 
 export const OnePage: Story = {
-  name: 'One page',
+  name: 'Owner, one page of members',
+  tags: ['!dev'],
   render: () => render('one-page'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -100,7 +108,8 @@ export const OnePage: Story = {
 };
 
 export const ManyPages: Story = {
-  name: 'Many pages',
+  name: 'Owner, multiple pages of members',
+  tags: ['!dev'],
   render: () => render('many-pages'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -109,7 +118,8 @@ export const ManyPages: Story = {
 };
 
 export const NotesAndDuplicates: Story = {
-  name: 'Notes and duplicate occurrences',
+  name: 'Owner, duplicate members with notes',
+  tags: ['!dev'],
   render: () => render('notes-duplicates'),
   play: async (context) => {
     const view = await detailReady(context);
@@ -118,45 +128,9 @@ export const NotesAndDuplicates: Story = {
   },
 };
 
-export const Editing: Story = {
-  name: 'Editing',
-  render: () => render('private'),
-  play: async (context) => {
-    const view = await detailReady(context);
-    await userEvent.click(await view.findByRole('button', { name: m.library_collection_actions() }));
-    await userEvent.click(await within(document.body).findByRole('menuitem', { name: m.library_collection_edit() }));
-    await view.findByRole('textbox', { name: m.library_collection_title() });
-  },
-};
-
-export const Reordering: Story = {
-  name: 'Reordering',
-  render: () => render('private'),
-  play: async (context) => {
-    const view = await detailReady(context);
-    const first = await view.findByRole('link', { name: 'Snow Country' });
-    const firstItem = first.closest('li');
-    if (!firstItem) throw new Error('The first member is not in the ordered list.');
-    await userEvent.click(within(firstItem).getByRole('button', { name: m.library_member_move_down() }));
-    const items = view.getAllByRole('listitem');
-    await expect(items[0]).toContainElement(view.getByRole('link', { name: 'The Tale of Genji' }));
-  },
-};
-
-export const Following: Story = {
-  name: 'Following a public collection',
-  render: () => render('public-reader'),
-  play: async (context) => {
-    const view = await detailReady(context);
-    const follow = await view.findByRole('button', { name: m.library_follow() });
-    await userEvent.click(follow);
-    await view.findByText(m.library_following(), { exact: true });
-    await expect(view.getByRole('button', { name: m.library_follow_unfollow() })).toBeVisible();
-  },
-};
-
 export const DeepPage: Story = {
-  name: 'Deep page',
+  name: 'Owner, deeper members',
+  tags: ['!dev'],
   render: () => render('deep-page', 'Signed In', `${pagePaths['library-collection']}?cursor=page-two`),
   play: async (context) => {
     const view = await detailReady(context);
@@ -165,7 +139,8 @@ export const DeepPage: Story = {
 };
 
 export const FinalPage: Story = {
-  name: 'Final page',
+  name: 'Owner, last members',
+  tags: ['!dev'],
   render: () => render('final-page', 'Signed In', `${pagePaths['library-collection']}?cursor=page-three`),
   play: async (context) => {
     const view = await detailReady(context);
@@ -175,7 +150,8 @@ export const FinalPage: Story = {
 };
 
 export const Preparing: Story = {
-  name: 'Preparing',
+  name: 'Owner, page unavailable',
+  tags: ['!dev'],
   render: () => render('preparing'),
   play: async (context) => {
     await pageReady(context);
@@ -184,7 +160,8 @@ export const Preparing: Story = {
 };
 
 export const RestartAfterEpochChange: Story = {
-  name: 'Restart after cursor epoch changes',
+  name: 'Owner, refreshed member list',
+  tags: ['!dev'],
   render: () => render('stale', 'Signed In', `${pagePaths['library-collection']}?cursor=old-epoch`),
   play: async (context) => {
     const view = await detailReady(context);

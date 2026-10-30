@@ -8,7 +8,7 @@ const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const preparing = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e04';
 const unavailable = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e05';
 
-const meta = { title: 'Pages/Zones', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Community/Zone', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

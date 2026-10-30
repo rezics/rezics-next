@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '../shadcn/button.tsx';
 import { ShelfEmpty } from './shelf-empty.tsx';
 const meta = {
-  title: 'Rezics UI/Shelf Empty',
+  title: 'Components/Shelf Empty',
   component: ShelfEmpty,
   args: {
     kind: 'library',

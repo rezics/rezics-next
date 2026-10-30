@@ -45,7 +45,7 @@ async function openMenu(canvasElement: HTMLElement, keys: string) {
 }
 
 const meta = {
-  title: 'Rezics UI/Editor Slash Menu',
+  title: 'Components/Editor Slash Menu',
   component: RichTextEditor,
   args: { value: fromPlainText(''), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },

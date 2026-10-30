@@ -30,11 +30,11 @@ export function selectSmokeStories(
     );
   const webEntries = Object.values(webIndex.entries);
   const uiEntries = Object.values(uiIndex.entries);
-  const shell = select(webEntries, 'Pages/Shell', 'Signed Out');
-  const signedInShell = select(webEntries, 'Pages/Shell', 'Signed In');
-  const uiCoverCard = select(uiEntries, 'Rezics UI/Cover Card');
-  const subject = select(webEntries, 'Pages/Subject', 'Signed In');
-  const copiesStory = select(webEntries, 'Pages/Library/Copies', 'Many Copies');
+  const shell = select(webEntries, 'Patterns/Account/Shell', 'Signed out, account menu open');
+  const signedInShell = select(webEntries, 'Patterns/Account/Shell', 'Member, account menu open');
+  const uiCoverCard = select(uiEntries, 'Components/Cover Card');
+  const subject = select(webEntries, 'Pages/Subjects/Subject', 'Member');
+  const copiesStory = select(webEntries, 'Pages/Library/Copies', 'Owner');
   const coverMedia = copies.copies?.[1]?.subject?.cover?.media;
 
   if (typeof coverMedia !== 'string' || !coverMedia) {
@@ -112,7 +112,7 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         const globals = scenario.globals ? `&globals=${encodeURIComponent(scenario.globals)}` : '';
         if (scenario.composed) {
           await page.goto(`${base}index.html`, { waitUntil: 'domcontentloaded' });
-          await page.getByText('REZICS UI', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+          await page.getByText('Components', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
         }
         await page.goto(`${base}index.html?path=/story/${storyId}${globals}`, { waitUntil: 'domcontentloaded' });
         const iframe = page.locator(scenario.composed ? '#storybook-ref-ui' : '#storybook-preview-iframe');

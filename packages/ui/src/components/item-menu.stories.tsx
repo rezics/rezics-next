@@ -35,12 +35,12 @@ function Example() {
     </ItemMenu>
   );
 }
-const meta = { title: 'Rezics UI/Shelf/Item menu', component: Example } satisfies Meta<typeof Example>;
+const meta = { title: 'Components/Shelf/Item menu', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ItemMenuStory: Story = {
   name: 'Item Menu',
-  parameters: { viewport: { defaultViewport: 'phone' } },
+  globals: { viewport: { value: 'phone' } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Item actions' }));

@@ -14,7 +14,7 @@ import {
 } from './rating.tsx';
 
 const meta = {
-  title: 'Rezics UI/Rating',
+  title: 'Components/Rating',
   component: RatingSummary,
   tags: ['autodocs'],
   decorators: [withSurface],
