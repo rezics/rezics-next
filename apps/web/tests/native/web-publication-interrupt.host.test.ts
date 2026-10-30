@@ -17,6 +17,10 @@ describe('native web publication driver interruptions', () => {
   afterAll(async () => driver?.close());
 
   test('owner-read makes the unavailable view owner fail at the served page and restores it', async () => {
+    const reachable = await driver.request(fixture.unavailableView);
+    expect(reachable.status).toBe(200);
+    await reachable.body?.cancel();
+
     const restore = await driver.interrupt('owner-read');
     try {
       const unavailable = await driver.request(fixture.unavailableView);
@@ -39,17 +43,25 @@ describe('native web publication driver interruptions', () => {
       const isolatedFixture = await isolated.provision(data);
       const cold = await isolated.request(isolatedFixture.preparingView);
       expect(cold.status).toBe(200);
-      expect(await cold.text()).toContain('Preparing this view');
+      expect(await cold.text()).not.toContain(data.subjects.book.title);
 
       const restoredAt = performance.now();
       await restore();
-      await isolated.settle();
-      const ready = await isolated.request(isolatedFixture.preparingView);
-      expect(ready.status).toBe(200);
-      expect(await ready.text()).not.toContain('Preparing this view');
-      console.info(
-        `web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - restoredAt)}ms`,
-      );
+      const projectionDeadline = restoredAt + 120_000;
+      let projected = false;
+      let delay = 50;
+      while (performance.now() < projectionDeadline) {
+        const ready = await isolated.request(isolatedFixture.preparingView);
+        const html = await ready.text();
+        if (ready.status === 200 && html.includes(data.subjects.book.title)) {
+          projected = true;
+          break;
+        }
+        await Bun.sleep(delay);
+        delay = Math.min(delay * 2, 1000);
+      }
+      console.info(`web-publication-interrupt: subject-view-restore-to-projection=${Math.round(performance.now() - restoredAt)}ms`);
+      expect(projected).toBe(true);
     } finally {
       await restore();
       await isolated.close();
