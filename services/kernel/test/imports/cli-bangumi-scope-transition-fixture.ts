@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import type { BatchCommand, BatchStatement, BatchWriteResult, Source } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
 import { ImportSession } from '../../../importer/src/import-session.ts';
@@ -206,7 +206,8 @@ export async function runJourney() {
           if (url.pathname === '/v1/subjects:batchWrite') {
             expect(Buffer.byteLength(body)).toBeLessThanOrEqual(65536);
             for (const command of (JSON.parse(body) as { commands: BatchCommand[] }).commands) {
-              if (commands.has(command.key)) expect(command).toEqual(commands.get(command.key));
+              const previous = commands.get(command.key);
+              if (previous) expect(command).toEqual(previous);
               commands.set(command.key, command);
             }
           }
@@ -423,14 +424,16 @@ export async function runJourney() {
         digest: returnedState.members[0]!.row.baseline!.digest,
         field_group: 'facts',
       });
-      expect(candidate.statement.references).toContainEqual({
-        parts: [
-          expect.objectContaining({
-            property: expect.objectContaining({ id: 'schema:url' }),
-            value: { type: 'value', content: `https://bgm.tv/subject/${target}` },
-          }),
-        ],
-      });
+      expect(candidate.statement.references).toContainEqual(
+        expect.objectContaining({
+          parts: [
+            expect.objectContaining({
+              property: expect.objectContaining({ id: 'schema:url' }),
+              value: { type: 'value', content: `https://bgm.tv/subject/${target}` },
+            }),
+          ],
+        }),
+      );
     }
     expect(returnedProposals.find((c) => c.statement.property.id === 'schema:name')!.statement.value).toEqual({
       type: 'value',

@@ -47,8 +47,17 @@ remain unchanged. The connected scenario does not close other provider journeys 
 
 ## Execution status
 
-Binding is implemented; native execution is pending. A helper or local registration pass is not
-native acceptance. The managed log and tested code revision must accompany the execution result.
+The first managed run at `2b4b453934` reached real returned proposals, then failed in fixture glue:
+TypeScript rejected a possibly undefined map lookup, and the citation comparison omitted the public
+reference's additional `hash` field. The actual reply contained the expected Bangumi URL and native
+reference hash `f5470599226c2052b8afe7b4b8852b150dd4df35dc2797a5c6fbfa90649e2c8f`.
+Its one named child failed after 910 assertions; this is fixture failure, not a production reconciliation
+red or a native acceptance pass. Raw witness:
+`.temp/goal/checks/worker-check-2026-10-30T08-52-08.129Z-24a9dfca.log`.
+
+The fixture now narrows the actual previous command and checks citation parts while retaining the
+native reference object and hash. The frozen test remains unchanged. Native acceptance of the corrected
+fixture is pending; a helper or local registration pass is not native acceptance.
 
 ## Source inspection and decisions
 
