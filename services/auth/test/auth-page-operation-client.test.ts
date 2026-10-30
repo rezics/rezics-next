@@ -10,6 +10,7 @@ import {
   type AccessAccount,
   type AccountWorkflowPorts,
   type SessionProof,
+  type PublicJwks,
 } from '../src/index.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 
@@ -385,7 +386,7 @@ test('password aliases issue each fixed operation profile with live proof and pr
       use: 'sig' as const,
     };
     await f.host.service.internal.registerWebsiteClient({
-      publicJwks: { keys: [websiteKey] },
+      publicJwks: { keys: [websiteKey] } as PublicJwks,
       redirectUris: ['https://rezics.test/callback'],
       postLogoutRedirectUris: ['https://rezics.test/'],
       scopes: ['openid', 'offline_access', 'media:complete', ...operationClient.scopes],
@@ -401,7 +402,7 @@ test('password aliases issue each fixed operation profile with live proof and pr
       password,
     });
     f.account.state = 'active';
-    const signIn = (scope: string[], client_id = operationClient.clientId) =>
+    const signIn = (scope: string[], client_id: string = operationClient.clientId) =>
       f.call('/signin', { email: 'operation@example.test', password, client_id, scope });
     for (const profile of Object.values(AUTH_PAGE_OPERATION_SCOPES)) {
       const signedIn = await signIn([...profile]);

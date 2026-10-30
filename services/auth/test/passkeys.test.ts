@@ -15,6 +15,7 @@ import {
   type AuthService,
   type CredentialAuthorizationInput,
   type SessionProof,
+  type PublicJwks,
 } from '../src/index.ts';
 import { credentialEffectTransport } from '../src/host.ts';
 
@@ -540,7 +541,7 @@ test('default host accepts each exact Auth-page operation profile after native p
       use: 'sig' as const,
     };
     await auth.service.internal.registerWebsiteClient({
-      publicJwks: { keys: [websiteKey] },
+      publicJwks: { keys: [websiteKey] } as PublicJwks,
       redirectUris: ['https://rezics.com/callback'],
       postLogoutRedirectUris: ['https://rezics.com/'],
       scopes: ['openid', 'offline_access', 'media:complete', 'organization:create', 'account:delete'],
@@ -550,7 +551,7 @@ test('default host accepts each exact Auth-page operation profile after native p
       { scopes: ['account:manage'] },
     ]);
     const jwks = createLocalJWKSet(await (await call('/.well-known/jwks.json')).json());
-    async function signIn(scope: string[], client_id = AUTH_PAGE_OPERATION_CLIENT_ID, uv = true) {
+    async function signIn(scope: string[], client_id: string = AUTH_PAGE_OPERATION_CLIENT_ID, uv = true) {
       const challenge = await call('/signin/passkey/options', {});
       expect(challenge.status).toBe(200);
       const options = await challenge.json();
