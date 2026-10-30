@@ -55,7 +55,7 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
         }).format(remainder)
       : '';
     return formatter
-      .formatToParts(whole === 0n && (minor < 0 || Object.is(minor, -0)) ? -0 : whole)
+      .formatToParts(whole === 0n && amount < 0n ? -0 : whole)
       .map((part) => (part.type === 'fraction' ? fraction : part.value))
       .join('');
   } catch {

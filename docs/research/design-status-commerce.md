@@ -66,6 +66,7 @@ Content owns `/editions/new` and the guarded buyer reader. Edition IDs identify 
 The editor explains ASCII-dot input, shows a localized currency/before-tax preview and clears the amount when
 currency changes. Offer, order-list and statement displays use recorded exponents, BigInt quotient/remainder and
 Intl placement/digits; signed cents and safe-integer precision survive without currency summing or UI FX.
+Numeric negative zero is normalized to zero; a real negative cent retains its sign in all eight locale cases.
 Existing recordings without actual metadata stay unknown. Focused parser/display, write, search and generated-adapter
 cases are source, not native proof. Shared localization keys retain the newer base translations; only missing
 Commerce keys are added in all eight locales. Native configuration does not establish provider qualification.
@@ -78,8 +79,9 @@ proof remain pending. The positive current mapped-offer fixture now supplies its
 `{system:'stripe-api',exponent:2,factsVersion:'stripe-money-v1'}` unit, retaining the raw `1299` amount and exact
 `$12.99` assertion. Its omitted tax convention remains unknown, preserving the no-before-tax assertion and all
 existing mapped/revoked, reader-denial, bounded-read and credential assertions. Historical recordings remain
-unchanged. Earlier buyer fixture proof above predates this reconciliation. Local
-`bun run --cwd apps/web typecheck` passes with no type errors in 1,051 files; no other checks ran for this change.
+unchanged. Earlier buyer fixture proof above predates this reconciliation. The creator editor, owned-offer controls
+and exact-money presentation are source-complete for this interface slice; local typing of the zero-display
+correction is pending. Native combined-journey proof and promoted-main completion remain separate obligations.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,

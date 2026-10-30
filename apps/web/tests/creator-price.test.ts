@@ -80,6 +80,19 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
       '-€90,071,992,547,409.91',
     );
   });
+  test('numeric negative zero displays as zero while a real negative cent keeps its sign in every released locale', () => {
+    for (const locale of locales)
+      for (const currency of ['usd', 'eur']) {
+        const formatter = new Intl.NumberFormat(locale, {
+          style: 'currency',
+          currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        expect(formatMinorAmount(locale, currency, -0, recordedStripeUnit)).toBe(formatter.format(0));
+        expect(formatMinorAmount(locale, currency, -1, recordedStripeUnit)).toBe(formatter.format(-0.01));
+      }
+  });
   test('recorded units override Intl digits, while absent historical metadata remains unknown', () => {
     expect(formatMinorAmount('en', 'mga', 500, { ...recordedStripeUnit, exponent: 0 })).toBe('MGA\u00a0500');
     expect(formatMinorAmount('en', 'isk', 500, recordedStripeUnit)).toBe('ISK\u00a05.00');
