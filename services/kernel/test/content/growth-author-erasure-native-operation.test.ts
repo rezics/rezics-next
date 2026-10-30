@@ -5,7 +5,8 @@ import { runCommand } from '../../src/command/command.ts';
 import { erasePostLogicalPageAsInitiator, type ErasureInitiator } from '../../src/content/erase-post.ts';
 import { readErasureInitiator } from '../../src/content/erasure-initiator.ts';
 import { pageAuthorErasurePosts, nullErasedRevisionPage, eraseRevisionMedia } from '../../src/content/erasure-workflow.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { createErasureJob } from '../../src/content/erasure-job.ts';
+import { partitionOf } from '../../src/route/route.ts';
 import {
   assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, type GrowthDatabase, type ReportSample,
 } from '../support/growth.ts';
@@ -59,18 +60,13 @@ function strictReport(name: string, samples: readonly ReportSample[], relations:
   console.info(name, JSON.stringify(samples));
 }
 
-test('Original documented privacy, replay and raw growth bounds remain strict: native 100-post author page', async () => {
-  const f = await createAuthorErasureFixture();
-  let db: GrowthDatabase | undefined;
-  try {
-    db = await openGrowthDatabase(f.pool.options.connectionString!);
-    const measured = db;
-    const scope = await f.scope(1, 1);
-    const actor = f.author.actor;
-    // Restoration consumes the native HTTP operation's original creation
-    // receipt. Neither an actor JSON snapshot nor a new identity supplies proof.
-    const restorer = createInitiatorRestorer({
-      pool: measured.pool, access: f.system.access,
+function nativeInitiator(f: AuthorErasureFixture, db: GrowthDatabase, scope: NativeScope, operationId: string): ErasureInitiator {
+  const actor = f.author.actor;
+  return {
+    kind: 'durable-initiator', operation: { route: scope.route, id: operationId, kind: 'content.author-erasure', sourceId: operationId },
+    accountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy,
+    restorer: createInitiatorRestorer({
+      pool: db.pool, access: f.system.access,
       readOperation: async (client, operation, time) => {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
@@ -80,7 +76,18 @@ test('Original documented privacy, replay and raw growth bounds remain strict: n
         } catch (error) { await client.query('ROLLBACK'); throw error; }
       },
       readConsent: ({ actorAccountId, clientId }) => f.consent.readCurrentConsent({ actorAccountId, clientId }),
-    });
+    }),
+  };
+}
+
+test('Original documented privacy, replay and raw growth bounds remain strict', async () => {
+  const f = await createAuthorErasureFixture();
+  let db: GrowthDatabase | undefined;
+  try {
+    db = await openGrowthDatabase(f.pool.options.connectionString!);
+    const measured = db;
+    const scope = await f.scope(1, 1);
+    const actor = f.author.actor;
     let prepared: { posts: NativePost[]; initiator: ErasureInitiator; key: string; operationId: string } | undefined;
     const runs: { ids: string[]; operationId: string; key: string }[] = [];
     async function preparePage() {
@@ -94,10 +101,8 @@ test('Original documented privacy, replay and raw growth bounds remain strict: n
       const operationId = await requested(f, scope);
       prepared = {
         posts, operationId, key: randomUUID(),
-        initiator: {
-          kind: 'durable-initiator', operation: { route: scope.route, id: operationId, kind: 'content.author-erasure', sourceId: operationId },
-          accountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy, restorer,
-        },
+        // Restoration consumes the native HTTP operation's original receipt.
+        initiator: nativeInitiator(f, measured, scope, operationId),
       };
     }
     async function operation() {
@@ -150,64 +155,91 @@ test('Original documented privacy, replay and raw growth bounds remain strict: n
   const f = await createAuthorErasureFixture();
   let db: GrowthDatabase | undefined;
   try {
-    const scope = await f.scope(1, 100, true);
-    const operationId = await requested(f, scope);
-    await f.startWorker();
-    const deadline = Date.now() + 120_000;
-    let workflowId: string | undefined;
-    while (!workflowId) {
-      workflowId = (await f.pool.query<{ native_workflow_id: string | null }>(
-        'SELECT native_workflow_id FROM content.operation WHERE route=$1 AND operation_id=$2', [scope.route, operationId],
-      )).rows[0]?.native_workflow_id ?? undefined;
-      if (!workflowId && Date.now() >= deadline) throw new Error('Native cleanup operation was not bound');
-      if (!workflowId) await Bun.sleep(10);
-    }
-    expect(await f.client.retrieveWorkflow(workflowId).getResult({ pollingIntervalMs: 10 })).toEqual({ processedPosts: 1, erasedRevisions: 101 });
-    await f.stopWorker();
+    const scope = await f.scope(1, 1);
     db = await openGrowthDatabase(f.pool.options.connectionString!);
-    const source = (await f.pool.query<{ upper_at: string; upper_id: string }>(
-      'SELECT upper_created_at::text AS upper_at,upper_post_id AS upper_id FROM content.operation WHERE route=$1 AND operation_id=$2',
-      [scope.route, operationId],
-    )).rows[0]!;
-    const identities = (await f.pool.query<{ revision_id: string }>(
-      'SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
-      [scope.route, scope.posts[0]!.id],
-    )).rows.map(({ revision_id }) => revision_id);
-    expect(identities).toHaveLength(101);
-    const report = await checkGrowth(db, {
+    const measured = db;
+    type CleanupPage = {
+      post: NativePost; mediaId: string; operationId: string; revisions: string[];
+      after: { at: string; id: string }; upper: { at: string; id: string };
+    };
+    let prepared: CleanupPage | undefined;
+    const completed: CleanupPage[] = [];
+    async function preparePage() {
+      const after = (await f.pool.query<{ at: string; id: string }>(
+        `SELECT created_at::text AS at,post_id AS id FROM content.post
+         WHERE route=$1 AND thread_id=$2 AND author_account_id=$3 ORDER BY created_at DESC,post_id DESC LIMIT 1`,
+        [scope.route, scope.threadId, f.author.actor.accountId],
+      )).rows[0]!;
+      const post = await f.reply(scope, f.author, 'Affected physical cleanup page');
+      for (let index = 1; index < 100; index++) await f.revise(post, `Affected revision ${index}`);
+      const mediaId = await f.claimMedia(scope, post);
+      const operationId = await requested(f, scope);
+      const result = await erasePostLogicalPageAsInitiator({ pool: f.pool, access: f.system.access },
+        nativeInitiator(f, measured, scope, operationId), {
+          threadId: scope.threadId, postIds: [post.id], reason: 'Author erasure',
+        }, {
+          idempotencyKey: `wf:${operationId}:erase:${after.at}:${after.id}`, requestId: operationId, deadline: Date.now() + 10_000,
+        });
+      expect(result.replayed).toBe(false);
+      expect(result.value).toEqual({ postIds: [post.id], processedPosts: 1, erasedRevisions: 101 });
+      const upper = (await f.pool.query<{ at: string; id: string }>(
+        'SELECT upper_created_at::text AS at,upper_post_id AS id FROM content.operation WHERE route=$1 AND operation_id=$2',
+        [scope.route, operationId],
+      )).rows[0]!;
+      const revisions = (await f.pool.query<{ revision_id: string }>(
+        'SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
+        [scope.route, post.id],
+      )).rows.map(({ revision_id }) => revision_id);
+      expect(revisions).toHaveLength(101);
+      prepared = { post, mediaId, operationId, revisions, after, upper };
+    }
+    async function operation(target: GrowthDatabase) {
+      if (!prepared) throw new Error('Native physical cleanup page was not prepared');
+      const page = prepared;
+      await runCommand(target.pool, { partition: partitionOf(scope.route) }, async (tx) => {
+        const posts = await pageAuthorErasurePosts(tx, {
+          route: scope.route, partition_no: partitionOf(scope.route), operation_id: page.operationId,
+          initiator_id: f.author.actor.accountId, author_id: f.author.actor.accountId, thread_id: scope.threadId,
+          after_at: page.after.at, after_id: page.after.id, upper_at: page.upper.at, upper_id: page.upper.id,
+        });
+        expect(posts.map(({ post_id }) => post_id)).toEqual([page.post.id]);
+        expect(posts[0]!.committed).toBe(true);
+        const revisions = await nullErasedRevisionPage(tx, {
+          route: scope.route, post_id: page.post.id, after_at: '-infinity', after_id: page.post.id,
+        });
+        expect(revisions.map(({ revision_id }) => revision_id)).toEqual(page.revisions.slice(0, 100));
+        expect(revisions.every(({ changed }) => changed)).toBe(true);
+        const media = await eraseRevisionMedia(tx, {
+          route: scope.route, post_id: page.post.id, revision_id: page.revisions.at(-1)!,
+        });
+        expect(media).toEqual([{ media_id: page.mediaId, container_id: scope.threadId, changed: true }]);
+        return { value: null, events: [] };
+      });
+      // The irreversible media decision also requires its actual producer purge,
+      // after the partition command releases its connection, inside the capture.
+      expect(await createErasureJob(target.pool, f.objects.storage).purgeObject(page.mediaId))
+        .toEqual({ mediaId: page.mediaId, outcome: 'purged' });
+      completed.push(page);
+    }
+    const report = await checkGrowth(measured, {
       name: 'native content erasure pages', scales: [32, 256, 2048], warmups: 1, repetitions: 5,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: (_db, scale, previous) => growOther(f, scope, scale, previous),
-      async operation(target) {
-        await runCommand(target.pool, { partition: partitionOf(scope.route) }, async (tx) => {
-          const posts = await pageAuthorErasurePosts(tx, {
-            route: scope.route, partition_no: partitionOf(scope.route), operation_id: operationId,
-            initiator_id: f.author.actor.accountId, author_id: f.author.actor.accountId, thread_id: scope.threadId,
-            after_at: '-infinity', after_id: operationId, upper_at: source.upper_at, upper_id: source.upper_id,
-          });
-          expect(posts.map(({ post_id }) => post_id)).toEqual([scope.posts[0]!.id]);
-          expect(posts[0]!.committed).toBe(true);
-          const revisions = await nullErasedRevisionPage(tx, {
-            route: scope.route, post_id: scope.posts[0]!.id, after_at: '-infinity', after_id: scope.posts[0]!.id,
-          });
-          expect(revisions.map(({ revision_id }) => revision_id)).toEqual(identities.slice(0, 100));
-          expect(revisions.every(({ changed }) => !changed)).toBe(true);
-          const media = await eraseRevisionMedia(tx, {
-            route: scope.route, post_id: scope.posts[0]!.id, revision_id: identities.at(-1)!,
-          });
-          expect(media).toEqual([{ media_id: scope.mediaId!, container_id: scope.threadId, changed: false }]);
-          return { value: null, events: [] };
-        });
-      },
+      async warmup(target) { await preparePage(); await operation(target); },
+      prepare: preparePage,
+      operation,
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
     strictReport('Native revision and media raw growth', report.samples, ['content.post', 'content.revision', 'content.media', 'core.receipt']);
-    const erased = await f.pool.query(
-      'SELECT body,body_sha256,search_text,availability FROM content.revision WHERE route=$1 AND post_id=$2',
-      [routeOf(scope.posts[0]!.id), scope.posts[0]!.id],
-    );
-    expect(erased.rows).toHaveLength(101);
-    expect(erased.rows.every((row) => row.body === null && row.body_sha256 === null && row.search_text === null && row.availability === 'erased')).toBe(true);
-    expect(f.objects.inspect().filter(({ key }) => key.startsWith(`m/${scope.mediaId}/`))).toEqual([]);
+    for (const page of completed) {
+      const erased = await f.pool.query(
+        `SELECT body,body_sha256,search_text,availability FROM content.revision
+         WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id`, [scope.route, page.post.id],
+      );
+      expect(erased.rows).toHaveLength(101);
+      expect(erased.rows.slice(0, 100).every((row) => row.body === null && row.body_sha256 === null && row.search_text === null && row.availability === 'erased')).toBe(true);
+      expect(erased.rows[100]).toMatchObject({ availability: 'available', body: expect.any(Buffer) });
+      expect(f.objects.inspect().filter(({ key }) => key.startsWith(`m/${page.mediaId}/`))).toEqual([]);
+    }
   } finally { try { await db?.close(); } finally { await f.close(); } }
 }, 240_000);

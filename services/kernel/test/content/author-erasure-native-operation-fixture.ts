@@ -173,6 +173,26 @@ export async function createAuthorErasureFixture(databaseUrl = process.env.DATAB
       }, credential, 200, 'POST', { 'if-match': JSON.stringify(post.revisionId) });
       post.revisionId = result.post.revisionId;
     }
+    async function claimMedia(scope: Pick<NativeScope, 'threadId'>, post: NativePost) {
+      const source = await imageSource('tiny');
+      const key = randomUUID();
+      const sha256 = createHash('sha256').update(source.bytes).digest('hex');
+      const reserved = await call('POST', '/v1/media', {
+        bearer: author.bearer, key,
+        body: { containerId: scope.threadId, purpose: 'post-image', mediaType: source.type, byteCount: source.bytes.length, sha256 },
+      });
+      if (reserved.response.status !== 201) throw new Error(`Media reservation: ${reserved.response.status} ${reserved.text}`);
+      const mediaId = reserved.value!.media.id as string;
+      // The supported confidential website credential belongs to this same author.
+      await objects.storage.put(`m/${mediaId}/original`, source.bytes, { mediaType: source.type });
+      await command(`/v1/media/${mediaId}:complete`, {
+        containerId: scope.threadId, reservationRequestId: key, byteCount: source.bytes.length, sha256,
+      }, system.actors.worker, 200);
+      const image = await createImageJob(pool, objects.storage).process(mediaId);
+      if (image.state !== 'available') throw new Error(`Native image producer returned ${image.state}`);
+      await revise(post, 'Private author claimed image sentinel', author, [mediaId]);
+      return mediaId;
+    }
     async function scope(count = 205, revisions = 3, withMedia = false): Promise<NativeScope> {
       const { thread } = await command('/v1/threads', {
         title: 'Native author erasure scope', body: fromPlainText('Private author opening sentinel'),
@@ -192,30 +212,13 @@ export async function createAuthorErasureFixture(databaseUrl = process.env.DATAB
           await revise(post, `Private author historical sentinel ${post.id} ${revision}`);
       for (const post of value.otherPosts) await revise(post, 'Surviving other author revision');
       if (withMedia) {
-        const source = await imageSource('tiny');
-        const key = randomUUID();
-        const sha256 = createHash('sha256').update(source.bytes).digest('hex');
-        const reserved = await call('POST', '/v1/media', {
-          bearer: author.bearer, key,
-          body: { containerId: value.threadId, purpose: 'post-image', mediaType: source.type, byteCount: source.bytes.length, sha256 },
-        });
-        if (reserved.response.status !== 201) throw new Error(`Media reservation: ${reserved.response.status} ${reserved.text}`);
-        const mediaId = reserved.value!.media.id as string;
-        // The supported confidential website credential belongs to this same author.
-        await objects.storage.put(`m/${mediaId}/original`, source.bytes, { mediaType: source.type });
-        await command(`/v1/media/${mediaId}:complete`, {
-          containerId: value.threadId, reservationRequestId: key, byteCount: source.bytes.length, sha256,
-        }, system.actors.worker, 200);
-        const image = await createImageJob(pool, objects.storage).process(mediaId);
-        if (image.state !== 'available') throw new Error(`Native image producer returned ${image.state}`);
-        await revise(value.posts[0]!, 'Private author claimed image sentinel', author, [mediaId]);
+        value.mediaId = await claimMedia(value, value.posts[0]!);
         value.revisionCount++;
-        value.mediaId = mediaId;
       }
       return value;
     }
     return {
-      system, pool, client: workClient, app, author, other, governance, objects, consent, call, command, scope, reply, revise,
+      system, pool, client: workClient, app, author, other, governance, objects, consent, call, command, scope, reply, revise, claimMedia,
       async startWorker(pauseAtSecondPage = false) {
         if (worker) throw new Error('Stop the owned Content worker before restarting it');
         worker = await spawnWorker({
@@ -302,7 +305,7 @@ async function spawnWorker(options: WorkerOptions): Promise<Worker> {
 
 async function runWorker() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
-  const client = await createWorkClient(process.env.DATABASE_URL!, pool);
+  let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   const observer = observeSql(pool);
   // The production post seek's second invocation is after the first logical page
   // and its native progress checkpoint. Holding this real query changes no result.
@@ -336,6 +339,8 @@ async function runWorker() {
     },
   };
   try {
+    client = await createWorkClient(process.env.DATABASE_URL!, pool);
+    const workClient = client;
     const clock = () => new Date();
     const module = createContentWork({
       access: createContentWorkAccess(clock, pool),
@@ -351,9 +356,9 @@ async function runWorker() {
       name: module.name,
       async register(context) {
         await module.register(context);
-        context.addEffects(contentEffects(pool, client));
+        context.addEffects(contentEffects(pool, workClient));
       },
-    }], { pool, client, databaseUrl: process.env.DATABASE_URL!, executorId: process.env.AUTHOR_ERASURE_EXECUTOR!, clock });
+    }], { pool, client: workClient, databaseUrl: process.env.DATABASE_URL!, executorId: process.env.AUTHOR_ERASURE_EXECUTOR!, clock });
     await work.launch();
     relay = startRelays(pool, [effectsRelay(pool, work.effects)], { intervalMs: 5, concurrency: 2 });
     if (barrier) void barrier.entered.then(() => console.log('author-erasure:page-boundary'));
@@ -371,7 +376,7 @@ async function runWorker() {
       finally {
         try { await observer.close(); }
         finally {
-          try { await client.close(); }
+          try { await client?.close(); }
           finally { await pool.end(); }
         }
       }
