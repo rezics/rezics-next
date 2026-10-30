@@ -233,7 +233,10 @@ export function createKernelAccessResolver(options: {
   composedActions?: () => AccessConfig['actions'] | undefined;
 }): { resolveAccess: (config: AccessConfig) => Access; realmRoleReader: AccessRealmRoleReader } {
   const factory = options.access ?? createAccess;
-  const contentEditionBuyerFactReader = createContentEditionBuyerFactReader({ pool: options.pool, clock: options.clock });
+  const contentEditionBuyerFactReader = createContentEditionBuyerFactReader({
+    pool: options.pool,
+    clock: options.clock,
+  });
   let access: Access | undefined;
   let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
   function membershipReader() {
@@ -264,7 +267,13 @@ export function createKernelAccessResolver(options: {
     if (access) return access;
     const actions = options.composedActions ? options.composedActions() : config.actions;
     if (!actions) throw new KernelAccessCompositionError();
-    return (access = factory({ ...config, actions, realmRoleReader, clock: options.clock, contentEditionBuyerFactReader }));
+    return (access = factory({
+      ...config,
+      actions,
+      realmRoleReader,
+      clock: options.clock,
+      contentEditionBuyerFactReader,
+    }));
   };
   return { resolveAccess, realmRoleReader };
 }

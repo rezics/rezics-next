@@ -46,13 +46,24 @@ export function createContentEditionBuyerFactReader(config: {
           if (!partition || partition.writeState !== 'active') throw new ProblemError('partition_unavailable');
           const account = await readAccount(bounded, route, buyerAccountId);
           if (
-            !account || account.accountId !== buyerAccountId || account.route !== route ||
-            account.state !== 'active' || account.fenced || account.minimumAuthnEpoch < 1n ||
-            account.createdAt === null || !Number.isFinite(account.createdAt) || account.createdAt > Date.parse(at)
-          ) throw new ProblemError('dependency_unavailable');
+            !account ||
+            account.accountId !== buyerAccountId ||
+            account.route !== route ||
+            account.state !== 'active' ||
+            account.fenced ||
+            account.minimumAuthnEpoch < 1n ||
+            account.createdAt === null ||
+            !Number.isFinite(account.createdAt) ||
+            account.createdAt > Date.parse(at)
+          )
+            throw new ProblemError('dependency_unavailable');
           const rows = await lookup.run(bounded, {
-            route, account_id: buyerAccountId, edition_route: String(benefit.resource.route),
-            edition_id: benefit.resource.id, revision_id: benefit.version.revisionId, sha256: benefit.version.sha256,
+            route,
+            account_id: buyerAccountId,
+            edition_route: String(benefit.resource.route),
+            edition_id: benefit.resource.id,
+            revision_id: benefit.version.revisionId,
+            sha256: benefit.version.sha256,
           });
           // An ambiguous current match cannot select an arbitrary purchase as authority.
           if (rows.length > 1) throw new ProblemError('dependency_unavailable');
@@ -60,16 +71,25 @@ export function createContentEditionBuyerFactReader(config: {
           if (row) {
             const capture = decodeCapturedContentEdition(row.contentEdition);
             if (
-              row.accountId !== buyerAccountId || row.route !== route || routeOf(row.id) !== route ||
-              routeOf(row.orderId) !== route || routeOf(row.offerId) === null ||
-              !Number.isSafeInteger(row.revision) || row.revision < 1 ||
-              row.revokedAt !== null || row.revokeReason !== null ||
-              !Number.isFinite(Date.parse(row.grantedAt)) || Date.parse(row.grantedAt) > Date.parse(at) ||
-              !capture || capture.targetSubjectId !== row.targetSubjectId || contentEditionBenefitBinding(capture.benefit) !== contentEditionBenefitBinding(benefit) ||
+              row.accountId !== buyerAccountId ||
+              row.route !== route ||
+              routeOf(row.id) !== route ||
+              routeOf(row.orderId) !== route ||
+              routeOf(row.offerId) === null ||
+              !Number.isSafeInteger(row.revision) ||
+              row.revision < 1 ||
+              row.revokedAt !== null ||
+              row.revokeReason !== null ||
+              !Number.isFinite(Date.parse(row.grantedAt)) ||
+              Date.parse(row.grantedAt) > Date.parse(at) ||
+              !capture ||
+              capture.targetSubjectId !== row.targetSubjectId ||
+              contentEditionBenefitBinding(capture.benefit) !== contentEditionBenefitBinding(benefit) ||
               routeOf(capture.source.threadId) !== benefit.resource.route ||
               routeOf(capture.source.postId) !== benefit.resource.route ||
               routeOf(capture.benefit.version.revisionId) !== benefit.resource.route
-            ) throw new ProblemError('dependency_unavailable');
+            )
+              throw new ProblemError('dependency_unavailable');
           }
           authoritativeTimeValue(time);
           requireAccessDeadline(deadline);
@@ -86,8 +106,12 @@ export function createContentEditionBuyerFactReader(config: {
       requireAccessDeadline(deadline);
       if (!entitlement) return null;
       return createContentEditionBuyerFact({
-        benefit, buyerAccountId, entitlementId: entitlement.id,
-        entitlementRevision: entitlement.revision, time, deadline,
+        benefit,
+        buyerAccountId,
+        entitlementId: entitlement.id,
+        entitlementRevision: entitlement.revision,
+        time,
+        deadline,
       });
     } catch (error) {
       throwAccessUnavailable(error, deadline);
@@ -98,4 +122,3 @@ export function createContentEditionBuyerFactReader(config: {
     }
   };
 }
-
