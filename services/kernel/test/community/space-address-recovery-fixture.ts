@@ -3,6 +3,7 @@ import { nativeFixture, issuer as nativeIssuer } from '../access/native-account-
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { anchorRoute, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { registerTestClient, testKernel, testRouteKey } from '../support/test-kernel.ts';
@@ -102,6 +103,13 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
   const kernel = testKernel({
     pool: database.pool,
     clock: () => new Date(domainTime),
+    writeRate: createWriteRateLimiter({
+      secret: 'space-address-recovery-write-rate-secret-32bytes',
+      overrides: JSON.stringify({
+        anonymous: { write: { maximum: 100000, seconds: 86400 } },
+        'new-account': { write: { maximum: 100000, seconds: 86400 } },
+      }),
+    }),
     auth: {
       issuer: nativeIssuer,
       audience: AUDIENCE,
