@@ -1,5 +1,5 @@
 import type { Access } from '../request/access.ts';
-import type { AuthErasureProofPorts, AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
+import type { AuthErasureProofPorts, AuthErasureObligationPorts, AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import type { OperatorOpening } from './operator.ts';
@@ -46,5 +46,5 @@ export declare class AuthBindingDeniedError extends Error {
 export declare function createAuthBindings(config: {
     pool: Pool;
     access?: Access;
-} & AuthBindingCapabilities): PasskeyTrustedAccessPorts;
+} & AuthBindingCapabilities): PasskeyTrustedAccessPorts & AuthErasureObligationPorts;
 export {};

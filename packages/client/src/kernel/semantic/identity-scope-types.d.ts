@@ -1,14 +1,19 @@
 import type { CommandTransaction } from '../command/command.ts';
 import type { NativeSourceCapture, NativeSourceFrontier, NativeSourceIdentity } from '../library/native-source-custody.ts';
+import type { NativePublicOutputIdentity } from '../library/native-source-output-types.ts';
 import type { WorkAllowance } from '../library/collection-source.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';
 import type { NativePublicSource } from './public-filter-source-binding.ts';
 import type { PublicIdentitySourceCapture } from './identity-scoped-public-source.ts';
+export type IdentityScopeLibraryIdentity = NativeSourceIdentity | NativePublicOutputIdentity;
+export type IdentityScopeLibraryCapture = Omit<NativeSourceCapture, 'identity'> & Readonly<{
+    identity: IdentityScopeLibraryIdentity;
+}>;
 /** Source identity is a locator. Registration always resolves the native retained capture. */
 export type IdentityScopeSource = Readonly<{
     kind: 'library';
-    identity: NativeSourceIdentity;
+    identity: IdentityScopeLibraryIdentity;
 }> | Readonly<{
     kind: 'public';
     identity: NativePublicSource;
@@ -30,7 +35,7 @@ export type IdentityScopeFailure = Readonly<{
 }>;
 export type IdentityScopeCapture = Readonly<{
     kind: 'library';
-    capture: NativeSourceCapture;
+    capture: IdentityScopeLibraryCapture;
     frontier: NativeSourceFrontier;
     allowance: WorkAllowance;
 }> | Readonly<{
@@ -74,7 +79,9 @@ export type IdentityScopeFinishInput = Readonly<{
     job: IdentityJobRef;
     attempt: IdentityNativeReceipt;
     /** Locators only. finish resolves each exact native receiving record in its own home. */
-    records: readonly IdentityReceivingRecord[];
+    records?: readonly IdentityReceivingRecord[];
+    /** One original reservation, shared with native enumeration and final Source guards. */
+    allowance: WorkAllowance;
     deadline: number;
 }>;
 export type IdentityScopeFinishResult = IdentityScopeFailure | Readonly<{
@@ -99,6 +106,7 @@ export type IdentityScopeRepairInput = Readonly<{
     key: IdentityScopeKey;
     limit: number;
     deadline: number;
+    allowance?: WorkAllowance;
 }>;
 export type IdentityScopeRepairResult = IdentityScopeFailure | Readonly<{
     status: 'repaired' | 'pending';
@@ -107,11 +115,12 @@ export type IdentityScopeRepairResult = IdentityScopeFailure | Readonly<{
 }>;
 export type IdentityScopeRetireInput = Readonly<{
     key: IdentityScopeKey;
-    receiving: readonly IdentityReceivingRecord[];
+    receiving?: readonly IdentityReceivingRecord[];
+    allowance: WorkAllowance;
     deadline: number;
 }>;
 export type IdentityScopeRetireResult = IdentityScopeFailure | Readonly<{
-    status: 'retired';
+    status: 'retired' | 'pending';
     work: IdentityScopeWork;
 }>;
 export interface IdentityScopedObservations {

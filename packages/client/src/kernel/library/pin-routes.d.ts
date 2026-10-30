@@ -197,6 +197,114 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
 } & {
     v1: {
         subjects: {
+            ":id": {
+                terms: {
+                    patch: {
+                        body: {
+                            labels?: Record<string, string | null>;
+                            descriptions?: Record<string, string | null>;
+                            aliases?: Record<string, string[] | null>;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match': string;
+                        };
+                        response: {
+                            200: {
+                                subject: string;
+                                revision: number;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
             $merge: {
                 post: {
                     body: {
@@ -2043,6 +2151,12 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     };
                                     change: {
                                         kind: "record";
+                                    } | {
+                                        kind: "terms";
+                                        fields: {
+                                            field: "aliases" | "descriptions" | "labels";
+                                            languages: string[];
+                                        }[];
                                     } | {
                                         candidate: string;
                                         property: string;

@@ -1374,7 +1374,7 @@ declare const productEventTypes: {
     readonly "com.rezics.subject.revised.v1": Type.TObject<{
         id: Type.TString;
         revision: Type.TInteger;
-        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">, Type.TLiteral<"identity">]>;
+        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"terms">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">, Type.TLiteral<"identity">]>;
     }>;
     readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
         id: Type.TString;

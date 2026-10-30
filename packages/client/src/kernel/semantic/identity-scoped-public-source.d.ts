@@ -1,7 +1,6 @@
-/** Provisional Semantic producer adapter. No I/O, capture or readiness is fabricated. */
 import type { CommandTransaction } from '../command/command.ts';
 import type { PublicFilterSourceFactory, PublicFilterReadContext, PublicFilterCost } from './public-filter-source-contract.ts';
-import type { PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
+import { type NativePublicSource, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 declare const publicSourceCapture: unique symbol;
 export type PublicIdentitySourceCapture = Readonly<{
     [publicSourceCapture]: true;
@@ -31,6 +30,17 @@ export type PublicIdentitySourceCaptureProducer = Readonly<{
         context: PublicFilterReadContext;
     }>): Promise<PublicIdentitySourceCapturePage>;
 }>;
-export declare function createPublicIdentitySourceCapture(config: Parameters<PublicFilterSourceFactory>[0]): PublicIdentitySourceCaptureProducer;
+export type CreatePublicIdentitySourceCapture = (config: Parameters<PublicFilterSourceFactory>[0]) => PublicIdentitySourceCaptureProducer;
+export type VerifyPublicIdentitySourceCapture = (tx: CommandTransaction, capture: PublicIdentitySourceCapture) => Promise<boolean>;
+type Locator = {
+    source: NativePublicSource;
+    captureId: string;
+    definition: string;
+};
+export declare function publicIdentityCaptureLocator(capture: PublicIdentitySourceCapture): Locator | null;
+/** Background structural scan; it never evaluates a matcher or grants public read authority. */
+export declare const createPublicIdentitySourceCapture: CreatePublicIdentitySourceCapture;
+/** Native committed capture + current local Source owner, on the caller's own command client. */
 export declare function verifyPublicIdentitySourceCapture(tx: CommandTransaction, capture: PublicIdentitySourceCapture): Promise<boolean>;
+export declare function verifyPublicIdentitySourceCaptureLocator(tx: CommandTransaction, locator: Locator): Promise<boolean>;
 export {};

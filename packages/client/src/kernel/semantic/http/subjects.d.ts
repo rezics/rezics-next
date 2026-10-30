@@ -83,6 +83,15 @@ export declare const ItemInputSchema: import("typebox").TObject<{
     aliases: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
     statements: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
 }>;
+export declare const TermsPatchSchema: import("typebox").TObject<{
+    labels: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>>;
+    descriptions: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>>>;
+    aliases: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TArray<import("typebox").TString>, import("typebox").TNull]>>>;
+}>;
+export declare const TermsResultSchema: import("typebox").TObject<{
+    subject: import("typebox").TString;
+    revision: import("typebox").TInteger;
+}>;
 export declare const RevisionDetailSchema: import("typebox").TObject<{
     subject: import("typebox").TString;
     revision: import("typebox").TObject<{
@@ -92,6 +101,12 @@ export declare const RevisionDetailSchema: import("typebox").TObject<{
     }>;
     change: import("typebox").TUnion<[import("typebox").TObject<{
         kind: import("typebox").TLiteral<"record">;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"terms">;
+        fields: import("typebox").TArray<import("typebox").TObject<{
+            field: import("typebox").TUnion<[import("typebox").TLiteral<"labels">, import("typebox").TLiteral<"descriptions">, import("typebox").TLiteral<"aliases">]>;
+            languages: import("typebox").TArray<import("typebox").TString>;
+        }>>;
     }>, import("typebox").TObject<{
         candidate: import("typebox").TString;
         property: import("typebox").TString;
@@ -323,6 +338,114 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     };
                 };
                 error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                terms: {
+                    patch: {
+                        body: {
+                            labels?: Record<string, string | null>;
+                            descriptions?: Record<string, string | null>;
+                            aliases?: Record<string, string[] | null>;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match': string;
+                        };
+                        response: {
+                            200: {
+                                subject: string;
+                                revision: number;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
             };
         };
     };
@@ -2175,6 +2298,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     };
                                     change: {
                                         kind: "record";
+                                    } | {
+                                        kind: "terms";
+                                        fields: {
+                                            field: "aliases" | "descriptions" | "labels";
+                                            languages: string[];
+                                        }[];
                                     } | {
                                         candidate: string;
                                         property: string;
