@@ -65,7 +65,12 @@ export function progressFormChoices(release: Release, type: string, locale: stri
   }));
 }
 export type ProgressChoices = ReturnType<typeof progressFormChoices>;
-export type ProgressInputRules = ReturnType<typeof progressInputRules>;
+export type ProgressInputRules =
+  | (Omit<NonNullable<ReturnType<typeof progressInputRules>>, 'min' | 'max'> & {
+      min?: string | undefined;
+      max?: string | undefined;
+    })
+  | undefined;
 
 /** Resolve only the presentation of this stored pair; legacy labels never enable a write. */
 export function progressSessionProfile(
