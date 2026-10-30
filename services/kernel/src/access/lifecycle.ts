@@ -1547,10 +1547,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
-      const subject =
-        context.actor.accountId !== input.accountId
-          ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
-          : null;
+      const subject = await withConnection(pool, (client) => readAccount(client, route, input.accountId));
       const operatorId = subject?.kind === 'actor' && subject.state === 'active' ? subject.operatorAccountId : null;
       const authorization = operatorId
         ? await authorize(context, 'account:manage', operatorId)
@@ -1585,8 +1582,9 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           displayNameChanged =
             Object.hasOwn(patch, 'displayName') && account.displayName !== (patch.displayName as string | null);
           requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
-          if (Object.hasOwn(patch, 'speakersListed')) requireAllowed(account.kind === 'organization');
           requireAllowed(await allowed(tx));
+          if (Object.hasOwn(patch, 'speakersListed') && account.kind !== 'organization')
+            throw new ProblemError('invalid_request');
           if (typeof patch.avatar === 'string' && !(await checkAvatarMedia(tx, patch.avatar, input.accountId)))
             throw new ProblemError('invalid_request');
           requireAllowed(

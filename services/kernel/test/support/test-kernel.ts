@@ -125,6 +125,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
 
 export type TestKernelOptions = TestRuntimeOptions & {
   pool: Pool;
+  requestDeadlineMs?: number;
   workClient?: WorkClient;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   commerce?: CommerceDependencies;
@@ -158,7 +159,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   const kernel = createKernel({
-    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+    requestDeadlineMs: options.requestDeadlineMs ?? TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     routeKey: testRouteKey(),
     tokens: defaults.tokens,

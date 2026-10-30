@@ -34,7 +34,7 @@ const pathOf = (account: Account) => `/v1/accounts/${account.accountId}`;
 const idsPath = (accounts: Account[]) =>
   `/v1/accounts?ids=${encodeURIComponent(accounts.map((a) => a.accountId).join(','))}`;
 const profilePath = (account: Account) => `/v1/accounts?handle=${encodeURIComponent(account.handle)}`;
-const writeInit = (method: string, body: unknown, key = crypto.randomUUID()): RequestInit => ({
+const writeInit = (method: string, body: unknown, key: string = crypto.randomUUID()): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json', 'Idempotency-Key': JSON.stringify(key) },
   body: JSON.stringify(body),

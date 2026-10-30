@@ -302,7 +302,9 @@ test("another account and an anonymous request change nothing and are refused as
 
 test('speakersListed is accepted only for an organization', async () => {
   const before = await profile(other);
-  expect((await patch(other, { displayName: 'Must roll back', speakersListed: true }, other.bearer)).status).toBe(403);
+  const invalid = await patch(other, { displayName: 'Must roll back', speakersListed: true }, other.bearer);
+  expect(invalid.status).toBe(400);
+  expect(invalid.body).toMatchObject({ code: 'invalid_request', effect_status: 'not_applied' });
   expect(await profile(other)).toEqual(before);
   const key = 'profile-http-organization';
   const operation = { kind: 'organization' as const, handle: key, authorization: 'request' };
