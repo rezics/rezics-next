@@ -82,9 +82,7 @@ function selectStories(
   availableStories: readonly string[],
   selectors: readonly string[],
 ): { stories: string[]; unmatchedSelectors: string[] } {
-  const unmatchedSelectors = selectors.filter(
-    (selector) => !availableStories.some((id) => storyMatches(id, selector)),
-  );
+  const unmatchedSelectors = selectors.filter((selector) => !availableStories.some((id) => storyMatches(id, selector)));
   const stories = availableStories
     .filter((id) => selectors.length === 0 || selectors.some((selector) => storyMatches(id, selector)))
     .sort();

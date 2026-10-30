@@ -19,7 +19,10 @@ function extracted<T>(startName: string, endName: string, ending = `\nreturn ${s
 type Job = { id: string; locale: string; theme: string };
 type CaptureResult = { files: string[]; failures: { job: Job; error: string }[] };
 type CaptureJobs = (jobs: readonly Job[], run: (job: Job, worker: number) => Promise<string>) => Promise<CaptureResult>;
-type StorySelection = (availableStories: readonly string[], selectors: readonly string[]) => {
+type StorySelection = (
+  availableStories: readonly string[],
+  selectors: readonly string[],
+) => {
   stories: string[];
   unmatchedSelectors: string[];
 };
@@ -74,11 +77,7 @@ test('unmatched explicit selectors are reported while matched stories retain the
   const selectStories = extracted<StorySelection>('storyMatches', 'parseOptions', '\nreturn selectStories;');
   const selection = selectStories(
     ['pages-collection--purchase', 'pages-community-thread-reading--selected-parent'],
-    [
-      'pages-collection--purchase',
-      'pages-community-thread--selected-reply-target',
-      'pages-community-thread--*',
-    ],
+    ['pages-collection--purchase', 'pages-community-thread--selected-reply-target', 'pages-community-thread--*'],
   );
   expect(selection.stories).toEqual(['pages-collection--purchase']);
   expect(selection.unmatchedSelectors).toEqual([
