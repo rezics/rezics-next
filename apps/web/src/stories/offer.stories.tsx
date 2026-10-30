@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, exposureStory, pagePaths, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
+import { setMappedCheckoutStory } from '../kernel/fake/checkout';
 
 const meta = {
   title: 'Pages/Commerce/Offer',
@@ -93,4 +94,19 @@ export const TermsChangedMobile: Story = {
     },
   },
   globals: { viewport: { value: 'phone' } },
+};
+
+export const MappedFixedEdition: Story = {
+  name: 'Buyer, fixed edition promise',
+  beforeEach() {
+    setMappedCheckoutStory(true);
+    return () => setMappedCheckoutStory(false);
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.benefit_heading() });
+    await canvas.findByText('CC-BY-SA-4.0');
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+  },
 };

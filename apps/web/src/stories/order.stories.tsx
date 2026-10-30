@@ -8,6 +8,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import type { ReconciliationSender } from '../checkout/order-reconcile';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { setMappedCheckoutStory } from '../kernel/fake/checkout';
 import {
   PageStory,
   PatternStory,
@@ -148,5 +149,21 @@ export const ReconciliationRetry: Story = {
     await canvas.findByText(m.order_reconcile_error());
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_retry() }));
     await canvas.findByText(m.order_reconcile_queued());
+  },
+};
+
+export const MappedFixedEdition: Story = {
+  name: 'Buyer, paid fixed edition and access record',
+  beforeEach() {
+    setMappedCheckoutStory(true);
+    return () => setMappedCheckoutStory(false);
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.benefit_heading() });
+    const link = await canvas.findByRole('link', { name: m.entitlements_detail_heading() });
+    await expect(link).toHaveAttribute('href', `/${getLocale()}/entitlements/${paidRecording.order.entitlementId}`);
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
   },
 };

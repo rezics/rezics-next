@@ -2431,5 +2431,15 @@
   "creator_offers_next": "Nächste Seite",
   "creator_offers_pagination": "Angebotsseiten",
   "creator_offers_amount_unavailable": "Preis nicht verfügbar",
-  "edition_publication_create_offer": "Angebot erstellen"
+  "edition_publication_create_offer": "Angebot erstellen",
+  "benefit_heading": "Feste Inhaltsausgabe",
+  "benefit_fixed_version": "Dieser Kauf umfasst eine festgelegte Version. Spätere Änderungen und andere Ausgaben sind nicht enthalten.",
+  "benefit_acquisition_label": "Kaufbedingungen",
+  "benefit_acquisition": "Einmaliger Kauf · Menge 1 · an das kaufende Konto gebunden",
+  "benefit_creator": "Urheber",
+  "benefit_creator_unavailable": "Name des Urhebers nicht verfügbar",
+  "benefit_licence": "Lizenz beim Kauf",
+  "benefit_reader_notice": "Die Leseseite prüft die aktuelle Verfügbarkeit. Ein bezahlter Kauf oder aktiver Eintrag garantiert nicht, dass sich die Ausgabe öffnen lässt.",
+  "benefit_open_reader": "Ausgabe lesen",
+  "benefit_terms_unavailable": "Die beim Kauf erfassten Angaben zur Ausgabe sind nicht verfügbar. Eine lesbare Ausgabe lässt sich hier nicht bestimmen."
 }

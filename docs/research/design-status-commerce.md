@@ -2,7 +2,7 @@
 
 Desk status of every Commerce-owned **In** system in [scope](../scope.md), with separate purchase and Library owner briefs.
 This is evidence and handoff, not another authority. **Designed**, **implemented**, **exposed**, **native-outcome-proven** and **promoted** are separate; implementation/exposure below means source presence.
-Native whole-journey proof and promotion are **not established** here. MINIMAL landings/promotion pause do not establish full-row/main completion. Points and user-saved dynamic queries remain deferred.
+Native whole-journey proof and promotion are **not established** here. MINIMAL landings/promotion pause do not establish full-row/main completion. Points remain deferred. User-saved dynamic queries are adopted and underway under Library; they are not implicitly deferred by this delivery.
 
 **Primary evidence accessed 2026-10-30.** Documented facts: Stripe's [hosted Checkout lifecycle](https://docs.stripe.com/payments/checkout/how-checkout-works?payment-ui=stripe-hosted)
 creates a Session URL and uses a webhook for fulfillment. [Managed Payments eligibility](https://docs.stripe.com/payments/managed-payments/eligibility) requires review, direct sales and distribution rights; it excludes Connect/platform configurations.
@@ -11,47 +11,48 @@ Stripe's [Entitlements API guide](https://docs.stripe.com/billing/entitlements?d
 [Zotero](https://www.zotero.org/support/collections_and_tags) documents overlapping collections, independent tags and automatically updated saved searches.
 **Inference:** these support separating facts from views, not REZICS's exact membership/privacy/pin rules. Existing decisions remain local constraints, not vendor evidence.
 
-**Commerce / offers / orders.** Sole purchase authority: [Commerce README](../../services/kernel/src/commerce/README.md);
-[Commerce Goal](../goals/commerce.md) owns purchase completion, and [Library Goal](../goals/library.md) separately
-retains personal-space completion under the same commerce manager, all original tasks and native/main requirements.
-Both [ownership/benefits](commerce-ownership-entitlements-benefits.md) and
-[payment evidence/settlement](commerce-payment-evidence-settlement.md) reports are delivered and adopted through
-that owner contract; [future modules](../commerce-modules.md) remains the sole future financial map.
-Commerce owns API/storage/journey pages. Web owns shell/navigation, shared patterns and visual review; existing Web
-checkout/history and Library interface producers remain handoffs, not duplicate rewrites. Offers use creator homes;
-orders/evidence/entitlements buyer homes; statements creator homes. Writes remain single-partition.
-Existing [routes](../../services/kernel/src/commerce/routes.ts) provide known-ID offer reads/create/revise/delist,
-order creation/read/history and entitlement read/list. Web supplies `/offers/$id`, `/orders/$id`,
-[history `/orders`](../../apps/web/src/routes/orders/index.tsx) and shell navigation. Old claims of absent revise HTTP,
-delisted concealment or history navigation are superseded by source presence, not a new acceptance result.
-The four payment-fix directions are creation uncertainty, complete evidence, immutable movement economics and
-bounded signature/secret inputs; this document does not certify their owner delivery or native/main proof.
-Financial erasure/custody and actual native/DBOS growth gaps remain open.
+**Commerce buyer journey.** The [Commerce README](../../services/kernel/src/commerce/README.md) owns purchases;
+[Commerce](../goals/commerce.md) owns this journey and [Library](../goals/library.md) retains the personal-space scope.
+The adopted [ownership/benefits](commerce-ownership-entitlements-benefits.md) and
+[payment evidence/settlement](commerce-payment-evidence-settlement.md) reports remain design evidence.
+Known-ID `/offers/$id` now presents the actual sanitized `contentEdition` capture: one fixed version, quantity one,
+one-time account binding, native creator identity when its public name is available, and the captured licence.
+Its current price consumes the existing minor-unit renderer. The current offer wire has no explicit tax convention,
+so the page does not label the amount before tax. Existing CSRF, observed offer revision and creation-intent retry
+remain the sole checkout path; unmapped or malformed terms cannot start a new purchase.
 
-**Entitlements and actual use.** The owner contract adopts one-time account-bound acquisition of one immutable
-fixed-version benefit/quantity one, separate from subject/payment/Library/future item identities. Historic subject-only
-orders retain UNKNOWN benefit mapping until explicit authorized mapping. Partial-refund compatibility and terminal
-no-restoration remain. The exact first target is adopted: native authored `content.edition`, `edition:read`, fixed revision ID/SHA256.
-Commerce has bounded immutable capture storage, HTTP DTOs and native entitlement data reads. It now imports the
-canonical Accounts benefit type and exact authenticated/mechanical Content sale entrypoints. Released per-attempt
-preparation preserves normal parent authorization and receipt ordering; physical Checkout has a one-use in-memory
-lifetime fence. Verified exact bindings permit paid grant/restore independently of financial truth and revocation.
-Content's entrypoints in this base are agreed unavailable declarations, pending its real native original-publisher
-and current-consent verifier. The bounded sequential reads do not establish a cross-home simultaneous snapshot;
-Content still rechecks current authority before final bytes. Fresh sale stays closed while that runtime is absent.
-The delivered sole offer-consent writer supplies observed expectedOfferRevision and its digest; the composed
-fresh body preserves its revision conflict check after authorized exact receipt replay. The native Commerce
-buyer-fact reader is composed with Accounts Access independently of Content sale reads. Content final
-source/ancestry reads, subject discovery, native sale/use proof, reviewed UI and promoted-main
-journey remain pending. The [owner contract](../../services/kernel/src/commerce/README.md#private-creator-offer-history)
-now has a native bounded own-offer list with existing Access own-account authority, delisted history and sanitized
-seller terms, plus served private `/creator/offers` page source and additive AppShell navigation in eight locales.
-The current generated client lacks `offers.get`, so the exact typed unavailable adapter keeps the page truthful
-until controller generation binds it. Contract-shaped stories include 390/1280 layouts; no browser visual review
-or native run is claimed under minimal verification. Offer editing, private sales and final target use remain open;
-activity/receipts are not substitutes for this source journey.
-Tax/unit, reserves/carry/payability, richer external attestation and authenticated recovery require the explicit
-owner/Root commercial/shared adoption recorded in the purchase contract before runtime bodies.
+Hosted Checkout returns to private `/orders/$id`; the captured edition terms remain separate from settlement and
+the associated current access read. That page links to the exact `/entitlements/$id` record. `/entitlements` keeps
+bounded owner-self paging and compact record navigation, with no per-row Content or identity lookups. The detail
+uses its immutable sanitized capture and one optional public identity point for that capture's creator. Only an active,
+unrevoked mapped record links, through the locale helper, to the existing guarded `/editions/{benefit.resource.id}`.
+No subject/offer ID substitutes for the edition, no source thread/post/body enters this presentation, and revision
+UUIDs, hashes and publication references remain data rather than buyer-facing prose. Null or absent historical
+mapping stays UNKNOWN; revoked/refund/dispute records retain purchase truth without a reader affordance.
+
+Content's [served reader](../../apps/web/src/routes/editions/$id.tsx) and
+[native sale binding](../../services/kernel/src/content/edition-sale-native.ts) are integrated source, replacing the
+old unavailable-declaration description. Content owns current scopes, opaque buyer facts, ancestry, source/version
+checks and final delivery; an active purchase record never promises that the reader will currently open. Native
+Commerce/Content sale/use proof, provider eligibility, physical cost/custody, current Web review and promoted-main
+proof remain controller/owner work. The order detail wire does not expose captured monetary fields, so this adapter
+never reconstructs them from a current offer or adds a history lookup. Reconciliation and money parsing keep their
+existing sole writers/renderers. Creator offer/sales/statement completion and commercial adoption retain their owners.
+
+**Next ordinary Web review.** Prior visual acceptance covers only its previously rendered states. Review the exact
+new IDs `pages-commerce-offer--mapped-fixed-edition`, `pages-commerce-order--mapped-fixed-edition`,
+`pages-commerce-entitlements--mapped-fixed-edition`, `pages-commerce-entitlement--mapped-fixed-edition`,
+`pages-commerce-entitlement--mapped-refunded`, `pages-commerce-entitlement--mapped-disputed` and
+`pages-commerce-entitlement--reader-unavailable`. Revisit the affected existing
+`pages-commerce-entitlement--active`, `pages-commerce-entitlement--refunded-with-paid-order`,
+`pages-commerce-entitlement--legacy-unknown-mapping`, `pages-commerce-entitlements--active`,
+`pages-commerce-entitlements--revoked` and `pages-commerce-entitlements--legacy-unknown-mapping` states as well,
+at 390/1280 and in all eight locales. These are explicitly constructed wire-shaped presentation fixtures, not new
+native recordings or delivery evidence. The new interface acceptance source follows the exact mapped edition into
+the existing reader adapter, preserves refusal/unavailability and covers unknown/revoked navigation. The local `bun run --cwd apps/web typecheck` passes after a minimal
+curated-members adapter guard for the existing native preparation union. The new
+`bun test apps/web/tests/mapped-entitlement.test.ts` passes three tests with 198 assertions. Browser, Storybook,
+native, remote and integration proof/publication remain pending. No protected-use, privacy, runtime or main approval is claimed.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,

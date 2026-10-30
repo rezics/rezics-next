@@ -2431,5 +2431,15 @@
   "creator_offers_next": "Page suivante",
   "creator_offers_pagination": "Pages des offres",
   "creator_offers_amount_unavailable": "Prix indisponible",
-  "edition_publication_create_offer": "Créer une offre"
+  "edition_publication_create_offer": "Créer une offre",
+  "benefit_heading": "Édition de contenu fixe",
+  "benefit_fixed_version": "Cet achat comprend une seule version figée. Les modifications ultérieures et les autres éditions ne sont pas incluses.",
+  "benefit_acquisition_label": "Conditions d’achat",
+  "benefit_acquisition": "Achat unique · quantité 1 · lié au compte acheteur",
+  "benefit_creator": "Créateur",
+  "benefit_creator_unavailable": "Nom du créateur indisponible",
+  "benefit_licence": "Licence lors de l’achat",
+  "benefit_reader_notice": "La page de lecture vérifie la disponibilité actuelle. Un achat payé ou un enregistrement actif ne garantit pas que cette édition puisse être ouverte.",
+  "benefit_open_reader": "Lire cette édition",
+  "benefit_terms_unavailable": "Les détails de l’édition enregistrés lors de l’achat sont indisponibles. Aucune édition lisible ne peut être identifiée ici."
 }

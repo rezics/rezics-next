@@ -3,7 +3,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
 import { dependencyUnavailable } from '../media/kernel';
 import type { OfferPageData } from './offer';
-import { formatOfferPrice } from './price';
+import { formatMinorAmount } from './money';
+import { benefitCreatorName, capturedBenefit } from './benefit';
 import { subjectCover } from './subject-cover';
 
 const reads = new WeakMap<Request, Map<string, Promise<OfferPageData>>>();
@@ -26,6 +27,9 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     offer.revision < 1
   )
     throw dependencyUnavailable(503);
+  const price = formatMinorAmount(locale, offer.currency, offer.unitAmountMinor);
+  if (price === null || offer.unitAmountMinor <= 0) throw dependencyUnavailable(503);
+  const benefit = capturedBenefit(offer.contentEdition, offer.targetSubjectId);
   return {
     id: offer.id,
     revision: offer.revision,
@@ -33,7 +37,9 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     currency: offer.currency,
     unitAmountMinor: offer.unitAmountMinor,
     state: offer.state,
-    price: formatOfferPrice(locale, offer.currency, offer.unitAmountMinor),
+    price,
+    benefit,
+    creatorName: await benefitCreatorName(kernelClient(locale), benefit),
     idempotencyKey: crypto.randomUUID(),
     subject: subjectCover(locale, offer.targetSubjectId, offer.title, offer.subject),
   };

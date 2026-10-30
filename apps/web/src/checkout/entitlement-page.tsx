@@ -1,10 +1,11 @@
-import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerEntitlementPage } from './entitlements';
 import { EntitlementStatus, EntitlementTime, EntitlementsState } from './entitlements-page';
 import { SubjectCover, subjectCover } from './subject-cover';
+import { capturedBenefit } from './benefit';
+import { BenefitDetails } from './benefit-details';
 
 export function EntitlementPage({
   page,
@@ -48,9 +49,12 @@ export function EntitlementPage({
               ) : null}
             </div>
           </div>
-          <Alert>
-            <AlertDescription>{m.entitlements_delivery_unknown()}</AlertDescription>
-          </Alert>
+          <BenefitDetails
+            benefit={capturedBenefit(record.contentEdition, record.targetSubjectId)}
+            creatorName={page.creatorName}
+            active={record.active && record.revokedAt === null && record.revokeReason === null}
+            locale={locale}
+          />
           <dl className="grid min-w-0 grid-cols-1 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-6 sm:gap-y-4 [&>dt]:text-muted-foreground [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
             <dt>{m.entitlements_granted()}</dt>
             <dd>
@@ -73,8 +77,6 @@ export function EntitlementPage({
                 </dd>
               </>
             ) : null}
-            <dt>{m.entitlements_record_id()}</dt>
-            <dd className="break-all">{record.id}</dd>
             <dt>{m.order_reference()}</dt>
             <dd>
               <a
@@ -84,8 +86,6 @@ export function EntitlementPage({
                 {record.orderId}
               </a>
             </dd>
-            <dt>{m.entitlements_offer_id()}</dt>
-            <dd className="break-all">{record.offerId}</dd>
           </dl>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_history_hint()}</p>
         </>

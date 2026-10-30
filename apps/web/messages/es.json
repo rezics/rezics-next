@@ -2431,5 +2431,15 @@
   "creator_offers_next": "Página siguiente",
   "creator_offers_pagination": "Páginas de ofertas",
   "creator_offers_amount_unavailable": "Precio no disponible",
-  "edition_publication_create_offer": "Crear una oferta"
+  "edition_publication_create_offer": "Crear una oferta",
+  "benefit_heading": "Edición de contenido fija",
+  "benefit_fixed_version": "Esta compra incluye una única versión fija. No incluye cambios posteriores ni otras ediciones.",
+  "benefit_acquisition_label": "Condiciones de compra",
+  "benefit_acquisition": "Compra única · cantidad 1 · vinculada a la cuenta compradora",
+  "benefit_creator": "Creador",
+  "benefit_creator_unavailable": "Nombre del creador no disponible",
+  "benefit_licence": "Licencia al comprar",
+  "benefit_reader_notice": "La página de lectura comprueba la disponibilidad actual. Una compra pagada o un registro activo no garantiza que se pueda abrir esta edición.",
+  "benefit_open_reader": "Leer esta edición",
+  "benefit_terms_unavailable": "Los detalles de la edición registrados al comprar no están disponibles. Aquí no se puede identificar una edición que se pueda leer."
 }

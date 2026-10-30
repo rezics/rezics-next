@@ -1,6 +1,7 @@
 import type { BuyerEntitlement } from '../../checkout/entitlements';
 import type { FakeRoute } from '../fake-modules';
 import paid from '../recorded/order-paid.json';
+import type { ContentEditionTerms } from '../../checkout/benefit';
 
 export type EntitlementStoryMode =
   | 'active'
@@ -13,9 +14,10 @@ export type EntitlementStoryMode =
   | 'long'
   | 'preparing'
   | 'cursor-error';
-let mode: EntitlementStoryMode = 'active';
+export type MappedEntitlementStoryMode = 'mapped' | 'mapped-refunded' | 'mapped-disputed';
+let mode: EntitlementStoryMode | MappedEntitlementStoryMode = 'active';
 let reads = 0;
-export function setEntitlementStoryMode(next: EntitlementStoryMode) {
+export function setEntitlementStoryMode(next: EntitlementStoryMode | MappedEntitlementStoryMode) {
   mode = next;
   reads = 0;
 }
@@ -40,6 +42,26 @@ export const revokedEntitlement: BuyerEntitlement = {
   revokeReason: 'refund',
 };
 
+// Constructed sanitized Commerce terms using the existing Content reader example's edition identity.
+// These are presentation fixtures, not a recording, sale grant or native delivery proof.
+export const fixedEditionTerms: ContentEditionTerms = {
+  benefit: {
+    kind: 'content-edition',
+    resourceType: 'content.edition',
+    resource: { route: 0, id: '0192f3a0-6c1e-7b2a-9d4e-000000000001' },
+    version: { revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000003', sha256: 'a'.repeat(64) },
+    action: 'edition:read',
+  },
+  creatorAccountId: '01a17a3a-20f5-72aa-9f14-f4cc56678188',
+  targetSubjectId: paid.order.targetSubjectId,
+  source: { licence: 'CC-BY-SA-4.0' },
+  saleTermsReference: 'constructed-publication-1',
+  delivery: 'fixed-content-edition',
+  acquisition: 'one-time-account-bound',
+  quantity: 1,
+};
+export const mappedEntitlement: BuyerEntitlement = { ...activeEntitlement, contentEdition: fixedEditionTerms };
+
 export const routes: FakeRoute[] = [
   {
     method: 'GET',
@@ -52,23 +74,31 @@ export const routes: FakeRoute[] = [
       if (mode === 'preparing') return { status: 202 };
       if (mode === 'cursor-error') return { status: 409, code: 'stale_cursor' };
       const record =
-        mode === 'revoked'
-          ? revokedEntitlement
-          : mode === 'legacy'
-            ? { ...activeEntitlement, summary: null }
-            : mode === 'long'
-              ? {
-                  ...activeEntitlement,
-                  summary: {
-                    ...paid.order.subject,
-                    label: {
-                      value:
-                        'The Little Prince: annotated edition with historical notes, illustrations, translations and a very long descriptive title',
-                      language: 'en',
-                    },
-                  },
-                }
-              : activeEntitlement;
+        mode === 'mapped'
+          ? mappedEntitlement
+          : mode === 'mapped-refunded' || mode === 'mapped-disputed'
+            ? {
+                ...revokedEntitlement,
+                contentEdition: fixedEditionTerms,
+                revokeReason: mode === 'mapped-refunded' ? 'refund' : 'dispute',
+              }
+            : mode === 'revoked'
+              ? revokedEntitlement
+              : mode === 'legacy'
+                ? { ...activeEntitlement, summary: null }
+                : mode === 'long'
+                  ? {
+                      ...activeEntitlement,
+                      summary: {
+                        ...paid.order.subject,
+                        label: {
+                          value:
+                            'The Little Prince: annotated edition with historical notes, illustrations, translations and a very long descriptive title',
+                          language: 'en',
+                        },
+                      },
+                    }
+                  : activeEntitlement;
       const url = new URL(request.url);
       if (url.pathname !== '/v1/entitlements') return { status: 200, entitlement: record };
       return {

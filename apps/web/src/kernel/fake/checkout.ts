@@ -1,5 +1,11 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { KernelRecording } from '../fake.ts';
+import { fixedEditionTerms } from './entitlements';
+
+let mapped = false;
+export function setMappedCheckoutStory(enabled: boolean) {
+  mapped = enabled;
+}
 
 const offerId = /^\/v1\/offers\/([^/]+)$/;
 const orderId = /^\/v1\/orders\/([^/]+)$/;
@@ -44,7 +50,7 @@ export const routes: FakeRoute[] = [
       if (!localized) return;
       return {
         ...recording,
-        offer: localized,
+        offer: mapped ? { ...localized, revision: 3, contentEdition: fixedEditionTerms } : localized,
       };
     },
   },
@@ -62,7 +68,8 @@ export const routes: FakeRoute[] = [
       const labels = demoSubjectLabels(recordings);
       const locale = new URL(request.url).searchParams.get('languages') ?? 'en';
       const localized = localizedSubject(recording.order as Record<string, unknown>, locale, labels);
-      return localized ? ({ ...recording, order: localized } as KernelRecording) : undefined;
+      if (!localized) return;
+      return { ...recording, order: mapped ? { ...localized, contentEdition: fixedEditionTerms } : localized };
     },
   },
 ];

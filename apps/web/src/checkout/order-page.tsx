@@ -8,6 +8,7 @@ import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { useSession } from '../session/query';
+import { BenefitDetails } from './benefit-details';
 import {
   createReconciliationRequest,
   requestOrderReconciliation,
@@ -174,6 +175,19 @@ export function OrderPage({
         <dt className="font-medium">{m.order_current_access()}</dt>
         <dd role="status">{entitlementLabel(order.entitlement)}</dd>
       </dl>
+      {order.benefit ? (
+        <BenefitDetails benefit={order.benefit} creatorName={order.creatorName} locale={locale} />
+      ) : null}
+      {order.entitlementId ? (
+        <p>
+          <a
+            href={`/${locale}/entitlements/${encodeURIComponent(order.entitlementId)}`}
+            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          >
+            {m.entitlements_detail_heading()}
+          </a>
+        </p>
+      ) : null}
       {initial.canReconcile && session === 'signed-in' && (
         <section className="space-y-3" aria-label={m.order_reconcile_action()}>
           <Button

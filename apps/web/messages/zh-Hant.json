@@ -2431,5 +2431,15 @@
   "creator_offers_next": "下一頁",
   "creator_offers_pagination": "報價分頁",
   "creator_offers_amount_unavailable": "無法取得價格",
-  "edition_publication_create_offer": "建立銷售方案"
+  "edition_publication_create_offer": "建立銷售方案",
+  "benefit_heading": "固定內容版本",
+  "benefit_fixed_version": "此購買僅包含當時確定的一個版本，不包含後續修改或其他版本。",
+  "benefit_acquisition_label": "購買條款",
+  "benefit_acquisition": "單次購買 · 數量 1 · 綁定購買帳戶",
+  "benefit_creator": "創作者",
+  "benefit_creator_unavailable": "創作者名稱暫無法顯示",
+  "benefit_licence": "購買時的授權條款",
+  "benefit_reader_notice": "閱讀頁面會確認目前是否可讀。付款紀錄或有效紀錄不保證目前能開啟此版本。",
+  "benefit_open_reader": "開啟版本閱讀頁面",
+  "benefit_terms_unavailable": "目前無法顯示購買時的版本資訊，因此無法確定可閱讀的版本。"
 }

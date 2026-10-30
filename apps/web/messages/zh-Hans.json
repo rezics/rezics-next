@@ -2432,5 +2432,15 @@
   "creator_offers_next": "下一页",
   "creator_offers_pagination": "报价分页",
   "creator_offers_amount_unavailable": "无法获取价格",
-  "edition_publication_create_offer": "创建销售方案"
+  "edition_publication_create_offer": "创建销售方案",
+  "benefit_heading": "固定内容版本",
+  "benefit_fixed_version": "此购买仅包含当时确定的一个版本，不包含后续修改或其他版本。",
+  "benefit_acquisition_label": "购买条款",
+  "benefit_acquisition": "单次购买 · 数量 1 · 绑定购买账户",
+  "benefit_creator": "创作者",
+  "benefit_creator_unavailable": "创作者名称暂时无法显示",
+  "benefit_licence": "购买时的许可条款",
+  "benefit_reader_notice": "阅读页面会确认当前是否可读。付款记录或有效记录不保证当前能打开此版本。",
+  "benefit_open_reader": "打开版本阅读页面",
+  "benefit_terms_unavailable": "当前无法显示购买时的版本信息，因此无法确定可阅读的版本。"
 }

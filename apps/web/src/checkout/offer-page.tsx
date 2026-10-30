@@ -8,6 +8,8 @@ import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
+import { BenefitDetails } from './benefit-details';
+import { getLocale } from '../paraglide/runtime.js';
 
 type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed';
 
@@ -86,7 +88,8 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           : phase === 'closed'
             ? m.offer_start_closed()
             : null;
-  const buyDisabled = !admitted || phase !== 'ready' || session === 'unknown';
+  const buyDisabled =
+    !admitted || phase !== 'ready' || session === 'unknown' || (offer.benefit && offer.benefit.kind !== 'mapped');
 
   return (
     <article className="max-w-3xl min-w-0 space-y-8 text-foreground" data-idempotency-key={offer.idempotencyKey}>
@@ -112,6 +115,9 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
           )}
         </div>
       </header>
+      {offer.benefit ? (
+        <BenefitDetails benefit={offer.benefit} creatorName={offer.creatorName} locale={getLocale()} review />
+      ) : null}
       <div className="pt-2">
         {phase === 'terms-changed' ? (
           <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>

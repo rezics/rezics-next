@@ -2526,5 +2526,15 @@
   "creator_offers_restart": "First page",
   "creator_offers_next": "Next page",
   "creator_offers_pagination": "Offer pages",
-  "creator_offers_amount_unavailable": "Price unavailable"
+  "creator_offers_amount_unavailable": "Price unavailable",
+  "benefit_heading": "Fixed content edition",
+  "benefit_fixed_version": "This purchase covers one fixed version. Later edits and other editions are not included.",
+  "benefit_acquisition_label": "Purchase terms",
+  "benefit_acquisition": "One-time purchase · quantity 1 · bound to the purchasing account",
+  "benefit_creator": "Creator",
+  "benefit_creator_unavailable": "Creator name unavailable",
+  "benefit_licence": "Captured licence",
+  "benefit_reader_notice": "The reader checks current availability. A paid purchase or active record does not guarantee that the edition can be opened.",
+  "benefit_open_reader": "Open edition reader",
+  "benefit_terms_unavailable": "The captured edition details are unavailable. No readable edition can be identified here."
 }

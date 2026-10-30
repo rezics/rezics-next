@@ -3,6 +3,7 @@ import { notFound } from '@tanstack/react-router';
 import { loadOrderPage } from './order.server';
 import { UUID } from './price';
 import type { SubjectCoverData } from './subject-cover';
+import type { CapturedBenefit } from './benefit';
 
 export type Settlement = 'failed' | 'paid' | 'pending' | 'unknown';
 export type CurrentEntitlement = { kind: 'current'; active: boolean } | { kind: 'none' | 'unavailable' | 'refresh' };
@@ -16,6 +17,8 @@ export type OrderPageData = {
   /** Creation time is present in the order read; it is not a payment-settlement time. */
   createdAt: string;
   subject: SubjectCoverData;
+  benefit?: CapturedBenefit;
+  creatorName?: string | undefined;
   /** Exact current native viewer-action decision on the signed-in account. */
   canReconcile?: boolean;
 };

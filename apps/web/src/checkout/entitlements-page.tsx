@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerEntitlement, BuyerEntitlementsPage, EntitlementsRead } from './entitlements';
 import { subjectCover } from './subject-cover';
+import { capturedBenefit } from './benefit';
 
 export function EntitlementStatus({ record }: { record: BuyerEntitlement }) {
   return (
@@ -114,9 +115,9 @@ export function EntitlementsPage({
                   <p className="text-sm text-muted-foreground">
                     {m.entitlements_granted()} <EntitlementTime value={record.grantedAt} locale={locale} />
                   </p>
-                  <p className="break-all text-xs text-muted-foreground">
-                    {m.entitlements_record_id()}: {record.id}
-                  </p>
+                  {capturedBenefit(record.contentEdition, record.targetSubjectId).kind === 'mapped' ? (
+                    <p className="text-sm text-muted-foreground">{m.benefit_heading()}</p>
+                  ) : null}
                 </div>
                 <ListRowLink href={`/${locale}/entitlements/${record.id}`}>
                   {m.entitlements_open({ title: subject.title })}

@@ -2431,5 +2431,15 @@
   "creator_offers_next": "次のページ",
   "creator_offers_pagination": "オファーのページ",
   "creator_offers_amount_unavailable": "価格を取得できません",
-  "edition_publication_create_offer": "オファーを作成"
+  "edition_publication_create_offer": "オファーを作成",
+  "benefit_heading": "固定されたコンテンツ版",
+  "benefit_fixed_version": "この購入には、購入時に確定した1つの版のみが含まれます。その後の編集や他の版は含まれません。",
+  "benefit_acquisition_label": "購入条件",
+  "benefit_acquisition": "買い切り · 数量1 · 購入アカウントに紐付け",
+  "benefit_creator": "制作者",
+  "benefit_creator_unavailable": "制作者名を表示できません",
+  "benefit_licence": "購入時のライセンス",
+  "benefit_reader_notice": "閲覧ページで現在の利用可否を確認します。支払い済みや有効な記録があっても、この版を開けるとは限りません。",
+  "benefit_open_reader": "この版を読む",
+  "benefit_terms_unavailable": "購入時の版の詳細を表示できないため、閲覧できる版を特定できません。"
 }

@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { activeEntitlement, setEntitlementStoryMode, type EntitlementStoryMode } from '../kernel/fake/entitlements';
+import {
+  activeEntitlement,
+  setEntitlementStoryMode,
+  type EntitlementStoryMode,
+  type MappedEntitlementStoryMode,
+} from '../kernel/fake/entitlements';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageStory } from './page';
@@ -20,7 +25,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function EntitlementsStory({ mode }: { mode: EntitlementStoryMode }) {
+function EntitlementsStory({ mode }: { mode: EntitlementStoryMode | MappedEntitlementStoryMode }) {
   setEntitlementStoryMode(mode);
   return <PageStory visitor="Signed In" path="/entitlements" />;
 }
@@ -74,3 +79,15 @@ export const Retry: Story = {
 export const Preparing: Story = { render: () => <EntitlementsStory mode="preparing" />, play: ready };
 export const StaleCursor: Story = { render: () => <EntitlementsStory mode="cursor-error" />, play: ready };
 export const LongTitles: Story = { render: () => <EntitlementsStory mode="long" />, play: ready };
+export const MappedFixedEdition: Story = {
+  render: () => <EntitlementsStory mode="mapped" />,
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText(m.benefit_heading());
+    await expect(
+      canvas.getByRole('link', { name: m.entitlements_open({ title: 'The Little Prince' }) }),
+    ).toHaveAttribute('href', `/${getLocale()}/entitlements/${activeEntitlement.id}`);
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+  },
+};

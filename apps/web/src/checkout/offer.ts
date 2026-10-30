@@ -3,11 +3,12 @@ import { notFound } from '@tanstack/react-router';
 import { loadOffer } from './offer.server';
 import { UUID } from './price';
 import type { SubjectCoverData } from './subject-cover';
+import type { CapturedBenefit } from './benefit';
 
 export type OfferPageData = {
   id: string;
   revision: number;
-  /** The offer read's only description of what the buyer receives. */
+  /** Seller title, separate from the native immutable benefit terms. */
   title: string;
   currency: string;
   unitAmountMinor: number;
@@ -15,6 +16,8 @@ export type OfferPageData = {
   price: string;
   idempotencyKey: string;
   subject: SubjectCoverData;
+  benefit?: CapturedBenefit;
+  creatorName?: string | undefined;
 };
 
 function validateOffer(input: unknown): { id: string; locale: string } {

@@ -8,6 +8,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { UUID } from './price';
 import { subjectCover } from './subject-cover';
+import { benefitCreatorName, capturedBenefit } from './benefit';
 
 type OrderRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']>;
 type BuyerOrder = { kind: 'order'; order: OrderPageData } | { kind: 'missing' } | { kind: 'unavailable' };
@@ -90,6 +91,7 @@ async function readOnce(request: Request, id: string, locale: string | undefined
       entitlement: { kind: 'refresh' },
       createdAt: order.createdAt,
       subject: subjectCover(locale ?? '', order.targetSubjectId, order.title, order.subject),
+      benefit: capturedBenefit(order.contentEdition, order.targetSubjectId),
     },
   };
 }
@@ -149,7 +151,12 @@ export async function loadOrderPage(id: string, locale: string): Promise<OrderPa
       // Missing current authority never exposes a write control.
     }
   }
-  return { ...order, entitlement, canReconcile };
+  return {
+    ...order,
+    entitlement,
+    canReconcile,
+    creatorName: order.benefit ? await benefitCreatorName(kernelClient(locale), order.benefit) : undefined,
+  };
 }
 
 export async function orderStatusResponse(request: Request, id: string): Promise<Response> {

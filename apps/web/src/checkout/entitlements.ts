@@ -9,6 +9,7 @@ import { locales } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { UUID } from './price';
+import { benefitCreatorName, capturedBenefit } from './benefit';
 
 export const ENTITLEMENTS_PAGE_SIZE = 20;
 type NativePage = NonNullable<Awaited<ReturnType<KernelClient['entitlements']['get']>>['data']>;
@@ -17,7 +18,7 @@ export type EntitlementsRead<T> =
   | { kind: 'ready'; data: T }
   | { kind: 'denied' | 'unavailable' | 'preparing' | 'cursor-error' };
 export type BuyerEntitlementsPage = EntitlementsRead<NativePage>;
-export type BuyerEntitlementPage = EntitlementsRead<BuyerEntitlement>;
+export type BuyerEntitlementPage = EntitlementsRead<BuyerEntitlement> & { creatorName?: string | undefined };
 
 export function entitlementSearch(input: Record<string, unknown>): { cursor?: string } {
   const cursor = input.cursor;
@@ -48,7 +49,8 @@ function validRecord(row: BuyerEntitlement): boolean {
     typeof row.active === 'boolean' &&
     (row.revokedAt === null || Number.isFinite(Date.parse(row.revokedAt))) &&
     (row.revokeReason === null || row.revokeReason === 'refund' || row.revokeReason === 'dispute') &&
-    (row.summary === null || row.summary.id === row.targetSubjectId)
+    (row.summary === null || row.summary.id === row.targetSubjectId) &&
+    capturedBenefit(row.contentEdition, row.targetSubjectId).kind !== 'unavailable'
   );
 }
 
@@ -99,7 +101,9 @@ export async function loadBuyerEntitlement(
     if (result.error || result.status !== 200 || !result.data) return failure(result.status);
     const row = result.data.entitlement;
     if (row.id !== id || !validRecord(row)) return { kind: 'unavailable' };
-    return { kind: 'ready', data: row };
+    const benefit = capturedBenefit(row.contentEdition, row.targetSubjectId);
+    const creatorName = await benefitCreatorName(client, benefit);
+    return { kind: 'ready', data: row, ...(creatorName ? { creatorName } : {}) };
   } catch (error) {
     if (isPlatformClosedError(error)) throw error;
     return { kind: 'unavailable' };
