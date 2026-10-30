@@ -231,6 +231,18 @@ async function setup(history: number) {
     concurrency: 2,
   });
   await runner.pause();
+  async function idleResume() {
+    // Observe completion of the real empty scan's connection ownership before admitting discovery.
+    const released = Promise.withResolvers<void>();
+    const notify = () => released.resolve();
+    pool.once('release', notify);
+    try {
+      runner.resume();
+      await bounded(released.promise, 'empty native scan');
+    } finally {
+      pool.off('release', notify);
+    }
+  }
   const checkpoint = async (generation: number) => {
     const { rows } = await admin.query<{ position: string }>(
       'SELECT position::text FROM core.consumer_checkpoint WHERE partition_no = $1 AND consumer = $2',
@@ -258,6 +270,7 @@ async function setup(history: number) {
     append,
     checkpoint,
     visible,
+    idleResume,
     holdRequest,
     holdSource,
     holdBulk,
