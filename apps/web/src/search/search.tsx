@@ -21,6 +21,7 @@ import { readSearchPage } from './search-request.ts';
 import { compileRefinement, refinementHref, refinementProperties } from './refinement/model';
 import { facetRequest, readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { Refinement, type RefinementData } from './refinement/refinement';
+import { readRefinement } from './refinement/server';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readDiscovery, type DiscoveryState } from './discovery';
 import { DiscoveryResults } from './discovery-results';
@@ -343,7 +344,9 @@ export function SearchPage({
       setDesktopFiltersOpen(true);
       requestAnimationFrame(() =>
         desktopPanel.current
-          ?.querySelector<HTMLElement>('a[href], input:not([type="hidden"]), button:not(:disabled)')
+          ?.querySelector<HTMLElement>(
+            'a[href], select:not(:disabled), input:not([type="hidden"]), button:not(:disabled)',
+          )
           ?.focus(),
       );
     } else setMobileFiltersOpen(true);
@@ -429,6 +432,22 @@ export function SearchPage({
           }}
           query={query}
           locale={locale}
+          load={(facets, signal) =>
+            readRefinement({
+              data: {
+                query,
+                locale,
+                conditions: {
+                  ...(type ? { type } : {}),
+                  facetValues: selectedFacets,
+                  ...(data.ranges ? { ranges: data.ranges } : {}),
+                  ...(data.condition ? { condition: data.condition } : {}),
+                },
+                facets,
+              },
+              signal,
+            })
+          }
           {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
         />
       )}

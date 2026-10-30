@@ -10,7 +10,6 @@ import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
-import { readRefinement } from './server';
 
 export type RefinementData = {
   key: string;
@@ -33,7 +32,7 @@ export function Refinement({
   query: string;
   locale: string;
   sort?: 'rating';
-  load?: Load;
+  load: Load;
 }) {
   const id = useId();
   const [shown, setShown] = useState(data.properties.slice(0, 8).map((entry) => entry.property));
@@ -74,9 +73,7 @@ export function Refinement({
     active.current = controller;
     setBusy(true);
     try {
-      const result = await (load
-        ? load(facets, controller.signal)
-        : readRefinement({ data: { query, locale, conditions, facets }, signal: controller.signal }));
+      const result = await load(facets, controller.signal);
       if (controller.signal.aborted) return;
       if (result.status === 'ready') {
         const next = [...pages];
@@ -120,15 +117,20 @@ export function Refinement({
                   pages.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
                     ?.labels ?? {},
                 ) || m.refinement_selected_value();
+              const propertyName =
+                property === 'type'
+                  ? m.search_type()
+                  : label(data.properties.find((entry) => entry.property === property)?.labels ?? {});
+              const chip = propertyName ? `${propertyName}: ${text}` : text;
               const values = conditions.facetValues[property]!.filter((entry) => entry !== value);
               return (
                 <li key={`${property}:${value}`}>
                   <a
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    aria-label={m.refinement_remove({ value: text })}
+                    aria-label={m.refinement_remove({ value: chip })}
                     href={href({ ...conditions, facetValues: { ...conditions.facetValues, [property]: values } })}
                   >
-                    <span className="max-w-44 truncate">{text}</span>
+                    <span className="max-w-44 truncate">{chip}</span>
                     <XIcon aria-hidden="true" className="size-3" />
                   </a>
                 </li>

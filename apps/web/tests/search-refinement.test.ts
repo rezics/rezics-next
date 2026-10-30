@@ -1,4 +1,9 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createKernelClient } from '@rezics/client';
+import { Refinement } from '../src/search/refinement/refinement';
+import { HeaderSearchFilterProvider } from '../src/search/header-search/filter-region';
 import { facetProperties, type FilterDocument } from '@rezics/filter';
 import recording from '../src/kernel/recorded/definitions-release.json';
 import { compileRefinement, refinementHref, refinementProperties } from '../src/search/refinement/model';
@@ -186,4 +191,46 @@ test('predicate edits, header submission and generation restarts keep conditions
   };
   expect(refinementKey(context)).not.toBe(refinementKey({ ...context, release: 'next-release' }));
   expect(refinementKey(context)).not.toBe(refinementKey({ ...context, languages: ['ja'] }));
+});
+
+test('the real visible Search journey consumes its actual typed API and current data through the shared Web shell with no fake trends counts or permission', async () => {
+  const calls: unknown[] = [];
+  const request = facetRequest({ text: 'reading', languages: ['en'] }, [{ property: 'schema:inLanguage' }]);
+  const client = createKernelClient('http://kernel.local', {
+    fetch: async (url, init) => {
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body)),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return Response.json({
+        facets: [{ property: 'schema:inLanguage', values: [{ value: 'en', labels: { en: 'English' } }], next: null }],
+        as_of,
+      });
+    },
+  });
+  const state = await readFacetPage(request, (body) => client.subjects.$facets.post(body));
+  const render = (initial: typeof state) =>
+    renderToStaticMarkup(
+      createElement(HeaderSearchFilterProvider, {
+        children: createElement(Refinement, {
+          query: 'reading',
+          locale: 'en',
+          conditions: { facetValues: { 'schema:inLanguage': ['en'] } },
+          data: { key: 'actual-response', properties: refinementProperties(release, book), initial },
+          load: async () => initial,
+        }),
+      }),
+    );
+  const html = render(state);
+  expect(calls).toEqual([{ url: 'http://kernel.local/v1/subjects:facets', body: request, authorization: null }]);
+  expect(html).toContain('English');
+  expect(html).toContain('checked=""');
+  expect(html).toContain('Choose a property');
+  expect(html).toContain('Clear filters');
+  expect(html).not.toMatch(/Trending|total|estimate|permission|opaque|More values/);
+  const refused = render({ status: 'refused', httpStatus: 403, code: 'platform_closed' });
+  expect(refused).toContain('role="alert"');
+  expect(refused).toContain('disabled=""');
+  expect(refused).not.toContain('No eligible values');
 });
