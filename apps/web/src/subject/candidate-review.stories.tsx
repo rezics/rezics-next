@@ -182,7 +182,7 @@ export const StaleRankedSelection: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
     await canvas.findAllByRole('button', { name: m.candidate_review() });
     const ranks = canvas.getAllByRole('combobox', { name: m.candidate_rank() });
-    expect((ranks.at(-1)! as HTMLSelectElement).value).toBe('preferred');
+    expect(ranks.at(-1)!).toHaveValue('preferred');
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
     await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
     await canvas.findByText(m.candidate_selection_confirmed());
