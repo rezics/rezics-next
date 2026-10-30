@@ -77,9 +77,27 @@ export async function mediaRealmDownloadFixture() {
   const callback = `${issuer}/media-realm-download/callback`;
   const audience = auth.host.service.verifier.audience;
   const websiteScopes = [...new Set([...protocolScopes, ...actions])].sort();
+  const exportedWebsiteKey = await exportJWK(websiteKeyPair.publicKey);
+  if (
+    exportedWebsiteKey.kty !== 'EC' ||
+    exportedWebsiteKey.crv !== 'P-256' ||
+    typeof exportedWebsiteKey.x !== 'string' ||
+    typeof exportedWebsiteKey.y !== 'string'
+  )
+    throw new Error('Native media fixture did not create an ES256 public key');
   await auth.host.service.internal.registerWebsiteClient({
     publicJwks: {
-      keys: [{ ...(await exportJWK(websiteKeyPair.publicKey)), kid: websiteKeyId, alg: 'ES256', use: 'sig' }],
+      keys: [
+        {
+          kty: 'EC',
+          crv: 'P-256',
+          x: exportedWebsiteKey.x,
+          y: exportedWebsiteKey.y,
+          kid: websiteKeyId,
+          alg: 'ES256',
+          use: 'sig',
+        },
+      ],
     },
     redirectUris: [callback],
     postLogoutRedirectUris: [`${issuer}/`],
