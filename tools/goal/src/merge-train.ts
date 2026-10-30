@@ -15,7 +15,15 @@ import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
 import { matchesPath, readRiskOwnership } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
-import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage, LandingRequest } from './contracts.ts';
+import type {
+  AttemptFence,
+  AttemptRef,
+  GateOutcome,
+  GateOutcomeSink,
+  GateStage,
+  LandingRequest,
+  RebaseConflictContext,
+} from './contracts.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -1124,6 +1132,11 @@ export class MergeTrain {
     return join(this.options.stateDirectory, `control-plane-release-${key}.json`);
   }
 
+  private controlPlaneConflictPath(taskId: string): string {
+    const key = createHash('sha256').update(taskId).digest('hex');
+    return join(this.options.stateDirectory, `control-plane-conflict-${key}.json`);
+  }
+
   private readControlPlaneRecord(request: LandingRequest): ControlPlaneReleaseRecord | undefined {
     try {
       const value = JSON.parse(readFileSync(this.controlPlaneRecordPath(request), 'utf8')) as ControlPlaneReleaseRecord;
@@ -1324,6 +1337,7 @@ export class MergeTrain {
     });
     if (transaction.status === 0) {
       rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
+      rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });
       return true;
     }
     if (!this.controlPlaneSnapshotMatches(snapshot)) return false;
@@ -3056,6 +3070,12 @@ export class MergeTrain {
             appendFileSync(logPath, `Candidate ${candidate} was not published.\n${report}\n`);
             result.stage = 'rebase';
             result.conflictedFiles = files;
+            const targetHead =
+              targetBranch === releaseSnapshot.stabilizeBranch
+                ? releaseSnapshot.stabilizeHead
+                : releaseSnapshot.devHead;
+            const conflictContext = makeRebaseConflictContext(targetHead, request.workerCommit ?? tip, files);
+            if (conflictContext) result.rebaseConflict = conflictContext;
             result.firstFailure = {
               ...firstFailure(report),
               assertion: report,
@@ -3063,7 +3083,7 @@ export class MergeTrain {
                 .update(JSON.stringify({ sourceBranch, targetBranch, files, cause }))
                 .digest('hex'),
             };
-            this.notifyControlPlaneConflict(
+            const repeatedConflict = this.notifyControlPlaneConflict(
               request.taskId,
               recorded.manager,
               sourceBranch,
@@ -3071,7 +3091,9 @@ export class MergeTrain {
               targetBranch,
               files,
               cause,
+              conflictContext,
             );
+            if (repeatedConflict) result.controlPlaneConflictRepeated = true;
             return finish();
           }
           if (!release.prepared) {
@@ -3200,14 +3222,36 @@ export class MergeTrain {
     targetBranch: string,
     files: readonly string[],
     cause: string,
-  ): void {
+    conflictContext?: RebaseConflictContext,
+  ): boolean {
     const details = {
       sourceBranch,
       targetBranch,
       files: [...files].sort(),
       cause,
+      ...(conflictContext
+        ? { targetHead: conflictContext.targetHead, workerCommit: conflictContext.workerCommit }
+        : {}),
     };
     const fingerprint = createHash('sha256').update(JSON.stringify(details)).digest('hex');
+    const taskRecordPath = this.controlPlaneConflictPath(taskId);
+    let previousTaskFingerprint: string | undefined;
+    try {
+      const previous = JSON.parse(readFileSync(taskRecordPath, 'utf8')) as {
+        taskId?: string;
+        fingerprint?: string;
+      };
+      if (previous.taskId === taskId) previousTaskFingerprint = previous.fingerprint;
+    } catch {
+      // A missing or invalid task record permits a new bounded conflict attempt.
+    }
+    if (previousTaskFingerprint === fingerprint) return true;
+
+    mkdirSync(this.options.stateDirectory, { recursive: true });
+    const taskTemporary = `${taskRecordPath}.${randomUUID()}.tmp`;
+    writeFileSync(taskTemporary, `${JSON.stringify({ taskId, fingerprint, ...details }, null, 2)}\n`, { mode: 0o600 });
+    renameSync(taskTemporary, taskRecordPath);
+
     const recordPath = join(this.options.stateDirectory, 'control-plane-conflict.json');
     let previousFingerprint: string | undefined;
     try {
@@ -3215,10 +3259,9 @@ export class MergeTrain {
     } catch {
       // A missing or invalid record permits one new notice.
     }
-    if (previousFingerprint === fingerprint) return;
-    mkdirSync(this.options.stateDirectory, { recursive: true });
+    if (previousFingerprint === fingerprint) return false;
     const temporary = `${recordPath}.${randomUUID()}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify({ fingerprint, ...details }, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(temporary, `${JSON.stringify({ taskId, fingerprint, ...details }, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, recordPath);
     const summary =
       `Task ${taskId} ${sourceBranch} ${sourceCommit} conflicts with ${targetBranch}: ${files.join(', ')}. ` +
@@ -3235,7 +3278,7 @@ export class MergeTrain {
     const path = join(this.options.stateDirectory, 'goal.sqlite');
     const owned = shared || !existsSync(path) ? undefined : openDb(path);
     const db = shared ?? owned;
-    if (!db) return;
+    if (!db) return false;
     try {
       const inbox = new SqliteManagerInbox(
         db,
@@ -3245,6 +3288,7 @@ export class MergeTrain {
     } finally {
       owned?.close();
     }
+    return false;
   }
 
   /** Merge the new stabilize commit into dev. A conflict leaves stabilize advanced and wakes both managers. */

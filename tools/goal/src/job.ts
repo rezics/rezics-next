@@ -1452,6 +1452,27 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
+        if (outcome.controlPlaneConflictRepeated) {
+          record.escalation = 'spec-conflict';
+          store.updateAttempt(outcome, (a) => {
+            a.escalation = 'spec-conflict';
+          });
+          store.updateTask(outcome, (current) => {
+            current.state = 'stopped';
+          });
+          const event = {
+            managerId: task.brief.manager,
+            taskId: task.id,
+            kind: 'spec-conflict' as const,
+            summary:
+              'spec-conflict: quarantined after the same control-plane propagation conflict repeated without progress; release refs remain unchanged.',
+            evidencePath,
+          };
+          store.event(outcome, 'manager-event', event);
+          this.inbox.deliver(event);
+          store.putRecord(record);
+          return;
+        }
         if (outcome.refusal?.kind === 'frozen-acceptance-change') {
           const paths = canonicalConflictPaths(outcome.refusal.paths);
           const detail = `frozen acceptance files changed: ${paths.join(', ')}`;
