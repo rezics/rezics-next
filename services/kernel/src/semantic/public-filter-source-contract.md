@@ -86,7 +86,9 @@ revision/release, original revision `source`, typed native `statement` and nulla
 statement. Typed native values preserve exact quantity amount/unit and unknown values even where existing indexed
 scalar matching has a narrower representation. `indexed: null` is REQUIRED for somevalue/novalue or any qualifier whose datatype/value cannot be
 represented without loss by `IndexedStatement`. This includes a concrete item with a quantity qualifier; do not
-copy only its item qualifiers and claim completeness. The native record remains present with exact identity,
+copy only its item qualifiers and claim completeness. It also includes a concrete item with a somevalue/novalue
+qualifier: retain that qualifier alongside every concrete qualifier and its foreign dependency. Unknown qualifier
+coverage cannot be dropped merely because the main value is concrete. The native record remains present with exact identity,
 release pin, rank, ordinal, units, references and source. Null is unresolved matcher coverage, never absence.
 A complete native stream and a complete scalar-matcher representation are different properties. Search must
 preserve unresolved coverage through its existing Boolean planner (`not_proven`), including NOT, until its admitted
@@ -364,6 +366,8 @@ real Access and HTTP create/propose/accept/adopt/moderation; no fixture SQL manu
 consent. It requires 300 selected relation values, a descriptive facet, hidden prefixes and complete absence,
 noncombinable crossed qualifiers, compact expansion, rank, retained frontier/replay, release A after B activation,
 source mutation and foreign target reduction. Public audience is checked inside an editor AsyncLocal context.
+Separate native cases preserve somevalue/novalue qualifiers on concrete values, their complete pin/identity and
+concrete foreign qualifier dependencies through suppression, without requiring consumer execution.
 The support fixture captures native rows (including removed rows), blocks, statements, backend IDs and wire bytes.
 
 `privacy-reduction-log.test.ts` requires actual subject/tuple/consent/Collection reductions with ordinary

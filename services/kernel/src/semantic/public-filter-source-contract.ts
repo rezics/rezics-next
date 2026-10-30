@@ -72,7 +72,8 @@ export type PublicFilterProjectionRecord = Readonly<{
   source: Source | null;
   /** Native value/qualifiers retain datatype, units, unknown values and association. */
   statement: Statement;
-  /** null when ANY native value/qualifier cannot be represented losslessly by the scalar matcher.
+  /** null when ANY native value/qualifier cannot be represented losslessly by the scalar matcher,
+   * including somevalue/novalue qualifiers on an otherwise concrete statement.
    * Keep the record and full Statement. null is unresolved evidence, never false or absence under NOT.
    */
   indexed: IndexedStatement | null;

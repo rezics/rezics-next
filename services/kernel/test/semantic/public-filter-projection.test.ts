@@ -282,3 +282,41 @@ test('complete native public projection preserves unknowns and disclosure depend
     await f.close();
   }
 });
+
+test('native concrete public statements retain unknown qualifier values and foreign dependencies', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const source = publicFilterSource(f.config);
+    for (const type of ['somevalue', 'novalue'] as const) {
+      const target = await f.create();
+      const qualifierTarget = await f.create('skos:Concept');
+      const input = {
+        ...snak('schema:author', target),
+        qualifiers: [{ property: { id: 'ex:left' }, value: { type } }, snak('ex:right', qualifierTarget)],
+      };
+      const subject = await f.create('schema:Book', { 'schema:author': [input] });
+      const projection = await complete(f, source, subject);
+      expect(projection.records).toHaveLength(1);
+      const record = projection.records[0]!;
+      expect(record.indexed, 'Concrete main value cannot hide unresolved qualifier coverage').toBeNull();
+      expect(record.statement.value).toEqual(input.value);
+      expect(
+        record.statement.qualifiers.map(({ property, value }) => ({ property: { id: property.id }, value })),
+      ).toEqual(input.qualifiers);
+      expect(record.candidate).toBe(record.statement.id);
+      expect(record.release).toBe(f.meaning.digest);
+      expect(record.statement.rezics).toEqual({ release: record.release, revision: record.revision });
+      expect(record.dependencies.some((key) => key.kind === 'selection' && key.candidate === record.candidate)).toBe(
+        true,
+      );
+      expect(record.dependencies.some((key) => key.kind === 'subject' && key.subject === qualifierTarget)).toBe(true);
+      await f.post(`/v1/subjects/${qualifierTarget}:hide`, { reason: 'Concrete dependency beside unknown qualifier' });
+      const hidden = await complete(f, source, subject);
+      expect(hidden.records).toEqual([]);
+      expect(hidden.repairLocators.some((locator) => locator.candidate === record.candidate)).toBe(true);
+    }
+  } finally {
+    await f.close();
+  }
+});
