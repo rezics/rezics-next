@@ -803,7 +803,6 @@ or detail GET creates progress. Source coverage does not acknowledge identity pu
 privacy, complete Library erasure, or shared-history erasure. The fixed ALL-Library epoch participant still
 must incorporate these exact structural namespaces and concurrent first applies before canonical readiness.
 
-
 The account-owned native rows below live on the owner's route unless stated otherwise. Account deletion has no
 account-wide Library cascade. The registered default participant purges bounded local fact and owned-graph pages
 from these applied tables, but it remains pending when an exact producer locator, remote disposition or custody

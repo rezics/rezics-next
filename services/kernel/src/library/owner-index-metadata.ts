@@ -9,13 +9,23 @@ import { resolveLibraryProfilePin } from './profile.ts';
 import { ProblemError } from '../http/problem.ts';
 
 type Client = Pick<PoolClient, 'query'>;
-export type OwnerPinMeaning = Readonly<{ pin: unknown; states: readonly {
-  collectionId: string; profileId: string; stateSetId: string; stateId: string; labels: Readonly<Record<string,string>>;
-}[] }>;
+export type OwnerPinMeaning = Readonly<{
+  pin: unknown;
+  states: readonly {
+    collectionId: string;
+    profileId: string;
+    stateSetId: string;
+    stateId: string;
+    labels: Readonly<Record<string, string>>;
+  }[];
+}>;
 /** Release this owner's connection BEFORE loading its immutable Definitions release. No current-head inference. */
 export async function nextOwnerPin(client: Client, accountId: string): Promise<unknown | undefined> {
-  const { rows } = await client.query<{ pin: unknown }>(`SELECT pin FROM library.owner_index_pin
-    WHERE route=$1 AND account_id=$2 AND NOT meaning_ready ORDER BY pin LIMIT 1`, [routeOf(accountId), accountId]);
+  const { rows } = await client.query<{ pin: unknown }>(
+    `SELECT pin FROM library.owner_index_pin
+    WHERE route=$1 AND account_id=$2 AND NOT meaning_ready ORDER BY pin LIMIT 1`,
+    [routeOf(accountId), accountId],
+  );
   return rows[0]?.pin;
 }
 export async function loadOwnerPinMeaning(pool: Pool, accountId: string, value: unknown): Promise<OwnerPinMeaning> {
@@ -30,11 +40,21 @@ export async function loadOwnerPinMeaning(pool: Pool, accountId: string, value: 
   const set = profile.entryStateSet;
   if (!set) return { pin: value, states: [] };
   if (set.states.length > 64) throw new Error('Released Library state-set exceeds its bound');
-  return { pin: value, states: set.states.map(state => ({
-    collectionId: builtinCollectionId(accountId, { kind: 'state', profileId: pin.profileId,
-      stateSetId: set.id, stateId: state.id }),
-    profileId: pin.profileId, stateSetId: set.id, stateId: state.id, labels: state.labels ?? {},
-  })) };
+  return {
+    pin: value,
+    states: set.states.map((state) => ({
+      collectionId: builtinCollectionId(accountId, {
+        kind: 'state',
+        profileId: pin.profileId,
+        stateSetId: set.id,
+        stateId: state.id,
+      }),
+      profileId: pin.profileId,
+      stateSetId: set.id,
+      stateId: state.id,
+      labels: state.labels ?? {},
+    })),
+  };
 }
 
 /** Same source-head fence as every native family writer. Stale work cannot resurrect a removed pin. */
@@ -42,18 +62,28 @@ export async function applyOwnerPinMeaning(tx: OperationalTransaction, accountId
   if (!hasLiveOperationalTransaction(tx)) throw new TypeError('Pin metadata needs a live operational transaction');
   const key = [routeOf(accountId), accountId];
   await tx.query('SELECT 1 FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR UPDATE', key);
-  const found = await tx.query(`SELECT 1 FROM library.owner_index_pin
+  const found = await tx.query(
+    `SELECT 1 FROM library.owner_index_pin
     WHERE route=$1 AND account_id=$2 AND pin=$3::jsonb AND NOT meaning_ready FOR UPDATE`,
-  [...key, JSON.stringify(meaning.pin)]);
+    [...key, JSON.stringify(meaning.pin)],
+  );
   if (!found.rows.length) return;
   for (const state of meaning.states) {
-    await tx.query(`INSERT INTO library.builtin_collection_reference
+    await tx.query(
+      `INSERT INTO library.builtin_collection_reference
       (route,account_id,collection_id,profile_id,state_set_id,state_id) VALUES($1,$2,$3,$4,$5,$6)
-      ON CONFLICT DO NOTHING`, [...key, state.collectionId, state.profileId, state.stateSetId, state.stateId]);
-    await tx.query(`INSERT INTO library.owner_index_state(route,account_id,pin,collection_id,labels)
+      ON CONFLICT DO NOTHING`,
+      [...key, state.collectionId, state.profileId, state.stateSetId, state.stateId],
+    );
+    await tx.query(
+      `INSERT INTO library.owner_index_state(route,account_id,pin,collection_id,labels)
       VALUES($1,$2,$3::jsonb,$4,$5::jsonb) ON CONFLICT DO NOTHING`,
-    [...key, JSON.stringify(meaning.pin), state.collectionId, JSON.stringify(state.labels)]);
+      [...key, JSON.stringify(meaning.pin), state.collectionId, JSON.stringify(state.labels)],
+    );
   }
-  await tx.query(`UPDATE library.owner_index_pin SET meaning_ready=true
-    WHERE route=$1 AND account_id=$2 AND pin=$3::jsonb`, [...key, JSON.stringify(meaning.pin)]);
+  await tx.query(
+    `UPDATE library.owner_index_pin SET meaning_ready=true
+    WHERE route=$1 AND account_id=$2 AND pin=$3::jsonb`,
+    [...key, JSON.stringify(meaning.pin)],
+  );
 }

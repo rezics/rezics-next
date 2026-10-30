@@ -48,14 +48,19 @@ test('native Everything/state/Liked discovery remains immutable when saved rule 
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { discoveryKey } from '../support/released-discovery.ts';
-import { createReleasedLibraryPopulation, type ReleasedLibraryPopulation } from './support/released-library-population.ts';
+import {
+  createReleasedLibraryPopulation,
+  type ReleasedLibraryPopulation,
+} from './support/released-library-population.ts';
 
 let world: ReleasedLibraryPopulation;
 beforeAll(async () => {
   world = await createReleasedLibraryPopulation();
   await world.base.setup.openFeatures(['personal_library', 'reading_progress']);
 }, 180_000);
-afterAll(async () => { await world?.close(); }, 180_000);
+afterAll(async () => {
+  await world?.close();
+}, 180_000);
 
 function status(response: HttpResponse, code = 200) {
   expect(response.status, JSON.stringify(response.body)).toBe(code);
@@ -75,45 +80,70 @@ async function page(id = everything(), query = 'limit=100') {
     expect(typeof item.subjectId).toBe('string');
     for (const key of ['id', 'memberId', 'note', 'addedAt']) expect(item).not.toHaveProperty(key);
   }
-  return { response, ids: items.map(item => String(item.subjectId)) };
+  return { response, ids: items.map((item) => String(item.subjectId)) };
 }
 
 test('empty owner discovers stable logical Everything without materialization', async () => {
   const account = world.base.personas.alice.accountId;
-  const before = await world.base.inspect('SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1', [account]);
+  const before = await world.base.inspect(
+    'SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1',
+    [account],
+  );
   const response = await world.request('alice', 'GET', `/v1/collections?curatorAccountId=${account}&limit=100`);
   status(response);
   const collections = response.body.collections as Record<string, unknown>[];
-  const descriptor = collections.find(item => item.id === everything());
+  const descriptor = collections.find((item) => item.id === everything());
   expect(descriptor).toMatchObject({ membershipKind: 'dynamic', builtinKind: 'everything', visibility: 'private' });
   for (const key of ['memberCount', 'createdAt', 'updatedAt', 'orderEpoch']) expect(descriptor).not.toHaveProperty(key);
   const empty = await page();
   expect(empty.ids).toEqual([]);
   expect(empty.response.body.next).toBeNull();
   status(await world.request('alice', 'GET', `/v1/collections/${everything()}`));
-  const readonly = await world.base.scoped('alice',['collection:read']);
-  status(await readonly.request('GET',`/v1/collections/${everything()}/members`));
-  status(await readonly.request('POST',`/v1/collections/${everything()}/members`,
-    { subjectId:everything() },discoveryKey()),403);
-  const after = await world.base.inspect('SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1', [account]);
+  const readonly = await world.base.scoped('alice', ['collection:read']);
+  status(await readonly.request('GET', `/v1/collections/${everything()}/members`));
+  status(
+    await readonly.request(
+      'POST',
+      `/v1/collections/${everything()}/members`,
+      { subjectId: everything() },
+      discoveryKey(),
+    ),
+    403,
+  );
+  const after = await world.base.inspect(
+    'SELECT count(*)::int AS n FROM library.collection WHERE curator_account_id=$1',
+    [account],
+  );
   expect(after.rows).toEqual(before.rows);
 });
 
 test('native Everything is the exact independent entry label session and holding union', async () => {
   const state = await world.state();
-  const made = await world.request('alice','POST','/v1/libraryLabels',{ name:'Independent builtin label' },discoveryKey());
-  status(made,201);
-  const label = made.body.label as { id:string };
-  const subject = await world.base.createSubject('schema:Book','Entryless native label');
-  const recipe = await world.base.createSubject('schema:Recipe','Unprofiled native label');
-  await world.base.nativeLabelAssignment('alice',label.id,subject.id);
-  await world.base.nativeLabelAssignment('alice',label.id,recipe.id);
-  const labels = { subject,recipe };
+  const made = await world.request(
+    'alice',
+    'POST',
+    '/v1/libraryLabels',
+    { name: 'Independent builtin label' },
+    discoveryKey(),
+  );
+  status(made, 201);
+  const label = made.body.label as { id: string };
+  const subject = await world.base.createSubject('schema:Book', 'Entryless native label');
+  const recipe = await world.base.createSubject('schema:Recipe', 'Unprofiled native label');
+  await world.base.nativeLabelAssignment('alice', label.id, subject.id);
+  await world.base.nativeLabelAssignment('alice', label.id, recipe.id);
+  const labels = { subject, recipe };
   const sessions = await world.sessions();
   const holding = await world.holdings();
   await world.controls();
-  const expected = [state.subject.id, labels.subject.id, labels.recipe.id,
-    sessions.active.subject.id, sessions.history.subject.id, holding.subject.id].sort();
+  const expected = [
+    state.subject.id,
+    labels.subject.id,
+    labels.recipe.id,
+    sessions.active.subject.id,
+    sessions.history.subject.id,
+    holding.subject.id,
+  ].sort();
   const result = await page();
   expect(result.ids).toEqual(expected);
   expect(result.response.body.next).toBeNull();
@@ -140,26 +170,79 @@ test('state identities include supported siblings and membership uses the actual
   status(response);
   const collections = response.body.collections as Record<string, unknown>[];
   for (const state of set.states) {
-    const id = builtinCollectionId(account, { kind: 'state', profileId: own.accepted.pin.profileId,
-      stateSetId: set.id, stateId: state.id });
-    expect(collections.find(item => item.id === id)).toMatchObject({ membershipKind: 'dynamic', builtinKind: 'state' });
+    const id = builtinCollectionId(account, {
+      kind: 'state',
+      profileId: own.accepted.pin.profileId,
+      stateSetId: set.id,
+      stateId: state.id,
+    });
+    expect(collections.find((item) => item.id === id)).toMatchObject({
+      membershipKind: 'dynamic',
+      builtinKind: 'state',
+    });
     const result = await page(id);
     expect(result.ids).toEqual(state.id === own.entry.state ? [own.subject.id] : []);
   }
-  status(await world.request('alice', 'POST', `/v1/collections/${everything()}/members`,
-    { subjectId: own.subject.id }, discoveryKey()), 409);
+  status(
+    await world.request(
+      'alice',
+      'POST',
+      `/v1/collections/${everything()}/members`,
+      { subjectId: own.subject.id },
+      discoveryKey(),
+    ),
+    409,
+  );
 });
 
-
 test('clearing the last live label removes presence and native restore restores it without an entry', async () => {
-  const subject = await world.base.createSubject('schema:Book','Last independent support');
-  const made = await world.request('alice','POST','/v1/libraryLabels',{ name:'Last support' },discoveryKey());
-  status(made,201);
-  const label = made.body.label as { id:string };
-  await world.base.nativeLabelAssignment('alice',label.id,subject.id);
+  const subject = await world.base.createSubject('schema:Book', 'Last independent support');
+  const made = await world.request('alice', 'POST', '/v1/libraryLabels', { name: 'Last support' }, discoveryKey());
+  status(made, 201);
+  const label = made.body.label as { id: string };
+  await world.base.nativeLabelAssignment('alice', label.id, subject.id);
   expect((await page()).ids).toContain(subject.id);
-  await world.base.nativeLabelAssignment('alice',label.id,subject.id,'unassign');
+  await world.base.nativeLabelAssignment('alice', label.id, subject.id, 'unassign');
   expect((await page()).ids).not.toContain(subject.id);
-  await world.base.nativeLabelAssignment('alice',label.id,subject.id,'restore');
+  await world.base.nativeLabelAssignment('alice', label.id, subject.id, 'restore');
   expect((await page()).ids).toContain(subject.id);
+});
+
+test('native state CAS replay clear and Undo update the same logical shelf', async () => {
+  const subject = await world.base.createSubject('schema:Book', 'Shelf state lifecycle');
+  const state = world.profile('schema:Book').profile.entryStateSet!.states[0]!.id;
+  const path = `/v1/libraryEntries/${subject.id}`;
+  const key = discoveryKey();
+  const made = await world.request('alice', 'PUT', path, { state }, key);
+  status(made, 201);
+  const entry = made.body.libraryEntry as { revision: number; incarnationId: string };
+  status(await world.request('alice', 'PUT', path, { state }, key), 201);
+  expect((await page()).ids.filter((id) => id === subject.id)).toHaveLength(1);
+  status(
+    await world.request(
+      'alice',
+      'PUT',
+      path,
+      { state, revision: entry.revision + 1, incarnationId: entry.incarnationId },
+      discoveryKey(),
+    ),
+    409,
+  );
+  const removed = await world.request(
+    'alice',
+    'DELETE',
+    `${path}?revision=${entry.revision}&incarnationId=${entry.incarnationId}`,
+    undefined,
+    discoveryKey(),
+  );
+  status(removed, 204);
+  expect((await page()).ids).not.toContain(subject.id);
+  const undo = {
+    deletionId: removed.headers.get('Library-Entry-Deletion-Id'),
+    revision: Number(removed.headers.get('Library-Entry-Deletion-Revision')),
+  };
+  const restoreKey = discoveryKey();
+  status(await world.request('alice', 'POST', `${path}:restore`, undo, restoreKey));
+  status(await world.request('alice', 'POST', `${path}:restore`, undo, restoreKey));
+  expect((await page()).ids.filter((id) => id === subject.id)).toHaveLength(1);
 });

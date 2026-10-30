@@ -600,7 +600,7 @@ async function startDriver(
         pool: pool!,
         async authenticatedAccount(account) {
           if (!credentials.has(account)) throw new Error('Expected an existing native fixture account');
-          const actor = await access.authenticate(account.bearer, { pool: pool!, deadline: Date.now()+10_000 });
+          const actor = await access.authenticate(account.bearer, { pool: pool!, deadline: Date.now() + 10_000 });
           if (actor.kind !== 'account' || actor.accountId !== account.accountId)
             throw new Error('Native account authentication did not preserve fixture identity');
           return actor;

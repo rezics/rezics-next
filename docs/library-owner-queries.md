@@ -581,7 +581,6 @@ privacy, full/final/preparing progress and cursor reauthorization. Bind real SQL
 shared composed growth harness before claiming native acceptance. Specified, native-bound, implemented/exposed,
 passed at a revision and promoted remain separate evidence stages. No second protocol engine closes a missing producer.
 
-
 ### Staged native owner implementation
 
 `owner_member_index` and `owner_member_support` now retain one original directory and structural family/pin scopes;

@@ -50,25 +50,37 @@ export const collectionSchema = t.Object(
     coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
     revision,
     memberCount: t.Integer(),
+    orderEpoch: t.Integer({ minimum: 0 }),
     createdAt: t.String(),
     updatedAt: t.String(),
   },
   closed,
 );
-const dynamicCollectionSchema = t.Object({
-  id, curatorAccountId: id, membershipKind: t.Literal('dynamic'),
-  builtinKind: t.Union([t.Literal('everything'),t.Literal('state')]),
-  builtin: t.Union([
-    t.Object({ kind:t.Literal('everything') },closed),
-    t.Object({ kind:t.Literal('state'), profileId:id, stateSetId:id, stateId:id },closed),
-  ]),
-  builtinLabels:t.Optional(t.Record(t.String(),t.String())),
-  title:nullableString, description:nullableString, visibility:t.Literal('private'),
-  revision:t.Integer({minimum:0}), presentationKind:t.Null(), presentationKindSource:t.Literal('empty'),
-  cover:t.Null(), coverSource:t.Literal('none'),
-},closed);
+const dynamicCollectionSchema = t.Object(
+  {
+    id,
+    curatorAccountId: id,
+    membershipKind: t.Literal('dynamic'),
+    builtinKind: t.Union([t.Literal('everything'), t.Literal('state')]),
+    builtin: t.Union([
+      t.Object({ kind: t.Literal('everything') }, closed),
+      t.Object({ kind: t.Literal('state'), profileId: id, stateSetId: id, stateId: id }, closed),
+    ]),
+    builtinLabels: t.Optional(t.Record(t.String(), t.String())),
+    title: nullableString,
+    description: nullableString,
+    visibility: t.Literal('private'),
+    revision: t.Integer({ minimum: 0 }),
+    presentationKind: t.Null(),
+    presentationKindSource: t.Literal('empty'),
+    cover: t.Null(),
+    coverSource: t.Literal('none'),
+  },
+  closed,
+);
 export const collectionReadSchema = t.Union([
-  embedded(collectionSchema,curatorFields), embedded(dynamicCollectionSchema,curatorFields),
+  embedded(collectionSchema, curatorFields),
+  embedded(dynamicCollectionSchema, curatorFields),
 ]);
 const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
@@ -204,7 +216,7 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
   }
 }
 function collectionView(value: Collection) {
-  const { id, curatorAccountId, title, description, visibility, revision, memberCount, createdAt, updatedAt } = value;
+  const { id, curatorAccountId, title, description, visibility, revision, memberCount, orderEpoch, createdAt, updatedAt } = value;
   if (value.membershipKind === 'dynamic')
     return {
       id,
@@ -225,6 +237,7 @@ function collectionView(value: Collection) {
     membershipKind: 'curated' as const,
     revision,
     memberCount,
+    orderEpoch,
     createdAt,
     updatedAt,
     ...collectionPresentation(value),
@@ -265,7 +278,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
     const current = await read().readCollection(actor, value.id);
     const cover =
-      current.revision === value.revision && current.coverMediaId === value.coverMediaId ? current.cover : null;
+      current.membershipKind === 'curated' &&
+      current.revision === value.revision &&
+      current.coverMediaId === value.coverMediaId
+        ? current.cover
+        : null;
     return { ...collectionView(value), ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId };
   }
   async function writtenCurated(value: Collection, actor: Actor) {
@@ -474,7 +491,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                     ...subjectFields,
                     facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
                   }),
-                  t.Object({ kind:t.Literal('dynamic'), subjectId:id, ...subjectFields },closed),
+                  t.Object({ kind: t.Literal('dynamic'), subjectId: id, ...subjectFields }, closed),
                 ]),
               ),
               next: nullableString,
@@ -502,8 +519,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         }
         return admission.run('normal', job, () =>
           query.view === 'FULL'
-            ? fullMembers(viewDependencies(), actor, params.collectionId, { cursor:query.cursor, limit:query.limit }, job.deadline)
-            : read().listMembers(actor, params.collectionId, { cursor:query.cursor, limit:query.limit }),
+            ? fullMembers(
+                viewDependencies(),
+                actor,
+                params.collectionId,
+                { cursor: query.cursor, limit: query.limit },
+                job.deadline,
+              )
+            : read().listMembers(actor, params.collectionId, { cursor: query.cursor, limit: query.limit }),
         );
       },
     )

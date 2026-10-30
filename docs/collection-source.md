@@ -272,7 +272,6 @@ native cursor restart/session/cache. Full persona/API/default/growth and unrelat
 - Growth check: three-scale native captures, interruption/replay, concurrent privacy reduction and terminal fencing;
   verify complete activation/catch-up and useful pages. Permanent preparing fails.
 
-
 ## Staged owner directory binding
 
 The [owner implementation status](library-owner-queries.md#staged-native-owner-implementation) records the native

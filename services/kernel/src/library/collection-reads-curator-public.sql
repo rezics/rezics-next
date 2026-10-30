@@ -10,7 +10,7 @@ candidates AS (
   (
     SELECT collection.collection_id AS id, collection.curator_account_id AS "curatorAccountId", collection.title,
            collection.description, collection.visibility, collection.presentation_kind AS "presentationKind",
-           collection.cover_media_id AS "coverMediaId", collection.source_generation::text AS "sourceGeneration", collection.membership_kind AS "membershipKind", collection.revision, collection.member_count AS "memberCount",
+           collection.cover_media_id AS "coverMediaId", collection.source_generation::text AS "sourceGeneration", collection.membership_kind AS "membershipKind", collection.revision, collection.member_count AS "memberCount", collection.order_epoch AS "orderEpoch",
            collection.created_at::text AS "createdAt", collection.updated_at::text AS "updatedAt",
            collection.updated_at AS "updatedAtOrder",
            COALESCE(to_char(collection.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS "updatedAtExact"
@@ -28,7 +28,7 @@ candidates AS (
   (
     SELECT collection.collection_id AS id, collection.curator_account_id AS "curatorAccountId", collection.title,
            collection.description, collection.visibility, collection.presentation_kind AS "presentationKind",
-           collection.cover_media_id AS "coverMediaId", collection.source_generation::text AS "sourceGeneration", collection.membership_kind AS "membershipKind", collection.revision, collection.member_count AS "memberCount",
+           collection.cover_media_id AS "coverMediaId", collection.source_generation::text AS "sourceGeneration", collection.membership_kind AS "membershipKind", collection.revision, collection.member_count AS "memberCount", collection.order_epoch AS "orderEpoch",
            collection.created_at::text AS "createdAt", collection.updated_at::text AS "updatedAt",
            collection.updated_at AS "updatedAtOrder",
            COALESCE(to_char(collection.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS "updatedAtExact"
@@ -45,7 +45,7 @@ candidates AS (
     LIMIT (SELECT page_limit FROM args)
   )
 )
-SELECT id, "curatorAccountId", title, description, visibility, "presentationKind", "coverMediaId", "sourceGeneration", "membershipKind", revision, "memberCount",
+SELECT id, "curatorAccountId", title, description, visibility, "presentationKind", "coverMediaId", "sourceGeneration", "membershipKind", revision, "memberCount", "orderEpoch",
        "createdAt", "updatedAt", "updatedAtExact"
 FROM candidates
 ORDER BY "updatedAtOrder" DESC, id DESC

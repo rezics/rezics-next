@@ -427,11 +427,14 @@ export function createCollectionCommands(config: {
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
-    if (owner.scopes.includes(action) && (kind.startsWith('library.collection.member') || kind === 'library.collection.delete')) {
+    if (
+      owner.scopes.includes(action) &&
+      (kind.startsWith('library.collection.member') || kind === 'library.collection.delete')
+    ) {
       const builtins = createBuiltinRuntime({ pool });
-      if (await builtins.read(owner,collectionId))
+      if (await builtins.read(owner, collectionId, action))
         throw new ProblemError(kind === 'library.collection.delete' ? 'conflict' : 'dynamic_membership_immutable');
-      if (destinationCollectionId && await builtins.read(owner,destinationCollectionId))
+      if (destinationCollectionId && (await builtins.read(owner, destinationCollectionId, action)))
         throw new ProblemError('dynamic_membership_immutable');
     }
     const identity = principalCommandIdentity(owner);

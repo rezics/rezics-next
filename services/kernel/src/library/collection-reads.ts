@@ -46,6 +46,7 @@ export type CollectionView = CollectionPresentation & {
   visibility: 'private' | 'unlisted' | 'public';
   revision: number;
   memberCount: number;
+  orderEpoch: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -102,6 +103,7 @@ function collectionView(row: {
   membershipKind?: string;
   revision: number;
   memberCount: number;
+  orderEpoch: number;
   createdAt: string;
   updatedAt: string;
 }): CollectionResourceView {
@@ -127,6 +129,7 @@ function collectionView(row: {
     visibility: row.visibility,
     revision: row.revision,
     memberCount: row.memberCount,
+    orderEpoch: row.orderEpoch,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -382,13 +385,18 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const builtinCursor = cursor?.after[0] === 'builtin';
-    if (builtinCursor && (cursor.after.length !== 2 || typeof cursor.after[1] !== 'string' || routeOf(cursor.after[1]) !== route))
+    if (
+      builtinCursor &&
+      (cursor.after.length !== 2 || typeof cursor.after[1] !== 'string' || routeOf(cursor.after[1]) !== route)
+    )
       throw invalidCursor();
     const after = builtinCursor ? null : listPosition(cursor, route);
     if (!visible && !curator) return { collections: [], next: null };
-    const logical = fullView && (cursor === null || builtinCursor)
-      ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null) : [];
-    const shownLogical = logical.slice(0,page.limit);
+    const logical =
+      fullView && (cursor === null || builtinCursor)
+        ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null)
+        : [];
+    const shownLogical = logical.slice(0, page.limit);
     const remaining = page.limit - shownLogical.length;
     const result = await readOnly(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
@@ -414,9 +422,12 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
         collections: shown,
         next:
           logical.length > shownLogical.length && partition
-            ? encodeCursor(tokens,binding,{ epoch:partition.epoch, after:['builtin',shownLogical.at(-1)!.id] })
+            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: ['builtin', shownLogical.at(-1)!.id] })
             : hasMore && partition
-              ? encodeCursor(tokens,binding,{ epoch:partition.epoch, after:last && exact ? [exact,last.id] : ['curated'] })
+              ? encodeCursor(tokens, binding, {
+                  epoch: partition.epoch,
+                  after: last && exact ? [exact, last.id] : ['curated'],
+                })
               : null,
       };
     });
