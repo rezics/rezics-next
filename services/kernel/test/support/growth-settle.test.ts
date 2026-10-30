@@ -200,6 +200,118 @@ test('settle waits for a later background transaction that reuses a measured bac
   }
 });
 
+test('settle does not mistake a retained measured transaction token for a later transaction on the same backend', async () => {
+  await db.admin.query(`TRUNCATE ${table}`);
+  await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);
+  await settle(db, { relations: [table], analyze: true });
+  const client = await db.pool.connect();
+  let settling: Promise<number> | undefined;
+  try {
+    const measured = await captureMeasuredRun(() =>
+      capture(
+        db,
+        async () => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await client.query(`SELECT count(*) FROM ${table}`);
+        },
+        { includeBackends: true },
+      ),
+    );
+    const backend = measured.value.capture.statementBackends![0]!;
+    const token = measured.transactions.get(db)?.get(backend);
+    expect(token).toEqual(expect.any(Number));
+    // Complete the measured transaction outside its capture. Its retained token deliberately stays in the receipt.
+    await client.query('COMMIT');
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await client.query(`SELECT count(*) FROM ${table}`);
+    await db.admin.query(`DELETE FROM ${table} WHERE id=1`);
+    let completed = false;
+    settling = settle(db, {
+      relations: [table],
+      timeoutMs: 5000,
+      pollMs: 20,
+      operationBackends: measured.backends,
+    }).then((elapsed) => {
+      completed = true;
+      return elapsed;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(completed).toBe(false);
+    expect(measured.transactions.get(db)?.get(backend)).toBe(token);
+    await client.query('COMMIT');
+    await settling;
+    expect((await relationState()).visible).toBe((await relationState()).pages);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+    await settling;
+  }
+});
+
+test('settle retains measured transaction identity in the actual mapped database', async () => {
+  const name = `growth_settle_${Bun.randomUUIDv7().replaceAll('-', '').slice(0, 16)}`;
+  const url = new URL(db.url);
+  url.pathname = `/${name}`;
+  await db.admin.query(`CREATE DATABASE "${name}"`);
+  const admin = new pg.Pool({ connectionString: url.toString(), max: 2 });
+  let source: GrowthDatabase | undefined;
+  let client: PoolClient | undefined;
+  try {
+    source = await openGrowthDatabase(db.url);
+    const database = source;
+    // Libraries such as DBOS redirect a pool before its first connection; capture must use the connected database.
+    const pool = database.openPool({ max: 1 });
+    pool.options.connectionString = url.toString();
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    await admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY, value integer NOT NULL)`);
+    await admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);
+    client = await pool.connect();
+    const connection = client;
+    const measured = await captureMeasuredRun(() =>
+      capture(
+        database,
+        async () => {
+          await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await connection.query(`UPDATE ${table} SET value=value+1 WHERE id=1`);
+          await connection.query(`SELECT count(*) FROM ${table}`);
+        },
+        { includeBackends: true },
+      ),
+    );
+    const target = [...measured.writes.keys()].find((database) => new URL(database.url).pathname === `/${name}`);
+    expect(target).toBeDefined();
+    const backend = measured.value.capture.statementBackends![0]!;
+    expect(measured.transactions.get(target!)?.get(backend)).toEqual(expect.any(Number));
+    expect(measured.transactions.get(database)?.has(backend) ?? false).toBe(false);
+    await expect(
+      settle(target!, {
+        relations: [table],
+        timeoutMs: 5000,
+        operationBackends: measured.backends,
+      }),
+    ).rejects.toMatchObject({
+      name: 'GrowthSettleInfrastructureError',
+      message: expect.stringContaining(`Backend ${backend} from the measured operation keeps a transaction open`),
+    });
+    await connection.query('COMMIT');
+    await settle(target!, { relations: [table] });
+    const visibility = await admin.query<{ pages: number; visible: number }>(
+      `SELECT relpages AS pages,relallvisible AS visible FROM pg_class WHERE oid=$1::regclass`,
+      [table],
+    );
+    expect(visibility.rows[0]!.pages).toBeGreaterThan(0);
+    expect(visibility.rows[0]!.visible).toBe(visibility.rows[0]!.pages);
+  } finally {
+    if (client) {
+      await client.query('ROLLBACK');
+      client.release(true);
+    }
+    await admin.end();
+    await source?.close();
+    await db.admin.query(`DROP DATABASE "${name}"`);
+  }
+});
+
 test('settle disables autovacuum on relations created after the growth database opened', async () => {
   await db.admin.query(`CREATE TABLE ${schema}.late (id integer, body text)`);
   await db.admin.query(`INSERT INTO ${schema}.late SELECT i,repeat('x',2000) FROM generate_series(1,100) i`);

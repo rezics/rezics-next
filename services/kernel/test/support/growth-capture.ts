@@ -33,7 +33,7 @@ type ActiveCapture = {
   backgroundPlanDatabases: string[];
   backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
-  readonly transactions: Map<number, number>;
+  readonly transactions: Map<GrowthDatabase, Map<number, number>>;
   pending: Set<Promise<void>>;
   error?: Error;
 };
@@ -310,11 +310,20 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
       if (backend !== undefined) {
         state.activeTransactions.set(backend, transaction.token);
         if (attribution && !attribution.background) {
-          attribution.capture.transactions.set(backend, transaction.token);
-          let runTransactions = attribution.capture.run?.backends.transactions.get(attribution.capture.database);
+          const database = databaseForName(
+            attribution.capture.database,
+            connectedDatabase(client) ?? databaseName(attribution.capture.database),
+          );
+          let captureTransactions = attribution.capture.transactions.get(database);
+          if (!captureTransactions) {
+            captureTransactions = new Map();
+            attribution.capture.transactions.set(database, captureTransactions);
+          }
+          captureTransactions.set(backend, transaction.token);
+          let runTransactions = attribution.capture.run?.backends.transactions.get(database);
           if (attribution.capture.run && !runTransactions) {
             runTransactions = new Map();
-            attribution.capture.run.backends.transactions.set(attribution.capture.database, runTransactions);
+            attribution.capture.run.backends.transactions.set(database, runTransactions);
           }
           runTransactions?.set(backend, transaction.token);
         }
@@ -326,9 +335,13 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
         state.activeTransactions.delete(backend);
       if (backend !== undefined && completedToken !== undefined) {
         if (attribution) {
-          if (attribution.capture.transactions.get(backend) === completedToken)
-            attribution.capture.transactions.delete(backend);
-          const runTransactions = attribution.capture.run?.backends.transactions.get(attribution.capture.database);
+          const database = databaseForName(
+            attribution.capture.database,
+            connectedDatabase(client) ?? databaseName(attribution.capture.database),
+          );
+          const captureTransactions = attribution.capture.transactions.get(database);
+          if (captureTransactions?.get(backend) === completedToken) captureTransactions.delete(backend);
+          const runTransactions = attribution.capture.run?.backends.transactions.get(database);
           if (runTransactions?.get(backend) === completedToken) runTransactions.delete(backend);
         }
       }
@@ -765,11 +778,12 @@ async function captureInternal<T>(
       for (const { backend } of foreground) {
         if (backend !== undefined) run.backends.add(backend);
       }
-    if (run && active.transactions.size > 0) {
-      const runTransactions = run.backends.transactions.get(database) ?? new Map<number, number>();
-      for (const [backend, token] of active.transactions) runTransactions.set(backend, token);
-      run.backends.transactions.set(database, runTransactions);
-    }
+    if (run)
+      for (const [target, transactions] of active.transactions) {
+        const runTransactions = run.backends.transactions.get(target) ?? new Map<number, number>();
+        for (const [backend, token] of transactions) runTransactions.set(backend, token);
+        run.backends.transactions.set(target, runTransactions);
+      }
     return {
       value,
       capture: {
@@ -832,6 +846,8 @@ function databaseForName(database: GrowthDatabase, name: string): GrowthDatabase
     close: () => admin.end(),
   };
   state.relatedDatabases.set(name, related);
+  states.set(related, state);
+  databasesByAdmin.set(admin, related);
   return related;
 }
 
