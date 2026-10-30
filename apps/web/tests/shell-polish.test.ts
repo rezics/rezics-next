@@ -21,9 +21,7 @@ test('the font preload uses an actual bundler-resolved existing font asset rathe
   const binding = /href=\{(\w+)\}/.exec(preload)?.[1];
   expect(binding).toBeDefined();
   const imports = [
-    ...shell.matchAll(
-      /import\s+(\w+)\s+from\s+['"](@fontsource-variable\/manrope\/files\/[^'"]+\.woff2)\?url['"]/g,
-    ),
+    ...shell.matchAll(/import\s+(\w+)\s+from\s+['"](@fontsource-variable\/manrope\/files\/[^'"]+\.woff2)\?url['"]/g),
   ];
   const fontImport = imports.find((match) => match[1] === binding);
   expect(fontImport).toBeDefined();

@@ -470,13 +470,7 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
           <a href="#main-content" className={skipLink}>
             {m.shell_skip_to_content()}
           </a>
-          <link
-            rel="preload"
-            href={manropeFontUrl}
-            as="font"
-            type="font/woff2"
-            crossOrigin="anonymous"
-          />
+          <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
           <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 has-[[data-expanded=true]]:z-50">
             <div className="flex h-16 items-center gap-2 px-3">
               <NavigationToggle
