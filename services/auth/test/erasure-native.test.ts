@@ -72,35 +72,37 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       expect(code).toBeTruthy();
       return { code: code!, verifier };
     }
-    const code = await authorize(victim.cookie);
-    const now = Math.floor(Date.now() / 1000);
-    const assertion = await new SignJWT({})
-      .setProtectedHeader({ alg: 'ES256', kid: 'native-client' })
-      .setIssuer(WEBSITE_CLIENT_ID)
-      .setSubject(WEBSITE_CLIENT_ID)
-      .setAudience(issuer)
-      .setIssuedAt(now)
-      .setExpirationTime(now + 120)
-      .setJti('native-erasure-assertion')
-      .sign(clientKey.privateKey);
-    const exchange = await f.host.handler(
-      new Request(`${issuer}/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: WEBSITE_CLIENT_ID,
-          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-          client_assertion: assertion,
-          grant_type: 'authorization_code',
-          code: code.code,
-          code_verifier: code.verifier,
-          redirect_uri: redirect,
-          resource: 'https://native-erasure.api.test',
+    async function exchangeCode(code: { code: string; verifier: string }, jti: string) {
+      const now = Math.floor(Date.now() / 1000);
+      const assertion = await new SignJWT({})
+        .setProtectedHeader({ alg: 'ES256', kid: 'native-client' })
+        .setIssuer(WEBSITE_CLIENT_ID)
+        .setSubject(WEBSITE_CLIENT_ID)
+        .setAudience(issuer)
+        .setIssuedAt(now)
+        .setExpirationTime(now + 120)
+        .setJti(jti)
+        .sign(clientKey.privateKey);
+      const exchange = await f.host.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: WEBSITE_CLIENT_ID,
+            client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+            client_assertion: assertion,
+            grant_type: 'authorization_code',
+            code: code.code,
+            code_verifier: code.verifier,
+            redirect_uri: redirect,
+            resource: 'https://native-erasure.api.test',
+          }),
         }),
-      }),
-    );
-    expect(exchange.status).toBe(200);
-    expect(((await exchange.json()) as { refresh_token?: string }).refresh_token).toBeString();
+      );
+      expect(exchange.status).toBe(200);
+      expect(((await exchange.json()) as { refresh_token?: string }).refresh_token).toBeString();
+    }
+    await exchangeCode(await authorize(victim.cookie), 'native-erasure-assertion');
     await authorize(survivor.cookie);
     expect(
       (await f.pool.query('SELECT 1 FROM "oauthRefreshFamily" WHERE erasure_account_id=$1', [owner])).rowCount,
@@ -108,6 +110,41 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     expect(
       (await f.pool.query('SELECT 1 FROM "oauthClientAssertion" WHERE erasure_client_id=$1', [WEBSITE_CLIENT_ID]))
         .rowCount,
+    ).toBe(1);
+    // The provider can bind a website family to a session from another client.
+    // Erasing that source client's owner must drain the cross-client children,
+    // preserving the target registration and its unrelated family's credentials.
+    const sourceOwner = await f.person('source-owner');
+    await f.host.service.internal.registerClient({ clientId: 'owned-login', firstParty: true, scopes });
+    await f.pool.query('UPDATE auth_client SET "userId"=$1 WHERE client_id=$2', [sourceOwner.accountId, 'owned-login']);
+    const sourceLogin = await f.call('/signin', {
+      email: survivor.email,
+      password,
+      client_id: 'owned-login',
+      scope: scopes,
+    });
+    expect(sourceLogin.status).toBe(200);
+    const sourceCookie = sourceLogin.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    await exchangeCode(await authorize(sourceCookie), 'cross-client-assertion');
+    expect(
+      (await f.pool.query('SELECT 1 FROM "oauthRefreshFamily" WHERE erasure_source_client_id=$1', ['owned-login']))
+        .rowCount,
+    ).toBe(1);
+    const sourceDeletion = await f.delete(sourceOwner);
+    expect({ status: sourceDeletion.status, body: await sourceDeletion.json() }).toEqual({
+      status: 200,
+      body: { accountId: sourceOwner.accountId },
+    });
+    for (const table of ['oauthAccessToken', 'oauthRefreshToken', 'oauthRefreshFamily', 'verification'])
+      expect(
+        (await f.pool.query(`SELECT 1 FROM "${table}" WHERE erasure_source_client_id=$1`, ['owned-login'])).rowCount,
+      ).toBe(0);
+    expect((await f.pool.query('SELECT 1 FROM auth_client WHERE client_id=$1', [WEBSITE_CLIENT_ID])).rowCount).toBe(1);
+    expect(
+      (await f.pool.query('SELECT 1 FROM "oauthRefreshFamily" WHERE erasure_account_id=$1', [owner])).rowCount,
     ).toBe(1);
     const actingSession = (
       await f.pool.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1', [survivor.accountId])
