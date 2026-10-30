@@ -842,7 +842,7 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 The importer derives an explicit removal intent from sanitized VNDB zero count with a present admitted paired
 average, without changing converter/native revisions, digest, rights or mappings. The production transport
 uses the installed `rating.source_statistic_clear` operation and generated `$clear.post` client, strict
-`{sourceRecordId,count:0,asOf}` body, keyed POST budget and ordinary session continuity. Positive PUT remains
+`{sourceRecordId,count:0,asOf}` body (plus the exact optional `sourceAlias` for custom feeds), keyed POST budget and ordinary session continuity. Positive PUT remains
 unchanged and suppressed behind the exact facts fence; removal may address its own binding even fenced.
 UNKNOWN/no-request projections can complete only with the existing VNDB statistic-refresh proof extended to
 exact unchanged semantic candidates, same native/converter revision and an already acknowledged record.
@@ -857,8 +857,11 @@ Required caller closure forwards real clears only under explicit VNDB runtime co
 observations remain separate, while physical clear exchanges are retained. All previous capability rows,
 peer sections and Cost bounds remain in place.
 
+The supplemental [alias caller](../../services/kernel/test/imports/vndb-statistic-alias.test.ts) shares that
+fixture and ordinary CLI/archive/Auth path. It observes alias PUT/clear bytes, exact facts disclosure,
+canonical-fence independence and conditional clear of the single current association.
 Native command reserved for integration (not executed in this attempt):
-`bun run --cwd services/kernel check test/imports/vndb-zero-refresh.test.ts`.
+`bun run --cwd services/kernel check test/imports/vndb-zero-refresh.test.ts test/imports/vndb-statistic-alias.test.ts`.
 Local verification is limited to the importer and kernel workspace typechecks and the new stack-free protocol
 suite, under the current worker instruction. No native/database acceptance or promotion result is claimed.
 

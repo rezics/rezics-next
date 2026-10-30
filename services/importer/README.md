@@ -2,6 +2,20 @@
 
 The importer owns source dump ingestion, durable SQLite run and record state, and replayable requests for platform writes through the kernel API.
 
+The [connected design status](../../docs/research/design-status-imports.md) follows the operator from terminal
+acquisition, status and recovery through the private SQLite baseline, source ownership and immutable request/ACK
+journal. Ordinary account Auth (`POST /signin/key` → `POST /token`) authorizes public tuple/bootstrap and proposal
+effects through `POST /v1/subjects:batchWrite`, exact `GET /v1/sourceFences:check`, and media acquisition through
+`POST /v1/media:importFromUrl` → `GET /v1/media/{id}:importStatus`. VNDB statistics use the PUT and clear POST below.
+[Semantic](../kernel/src/semantic/README.md) owns independent candidate selection through
+`POST /v1/subjects/{id}/candidates/{candidate}:accept` and `POST /v1/subjects/{id}:adopt`;
+[Content](../kernel/src/content/README.md) owns rights, current fences and final disclosure. Selected results reach
+`GET /v1/subjects/{id}`, `POST /v1/pages:read` and `POST /v1/subjects:search`, then the
+[Web](../../apps/web/README.md) subject/search journey. These APIs and CLI form the designed journey; browser
+candidate-review entry remains Web/Semantic work and is not delivered by Imports. Primary-source rights,
+independent selection, current authorization and exact replay remain required. General SourceRecord catch-up/ACK,
+reviewed vocabulary/measured inputs and broader discovery remain deferred.
+
 Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. A recognized Bangumi
 input outside launch scope remains a present source member and increments `skipped` once during acquisition; it creates
 no subject, proposal, or media effect. The sealed run stores this bounded count so recovery reports it without reading
@@ -93,7 +107,11 @@ Explicit sanitized VNDB `c_votecount: 0` with its admitted paired `c_average` pr
 intent, including `0/null` and `0/0`. The ordinary seven-scope CLI calls the installed
 `rating.source_statistic_clear` operation, `POST /v1/subjects/{id}/source-statistics/vndb:clear`,
 with strict `{sourceRecordId, count: 0, asOf}` and expects 204 with ordinary session continuity.
-It removes only that subject/source/record binding. It uses the existing bounded write coordinator,
+Default `vndb` calls omit `sourceAlias` and retain their existing bytes. A configured VNDB feed alias sends its
+exact registration alias on both positive PUT and clear POST, while provider `vndb` and native record `v123`
+remain unchanged. Facts/claim/read-fence identity follows that alias. The single subject/provider score slot
+is unchanged: removal matches its current subject/provider/record/alias association; absent or mismatched
+bindings leave another association intact. Canonical `vndb` fencing does not govern a custom alias. It uses the existing bounded write coordinator,
 keyed POST retry budget and run-derived identity; reopening a sealed run reuses the original bytes/key
 before reading replacement source records. The native archive admission gate still validates a supplied
 archive first; it cannot replace the sealed projection or its clear command. An uncertain or denied clear
@@ -105,6 +123,8 @@ acknowledged VNDB record and exhaustive retention of every semantic candidate/pr
 source-specific statistic omission requires no request. It advances only the input projection, without a
 fabricated receipt or changes to old semantic requests/receipts. General metadata acknowledgement remains deferred.
 
+The supplemental [alias journey](../kernel/test/imports/vndb-statistic-alias.test.ts) reuses the same fixture
+for ordinary alias PUT/clear, exact facts fencing and stale-association preservation.
 The frozen [zero-refresh journey](../kernel/test/imports/vndb-zero-refresh.test.ts) now has an adjacent genuine
 native CLI fixture. It uses pinned headers/COPY archive input, real account-key credential effects, public
 clear/read/receipt/event observation, same-state response-loss recovery and current grant denial. UNKNOWN

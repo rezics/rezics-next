@@ -253,3 +253,56 @@ test('other registered sources never derive a clear from source rating fields', 
     expect(result.sourceStatistic).toBeUndefined();
   }
 });
+
+test('registered VNDB aliases use the generated positive and clear client bodies without changing native identity', async () => {
+  const alias = createSourceRegistration('vndb', { source: 'feed-two' });
+  const converted = (row: SourceRecord) =>
+    alias.convert(
+      { external_id: row.key, record_revision: row.revision!, record: row.payload },
+      { source: 'feed-two' },
+    );
+  const positive = converted(record(2, 700));
+  const zero = converted(record(0, null));
+  expect(positive.sourceStatistic?.sourceAlias).toBe('feed-two');
+  expect(zero.sourceStatisticClear).toEqual({
+    source: 'vndb',
+    sourceAlias: 'feed-two',
+    sourceRecordId: 'v123',
+    count: 0,
+    asOf: '2026-10-25',
+  });
+  expect(converted(record()).sourceStatistic).toBeUndefined();
+  expect(converted(record()).sourceStatisticClear).toBeUndefined();
+  const native = convertVndb(
+    { external_id: 'v123', record_revision: '7', record: record(0, null).payload },
+    { source: 'feed-two' },
+  );
+  expect(zero.digest).toBe(native.digest);
+  expect(zero.proposals).toEqual(native.proposals);
+  const requests: { method: string; path: string; body: unknown }[] = [];
+  const client = createImportTransport({
+    origin: 'https://zero.import.test',
+    tokenProvider: async () => 'local-protocol-token',
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const body = await request.json();
+      requests.push({ method: request.method, path: new URL(request.url).pathname, body });
+      return request.method === 'PUT'
+        ? Response.json({ source: 'vndb', ...body })
+        : new Response(null, { status: 204 });
+    }) as typeof fetch,
+  });
+  const { source: provider, ...positiveValue } = positive.sourceStatistic!;
+  await client.writeSourceStatistic({
+    subjectId: subject,
+    source: provider,
+    value: positiveValue,
+    idempotencyKey: 'positive-alias',
+  });
+  const { source, ...clearValue } = zero.sourceStatisticClear!;
+  await client.clearSourceStatistic({ subjectId: subject, source, value: clearValue, idempotencyKey: 'zero-alias' });
+  expect(requests).toEqual([
+    { method: 'PUT', path: `/v1/subjects/${subject}/source-statistics/vndb`, body: positiveValue },
+    { method: 'POST', path: `/v1/subjects/${subject}/source-statistics/vndb:clear`, body: clearValue },
+  ]);
+});

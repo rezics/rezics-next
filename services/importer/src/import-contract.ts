@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
@@ -5,26 +6,12 @@ import type { ConversionContext } from '../../../packages/conversion/src/support
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
 
-export type ImportSourceStatistic = Readonly<{
-  source: 'vndb';
-  sourceRecordId: string;
-  scale: Readonly<{ min: number; max: number }>;
-  mean: number;
-  count: number;
-  asOf: string;
-  licence: string;
-  attribution: string;
-}>;
-
-export type ImportSourceStatisticValue = Omit<ImportSourceStatistic, 'source'>;
-
-export type ImportSourceStatisticClear = Readonly<{
-  source: 'vndb';
-  sourceRecordId: string;
-  count: 0;
-  asOf: string;
-}>;
-export type ImportSourceStatisticClearValue = Omit<ImportSourceStatisticClear, 'source'>;
+// Consume the installed generated client bodies for both statistic operations.
+type SourceStatisticsClient = ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']>;
+export type ImportSourceStatisticValue = Readonly<Parameters<SourceStatisticsClient['put']>[0]>;
+export type ImportSourceStatistic = ImportSourceStatisticValue & Readonly<{ source: 'vndb' }>;
+export type ImportSourceStatisticClearValue = Readonly<Parameters<SourceStatisticsClient['$clear']['post']>[0]>;
+export type ImportSourceStatisticClear = ImportSourceStatisticClearValue & Readonly<{ source: 'vndb' }>;
 
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;

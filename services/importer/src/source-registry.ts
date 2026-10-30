@@ -83,7 +83,7 @@ function validateSourceField(field: SourceField, value: unknown): asserts value 
     throw new TypeError(`Invalid source ${field}`);
 }
 
-function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
+function addAliases(result: NativeConversion, sourceAlias: string): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
   let sourceStatistic: ImportSourceStatistic | undefined;
@@ -94,6 +94,7 @@ function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
     if (count === 0 && average !== undefined) {
       sourceStatisticClear = {
         source: 'vndb',
+        ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
         sourceRecordId: result.normalizedRecord.vn.id,
         count: 0,
         asOf: VNDB_DUMP_AS_OF,
@@ -102,6 +103,7 @@ function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
     if (count !== undefined && count > 0 && average !== undefined && average !== null && average >= 100) {
       sourceStatistic = {
         source: 'vndb',
+        ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
         sourceRecordId: result.normalizedRecord.vn.id,
         scale: { min: 1, max: 10 },
         mean: average / 100,
@@ -144,7 +146,7 @@ export function createSourceRegistration(
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
       const result = native.convert(input, context, { converterRevision });
-      return addAliases(result);
+      return addAliases(result, source);
     },
   };
 }

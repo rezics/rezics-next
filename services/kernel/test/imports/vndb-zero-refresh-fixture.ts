@@ -13,6 +13,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createFigureFixture, type FigureFixture } from '../rating/support/figure-fixture.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { identitySupport } from './identity-fixture.ts';
+import { openApiObserver } from './api-observer.ts';
 import { archive } from './vndb-materialization-native-fixture.ts';
 import { captureVndbStatistics, VNDB_API_ORIGIN } from './vndb-statistics-driver.ts';
 
@@ -134,10 +135,10 @@ export async function runJourney() {
         await reader.close();
       }
     };
-    const subjectFor = async (id: string) => {
+    const subjectFor = async (id: string, source = 'vndb') => {
       const reader = open();
       try {
-        const binding = reader.session.bindings.claim({ source: 'vndb', external_id: id });
+        const binding = reader.session.bindings.claim({ source, external_id: id });
         if (binding?.state !== 'bound') throw new Error('Ordinary CLI did not bind VNDB subject');
         return binding.subject;
       } finally {
@@ -153,11 +154,11 @@ export async function runJourney() {
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     }
-    const invoke = async (average: number | null, count: number, loss = false) => {
+    const invoke = async (average: number | null, count: number, loss = false, sourceAlias = 'vndb') => {
       const exchanges = capture.begin();
       const abort = new AbortController();
       let sourceRecords = 0;
-      const result = await runImportCli(argv, {
+      const result = await runImportCli(sourceAlias === 'vndb' ? argv : [...argv, '--source-alias', sourceAlias], {
         signal: abort.signal,
         stdin: archive(false, { v123: { count, average }, v124: { count: 4, average: 800 } }),
         observer: {
@@ -344,6 +345,91 @@ export async function runJourney() {
       (row) => !originalCandidates.some((prior) => prior.id === row.id),
     );
     expect(afterCandidates).toEqual(originalCandidates);
+    // Supplemental alias outcomes share the CLI, private state, native archive, Auth and public runtime.
+    async function aliasJourney() {
+      const alias = 'feed-two';
+      const positive = await invoke(700, 2, false, alias);
+      expect(positive.code).toBe(0);
+      const aliasSubject = await subjectFor('v123', alias);
+      const aliasIndependent = await subjectFor('v124', alias);
+      const read = () => publicRead(`/v1/subjects/${aliasSubject}/source-statistics`);
+      const independentBefore = await publicRead(`/v1/subjects/${aliasIndependent}/source-statistics`);
+      const positiveExchange = positive.exchanges.find((e) => e.method === 'PUT' && e.body?.includes('v123'))!;
+      const positiveBody = JSON.parse(positiveExchange.body!);
+      expect(positiveExchange.status).toBe(200);
+      const zero = await invoke(null, 0, false, alias);
+      expect(zero.code).toBe(0);
+      const clear = zero.exchanges.find((e) => e.path.endsWith(':clear') && e.body?.includes('v123'))!;
+      const afterZero = await read();
+      expect((await invoke(800, 3, false, alias)).code).toBe(0);
+      const beforeMismatch = await read();
+      for (const value of [
+        { sourceAlias: 'feed-one', sourceRecordId: 'v123', count: 0 as const, asOf: '2026-10-25' },
+        { sourceAlias: alias, sourceRecordId: 'v999', count: 0 as const, asOf: '2026-10-25' },
+      ]) {
+        await ordinaryTransport.clearSourceStatistic({
+          subjectId: aliasSubject,
+          source: 'vndb',
+          value,
+          idempotencyKey: randomUUID(),
+        });
+        expect(await read()).toEqual(beforeMismatch);
+      }
+      // One subject/provider slot: replace its association through the real public PUT, then
+      // an old alias clear must leave that current other association intact.
+      await ordinaryTransport.writeSourceStatistic({
+        subjectId: aliasSubject,
+        source: 'vndb',
+        value: { ...positiveBody, sourceAlias: 'feed-one' },
+        idempotencyKey: randomUUID(),
+      });
+      const otherAssociation = await read();
+      expect(otherAssociation).toEqual([{ source: 'vndb', ...positiveBody, sourceAlias: 'feed-one' }]);
+      await ordinaryTransport.clearSourceStatistic({
+        subjectId: aliasSubject,
+        source: 'vndb',
+        value: { sourceAlias: alias, sourceRecordId: 'v123', count: 0, asOf: '2026-10-25' },
+        idempotencyKey: randomUUID(),
+      });
+      const afterStaleClear = await read();
+      expect((await invoke(900, 4, false, alias)).code).toBe(0);
+      const beforeCanonicalFence = await read();
+      const editor = await openApiObserver(runtime);
+      const fence = async (source: string) => {
+        const response = await editor.http('/v1/sourceFences:takedown', {
+          source,
+          externalId: 'v123',
+          fieldGroup: 'facts',
+          reason: 'Exact alias statistic control',
+        });
+        expect(response.status, JSON.stringify(response.body)).toBe(200);
+      };
+      await fence('vndb');
+      const afterCanonicalFence = await read();
+      await fence(alias);
+      const afterAliasFence = await read();
+      const fenced = await invoke(850, 6, false, alias);
+      expect(fenced.code).toBe(0);
+      const fencedStatisticRequests = statisticRequests(fenced.exchanges);
+      const fencedZero = await invoke(null, 0, false, alias);
+      expect(fencedZero.code).toBe(0);
+      const fencedClear = fencedZero.exchanges.find((e) => e.path.endsWith(':clear') && e.body?.includes('v123'))!;
+      return {
+        positiveBody,
+        clear: { status: clear.status, body: JSON.parse(clear.body!), receipt: clear.receipt },
+        afterZero,
+        beforeMismatch,
+        otherAssociation,
+        afterStaleClear,
+        beforeCanonicalFence,
+        afterCanonicalFence,
+        afterAliasFence,
+        fencedStatisticRequests,
+        fencedClear: { status: fencedClear.status, body: JSON.parse(fencedClear.body!), receipt: fencedClear.receipt },
+        independentBefore,
+        independentAfter: await publicRead(`/v1/subjects/${aliasIndependent}/source-statistics`),
+      };
+    }
     console.log(
       JSON.stringify({
         converter_revision,
@@ -362,6 +448,7 @@ export async function runJourney() {
       }),
     );
     return {
+      aliasJourney,
       initial,
       zero,
       clear,

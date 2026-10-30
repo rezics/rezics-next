@@ -127,11 +127,22 @@ function idempotencyKey(key: string): string {
   return JSON.stringify(key);
 }
 
+function statisticAlias(body: Record<string, unknown>): void {
+  if (Object.hasOwn(body, 'sourceAlias'))
+    ensure(typeof body.sourceAlias === 'string' && /^[a-z][a-z0-9_-]{0,31}(?![\s\S])/.test(body.sourceAlias));
+}
+
 function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
   const value = snapshot(input, BODY_BYTES);
   ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
   const body = value as Record<string, unknown>;
-  ensure(Object.keys(body).sort().join(',') === 'asOf,attribution,count,licence,mean,scale,sourceRecordId');
+  statisticAlias(body);
+  ensure(
+    Object.keys(body)
+      .filter((key) => key !== 'sourceAlias')
+      .sort()
+      .join(',') === 'asOf,attribution,count,licence,mean,scale,sourceRecordId',
+  );
   const scale = body.scale;
   ensure(typeof scale === 'object' && scale !== null && !Array.isArray(scale));
   const sourceScale = scale as Record<string, unknown>;
@@ -299,22 +310,12 @@ export function createImportTransport(options: ImportTransportOptions) {
     },
     signal?: AbortSignal,
   ): Promise<void> {
-    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const body = sourceStatisticBody(input.value);
-    const statisticsClient = client as unknown as {
-      subjects(params: { subjectId: string }): {
-        'source-statistics'(params: { source: 'vndb' }): {
-          put(
-            body: ImportSourceStatisticValue,
-            options: { headers: { 'idempotency-key': string }; fetch?: RequestInit },
-          ): Promise<ClientResponse>;
-        };
-      };
-    };
     const reply = await response(
       () =>
-        statisticsClient
-          .subjects({ subjectId: input.subjectId })
+        client
+          .subjects({ id: input.subjectId })
           ['source-statistics']({ source: input.source })
           .put(body, {
             headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
@@ -324,6 +325,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       signal,
     );
     const expected = JSON.parse(JSON.stringify({ source: input.source, ...body }));
+    if (expected.sourceAlias === input.source) delete expected.sourceAlias;
     ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(reply.body)), expected));
   }
   async function clearSourceStatistic(
@@ -338,7 +340,13 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const value = snapshot(input.value, BODY_BYTES) as Record<string, unknown>;
     ensure(value !== null && typeof value === 'object' && !Array.isArray(value));
-    ensure(Object.keys(value).sort().join(',') === 'asOf,count,sourceRecordId');
+    statisticAlias(value);
+    ensure(
+      Object.keys(value)
+        .filter((key) => key !== 'sourceAlias')
+        .sort()
+        .join(',') === 'asOf,count,sourceRecordId',
+    );
     ensure(
       typeof value.sourceRecordId === 'string' &&
         value.sourceRecordId.length > 0 &&
