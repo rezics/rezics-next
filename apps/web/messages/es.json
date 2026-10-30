@@ -2800,5 +2800,15 @@
   "creator_sales_empty": "Aún no hay ventas registradas",
   "creator_sales_empty_hint": "Aquí solo aparecen las compras registradas. Los estados de regalías ofrecen por separado los datos contables y los pagos externos.",
   "creator_sales_pagination": "Páginas del historial de ventas",
-  "creator_sales_next": "Ventas anteriores"
+  "creator_sales_next": "Ventas anteriores",
+  "game_profile_title": "Editar juegos y novelas visuales",
+  "game_profile_credits": "Creadores y créditos",
+  "game_profile_classification": "Plataformas y clasificaciones",
+  "game_profile_relations": "Obras y versiones relacionadas",
+  "game_profile_facts": "Datos e identificadores",
+  "game_profile_initial": "Datos iniciales",
+  "game_profile_optional": "Añade solo hechos conocidos. Los campos omitidos siguen siendo desconocidos. Conserva juntos los calificadores y las pruebas de cada declaración.",
+  "game_profile_grain": "Elige la obra real, una expansión con identidad propia o una versión de software. Las plataformas y los idiomas nunca generan versiones automáticamente.",
+  "game_profile_terms_help": "Los nombres y las descripciones usan el editor de nombres. Allí se indica la disponibilidad nativa actual. Una propuesta no cambia los mapas de nombres.",
+  "game_profile_support": "Solo se ofrecen campos del tipo publicado actualmente. Las versiones de software son sujetos independientes. Un campo ausente no se admite aquí."
 }

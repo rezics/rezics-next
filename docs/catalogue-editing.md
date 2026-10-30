@@ -123,3 +123,31 @@ merge or work/edition/release conversion exists. Selection rereads the actual cu
 uncaught-up result remains labelled. Denied or failed page reads conceal the previous page while retaining mounted
 drafts for recovery. Ordinary forms send statement references, never ingestion Source metadata. These controls do
 not infer rights or replace the existing disclosure and source-or-consent rules.
+
+## Browser flow: game and visual-novel works
+
+`/{locale}/catalogue/game` is the profile-guided entry in catalogue creation. Game, visual-novel, add-on and
+software-release readers link to `/{locale}/subjects/{id}/{slug}/game`. The private, noindex journey retains the
+actual native identity and Type. Work facts, creators, classifications and related works/releases follow effective
+emitted metadata. Labels retain their actual fallback language. The current visual-novel work Type does not emit
+`schema:gamePlatform`; its absence does not authorize adding that field. Released software and independently
+referable add-ons remain separate subjects. Language/platform combinations never manufacture release subjects.
+
+Creation composes the existing multilingual initial-terms form with optional native statement controls, target
+picker, qualifiers and references. Only explicitly added facts enter ordinary `POST /v1/subjects`; native initial
+facts are selected in Global. The exact returned UUID supplies the current reader, with read retry after concealment
+or unavailability. Draft facts are retained independently for each selected Type. Uncertain delivery preserves the
+exact augmented payload and key. Invalid current definitions refresh without discarding entered facts.
+
+Corrections compose the common multi-field scalar editor, qualified relation editor and per-field submission
+helpers. Classification claims use native item values in scalar competition slots; credits and work links retain
+the native target and any declared slot key. Every selected statement keeps its qualifiers and evidence together.
+Only changed facts become candidates; unchanged languages and other fields remain intact. Submission reports
+independent results and exact candidate IDs awaiting review, separate from acceptance, adoption and the ordinary
+current reader. Uncertain attempts retain their commands and keys. Metadata, denial, stale and unavailable states
+remain visible. Missing controls confer no additional native capability.
+
+Names and descriptions link the existing terms adapter. Its pending native producer, binding and deduplication
+remain Semantic-owned; this profile never substitutes `schema:name` proposals for terms writes. Authored text
+uses the existing document/licence editor. Ordinary forms do not submit ingestion Source metadata, infer rights,
+copy provider prose or covers, publish profiles, or change Library progress.

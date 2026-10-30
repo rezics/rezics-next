@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { PropertyDefinition } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -27,6 +28,11 @@ import {
 
 type Current = Extract<EditorRead, { ok: true }>;
 type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
+/** Creation has no subject DTO or invented identity; controls need only its chosen Type and related summaries. */
+export type StatementFieldsRead = ScalarRead & {
+  source: Current['source'];
+  public: ScalarRead['public'] & { subject: Pick<Current['public']['subject'], 'type'> };
+};
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 
 export { ScalarControl };
@@ -271,9 +277,11 @@ function PartEditor({
   read,
   locale,
   onChange,
+  control,
 }: {
+  control?: ((part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode) | undefined;
   part: SnakInput;
-  read: Current;
+  read: StatementFieldsRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
 }) {
@@ -283,13 +291,15 @@ function PartEditor({
         {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
           m.subject_value_unlabelled({}, { locale: locale as never })}
       </p>
-      <ScalarControl
-        part={part}
-        definition={read.release.properties[part.property.id]}
-        read={read}
-        locale={locale}
-        onChange={onChange}
-      />
+      {control?.(part, onChange) ?? (
+        <ScalarControl
+          part={part}
+          definition={read.release.properties[part.property.id]}
+          read={read}
+          locale={locale}
+          onChange={onChange}
+        />
+      )}
     </div>
   );
 }
@@ -300,9 +310,11 @@ function AddPart({
   locale,
   label,
   onAdd,
+  allowItems,
 }: {
+  allowItems?: boolean;
   ids: string[];
-  read: Current;
+  read: StatementFieldsRead;
   locale: string;
   label: string;
   onAdd: (id: string) => void;
@@ -311,7 +323,8 @@ function AddPart({
   const choices = ids.flatMap((id) => {
     const definition = read.release.properties[id];
     const name = pageText(definition?.labels, locale).text;
-    return editableScalar(definition) && name ? [{ id, name }] : [];
+    const supportedItem = allowItems && definition?.datatype === 'wikibase-item' && !!definition.targets?.length;
+    return (supportedItem || editableScalar(definition)) && name ? [{ id, name }] : [];
   });
   if (!choices.length) return null;
   return (
@@ -350,12 +363,16 @@ export function StatementFields({
   change,
   guideReturn,
   heading: Heading = 'h2',
+  valueControl,
+  partControl,
 }: {
   draft: StatementInput;
-  current: Current;
+  current: StatementFieldsRead;
   locale: string;
   change: (next: StatementInput) => void;
   guideReturn?: string | undefined;
+  partControl?: (part: SnakInput, change: (value: SnakInput['value']) => void) => ReactNode;
+  valueControl?: ReactNode;
   heading?: 'h2' | 'h4';
 }) {
   const o = { locale: locale as never };
@@ -377,13 +394,15 @@ export function StatementFields({
         {definition?.descriptions && (
           <p className="text-sm text-muted-foreground">{pageText(definition.descriptions, locale).text}</p>
         )}
-        <ScalarControl
-          part={draft}
-          definition={definition}
-          read={current}
-          locale={locale}
-          onChange={(value) => change({ ...draft, value })}
-        />
+        {valueControl ?? (
+          <ScalarControl
+            part={draft}
+            definition={definition}
+            read={current}
+            locale={locale}
+            onChange={(value) => change({ ...draft, value })}
+          />
+        )}
         <p className="text-sm text-muted-foreground">
           {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
         </p>
@@ -392,6 +411,7 @@ export function StatementFields({
         <Heading className="font-semibold">{m.correction_qualifiers({}, o)}</Heading>
         {(draft.qualifiers ?? []).map((part, index) => (
           <PartEditor
+            control={partControl}
             key={index}
             part={part}
             read={current}
@@ -405,6 +425,7 @@ export function StatementFields({
           />
         ))}
         <AddPart
+          allowItems={!!partControl}
           ids={definition?.qualifiers ?? []}
           read={current}
           locale={locale}
@@ -427,6 +448,7 @@ export function StatementFields({
             </legend>
             {reference.parts.map((part, partIndex) => (
               <PartEditor
+                control={partControl}
                 key={partIndex}
                 part={part}
                 read={current}
@@ -444,6 +466,7 @@ export function StatementFields({
               />
             ))}
             <AddPart
+              allowItems={!!partControl}
               ids={Object.keys(current.release.properties)}
               read={current}
               locale={locale}

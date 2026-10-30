@@ -2800,5 +2800,15 @@
   "creator_sales_empty": "Noch keine Verkäufe erfasst",
   "creator_sales_empty_hint": "Hier erscheinen nur erfasste Käufe. Honorarabrechnungen enthalten gesonderte Buchhaltungsdaten und externe Zahlungsbelege.",
   "creator_sales_pagination": "Seiten des Verkaufsverlaufs",
-  "creator_sales_next": "Ältere Verkäufe"
+  "creator_sales_next": "Ältere Verkäufe",
+  "game_profile_title": "Spiel- und Visual-Novel-Werke bearbeiten",
+  "game_profile_credits": "Urheber und Mitwirkende",
+  "game_profile_classification": "Plattformen und Klassifikationen",
+  "game_profile_relations": "Verwandte Werke und Veröffentlichungen",
+  "game_profile_facts": "Werkdaten und Kennungen",
+  "game_profile_initial": "Anfängliche Angaben",
+  "game_profile_optional": "Nur bekannte Fakten hinzufügen. Ausgelassene Felder bleiben unbekannt. Qualifikatoren und Belege jeder Aussage zusammenhalten.",
+  "game_profile_grain": "Das tatsächliche Werk, eine eigenständig referenzierbare Erweiterung oder eine Softwareveröffentlichung wählen. Plattformen und Sprachen erzeugen keine Veröffentlichungen.",
+  "game_profile_terms_help": "Namen und Beschreibungen werden im Namenseditor bearbeitet. Dort wird die aktuelle native Verfügbarkeit angezeigt. Aussagevorschläge ändern keine Namenszuordnungen.",
+  "game_profile_support": "Nur Felder des aktuell veröffentlichten Typs werden angeboten. Softwareveröffentlichungen sind eigene Einträge. Fehlende Felder werden hier nicht unterstützt."
 }

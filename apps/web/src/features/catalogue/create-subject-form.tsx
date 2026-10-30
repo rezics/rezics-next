@@ -8,6 +8,10 @@ import { useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { GameProfileEntry } from './game-profile-entry';
+import type { ReactNode } from 'react';
+import type { InitialSubject } from './create-subject';
+import type { Violation } from '@rezics/definitions/validate';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
 import {
@@ -28,7 +32,16 @@ export function CreateSubjectForm({
   session,
   transport,
   onNavigate,
+  profile,
 }: {
+  profile?: {
+    title: string;
+    scope: string;
+    labelLanguage?: (type: string) => string | undefined;
+    descriptionLanguage?: (type: string) => string | undefined;
+    fields: (type: string, disabled: boolean) => ReactNode;
+    prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
+  };
   locale: string;
   session: Session;
   transport: CreateTransport;
@@ -37,6 +50,7 @@ export function CreateSubjectForm({
   const options = { locale: locale as never };
   const client = useQueryClient();
   const queryKey = ['catalogue-create', 'definitions', locale];
+  if (profile) queryKey.push(profile.scope);
   // Definitions and the route's session read start independently.
   const definitions = useQuery({ queryKey, queryFn: () => transport.definitions(), retry: false });
   const [type, setType] = useState('');
@@ -45,9 +59,11 @@ export function CreateSubjectForm({
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
   const running = useRef(false);
+  const unresolvedProfile = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
   const types = definitions.data?.ok ? definitions.data.types : [];
-  const uncertain = failure?.reason === 'unavailable' && request.current !== null;
+  const uncertain =
+    (failure?.reason === 'unavailable' && request.current !== null) || (!!profile && unresolvedProfile.current);
   const locked = busy || uncertain || failure?.reason === 'conflict';
   const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
@@ -80,6 +96,11 @@ export function CreateSubjectForm({
     if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict') return;
     if (!request.current) {
       const draft = initialTerms(type, rows);
+      if (profile) {
+        const prepared = profile.prepare(draft.item);
+        draft.item = prepared.item;
+        draft.errors.push(...prepared.errors);
+      }
       if (!types.some((entry) => entry.id === type)) draft.errors.push({ pointer: '/type', code: 'unsupported' });
       if (draft.errors.length) {
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
@@ -97,14 +118,17 @@ export function CreateSubjectForm({
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         setFailure(result);
+        if (profile && result.reason === 'unavailable') unresolvedProfile.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
-        if (result.reason !== 'unavailable' && result.reason !== 'conflict') request.current = null;
+        if (!unresolvedProfile.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
+          request.current = null;
         if (result.refreshDefinitions) {
           const refreshed = await transport.definitions(true).catch(() => ({ ok: false as const }));
           client.setQueryData(queryKey, refreshed);
         }
       }
     } catch {
+      if (profile) unresolvedProfile.current = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       running.current = false;
@@ -131,7 +155,11 @@ export function CreateSubjectForm({
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 text-foreground">
       <header className="space-y-3">
-        <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
+        {profile ? (
+          <PageHeading>{profile.title}</PageHeading>
+        ) : (
+          <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
+        )}
         <p className="text-muted-foreground">{m.catalogue_create_intro({}, options)}</p>
       </header>
       <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
@@ -194,8 +222,9 @@ export function CreateSubjectForm({
               </Button>
             </div>
           )}
-          <RecipeEditorEntry locale={locale} />
-          <CharacterProfileEntry locale={locale} />
+          {!profile && <GameProfileEntry locale={locale} />}
+          {!profile && <RecipeEditorEntry locale={locale} />}
+          {!profile && <CharacterProfileEntry locale={locale} />}
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
@@ -219,13 +248,13 @@ export function CreateSubjectForm({
                     </NativeSelectOption>
                   )}
                   {types.map((entry) => (
-                    <NativeSelectOption key={entry.id} value={entry.id}>
+                    <NativeSelectOption key={entry.id} value={entry.id} lang={profile?.labelLanguage?.(entry.id)}>
                       {entry.label}
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
                 <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
-                <FieldDescription id="create-type-help">
+                <FieldDescription id="create-type-help" lang={profile?.descriptionLanguage?.(type)}>
                   {types.find((entry) => entry.id === type)?.description}
                 </FieldDescription>
                 <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/new` }} />
@@ -307,6 +336,7 @@ export function CreateSubjectForm({
               >
                 {m.catalogue_create_add_language({}, options)}
               </Button>
+              {profile?.fields(type, disabled)}
               {failure && (
                 <div role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
                   <p>
@@ -348,7 +378,7 @@ export function CreateSubjectForm({
                     </ul>
                   )}
                   {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, options)}</p>}
-                  {failure.reason === 'conflict' && (
+                  {failure.reason === 'conflict' && !unresolvedProfile.current && (
                     <Button
                       type="button"
                       variant="outline"

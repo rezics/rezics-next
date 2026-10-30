@@ -1,0 +1,279 @@
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { pickText } from '@rezics/composition';
+import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { m } from '../../paraglide/messages.js';
+import { subjectHref } from '../../subject/subject-href';
+import type { CandidateTransport } from '../../subject/candidate-review';
+import { relationFields, type RelationTransport } from '../../subject/relation-candidates';
+import { ViewHeading } from '../pages/view-heading';
+import { CreateSubjectForm } from './create-subject-form';
+import type { CreatedReader, CreateResult } from './create-subject';
+import { SubjectTermsEntry } from './subject-terms-entry';
+import { PublicationEditorEntry } from './publication-editor-entry';
+import { AuthoredFieldEntry } from './authored-field-entry';
+import { SubjectFacts } from './subject-facts-view';
+import type { FactsTransport } from './subject-facts';
+import { RelationEditor } from './relation-editor';
+import { DefinitionGuideLink } from './definition-guide-view';
+import { EditorFailure, PartValue } from './statement-editor-view';
+import type { StatementInput } from './statement-editor';
+import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
+import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
+
+export type GameProfileTransport = {
+  load: () => Promise<GameRead>;
+  create: (command: GameCommand) => Promise<CreateResult>;
+  read: (id: string) => Promise<CreatedReader>;
+  facts: FactsTransport;
+  classifications: FactsTransport;
+  relations: RelationTransport;
+  review: (property: string, session?: string) => CandidateTransport;
+  classificationReview: (property: string, session?: string) => CandidateTransport;
+};
+export function GameProfile({
+  id,
+  locale,
+  session,
+  transport,
+  search,
+  onNavigate,
+}: {
+  id?: string;
+  locale: string;
+  session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  transport: GameProfileTransport;
+  search: EntityPickerSearch;
+  onNavigate: (href: string) => void;
+}) {
+  const query = useQuery({ queryKey: ['game-profile', id ?? 'new', locale], queryFn: transport.load, retry: false });
+  const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
+  const o = { locale: locale as never };
+  const read = query.data;
+  if (!read || !read.ok)
+    return (
+      <article className="mx-auto max-w-4xl space-y-5">
+        <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+        {query.isPending ? (
+          <p role="status">{m.catalogue_create_loading({}, o)}</p>
+        ) : (
+          <>
+            <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
+            <Button onClick={() => void query.refetch()}>{m.correction_reload({}, o)}</Button>
+          </>
+        )}
+      </article>
+    );
+  if (!id)
+    return (
+      <div className="space-y-6">
+        <p className="mx-auto max-w-3xl text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+        <CreateSubjectForm
+          locale={locale}
+          session={session}
+          onNavigate={onNavigate}
+          profile={{
+            title: m.game_profile_title({}, o),
+            scope: 'game',
+            labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
+            descriptionLanguage: (type) =>
+              pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
+            prepare: (initial) =>
+              gameDraft(
+                read.release,
+                initial,
+                (drafts[initial.type] ?? []).map((row) => row.statement),
+              ),
+            fields: (type, disabled) => (
+              <GameInitialFacts
+                key={type}
+                type={type}
+                release={read.release}
+                locale={locale}
+                search={search}
+                statements={drafts[type] ?? []}
+                disabled={disabled}
+                change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
+              />
+            ),
+          }}
+          transport={{
+            definitions: async (refresh) => {
+              const current = refresh ? (await query.refetch()).data : read;
+              return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
+            },
+            submit: (command) => {
+              // The common form seals the augmented native ItemInput and its key before the first request.
+              const item = command.item as GameCommand['item'];
+              return transport.create({ item, key: command.key });
+            },
+            read: transport.read,
+          }}
+        />
+      </div>
+    );
+  if (!read.public) return <EditorFailure reason="unavailable" locale={locale} />;
+  return (
+    <GameCorrection
+      read={{ ...read, public: read.public }}
+      locale={locale}
+      session={session}
+      transport={transport}
+      search={search}
+      refresh={() => query.refetch().then(() => undefined)}
+    />
+  );
+}
+function GameCorrection({
+  read,
+  locale,
+  session,
+  transport,
+  search,
+  refresh,
+}: {
+  refresh: () => Promise<void>;
+  read: Extract<GameRead, { ok: true }> & { public: NonNullable<Extract<GameRead, { ok: true }>['public']> };
+  locale: string;
+  session: string;
+  transport: GameProfileTransport;
+  search: EntityPickerSearch;
+}) {
+  const o = { locale: locale as never };
+  const subject = read.public.subject;
+  const title = pickText(subject.labels, locale);
+  const type = pickText(read.release.types[subject.type]!.labels, locale);
+  const href = subjectHref({ id: subject.id, label: title.text }, locale).href;
+  const groups = gameGroups(read.release, subject.type);
+  const fields = useMemo(
+    () => relationFields(read.release, subject.type, locale),
+    [read.release, subject.type, locale],
+  );
+  const relationRead = useMemo(
+    () => ({
+      ok: true as const,
+      public: read.public,
+      fields,
+      page: null,
+      names: Object.fromEntries(Object.entries(read.release.properties).map(([id, field]) => [id, field.labels])),
+    }),
+    [read.public, read.release, fields],
+  );
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-8">
+      <header className="space-y-4">
+        <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
+        <a className="font-serif text-xl underline" lang={title.lang ?? undefined} href={href}>
+          {title.text || m.subject_value_unlabelled({}, o)}
+        </a>
+        <p lang={type.lang ?? undefined}>{type.text}</p>
+        <p className="break-all font-mono text-xs text-muted-foreground">
+          {subject.id} · {subject.type}
+        </p>
+        <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
+        <nav className="flex flex-wrap gap-2" aria-label={m.facts_other_editors({}, o)}>
+          <a className={buttonVariants({ variant: 'outline' })} href={href}>
+            {m.candidate_view_public({}, o)}
+          </a>
+          <SubjectTermsEntry id={subject.id} label={title.text} locale={locale} />
+          {read.release.types[subject.type]!.properties.some(
+            (id) => read.release.properties[id]?.datatype === 'document',
+          ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
+          {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
+          <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
+          <Button type="button" variant="outline" onClick={() => void refresh()}>
+            {m.correction_reload({}, o)}
+          </Button>
+        </nav>
+        <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
+        <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
+      </header>
+      {Object.entries(groups)
+        .filter(([, ids]) => ids.length)
+        .map(([group, ids]) => (
+          <section key={group} className="space-y-4">
+            <h2 className="font-sans text-xl font-semibold">{gameGroupLabel(group, locale)}</h2>
+            <dl className="divide-y divide-border rounded-xl border border-border bg-card px-4">
+              {ids.map((property) => {
+                const label = pickText(read.release.properties[property]!.labels, locale);
+                return (
+                  <div key={property} className="grid min-w-0 gap-2 py-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                    <dt className="text-sm font-medium" lang={label.lang ?? undefined}>
+                      {label.text}
+                    </dt>
+                    <dd className="min-w-0 space-y-3 break-words">
+                      {!subject.statements[property]?.length && (
+                        <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
+                      )}
+                      {(subject.statements[property] ?? []).map((statement) => (
+                        <div key={statement.id} className="space-y-1">
+                          <PartValue part={statement} read={read} locale={locale} />
+                          {statement.qualifiers.map((part, i) => (
+                            <div key={i} className="text-sm">
+                              <span>
+                                {pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}:{' '}
+                              </span>
+                              <PartValue part={part} read={read} locale={locale} />
+                            </div>
+                          ))}
+                          {statement.references.map((reference, i) => (
+                            <div key={i} className="border-s-2 ps-3 text-sm">
+                              {reference.parts.map((part, j) => (
+                                <PartValue key={j} part={part} read={read} locale={locale} />
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </section>
+        ))}
+      {session !== 'signed-in' ? (
+        <p role="status">{session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}</p>
+      ) : (
+        <>
+          <details className="rounded-xl border border-border p-4">
+            <summary className="cursor-pointer font-sans font-semibold">{m.game_profile_facts({}, o)}</summary>
+            <SubjectFacts
+              initial={{ ...read, source: null }}
+              locale={locale}
+              transport={transport.facts}
+              review={transport.review}
+            />
+          </details>
+          {!!groups.classification.length && (
+            <details className="space-y-4 rounded-xl border border-border p-4">
+              <summary className="cursor-pointer font-sans font-semibold">
+                {m.game_profile_classification({}, o)}
+              </summary>
+              <GameClassifications
+                read={read}
+                locale={locale}
+                search={search}
+                transport={transport.classifications}
+                review={transport.classificationReview}
+              />
+            </details>
+          )}
+          {!!fields.length && (
+            <details className="rounded-xl border border-border p-4">
+              <summary className="cursor-pointer font-sans font-semibold">{m.game_profile_relations({}, o)}</summary>
+              <RelationEditor
+                id={subject.id}
+                locale={locale}
+                initial={relationRead}
+                search={search}
+                transport={transport.relations}
+              />
+            </details>
+          )}
+        </>
+      )}
+    </article>
+  );
+}

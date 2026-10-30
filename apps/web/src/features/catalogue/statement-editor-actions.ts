@@ -94,7 +94,13 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     const locale = requestLocale() ?? 'en';
     return {
       ...result,
-      fields: [{ id: data.property, label: pickText(form.release.properties[data.property]!.labels, locale).text }],
+      fields: [
+        {
+          id: data.property,
+          label: pickText(form.release.properties[data.property]!.labels, locale).text,
+          multivalued: form.release.properties[data.property]!.multivalued,
+        },
+      ],
       names: Object.fromEntries(Object.entries(form.release.properties).map(([id, property]) => [id, property.labels])),
     };
   });
@@ -109,11 +115,29 @@ export const confirmCorrection = createServerFn({ method: 'POST', strict: false 
       !uuid.test(input.candidate) ||
       typeof input.key !== 'string' ||
       !uuid.test(input.key) ||
-      (input.operation !== 'accept' && input.operation !== 'adopt') ||
+      (input.operation !== 'accept' && input.operation !== 'adopt' && input.operation !== 'reject') ||
       (input.head !== null && (!Number.isSafeInteger(input.head) || Number(input.head) < 1)) ||
       (input.session !== undefined && (typeof input.session !== 'string' || input.session.length > 16384))
     )
       throw new Error('Invalid correction confirmation');
+    // The shared review edits the whole selected set; dropping it would silently clear other languages/values.
+    let selection: CandidateCommand['selection'];
+    if (input.selection !== undefined) {
+      if (!Array.isArray(input.selection) || input.selection.length > 32) throw new Error('Invalid selection');
+      selection = input.selection.map((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') throw new Error('Invalid selection');
+        const item = entry as Record<string, unknown>;
+        if (
+          typeof item.candidate !== 'string' ||
+          !uuid.test(item.candidate) ||
+          (item.rank !== 'normal' && item.rank !== 'preferred')
+        )
+          throw new Error('Invalid selection');
+        return { candidate: item.candidate, rank: item.rank };
+      });
+      if (new Set(selection.map((entry) => entry.candidate)).size !== selection.length)
+        throw new Error('Invalid selection');
+    }
     return {
       id: address.id,
       property: address.property,
@@ -122,6 +146,7 @@ export const confirmCorrection = createServerFn({ method: 'POST', strict: false 
       operation: input.operation,
       head: input.head as number | null,
       ...(typeof input.session === 'string' ? { session: input.session } : {}),
+      ...(selection ? { selection } : {}),
     };
   })
   .handler(async ({ data }): Promise<CandidateResult> => {

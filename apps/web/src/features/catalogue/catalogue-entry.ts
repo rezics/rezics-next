@@ -1,5 +1,6 @@
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
+import { gameTypes } from './game-profile';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -39,6 +40,21 @@ export const catalogueEntries = {
     label: id ? m.recipe_edit({}, options(locale)) : m.recipe_title({}, options(locale)),
     href: id ? `${subject({ id, label: label ?? '', locale })}/recipe` : `/${locale}/catalogue/recipe`,
   }),
+  gameProfile: ({
+    id,
+    type,
+    label = '',
+    locale,
+  }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
+    | CatalogueEntry
+    | undefined => {
+    if (id && !gameTypes.includes(type as (typeof gameTypes)[number])) return undefined;
+    return {
+      group: id ? 'edit' : 'create',
+      label: m.game_profile_title({}, options(locale)),
+      href: id ? `${subject({ id, label, locale })}/game` : `/${locale}/catalogue/game`,
+    };
+  },
   publication: ({ work, locale }: Locale & { work: string }): CatalogueEntry => ({
     group: 'create',
     label: m.publication_add({}, options(locale)),

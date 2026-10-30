@@ -1,3 +1,4 @@
+import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
@@ -389,6 +390,12 @@ export function SubjectPage({
           realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
         >
           {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
+          <GameProfileEntry
+            id={read.subject.id}
+            type={read.subject.type}
+            label={subjectPageTitle(page, locale)}
+            locale={locale}
+          />
           <CreateSubjectEntry locale={locale} />
           {read.subject.type === 'wd:Q95074' && (
             <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />

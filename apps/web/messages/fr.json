@@ -2800,5 +2800,15 @@
   "creator_sales_empty": "Aucune vente enregistrée pour le moment",
   "creator_sales_empty_hint": "Seuls les achats enregistrés apparaissent ici. Les relevés de redevances fournissent séparément les données comptables et les paiements externes.",
   "creator_sales_pagination": "Pages de l’historique des ventes",
-  "creator_sales_next": "Ventes plus anciennes"
+  "creator_sales_next": "Ventes plus anciennes",
+  "game_profile_title": "Modifier un jeu ou un visual novel",
+  "game_profile_credits": "Créateurs et crédits",
+  "game_profile_classification": "Plateformes et classifications",
+  "game_profile_relations": "Œuvres et versions liées",
+  "game_profile_facts": "Informations et identifiants",
+  "game_profile_initial": "Informations initiales",
+  "game_profile_optional": "Ajoutez uniquement des faits connus. Les champs omis restent inconnus. Conservez ensemble les qualificatifs et les preuves de chaque déclaration.",
+  "game_profile_grain": "Choisissez l’œuvre réelle, une extension identifiable séparément ou une version logicielle. Les plateformes et les langues ne créent jamais de versions automatiquement.",
+  "game_profile_terms_help": "Utilisez l’éditeur de noms pour les noms et descriptions. Il indique la disponibilité native actuelle. Une proposition ne modifie pas les noms.",
+  "game_profile_support": "Seuls les champs du type actuellement publié sont proposés. Les versions logicielles sont des sujets distincts. Un champ absent n’est pas pris en charge ici."
 }

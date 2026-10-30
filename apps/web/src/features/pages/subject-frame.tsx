@@ -1,3 +1,4 @@
+import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
@@ -263,6 +264,7 @@ export function SubjectFrame({
         <div data-slot="actions">
           <EditorialEntry id={frame.id} label={title} locale={locale} context={context ?? frame.context} realm={realm}>
             {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
+            <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
             <CreateSubjectEntry locale={locale} />
             {frame.type === 'wd:Q95074' && <CharacterProfileEntry id={frame.id} label={title} locale={locale} />}
             {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (

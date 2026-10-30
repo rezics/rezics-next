@@ -2801,5 +2801,15 @@
   "creator_sales_empty": "暂无销售记录",
   "creator_sales_empty_hint": "这里只显示已记录的购买。版税报表另行提供会计数据与外部付款记录。",
   "creator_sales_pagination": "销售记录分页",
-  "creator_sales_next": "更早的销售记录"
+  "creator_sales_next": "更早的销售记录",
+  "game_profile_title": "游戏与视觉小说作品编辑",
+  "game_profile_credits": "创作者与职员",
+  "game_profile_classification": "平台与分类",
+  "game_profile_relations": "相关作品与发行版本",
+  "game_profile_facts": "作品事实与标识符",
+  "game_profile_initial": "初始事实",
+  "game_profile_optional": "仅添加你确知的事实。未填字段保持未知。请将每条陈述的限定符与证据保留在一起。",
+  "game_profile_grain": "选择实际作品、可独立指称的扩展作品或软件发行版本。平台与语言不会自动生成发行版本。",
+  "game_profile_terms_help": "名称与描述使用名称编辑器，并以其中显示的原生接口可用状态为准。陈述提案不会更改名称映射。",
+  "game_profile_support": "仅提供当前已发布类型实际包含的字段。软件发行版本是独立条目。缺失字段在此不受支持。"
 }

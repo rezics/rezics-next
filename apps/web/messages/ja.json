@@ -2800,5 +2800,15 @@
   "creator_sales_empty": "販売記録はまだありません",
   "creator_sales_empty_hint": "記録された購入のみを表示します。会計情報と外部支払いの記録はロイヤリティ明細で別途確認できます。",
   "creator_sales_pagination": "販売履歴のページ",
-  "creator_sales_next": "以前の販売"
+  "creator_sales_next": "以前の販売",
+  "game_profile_title": "ゲーム・ビジュアルノベル作品の編集",
+  "game_profile_credits": "制作者とクレジット",
+  "game_profile_classification": "プラットフォームと分類",
+  "game_profile_relations": "関連作品とリリース",
+  "game_profile_facts": "作品の情報と識別子",
+  "game_profile_initial": "初期情報",
+  "game_profile_optional": "確かな情報だけを追加してください。省略した項目は不明のままです。各記述の修飾子と根拠をまとめて保持します。",
+  "game_profile_grain": "実際の作品、独立して参照できる追加作品、またはソフトウェアリリースを選択してください。プラットフォームと言語からリリースを自動生成しません。",
+  "game_profile_terms_help": "名称と説明には名称エディターを使います。現在のネイティブ機能の利用可否はそこで確認できます。記述の提案は名称マップを変更しません。",
+  "game_profile_support": "現在公開されている型に含まれる項目のみを表示します。ソフトウェアリリースは別の項目です。表示されない項目はここでは未対応です。"
 }

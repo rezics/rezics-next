@@ -5,6 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { CreateSubjectEntry } from './create-subject-entry';
+import { GameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
@@ -36,6 +37,11 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       const nested = collectEditorialEntries(node.props.children);
       entries.push(...nested.entries);
       retained.push(...nested.retained);
+      return;
+    }
+    if (isValidElement<Parameters<typeof GameProfileEntry>[0]>(node) && node.type === GameProfileEntry) {
+      const entry = catalogueEntries.gameProfile(node.props);
+      if (entry) entries.push(entry);
       return;
     }
     const entry =

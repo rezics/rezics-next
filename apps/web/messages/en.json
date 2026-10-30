@@ -3109,5 +3109,15 @@
   "creator_sales_empty": "No sales recorded yet",
   "creator_sales_empty_hint": "Only recorded purchases appear here. Royalty statements provide separate accounting and external payment records.",
   "creator_sales_pagination": "Sales history pages",
-  "creator_sales_next": "Older sales"
+  "creator_sales_next": "Older sales",
+  "game_profile_title": "Game and visual-novel work editor",
+  "game_profile_credits": "Creators and credits",
+  "game_profile_classification": "Platforms and classifications",
+  "game_profile_relations": "Related works and releases",
+  "game_profile_facts": "Work facts and identifiers",
+  "game_profile_initial": "Initial facts",
+  "game_profile_optional": "Add only facts you know. Omitted fields remain unknown. Keep each statement’s qualifiers and evidence together.",
+  "game_profile_grain": "Choose the actual work, independently referable add-on or software release. Platforms and languages never create releases automatically.",
+  "game_profile_terms_help": "Names and descriptions use the terms editor. Its current native availability is shown there; a statement proposal does not change title maps.",
+  "game_profile_support": "Only fields in the current emitted Type are offered. Software releases are separate subjects. A missing field is unsupported here."
 }

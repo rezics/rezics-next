@@ -2800,5 +2800,15 @@
   "creator_sales_empty": "尚無銷售紀錄",
   "creator_sales_empty_hint": "這裡只顯示已記錄的購買。版稅報表另行提供會計資料與外部付款紀錄。",
   "creator_sales_pagination": "銷售紀錄分頁",
-  "creator_sales_next": "較早的銷售紀錄"
+  "creator_sales_next": "較早的銷售紀錄",
+  "game_profile_title": "遊戲與視覺小說作品編輯",
+  "game_profile_credits": "創作者與職員",
+  "game_profile_classification": "平台與分類",
+  "game_profile_relations": "相關作品與發行版本",
+  "game_profile_facts": "作品事實與識別碼",
+  "game_profile_initial": "初始事實",
+  "game_profile_optional": "僅新增你確知的事實。未填欄位維持未知。請將每條陳述的限定符與證據保留在一起。",
+  "game_profile_grain": "選擇實際作品、可獨立指稱的擴充作品或軟體發行版本。平台與語言不會自動產生發行版本。",
+  "game_profile_terms_help": "名稱與描述使用名稱編輯器，並以其中顯示的原生介面可用狀態為準。陳述提案不會變更名稱對照。",
+  "game_profile_support": "僅提供目前已發布類型實際包含的欄位。軟體發行版本是獨立條目。缺失欄位在此不受支援。"
 }
