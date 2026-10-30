@@ -356,7 +356,7 @@ export async function runJourney() {
       const before = inspect(source),
         target = before.records[0]!;
       expect(before.source.count).toBe(5);
-      const returnedExternalId = target.owner.external_id;
+      const returnedExternalId = target.state.baseline!.recordKey;
       const originalSubjectId = await nativeClaim(source, returnedExternalId);
       expect(target.claim).toEqual({ state: 'bound', subject: originalSubjectId });
       expect(target.bootstrap).not.toBeNull();
@@ -540,7 +540,7 @@ export async function runJourney() {
         if (i > 0) expect(final.records[i]).toEqual(before.records[i]);
       }
       sources.push({
-        source,
+        source: target.state.baseline!.source,
         initial,
         removed,
         returned,

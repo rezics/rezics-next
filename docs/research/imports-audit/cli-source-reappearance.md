@@ -46,6 +46,13 @@ proof only; they do not replace the ordinary native CLI acceptance.
 
 ## Execution
 
+Local edited-file formatting and `node_modules/.bin/bun check --no-script -p services/importer/tsconfig.json`
+passed (147 files). `node_modules/.bin/bun test services/importer/tests/cli-source-reappearance.test.ts` passed
+all four named provider cases, 212 assertions, zero skips/todos, on Bun `a0cc096ce`. Initial local fixture mistakes
+used public camel-case fence names at the coordinator boundary and omitted Open Library last-modified metadata;
+correcting those inputs preserved the assertions. Independent risk review corrected the Open Library title
+language expectation to the converter's actual `und`, and found no remaining concrete blocking issue.
+
 Implementation and binding are present. Managed native execution is pending; no native pass, promotion or
 main-branch closure is claimed here. The managed log will contain `CLI source reappearance evidence` with actual
 source rows, bootstrap bytes/keys, original and removal receipt anchors, returned candidate IDs and provenance,
