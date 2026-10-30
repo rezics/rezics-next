@@ -78,6 +78,15 @@ export type PrincipalCommandOptions = PrincipalCommandIdentity & {
     /** Trusted service configuration only, never a request timestamp. */
     clock?: (() => Date) | undefined;
 };
+/** Union-valued callers may assemble these fields separately; normalization
+ * checks their correlation before acquiring a connection or reading a receipt. */
+type PrincipalCommandInput = Omit<PrincipalCommandOptions, 'principal' | 'basis'> & {
+    principal: Readonly<CommandPrincipal>;
+    basis: Readonly<{
+        clientId: string | null;
+        requestedBy: string | null;
+    }>;
+};
 export type CommandReceipt = {
     actorAccountId: string;
     kind: string;
@@ -193,4 +202,4 @@ type LegacyCommandOptions = {
     clock?: (() => Date) | undefined;
 };
 export declare function runCommand<T>(pool: Pool, options: LegacyCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
-export declare function runCommand<T>(pool: Pool, options: PrincipalCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
+export declare function runCommand<T>(pool: Pool, options: PrincipalCommandInput, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;

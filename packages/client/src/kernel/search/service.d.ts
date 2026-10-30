@@ -27,7 +27,7 @@ type Result = {
 export declare function validateSearchLimit(value: unknown): number;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;

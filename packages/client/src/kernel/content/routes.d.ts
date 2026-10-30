@@ -5252,19 +5252,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     headers: unknown;
                     response: {
                         200: {
-                            report: Readonly<{
-                                id: import("./model.ts").ReportId;
-                                partition: number;
-                                target: import("./reports.ts").ReportTarget;
-                                revisionId: import("./model.ts").RevisionId | null;
-                                reason: string;
-                                evidence: string | null;
-                                createdAt: string;
-                                outcome: 'actioned' | 'dismissed' | null;
-                                resolvedAt: string | null;
-                                transactionId: string;
-                                reporterId: string | null;
-                            }>;
+                            report: import("./reports.ts").ReportReadView;
                         };
                         400: {
                             type: unknown;

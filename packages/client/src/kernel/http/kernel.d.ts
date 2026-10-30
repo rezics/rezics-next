@@ -32,6 +32,8 @@ import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
+    /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
+    receiptKeys?: KeyRing;
     /** Trusted modules mount declarations before composition validation. */
     modules?: readonly ((app: ReturnType<typeof createApp>) => void)[];
     viewerActionResources?: ViewerActionResources;

@@ -3,6 +3,7 @@ import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { type Notifications } from './notification-kinds.ts';
 import { type Access, type AccessRealmRoleReader } from '../request/access.ts';
+import { type EditableAccountProfile } from './account-edit-profile.ts';
 import { type PublicIdentity, type PublicHandleIdentity, type PublicAccountProfile } from './account-data.ts';
 import { type GrantReadPage } from './grant-read.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
@@ -3919,6 +3920,85 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                     };
                 };
                 error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        accounts: {
+            ":accountId": {
+                profile: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            accountId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                profile: EditableAccountProfile;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
             };
         };
     };

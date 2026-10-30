@@ -7568,6 +7568,809 @@
         }
       }
     },
+    "/v1/accounts/{accountId}/profile": {
+      "get": {
+        "operationId": "account.read_editable_profile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "profile": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "avatar": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "credit": {
+                                  "type": "null"
+                                },
+                                "focalPoint": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "x": {
+                                      "maximum": 1,
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "maximum": 1,
+                                      "minimum": 0,
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "x",
+                                    "y"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "height": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "media": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "placeholder": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "color": {
+                                      "type": "string"
+                                    },
+                                    "thumbhash": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "thumbhash",
+                                    "color"
+                                  ],
+                                  "type": "object"
+                                },
+                                "variants": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "format": {
+                                        "enum": [
+                                          "avif",
+                                          "webp"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "format",
+                                      "width"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "width": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "media",
+                                "width",
+                                "height",
+                                "placeholder",
+                                "variants",
+                                "focalPoint",
+                                "credit"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "bio": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "displayName": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "handle": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "actor",
+                              "type": "string"
+                            },
+                            "links": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "label": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "url"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 5,
+                              "type": "array"
+                            },
+                            "publicViews": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "collections": {
+                                  "type": "boolean"
+                                },
+                                "posts": {
+                                  "type": "boolean"
+                                },
+                                "realms": {
+                                  "type": "boolean"
+                                },
+                                "reviews": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "posts",
+                                "reviews",
+                                "collections",
+                                "realms"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "handle",
+                            "displayName",
+                            "bio",
+                            "links",
+                            "avatar",
+                            "publicViews",
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "avatar": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "credit": {
+                                  "type": "null"
+                                },
+                                "focalPoint": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "x": {
+                                      "maximum": 1,
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "maximum": 1,
+                                      "minimum": 0,
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "x",
+                                    "y"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "height": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "media": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "placeholder": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "color": {
+                                      "type": "string"
+                                    },
+                                    "thumbhash": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "thumbhash",
+                                    "color"
+                                  ],
+                                  "type": "object"
+                                },
+                                "variants": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "format": {
+                                        "enum": [
+                                          "avif",
+                                          "webp"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "width": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "format",
+                                      "width"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "width": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "media",
+                                "width",
+                                "height",
+                                "placeholder",
+                                "variants",
+                                "focalPoint",
+                                "credit"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "bio": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "displayName": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "handle": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "organization",
+                              "type": "string"
+                            },
+                            "links": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "label": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "maxLength": 2048,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "url"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 5,
+                              "type": "array"
+                            },
+                            "publicViews": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "collections": {
+                                  "type": "boolean"
+                                },
+                                "posts": {
+                                  "type": "boolean"
+                                },
+                                "realms": {
+                                  "type": "boolean"
+                                },
+                                "reviews": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "posts",
+                                "reviews",
+                                "collections",
+                                "realms"
+                              ],
+                              "type": "object"
+                            },
+                            "speakersListed": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "handle",
+                            "displayName",
+                            "bio",
+                            "links",
+                            "avatar",
+                            "publicViews",
+                            "kind",
+                            "speakersListed"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "profile"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "invalid_request",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Invalid Request",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/invalid_request",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden",
+                        "platform_closed"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Forbidden",
+                        "Platform Closed"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/forbidden",
+                        "https://rezics.com/problems/platform_closed"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden; Platform closed"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "overloaded",
+                        "deadline_exceeded",
+                        "partition_unavailable",
+                        "transaction_retry_exhausted"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        true,
+                        true,
+                        true,
+                        true
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Service Overloaded",
+                        "Deadline Exceeded",
+                        "Partition Unavailable",
+                        "Transaction Retry Exhausted"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/overloaded",
+                        "https://rezics.com/problems/deadline_exceeded",
+                        "https://rezics.com/problems/partition_unavailable",
+                        "https://rezics.com/problems/transaction_retry_exhausted"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Overloaded; Deadline exceeded; Partition unavailable; Transaction retry exhausted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-action": "account:update",
+        "x-exposure": "public"
+      }
+    },
     "/v1/accounts/{accountId}/realms": {
       "get": {
         "operationId": "account.list_realms",
@@ -134040,7 +134843,7 @@
     },
     "/v1/reports/{id}": {
       "get": {
-        "description": "A reporter reads their own report through account:read. Moderators retain report inspection through moderation:read_reports.",
+        "description": "A reporter reads their submitted target/revision, reason/evidence, identity, times and outcome through account:read, with output-only current targetAvailability and no target content. Moderators retain report inspection through moderation:read_reports.",
         "operationId": "report.get",
         "parameters": [
           {
@@ -134060,115 +134863,224 @@
                   "additionalProperties": false,
                   "properties": {
                     "report": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "createdAt": {
-                          "format": "date-time",
-                          "type": "string"
-                        },
-                        "evidence": {
-                          "maxLength": 4096,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "id": {
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-                          "type": "string"
-                        },
-                        "outcome": {
-                          "anyOf": [
-                            {
-                              "const": "actioned",
-                              "type": "string"
-                            },
-                            {
-                              "const": "dismissed",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "partition": {
-                          "maximum": 4095,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        "reason": {
-                          "enum": [
-                            "off_topic",
-                            "inappropriate",
-                            "spam",
-                            "illegal",
-                            "other"
-                          ],
-                          "type": "string"
-                        },
-                        "reporterId": {
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "resolvedAt": {
-                          "format": "date-time",
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "revisionId": {
-                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "target": {
+                      "anyOf": [
+                        {
                           "additionalProperties": false,
                           "properties": {
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "evidence": {
+                              "maxLength": 4096,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "id": {
                               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                               "type": "string"
                             },
-                            "kind": {
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "const": "actioned",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "dismissed",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
                               "enum": [
-                                "board",
-                                "thread",
-                                "post"
+                                "off_topic",
+                                "inappropriate",
+                                "spam",
+                                "illegal",
+                                "other"
+                              ],
+                              "type": "string"
+                            },
+                            "reporterId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "resolvedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "target": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "enum": [
+                                    "board",
+                                    "thread",
+                                    "post"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id"
+                              ],
+                              "type": "object"
+                            },
+                            "targetAvailability": {
+                              "enum": [
+                                "available",
+                                "unavailable"
                               ],
                               "type": "string"
                             }
                           },
                           "required": [
-                            "kind",
-                            "id"
+                            "id",
+                            "target",
+                            "revisionId",
+                            "reason",
+                            "evidence",
+                            "reporterId",
+                            "outcome",
+                            "resolvedAt",
+                            "createdAt",
+                            "targetAvailability"
                           ],
                           "type": "object"
                         },
-                        "transactionId": {
-                          "format": "uuid",
-                          "type": "string"
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "evidence": {
+                              "maxLength": 4096,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "const": "actioned",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "dismissed",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "partition": {
+                              "maximum": 4095,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "reason": {
+                              "enum": [
+                                "off_topic",
+                                "inappropriate",
+                                "spam",
+                                "illegal",
+                                "other"
+                              ],
+                              "type": "string"
+                            },
+                            "reporterId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "resolvedAt": {
+                              "format": "date-time",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revisionId": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "target": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "enum": [
+                                    "board",
+                                    "thread",
+                                    "post"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id"
+                              ],
+                              "type": "object"
+                            },
+                            "transactionId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "partition",
+                            "target",
+                            "revisionId",
+                            "reason",
+                            "evidence",
+                            "reporterId",
+                            "outcome",
+                            "resolvedAt",
+                            "createdAt",
+                            "transactionId"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "id",
-                        "partition",
-                        "target",
-                        "revisionId",
-                        "reason",
-                        "evidence",
-                        "reporterId",
-                        "outcome",
-                        "resolvedAt",
-                        "createdAt",
-                        "transactionId"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [

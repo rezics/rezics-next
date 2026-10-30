@@ -32,6 +32,11 @@ export type ReportView = Readonly<{
     transactionId: string;
     reporterId: string | null;
 }>;
+/** The reporter's submitted record, without moderator-only storage metadata. */
+export type ReporterReportView = Pick<ReportView, 'id' | 'target' | 'revisionId' | 'reason' | 'evidence' | 'reporterId' | 'createdAt' | 'outcome' | 'resolvedAt'> & Readonly<{
+    targetAvailability: 'available' | 'unavailable';
+}>;
+export type ReportReadView = ReportView | ReporterReportView;
 export type ReportDependencies = Readonly<{
     pool: Pool;
     access: Access;
@@ -60,5 +65,7 @@ export declare function createReport(dependencies: ReportDependencies, actor: Ac
     reportId: ReportId;
 }>>>;
 export declare function readReport(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<Anchored<ReportView | null>>;
+/** Closed reporter projection, independent of the required moderator/list fields. */
+export declare function reportReadView(report: ReportView): ReportReadView;
 export declare function listTargetReports(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ReportView>>;
 export {};
