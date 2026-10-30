@@ -91,17 +91,18 @@ Current `realm:read`, protected bans and privacy gate the entire result; public 
 bounded board-list responses; Community reuses its Realm part on the Space home. No per-card metadata HTTP:
 
 ```ts
-type Optional<T> = { state: 'available'; value: T }
-                 | { state: 'none' | 'unavailable'; value: null };
+type Optional<T> = { state: 'available'; value: T } | { state: 'none' | 'unavailable'; value: null };
 type CommunityPresentation = {
-  realmId: UUID; spaceId: UUID; contextId: UUID; name: string; description: string;
-  avatar: Optional<ContentImageSummary>; banner: Optional<ContentImageSummary>;
-  members: { state: 'current'; count: number; version: string }
-         | { state: 'unknown'; count: null; version: null };
-  rules: Optional<{ postId: UUID; revisionId: UUID; body: DocumentSnapshot;
-                    licence: string; sha256: string }>;
-  join: { membership: 'member' | 'nonmember' | 'unknown';
-          action: 'join' | 'leave' | 'sign-in' | null };
+  realmId: UUID;
+  spaceId: UUID;
+  contextId: UUID;
+  name: string;
+  description: string;
+  avatar: Optional<ContentImageSummary>;
+  banner: Optional<ContentImageSummary>;
+  members: { state: 'current'; count: number; version: string } | { state: 'unknown'; count: null; version: null };
+  rules: Optional<{ postId: UUID; revisionId: UUID; body: DocumentSnapshot; licence: string; sha256: string }>;
+  join: { membership: 'member' | 'nonmember' | 'unknown'; action: 'join' | 'leave' | 'sign-in' | null };
 }; // BoardView adds community: CommunityPresentation|null; reject undeclared fields.
 ```
 
