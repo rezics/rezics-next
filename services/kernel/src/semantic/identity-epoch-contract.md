@@ -426,6 +426,9 @@ Required `semantic/identity-epoch-store.ts` export `identityEpochStore: Identity
    authorization before any indexed receipt lookup. Fresh coherent cap collection precedes claim/history writes.
    The binding home is the actual actor/account route, with the unchanged `identityReceiptKey` tuple. It commits
    pending intent digest, generation and exact proposed job/home/epoch, releases, and returns committed custody.
+   The proof exposes `partition` (binding home), `generation`, `transactionId`, `jobHome` and immutable `job`
+   (`jobId`, bigint `epoch`). Callers route admission with `binding.jobHome`; opaque in-process verification
+   rejects caller JSON. The locator does not grant Access.
    `admit(tx, {intent, receipt, binding}) -> CommandResult<IdentityJobRef>` runs at that first ordered group home.
    Calling `bindReceipt` again after reservation independently verifies the committed native job and publishes the
    immutable accepted pointer at the binding home. `prepareAdmission` composes those three released stages.
@@ -1391,9 +1394,12 @@ its source command, whose SQL revalidates source owner, subject and captured hea
 Receiving acquire joins only its retained local handoff, local group, owner, attempt and slot; close remains atomic
 with first absence and takes no capacity. Receiving waiters are discovered from local handoff/attempt records.
 
-Default bootstrap effects execute at most 100 existing bounded native steps with four released home pipelines.
-Cursor selection/advance is one topology-home command; completion decrements only validated native closure custody
-and never rewinds the scheduling cursor. The first step retains the next wake before source contact. Individual
+Default bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
+home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
+advances the cursor and retains the next wake before source contact; one later local command takes at most 100
+independently released native closure receipts. It decrements only newly retained custody and never rewinds the
+scheduling cursor. These bounded transient locators add no retained copy or membership vector. Dirty-home repair
+keeps its individual scheduler steps and four pipelines. Pool and queue limits are unchanged. Individual
 source export/receiving/source ACK commands, raw100 bound, all4096 closure and every registered queue remain intact.
 This changes scheduling overhead, not closure meaning or Community's default 30s settle deadline. Native growth
 64/512/4096, nested-function RLS/crash schedules and the actual default Community worker are the focused witnesses;

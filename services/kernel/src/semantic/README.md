@@ -144,8 +144,10 @@ bounded native source pages and installs mappings only when their source transac
 custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
 
 Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; the default Semantic WorkModule batches at most
-100 of those same bounded steps with four released native-home pipelines. Cursor claim/advance is atomic at the
-topology home and the first step commits the next wake before source contact. All 4096 homes, including empty
+100 of those same bounded steps with eight released native-home pipelines during initial closure. One bounded
+topology-home frontier command advances the cursor and commits the next wake before source contact; one later
+local command takes at most 100 separately verified native closure receipts. Dirty-home repair retains its
+individual scheduler steps. All 4096 homes, including empty
 homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
 `readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.
 

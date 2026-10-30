@@ -58,7 +58,12 @@ import {
   serializeIdentityValue as json,
   recordIdentityEpochNativeCommit,
 } from './identity-epoch-store.ts';
-import type { IdentityIntent, IdentityJobRef, NativeStepWork } from './identity-epoch-contract.ts';
+import type {
+  IdentityIntent,
+  IdentityJobRef,
+  IdentityNativeReceipt,
+  NativeStepWork,
+} from './identity-epoch-contract.ts';
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
@@ -257,8 +262,8 @@ async function closeUnreservedBinding(
   const data = identityBindingData(binding);
   const first = await runCommand(pool, { partition: data.home }, async (tx) => {
     await tx.query(selectControl.sql, [data.home]);
-    const job = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
-    if (job) return noEffect(false);
+    const existingJob = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
+    if (existingJob) return noEffect(false);
     const duplicate = (await tx.query(receipt.sql, [data.home, data.job.jobId, data.job.epoch.toString(), 'closed']))
       .rows[0];
     if (duplicate) return noEffect(true);
@@ -278,12 +283,17 @@ async function closeUnreservedBinding(
     };
   });
   if (!first.value) return false;
-  const receipts = [];
+  const receipts: IdentityNativeReceipt[] = [];
   for (const home of [...new Set(data.sources.map((s) => s.partition_no))].sort((a, b) => a - b)) {
     await deliverHome(pool, data.job, data.scope, home, 'closed');
     const received = await receivingReceipt(pool, data.job, home, 'closed');
     if (!received) throw unavailable();
-    receipts.push(received);
+    receipts.push({
+      partition: received.partition_no,
+      transactionId: received.transaction_id,
+      epoch: received.native_epoch,
+      position: BigInt(received.native_position),
+    });
   }
   await runCommand(pool, { ...authority, partition: data.partition }, async (tx) => {
     const current = await lookupLocalBinding(tx, input, binding);
@@ -291,15 +301,7 @@ async function closeUnreservedBinding(
     for (const r of receipts)
       await tx.query(
         `INSERT INTO semantic.identity_epoch_receipt_closure VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-        [
-          data.partition,
-          data.key,
-          data.generation,
-          r.partition_no,
-          r.transaction_id,
-          r.native_epoch,
-          r.native_position,
-        ],
+        [data.partition, data.key, data.generation, r.partition, r.transactionId, r.epoch, r.position.toString()],
       );
     await tx.query(
       `UPDATE semantic.identity_epoch_receipt_binding SET state='not-applied' WHERE partition_no=$1 AND receipt_key=$2 AND generation=$3 AND state='pending'`,

@@ -408,7 +408,8 @@ async function bindingRows(request: IdentityAdmissionInput) {
     await f.admin.query(
       `SELECT b.state,b.accepted_job,c.*,k.transaction_id AS binding_commit
  FROM semantic.identity_epoch_receipt_binding b JOIN semantic.identity_epoch_receipt_claim c USING(partition_no,receipt_key)
- JOIN semantic.identity_epoch_receipt_claim_commit k USING(partition_no,receipt_key,generation)
+ JOIN semantic.identity_epoch_receipt_claim_commit k
+ ON (k.partition_no,k.receipt_key,k.generation)=(c.partition_no,c.receipt_key,c.generation)
  WHERE b.partition_no=$1 AND b.receipt_key=$2 ORDER BY c.generation`,
       [home(f.accounts.editor), key],
     )

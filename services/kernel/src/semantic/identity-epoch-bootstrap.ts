@@ -1,3 +1,5 @@
+import selectFrontier from './identity-epoch-bootstrap-select-frontier.sql';
+import takeClosures from './identity-epoch-bootstrap-take-closures.sql';
 import receivingBasis from './identity-epoch-bootstrap-basis.sql';
 import saveBasis from './identity-epoch-bootstrap-save-basis.sql';
 import bootstrapSelectBootstrapTopology from './identity-epoch-bootstrap-select-bootstrap-topology.sql';
@@ -505,20 +507,84 @@ export async function stepIdentityEpochBootstrapWork(
   return progress;
 }
 
-/** One durable effect performs at most 100 existing bounded native steps. The first step commits
- * the next wake before source contact; DBOS retry and that wake both recover a lost batch reply.
- * Four independent home pipelines overlap released I/O without changing pool or native command limits.
+/** One effect claims at most 100 local topology slots, then releases the topology connection.
+ * Every selected home still executes its actual retained export/receiving/source-ACK protocol.
+ * Selection and custody are amortized over the bounded frontier, never over foreign source rows.
  */
 export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> {
-  let issued = 0,
-    done = false;
+  const selected = await runCommand<number[]>(pool, { partition: 0 }, async (tx) => {
+    const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
+    if (!state || state.remaining === 0) return noEffect([]);
+    const homes = (await tx.query(selectFrontier.sql, [state.next_partition])).rows.map((r) => r.source_partition);
+    if (!homes.length) throw fail();
+    await tx.query(advanceCursor.sql, [(homes.at(-1)! + 1) % 4096]);
+    return {
+      value: homes,
+      events: [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition: homes[0]! } }],
+    };
+  });
+  if (!selected.value.length) {
+    // After initial closure, retain the existing dirty-home repair traversal and its native wakes.
+    let issued = 0,
+      done = false;
+    await Promise.all(
+      Array.from({ length: 4 }, async () => {
+        while (!done && issued < 100) {
+          const index = issued++;
+          if (!(await stepIdentityEpochBootstrapWork(pool, index === 0))) done = true;
+        }
+      }),
+    );
+    return;
+  }
+  const closures: {
+    source_partition: number;
+    source_generation: string;
+    source_epoch: number;
+    source_transaction_id: string;
+    source_position: string;
+  }[] = [];
+  let issued = 0;
+  // At most eight released pipelines; the existing pool and all queues keep their normal limits.
   await Promise.all(
-    Array.from({ length: 4 }, async () => {
-      while (!done && issued < 100) {
-        const index = issued++;
-        const progress = await stepIdentityEpochBootstrapWork(pool, index === 0);
-        if (!progress) done = true;
+    Array.from({ length: 8 }, async () => {
+      while (issued < selected.value.length) {
+        const partition = selected.value[issued++]!;
+        await stepIdentityEpochBootstrap(pool, partition);
+        const evidence = await withReadTransaction(pool, async (tx) => {
+          const owner = await readPartition(tx, partition);
+          const home = (await tx.query(closureReceipt.sql, [partition])).rows[0];
+          return owner?.writeState === 'active' &&
+            owner.epoch === home?.sealed_epoch &&
+            BigInt(home.sealed_position) <= owner.position
+            ? home
+            : null;
+        });
+        if (evidence)
+          closures.push({
+            source_partition: partition,
+            source_generation: evidence.sealed_generation,
+            source_epoch: evidence.sealed_epoch,
+            source_transaction_id: evidence.sealed_transaction_id,
+            source_position: evidence.sealed_position,
+          });
       }
     }),
   );
+  await runCommand(pool, { partition: 0 }, async (tx) => {
+    await tx.query(bootstrapSelectBootstrapTopology3.sql);
+    await tx.query(takeClosures.sql, [JSON.stringify(closures)]);
+    return {
+      value: null,
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: {
+            partition: 0,
+            generation: ((await readPartition(tx, 0))!.position + 1n).toString(),
+          },
+        },
+      ],
+    };
+  });
 }

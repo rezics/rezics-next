@@ -27,7 +27,13 @@ import acceptClaim from './identity-epoch-binding-accept.sql';
 import committedJob from './identity-epoch-binding-job.sql';
 
 /** A serializable locator is custody data. Only a released verified read mints an in-process proof. */
-export type IdentityReceiptBinding = Readonly<{ partition: number; generation: string; transactionId: string }>;
+export type IdentityReceiptBinding = Readonly<{
+  partition: number;
+  generation: string;
+  transactionId: string;
+  jobHome: number;
+  job: IdentityJobRef;
+}>;
 export type IdentityAdmissionSource = Readonly<{
   input_original: string;
   source_route: number;
@@ -95,6 +101,8 @@ function proof(row: BindingRow): IdentityReceiptBinding {
     partition: row.partition_no,
     generation: String(row.generation),
     transactionId: row.binding_transaction_id,
+    jobHome: row.job_home,
+    job: Object.freeze({ jobId: row.job_id, epoch: BigInt(row.job_epoch) }),
   });
   verified.set(
     value,

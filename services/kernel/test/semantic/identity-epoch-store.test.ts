@@ -54,7 +54,7 @@ async function admission(intent: IdentityIntent, key = randomUUID(), receiptDige
       f.pool,
       {
         ...authority,
-        partition: home(next.kind === 'merge' ? next.survivor : next.original),
+        partition: binding.jobHome,
       },
       (tx) => store.admit(tx, { intent: next, receipt, binding }),
     );
