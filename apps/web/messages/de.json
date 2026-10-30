@@ -3088,5 +3088,20 @@
   "library_copy_meaning_unknown": "Die historische Bedeutung ist unbekannt. Gespeicherte Kennungen für Art und Status bleiben unverändert.",
   "library_copy_status_unavailable": "Statusoptionen sind vorübergehend nicht verfügbar. Andere Details können weiterhin bearbeitet und der Bestand gelöscht werden.",
   "library_copy_status_unsupported": "Für diesen Bestand werden keine neuen Statuswerte unterstützt. Gespeicherte Werte bleiben lesbar.",
-  "library_copy_new_status": "Neuer Status"
+  "library_copy_new_status": "Neuer Status",
+  "manga_title": "Mangaserie oder Band erstellen",
+  "manga_edit": "Mangaserie oder Band bearbeiten",
+  "manga_intro": "Beschreibe eine Mangaserie oder einen eigenständig identifizierten Band. Suche zuerst den vorhandenen Katalogeintrag und ergänze nur belegbare Angaben.",
+  "manga_grain": "Was beschreibst du?",
+  "manga_grain_help": "Serie, Band und konkrete Ausgabe haben verschiedene Identitäten. Seitenzahlen gehören zum Band; Titel oder Nummern erzeugen keine Kennung.",
+  "manga_independent": "Dies ist ein eigenständig identifizierbarer veröffentlichter Band, nicht nur eine Nummer oder ein persönliches Exemplar.",
+  "manga_membership": "Serienzugehörigkeit und Reihenfolge",
+  "manga_creators": "Urheber und Verlag",
+  "manga_publication": "Veröffentlichung und Kennungen",
+  "manga_classification": "Genres und öffentliche Schlagwörter",
+  "manga_order_help": "Wähle die tatsächliche Serie. Die Bandnummer ist ein Positionsqualifikator der Beziehung, keine Zeilenreihenfolge.",
+  "manga_created": "Mit nativen Ausgangsfakten erstellt. Öffne die aktuelle Ansicht.",
+  "manga_terms_help": "Namen und Beschreibungen verwenden den vorhandenen Begriffs-Editor. Die native Schreibfunktion kann fehlen; eine Titelaussage ändert keine Namen.",
+  "manga_relation_help": "Nutze den gemeinsamen Beziehungseditor für Zugehörigkeit und Mitwirkende. Prüfung und öffentliche Auswahl bleiben getrennt.",
+  "manga_classification_help": "Aktuelle Klassifikationen werden hier angezeigt. Der gemeinsame Beziehungseditor bietet noch keine Klassifikationsvorschläge."
 }

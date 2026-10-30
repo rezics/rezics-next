@@ -14,6 +14,7 @@ import type { InitialSubject } from './create-subject';
 import type { Violation } from '@rezics/definitions/validate';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
+import { MangaProfileEntry } from './manga-profile-entry';
 import {
   initialTerms,
   type CreateFailure,
@@ -238,6 +239,7 @@ export function CreateSubjectForm({
           {!profile && <GameProfileEntry locale={locale} />}
           {!profile && <RecipeEditorEntry locale={locale} />}
           {!profile && <CharacterProfileEntry locale={locale} />}
+          {!profile && <MangaProfileEntry locale={locale} />}
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>

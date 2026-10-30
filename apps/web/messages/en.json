@@ -3440,5 +3440,20 @@
   "library_copy_meaning_unknown": "Historical meaning is unknown. Stored kind and status identifiers are shown unchanged.",
   "library_copy_status_unavailable": "Status choices are temporarily unavailable. You can still edit other details or delete this holding.",
   "library_copy_status_unsupported": "New statuses are not supported for this holding. Its stored values remain readable.",
-  "library_copy_new_status": "New status"
+  "library_copy_new_status": "New status",
+  "manga_title": "Create manga series or volume",
+  "manga_edit": "Edit manga series or volume",
+  "manga_intro": "Describe one manga series or an independently identified volume. Start with the existing catalogue identity, then enter only facts you can support.",
+  "manga_grain": "What are you describing?",
+  "manga_grain_help": "A series, a volume and a particular edition are different identities. Page counts belong to the volume; no identifier or volume is inferred from a title or number.",
+  "manga_independent": "This is an independently identifiable published volume, not just a number or a personal copy.",
+  "manga_membership": "Series membership and order",
+  "manga_creators": "Creators and publisher",
+  "manga_publication": "Publication and identifiers",
+  "manga_classification": "Genres and public tags",
+  "manga_order_help": "Choose the actual series. An ordinal is a position qualifier on that relation, never the order of rows.",
+  "manga_created": "Created with native initial facts. Open its current reading.",
+  "manga_terms_help": "Names and descriptions use the existing terms editor. Its native write producer may be unavailable; a title statement is not a title-map update.",
+  "manga_relation_help": "Use the shared relation editor below to propose membership or credit changes and compare the exact native slot. Review and public selection remain separate.",
+  "manga_classification_help": "Current classifications are shown here. The shared relation editor does not yet offer classification proposals."
 }

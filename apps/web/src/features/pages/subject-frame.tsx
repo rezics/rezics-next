@@ -11,6 +11,7 @@ import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
+import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -299,6 +300,9 @@ export function SubjectFrame({
               <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
               <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
               {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
+              {(frame.type === 'schema:ComicSeries' || frame.type === 'schema:PublicationVolume') && (
+                <MangaProfileEntry id={frame.id} label={title} locale={locale} />
+              )}
               <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
               {view === 'contents' && (
                 <WorkPartsEntry

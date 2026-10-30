@@ -43,6 +43,15 @@ export const catalogueEntries = {
     label: m.catalogue_terms_title({}, options(address.locale)),
     href: `${subject(address)}/terms`,
   }),
+  manga: ({
+    id,
+    label,
+    locale,
+  }: Locale & { id?: string | undefined; label?: string | undefined }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: id ? m.manga_edit({}, options(locale)) : m.manga_title({}, options(locale)),
+    href: id ? `${subject({ id, label: label ?? '', locale })}/manga` : `/${locale}/catalogue/manga`,
+  }),
   recipe: ({
     id,
     label,

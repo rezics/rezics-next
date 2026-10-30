@@ -9,6 +9,7 @@ import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
+import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -440,6 +441,9 @@ export function SubjectPage({
           <SubjectFactsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           {read.subject.type === 'schema:Recipe' && (
             <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          {(read.subject.type === 'schema:ComicSeries' || read.subject.type === 'schema:PublicationVolume') && (
+            <MangaProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
           <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           <SubjectChangesLink id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />

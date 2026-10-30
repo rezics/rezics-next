@@ -3088,5 +3088,20 @@
   "library_copy_meaning_unknown": "過去の意味は不明です。保存された種別と状態の識別子をそのまま表示します。",
   "library_copy_status_unavailable": "状態の選択肢を一時的に取得できません。ほかの詳細の編集や所持記録の削除は可能です。",
   "library_copy_status_unsupported": "この所持記録では新しい状態を設定できません。保存された値は引き続き表示できます。",
-  "library_copy_new_status": "新しい状態"
+  "library_copy_new_status": "新しい状態",
+  "manga_title": "漫画シリーズ・巻を作成",
+  "manga_edit": "漫画シリーズ・巻を編集",
+  "manga_intro": "漫画シリーズ、または独立して識別できる巻を記述します。既存の項目を確認し、裏付けのある情報だけを入力してください。",
+  "manga_grain": "何について記述しますか？",
+  "manga_grain_help": "シリーズ、巻、特定の版はそれぞれ別の識別対象です。ページ数は巻の情報です。題名や巻数からIDを生成しません。",
+  "manga_independent": "単なる番号や個人の所蔵品ではなく、独立して識別できる刊行済みの巻です。",
+  "manga_membership": "シリーズへの所属と順序",
+  "manga_creators": "作者・作画・出版社",
+  "manga_publication": "刊行情報と識別子",
+  "manga_classification": "ジャンルと公開タグ",
+  "manga_order_help": "実際のシリーズを選択してください。巻数は所属関係の位置修飾子として記録し、行の順序では表しません。",
+  "manga_created": "初期情報を登録しました。現在の表示を開いてください。",
+  "manga_terms_help": "名称と説明は既存の用語エディターで編集します。書き込み機能が未提供の場合があります。題名のステートメントは名称の更新ではありません。",
+  "manga_relation_help": "共通の関係エディターで所属やクレジットの変更を提案し、正確な対象を比較します。レビューと公開表示への選択は別の操作です。",
+  "manga_classification_help": "現在の分類を表示しています。共通の関係エディターは分類の提案にまだ対応していません。"
 }

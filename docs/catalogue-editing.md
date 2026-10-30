@@ -377,3 +377,57 @@ Web owns the normal next visual review using the unchanged `pages-catalogue-chan
 `concealed`, `unavailable-retry`, `detail-retry` and `detail-loading`. The unchanged
 `pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
 there is no capture restart.
+
+## Browser flow: manga series and volumes
+
+`/{locale}/catalogue/manga`, linked from catalogue creation, offers the released `schema:ComicSeries` and
+`schema:PublicationVolume` profiles. Their existing subject headers and compact frames include the editor in the
+Contribute menu, linking to `/{locale}/subjects/{id}/{slug}/manga` through the shared destination descriptor.
+The editor groups current membership, creators, publication, identifiers,
+classifications and original writing using effective emitted properties. Definition labels retain their actual
+fallback language. Initial term languages remain independent of the interface language.
+
+A volume requires an independently identifiable published object and the exact readable manga series selected
+through the common target picker. `wdt:P179` carries this relationship; an explicitly entered `schema:position`
+qualifier supplies its ordinal. Row order does not. A series receives neither volume pagination nor ISBN fields.
+The emitted series part count uses its explicit volume or chapter unit; no latest, maximum, sum or progress is
+inferred. Editions remain separate: the current edition producer does not admit these manga Types as work targets,
+so this editor offers no invented edition action. It never derives a subject ID from names or ordinals.
+
+Creation reuses native `POST /v1/subjects`, the session BFF and its idempotency contract. Only entered initial
+facts are submitted; the confirmed creation selects those facts in Global. The exact returned ID supplies the
+ordinary current reader. A failed read retains that ID and retries only the read. Uncertain delivery freezes the
+payload and key; conflict requires explicit draft review. Invalid values refresh the active release while keeping
+the draft, and a removed or changed field is rejected rather than silently dropped.
+
+Corrections reuse the common per-field draft, partial-result and candidate-review controls. Unchanged scalar
+fields are omitted, qualifiers and citations survive replacement, and each uncertain field keeps its own key.
+Membership and creator changes use the integrated relation editor's actual qualified slots and target discovery.
+Original abstracts use the shared authored-text, explicit language and licence controls. Names and descriptions
+link to the existing terms adapter and its native conditional PATCH; `schema:name` proposals do not substitute
+for term-map writes. Its current denied, unavailable and conflict outcomes remain authoritative. Current
+classifications are visible; the shared relation editor currently excludes classification proposals, so no successful
+classification mutation is implied. A later proposal awaits
+review and does not alter the current reading. Existing disclosure and source-or-consent rules remain native.
+
+The real-route story IDs are:
+
+- `pages-catalogue-manga-series-and-volume-editor--create-series`
+- `pages-catalogue-manga-series-and-volume-editor--create-volume`
+- `pages-catalogue-manga-series-and-volume-editor--correct-series`
+- `pages-catalogue-manga-series-and-volume-editor--correct-volume`
+- `pages-catalogue-manga-series-and-volume-editor--uncertain`
+- `pages-catalogue-manga-series-and-volume-editor--denied`
+- `pages-catalogue-manga-series-and-volume-editor--invalid`
+- `pages-catalogue-manga-series-and-volume-editor--conflict`
+- `pages-catalogue-manga-series-and-volume-editor--stale-correction`
+- `pages-catalogue-manga-series-and-volume-editor--reader-unavailable`
+- `pages-catalogue-manga-series-and-volume-editor--reader-concealed`
+- `pages-catalogue-manga-series-and-volume-editor--saving`
+- `pages-catalogue-manga-series-and-volume-editor--loading`
+- `pages-catalogue-manga-series-and-volume-editor--unavailable`
+- `pages-catalogue-manga-series-and-volume-editor--empty`
+- `pages-catalogue-manga-series-and-volume-editor--signed-out`
+
+Use the locale, theme and phone390/desktop1280 viewport globals. They are declared request examples; native
+acceptance and normal Web captures remain separate verification.

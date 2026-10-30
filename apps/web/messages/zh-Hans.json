@@ -3089,5 +3089,20 @@
   "library_copy_meaning_unknown": "历史含义不明。原有的种类与状态标识符保持不变。",
   "library_copy_status_unavailable": "暂时无法获取状态选项。你仍可修改其他详情或删除这份持有记录。",
   "library_copy_status_unsupported": "这份持有记录不支持新状态，原有数据仍可阅读。",
-  "library_copy_new_status": "新状态"
+  "library_copy_new_status": "新状态",
+  "manga_title": "创建漫画系列或单行本",
+  "manga_edit": "编辑漫画系列或单行本",
+  "manga_intro": "描述一个漫画系列，或可独立识别的单行本。先查找现有条目，再填写有依据的资料。",
+  "manga_grain": "你要描述什么？",
+  "manga_grain_help": "系列、单行本和具体版本是不同的对象。页数属于单行本，不会根据标题或卷号推算标识符。",
+  "manga_independent": "这是可独立识别的已出版单行本，而不只是一个卷号或个人藏本。",
+  "manga_membership": "系列归属与顺序",
+  "manga_creators": "创作者与出版社",
+  "manga_publication": "出版资料与标识符",
+  "manga_classification": "类型与公开标签",
+  "manga_order_help": "选择实际的系列。卷序是该关系上的位置限定符，不以行的排列顺序表示。",
+  "manga_created": "已创建并写入初始事实。查看当前条目。",
+  "manga_terms_help": "名称和描述由现有名称编辑器处理。原生写入功能可能尚未提供；标题陈述不会修改名称映射。",
+  "manga_relation_help": "使用下方共用关系编辑器提出系列归属或创作署名修改，并比较准确的原生关系。审核与公开选用是不同的操作。",
+  "manga_classification_help": "此处显示当前分类。共用关系编辑器尚不支持分类提案。"
 }

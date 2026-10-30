@@ -32,6 +32,7 @@ export type FactsProfile = {
   empty: string;
   path: string;
 };
+export { FactField };
 function ExactReview({
   address,
   id,

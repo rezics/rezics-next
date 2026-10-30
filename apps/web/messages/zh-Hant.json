@@ -3088,5 +3088,20 @@
   "library_copy_meaning_unknown": "歷史含義不明。原有的種類與狀態識別碼保持不變。",
   "library_copy_status_unavailable": "暫時無法取得狀態選項。你仍可修改其他詳情或刪除這份持有記錄。",
   "library_copy_status_unsupported": "這份持有記錄不支援新狀態，原有資料仍可閱讀。",
-  "library_copy_new_status": "新狀態"
+  "library_copy_new_status": "新狀態",
+  "manga_title": "建立漫畫系列或單行本",
+  "manga_edit": "編輯漫畫系列或單行本",
+  "manga_intro": "描述一個漫畫系列，或可獨立識別的單行本。先尋找現有條目，再填寫有依據的資料。",
+  "manga_grain": "你要描述什麼？",
+  "manga_grain_help": "系列、單行本與特定版本是不同的對象。頁數屬於單行本，不會根據標題或卷號推算識別碼。",
+  "manga_independent": "這是可獨立識別的已出版單行本，而不只是卷號或個人藏本。",
+  "manga_membership": "系列歸屬與順序",
+  "manga_creators": "創作者與出版社",
+  "manga_publication": "出版資料與識別碼",
+  "manga_classification": "類型與公開標籤",
+  "manga_order_help": "選取實際的系列。卷序是該關係上的位置限定詞，不以列的排列順序表示。",
+  "manga_created": "已建立並寫入初始事實。查看目前條目。",
+  "manga_terms_help": "名稱與描述由現有名稱編輯器處理。原生寫入功能可能尚未提供；標題陳述不會修改名稱對應。",
+  "manga_relation_help": "使用下方共用關係編輯器提出系列歸屬或創作署名修改，並比較精確的原生關係。審核與公開選用是不同的操作。",
+  "manga_classification_help": "此處顯示目前分類。共用關係編輯器尚未支援分類提案。"
 }

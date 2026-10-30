@@ -3088,5 +3088,20 @@
   "library_copy_meaning_unknown": "Le sens historique est inconnu. Les identifiants de type et de statut enregistrés restent inchangés.",
   "library_copy_status_unavailable": "Les choix de statut sont temporairement indisponibles. Vous pouvez modifier les autres détails ou supprimer cet exemplaire.",
   "library_copy_status_unsupported": "Les nouveaux statuts ne sont pas pris en charge pour cet exemplaire. Les valeurs enregistrées restent lisibles.",
-  "library_copy_new_status": "Nouveau statut"
+  "library_copy_new_status": "Nouveau statut",
+  "manga_title": "Créer une série de manga ou un volume",
+  "manga_edit": "Modifier une série de manga ou un volume",
+  "manga_intro": "Décrivez une série de manga ou un volume ayant sa propre identité. Cherchez d’abord l’identité du catalogue, puis saisissez uniquement des faits vérifiables.",
+  "manga_grain": "Que décrivez-vous ?",
+  "manga_grain_help": "La série, le volume et l’édition ont des identités distinctes. La pagination appartient au volume ; aucun identifiant ne découle du titre ou du numéro.",
+  "manga_independent": "Il s’agit d’un volume publié identifiable en lui-même, et non d’un simple numéro ou exemplaire personnel.",
+  "manga_membership": "Appartenance à une série et ordre",
+  "manga_creators": "Créateurs et éditeur",
+  "manga_publication": "Publication et identifiants",
+  "manga_classification": "Genres et mots-clés publics",
+  "manga_order_help": "Choisissez la série réelle. Le numéro est un qualificatif de position de cette relation, jamais l’ordre des lignes.",
+  "manga_created": "Créé avec les faits initiaux natifs. Ouvrez la lecture actuelle.",
+  "manga_terms_help": "Les noms et descriptions utilisent l’éditeur de termes existant. Son écriture native peut être indisponible ; une déclaration de titre ne modifie pas les noms.",
+  "manga_relation_help": "Utilisez l’éditeur de relations partagé pour proposer des liens ou crédits et comparer leur emplacement natif exact. La révision et la sélection publique restent distinctes.",
+  "manga_classification_help": "Les classifications actuelles sont affichées ici. L’éditeur partagé ne propose pas encore de modifications de classification."
 }
