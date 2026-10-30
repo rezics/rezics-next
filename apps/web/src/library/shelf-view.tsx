@@ -526,7 +526,7 @@ export function LabelShelfEntries({
                   className="w-10 overflow-hidden rounded"
                   style={{ aspectRatio: coverRatio(cover.subject.types).replace(':', ' / ') }}
                 >
-                  <Cover {...cover} size="fill" ratio={coverRatio(cover.subject.types)} decorative caption={false} />
+                  <Cover {...cover} size="fill" ratio={coverRatio(cover.subject.types)} decorative />
                 </div>
               </TableCell>
               <TableCell>
