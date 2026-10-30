@@ -4017,9 +4017,11 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 id: string;
                                 curatorAccountId: string;
                                 membershipKind: "dynamic";
-                                builtinKind: "everything" | "state";
+                                builtinKind: "everything" | "liked" | "state";
                                 builtin: {
                                     kind: "everything";
+                                } | {
+                                    kind: "liked";
                                 } | {
                                     kind: "state";
                                     profileId: string;

@@ -10,6 +10,22 @@ type Dependencies = {
     tokens: KeyRing;
     clock: KernelClock;
 };
+export declare const sessionSchema: import("typebox").TObject<{
+    id: import("typebox").TString;
+    subjectId: import("typebox").TString;
+    versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
+    unit: import("typebox").TString;
+    total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    completedUnitCount: import("typebox").TInteger;
+    state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+    revision: import("typebox").TInteger;
+    startedAt: import("typebox").TString;
+    completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+}>;
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};

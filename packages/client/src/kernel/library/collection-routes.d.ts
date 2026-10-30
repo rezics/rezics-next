@@ -108,9 +108,11 @@ export declare const collectionReadSchema: import("typebox").TUnion<[import("typ
     id: import("typebox").TString;
     curatorAccountId: import("typebox").TString;
     membershipKind: import("typebox").TLiteral<"dynamic">;
-    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">]>;
+    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">, import("typebox").TLiteral<"liked">]>;
     builtin: import("typebox").TUnion<[import("typebox").TObject<{
         kind: import("typebox").TLiteral<"everything">;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"liked">;
     }>, import("typebox").TObject<{
         kind: import("typebox").TLiteral<"state">;
         profileId: import("typebox").TString;
@@ -256,9 +258,11 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     id: import("typebox").TString;
     curatorAccountId: import("typebox").TString;
     membershipKind: import("typebox").TLiteral<"dynamic">;
-    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">]>;
+    builtinKind: import("typebox").TUnion<[import("typebox").TLiteral<"everything">, import("typebox").TLiteral<"state">, import("typebox").TLiteral<"liked">]>;
     builtin: import("typebox").TUnion<[import("typebox").TObject<{
         kind: import("typebox").TLiteral<"everything">;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"liked">;
     }>, import("typebox").TObject<{
         kind: import("typebox").TLiteral<"state">;
         profileId: import("typebox").TString;
@@ -4507,9 +4511,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             id: string;
                             curatorAccountId: string;
                             membershipKind: "dynamic";
-                            builtinKind: "everything" | "state";
+                            builtinKind: "everything" | "liked" | "state";
                             builtin: {
                                 kind: "everything";
+                            } | {
+                                kind: "liked";
                             } | {
                                 kind: "state";
                                 profileId: string;
@@ -4780,9 +4786,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             id: string;
                             curatorAccountId: string;
                             membershipKind: "dynamic";
-                            builtinKind: "everything" | "state";
+                            builtinKind: "everything" | "liked" | "state";
                             builtin: {
                                 kind: "everything";
+                            } | {
+                                kind: "liked";
                             } | {
                                 kind: "state";
                                 profileId: string;
@@ -5101,9 +5109,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     id: string;
                                     curatorAccountId: string;
                                     membershipKind: "dynamic";
-                                    builtinKind: "everything" | "state";
+                                    builtinKind: "everything" | "liked" | "state";
                                     builtin: {
                                         kind: "everything";
+                                    } | {
+                                        kind: "liked";
                                     } | {
                                         kind: "state";
                                         profileId: string;
@@ -5341,9 +5351,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 id: string;
                                 curatorAccountId: string;
                                 membershipKind: "dynamic";
-                                builtinKind: "everything" | "state";
+                                builtinKind: "everything" | "liked" | "state";
                                 builtin: {
                                     kind: "everything";
+                                } | {
+                                    kind: "liked";
                                 } | {
                                     kind: "state";
                                     profileId: string;
@@ -5574,9 +5586,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     id: string;
                                     curatorAccountId: string;
                                     membershipKind: "dynamic";
-                                    builtinKind: "everything" | "state";
+                                    builtinKind: "everything" | "liked" | "state";
                                     builtin: {
                                         kind: "everything";
+                                    } | {
+                                        kind: "liked";
                                     } | {
                                         kind: "state";
                                         profileId: string;
@@ -5805,9 +5819,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 id: string;
                                 curatorAccountId: string;
                                 membershipKind: "dynamic";
-                                builtinKind: "everything" | "state";
+                                builtinKind: "everything" | "liked" | "state";
                                 builtin: {
                                     kind: "everything";
+                                } | {
+                                    kind: "liked";
                                 } | {
                                     kind: "state";
                                     profileId: string;
@@ -6153,9 +6169,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     id: string;
                                     curatorAccountId: string;
                                     membershipKind: "dynamic";
-                                    builtinKind: "everything" | "state";
+                                    builtinKind: "everything" | "liked" | "state";
                                     builtin: {
                                         kind: "everything";
+                                    } | {
+                                        kind: "liked";
                                     } | {
                                         kind: "state";
                                         profileId: string;

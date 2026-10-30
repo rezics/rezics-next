@@ -9,8 +9,9 @@ import type { ProgressSession } from './progress-model.ts';
 import type { ShelfMaintenanceCheckpoint, ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
- * `shelf-contract.md`. Read services and admission are concrete re-exports; uninstalled write/projection factories
- * below remain specification ports. Entry and progress storage layouts stay unchanged; shelf types are additive.
+ * `shelf-contract.md`. Read admission, native type-key and counter factories are concrete re-exports;
+ * remaining projection ports below throw until their owning implementation is composed.
+ * Entry and progress storage layouts stay unchanged; shelf types are additive.
  */
 type Client = Pick<PoolClient, 'query'>;
 export declare class ShelfContractNotImplementedError extends Error {
@@ -96,7 +97,7 @@ export type ShelfCountRow = {
 };
 /** What an entry contributes to the counters. */
 export type ShelfPlacement = {
-    state: LegacyEntryState;
+    state: EntryState;
     typeId: string;
 };
 /** Every call runs in the owning account's command transaction. `time` is the command's authoritative T. */
@@ -132,7 +133,7 @@ export interface ShelfHeads {
 export interface ProgressActivity {
     touch(write: ShelfWrite, touch: ProgressTouch): Promise<void>;
 }
-/** Entry writer's call point for the counters. One statement; keys are sorted so the account's all-types row locks first. */
+/** Entry writer counter port. Native owner generation locks before sorted counter keys; all-types all locks first. */
 export interface ShelfCounters {
     /** Moves one entry between placements: `from` null on insert, `to` null on delete. */
     transition(write: ShelfWrite, from: ShelfPlacement | null, to: ShelfPlacement | null): Promise<void>;
@@ -196,6 +197,7 @@ export interface ShelfTypeKeys {
     reserve(write: ShelfWrite, fullType: string): Promise<ShelfTypeResolution>;
     continue(write: ShelfWrite, reservation: ShelfTypeReservation): Promise<ShelfTypeResolution>;
 }
+/** Native factory; caller admission remains tied to the live owner transaction. */
 export declare function createShelfTypeKeys(): ShelfTypeKeys;
 /** One bounded statement set: at most `limit + 1` entry rows and one active-session probe per returned entry. */
 export type ShelfRows = {

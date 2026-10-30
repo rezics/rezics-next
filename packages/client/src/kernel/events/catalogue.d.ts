@@ -1068,6 +1068,9 @@ declare const productEventTypes: {
         deletionId: Type.TString;
         removed: Type.TInteger;
     }>;
+    readonly 'com.rezics.library.type-preparation.changed.v1': Type.TObject<{
+        preparationId: Type.TString;
+    }>;
     readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TString;

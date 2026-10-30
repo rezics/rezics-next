@@ -28,15 +28,34 @@ export type HistoryOwner = Readonly<{
 /** Required producer families, independently of which ones happen to have artifacts today. */
 export declare const HISTORY_PRODUCER_FAMILIES: readonly ["access", "commerce", "community", "content", "library", "rating", "semantic", "zones", "imports"];
 export type HistoryProducerFamily = (typeof HISTORY_PRODUCER_FAMILIES)[number];
+/** The owner's complete current AND former native producer inventory. This declaration does
+ * not enroll historical data. Each configured home needs separate native source enrollment. */
+export type HistoryFamilySource = Readonly<{
+    artifactType: HistoryArtifactType;
+    producer: string;
+    version: number;
+}>;
+export type HistoryFamilyDefinition = Readonly<{
+    family: HistoryProducerFamily;
+    version: number;
+    sources: readonly HistoryFamilySource[];
+    digest: string;
+}>;
+/** Native producer namespaces with unambiguous ownership. Other names require the owner's
+ * explicit manifest; they never acquire a Semantic family merely by elimination. */
+export declare function nativeHistoryProducerFamily(producer: string): HistoryProducerFamily | undefined;
 /** A registration is an owner declaration of conversion, never an absence proof. Local sealed
  * prefixes, native consumers and Auth completion are checked separately by the receiving runtime. */
 export declare class HistoryRegistry {
     private readonly owners;
     private readonly coverage;
+    private readonly families;
     private closed;
     registerOwner(owner: HistoryOwner): void;
     registerCoverage(family: HistoryProducerFamily, types: readonly HistoryArtifactType[]): void;
     owner(type: HistoryArtifactType, name: string): HistoryOwner | undefined;
+    registerFamilySources(family: HistoryProducerFamily, version: number, sources: readonly HistoryFamilySource[]): void;
+    familyDefinitions(): readonly HistoryFamilyDefinition[];
     gaps(): readonly string[];
     familyGaps(family: HistoryProducerFamily): readonly string[];
     /** Stable across registration order; a changed owner/version/coverage invalidates old progress. */
