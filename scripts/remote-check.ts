@@ -1598,6 +1598,15 @@ def active_packages(root):
     return list(packages.values())
 
 
+def preparation_log_tail(root):
+    try:
+        raw = (root / '.temp/check-host/preparation-output').read_bytes()
+    except FileNotFoundError:
+        return ''
+    # Replacement characters can expand invalid UTF-8; bound the encoded receipt field as well as the raw tail.
+    return raw.decode(errors='replace').encode()[-8192:].decode(errors='ignore')
+
+
 def supervise():
     limit_ms, host, run, directory = sys.argv[2:6]
     root = Path(directory)
@@ -1649,11 +1658,17 @@ def supervise():
         for event, unused in selected.select(0.02):
             block = os.read(event.fileobj.fileno(), 65536)
             if block:
-                event.data.write(block)
-                event.data.flush()
                 if not preparation_done:
                     tail.extend(block)
                     del tail[:-8192]
+                    # The independent host deadline can reap this supervisor, including while SSH output blocks.
+                    # Publish a bounded atomic snapshot before forwarding so that monitor retains actual output.
+                    output = root / '.temp/check-host/preparation-output'
+                    pending = output.with_name(output.name + '.pending')
+                    pending.write_bytes(tail)
+                    pending.replace(output)
+                event.data.write(block)
+                event.data.flush()
             else:
                 selected.unregister(event.fileobj)
                 event.fileobj.close()
@@ -1685,7 +1700,7 @@ def supervise():
                    'reason': failure or 'preparation exited ' + str(child.returncode),
                    'activePackages': packages, 'lastObservedPackages': observed,
                    'packageClassification': 'active' if packages else 'unknown',
-                   'logTail': tail.decode(errors='replace')}
+                   'logTail': preparation_log_tail(root)}
         (root / 'preparation-status.json').write_text(json.dumps(receipt, sort_keys=True))
         terminal_status(root).write_text(str(code) + '\n')
         print('remote-check: infrastructure failure ' + json.dumps(receipt, sort_keys=True), file=sys.stderr, flush=True)
@@ -1958,7 +1973,8 @@ def lifetime():
         code = 124 if reason == 'run-lifetime' else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
-                            'packageClassification': 'active' if packages else 'unknown', 'logTail': ''})
+                            'packageClassification': 'active' if packages else 'unknown',
+                            'logTail': preparation_log_tail(root)})
         name = 'run-lifetime-status.json' if reason == 'run-lifetime' else 'preparation-status.json'
         contents = json.dumps(receipt, sort_keys=True)
         durable(root / name, contents)
