@@ -15,7 +15,12 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import { createKernelRuntimeDefaults, type KernelRuntimeOverrides } from '../../src/server.ts';
 import { createApp } from '../../src/http/app.ts';
-import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
+import {
+  createKernel,
+  createKernelAccessResolver,
+  type Kernel,
+  type KernelDependencies,
+} from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import type { SearchService } from '../../src/search/http/routes.ts';
 
@@ -129,6 +134,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
 
 export type TestKernelOptions = TestRuntimeOptions & {
   pool: Pool;
+  viewerActionResources?: KernelDependencies['viewerActionResources'];
   requestDeadlineMs?: number;
   workClient?: WorkClient;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
@@ -177,6 +183,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.commerce === undefined ? {} : { commerce: options.commerce }),
     ...(options.search === undefined ? {} : { search: options.search }),
     ...(options.reports === undefined ? {} : { reports: options.reports }),
+    ...(options.viewerActionResources === undefined ? {} : { viewerActionResources: options.viewerActionResources }),
     access: accessComposition.resolveAccess,
   });
   const composed = kernel as TestKernel;

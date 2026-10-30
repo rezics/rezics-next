@@ -10,6 +10,7 @@ import { createPool } from '../../src/database/pool.ts';
 import type { MountedRoute } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { ContextNotFoundError, editorialContextAnchor } from '../../src/semantic/context.ts';
 import { testKernel } from '../support/test-kernel.ts';
 import { issuer, nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
@@ -66,6 +67,26 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
     auth = await nativeFixture(pool);
     const kernel = testKernel({
       pool,
+      viewerActionResources: new Map([
+        [
+          reference.type,
+          {
+            readAction: 'context:read',
+            async read(client, ids, at, time) {
+              if (!time) throw new TypeError('Context fixture requires the live viewer read time');
+              const present: Record<string, boolean> = {};
+              for (const id of ids) {
+                try {
+                  if (await editorialContextAnchor(id).validate(client, time)) present[id] = true;
+                } catch (error) {
+                  if (!(error instanceof ContextNotFoundError)) throw error;
+                }
+              }
+              return present;
+            },
+          },
+        ],
+      ]),
       auth: {
         issuer,
         audience: 'https://ordinary.api.test',
@@ -92,13 +113,18 @@ test('Existing exact exposure actions are advertised only for actual fixed Globa
       expect(response.status).toBe(200);
       expect(response.headers.get('cache-control')).toBe('private, no-store');
       return (await response.json()) as {
-        resources: { type: string; id: string; viewerActions?: { action: string; operations: string[] }[]; error?: string }[];
+        resources: {
+          type: string;
+          id: string;
+          viewerActions?: { action: string; operations: string[] }[];
+          error?: string;
+        }[];
       };
     }
     const exposure = (result: Awaited<ReturnType<typeof read>>, id: string) =>
-      result.resources.find((item) => item.id === id)?.viewerActions?.filter((entry) =>
-        entry.action.startsWith('exposure:'),
-      );
+      result.resources
+        .find((item) => item.id === id)
+        ?.viewerActions?.filter((entry) => entry.action.startsWith('exposure:'));
     const mounted = compileViewerActionBindings(kernel.routes).get(reference.type)!;
     for (const operation of ['open', 'close'])
       expect(mounted.find((binding) => binding.operationId === `exposure.${operation}`)).toMatchObject({
