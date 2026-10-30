@@ -150,7 +150,7 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
           throw new Error(`Story ${storyId} failed its play function: ${errors.join('; ')}`);
         }
         if (scenario.id === stories.shell.id || scenario.id === stories.signedInShell.id) {
-          await frame.getByRole('menu').waitFor({ state: 'visible', timeout: 10_000 });
+          await frame.getByRole('dialog').waitFor({ state: 'visible', timeout: 10_000 });
         }
         if (scenario.globals) {
           await frame.locator('html[lang="ja"].dark').waitFor({ state: 'attached', timeout: 30_000 });
