@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, accountAgentId } from '../../src/semantic/index.ts';
@@ -176,7 +177,18 @@ test('native stale identity proof never becomes positive reuse and a hidden orig
     const second = await f.create('schema:Book', { 'schema:wordCount': quantity('+20') });
     const [terminal, original] = [first, second].sort() as [string, string];
     expect((await readListPresentationFacts(await f.deps(), [original])).get(original)?.id).toBe(original);
-    await f.checked('POST', '/v1/subjects:merge', { subjects: [original, terminal] });
+    const deps = await f.deps();
+    let preparations = 0;
+    const access = deriveAccess(deps.access, {
+      async prepare(actor, action, resource, context) {
+        if (resource.id === original && ++preparations === 2)
+          await f.checked('POST', '/v1/subjects:merge', { subjects: [original, terminal] });
+        return deps.access.prepare!(actor, action, resource, context);
+      },
+    });
+    await expect(readListPresentationFacts({ ...deps, access }, [original])).rejects.toMatchObject({
+      code: 'semantic_not_ready',
+    });
     // The actual current store refuses an unpublished native mapping; no fixture manufactures its publication.
     await expect(readListPresentationFacts(await f.deps(), [original])).rejects.toMatchObject({
       code: 'semantic_not_ready',
@@ -258,6 +270,35 @@ test('suspended and revoked native bearers fail authentication while a finite an
     expect((await readListPresentationFacts(await f.deps(), [id])).get(id)?.facts['schema:wordCount']).toEqual([
       { kind: 'quantity', amount: 31, unit: '1' },
     ]);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('a blocked native point read keeps deadline classification and releases its home for a finite retry', async () => {
+  const f = await createListPresentationFixture({ poolMax: 1 });
+  try {
+    const id = await f.create('schema:Book', { 'schema:wordCount': quantity('+19') });
+    const deps = await f.deps();
+    const locker = await f.db.admin.connect();
+    let failure: unknown;
+    try {
+      await locker.query('BEGIN');
+      await locker.query('LOCK TABLE semantic.subject IN ACCESS EXCLUSIVE MODE');
+      try {
+        await readListPresentationFacts({ ...deps, deadline: Date.now() + 100 }, [id]);
+      } catch (error) {
+        failure = error;
+      }
+    } finally {
+      await locker.query('ROLLBACK');
+      locker.release();
+    }
+    expect(classifyUnavailability(failure)).toBe('deadline');
+    expect((await readListPresentationFacts(await f.deps(), [id])).get(id)?.facts['schema:wordCount']).toEqual([
+      { kind: 'quantity', amount: 19, unit: '1' },
+    ]);
+    expect(f.maximumHeldBackends()).toBeLessThanOrEqual(1);
   } finally {
     await f.close();
   }
