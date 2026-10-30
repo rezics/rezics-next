@@ -69,14 +69,15 @@ export function projectSubjectOffer(pool: Pool, offerId: string, deadline: numbe
         throw new CommandUnavailableError('fenced', partitionOf(key.route));
       return noEffect(await upsert.run(tx, { ...key, version: observed.version }));
     });
-    if (!written.value) throw new CommandUnavailableError('fenced', partitionOf(key.route));
+    const installed = written.value;
+    if (!installed) throw new CommandUnavailableError('fenced', partitionOf(key.route));
     // No directory client is held across either native source or identity collection.
     const final = await readSubjectOfferSource(pool, offerId, deadline);
     const [identity] = await readIdentityMappings(pool, [source.targetSubjectId]);
     if (!final || final.revision !== source.revision || identity?.state !== 'mapped' ||
         identity.terminal !== mapping.terminal || identity.epoch !== mapping.epoch) {
       await runCommand(pool, { partition: partitionOf(key.route), basis, deadline }, async (tx) => {
-        await remove.run(tx, { ...key, version: written.value.version });
+        await remove.run(tx, { ...key, version: installed.version });
         return noEffect(null);
       });
       throw new CommandUnavailableError('fenced', partitionOf(key.route));
