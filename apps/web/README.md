@@ -2118,9 +2118,10 @@ the existing Commerce offer editor consumes that ID. No additional offer, order 
 
 The isolated typed wire binding uses configured `KERNEL_ORIGIN`, the existing session/Origin/CSRF boundary and private,
 no-store native transport with read-after-write session headers. It never uses the development fake. Without the native
-origin it returns typed `native-pending`. The generated client in this checkout has no edition routes, and Content post
-and edition resources are absent from the installed viewer-action registry; these are remaining producer integration
-edges. Missing native action resources return typed `admission-pending`, never invented permissions. The configured wire
+origin it returns typed `native-pending`. Native Content edition routes are mounted in this checkout, while the
+generated client still has no edition routes and Content post and edition resources are absent from the installed
+viewer-action registry; these are remaining producer integration edges. Missing native action resources return typed
+`admission-pending`, never invented permissions. The configured wire
 binding already calls real native operations when those resources are present; generated composition should replace the
 isolated transport when delivered. Native refusal or missing original authorship remains a refusal. These interface
 fixtures do not prove native availability, disclosure, physical growth, publisher receipts or buyer delivery.
