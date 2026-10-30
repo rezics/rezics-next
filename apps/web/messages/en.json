@@ -3268,5 +3268,17 @@
   "access_transfer_source": "Current owner: {name}",
   "access_transfer_responsibility": "The recipient becomes an owner responsible for this Realm. The source ownership grant is removed in the same operation. Membership is managed separately.",
   "access_transfer_confirm": "Transfer ownership from {source} to {recipient}?",
-  "access_transfer_lookup_failed": "Find an active account other than the source owner and confirm its identity."
+  "access_transfer_lookup_failed": "Find an active account other than the source owner and confirm its identity.",
+  "story_arc_title": "Narrative story-arc editor",
+  "story_arc_intro": "Describe a named narrative arc. A volume, release, season or page of results does not establish an arc.",
+  "story_arc_identity": "Arc identity",
+  "story_arc_create": "Create a story arc",
+  "story_arc_creation_help": "Create the arc with its names first. Connect existing works and add cited facts afterward; those later contributions await review.",
+  "story_arc_continue": "Connect and correct this arc",
+  "story_arc_choose_existing": "Choose an existing story arc",
+  "story_arc_relations": "Series and other relationships",
+  "story_arc_relations_help": "Use the released series, part-of, preceding and relationship fields. Preserve each target, order qualifier and citation; no membership is inferred.",
+  "story_arc_work": "Work and arc order",
+  "story_arc_work_help": "Select the actual work that carries this arc. Its Story arcs relation stores the arc target, position and first/last part evidence. Creating an arc does not create this relation.",
+  "story_arc_choose_work": "Choose an existing parent work"
 }

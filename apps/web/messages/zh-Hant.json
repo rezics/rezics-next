@@ -2947,5 +2947,17 @@
   "access_transfer_source": "目前擁有者：{name}",
   "access_transfer_responsibility": "接收者將成為擁有者，負責管理此領域。原擁有權授權會在同一次操作中移除。成員身分另行管理。",
   "access_transfer_confirm": "要將擁有權從 {source} 轉移給 {recipient} 嗎？",
-  "access_transfer_lookup_failed": "請尋找原擁有者以外的有效帳號，並確認其身分。"
+  "access_transfer_lookup_failed": "請尋找原擁有者以外的有效帳號，並確認其身分。",
+  "story_arc_title": "敘事篇章編輯器",
+  "story_arc_intro": "描述有名稱的敘事篇章。卷冊、發行版本、季度或一頁結果本身都不能確立篇章。",
+  "story_arc_identity": "篇章身分",
+  "story_arc_create": "建立故事篇章",
+  "story_arc_creation_help": "先建立篇章及其名稱，再關聯既有作品並新增有引用的事實；後續貢獻需要審核。",
+  "story_arc_continue": "關聯並修正此篇章",
+  "story_arc_choose_existing": "選擇既有故事篇章",
+  "story_arc_relations": "系列與其他關係",
+  "story_arc_relations_help": "使用目前發布的系列、組成、前作及關係欄位，保留各目標、順序限定與引用，不推斷歸屬。",
+  "story_arc_work": "所屬作品與篇章順序",
+  "story_arc_work_help": "選擇實際承載篇章的作品。作品的故事篇章關係保存篇章目標、位置及起迄部分依據。建立篇章不會自動建立此關係。",
+  "story_arc_choose_work": "選擇既有父作品"
 }

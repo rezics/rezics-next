@@ -2947,5 +2947,17 @@
   "access_transfer_source": "Propietario actual: {name}",
   "access_transfer_responsibility": "El destinatario será propietario y responsable de este Realm. El permiso de propiedad de origen se elimina en la misma operación. La pertenencia se gestiona por separado.",
   "access_transfer_confirm": "¿Transferir la propiedad de {source} a {recipient}?",
-  "access_transfer_lookup_failed": "Busca una cuenta activa distinta del propietario de origen y confirma su identidad."
+  "access_transfer_lookup_failed": "Busca una cuenta activa distinta del propietario de origen y confirma su identidad.",
+  "story_arc_title": "Editor de arcos narrativos",
+  "story_arc_intro": "Describe un arco narrativo con nombre. Un volumen, lanzamiento, temporada o página de resultados no constituye un arco.",
+  "story_arc_identity": "Identidad del arco",
+  "story_arc_create": "Crear un arco narrativo",
+  "story_arc_creation_help": "Crea primero el arco con sus nombres. Después conecta obras existentes y añade datos con citas; las contribuciones posteriores esperan revisión.",
+  "story_arc_continue": "Conectar y corregir este arco",
+  "story_arc_choose_existing": "Elegir un arco narrativo existente",
+  "story_arc_relations": "Series y otras relaciones",
+  "story_arc_relations_help": "Usa los campos publicados de serie, parte, predecesor y relaciones. Conserva cada destino, calificador de orden y cita; no se infiere pertenencia.",
+  "story_arc_work": "Obra y orden del arco",
+  "story_arc_work_help": "Selecciona la obra que realmente contiene este arco. Su relación de arcos guarda el destino, la posición y las pruebas de la primera y última parte. Crear el arco no crea esta relación.",
+  "story_arc_choose_work": "Elegir una obra principal existente"
 }

@@ -7,6 +7,7 @@ import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
+import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -412,6 +413,14 @@ export function SubjectPage({
             locale={locale}
           />
           <CreateSubjectEntry locale={locale} />
+          {read.subject.type === 'wd:Q2620972' && (
+            <StoryArcProfileEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
+            />
+          )}
           {read.subject.type === 'wd:Q95074' && (
             <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}

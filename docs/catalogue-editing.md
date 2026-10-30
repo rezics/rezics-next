@@ -186,3 +186,25 @@ Web capture handoff: `pages-catalogue-ordinary-identifier-evidence-editor--` fol
 Connected examples use synthetic native-shaped payloads through production adapters; the route story uses
 `PageStory`. Existing native subject/candidate APIs are bound through the current BFF; execution of the plays,
 normal Web captures and native integration acceptance remain pending. There is no new missing producer adapter.
+
+## Narrative story arcs
+
+The Contribute menu opens `/catalogue/story-arc`; an existing `wd:Q2620972` Subject also offers its
+`/subjects/:id/:slug/story-arc` correction workspace. These entries preserve locale and Realm addresses.
+The current generic producers support Global only, so a Realm address shows their unavailable-context state
+without silently submitting to Global. A physical volume, release, season or pagination segment does not establish
+an arc. The editor selects real native IDs and the current emitted Type and properties; it creates no schema,
+mapping or inferred membership.
+
+Initial creation reuses the ordinary multilingual terms form, its frozen retry key and actual created-Subject
+reread. The form creates names first; existing names link to the terms editor. Later scalar and classification
+facts reuse the shared multi-field/statement controls and candidate review, with independent partial results.
+The workspace links to the actual Subject and its current context review. A created identity and a proposed fact
+remain separate outcomes; a concealed or unavailable reader never becomes a fabricated success preview.
+
+An explicitly selected existing parent work owns the forward `rezics:storyArc` relation. Its shared relationship
+editor retains exact arc target slots, `schema:position`, `rezics:firstPart`, `rezics:lastPart` and grouped citations
+as emitted. Creating an arc creates no parent statement. The arc's own series, part-of, predecessor and other
+admitted relationships open the existing relationship workspace. Acceptance and adoption use current heads and
+the actual reader; an unselected adoption stays pending. Other slots and their evidence remain intact. Ordinary
+forms submit no ingestion Source metadata, and existing source-or-consent and disclosure decisions remain native.

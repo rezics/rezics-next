@@ -10,6 +10,7 @@ import { GameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
+import { StoryArcProfileEntry, storyArcEntry } from './story-arc-profile-entry';
 import { SubjectFactsEntry } from './subject-facts-entry';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { SubjectChangesLink } from './subject-changes-link';
@@ -52,6 +53,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       match(node, SubjectTermsEntry, catalogueEntries.terms) ??
       match(node, RecipeEditorEntry, catalogueEntries.recipe) ??
       match(node, CharacterProfileEntry, catalogueEntries.character) ??
+      match(node, StoryArcProfileEntry, storyArcEntry) ??
       match(node, PublicationEditorEntry, catalogueEntries.publication) ??
       match(node, SubjectChangesLink, catalogueEntries.changes);
     if (entry) entries.push(entry);
@@ -105,6 +107,7 @@ export function EditorialEntry({
   const { state } = useSession();
   const collected = collectEditorialEntries(children);
   const entries = [...collected.entries, ...subjectContributionEntries({ id, label, locale, context, realm })];
+  entries.push(storyArcEntry({ locale, realm }));
   entries.push({
     group: 'edit',
     label: m.identifiers_title({}, { locale: locale as never }),

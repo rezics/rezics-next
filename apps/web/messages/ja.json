@@ -2947,5 +2947,17 @@
   "access_transfer_source": "現在の所有者：{name}",
   "access_transfer_responsibility": "移譲先はこのRealmに責任を持つ所有者になります。同じ操作で移譲元の所有権付与が削除されます。メンバー資格は別に管理されます。",
   "access_transfer_confirm": "{source} から {recipient} に所有権を移譲しますか？",
-  "access_transfer_lookup_failed": "移譲元の所有者以外の有効なアカウントを検索し、本人を確認してください。"
+  "access_transfer_lookup_failed": "移譲元の所有者以外の有効なアカウントを検索し、本人を確認してください。",
+  "story_arc_title": "物語の編の編集",
+  "story_arc_intro": "名前のある物語の編を記述します。巻、リリース、シーズン、結果のページだけでは編を定義できません。",
+  "story_arc_identity": "編の識別情報",
+  "story_arc_create": "物語の編を作成",
+  "story_arc_creation_help": "まず編と名前を作成します。その後、既存の作品を関連付け、出典付きの情報を追加します。後からの投稿にはレビューが必要です。",
+  "story_arc_continue": "この編を関連付け・修正",
+  "story_arc_choose_existing": "既存の物語の編を選択",
+  "story_arc_relations": "シリーズとその他の関係",
+  "story_arc_relations_help": "公開済みのシリーズ、構成、前作、関係フィールドを使います。対象、順序の修飾子、出典を保持し、所属を推測しません。",
+  "story_arc_work": "作品と編の順序",
+  "story_arc_work_help": "実際にこの編を含む作品を選択します。作品の編の関係に、対象の編、位置、開始・終了部分の根拠を保存します。編の作成だけでは関係は作成されません。",
+  "story_arc_choose_work": "既存の親作品を選択"
 }

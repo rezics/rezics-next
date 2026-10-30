@@ -37,6 +37,9 @@ export function CreateSubjectForm({
   profile?: {
     title: string;
     scope: string;
+    type?: string;
+    intro?: string;
+    href?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
     fields: (type: string, disabled: boolean) => ReactNode;
@@ -53,7 +56,7 @@ export function CreateSubjectForm({
   if (profile) queryKey.push(profile.scope);
   // Definitions and the route's session read start independently.
   const definitions = useQuery({ queryKey, queryFn: () => transport.definitions(), retry: false });
-  const [type, setType] = useState('');
+  const [type, setType] = useState(profile?.type ?? '');
   const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
   const [failure, setFailure] = useState<CreateFailure>();
   const [busy, setBusy] = useState(false);
@@ -61,7 +64,9 @@ export function CreateSubjectForm({
   const running = useRef(false);
   const unresolvedProfile = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
-  const types = definitions.data?.ok ? definitions.data.types : [];
+  const types = definitions.data?.ok
+    ? definitions.data.types.filter((entry) => !profile?.type || entry.id === profile.type)
+    : [];
   const uncertain =
     (failure?.reason === 'unavailable' && request.current !== null) || (!!profile && unresolvedProfile.current);
   const locked = busy || uncertain || failure?.reason === 'conflict';
@@ -160,7 +165,7 @@ export function CreateSubjectForm({
         ) : (
           <PageHeading>{m.catalogue_create_title({}, options)}</PageHeading>
         )}
-        <p className="text-muted-foreground">{m.catalogue_create_intro({}, options)}</p>
+        <p className="text-muted-foreground">{profile?.intro ?? m.catalogue_create_intro({}, options)}</p>
       </header>
       <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
         <p>{m.catalogue_create_duplicate_help({}, options)}</p>
@@ -201,7 +206,7 @@ export function CreateSubjectForm({
               {m.catalogue_create_signed_out({}, options)}{' '}
               <a
                 className="underline"
-                href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/catalogue/new`)}`}
+                href={`/auth/sign-in?return_to=${encodeURIComponent(profile?.href ?? `/${locale}/catalogue/new`)}`}
               >
                 {m.account_sign_in({}, options)}
               </a>
@@ -353,7 +358,7 @@ export function CreateSubjectForm({
                   {failure.reason === 'signed-out' && (
                     <a
                       className="underline"
-                      href={`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/catalogue/new`)}`}
+                      href={`/auth/sign-in?return_to=${encodeURIComponent(profile?.href ?? `/${locale}/catalogue/new`)}`}
                     >
                       {m.account_sign_in({}, options)}
                     </a>
