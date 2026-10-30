@@ -95,7 +95,8 @@ export async function startSearchIndexing(options: {
 
       if (options.publicPreparation) {
         for (const generation of state.generations)
-          if (state.active === null || generation > state.active) await options.publicPreparation.initialize(generation);
+          if (state.active === null || generation > state.active)
+            await options.publicPreparation.initialize(generation);
         await options.publicPreparation.discover();
       }
       let activatedAt: number | undefined;

@@ -132,7 +132,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (request.generation !== undefined && request.generation !== state.active)
           throw new ProblemError('search_restart_required');
         const native = await createPublicSuggestionOperations({
-          pool: config.pool, source, search: config.search, clock: config.clock, context,
+          pool: config.pool,
+          source,
+          search: config.search,
+          clock: config.clock,
+          context,
           physicalTarget: subjectIndexName(config.prefix, state.active),
           meaning: { digest: release.digest, release: release.release, type: 'schema:Thing' },
         });

@@ -32,9 +32,16 @@ test('the default real Search journey provides useful current-authorized filled 
   const kept: string[] = [];
   try {
     for (let n = 0; n < 23; n++) {
-      const response = await driver.request('editor', 'POST', '/v1/subjects', {
-        type: 'schema:Book', labels: { en: `${marker} ${n < 20 ? 'a' : 'z'}${String(n).padStart(2, '0')}` },
-      }, { 'Idempotency-Key': `"${randomUUID()}"` });
+      const response = await driver.request(
+        'editor',
+        'POST',
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: `${marker} ${n < 20 ? 'a' : 'z'}${String(n).padStart(2, '0')}` },
+        },
+        { 'Idempotency-Key': `"${randomUUID()}"` },
+      );
       expect(response.status).toBe(201);
       const subject = response.body.subject as { id: string };
       (n < 20 ? removed : kept).push(subject.id);
@@ -43,7 +50,11 @@ test('the default real Search journey provides useful current-authorized filled 
     expect(new Set(initial.map((hit) => hit.id))).toEqual(new Set([...removed, ...kept]));
     await driver.indexing('paused');
     for (const id of removed) await driver.remove(id, 'hidden');
-    const lagged = await driver.request('anonymous', 'POST', '/v1/subjects:search', { text: marker, sort: 'name', limit: 2 });
+    const lagged = await driver.request('anonymous', 'POST', '/v1/subjects:search', {
+      text: marker,
+      sort: 'name',
+      limit: 2,
+    });
     if (lagged.status === 200) {
       const hits = subjects(lagged);
       expect(hits.every((hit) => kept.includes(hit.id))).toBe(true);
@@ -68,21 +79,33 @@ test('the default real Search journey provides useful current-authorized filled 
     expect(new Set([...firstHits, ...subjects(last)].map((hit) => hit.id))).toEqual(new Set(kept));
     await driver.rebuild();
     const stale = await driver.request('anonymous', 'POST', '/v1/subjects:search', {
-      text: marker, sort: 'name', limit: 2, cursor: first.body.next,
+      text: marker,
+      sort: 'name',
+      limit: 2,
+      cursor: first.body.next,
     });
     expect(stale.status).toBe(409);
     expect(stale.body.code).toBe('search_restart_required');
     expect(subjects(await currentPage(driver, { text: marker, sort: 'name', limit: 2 }))).toHaveLength(2);
-  } finally { await driver.close(); }
+  } finally {
+    await driver.close();
+  }
 }, 900_000);
 
 test('the default prefix journey hydrates current suggestions and recovers after privacy repair', async () => {
   const driver = await createSearchDriver();
   const marker = `suggestjourney${randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
   try {
-    const created = await driver.request('editor', 'POST', '/v1/subjects', {
-      type: 'schema:Book', labels: { en: `${marker} encyclopedia` },
-    }, { 'Idempotency-Key': `"${randomUUID()}"` });
+    const created = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      {
+        type: 'schema:Book',
+        labels: { en: `${marker} encyclopedia` },
+      },
+      { 'Idempotency-Key': `"${randomUUID()}"` },
+    );
     expect(created.status).toBe(201);
     const id = (created.body.subject as { id: string }).id;
     async function suggestions(): Promise<HttpResponse> {
@@ -111,5 +134,7 @@ test('the default prefix journey hydrates current suggestions and recovers after
     }
     await driver.indexing('running');
     expect(subjects(await suggestions()).map((hit) => hit.id)).not.toContain(id);
-  } finally { await driver.close(); }
+  } finally {
+    await driver.close();
+  }
 }, 900_000);

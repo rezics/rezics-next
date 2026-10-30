@@ -85,9 +85,14 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     if (state.partition === 4096) {
       if (state.phase !== 'activate') {
         const reconciliation = await options.runtime.publication.step(publication.locator, context);
-        return store.advance(record, {
-          ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native',
-        }, reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000);
+        return store.advance(
+          record,
+          {
+            ...state,
+            phase: reconciliation.status === 'reconciled' ? 'activate' : 'native',
+          },
+          reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
+        );
       }
       const activated = await options.runtime.publication.activate(publication.locator, context);
       if (activated.status === 'active') {

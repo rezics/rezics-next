@@ -746,10 +746,19 @@ export function createSearchService({
       const generation = await discoveryGeneration();
       if (publicFilters) {
         const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
-        const bound = await indexRequest(() => publicFilters().bindSuggestion({
-          purpose: 'suggest', prefix: q, size: 2 * limit, generation,
-          filterDocument: undefined, text: undefined,
-        }, context));
+        const bound = await indexRequest(() =>
+          publicFilters().bindSuggestion(
+            {
+              purpose: 'suggest',
+              prefix: q,
+              size: 2 * limit,
+              generation,
+              filterDocument: undefined,
+              text: undefined,
+            },
+            context,
+          ),
+        );
         const preparing = async (): Promise<never> => {
           if (bound.capture.status === 'captured' || bound.capture.status === 'preparing')
             await preparePublic?.(bound.capture.repair);
@@ -760,9 +769,13 @@ export function createSearchService({
           const observation = bound.capture.queried;
           const queried = await indexRequest(() => bound.operations.query(observation, context));
           if (queried.status !== 'queried') return await preparing();
-          const { passed } = await sourceRequest(() => checkHits(
-            source, queried.result.map((hit) => ({ ...hit, matched: [] })), new Map(),
-          ));
+          const { passed } = await sourceRequest(() =>
+            checkHits(
+              source,
+              queried.result.map((hit) => ({ ...hit, matched: [] })),
+              new Map(),
+            ),
+          );
           const response = {
             subjects: passed.slice(0, limit).map(({ subject }) => project(subject, options.languages)),
             as_of: await asOf(generation),
@@ -770,13 +783,19 @@ export function createSearchService({
           await read?.complete(response);
           if ((await indexRequest(freshAliasGeneration)) !== generation)
             throw new ProblemError('search_restart_required');
-          const final = await bound.operations.readStatus({ queried: queried.queried, execution: queried.execution }, context);
+          const final = await bound.operations.readStatus(
+            { queried: queried.queried, execution: queried.execution },
+            context,
+          );
           if (final.status !== 'observed' || final.blocking.length) return await preparing();
           return response;
         } finally {
           try {
-            if (bound.capture.status === 'captured') await bound.operations.closeObservation(bound.capture.queried, context);
-          } finally { await bound.operations.close(); }
+            if (bound.capture.status === 'captured')
+              await bound.operations.closeObservation(bound.capture.queried, context);
+          } finally {
+            await bound.operations.close();
+          }
         }
       }
       const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit, generation }));

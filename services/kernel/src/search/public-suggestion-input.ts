@@ -10,11 +10,16 @@ export function validatePublicSuggestionInput(input: PublicSuggestionCaptureInpu
     input.prefix.length > 128 ||
     [...input.prefix].length < 1 ||
     [...input.prefix].length > 64 ||
-    !Number.isInteger(input.size) || input.size < 1 || input.size > 50 ||
-    !Object.hasOwn(input, 'filterDocument') || input.filterDocument !== undefined ||
-    !Object.hasOwn(input, 'text') || input.text !== undefined ||
+    !Number.isInteger(input.size) ||
+    input.size < 1 ||
+    input.size > 50 ||
+    !Object.hasOwn(input, 'filterDocument') ||
+    input.filterDocument !== undefined ||
+    !Object.hasOwn(input, 'text') ||
+    input.text !== undefined ||
     (input.generation !== undefined && (!Number.isSafeInteger(input.generation) || input.generation < 1))
-  ) throw new TypeError('Invalid canonical public suggestion input');
+  )
+    throw new TypeError('Invalid canonical public suggestion input');
 }
 
 /** The existing search_as_you_type prefix semantics, with no user-selected fields or DSL. */

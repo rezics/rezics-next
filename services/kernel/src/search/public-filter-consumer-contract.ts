@@ -45,8 +45,9 @@ export type PublicSuggestionCaptureInput = Readonly<{
 }>;
 
 /** Retained by the same custody registry and resolved by the same native Source definition. */
-export type PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput |
-  (PublicSuggestionCaptureInput & Readonly<{ after?: never }>);
+export type PublicCanonicalCaptureInput =
+  | PublicFilterConsumerCaptureInput
+  | (PublicSuggestionCaptureInput & Readonly<{ after?: never }>);
 
 export type PublicSuggestionQuery =
   | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> &

@@ -14,13 +14,14 @@ import type {
 import type { OpenSearch } from './opensearch.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
-export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> = Readonly<{
-  source: Readonly<{ id: string; partition: number; epoch: number; configuration: string }>;
-  readDefinition: string;
-  meaning: PublicFilterProjectionMeaning;
-  capture: Capture;
-  dependencyKeys: readonly PublicFilterDependencyKey[];
-}>;
+export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
+  Readonly<{
+    source: Readonly<{ id: string; partition: number; epoch: number; configuration: string }>;
+    readDefinition: string;
+    meaning: PublicFilterProjectionMeaning;
+    capture: Capture;
+    dependencyKeys: readonly PublicFilterDependencyKey[];
+  }>;
 /** Exact immutable authority consumed through semantic.readRelease, including registered composites.
  * This locates complete meaning, never current Source permission or a reduced copy of its grammar.
  */

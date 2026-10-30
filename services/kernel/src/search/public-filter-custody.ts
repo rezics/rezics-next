@@ -11,7 +11,11 @@ import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
-import type { PublicCanonicalCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import type {
+  PublicCanonicalCaptureInput,
+  PublicFilterConsumerContext,
+  PublicFilterQueriedObservation,
+} from './public-filter-consumer-contract.ts';
 import type {
   CustodyCost,
   CustodyDefinition,
@@ -213,7 +217,11 @@ async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string)
   if (await compositeReference.run(db, { digest })) return;
   throw new Failure('definition_missing');
 }
-async function retainedDefinition(pool: Pool, meter: Meter, definition: CustodyDefinition<PublicCanonicalCaptureInput>) {
+async function retainedDefinition(
+  pool: Pool,
+  meter: Meter,
+  definition: CustodyDefinition<PublicCanonicalCaptureInput>,
+) {
   let retained: CustodyRetainedDefinition = definition;
   let encoded = encode({ digest: digest(retained), data: retained });
   if (Buffer.byteLength(encoded) > 1048576) {
