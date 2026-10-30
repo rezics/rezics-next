@@ -90,7 +90,16 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     await f.activate(f.replacementDigest);
     let fault: 'before' | 'after' | null = 'before';
     let advanced = false;
-    await observeRetentionQueries(f.pool, ({ sql }) => {
+    const consumed = new WeakMap<object, number>();
+    const rawPages: number[] = [];
+    await observeRetentionQueries(f.pool, ({ connection, sql, result }) => {
+      if (/AS incompatible/i.test(sql)) {
+        const total = (consumed.get(connection) ?? 0) + result.rows.length;
+        consumed.set(connection, total);
+        rawPages.push(total);
+        expect(total).toBeLessThanOrEqual(100);
+      }
+      if (/^(COMMIT|ROLLBACK)$/i.test(sql.trim())) consumed.delete(connection);
       if (/SET profile_migration_phase =/i.test(sql)) {
         advanced = true;
         if (fault === 'before') { fault = null; throw new Error('fixture before native commit'); }
@@ -118,6 +127,7 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     expect(withoutPins(after.sessions)).toEqual(withoutPins(before.sessions));
     expect(withoutPins(after.copies, true)).toEqual(withoutPins(before.copies, true));
     expect(after.history).toEqual(before.history);
+    expect(rawPages.some((rows) => rows === 4)).toBe(true);
     expect(after.receipts).toEqual(fresh.receipts);
     for (const { row } of [...after.sessions, ...after.copies]) expect(row.library_profile_pin).toEqual({
       provenance: 'legacy', releaseDigest: f.originalDigest, acceptingType: null, profileId: 'legacy-fixed-v1',

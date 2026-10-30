@@ -110,7 +110,6 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
     if (state.phase !== input.phase || state.after !== input.after) return state;
     let remaining = 100;
     while (state.phase !== 'ready' && remaining > 0) {
-      if (state.phase === 'legacy') throw new Error('Library profile migration was not started');
       const page = await pinLegacyFactsPage(tx, {
         accountId, kind: state.phase, releaseDigest: input.releaseDigest, after: state.after, limit: remaining,
       });

@@ -147,6 +147,7 @@ export async function insertSession(
     transaction_id: context.transactionId,
     library_profile_pin: acceptedPin,
   });
+  if (!row) throw new Error('Library session insert returned no row');
   return asSession(row);
 }
 

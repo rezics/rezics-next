@@ -47,8 +47,16 @@ BEGIN
     IF OLD.library_profile_pin IS NOT NULL OR (OLD.route, OLD.account_id) IS DISTINCT FROM (NEW.route, NEW.account_id) THEN
       RAISE EXCEPTION 'Library migration cannot admit a new unpinned fact' USING ERRCODE = '23514';
     END IF;
-    IF TG_TABLE_NAME = 'copy' THEN
-      IF OLD.deletion_id IS NOT NULL THEN
+    IF TG_TABLE_NAME = 'entry' THEN
+      IF OLD.subject_id IS DISTINCT FROM NEW.subject_id THEN
+        RAISE EXCEPTION 'Library migration requires a stable unpinned entry key' USING ERRCODE = '23514';
+      END IF;
+    ELSIF TG_TABLE_NAME = 'progress_session' THEN
+      IF OLD.session_id IS DISTINCT FROM NEW.session_id THEN
+        RAISE EXCEPTION 'Library migration requires a stable unpinned session key' USING ERRCODE = '23514';
+      END IF;
+    ELSIF TG_TABLE_NAME = 'copy' THEN
+      IF OLD.deletion_id IS NOT NULL OR OLD.copy_id IS DISTINCT FROM NEW.copy_id THEN
         RAISE EXCEPTION 'Library migration cannot admit a new unpinned fact' USING ERRCODE = '23514';
       END IF;
     END IF;
