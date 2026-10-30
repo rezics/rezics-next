@@ -467,7 +467,10 @@ export async function runJourney() {
       }
       expect(
         newNativeProposals.find((c) => c.statement.property.id === 'schema:name')?.statement.value.content,
-      ).toEqual({ language: source === 'bangumi' ? 'und' : 'en', text: title(source, 0, 2) });
+      ).toEqual({
+        language: source === 'bangumi' || source === 'openlibrary' ? 'und' : 'en',
+        text: title(source, 0, 2),
+      });
       expect(returned.exchanges.flatMap((e) => e.body.commands).some((c) => c.op === 'create')).toBe(false);
       const removedAgain = await invoke(source, 2, true);
       const absentAgain = inspect(source);
