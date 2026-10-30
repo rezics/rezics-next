@@ -1,5 +1,5 @@
 import type { Access } from '../request/access.ts';
-import type { AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
+import type { AuthErasureProofPorts, AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, CredentialEffectAuthorization, CredentialFloorPurpose, CredentialPurpose, PasskeyAuthorizationInput, PasskeyTrustedAccessPorts, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import type { OperatorOpening } from './operator.ts';
@@ -16,7 +16,7 @@ export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = Cr
  * epoch checks. These callbacks are capabilities, never request JSON or authorization flags.
  * Workflow/provider implementations can bind here without another account or policy authority.
  */
-export type AuthBindingCapabilities = {
+export type AuthBindingCapabilities = AuthErasureProofPorts & {
     /** Native pending reader, including verified original receipt metadata. The
      * composition must also verify current workflow approval for automated chains. */
     verifyPendingIdentity?: (reference: string) => Promise<(AccessAccount & {
