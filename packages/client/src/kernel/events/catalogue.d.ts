@@ -1,6 +1,22 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly 'com.rezics.semantic.composite.registered.v1': Type.TObject<{
+        context: Type.TString;
+        digest: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.scheduled.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.locator-scheduled.v1': Type.TObject<{
+        position: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.locator-advanced.v1': Type.TObject<{
+        position: Type.TString;
+    }>;
+    readonly 'com.rezics.semantic.erasure.progress.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
     readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{
         partition: Type.TInteger;
         after: Type.TString;
