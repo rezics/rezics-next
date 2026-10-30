@@ -3,6 +3,7 @@ import type { DataType, RelationDefinition, Release } from '@rezics/definitions'
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
 import { derivedId, routeOf } from '../route/route.ts';
+import type { SourceRecord } from './source-records.ts';
 
 export type Value = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
 export type Snak = { property: { id: string; data_type: DataType }; value: Value };
@@ -28,6 +29,7 @@ export type Item = {
   descriptions: Record<string, string>;
   aliases: Record<string, string[]>;
   statements: Record<string, Statement[]>;
+  sourceRecords: SourceRecord[];
 };
 export type Fact = {
   slot_id: string;
@@ -334,5 +336,6 @@ export function resolveItem(
     descriptions,
     aliases: Object.fromEntries([...aliases].filter(([, values]) => values.length)),
     statements: Object.fromEntries([...statements].filter(([, values]) => values.length)),
+    sourceRecords: [],
   };
 }

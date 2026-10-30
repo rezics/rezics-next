@@ -66,6 +66,15 @@ export declare const ItemSchema: import("typebox").TObject<{
             revision: import("typebox").TInteger;
         }>;
     }>>>;
+    sourceRecords: import("typebox").TArray<import("typebox").TObject<{
+        name: import("typebox").TString;
+        url: import("typebox").TString;
+        licence: import("typebox").TOptional<import("typebox").TObject<{
+            id: import("typebox").TString;
+            url: import("typebox").TOptional<import("typebox").TString>;
+        }>>;
+        attribution: import("typebox").TOptional<import("typebox").TString>;
+    }>>;
 }>;
 export declare const ItemInputSchema: import("typebox").TObject<{
     type: import("typebox").TString;
@@ -195,6 +204,15 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     revision: number;
                                 };
                             }[]>;
+                            sourceRecords: {
+                                name: string;
+                                url: string;
+                                licence?: {
+                                    id: string;
+                                    url?: string;
+                                };
+                                attribution?: string;
+                            }[];
                         };
                     };
                     400: {
@@ -473,6 +491,15 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                         revision: number;
                                     };
                                 }[]>;
+                                sourceRecords: {
+                                    name: string;
+                                    url: string;
+                                    licence?: {
+                                        id: string;
+                                        url?: string;
+                                    };
+                                    attribution?: string;
+                                }[];
                             };
                             account: {
                                 id: string;

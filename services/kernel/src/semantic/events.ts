@@ -93,6 +93,14 @@ export const SEMANTIC_EVENTS = {
   ),
   [RECORD_DELETED]: contextLifecycle,
   [RECORD_RESTORED]: contextLifecycle,
+  'com.rezics.source-record.metadata-changed.v1': Type.Object(
+    {
+      source: Type.String({ pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
+      external_id: Type.String({ minLength: 1, maxLength: 255 }),
+      metadata_revision: revision,
+    },
+    { additionalProperties: false },
+  ),
   [SUBJECT_MERGED]: Type.Object({ id: UUID, survivor: UUID }, { additionalProperties: false }),
   [SUBJECT_REVISED]: Type.Object(
     {

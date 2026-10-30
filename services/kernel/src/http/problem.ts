@@ -11,6 +11,8 @@ export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 
 export const PROBLEMS = {
   invalid_request: { status: 400, title: 'Invalid Request', retryable: false },
+  invalid_source_record_metadata: { status: 422, title: 'Invalid Source Record Metadata', retryable: false },
+  source_record_metadata_conflict: { status: 409, title: 'Source Record Metadata Conflict', retryable: false },
   invalid_argument: { status: 400, title: 'Invalid Argument', retryable: false },
   precondition_failed: { status: 412, title: 'Precondition Failed', retryable: false },
   content_too_large: { status: 413, title: 'Content Too Large', retryable: false },

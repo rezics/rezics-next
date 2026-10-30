@@ -29,6 +29,7 @@ import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
+import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
@@ -79,7 +80,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
         v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
     };
 };
-type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
+type KernelComposition = ZoneComposition & ReturnType<typeof recentSearchRoutes> & ReturnType<typeof viewerActionsRoutes> & ReturnType<typeof sourceStatisticRoutes> & ReturnType<typeof ratingRoutes> & ReturnType<typeof collectionRoutes> & ReturnType<typeof pinRoutes> & ReturnType<typeof personalLabelRoutes> & ReturnType<typeof personalLibraryRoutes> & ReturnType<typeof communityRoutes> & ReturnType<typeof exposureRoutes> & ReturnType<typeof subjectPageRoutes> & ReturnType<typeof bulkRoutes> & ReturnType<typeof sourceRecordRoutes> & ReturnType<typeof profileRoutes> & ReturnType<typeof accessRoutes> & ReturnType<typeof mediaRoutes> & ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof searchRoutes> & ReturnType<typeof payoutRoutes> & ReturnType<typeof commerceRoutes> & ReturnType<typeof progressRoutes> & ReturnType<typeof contextRoutes>;
 export type Kernel = KernelComposition;
 type ClientRoutes<Routes, Base> = {
     [Key in keyof Routes]: Key extends keyof Base ? Base[Key] extends {

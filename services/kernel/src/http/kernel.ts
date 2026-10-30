@@ -58,6 +58,7 @@ import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
+import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
@@ -314,6 +315,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     },
   );
   subjectPageRoutes(subjects as unknown as ReturnType<typeof createApp>);
+  sourceRecordRoutes(subjects, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+  });
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -567,6 +574,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &
   ReturnType<typeof bulkRoutes> &
+  ReturnType<typeof sourceRecordRoutes> &
   ReturnType<typeof profileRoutes> &
   ReturnType<typeof accessRoutes> &
   ReturnType<typeof mediaRoutes> &

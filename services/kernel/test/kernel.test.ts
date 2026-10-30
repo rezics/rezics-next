@@ -63,6 +63,7 @@ const typed = [
   'POST /v1/publishedLogs/:logId/$restore',
   'POST /v1/subjects',
   'POST /v1/subjects/$batchWrite',
+  'POST /v1/source-records/$setMetadata',
   'PUT /v1/realms/:realmId/boardScheme',
   'POST /v1/subjects/$facets',
   'POST /v1/spaces',

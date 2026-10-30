@@ -123,6 +123,15 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                     revision: number;
                                 };
                             }[]>;
+                            sourceRecords: {
+                                name: string;
+                                url: string;
+                                licence?: {
+                                    id: string;
+                                    url?: string;
+                                };
+                                attribution?: string;
+                            }[];
                         };
                     };
                     400: {
@@ -401,6 +410,15 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                         revision: number;
                                     };
                                 }[]>;
+                                sourceRecords: {
+                                    name: string;
+                                    url: string;
+                                    licence?: {
+                                        id: string;
+                                        url?: string;
+                                    };
+                                    attribution?: string;
+                                }[];
                             };
                             account: {
                                 id: string;

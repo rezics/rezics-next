@@ -1,6 +1,7 @@
 import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
 import { type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
+import type { SourceRecord } from './source-records.ts';
 export type Value = {
     type: 'value';
     content: unknown;
@@ -47,6 +48,7 @@ export type Item = {
     descriptions: Record<string, string>;
     aliases: Record<string, string[]>;
     statements: Record<string, Statement[]>;
+    sourceRecords: SourceRecord[];
 };
 export type Fact = {
     slot_id: string;

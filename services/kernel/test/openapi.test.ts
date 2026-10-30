@@ -158,6 +158,49 @@ test('generation refuses an error response that is not a problem and an unknown 
   expect(() => openApiDocument(unknown)).toThrow('GET /v1/cookie: unknown security scheme cookieSession');
 });
 
+test('authored closed command bodies survive an unknown transport body and global parser', () => {
+  const command = t.Object(
+    { metadata: t.Object({ name: t.String({ minLength: 1 }) }, { additionalProperties: false }) },
+    { additionalProperties: false },
+  );
+  const app = createApp({ pool }).post(
+    '/v1/commands',
+    {
+      body: t.Any(),
+      detail: {
+        operationId: 'command.write',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: command } },
+        },
+      },
+    },
+    () => ({ ok: true }),
+  );
+  const body = openApiDocument(app).paths['/v1/commands']!.post!.requestBody!;
+  expect(Object.keys(body.content!)).toEqual(['application/json']);
+  expect(body).toMatchObject({
+    required: true,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['metadata'],
+          properties: {
+            metadata: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['name'],
+              properties: { name: { type: 'string', minLength: 1 } },
+            },
+          },
+        },
+      },
+    },
+  });
+});
+
 test('the document is OpenAPI 3.1 with the bearer scheme and stable text', () => {
   expect(document.openapi).toBe('3.1.2');
   expect(document.info).toEqual({ title: 'REZICS Kernel API', version: '0.1.0' });

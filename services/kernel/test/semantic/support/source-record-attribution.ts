@@ -76,6 +76,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     'subject:read',
     'subject:batch_write',
     'subject:merge',
+    'gate:subject_identity',
     'statement:propose',
     'context:accept',
     'context:adopt',
@@ -113,11 +114,12 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     as: Persona | null = 'importer',
     key = randomUUID(),
   ) {
+    const bearer = as ? await real.refreshBearer(as) : undefined;
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
-          ...(as ? { authorization: `Bearer ${real.bearer(as)}` } : {}),
+          ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
           ...(method === 'POST' ? { 'idempotency-key': `"${key}"` } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
@@ -131,7 +133,7 @@ export async function attributionFixture(db: GrowthDatabase, pool: Pool = db.poo
     } catch {
       value = { raw: text };
     }
-    return { status: response.status, body: value };
+    return { status: response.status, body: value, authenticate: response.headers.get('www-authenticate') };
   }
   async function batch(command: BatchCommand) {
     const body = status(await call('POST', '/v1/subjects:batchWrite', { commands: [command] }), 200);

@@ -162,6 +162,21 @@ function validateRequestBody(operation: Operation, method: string, path: string)
 }
 
 function restoreJsonRequestBody(operation: Operation, route: Route): void {
+  // Command handlers can validate a closed body themselves while the transport accepts unknown input.
+  // The framework's generated body must not erase their explicitly authored public request schema.
+  const authored = route.hooks?.detail?.requestBody;
+  if (isRecord(authored) && isRecord(authored.content)) {
+    const content: Record<string, MediaType> = {};
+    for (const [type, media] of Object.entries(authored.content)) {
+      if (!isRecord(media)) continue;
+      content[type] = media.schema ? { ...media, schema: unwrapSchema(media.schema as never) } : media;
+    }
+    operation.requestBody = {
+      ...operation.requestBody,
+      ...authored,
+      content,
+    };
+  }
   if (route.hooks?.detail?.['x-body-mode'] === 'raw' || operation.requestBody?.content?.['application/json']) return;
   const schema = route.hooks?.body;
   if (!schema) return;

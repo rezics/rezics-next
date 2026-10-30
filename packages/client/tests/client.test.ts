@@ -18,6 +18,7 @@ const subject = {
   context: '019a1b2c-3d4e-7f00-8a00-000000000002',
   resolution: {},
   relationCounts: {},
+  sourceRecords: [],
   labels: { en: '1984' },
   descriptions: { en: '2024-01-01' },
   aliases: {},

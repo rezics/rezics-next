@@ -78,6 +78,8 @@ export async function resolveSlot(
 ) {
   const route = routeOf(subject)!;
   const last = await readSlotOperation.run(tx, { route, subject_id: subject, slot_id: slot });
+  // No head means there are no compact facts to resolve in this snapshot.
+  if (!last) return { expanded: false, compact: [] as Candidate[], adoption: null };
   if (last?.operation === 'expand') {
     const adoption = await latestAdoption(tx, subject, property, context, slot);
     return { expanded: true, compact: [] as Candidate[], adoption };

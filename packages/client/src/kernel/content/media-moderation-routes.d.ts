@@ -121,6 +121,15 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                     revision: number;
                                 };
                             }[]>;
+                            sourceRecords: {
+                                name: string;
+                                url: string;
+                                licence?: {
+                                    id: string;
+                                    url?: string;
+                                };
+                                attribution?: string;
+                            }[];
                         };
                     };
                     400: {
@@ -399,6 +408,15 @@ export declare function mediaModerationRoutes(app: ReturnType<typeof sourceFence
                                         revision: number;
                                     };
                                 }[]>;
+                                sourceRecords: {
+                                    name: string;
+                                    url: string;
+                                    licence?: {
+                                        id: string;
+                                        url?: string;
+                                    };
+                                    attribution?: string;
+                                }[];
                             };
                             account: {
                                 id: string;

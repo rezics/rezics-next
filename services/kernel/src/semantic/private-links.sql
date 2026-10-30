@@ -16,7 +16,11 @@ selected AS MATERIALIZED (
          holder.type AS source_type, target.type AS target_type,
          CASE WHEN input.inbound THEN d.source_order_key ELSE d.target_order_key END AS order_key
   FROM input CROSS JOIN semantic.statement_disclosure d
-  JOIN semantic.candidate c ON c.route = d.route AND c.subject_id = d.subject_id AND c.candidate_id = d.candidate_id
+  CROSS JOIN LATERAL (
+    SELECT slot_id, statement, release, revision, rank FROM semantic.candidate
+    WHERE route = d.route AND subject_id = d.subject_id AND candidate_id = d.candidate_id
+    LIMIT 1
+  ) c
   JOIN semantic.subject holder ON holder.route = d.route AND holder.subject_id = d.subject_id
   JOIN semantic.subject target ON target.route = get_byte(uuid_send(d.target_id), 10) * 256 + get_byte(uuid_send(d.target_id), 11)
     AND target.subject_id = d.target_id

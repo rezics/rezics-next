@@ -239,11 +239,21 @@ request-local and never a stored reusable permission. Pool max 1 must complete, 
   `T + sum(E_p)` for those facts, deduplicated by tuple. Term puts superseded/retracted in the native fold do not
   add support. Count all native term-fold work, exact revision lookups and fence probes, not just hydration.
   This is not a universal 32/128 source-key cap: multiple originals supporting one fact still count. Metadata
-  hydration examines at most D records; with K native exact proofs it is O(D+K), with constant statements for
-  fixed displayed support and logarithmic blocks. Existing 100-tuple fence batches and 256-id helpers are
-  transport chunks, never a disclosure truncation rule. No whole-degree or reverse/global scan.
+  hydration examines at most D records when the measured metadata relation exceeds eight pages; with K native
+  exact proofs it is O(D+K), with constant statements for fixed displayed support and logarithmic blocks.
+  Existing 100-tuple fence batches and 256-id helpers are transport chunks, never a disclosure truncation rule. No whole-degree or reverse/global scan.
 - Growth check: independently grow unrelated records/history and the same subject's irrelevant candidates at
   64/512/4096 while fixing returned support; capture rows including removed rows, shared blocks, statements,
   request/response bytes and backend connections across the full original pool. Run public/private/hidden,
   foreign/fenced and replay paths and a max-1 pool read. Native acceptance must first obtain genuine positive
   data, then revoke it; an absent route or 503 cannot supply a cost or disclosure pass.
+
+### Measured access paths
+
+Use the shared `checkGrowth` producer and `assertGrowthAccessPaths` from `test/support/growth.ts`. Every
+repetition uses the actual post-grow-settle native relation footprint. Executed scans must be zero for each
+measured relation larger than eight pages. At eight pages or fewer, the unchanged inclusive rows, blocks,
+statements and bytes growth series decides; all physical work, including removed rows, remains counted.
+The metadata hydration bound of D follows the same measured-footprint condition. Empty-disclosure and
+no-support paths always perform zero metadata hydration. No fixed plan shape, population padding or local
+classifier substitutes for this shared rule. Preserve the original scales, repetitions and deadlines.

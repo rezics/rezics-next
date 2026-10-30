@@ -20,6 +20,7 @@ export type RealAccessFixture<Persona extends string> = {
   writeRate: ReturnType<typeof createWriteRateLimiter>;
   bearer(persona: Persona): string;
   renew(persona: Persona): Promise<void>;
+  refreshBearer(persona: Persona): Promise<string>;
   grant(resource: Resource, persona: Persona, action: string): Promise<void>;
   revoke(resource: Resource, persona: Persona, action: string): Promise<void>;
   checks: RealAccessCheck[];
@@ -45,19 +46,14 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   };
   const bearers = new Map<Persona, string>();
 
-  async function renew(persona: Persona): Promise<void> {
+  async function mintBearer(persona: Persona, epoch = 1): Promise<string> {
     const accountId = accounts[persona];
     if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
-    const result = await admin.query(
-      'SELECT state, minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
-      [routeOf(accountId), accountId],
-    );
-    if (result.rows[0]?.state !== 'active') throw new Error('Fixture issuer requires an active account');
     const issuedAt = Math.floor((options.clock?.() ?? new Date()).getTime() / 1000);
-    const bearer = await new SignJWT({
+    return new SignJWT({
       client_id: 'web',
       scope: actions.join(' '),
-      authn_epoch: Number(result.rows[0].epoch),
+      authn_epoch: epoch,
       auth_time: issuedAt,
       amr: ['pwd'],
     })
@@ -68,7 +64,17 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
       .setIssuedAt(issuedAt)
       .setExpirationTime(issuedAt + 5 * 60)
       .sign(signing.privateKey);
-    bearers.set(persona, bearer);
+  }
+
+  async function renew(persona: Persona): Promise<void> {
+    const accountId = accounts[persona];
+    if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
+    const result = await admin.query(
+      'SELECT state, minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    );
+    if (result.rows[0]?.state !== 'active') throw new Error('Fixture issuer requires an active account');
+    bearers.set(persona, await mintBearer(persona, Number(result.rows[0].epoch)));
   }
 
   for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
@@ -132,6 +138,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     grant,
     revoke,
     renew,
+    refreshBearer: (persona) => mintBearer(persona),
     checks,
     readChecks,
   };

@@ -8,6 +8,9 @@ JOIN LATERAL (
   SELECT candidate_id FROM semantic.hidden_candidate h
   WHERE h.route = input.route AND h.subject_id = input.subject_id AND h.candidate_id = wanted.candidate_id
   UNION ALL
+  SELECT candidate_id FROM semantic.retraction t
+  WHERE t.route = input.route AND t.subject_id = input.subject_id AND t.candidate_id = wanted.candidate_id
+  UNION ALL
   SELECT candidate_id FROM semantic.statement_disclosure d
   WHERE d.route = input.route AND d.subject_id = input.subject_id AND d.candidate_id = wanted.candidate_id
     AND (EXISTS (SELECT 1 FROM semantic.retraction t WHERE t.route = input.route

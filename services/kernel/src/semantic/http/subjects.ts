@@ -60,6 +60,7 @@ import { readReactionCounts, type ReactionKind } from '../../content/reaction-pr
 import readVisibility from '../read-visibility.sql';
 import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';
 import readRedirect from '../read-redirect.sql';
+import { SourceRecordSchema } from '../source-records.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const AgentSelfSourceSchema = t.Object(
@@ -106,6 +107,7 @@ export const ItemSchema = t.Object(
     descriptions: t.Record(t.String(), t.String()),
     aliases: t.Record(t.String(), t.Array(t.String())),
     statements: t.Record(t.String(), t.Array(StatementSchema)),
+    sourceRecords: t.Array(SourceRecordSchema),
   },
   { additionalProperties: false },
 );
@@ -654,9 +656,6 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const resource = { route, id: params.id };
-        const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
-        const check = await authorize(subjectResource);
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
         const checksById = new Map<string, Promise<import('../../request/access.ts').AccessCheck>>();
         const authorizeSummary: import('../summaries.ts').SummaryDependencies['authorize'] = async (
@@ -674,18 +673,18 @@ function subjectRoutes(
           return (await pending)(client);
         };
         const result = await admission.run('normal', job, () =>
-          readStatementAs(pool, access(), actor, job.deadline, () =>
-            readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey, {
-              languages,
-              authorize: authorizeSummary,
-              prepareAuthorization: async () => {
-                checksById.clear();
-                return authorize(subjectResource);
-              },
-              seen: [...session.components],
-              deadline: job.deadline,
-            }),
-          ).catch((error: unknown) => {
+          readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
+            languages,
+            authorize: authorizeSummary,
+            seen: [...session.components],
+            deadline: job.deadline,
+            prepareAuthorize: (id) => {
+              checksById.clear();
+              const resource = { route: routeOf(id)!, id };
+              return authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+            },
+            readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
+          }).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
           }),
@@ -1861,8 +1860,6 @@ function subjectRoutes(
                 },
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 authorize: check,
-                prepareAuthorization: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
-                deadline: job.deadline,
                 seen,
                 caughtUp,
               }),
@@ -1987,8 +1984,6 @@ function subjectRoutes(
                   return relatedCheck(client);
                 },
                 authorize: check,
-                prepareAuthorization: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
-                deadline: job.deadline,
                 seen,
                 caughtUp,
               }),

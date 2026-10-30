@@ -1,4 +1,3 @@
-import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
@@ -138,7 +137,7 @@ test('concurrent native fills and CAS corrections serialize without lost metadat
   expect(final.record).toEqual({ ...bare, licence: a.licence!, attribution: 'Registered contributors' });
 });
 
-test('real Global bulk grants are required before replay and natively suspended accounts get invalid_credentials', async () => {
+test('real Global bulk grants are required before replay and suspended credentials are rejected before metadata', async () => {
   const origin = source();
   const metadata = registeredBangumi(origin.external_id);
   const body: MetadataCommand = {
@@ -161,13 +160,21 @@ test('real Global bulk grants are required before replay and natively suspended 
   } finally {
     await f.real.grant(global, 'importer', 'subject:batch_write');
   }
-  await suspendAccount(db.admin, f.accounts.importer);
+  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+    routeOf(f.accounts.importer),
+    f.accounts.importer,
+  ]);
   try {
-    const denied = status(await f.metadata(origin, metadata, null, key), 401);
+    const response = await f.metadata(origin, metadata, null, key);
+    const denied = status(response, 401);
     expect(denied.type).toEndWith('/invalid_credentials');
+    expect(denied.code).toBe('invalid_credentials');
+    expect(response.authenticate).toBe('Bearer error="invalid_token"');
   } finally {
-    await reinstateAccount(db.admin, f.accounts.importer);
-    await f.real.renew('importer');
+    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+      routeOf(f.accounts.importer),
+      f.accounts.importer,
+    ]);
   }
   expect(
     f.real.checks.some((check) => check.action === 'subject:batch_write' && check.resource.id === GLOBAL_CONTEXT),
@@ -251,7 +258,7 @@ test('current bootstrap and selected multi-source support is attributed, through
   expect(records(await f.read(book.id))).toEqual([a]); // accepted but unselected
   await f.adopt(book.id, [book.candidate, candidate]);
   expect(sorted(records(await f.read(book.id)))).toEqual(sorted([a, b]));
-  await f.adopt(book.id, [], 'schema:inLanguage', 'suppress');
+  await f.adopt(book.id, [], 'schema:inLanguage', 'replace');
   expect(records(await f.read(book.id))).toEqual([a]);
   await f.adopt(book.id, [book.candidate, candidate]);
   status(
@@ -524,7 +531,7 @@ test('sourceRecords includes currently disclosed native bootstrap metadata and s
   expect(selected.labels).toEqual(terms.labels);
   expect(selected.aliases).toEqual(terms.aliases);
   expect(sorted(records(selected))).toEqual(sorted([a, b]));
-  await f.adopt(book.id, [], 'schema:name', 'suppress');
+  await f.adopt(book.id, [], 'schema:name', 'replace');
   expect(records(await f.read(book.id))).toEqual([a]);
   await f.adopt(book.id, [name], 'schema:name');
   await f.drain(book.id);

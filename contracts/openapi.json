@@ -149171,6 +149171,832 @@
         "x-exposure": "public"
       }
     },
+    "/v1/source-records:setMetadata": {
+      "post": {
+        "operationId": "source_record.set_metadata",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 3,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_metadata_revision": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "external_id": {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "attribution": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "licence": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "url": {
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      "name": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "url": {
+                        "maxLength": 2048,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "url"
+                    ],
+                    "type": "object"
+                  },
+                  "source": {
+                    "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "external_id",
+                  "metadata",
+                  "expected_metadata_revision"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "effect": {
+                      "enum": [
+                        "filled",
+                        "corrected",
+                        "noEffect"
+                      ],
+                      "type": "string"
+                    },
+                    "metadata_revision": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "record": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "attribution": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "licence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "url": {
+                              "maxLength": 2048,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        "name": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "url": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "url"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "record",
+                    "metadata_revision",
+                    "effect"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200",
+            "headers": {
+              "rezics-session-token": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "effect": {
+                      "enum": [
+                        "filled",
+                        "corrected",
+                        "noEffect"
+                      ],
+                      "type": "string"
+                    },
+                    "metadata_revision": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "record": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "attribution": {
+                          "maxLength": 500,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "licence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "url": {
+                              "maxLength": 2048,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        "name": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "url": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "url"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "record",
+                    "metadata_revision",
+                    "effect"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201",
+            "headers": {
+              "rezics-session-token": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "invalid_request",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Invalid Request",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/invalid_request",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "forbidden",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Forbidden",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/forbidden",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "source_record_metadata_conflict",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Source Record Metadata Conflict",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/source_record_metadata_conflict",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Source record metadata conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "invalid_source_record_metadata",
+                        "idempotency_conflict"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Invalid Source Record Metadata",
+                        "Idempotency Key Reused"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/invalid_source_record_metadata",
+                        "https://rezics.com/problems/idempotency_conflict"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid source record metadata; Idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "overloaded",
+                        "deadline_exceeded",
+                        "partition_unavailable",
+                        "transaction_retry_exhausted"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        true,
+                        true,
+                        true,
+                        true
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Service Overloaded",
+                        "Deadline Exceeded",
+                        "Partition Unavailable",
+                        "Transaction Retry Exhausted"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/overloaded",
+                        "https://rezics.com/problems/deadline_exceeded",
+                        "https://rezics.com/problems/partition_unavailable",
+                        "https://rezics.com/problems/transaction_retry_exhausted"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Overloaded; Deadline exceeded; Partition unavailable; Transaction retry exhausted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-action": "subject:batch_write",
+        "x-exposure": "public",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        }
+      }
+    },
     "/v1/sourceFences:check": {
       "get": {
         "operationId": "source_fence.read",
@@ -156788,6 +157614,53 @@
                           "minimum": 1,
                           "type": "integer"
                         },
+                        "sourceRecords": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attribution": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "licence": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "maxLength": 2048,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "url": {
+                                "maxLength": 2048,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "url"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "statements": {
                           "patternProperties": {
                             "^.*$": {
@@ -157113,7 +157986,8 @@
                         "labels",
                         "descriptions",
                         "aliases",
-                        "statements"
+                        "statements",
+                        "sourceRecords"
                       ],
                       "type": "object"
                     }
@@ -157996,6 +158870,53 @@
                           "minimum": 1,
                           "type": "integer"
                         },
+                        "sourceRecords": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attribution": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "licence": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "maxLength": 128,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "maxLength": 2048,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
+                              },
+                              "name": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "url": {
+                                "maxLength": 2048,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "url"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "statements": {
                           "patternProperties": {
                             "^.*$": {
@@ -158321,7 +159242,8 @@
                         "labels",
                         "descriptions",
                         "aliases",
-                        "statements"
+                        "statements",
+                        "sourceRecords"
                       ],
                       "type": "object"
                     },
@@ -183188,10 +184110,670 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
                 "properties": {
                   "commands": {
-                    "items": {},
+                    "items": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "pattern": "^[\\x20-\\x7e]+$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "create",
+                              "type": "string"
+                            },
+                            "source": {
+                              "properties": {
+                                "converter_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "external_id": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "field_group": {
+                                  "enum": [
+                                    "facts",
+                                    "summary",
+                                    "cover"
+                                  ],
+                                  "type": "string"
+                                },
+                                "record_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "external_id",
+                                "record_revision",
+                                "digest",
+                                "converter_revision",
+                                "field_group"
+                              ],
+                              "type": "object"
+                            },
+                            "subject": {
+                              "properties": {
+                                "aliases": {
+                                  "patternProperties": {
+                                    "^.*$": {
+                                      "items": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "descriptions": {
+                                  "patternProperties": {
+                                    "^.*$": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "labels": {
+                                  "patternProperties": {
+                                    "^.*$": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "type": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "labels"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "key",
+                            "source",
+                            "subject"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "pattern": "^[\\x20-\\x7e]+$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "propose",
+                              "type": "string"
+                            },
+                            "rights": {
+                              "properties": {
+                                "attribution": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "license": {
+                                  "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]{0,79}$",
+                                  "type": "string"
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "enum": [
+                                      "cc:Attribution",
+                                      "cc:ShareAlike",
+                                      "cc:Notice",
+                                      "cc:SourceCode"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "maxItems": 4,
+                                  "type": "array",
+                                  "uniqueItems": true
+                                }
+                              },
+                              "required": [
+                                "license",
+                                "obligations",
+                                "attribution"
+                              ],
+                              "type": "object"
+                            },
+                            "source": {
+                              "properties": {
+                                "converter_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "external_id": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "field_group": {
+                                  "enum": [
+                                    "facts",
+                                    "summary",
+                                    "cover"
+                                  ],
+                                  "type": "string"
+                                },
+                                "record_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "external_id",
+                                "record_revision",
+                                "digest",
+                                "converter_revision",
+                                "field_group"
+                              ],
+                              "type": "object"
+                            },
+                            "statement": {
+                              "properties": {
+                                "property": {
+                                  "properties": {
+                                    "id": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "qualifiers": {
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "properties": {
+                                          "property": {
+                                            "properties": {
+                                              "id": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "id"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "value": {
+                                            "properties": {
+                                              "content": {},
+                                              "type": {
+                                                "const": "value",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "content"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        },
+                                        "required": [
+                                          "property",
+                                          "value"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "property": {
+                                            "properties": {
+                                              "id": {
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "id"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "value": {
+                                            "anyOf": [
+                                              {
+                                                "properties": {
+                                                  "type": {
+                                                    "const": "somevalue",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "type"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "properties": {
+                                                  "type": {
+                                                    "const": "novalue",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "type"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "property",
+                                          "value"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "type": "array"
+                                },
+                                "rank": {
+                                  "enum": [
+                                    "normal",
+                                    "preferred"
+                                  ],
+                                  "type": "string"
+                                },
+                                "references": {
+                                  "items": {
+                                    "properties": {
+                                      "parts": {
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "property": {
+                                                  "properties": {
+                                                    "id": {
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "value": {
+                                                  "properties": {
+                                                    "content": {},
+                                                    "type": {
+                                                      "const": "value",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type",
+                                                    "content"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "required": [
+                                                "property",
+                                                "value"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "property": {
+                                                  "properties": {
+                                                    "id": {
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "value": {
+                                                  "anyOf": [
+                                                    {
+                                                      "properties": {
+                                                        "type": {
+                                                          "const": "somevalue",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    {
+                                                      "properties": {
+                                                        "type": {
+                                                          "const": "novalue",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type"
+                                                      ],
+                                                      "type": "object"
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "property",
+                                                "value"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "minItems": 1,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "parts"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 16,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "value": {
+                                  "anyOf": [
+                                    {
+                                      "properties": {
+                                        "content": {},
+                                        "type": {
+                                          "const": "value",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "content"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "properties": {
+                                        "type": {
+                                          "const": "somevalue",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "properties": {
+                                        "type": {
+                                          "const": "novalue",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "property",
+                                "value",
+                                "references"
+                              ],
+                              "type": "object"
+                            },
+                            "subject": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "key",
+                            "source",
+                            "subject",
+                            "statement"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "candidate": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "pattern": "^[\\x20-\\x7e]+$",
+                              "type": "string"
+                            },
+                            "op": {
+                              "const": "retract",
+                              "type": "string"
+                            },
+                            "references": {
+                              "items": {
+                                "properties": {
+                                  "parts": {
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "properties": {
+                                            "property": {
+                                              "properties": {
+                                                "id": {
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "value": {
+                                              "properties": {
+                                                "content": {},
+                                                "type": {
+                                                  "const": "value",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "content"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "property",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "properties": {
+                                            "property": {
+                                              "properties": {
+                                                "id": {
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "value": {
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "type": {
+                                                      "const": "somevalue",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "type": {
+                                                      "const": "novalue",
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "type"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "property",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "parts"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "source": {
+                              "properties": {
+                                "converter_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "digest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "external_id": {
+                                  "maxLength": 255,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "field_group": {
+                                  "enum": [
+                                    "facts",
+                                    "summary",
+                                    "cover"
+                                  ],
+                                  "type": "string"
+                                },
+                                "record_revision": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "external_id",
+                                "record_revision",
+                                "digest",
+                                "converter_revision",
+                                "field_group"
+                              ],
+                              "type": "object"
+                            },
+                            "subject": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "op",
+                            "key",
+                            "source",
+                            "subject",
+                            "candidate",
+                            "references"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "maxItems": 100,
                     "minItems": 1,
                     "type": "array"

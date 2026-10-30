@@ -65,6 +65,8 @@ import listOutboundLinks from './list-outbound-links-by-property.sql';
 import readOutboundLinkCount from './read-outbound-link-count.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import { identityEpochStore } from './identity-epoch-store.ts';
+import { readSourceRecords } from './source-records.ts';
+import readSourceMembers from './source-records-members.sql';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -321,10 +323,10 @@ export async function writeSubject(
 type SubjectReadRow = {
   id: string;
   account: string | null;
-  security_revision: string;
   redirect: string | null;
   type: string;
   revision: number;
+  security_revision: string;
   release: string;
   fact_revision: number | null;
   fact_release: string | null;
@@ -364,36 +366,95 @@ function asFacts(rows: readonly SubjectReadRow[]): FactRow[] {
   );
 }
 
-async function withoutFencedFacts(
+/** Fold terms first: fencing a final put must never resurrect an older put. */
+function currentTerms(facts: FactRow[]): FactRow[] {
+  const live = new Map<string, FactRow>();
+  for (const fact of facts) {
+    const key = JSON.stringify([fact.kind, fact.language, fact.kind === 'alias' ? fact.body : null]);
+    if (fact.operation === 'retract') live.delete(key);
+    else if (fact.operation === 'assert' && (fact.kind !== 'alias' || !live.has(key))) live.set(key, fact);
+  }
+  return [...live.values()];
+}
+
+type SupportedFact = { fact: FactRow; source: Source | null };
+
+/** Exact immutable revision locators for the final terms and selected statements only. */
+async function supportedFacts(
   client: PoolClient,
-  routeKey: Uint8Array,
-  route: number,
-  subjectId: string,
+  routeKey: Uint8Array | undefined,
+  subject: string,
   facts: FactRow[],
-): Promise<FactRow[]> {
-  const revisions = [
-    ...new Set(facts.flatMap((fact) => (fact.statement_id && fact.fact_revision ? [fact.fact_revision] : []))),
-  ];
-  // Always probe, including an empty list, so hiding the last shown statement does not drop a statement.
+): Promise<SupportedFact[]> {
+  const revisions = [...new Set(facts.flatMap((fact) => (fact.fact_revision ? [fact.fact_revision] : [])))];
   const rows = listed(
     (await readHiddenStatement.run(client, {
-      route,
-      subject_id: subjectId,
+      route: routeOf(subject)!,
+      subject_id: subject,
       revisions,
     })) as { revision: number; source: Source | null }[] | { revision: number; source: Source | null } | null,
   );
-  if (!revisions.length) return facts;
   const sources = new Map(rows.map((row) => [row.revision, row.source]));
-  const gone = await fencedIds(
-    client,
-    routeKey,
-    facts.flatMap((fact) =>
-      fact.statement_id && fact.fact_revision
-        ? [{ id: fact.statement_id, source: sources.get(fact.fact_revision) ?? null }]
-        : [],
-    ),
+  const supported = facts.map((fact) => ({ fact, source: sources.get(fact.fact_revision!) ?? null }));
+  const gone = routeKey
+    ? await fencedIds(
+        client,
+        routeKey,
+        supported.map((row, index) => ({ id: String(index), source: row.source })),
+      )
+    : new Set<string>();
+  return supported.filter((_, index) => !gone.has(String(index)));
+}
+
+/** Foreign item snaks need current original and terminal disclosure as well as the holder's permission. */
+async function disclosedTargets(
+  pool: Pool,
+  release: Release,
+  supported: SupportedFact[],
+  authorize: SummaryDependencies['authorize'] | undefined,
+): Promise<SupportedFact[]> {
+  const types = factDataTypes(
+    release,
+    supported.map((row) => row.fact),
   );
-  return facts.filter((fact) => fact.statement_id === null || !gone.has(fact.statement_id));
+  const targets = (fact: FactRow): string[] => {
+    if (fact.kind !== 'statement') return [];
+    const body = fact.body as {
+      value: { type: string; content?: unknown };
+      qualifiers: { property: string; value: { type: string; content?: unknown } }[];
+      references: { parts: { property: string; value: { type: string; content?: unknown } }[] }[];
+    };
+    return [
+      { property: fact.property!, value: body.value },
+      ...body.qualifiers,
+      ...body.references.flatMap((ref) => ref.parts),
+    ].flatMap((snak) =>
+      types[snak.property] === 'wikibase-item' && snak.value.type === 'value' && typeof snak.value.content === 'string'
+        ? [snak.value.content]
+        : [],
+    );
+  };
+  const pending = [...new Set(supported.flatMap((row) => targets(row.fact)))];
+  if (!pending.length) return supported;
+  // No owner is checked out while Access prepares evidence, including on a max-one pool.
+  const client = { query: pool.query.bind(pool) };
+  const allowed = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const check = async (id: string): Promise<boolean> => {
+    if (allowed.has(id)) return allowed.get(id)!;
+    if (visiting.has(id)) return false;
+    visiting.add(id);
+    const state = (await loadRelated(client, [id])).get(id);
+    const visible =
+      state?.visibility === 'visible' &&
+      (!authorize || (await authorize(client, id, [id]))) &&
+      (!state.redirect || (await check(state.redirect)));
+    visiting.delete(id);
+    allowed.set(id, !!visible);
+    return !!visible;
+  };
+  for (const id of pending) await check(id);
+  return supported.filter((row) => targets(row.fact).every((id) => allowed.get(id)));
 }
 
 export async function readSubject(
@@ -405,9 +466,11 @@ export async function readSubject(
   summaries: {
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
-    prepareAuthorization?: () => Promise<AccessCheck>;
     seen?: readonly { partition: number; epoch: number; position: bigint }[];
     deadline?: number;
+    prepareAuthorization?: () => Promise<AccessCheck>;
+    prepareAuthorize?: (id: string) => Promise<AccessCheck>;
+    readAs?: <T>(read: () => Promise<T>) => Promise<T>;
   } = {},
 ): Promise<{
   subject: Item;
@@ -420,165 +483,233 @@ export async function readSubject(
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) return null;
   const defaults = contextRecord?.defaults ?? {};
-  const preflight = await withReadTransaction(pool, async (client) => {
-    const identity = (await readSubjectIdentity.run(client, {
-      route,
-      subject_id: id,
-      partition_no: partitionOf(route),
-    })) as {
-      visibility: string;
-      securityRevision: string;
-      redirect: string | null;
-      partitionNo: number;
-      epoch: number;
-      position: string;
-      revision: number | null;
-    } | null;
-    if (!identity || identity.visibility !== 'visible') return null;
-    if (!(await authorize(client))) return null;
-    if (identity.redirect) throw new SubjectRedirectError(id, identity.redirect);
-    return {
-      component: {
-        partition: identity.partitionNo,
-        epoch: identity.epoch,
-        position: BigInt(identity.position),
-      },
-      revision: identity.revision,
-      securityRevision: identity.securityRevision,
-    };
-  });
-  if (!preflight) return null;
   const active = await activeRelease(pool);
   const deadline = summaries.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const seen = [...(summaries.seen ?? []), preflight.component];
-  await waitForSubjectLinks(pool, seen, id, deadline);
-  await refreshStatementReaderAuthorization();
-  let finalAuthorize = summaries.prepareAuthorization ? await summaries.prepareAuthorization() : authorize;
-  let expectedRevision = preflight.revision;
-  let expectedSecurityRevision = preflight.securityRevision;
-  const readSnapshot = () =>
-    withReadTransaction(pool, async (client) => {
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition) return null;
-      const rows = listed(
-        (await readSubjectStatement.run(client, { route, subject_id: id })) as SubjectReadRow[] | SubjectReadRow | null,
-      );
-      if (!rows.length) return null;
-      const allowed = await finalAuthorize(client);
-      if (!allowed) return null;
-      if (rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
-      if (rows[0]!.revision !== expectedRevision || rows[0]!.security_revision !== expectedSecurityRevision)
-        return {
-          freshnessRetry: true as const,
-          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-          revision: rows[0]!.revision,
-          securityRevision: rows[0]!.security_revision,
-        };
-      const stored = await getRelease(client, rows[0]!.release);
-      if (!stored) throw new Error('Subject revision release is missing');
-      // The Context's own relation types show with the subject's release; reads never register the digest.
-      const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
-      const release = layer.release;
-      let statementFacts: FactRow[] = [];
-      const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
-      const relationCounts: Record<string, number> = {};
-      const properties = release.types[rows[0]!.type]!.properties;
-      for (const property of properties) {
-        if (!isRelationProperty(release, property)) {
-          const view = await slotView(client, id, property, context, defaults);
-          statementFacts.push(...view.facts);
-          if (view.resolution) resolution[property] = view.resolution;
-          continue;
-        }
-        const preview = (await listOutboundLinks.run(client, {
-          context_id: context,
+  const readSnapshot = async (subjectId: string, terminal?: string) => {
+    const route = routeOf(subjectId)!;
+    const readOriginal = async () => {
+      const prepare = () =>
+        summaries.prepareAuthorize
+          ? summaries.prepareAuthorize(subjectId)
+          : summaries.prepareAuthorization
+            ? summaries.prepareAuthorization()
+            : Promise.resolve(authorize);
+      const initialAuthorize = await prepare();
+      const preflight = await withReadTransaction(pool, async (client) => {
+        const identity = await readSubjectIdentity.run(client, {
           route,
-          subject_id: id,
-          property,
-          filter_value: NIL_UUID,
-          after_order: '',
-          after_target: NIL_UUID,
-          after_statement: NIL_UUID,
-          page_limit: 13,
-        })) as { slot: string; statement: string; target: string | null; order_key: string }[];
-        const count = await readOutboundLinkCount.run(client, {
-          context_id: context,
-          route,
-          subject_id: id,
-          property,
-          filter_value: NIL_UUID,
+          subject_id: subjectId,
+          partition_no: partitionOf(route),
         });
-        // Resolution describes omitted Global slots too. Keep that diagnostic at
-        // the same bounded Global preview it used before Context projection rows.
-        if (context !== GLOBAL_CONTEXT) {
-          const inheritedPreview = (await listOutboundLinks.run(client, {
-            context_id: GLOBAL_CONTEXT,
-            route,
-            subject_id: id,
-            property,
-            filter_value: NIL_UUID,
-            after_order: '',
-            after_target: NIL_UUID,
-            after_statement: NIL_UUID,
-            page_limit: 12,
-          })) as { slot: string }[];
-          for (const entry of inheritedPreview) {
-            const view = await slotView(client, id, property, context, defaults, entry.slot);
-            if (view.resolution) resolution[property] = view.resolution;
+        if (!identity || identity.visibility !== 'visible' || !(await initialAuthorize(client))) return null;
+        if (identity.redirect && identity.redirect !== terminal)
+          throw new SubjectRedirectError(subjectId, identity.redirect);
+        return {
+          component: { partition: identity.partitionNo, epoch: identity.epoch, position: BigInt(identity.position) },
+          revision: identity.revision,
+          securityRevision: BigInt(identity.securityRevision),
+        };
+      });
+      if (!preflight) return null;
+      await waitForSubjectLinks(pool, [...(summaries.seen ?? []), preflight.component], subjectId, deadline);
+      await refreshStatementReaderAuthorization();
+      let check = await prepare();
+      let expectedRevision = preflight.revision;
+      let expectedSecurityRevision = preflight.securityRevision;
+      const readCurrent = () =>
+        withReadTransaction(pool, async (client) => {
+          const partition = await readPartition(client, partitionOf(route));
+          if (!partition) return null;
+          const rows = listed(
+            (await readSubjectStatement.run(client, { route, subject_id: subjectId })) as
+              | SubjectReadRow[]
+              | SubjectReadRow
+              | null,
+          );
+          if (!rows.length) {
+            return null;
           }
-        }
-        const privatePage = await privateLinks(client, { subject: id, property, limit: 13 });
-        relationCounts[property] = Number(count?.value ?? 0) + privatePage.total;
-        const privatePreview = privatePage.entries.map((row) => ({
-          slot: row.slot_id,
-          statement: row.candidate_id,
-          target: row.target_id,
-          order_key: row.order_key,
-        }));
-        const combined = [...preview, ...privatePreview].sort((a, b) =>
-          a.order_key < b.order_key
-            ? -1
-            : a.order_key > b.order_key
-              ? 1
-              : a.target! < b.target!
-                ? -1
-                : a.target! > b.target!
-                  ? 1
-                  : a.statement.localeCompare(b.statement),
-        );
-        for (const entry of combined.slice(0, 12)) {
-          const view = await slotView(client, id, property, context, defaults, entry.slot);
-          const fact = view.facts.find((row) => row.statement_id === entry.statement);
-          if (fact) statementFacts.push(fact);
-          if (view.resolution) resolution[property] = view.resolution;
-        }
+          const allowed = await check(client);
+          if (!allowed) return null;
+          if (rows[0]!.redirect && rows[0]!.redirect !== terminal)
+            throw new SubjectRedirectError(subjectId, rows[0]!.redirect);
+          const securityRevision = BigInt(rows[0]!.security_revision);
+          if (rows[0]!.revision !== expectedRevision || securityRevision !== expectedSecurityRevision)
+            return {
+              freshnessRetry: true as const,
+              component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+              revision: rows[0]!.revision,
+              securityRevision,
+            };
+          const stored = await getRelease(client, rows[0]!.release);
+          if (!stored) throw new Error('Subject revision release is missing');
+          // The Context's own relation types show with the subject's release; reads never register the digest.
+          const layer = await layeredRelease(client, { digest: rows[0]!.release, release: stored }, context);
+          const release = layer.release;
+          let statementFacts: FactRow[] = [];
+          const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
+          const relationCounts: Record<string, number> = {};
+          if (allowed) {
+            const properties = release.types[rows[0]!.type]!.properties;
+            for (const property of properties) {
+              if (!isRelationProperty(release, property)) {
+                const view = await slotView(client, subjectId, property, context, defaults);
+                statementFacts.push(...view.facts);
+                if (view.resolution) resolution[property] = view.resolution;
+                continue;
+              }
+              const preview = (await listOutboundLinks.run(client, {
+                context_id: context,
+                route,
+                subject_id: subjectId,
+                property,
+                filter_value: NIL_UUID,
+                after_order: '',
+                after_target: NIL_UUID,
+                after_statement: NIL_UUID,
+                page_limit: 13,
+              })) as { slot: string; statement: string; target: string | null; order_key: string }[];
+              const count = await readOutboundLinkCount.run(client, {
+                context_id: context,
+                route,
+                subject_id: subjectId,
+                property,
+                filter_value: NIL_UUID,
+              });
+              // Resolution describes omitted Global slots too. Keep that diagnostic at
+              // the same bounded Global preview it used before Context projection rows.
+              if (context !== GLOBAL_CONTEXT) {
+                const inheritedPreview = (await listOutboundLinks.run(client, {
+                  context_id: GLOBAL_CONTEXT,
+                  route,
+                  subject_id: subjectId,
+                  property,
+                  filter_value: NIL_UUID,
+                  after_order: '',
+                  after_target: NIL_UUID,
+                  after_statement: NIL_UUID,
+                  page_limit: 12,
+                })) as { slot: string }[];
+                for (const entry of inheritedPreview) {
+                  const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
+                  if (view.resolution) resolution[property] = view.resolution;
+                }
+              }
+              const privatePage = await privateLinks(client, { subject: subjectId, property, limit: 13 });
+              relationCounts[property] = Number(count?.value ?? 0) + privatePage.total;
+              const privatePreview = privatePage.entries.map((row) => ({
+                slot: row.slot_id,
+                statement: row.candidate_id,
+                target: row.target_id,
+                order_key: row.order_key,
+              }));
+              const combined = [...preview, ...privatePreview].sort((a, b) =>
+                a.order_key < b.order_key
+                  ? -1
+                  : a.order_key > b.order_key
+                    ? 1
+                    : a.target! < b.target!
+                      ? -1
+                      : a.target! > b.target!
+                        ? 1
+                        : a.statement.localeCompare(b.statement),
+              );
+              for (const entry of combined.slice(0, 12)) {
+                const view = await slotView(client, subjectId, property, context, defaults, entry.slot);
+                const fact = view.facts.find((row) => row.statement_id === entry.statement);
+                if (fact) statementFacts.push(fact);
+                if (view.resolution) resolution[property] = view.resolution;
+              }
+            }
+          }
+          if (!allowed) return null;
+          return {
+            freshnessRetry: false as const,
+            rows,
+            supported: await supportedFacts(client, routeKey, subjectId, [
+              ...currentTerms(asFacts(rows)),
+              ...statementFacts,
+            ]),
+            members: terminal
+              ? []
+              : (await readSourceMembers.run(client, { route, subject_id: subjectId })).map((row) => row.member_id),
+            release,
+            layerDigest: layer.digest,
+            component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+            resolution,
+            relationCounts,
+          };
+        });
+      let snapshot = await readCurrent();
+      while (snapshot?.freshnessRetry) {
+        expectedRevision = snapshot.revision;
+        expectedSecurityRevision = snapshot.securityRevision;
+        requireAccessDeadline(deadline);
+        await waitForSubjectLinks(pool, [...(summaries.seen ?? []), snapshot.component], subjectId, deadline);
+        requireAccessDeadline(deadline);
+        await refreshStatementReaderAuthorization();
+        check = await prepare();
+        snapshot = await readCurrent();
       }
-      if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
-      return {
-        freshnessRetry: false as const,
-        rows,
-        statementFacts,
-        release,
-        layerDigest: layer.digest,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-        resolution,
-        relationCounts,
-      };
-    });
-  let snapshot = await readSnapshot();
-  while (snapshot?.freshnessRetry) {
-    expectedRevision = snapshot.revision;
-    expectedSecurityRevision = snapshot.securityRevision;
-    requireAccessDeadline(deadline);
-    await waitForSubjectLinks(pool, [...(summaries.seen ?? []), snapshot.component], id, deadline);
-    requireAccessDeadline(deadline);
-    await refreshStatementReaderAuthorization();
-    if (summaries.prepareAuthorization) finalAuthorize = await summaries.prepareAuthorization();
-    snapshot = await readSnapshot();
-  }
+      return snapshot;
+    };
+    return summaries.readAs ? summaries.readAs(readOriginal) : readOriginal();
+  };
+  const snapshot = await readSnapshot(id);
   if (!snapshot) return null;
-  const { rows, component, release, layerDigest, statementFacts, resolution, relationCounts } = snapshot;
-  const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
+  const { rows, component, release, layerDigest, resolution, relationCounts } = snapshot;
+  const supported = await disclosedTargets(pool, release, snapshot.supported, summaries.authorize);
+  // Membership is current identity state, never revision/candidate history. Each admitted original
+  // contributes only live displayed terms and selected slots, with fresh original Access and fences.
+  const termKeys = new Map<string, unknown>();
+  const factKeys = new Map<string, number>();
+  const displayed: FactRow[] = [];
+  const proof: SupportedFact[] = [];
+  const key = (fact: FactRow) => {
+    if (fact.kind !== 'statement')
+      return JSON.stringify([fact.kind, fact.language, fact.kind === 'alias' ? fact.body : null]);
+    const body = fact.body as Record<string, unknown>;
+    return JSON.stringify([fact.property, body.value, body.qualifiers, body.references]);
+  };
+  const add = (entries: SupportedFact[], original = false) => {
+    for (const entry of entries) {
+      const fact = entry.fact;
+      const identity = key(fact);
+      if (fact.kind !== 'statement') {
+        if (termKeys.has(identity) && termKeys.get(identity) !== fact.body) continue;
+        if (!termKeys.has(identity)) {
+          termKeys.set(identity, fact.body);
+          displayed.push(fact);
+        }
+      } else if (!original || !factKeys.has(identity)) {
+        const count = displayed.filter((row) => row.kind === 'statement' && row.property === fact.property).length;
+        if (original && count >= (isRelationProperty(release, fact.property!) ? 12 : 32)) continue;
+        factKeys.set(identity, displayed.length);
+        displayed.push(fact);
+      }
+      proof.push(entry);
+    }
+  };
+  add(supported);
+  for (const member of snapshot.members) {
+    const original = await readSnapshot(member, id);
+    if (!original) continue;
+    add(await disclosedTargets(pool, original.release, original.supported, summaries.authorize), true);
+  }
+  const dataTypes = factDataTypes(release, displayed);
+  const subject = resolveItem(id, displayed, rows[0]!.type, dataTypes, {
+    revision: rows[0]!.revision,
+    release: layerDigest,
+    context,
+    resolution,
+    relationCounts,
+  });
+  if (routeKey)
+    subject.sourceRecords = await readSourceRecords(
+      pool,
+      routeKey,
+      proof.flatMap((row) => (row.source && typeof row.source.source === 'string' ? [row.source] : [])),
+    );
   const summary = active
     ? ((
         await readSubjectSummaries(
@@ -610,13 +741,7 @@ export async function readSubject(
   return {
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
     summary,
-    subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
-      revision: rows[0]!.revision,
-      release: layerDigest,
-      context,
-      resolution,
-      relationCounts,
-    }),
+    subject,
     component,
   };
 }

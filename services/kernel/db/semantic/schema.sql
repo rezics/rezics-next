@@ -2696,6 +2696,23 @@ CREATE TABLE semantic.source_candidate (
 
 
 --
+-- Name: source_record; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.source_record (
+    route integer NOT NULL,
+    source text NOT NULL,
+    external_id text NOT NULL,
+    metadata_revision integer NOT NULL,
+    record jsonb NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT source_record_metadata_revision_check CHECK ((metadata_revision > 0)),
+    CONSTRAINT source_record_record_check CHECK ((jsonb_typeof(record) = 'object'::text)),
+    CONSTRAINT source_record_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: statement_disclosure; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -3377,6 +3394,14 @@ ALTER TABLE ONLY semantic.source_candidate
 
 
 --
+-- Name: source_record source_record_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.source_record
+    ADD CONSTRAINT source_record_pkey PRIMARY KEY (route, source, external_id);
+
+
+--
 -- Name: statement_disclosure statement_disclosure_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -3460,6 +3485,13 @@ CREATE INDEX context_active ON semantic.context USING btree (route, context_id) 
 --
 
 CREATE UNIQUE INDEX context_erasure_key ON semantic.context USING btree (erasure_key, route);
+
+
+--
+-- Name: context_global_point; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_global_point ON semantic.context USING btree (route, context_id) WHERE (kind = 'global'::text);
 
 
 --
@@ -3943,6 +3975,13 @@ CREATE UNIQUE INDEX source_candidate_erasure_key ON semantic.source_candidate US
 --
 
 CREATE INDEX source_candidate_retract ON semantic.source_candidate USING btree (route, subject_id, candidate_id, source, external_id, field_group);
+
+
+--
+-- Name: source_record_tuple_point; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX source_record_tuple_point ON semantic.source_record USING hash (((((((route)::text || ':'::text) || source) || ':'::text) || external_id)));
 
 
 --

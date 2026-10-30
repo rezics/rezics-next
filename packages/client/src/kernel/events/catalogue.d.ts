@@ -47,6 +47,11 @@ declare const productEventTypes: {
         id: Type.TString;
         version: Type.TString;
     }>;
+    readonly 'com.rezics.source-record.metadata-changed.v1': Type.TObject<{
+        source: Type.TString;
+        external_id: Type.TString;
+        metadata_revision: Type.TInteger;
+    }>;
     readonly "com.rezics.subject.merged.v1": Type.TObject<{
         id: Type.TString;
         survivor: Type.TString;
