@@ -464,7 +464,7 @@ afterAll(async () => {
 });
 
 test(
-  'an author deletes a post in place and Undo restores it with exactly two kernel writes',
+  'an author deletes a post in place and Undo restores it with exactly two kernel requests',
   async () => {
     reset();
     const { page, access } = await open(`/en/threads/${threadId}/a-close-reading`, { width: 390 });
