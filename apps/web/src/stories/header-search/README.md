@@ -56,3 +56,6 @@ Worker verification follows the maintainer's minimal override: only `bun run --c
 acceptance, unit execution, native/browser/remote checks, publication and screenshots are deferred. Written
 regressions cover the real presenter, transition reducer and request boundary. A typecheck pass is not their pass
 or Root visual approval.
+
+The final local Web typecheck completed with no errors in 561 files. Focused acceptance and story plays were not
+executed on this worker; Root screenshot review remains pending for all listed IDs and globals.
