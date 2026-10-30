@@ -2,6 +2,7 @@ import type { CoverSummary } from '@rezics/ui/cover';
 import { isRecord } from './shared';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import type { SessionEnv } from '../../session/client';
 
 export type AccountViewerActions =
   | { state: 'ready'; actions: { action: string; operations: string[] }[]; securityHref: string | null }
@@ -20,12 +21,13 @@ export const readAccountViewerActions = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<AccountViewerActions> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { env } = await import('cloudflare:workers');
+    const sessionEnv = env as Partial<SessionEnv>;
     const { prepareSession, viewerCredential } = await import('../../session/request');
     const { kernelClient } = await import('../../kernel/client');
     const { securityHrefFromIssuer } = await import('../../settings/account-safety-links');
     try {
       const request = getRequest();
-      await prepareSession(request, env);
+      await prepareSession(request, sessionEnv);
       const authorization = viewerCredential(request);
       if (!authorization) return { state: 'ready', actions: [], securityHref: null };
       const result = await kernelClient().viewerActions.post(
@@ -35,7 +37,11 @@ export const readAccountViewerActions = createServerFn({ method: 'GET' })
       if (result.error || result.status !== 200) return { state: 'unavailable' };
       const resource = result.data?.resources.find((item) => item.type === 'access.account' && item.id === data);
       return resource && 'viewerActions' in resource
-        ? { state: 'ready', actions: resource.viewerActions, securityHref: securityHrefFromIssuer(env.AUTH_ISSUER) }
+        ? {
+            state: 'ready',
+            actions: resource.viewerActions,
+            securityHref: securityHrefFromIssuer(sessionEnv.AUTH_ISSUER),
+          }
         : { state: 'ready', actions: [], securityHref: null };
     } catch {
       return { state: 'unavailable' };
