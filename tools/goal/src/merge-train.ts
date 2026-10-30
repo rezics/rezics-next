@@ -3075,7 +3075,7 @@ export class MergeTrain {
     sourceCommit: string,
     targetBranch: string,
     files: readonly string[],
-    cause: string,
+    cause = 'Git reported a merge conflict',
     conflictContext?: RebaseConflictContext,
   ): boolean {
     const details = {
