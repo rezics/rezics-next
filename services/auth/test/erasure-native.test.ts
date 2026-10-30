@@ -2,6 +2,9 @@ import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { nativeFixture, password, scopes } from './support/erasure-native.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
+import { Pool } from 'pg';
+import { testDatabase } from '../scripts/database.ts';
+import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts';
 
 async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
   const until = Date.now() + timeout;
@@ -218,3 +221,76 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     await f.close();
   }
 }, 540_000);
+
+test('an absent native user with operating evidence retains original applicability across a rolled-back page and a new native connection pool', async () => {
+  const fixture = testDatabase();
+  let pool = new Pool({ connectionString: fixture.url });
+  try {
+    // Native operating evidence deliberately has no user FK: a missing user is
+    // exactly the legacy/restart case which must not become an empty inventory.
+    await pool.query(`INSERT INTO auth_effect_receipt
+      (receipt_id,account_id,purpose,minimum_authn_epoch,acting_human_id)
+      SELECT 'operating-'||lpad(i::text,3,'0'),'surviving-subject','sessions',0,'missing-human'
+      FROM generate_series(1,105) i;
+      INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch,acting_human_id)
+      VALUES ('unrelated-witness','unrelated-subject','sessions',0,'unrelated-human');`);
+    const id = await startNativeErasure(pool, 'missing-human', 7);
+    expect((await pool.query('SELECT applicable FROM auth_erasure WHERE id=$1', [id])).rows[0]!.applicable).toBe(true);
+    const connect = pool.connect.bind(pool);
+    let crash = true;
+    pool.connect = (async () => {
+      const connection = await connect();
+      const query = connection.query.bind(connection);
+      let changed = false;
+      connection.query = ((...args: Parameters<typeof query>) => {
+        if (String(args[0]).startsWith('DELETE FROM "auth_effect_receipt"')) changed = true;
+        if (crash && changed && String(args[0]).startsWith('UPDATE auth_erasure SET phase=')) {
+          crash = false;
+          throw new Error('crash before native page checkpoint');
+        }
+        return query(...args);
+      }) as typeof connection.query;
+      return connection;
+    }) as typeof pool.connect;
+    await expect(
+      (async () => {
+        for (let page = 0; page < 100; page++) {
+          const result = await nativeErasurePage(pool, id);
+          if (result.state !== 'more') throw new Error(`Unexpected native hold: ${result.code}`);
+        }
+        throw new Error('Did not reach the operating evidence page');
+      })(),
+    ).rejects.toThrow('crash before native page checkpoint');
+    expect((await pool.query("SELECT 1 FROM auth_effect_receipt WHERE acting_human_id='missing-human'")).rowCount).toBe(
+      105,
+    );
+    const before = (await pool.query('SELECT phase,after_key FROM auth_erasure WHERE id=$1', [id])).rows[0]!;
+    expect(before.after_key).toBe('');
+    await pool.end();
+    pool = new Pool({ connectionString: fixture.url });
+    for (let page = 0; page < 100; page++) {
+      const result = await nativeErasurePage(pool, id);
+      if (result.state === 'consent') break;
+      expect(result.state).toBe('more');
+    }
+    expect((await pool.query("SELECT 1 FROM auth_effect_receipt WHERE acting_human_id='missing-human'")).rowCount).toBe(
+      0,
+    );
+    expect((await pool.query("SELECT 1 FROM auth_effect_receipt WHERE receipt_id='unrelated-witness'")).rowCount).toBe(
+      1,
+    );
+    const saved = (await pool.query('SELECT applicable,barrier,user_deleted_at FROM auth_erasure WHERE id=$1', [id]))
+      .rows[0]!;
+    expect(saved.applicable).toBe(true);
+    expect(saved.barrier).toBe(7);
+    expect(saved.user_deleted_at).toBeInstanceOf(Date);
+    expect(await startNativeErasure(pool, 'missing-human', 8)).toBe(id);
+    expect((await pool.query('SELECT applicable,barrier FROM auth_erasure WHERE id=$1', [id])).rows[0]).toEqual({
+      applicable: true,
+      barrier: 7,
+    });
+  } finally {
+    await pool.end();
+    fixture.close();
+  }
+}, 60_000);
