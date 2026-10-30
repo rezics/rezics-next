@@ -78,9 +78,9 @@ test('bounded artifact returns retain missing and oversize evidence without rest
   const physicalRunId = randomUUID();
   const paths = ['report with space.png', 'too large.bin'];
   const stage = prepareArtifactRun(root, physicalRunId);
-  await registerArtifactDeclarations(root, stage, physicalRunId, paths);
   const stale = join(root, paths[0]!);
   writeFileSync(stale, 'stale proof');
+  await registerArtifactDeclarations(root, stage, physicalRunId, paths);
   const oversized = join(root, paths[1]!);
   writeFileSync(oversized, '');
   truncateSync(oversized, CHECK_ARTIFACTS_MAX_BYTES + 1);
