@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KernelClient } from '@rezics/client';
@@ -255,7 +255,7 @@ test('a thread page reads native posts in order with one batched byline read and
   expect(firstPage.authors?.[id(90)]).toEqual(account);
 });
 
-test('an erased post has no body or restored byline and keeps server-authorized restore access', async () => {
+test('an erased post has no body, byline or restore access from an arbitrary callback', async () => {
   const { authorId: _hiddenAuthor, ...publicPostFields } = post(16, id(5));
   const erased: Post = {
     ...publicPostFields,
@@ -263,7 +263,6 @@ test('an erased post has no body or restored byline and keeps server-authorized 
     removed: true,
     sha256: null,
     body: null,
-    restorableUntil: new Date(Date.now() + 60_000).toISOString(),
   } as Post;
   const requests: { path: string; ids?: string }[] = [];
   const fakeClient = {
@@ -303,10 +302,64 @@ test('an erased post has no body or restored byline and keeps server-authorized 
     }),
   );
   expect(markup).toContain('This post was deleted.');
-  expect(markup).toContain('>Restore</button>');
+  expect(markup).not.toContain('>Restore</button>');
   expect(markup).not.toContain('Removed by its author');
   expect(markup).not.toContain('Contribution 16');
   expect(markup).not.toContain('reader');
+});
+
+test('only a self-deleted owner post with the original unexpired server deadline offers restore', () => {
+  const now = '2026-01-15T00:00:00.000Z';
+  const deadline = '2026-01-31T00:00:00.000Z';
+  const clock = spyOn(Date, 'now').mockReturnValue(new Date(now).getTime());
+  const erased: Post = {
+    ...post(16, id(5)),
+    availability: 'erased',
+    removed: true,
+    sha256: null,
+    body: null,
+    restorableUntil: deadline,
+  };
+  const render = (entry: Post, viewerId?: string, restore = true) =>
+    renderToStaticMarkup(
+      createElement(RemovedPost, {
+        post: entry,
+        authors: { [account.id]: account },
+        now,
+        ...(viewerId === undefined ? {} : { viewerId }),
+        anchorId: id(16),
+        itemRef: null,
+        menuButton: null,
+        ...(restore ? { onRestore: () => undefined } : {}),
+        onCopyLink: () => undefined,
+      }),
+    );
+  try {
+    const owned = render(erased, account.id);
+    expect(owned).toContain('>Restore</button>');
+    expect(owned).toContain(`dateTime="${deadline}"`);
+    // Even an owner tombstone must not recover the hidden body or identity from the author batch.
+    for (const html of [
+      owned,
+      render(erased),
+      render(erased, id(91)),
+      render(erased, account.id, false),
+      render({ ...erased, restorableUntil: now }, account.id),
+      render({ ...erased, restorableUntil: '2026-01-14T23:59:59.999Z' }, account.id),
+      render({ ...erased, restorableUntil: 'invalid' }, account.id),
+    ]) {
+      expect(html).not.toContain('Contribution 16');
+      expect(html).not.toContain('reader');
+      expect(html).not.toContain('Reader');
+      if (html !== owned) expect(html).not.toContain('>Restore</button>');
+    }
+    const { restorableUntil: _deadline, ...permanent } = erased;
+    expect(render(permanent, account.id)).not.toContain('>Restore</button>');
+    const { authorId: _author, ...unknownOwner } = erased;
+    expect(render(unknownOwner as Post, account.id)).not.toContain('>Restore</button>');
+  } finally {
+    clock.mockRestore();
+  }
 });
 
 test('kernel 404s stay on the not-found boundary for board and thread route loaders', async () => {

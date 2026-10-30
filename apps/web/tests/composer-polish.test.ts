@@ -56,17 +56,26 @@ test('composer defers kernel writes until send and retains existing refusal and 
   expect(composer).toContain('uploadRefusalText');
 });
 
-test('composer stories cover every requested state at phone and desktop widths', async () => {
+test('composer state plays share the phone and desktop viewport globals', async () => {
   const stories = await read('../src/stories/composer.stories.tsx');
-  for (const state of [
-    'ReplyEmpty',
-    'ReplyWithText',
-    'ReplyWithImage',
-    'ReplyRefusal',
-    'NewThreadEmpty',
-    'NewThreadLong',
-  ]) {
-    expect(stories).toContain(`export const ${state}:`);
-    expect(stories).toContain(`export const ${state}390:`);
+  const preview = await read('../.storybook/preview.tsx');
+  for (const [state, play] of Object.entries({
+    ReplyEmpty: 'emptyReplyPlay',
+    ReplyWithText: 'textReplyPlay',
+    ReplyWithImage: 'imageReplyPlay',
+    ReplyRefusal: 'refusalPlay',
+    NewThreadEmpty: 'newThreadReady',
+    NewThreadLong: 'longThreadPlay',
+    ReplyPastedImageUploading: 'pasteReuploadPlay',
+    ReplyImageUsed: 'reusedMediaPlay',
+  })) {
+    const story = stories.split(`export const ${state}: Story = `)[1]?.split('export const ')[0];
+    expect(story).toBeDefined();
+    expect(story).toContain(`play: ${play}`);
+    expect(story).toContain('render:');
   }
+  expect(preview).toContain("phone390: { name: 'Phone 390', styles: { width: '390px'");
+  expect(preview).toContain("desktop1280: { name: 'Desktop 1280', styles: { width: '1280px'");
+  expect(stories).not.toMatch(/export const \w+(?:390|1280|Phone|Desktop):/);
+  expect(stories).not.toContain('viewport:');
 });

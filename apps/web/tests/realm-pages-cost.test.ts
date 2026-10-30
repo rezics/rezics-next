@@ -31,7 +31,10 @@ function setup(size: number, signedIn: boolean, address: string | null = 'atlas'
       const request = new Request(input, init);
       const url = new URL(request.url);
       paths.push(`${request.method} ${url.pathname}`);
-      expect(request.headers.get('authorization')).toBe(signedIn ? 'Bearer page-token' : null);
+      // A session cookie does not authorize public HTML; only personal reads and commands use its bearer.
+      const personal =
+        url.pathname === '/v1/me/realms' || /\/(?:members\/me|participation|membership)$/.test(url.pathname);
+      expect(request.headers.get('authorization')).toBe(personal && signedIn ? 'Bearer page-token' : null);
       const limit = Number(url.searchParams.get('limit') ?? 20);
       const page = (length: number, item: (index: number) => unknown) =>
         Response.json({
@@ -58,7 +61,23 @@ function setup(size: number, signedIn: boolean, address: string | null = 'atlas'
         });
       if (url.pathname === `/v1/realms/${realm}`)
         return Response.json({
-          realm: { realmId: realm, spaceId: space, visibility: 'public', title: 'Atlas', summary: '', votes: {} },
+          realm: {
+            realmId: realm,
+            spaceId: space,
+            state: 'active',
+            visibility: 'public',
+            contextId: id(5),
+            boardSchemeId: null,
+            headRevisionId: id(6),
+            createdAt: stamp,
+            creator: id(4),
+            predecessor: null,
+            title: 'Atlas',
+            summary: '',
+            revisionCreatedAt: stamp,
+            author: id(4),
+            votes: {},
+          },
         });
       if (url.pathname === `/v1/realms/${realm}/boards`)
         return page(size, (index) => ({
@@ -145,6 +164,17 @@ test('the Realm page reads its fixed set once, however many boards, publications
       const bound = 5 + Math.min(size, COVER_ROW_LIMIT);
       expect({ size, signedIn, reads: paths.length }).toEqual({ size, signedIn, reads: bound });
       expect(counts).toEqual({ D: 0, K: bound });
+      expect(paths).toEqual([
+        'GET /v1/spaceAddresses/atlas',
+        `GET /v1/spaces/${space}`,
+        `GET /v1/realms/${realm}`,
+        `GET /v1/realms/${realm}/boards`,
+        `GET /v1/realms/${realm}/publications`,
+        ...Array.from(
+          { length: Math.min(size, COVER_ROW_LIMIT) },
+          (_, index) => `GET /v1/subjects/${id(2000 + index)}`,
+        ),
+      ]);
     }
 });
 
@@ -153,7 +183,7 @@ test('the Realm page of a Space without an address is read from the same fixed s
     const { client, env, request, counts } = setup(size, true, null);
     const located = await locateRealm(client, request(`realms/${realm}`), env, { realmId: realm }, 'anonymous');
     expect(located.kind).toBe('page');
-    // The Realm and the Space, then boards, publications, membership and participation, then the cover row.
+    // The Realm and Space, then boards, publications and the bounded cover row; no personal standing reads.
     expect(counts).toEqual({ D: 0, K: 4 + Math.min(size, COVER_ROW_LIMIT) });
   }
 });

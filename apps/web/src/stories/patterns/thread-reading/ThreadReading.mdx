@@ -8,7 +8,9 @@ import * as ThreadReading from './thread-reading.stories';
 Pattern and Page stories share the delivered `ThreadReading` region and native post/header components; Pages add
 `AppShell`. Existing thread, owned-thread, Realm-thread and history recordings supply their data. The populated
 signed-in and signed-out stories retain rich document and edited/unedited post coverage. The existing reply example
-uses the recorded parent relationship; selection and cancellation act on the same composer. The deleted organization
+uses the recorded parent relationship; selection and cancellation act on the same composer. Page exports bind the shared plays explicitly so Storybook
+indexes their interactions as well as their renderings. Selection checks the recorded opening-post identity and
+entered text; cancellation removes only that target and retains the text. The deleted organization
 example uses the existing identity fixture and keeps the readable post body, separately from a deleted post.
 Explicit post lifecycle examples use null current bodies. The existing state components represent loading,
 unavailable and current denial. Play interactions reach own edit, both recorded history versions and report states.

@@ -71,15 +71,26 @@ export const ExistingReplyRelationship: Story = {
     await expect(canvasElement.querySelector(`#post-${owned.thread.firstPost.id}`)).toBeVisible();
   },
 };
+const selectedReply = 'The relationship matters as much as the journey.';
+
 async function selectParent({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   const editor = await canvas.findByRole('textbox', { name: m.thread_reply_label() });
   await waitFor(() => expect(editor).toHaveClass('ProseMirror'));
-  await userEvent.click((await canvas.findAllByRole('button', { name: m.thread_reply_to_post() }))[0]!);
-  await expect(editor).toHaveFocus();
-  await userEvent.type(editor, 'The relationship matters as much as the journey.');
-  await expect(canvas.getByRole('button', { name: m.thread_reply_cancel_target() })).toBeVisible();
-  return { canvas, editor };
+  const parent = canvasElement.querySelector<HTMLElement>(`#post-${thread.thread.firstPost.id}`);
+  if (!parent) throw new Error('The recorded opening post must be loaded before selecting a reply.');
+  await userEvent.click(await within(parent).findByRole('button', { name: m.thread_reply_to_post() }));
+  await waitFor(() => expect(editor).toHaveFocus());
+  await userEvent.keyboard(selectedReply);
+  await expect(editor).toHaveTextContent(selectedReply);
+  const composer = canvas.getByRole('region', { name: m.thread_reply_label() });
+  await expect(within(composer).getByRole('button', { name: m.thread_reply_cancel_target() })).toBeVisible();
+  await expect(within(composer).getByRole('link', { name: m.thread_reply_parent() })).toHaveAttribute(
+    'href',
+    `#post-${thread.thread.firstPost.id}`,
+  );
+  await expect(canvas.getAllByRole('textbox', { name: m.thread_reply_label() })).toHaveLength(1);
+  return { canvas, editor, composer };
 }
 export const SelectedParent: Story = {
   play: async (context) => {
@@ -88,11 +99,12 @@ export const SelectedParent: Story = {
 };
 export const CancelledParent: Story = {
   play: async (context) => {
-    const { canvas, editor } = await selectParent(context);
+    const { canvas, editor, composer } = await selectParent(context);
     await userEvent.click(canvas.getByRole('button', { name: m.thread_reply_cancel_target() }));
     await expect(editor).toHaveFocus();
-    await expect(editor).toHaveTextContent('The relationship matters as much as the journey.');
+    await expect(editor).toHaveTextContent(selectedReply);
     await expect(canvas.queryByRole('button', { name: m.thread_reply_cancel_target() })).toBeNull();
+    await expect(within(composer).queryByRole('link', { name: m.thread_reply_parent() })).toBeNull();
     await expect(canvas.getAllByRole('textbox', { name: m.thread_reply_label() })).toHaveLength(1);
   },
 };

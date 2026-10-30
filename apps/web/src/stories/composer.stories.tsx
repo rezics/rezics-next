@@ -10,12 +10,6 @@ const meta = {
   title: 'Pages/Community/Post Editor',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -187,64 +181,6 @@ export const ReplyPastedImageUploading: Story = {
 };
 export const ReplyImageUsed: Story = {
   name: 'Reply / Image used in another post',
-  render: usedMedia,
-  play: reusedMediaPlay,
-};
-
-// Regression-only phone renderings keep their behavior checks without duplicating sidebar states.
-export const ReplyEmptyPhone: Story = {
-  name: 'Member reply, empty',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: emptyReplyPlay,
-  render: reply,
-};
-export const ReplyWithTextPhone: Story = {
-  name: 'Member reply, text entered',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: textReplyPlay,
-  render: reply,
-};
-export const ReplyWithImagePhone: Story = {
-  name: 'Member reply, image attached',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: imageReplyPlay,
-  render: reply,
-};
-export const ReplyRefusalPhone: Story = {
-  name: 'Member reply, refused',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: refusalPlay,
-  render: reply,
-};
-export const NewThreadEmptyPhone: Story = {
-  name: 'Owner, new thread empty',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: newThreadReady,
-  render: newThread,
-};
-export const NewThreadLongPhone: Story = {
-  name: 'Owner, long opening post',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  play: longThreadPlay,
-  render: newThread,
-};
-export const ReplyPastedImageUploadingPhone: Story = {
-  name: 'Member reply, pasted image uploading again',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
-  render: () => <ReuploadingReply />,
-  play: pasteReuploadPlay,
-};
-export const ReplyImageUsedPhone: Story = {
-  name: 'Member reply, reused image unavailable',
-  tags: ['!dev'],
-  globals: { viewport: { value: 'phone' } },
   render: usedMedia,
   play: reusedMediaPlay,
 };
