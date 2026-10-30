@@ -204,9 +204,15 @@ const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
 const attemptDeadlines = new WeakMap<CommandAttempt, number>();
 const commands = new WeakMap<CommandTransaction, CurrentCommand>();
 const commandResources = new WeakMap<CommandTransaction, Readonly<{ pool: Pool; deadline: number }>>();
-const nativeReceipts = new WeakMap<CommandTransaction, Readonly<{
-  principal: CommandPrincipal; kind: string; key: string; storageKey: string;
-}>>();
+const nativeReceipts = new WeakMap<
+  CommandTransaction,
+  Readonly<{
+    principal: CommandPrincipal;
+    kind: string;
+    key: string;
+    storageKey: string;
+  }>
+>();
 
 /** Original source writers consume the executor's actual codec result, never a second HMAC.
  * Available only after authorization and replay lookup, on the original transaction. */
@@ -628,12 +634,16 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
-          if (receiptInput) nativeReceipts.set(tx, Object.freeze({
-            principal: Object.freeze({ ...receiptInput.principal }),
-            kind: receiptInput.kind,
-            key: receiptInput.key,
-            storageKey: receiptCandidates.find((key) => key.startsWith(`rk1.${receiptKeys!.current}.`))!,
-          }));
+          if (receiptInput)
+            nativeReceipts.set(
+              tx,
+              Object.freeze({
+                principal: Object.freeze({ ...receiptInput.principal }),
+                kind: receiptInput.kind,
+                key: receiptInput.key,
+                storageKey: receiptCandidates.find((key) => key.startsWith(`rk1.${receiptKeys!.current}.`))!,
+              }),
+            );
           const response = await body(tx, { transactionId, time });
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
           if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');

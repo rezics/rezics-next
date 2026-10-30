@@ -715,7 +715,8 @@ test('a retained reversal payload without the original native write basis cannot
 });
 
 test('Original native Account identity writers enroll actual generated receipt outbox and durable copies at serialization before data loss with real full role union and native receiving custody, preserving unknown historical association as pending', async () => {
-  const { readAgentIdentityCopies, readAgentIdentityCopyReceiving } = await import('../../src/history/agent-identity-source.ts');
+  const { readAgentIdentityCopies, readAgentIdentityCopyReceiving } =
+    await import('../../src/history/agent-identity-source.ts');
   const { AGENT_IDENTITY_DURABLE_ASSOCIATION } = await import('../../src/history/durable.ts');
   const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
   const { encodeLocator } = await import('../../src/history/locator.ts');
@@ -723,26 +724,41 @@ test('Original native Account identity writers enroll actual generated receipt o
   const account = await seedAccount(`copy_${randomUUID().slice(0, 8)}`, { kind: 'organization' });
   await pool.query(
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-     VALUES($1,$2,$3,'account:manage','(,)',$3)`, [accountRoute, account.id, manager.id],
+     VALUES($1,$2,$3,'account:manage','(,)',$3)`,
+    [accountRoute, account.id, manager.id],
   );
   const subject = await catalogueSubject('schema:Organization', 'Original identity copies');
   const applied = await request(account, subject, await bearer(manager));
   expect(applied.response.status).toBe(201);
-  const approved = await post(`/v1/verification-requests/${applied.body.verificationRequest.id}:approve`, await bearer(staff), {});
+  const approved = await post(
+    `/v1/verification-requests/${applied.body.verificationRequest.id}:approve`,
+    await bearer(staff),
+    {},
+  );
   expect(approved.response.status).toBe(200);
   const decision = (await readAgentVerificationWorkflowRequest(pool, applied.body.verificationRequest.id))!;
   const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
   await recordPendingAgentVerification(pool, workflow, clock);
-  const source = (await pool.query(
-    `SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2
-     AND direction='account-agent.verify' AND receipt_id=$3`, [accountRoute, account.id, workflow.receiptId],
-  )).rows[0];
-  const key = { route: accountRoute, accountId: account.id, direction: 'account-agent.verify' as const, receiptId: workflow.receiptId };
-  const copies = (await pool.query(
-    `SELECT * FROM core.agent_identity_history_copy WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3
+  const source = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2
+     AND direction='account-agent.verify' AND receipt_id=$3`,
+      [accountRoute, account.id, workflow.receiptId],
+    )
+  ).rows[0];
+  const key = {
+    route: accountRoute,
+    accountId: account.id,
+    direction: 'account-agent.verify' as const,
+    receiptId: workflow.receiptId,
+  };
+  const copies = (
+    await pool.query(
+      `SELECT * FROM core.agent_identity_history_copy WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3
      AND source_direction=$4 AND source_receipt_id=$5 ORDER BY artifact_type,locator`,
-    [source.source_partition, key.route, key.accountId, key.direction, key.receiptId],
-  )).rows;
+      [source.source_partition, key.route, key.accountId, key.direction, key.receiptId],
+    )
+  ).rows;
   expect(copies.map((copy) => copy.artifact_type)).toEqual(['command-receipt/v1', 'outbox-event/v1']);
   for (const copy of copies) {
     expect(copy.source_digest).toBe(source.intent_digest);
@@ -754,22 +770,32 @@ test('Original native Account identity writers enroll actual generated receipt o
   }
   const first = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 });
   expect(first.state).toBe('pending');
-  expect(first.artifact?.accounts).toEqual(expect.arrayContaining([
-    { accountRoute, accountId: account.id, roles: ACCOUNT_ROLE_BITS.subject },
-    { accountRoute, accountId: manager.id, roles: ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal },
-    { accountRoute, accountId: staff.id, roles: ACCOUNT_ROLE_BITS.reviewer },
-  ]));
+  expect(first.artifact?.accounts).toEqual(
+    expect.arrayContaining([
+      { accountRoute, accountId: account.id, roles: ACCOUNT_ROLE_BITS.subject },
+      { accountRoute, accountId: manager.id, roles: ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal },
+      { accountRoute, accountId: staff.id, roles: ACCOUNT_ROLE_BITS.reviewer },
+    ]),
+  );
   const receiptLocator = first.artifact!.locator;
   if (receiptLocator.artifactType !== 'command-receipt/v1') throw new Error('Expected the actual native receipt');
   const actualToken = `rk1.${receiptLocator.keyVersion}.${Buffer.from(receiptLocator.keyToken, 'hex').toString('base64url')}`;
   expect(actualToken).toBe(source.native_receipt_key);
   expect(commandHistoryKind(receiptLocator.commandKindId)).toBe(source.native_command_kind);
   expect(Buffer.from(encodeLocator(receiptLocator))).toEqual(copies[0].locator);
-  const receipt = (await pool.query(
-    `SELECT transaction_id,position FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2
+  const receipt = (
+    await pool.query(
+      `SELECT transaction_id,position FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2
      AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5`,
-    [source.source_partition, receiptLocator.principalKind, receiptLocator.principalId, source.native_command_kind, actualToken],
-  )).rows[0];
+      [
+        source.source_partition,
+        receiptLocator.principalKind,
+        receiptLocator.principalId,
+        source.native_command_kind,
+        actualToken,
+      ],
+    )
+  ).rows[0];
   expect(receipt.transaction_id).toBe(source.source_transaction_id);
   const second = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 }, first.cursor!);
   expect(second.artifact?.accounts).toEqual(first.artifact!.accounts);
@@ -779,44 +805,74 @@ test('Original native Account identity writers enroll actual generated receipt o
   expect(outbox.eventSeq).toBe(0);
   expect(Buffer.from(encodeLocator(outbox))).toEqual(copies[1].locator);
   // A receiving read cannot turn association enrollment into a barrier or inventory seal.
-  const receiving = await readAgentIdentityCopyReceiving({ pool }, {
-    accountRoute, accountId: account.id, version: 1, at: clock().toISOString(),
-  }, [key], { deadline: Date.now() + 5000 });
+  const receiving = await readAgentIdentityCopyReceiving(
+    { pool },
+    {
+      accountRoute,
+      accountId: account.id,
+      version: 1,
+      at: clock().toISOString(),
+    },
+    [key],
+    { deadline: Date.now() + 5000 },
+  );
   expect(receiving.receipt).toBeNull();
   expect(receiving.state).toBe('pending');
   const end = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 }, second.cursor!);
   expect(end.artifact).toBeNull();
   expect(end.gap).toBe('agent-identity-original-inventory-unsealed');
-  const unknown = await readAgentIdentityCopies(pool, [{ ...key, receiptId: randomUUID() }], { deadline: Date.now() + 5000 });
+  const unknown = await readAgentIdentityCopies(pool, [{ ...key, receiptId: randomUUID() }], {
+    deadline: Date.now() + 5000,
+  });
   expect(unknown.artifact).toBeNull();
   expect(unknown.state).toBe('pending');
   expect(AGENT_IDENTITY_DURABLE_ASSOCIATION.gap).toBe('agent-identity-sdk-recording-port-unavailable');
   // Receipt replay does not rebind the original source or add guessed copies.
   await recordPendingAgentVerification(pool, workflow, clock);
-  expect((await pool.query(
-    'SELECT count(*)::integer AS n FROM core.agent_identity_history_copy WHERE partition_no=$1 AND source_account_id=$2',
-    [source.source_partition, account.id],
-  )).rows[0].n).toBe(2);
+  expect(
+    (
+      await pool.query(
+        'SELECT count(*)::integer AS n FROM core.agent_identity_history_copy WHERE partition_no=$1 AND source_account_id=$2',
+        [source.source_partition, account.id],
+      )
+    ).rows[0].n,
+  ).toBe(2);
 });
 
 test('identity source declaration rejects foreign live commands and post-serialization keys without enrolling copies', async () => {
-  const { declareAgentIdentitySource, readAgentIdentityCopies } = await import('../../src/history/agent-identity-source.ts');
+  const { declareAgentIdentitySource, readAgentIdentityCopies } =
+    await import('../../src/history/agent-identity-source.ts');
   const { beginRecordHistorySerialization } = await import('../../src/history/record-source.ts');
   const { runCommand, noEffect } = await import('../../src/command/command.ts');
   const { partitionOf } = await import('../../src/route/route.ts');
-  const key = { route: accountRoute, accountId: manager.id, direction: 'account-agent.verify' as const, receiptId: randomUUID() };
-  await expect(runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
-    await declareAgentIdentitySource(tx, key, 'a'.repeat(64));
-    return noEffect(null);
-  })).rejects.toThrow('actual original source writer');
-  await expect(runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
-    beginRecordHistorySerialization(tx);
-    await declareAgentIdentitySource(tx, key, 'a'.repeat(64));
-    return noEffect(null);
-  })).rejects.toThrow('late Agent identity');
-  await expect(readAgentIdentityCopies(pool, Array.from({ length: 9 }, () => ({ ...key, receiptId: randomUUID() })), {
-    deadline: Date.now() + 5000,
-  })).rejects.toThrow('one to eight');
+  const key = {
+    route: accountRoute,
+    accountId: manager.id,
+    direction: 'account-agent.verify' as const,
+    receiptId: randomUUID(),
+  };
+  await expect(
+    runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
+      await declareAgentIdentitySource(tx, key, 'a'.repeat(64));
+      return noEffect(null);
+    }),
+  ).rejects.toThrow('actual original source writer');
+  await expect(
+    runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
+      beginRecordHistorySerialization(tx);
+      await declareAgentIdentitySource(tx, key, 'a'.repeat(64));
+      return noEffect(null);
+    }),
+  ).rejects.toThrow('late Agent identity');
+  await expect(
+    readAgentIdentityCopies(
+      pool,
+      Array.from({ length: 9 }, () => ({ ...key, receiptId: randomUUID() })),
+      {
+        deadline: Date.now() + 5000,
+      },
+    ),
+  ).rejects.toThrow('one to eight');
   expect((await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 })).artifact).toBeNull();
 });
 
@@ -828,16 +884,25 @@ test('original reversal serializers enroll both actual outbox slots and preserve
   expect(released.response.status).toBe(200);
   const reversal = released.body.reversal as AgentVerificationReversal;
   const key = {
-    route: accountRoute, accountId: account.id, direction: 'account-agent.unverify' as const, receiptId: reversal.receiptId,
+    route: accountRoute,
+    accountId: account.id,
+    direction: 'account-agent.unverify' as const,
+    receiptId: reversal.receiptId,
   };
-  const copies = (await pool.query(
-    `SELECT artifact_type,locator,source_transaction_id,source_receipt_id FROM core.agent_identity_history_copy
+  const copies = (
+    await pool.query(
+      `SELECT artifact_type,locator,source_transaction_id,source_receipt_id FROM core.agent_identity_history_copy
      WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3 AND source_direction=$4 AND source_receipt_id=$5
      ORDER BY artifact_type,locator`,
-    [accountRoute >> 4, key.route, key.accountId, key.direction, key.receiptId],
-  )).rows;
+      [accountRoute >> 4, key.route, key.accountId, key.direction, key.receiptId],
+    )
+  ).rows;
   expect(copies.map((row) => row.artifact_type)).toEqual(['command-receipt/v1', 'outbox-event/v1', 'outbox-event/v1']);
-  expect(copies.every((row) => row.source_transaction_id === reversal.receiptId && row.source_receipt_id === reversal.receiptId)).toBe(true);
+  expect(
+    copies.every(
+      (row) => row.source_transaction_id === reversal.receiptId && row.source_receipt_id === reversal.receiptId,
+    ),
+  ).toBe(true);
   const receipt = await readAgentIdentityCopies(pool, [key], { deadline: Date.now() + 5000 });
   const role = (accountId: string) => receipt.artifact!.accounts.find((ref) => ref.accountId === accountId)!.roles;
   expect(role(account.id) & roles.subject).toBe(roles.subject);

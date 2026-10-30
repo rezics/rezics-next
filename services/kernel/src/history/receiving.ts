@@ -160,7 +160,12 @@ async function receivingGap(
   partition: number,
   locator: HistoryArtifact['locator'],
 ): Promise<string | null> {
-  const identityGap = await agentIdentityCopyRetentionGap(tx, partition, locator.artifactType, Buffer.from(encodeLocator(locator)));
+  const identityGap = await agentIdentityCopyRetentionGap(
+    tx,
+    partition,
+    locator.artifactType,
+    Buffer.from(encodeLocator(locator)),
+  );
   if (identityGap) return identityGap;
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const consumers = await tx.query(

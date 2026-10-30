@@ -1,5 +1,9 @@
 import { hasCommandRecordSourceSet } from './record-source-set.ts';
-import { commandAgentIdentitySource, recordAgentIdentityCopy, releaseAgentIdentitySource } from './agent-identity-source.ts';
+import {
+  commandAgentIdentitySource,
+  recordAgentIdentityCopy,
+  releaseAgentIdentitySource,
+} from './agent-identity-source.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
@@ -120,7 +124,8 @@ export function validateCommandHistoryScope(
     if (declarations.has(tx) || identitySource.kind !== kind)
       throw new TypeError('Conflicting original identity command history declaration');
     declarations.set(tx, {
-      kind: identitySource.kind, partition: currentCommand(tx).partition,
+      kind: identitySource.kind,
+      partition: currentCommand(tx).partition,
       response: { artifactType: 'command-receipt/v1', accounts: identitySource.accounts },
       events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: identitySource.accounts })),
     });
@@ -189,9 +194,15 @@ export async function recordCommandHistory(
     const { decodeLocator } = await import('./locator.ts');
     const nativeLocator = decodeLocator(scope.artifactType, locator);
     await recordRecordHistoryCopy(tx, nativeLocator, input.position);
-    await recordAgentIdentityCopy(tx, {
-      partition: declaration.partition, locator: nativeLocator, accounts: scope.accounts,
-    }, input.position);
+    await recordAgentIdentityCopy(
+      tx,
+      {
+        partition: declaration.partition,
+        locator: nativeLocator,
+        accounts: scope.accounts,
+      },
+      input.position,
+    );
   };
   await write(declaration.response, receipt);
   for (let eventSeq = 0; eventSeq < declaration.events.length; eventSeq++)

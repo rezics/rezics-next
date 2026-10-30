@@ -86,9 +86,15 @@ export function originalAccountIdentitySource(
 ): OriginalIdentity {
   const command = currentCommand(tx);
   const original = originalIdentities.get(tx);
-  if (!original || original.transactionId !== command.transactionId || original.digest !== digest ||
-    original.key.route !== key.route || original.key.accountId !== key.accountId ||
-    original.key.direction !== key.direction || original.key.receiptId !== key.receiptId)
+  if (
+    !original ||
+    original.transactionId !== command.transactionId ||
+    original.digest !== digest ||
+    original.key.route !== key.route ||
+    original.key.accountId !== key.accountId ||
+    original.key.direction !== key.direction ||
+    original.key.receiptId !== key.receiptId
+  )
     throw new TypeError('Identity association requires its actual original source writer');
   return original;
 }
@@ -165,8 +171,12 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
       : source.commandReceipt;
   if (!commandReceipt) throw new TypeError('Reversal source requires its original native command key');
   const actualReceipt = currentCommandReceipt(tx);
-  if (actualReceipt.kind !== commandReceipt.kind || actualReceipt.key !== commandReceipt.key ||
-    actualReceipt.principal.kind !== 'account' || actualReceipt.principal.id !== source.requestedBy)
+  if (
+    actualReceipt.kind !== commandReceipt.kind ||
+    actualReceipt.key !== commandReceipt.key ||
+    actualReceipt.principal.kind !== 'account' ||
+    actualReceipt.principal.id !== source.requestedBy
+  )
     throw new TypeError('Accounts source requires its actual original native command receipt');
   const nativeReceiptKey = actualReceipt.storageKey;
   const inserted = await tx.query(insert.sql, [
@@ -209,15 +219,25 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
   const { unionHistoryScope } = await import('../history/record.ts');
   const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
-  const undoRoles = source.undo?.source.roles.map(({ account_id, role }) => {
-    // This is the genuine released undo's closed Accounts vocabulary, not caller role text.
-    const mask = role === 'subject' ? roles.subject : role === 'actor' ? roles.actor | roles.principal :
-      role === 'editor' ? roles.reviewer : null;
-    if (mask === null) throw new TypeError('Unknown original Accounts undo role');
-    return ref(account_id, mask);
-  }) ?? [];
+  const undoRoles =
+    source.undo?.source.roles.map(({ account_id, role }) => {
+      // This is the genuine released undo's closed Accounts vocabulary, not caller role text.
+      const mask =
+        role === 'subject'
+          ? roles.subject
+          : role === 'actor'
+            ? roles.actor | roles.principal
+            : role === 'editor'
+              ? roles.reviewer
+              : null;
+      if (mask === null) throw new TypeError('Unknown original Accounts undo role');
+      return ref(account_id, mask);
+    }) ?? [];
   const key: AgentIdentitySourceKey = Object.freeze({
-    route, accountId: source.account, direction: source.receipt.kind, receiptId: source.receipt.receipt,
+    route,
+    accountId: source.account,
+    direction: source.receipt.kind,
+    receiptId: source.receipt.receipt,
   });
   const accounts = unionHistoryScope('command-receipt/v1', [
     ref(source.account, roles.subject),
@@ -226,11 +246,18 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
     ...(command.basis?.requestedBy ? [ref(command.basis.requestedBy, roles['acting-human'])] : []),
     ...undoRoles,
   ]).accounts;
-  originalIdentities.set(tx, Object.freeze({
-    key, digest: row.intent_digest, partition: row.source_partition, epoch: row.source_epoch,
-    position: BigInt(row.source_position), transactionId: row.source_transaction_id,
-    accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
-  }));
+  originalIdentities.set(
+    tx,
+    Object.freeze({
+      key,
+      digest: row.intent_digest,
+      partition: row.source_partition,
+      epoch: row.source_epoch,
+      position: BigInt(row.source_position),
+      transactionId: row.source_transaction_id,
+      accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
+    }),
+  );
   await declareAgentIdentitySource(tx, key, digestOf(input));
 }
 
