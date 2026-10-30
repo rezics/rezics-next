@@ -48,7 +48,6 @@ import {
   writeSync,
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { stageCheckGit } from './check-git.ts';
 
 export type Host = {
   name: string;
@@ -3888,6 +3887,7 @@ async function uploadRun(
         throw new Error('remote-check: local Git staging directory is unavailable');
       localGitStage = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
       const gitStageStarted = performance.now();
+      const { stageCheckGit } = await import('./check-git.ts');
       const manifestPath = await stageCheckGit(options.workspace, localGitStage);
       const packPath = join(localGitStage, 'snapshot.pack');
       gitManifestRelativePath = relative(resolve(options.workspace), manifestPath);
