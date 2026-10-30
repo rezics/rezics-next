@@ -1,6 +1,6 @@
 import { exposureQuery, sessionQuery, useSession } from '../session/query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -287,20 +287,29 @@ function SettingsSections({
   );
 }
 
+const subscribeHydration = () => () => {};
+
 export function SettingsPageView({
   page,
+  requestSession,
   managedAccountsIO,
   preferenceIO = nativePreferences,
 }: {
   page: SettingsPage;
   csrfToken: string | null;
+  /** Supplied only by the guarded route, from its request's established session query. */
+  requestSession?: ReturnType<typeof useSession> | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
   preferenceIO?: PreferenceIO;
 }) {
   const location = useLocation();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const session = useSession();
+  const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
+  const browserSession = useSession();
+  // Match the server snapshot on first hydration; later renders require the live browser identity.
+  // A loader page or a seeded cache alone never establishes this route-bound session.
+  const session = hydrated ? browserSession : (requestSession ?? browserSession);
   const managedTarget = managedAccountTarget(location.publicHref);
   const signedOut = !page.signedIn && (session.state === 'unknown' || session.state === 'signed-out');
   const ready =
