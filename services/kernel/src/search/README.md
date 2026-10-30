@@ -50,6 +50,13 @@ installs may remain; the next ordinary invocation repeats and validates the whol
 an installed-version registry or internal retries. This proves adapter installation only; population, Source and
 permission readiness retain their separate gates.
 
+The native representation follows OpenSearch 3.9.0's
+[`StoredScriptSource`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/script/StoredScriptSource.java)
+and [`GetStoredScriptResponse`](https://github.com/opensearch-project/OpenSearch/blob/4ee42a94e87f66fbf1e62a9871b1b87f91e02472/server/src/main/java/org/opensearch/action/admin/cluster/storedscripts/GetStoredScriptResponse.java).
+Native controls also substitute compiler options while preserving the released source and retain an already
+installed `subjects-search-v1` across failed installation and repeated recovery. Older versions remain untouched;
+they do not expand the fixed required installation set.
+
 `disclosure/check.ts` rejects missing, hidden, redirected or security-revision-mismatched candidates and evaluates
 current filter evidence in the existing partial implementation; hit data is projected from the current source snapshot. Suggestions
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,

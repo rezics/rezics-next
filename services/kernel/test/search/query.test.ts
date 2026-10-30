@@ -836,3 +836,83 @@ test('installation work stays fixed at 64, 512 and 4096 unrelated native documen
       await Promise.all(noise.slice(start, start + 16).map((path) => search.request('DELETE', path)));
   }
 }, 600_000);
+
+test('native compiler option substitution with unchanged released source fails and recovers every version', async () => {
+  const target = fresh();
+  try {
+    for (const name of installationNames) {
+      const substitutions: Receipt[] = [];
+      const { client, calls } = installationTransport(target, async (receipt, call) => {
+        if (call.method === 'PUT' && call.path === `/_scripts/${target}${name}`) {
+          const replacement = structuredClone(call.body) as { script: Record<string, unknown> };
+          replacement.script.options = { content_type: 'text/plain' };
+          // Change only native compiler options; a changed source must not mask an options comparison defect.
+          substitutions.push(await search.request('PUT', call.path, replacement));
+        }
+        return receipt;
+      });
+      try {
+        await expect(installTemplates(client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+        expect(substitutions).toEqual([{ status: 200, body: { acknowledged: true } }]);
+        const put = calls.at(-2)!;
+        const get = calls.at(-1)!;
+        expect([put.method, get.method]).toEqual(['PUT', 'GET']);
+        expect(get.raw).toEqual({
+          status: 200,
+          body: {
+            _id: `${target}${name}`,
+            found: true,
+            script: {
+              ...(put.body as { script: object }).script,
+              options: { content_type: 'text/plain' },
+            },
+          },
+        });
+      } finally {
+        console.info('native option substitution', JSON.stringify({ name, substitutions }));
+        retainInstallation('unchanged released source with substituted options', calls);
+      }
+      await verifiedInstallation(target);
+    }
+  } finally {
+    await removeInstalled(target);
+  }
+}, 120_000);
+
+test('genuine recovery preserves an existing older released template byte for byte', async () => {
+  const target = fresh();
+  const older = `/_scripts/${target}subjects-search-v1`;
+  const released = JSON.parse(
+    readFileSync(new URL('../../db/search/templates/subjects-search-v1.json', import.meta.url), 'utf8'),
+  ) as { script: unknown };
+  try {
+    expect(await search.request('PUT', older, structuredClone(released))).toEqual({
+      status: 200,
+      body: { acknowledged: true },
+    });
+    const original = await search.request('GET', older);
+    expect(original).toEqual({
+      status: 200,
+      body: { _id: `${target}subjects-search-v1`, found: true, script: released.script },
+    });
+    const { client, calls } = installationTransport(target, (receipt, call) => {
+      if (call.method === 'GET' && call.path.endsWith(SUGGEST_TEMPLATE)) throw new Error('lost native readback');
+      return receipt;
+    });
+    try {
+      await expect(installTemplates(client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+      expect(calls.map(({ method, path }) => [method, path])).toEqual(installationPaths(target).slice(0, 4));
+    } finally {
+      retainInstallation('partial installation beside existing older release', calls);
+    }
+    for (let caller = 0; caller < 2; caller++) {
+      await verifiedInstallation(target);
+      const retained = await search.request('GET', older);
+      expect(retained).toEqual(original);
+      console.info('native retained older release', JSON.stringify({ caller, retained }));
+    }
+  } finally {
+    await removeInstalled(target);
+    await search.request('DELETE', older);
+  }
+}, 120_000);
