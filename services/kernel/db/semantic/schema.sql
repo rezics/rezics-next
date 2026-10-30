@@ -1765,6 +1765,27 @@ $$;
 
 
 --
+-- Name: invalidate_identity_prearm_release(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.invalidate_identity_prearm_release() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+  UPDATE semantic.identity_epoch_prearm_directory SET released=released
+   WHERE partition_no=OLD.partition_no AND job_id=OLD.job_id AND generation=OLD.generation AND released;
+ END IF;
+ IF TG_OP='INSERT' OR (TG_OP='UPDATE' AND
+  (NEW.partition_no,NEW.job_id,NEW.generation) IS DISTINCT FROM (OLD.partition_no,OLD.job_id,OLD.generation)) THEN
+  UPDATE semantic.identity_epoch_prearm_directory SET released=released
+   WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id AND generation=NEW.generation AND released;
+ END IF;
+ RETURN NULL;
+END; $$;
+
+
+--
 -- Name: keep_identity_epoch_accepted_binding(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3852,7 +3873,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text])))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-prearm-release'::text])))
 );
 
 
@@ -3963,7 +3984,8 @@ CREATE TABLE semantic.identity_epoch_prearm_directory (
     released boolean DEFAULT false NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     cancel_sequence bigint DEFAULT 0 NOT NULL,
-    cancelled_transaction_id uuid
+    cancelled_transaction_id uuid,
+    release_transaction_id uuid
 );
 
 
@@ -9297,6 +9319,13 @@ CREATE TRIGGER identity_epoch_step_immutable BEFORE DELETE OR UPDATE ON semantic
 
 
 --
+-- Name: identity_epoch_prearm_page identity_prearm_release_fence; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_prearm_release_fence AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_prearm_page FOR EACH ROW EXECUTE FUNCTION semantic.invalidate_identity_prearm_release();
+
+
+--
 -- Name: subject identity_public_writer; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -10082,6 +10111,14 @@ ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
 
 ALTER TABLE ONLY semantic.identity_epoch_step
     ADD CONSTRAINT identity_epoch_step_partition_no_transaction_id_native_epo_fkey FOREIGN KEY (partition_no, transaction_id, native_epoch, native_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position");
+
+
+--
+-- Name: identity_epoch_prearm_directory identity_prearm_release_commit_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_prearm_directory
+    ADD CONSTRAINT identity_prearm_release_commit_fkey FOREIGN KEY (partition_no, release_transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
 
 
 --

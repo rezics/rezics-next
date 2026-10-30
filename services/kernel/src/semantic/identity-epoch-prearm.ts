@@ -931,13 +931,30 @@ export async function releaseIdentityPrearmHome(pool: Pool, ref: IdentityJobRef,
       [home],
       work,
     );
-    await query(
+    const releasing = await query(
       tx,
-      `UPDATE semantic.identity_epoch_prearm_directory SET released=true
-      WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT released`,
+      `SELECT generation FROM semantic.identity_epoch_prearm_directory
+      WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT released
+      ORDER BY generation LIMIT 3 FOR UPDATE`,
       [home, ref.jobId, ref.epoch.toString()],
       work,
     );
+    if (releasing.rows.length > 2) throw unavailable();
+    if (releasing.rows.length) {
+      // Only the actual original false -> true transition mints release provenance.
+      // Old released rows and native retries retain their original locator (including NULL).
+      recordIdentityEpochNativeCommit(tx, 'identity-prearm-release');
+      registerCommandCallback(tx, async (id) => {
+        await query(
+          tx,
+          `UPDATE semantic.identity_epoch_prearm_directory
+          SET released=true,release_transaction_id=$4
+          WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT released`,
+          [home, ref.jobId, ref.epoch.toString(), id],
+          work,
+        );
+      });
+    }
     await query(
       tx,
       `UPDATE semantic.identity_epoch_prearm_bridge SET job_id=NULL,job_epoch=NULL,scope_digest=NULL,bridge_version=bridge_version+1
