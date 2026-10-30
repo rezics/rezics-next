@@ -27,15 +27,15 @@ No public property facet response contains counts or a substitute for counts.
 Universal kind chips remain governed exclusively by the exception in `search-facets.md`.
 This plan neither adds kind-count work nor changes that exception.
 
-| Surface | Specified now | Current implementation boundary | Required closure |
-| --- | --- | --- | --- |
-| Facet HTTP wire | Adopted count-free continuation | Route has no cursor or required `next` | Runtime brief |
-| Population | Complete eligible distinct values | Sampled relation projection and terms | Complete retained preparation |
-| Identity/order | Canonical item/native code/type order | Count-ordered preview | Canonical unique retained keys |
-| Privacy | Whole query and current disclosure | Candidate/label checks are insufficient | Actual Source/consumer custody |
-| Roster | `facetProperties(release, types)` | Web truncates at eight | Group full roster; separate ranges |
-| Native catalogue | Released shared fixture | Existing acceptance writers own older cases | Native closure brief below |
-| Renderer | Adopted wire consumption | Preview-oriented values and no continuation | Web consumer closure, no new DTO |
+| Surface          | Specified now                         | Current implementation boundary             | Required closure                   |
+| ---------------- | ------------------------------------- | ------------------------------------------- | ---------------------------------- |
+| Facet HTTP wire  | Adopted count-free continuation       | Route has no cursor or required `next`      | Runtime brief                      |
+| Population       | Complete eligible distinct values     | Sampled relation projection and terms       | Complete retained preparation      |
+| Identity/order   | Canonical item/native code/type order | Count-ordered preview                       | Canonical unique retained keys     |
+| Privacy          | Whole query and current disclosure    | Candidate/label checks are insufficient     | Actual Source/consumer custody     |
+| Roster           | `facetProperties(release, types)`     | Web truncates at eight                      | Group full roster; separate ranges |
+| Native catalogue | Released shared fixture               | Existing acceptance writers own older cases | Native closure brief below         |
+| Renderer         | Adopted wire consumption              | Preview-oriented values and no continuation | Web consumer closure, no new DTO   |
 
 ### Why the current value population is incomplete
 
@@ -71,11 +71,11 @@ source/population definition, facet property, datatype and identity context.
 A build is immutable after publication and has one value row per distinct native key.
 The order is ascending key order within that property's identified build.
 
-| Kind | Stored unique/order key | Public `value` | Equality/refinement |
-| --- | --- | --- | --- |
-| Item | Canonical terminal UUID's 16 unsigned bytes | Lowercase canonical UUID | Existing statement `in` |
+| Kind | Stored unique/order key                                       | Public `value`                 | Equality/refinement     |
+| ---- | ------------------------------------------------------------- | ------------------------------ | ----------------------- |
+| Item | Canonical terminal UUID's 16 unsigned bytes                   | Lowercase canonical UUID       | Existing statement `in` |
 | Code | Exact UTF-8 bytes, binary lexicographic, shorter prefix first | Unchanged released code string | Existing statement `in` |
-| Type | Exact UTF-8 bytes of actual released type ID | Unchanged released type ID | Existing type `in` |
+| Type | Exact UTF-8 bytes of actual released type ID                  | Unchanged released type ID     | Existing type `in`      |
 
 UUID byte order equals lexical order for validated lowercase fixed-width UUID text.
 Use PostgreSQL `uuid` ordering for item keys and `bytea` for string key ordering.
@@ -221,10 +221,10 @@ Use actual candidates `c`, including rejects, duplicate supports, lookahead and 
 Charge every underlying backend call, including failure and retry work.
 
 | Per-property size | Direct candidate ceiling | Ready candidate ceiling | Ready points | Ready rows |
-| ---: | ---: | ---: | ---: | ---: |
-| 2 | 15 | 6 | 64 | 160 |
-| 10 | 63 | 22 | 192 | 416 |
-| 20 | 123 | 42 | 352 | 736 |
+| ----------------: | -----------------------: | ----------------------: | -----------: | ---------: |
+|                 2 |                       15 |                       6 |           64 |        160 |
+|                10 |                       63 |                      22 |          192 |        416 |
+|                20 |                      123 |                      42 |          352 |        736 |
 
 Direct candidates are `min(600, 6s + 3)` with three refill rounds.
 Each round asks at most `2 * remaining + 1`, not a fresh full-page quota.
@@ -422,25 +422,25 @@ Return facets in request order with exactly `property`, `values`, `next` and env
 
 ## State transitions and failure rules
 
-| State | Input/event | Result | Retained effect |
-| --- | --- | --- | --- |
-| Absent | Admitted initial request | Existing readiness | Reserve one building generation |
-| Captured | Finite population and complete custody available | Building | Retain fences and native observation |
-| Building | One bounded successful step | Building | Atomic effects plus one frontier |
-| Building | Source/projection progress | Building | Resume exact subject sub-frontier |
-| Building | Rollback or no effect | Building | No frontier advance |
-| Building | Crash after committed step | Building | Replay from committed frontier |
-| Building | Ambiguous external effect | Repairing | Resolve native winner before advancement |
-| Building | Input exhausted and final CAS wins | Ready | Immutable published generation |
-| Building | CAS loses to valid winner | Ready or Building | Use persisted winner, discard losing staging |
-| Ready | Static invalid cursor binding | 400 | No page/cursor advance |
-| Ready | Relevant pending/change/unsafe covered cut | Readiness | Retain indexed repair work |
-| Ready | Generation/identity/observation lost | 409 | New query must capture new observation |
-| Ready | Current public source denial | Existing denial | No successful empty substitute |
-| Ready | Safe filled/final page | 200 | Last consumed key only in confidential cursor |
-| Ready | Ordinary relevant addition | Ready plus replacement | Existing lag policy; no in-place mutation |
-| Any retained | Idle expiry/cancel | Expired | Block new reads, drain owned use, bounded cleanup |
-| Any retained | Owner moved/unavailable/deadline | Existing readiness/unavailable | Preserve frontier, never certify emptiness |
+| State        | Input/event                                      | Result                         | Retained effect                                   |
+| ------------ | ------------------------------------------------ | ------------------------------ | ------------------------------------------------- |
+| Absent       | Admitted initial request                         | Existing readiness             | Reserve one building generation                   |
+| Captured     | Finite population and complete custody available | Building                       | Retain fences and native observation              |
+| Building     | One bounded successful step                      | Building                       | Atomic effects plus one frontier                  |
+| Building     | Source/projection progress                       | Building                       | Resume exact subject sub-frontier                 |
+| Building     | Rollback or no effect                            | Building                       | No frontier advance                               |
+| Building     | Crash after committed step                       | Building                       | Replay from committed frontier                    |
+| Building     | Ambiguous external effect                        | Repairing                      | Resolve native winner before advancement          |
+| Building     | Input exhausted and final CAS wins               | Ready                          | Immutable published generation                    |
+| Building     | CAS loses to valid winner                        | Ready or Building              | Use persisted winner, discard losing staging      |
+| Ready        | Static invalid cursor binding                    | 400                            | No page/cursor advance                            |
+| Ready        | Relevant pending/change/unsafe covered cut       | Readiness                      | Retain indexed repair work                        |
+| Ready        | Generation/identity/observation lost             | 409                            | New query must capture new observation            |
+| Ready        | Current public source denial                     | Existing denial                | No successful empty substitute                    |
+| Ready        | Safe filled/final page                           | 200                            | Last consumed key only in confidential cursor     |
+| Ready        | Ordinary relevant addition                       | Ready plus replacement         | Existing lag policy; no in-place mutation         |
+| Any retained | Idle expiry/cancel                               | Expired                        | Block new reads, drain owned use, bounded cleanup |
+| Any retained | Owner moved/unavailable/deadline                 | Existing readiness/unavailable | Preserve frontier, never certify emptiness        |
 
 Retry only within the caller's real deadline and remaining cost reservation.
 A retry does not reset candidate, statement, connection or byte counters.
@@ -870,7 +870,31 @@ For released `schema:inLanguage`, create Book statements through ordinary adopti
 Use all 23 valid codes listed below on eligible Books:
 
 ```json
-["ar","bg","cs","da","de","el","en","es","fi","fr","he","hi","hu","id","it","ja","ko","nl","pl","pt","ro","ru","sv"]
+[
+  "ar",
+  "bg",
+  "cs",
+  "da",
+  "de",
+  "el",
+  "en",
+  "es",
+  "fi",
+  "fr",
+  "he",
+  "hi",
+  "hu",
+  "id",
+  "it",
+  "ja",
+  "ko",
+  "nl",
+  "pl",
+  "pt",
+  "ro",
+  "ru",
+  "sv"
+]
 ```
 
 The complete value order is exactly this array under binary UTF-8 ordering.
