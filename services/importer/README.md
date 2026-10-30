@@ -88,12 +88,6 @@ The frozen [caller test](tests/source-statistic-fence.test.ts) binds first, then
 refreshes through the production importer and source registration with a fake external transport.
 [Source-statistic tests](tests/source-statistics.test.ts) retain public-route, acknowledgement and retry coverage.
 
-### Cost: Fenced statistic refresh
-
-- Touches: the already obtained bounded facts-omission result for the exact tuple; the existing positive-statistic HTTP effect only when unfenced.
-- Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
-- Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
-
 The native archive binding and real account-key CLI caller are exercised by
 `services/kernel/test/imports/vndb-statistics-outcomes.test.ts` and `vndb-cli-native.test.ts`.
 They use synthetic COPY rows with the pinned headers, retain the native revision and statistic fields,
@@ -267,6 +261,31 @@ request/receipt bytes. Exact source/record/field fences are checked before the u
 dispatch. Same-run recovery can retain candidates already acknowledged from the current converter. VNDB's
 statistic-only completion still requires a successful statistic write and exhaustive semantic retention; it
 cannot stand in for new-converter proposals. See the [focused verification record](../../docs/research/imports-audit/revision-fence-refresh.md).
+
+### Refresh source-only provenance
+
+A changed admitted source field requires fresh cited proposals even when its catalogue values remain equal.
+For example, changing only an unversioned Bangumi Book's native date changes the source digest, while the
+unchanged `bangumi@3` converter still emits only its name and external identifier. The importer retracts its
+old owned candidates and publishes those equal facts with the actual new digest, using the same native subject
+and claim. It preserves bootstrap bytes, old requests/receipts and independently selected editor candidates.
+It does not infer `schema:datePublished`. Current facts fences suppress publication; unchanged successors send
+no public writes. Keep the same state path for recovery and immutable-plan replay.
+
+Semantic retention requires matching source digests as well as converter revision, subject, group and complete
+statement. A candidate acknowledged by the current immutable run remains eligible during recovery. The explicit
+confirmed VNDB statistic-only exception still requires exhaustive semantic retention and its acknowledged
+statistic effect; it does not become a generic source-metadata acknowledgement.
+
+The frozen [local caller](tests/source-only-provenance-refresh.test.ts), focused
+[partial-receipt/reopen caller](tests/source-provenance-recovery.test.ts), and
+[native ordinary CLI journey](../kernel/test/imports/source-only-provenance-refresh.test.ts) bind this outcome.
+[Evidence and limits](../../docs/research/imports-audit/source-only-provenance-refresh.md) record the actual results;
+native registration alone is not a passing receipt or promotion.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts
+```
 
 ### Reconcile a new converter revision with current fences
 
@@ -450,6 +469,30 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
 
+### Source-only provenance refresh
+
+- Touches: the already bounded current record's <=300 owned candidates/proposals and existing exact source/subject/fence/journal reads; no new lookup authority.
+- Bound: changed-record delta times q indexed journal/proposal work; current-run replay and unchanged input preserve existing caps/zero duplicate effects. Confirmed statistic-only effect retains its accepted bound.
+- Growth check: existing reconciliation/counting and native sourced-write growth keep their units and literal bounds; the native caller proves actual changed-provenance/public outcome, not a new PostgreSQL growth series.
+
+### Fenced statistic refresh
+
+- Touches: the already obtained bounded facts-omission result for the exact tuple; the existing positive-statistic HTTP effect only when unfenced.
+- Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
+- Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
+
+### Operate a permitted scalar source feed
+
+- Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
+- Bound: existing source byte/field/page and command budgets; input consumed once after the actual acquisition rules. No catalogue/history scan or predicted native effects. The caller captures exact consumed bytes, actual seal accounting and independent committed rows/receipts under the existing fixture bounds.
+- Growth check: reuse the existing importer/native capture bounds and units. The new three-provider caller acceptance proves connected behaviour and retains raw observations; it claims no new growth measurement.
+
+### Complete the rejected-cover operator journey
+
+- Touches: supplied bounded source bytes, exact owner/run/record and native receipt/subject/candidate keys, ordinary Auth/public requests and captured response bodies.
+- Bound: existing input/page/projection/public envelope and retry bounds, O(input bytes+(S+D)(1+q)logR) with bounded q. No catalogue/history scan or invented PostgreSQL units.
+- Growth check: existing local counted ceilings and canonical/derived native suites remain unchanged. This connected outcome adds no growth series or replacement counters.
+
 ### Native mixed Wikidata acquisition
 
 - Touches: each existing bounded JSON line plus type, identity and optional native revision validation; only admitted Q items stage indexed source rows and public effects.
@@ -621,12 +664,6 @@ refreshed pixels and exact cover tuple takedown. Its [verification notes](../../
 record the frozen original-byte assertion conflict and distinguish privately retained originals from reencoded
 public variants. A native pass is not claimed for that assertion.
 
-### Operate a permitted scalar source feed
-
-- Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
-- Bound: existing source byte/field/page and command budgets; input consumed once after the actual acquisition rules. No catalogue/history scan or predicted native effects. The caller captures exact consumed bytes, actual seal accounting and independent committed rows/receipts under the existing fixture bounds.
-- Growth check: reuse the existing importer/native capture bounds and units. The new three-provider caller acceptance proves connected behaviour and retains raw observations; it claims no new growth measurement.
-
 ## Exact CLI acknowledgement interruption
 
 The [native account-key journey](../kernel/test/imports/cli-ack-recovery.test.ts) runs Bangumi and Open Library in
@@ -682,12 +719,6 @@ integration, promotion and the broader consumer matrix remain open.
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-rejected-cover-recovery.test.ts
 ```
-
-### Complete the rejected-cover operator journey
-
-- Touches: supplied bounded source bytes, exact owner/run/record and native receipt/subject/candidate keys, ordinary Auth/public requests and captured response bodies.
-- Bound: existing input/page/projection/public envelope and retry bounds, O(input bytes+(S+D)(1+q)logR) with bounded q. No catalogue/history scan or invented PostgreSQL units.
-- Growth check: existing local counted ceilings and canonical/derived native suites remain unchanged. This connected outcome adds no growth series or replacement counters.
 
 ## Concurrent ordinary CLI operators
 

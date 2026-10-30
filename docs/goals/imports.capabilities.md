@@ -793,3 +793,22 @@ This slice adds no growth series and preserves the existing rights, deferred sur
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-midrun-authority-resume.test.ts
 ```
+
+## Source-only provenance refresh
+
+The ordinary provider import/refresh row includes the frozen
+[source-only CLI outcome](../../services/kernel/test/imports/source-only-provenance-refresh.test.ts) and its
+[native caller](../../services/kernel/test/imports/source-only-provenance-refresh-fixture.ts). An unversioned
+Bangumi Book changes only its native date under `bangumi@3`: two equal cited facts must receive the new source
+digest through ordinary retractions/proposals, preserving native identity, immutable bootstrap/receipts and an
+independent editor Context selection. Unchanged input writes nothing; a current facts fence prevents the next
+source-only publication and hides sourced facts. No date mapping or native revision is invented.
+
+The bounded retention correction and callers are implemented. Local/compiler and managed native outcomes are
+recorded in the [verification notes](../research/imports-audit/source-only-provenance-refresh.md); this binding
+adds no growth series, full Imports closure or promotion claim. The confirmed VNDB statistic-only exception
+retains its existing scope and acknowledgement requirements.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts
+```

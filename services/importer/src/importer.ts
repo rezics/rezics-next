@@ -631,7 +631,7 @@ export class Importer {
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       statisticWritten = true;
     }
-    const retainedCandidates = new Set<Candidate>();
+    const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();
     for (const candidate of candidates) {
       if (
@@ -657,8 +657,25 @@ export class Importer {
           !retainedProposals.has(command),
       );
       if (unchanged) {
-        retainedCandidates.add(candidate);
+        retainedCandidates.set(candidate, unchanged);
         retainedProposals.add(unchanged);
+      }
+    }
+    const statisticOnly =
+      statisticWritten &&
+      !skipCover &&
+      candidates.length > 0 &&
+      retainedCandidates.size === candidates.length &&
+      conversion?.proposals.every((command) => command.op === 'create' || retainedProposals.has(command));
+    if (!statisticOnly) {
+      for (const [candidate, proposal] of retainedCandidates) {
+        const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
+        // Equal values still need the changed source's actual digest. An acknowledged
+        // proposal from this immutable run is already current and must survive replay.
+        if (prior.source.digest !== row.digest && candidate.signature !== hash(`${run.id}:${candidate.key}`)) {
+          retainedCandidates.delete(candidate);
+          retainedProposals.delete(proposal);
+        }
       }
     }
     const commands: BatchCommand[] = [];
@@ -705,13 +722,7 @@ export class Importer {
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'converter-ignored' });
       else if (row.state === 'vanished' && !candidates.length)
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'no-owned-candidates' });
-      else if (
-        statisticWritten &&
-        !skipCover &&
-        candidates.length > 0 &&
-        retainedCandidates.size === candidates.length &&
-        conversion?.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
-      ) {
+      else if (statisticOnly) {
         // A confirmed statistic-only refresh changes the input projection without
         // replacing any acknowledged semantic candidate or its immutable journal.
         store.acknowledgeStatisticRefresh(run, row.recordKey);
