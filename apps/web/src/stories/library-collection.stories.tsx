@@ -11,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Read page states. Review these same IDs at phone390 and desktop1280, all launch locale globals and light/dark theme globals. Web story review and Root screenshot review PENDING. Social actions and FULL facts await their native producers.',
+          'Read page states. Review these same IDs at phone390 and desktop1280, all launch locale globals and light/dark theme globals. Web story review and Root screenshot review PENDING. Social actions await their native producers; rows render only supplied FULL facts.',
       },
     },
   },
@@ -104,7 +104,13 @@ export const PublicItemListExport: Story = {
   },
 };
 
-export const CuratorPublicMany = variantStory(variants.CuratorPublicMany);
+export const CuratorPublicMany: Story = {
+  ...variantStory(variants.CuratorPublicMany),
+  play: async (context) => {
+    await variantReady(context, variants.CuratorPublicMany.title);
+    await expect(within(context.canvasElement).getByText(m.library_member_count({ count: 4 }))).toBeVisible();
+  },
+};
 export const GridLayout: Story = {
   name: 'Grid Layout',
   play: collectionReadyWithHover,

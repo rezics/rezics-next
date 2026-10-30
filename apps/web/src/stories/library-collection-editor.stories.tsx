@@ -7,6 +7,7 @@ import { collectionPageQuery, readCollectionPage } from '../library/collection-q
 import { CollectionFilters } from '../library/collection-filters';
 import {
   completePendingCollectionSave,
+  collectionStoryDestinationId,
   setCollectionStoryMode,
   type CollectionStoryMode,
 } from '../kernel/fake/collection-page-stories';
@@ -20,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Atomic selected removal and cross-Collection transfer await the generated producer; built-in dynamic rules remain immutable.',
+          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Selected removal and cross-Collection transfer use the delivered native atomic commands on Save; built-in dynamic rules remain immutable.',
       },
     },
   },
@@ -38,6 +39,11 @@ function EditorRegion() {
       page={data}
       cursor={undefined}
       queryKey={query.queryKey}
+      readEditorPage={async () => {
+        const editable = await readCollectionPage({ data: { id, credentialMode: 'session', editor: true } });
+        if ('preparing' in editable) throw new Error('Expected a curated Collection');
+        return editable;
+      }}
       refreshPage={async () => {
         const refreshed = await readCollectionPage({ data: { id, credentialMode: 'session' } });
         if ('preparing' in refreshed) throw new Error('Expected a curated Collection');
@@ -69,7 +75,7 @@ async function openEditor(canvasElement: HTMLElement) {
   return canvas;
 }
 function firstRow(canvasElement: HTMLElement) {
-  const row = canvasElement.querySelector<HTMLElement>('[data-member]');
+  const row = canvasElement.querySelector<HTMLElement>('[data-collection-members] [data-slot="list-row"]');
   if (!row) throw new Error('Missing member row');
   return row;
 }
@@ -107,6 +113,9 @@ export const Reordering: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
+    await openEditor(canvasElement);
+    await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
+    await expect(canvas.getByRole('button', { name: m.library_collection_save() })).toBeVisible();
   },
 };
 export const Note: Story = {
@@ -214,12 +223,62 @@ export const ExpiredUndo: Story = {
 };
 
 export const SelectionUnavailable: Story = {
+  render: () => renderEditor('failed-save'),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_remove_selected() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await expect(await canvas.findByRole('alert')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.library_collection_remove_selected() })).toBeDisabled();
+    await expect(canvas.getByText(m.library_collection_batch_unavailable())).toBeVisible();
+    await expect(canvas.getByText(m.library_collection_move_unavailable())).toBeVisible();
+  },
+};
+
+export const SelectedRemoval: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
-    await expect(canvas.getByRole('button', { name: m.library_collection_remove_selected() })).toBeDisabled();
-    await expect(canvas.getByText(m.library_collection_batch_unavailable())).toBeVisible();
-    await expect(canvas.getByText(m.library_collection_move_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_remove_selected() }));
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(2);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
+    await openEditor(canvasElement);
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(4);
+    await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
+    await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_remove_selected() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
+    await expect(canvas.getAllByRole('button', { name: new RegExp(m.editor_undo()) })).toHaveLength(2);
+    await userEvent.click(canvas.getAllByRole('button', { name: new RegExp(m.editor_undo()) })[0]!);
+    await expect(await canvas.findByText('Snow Country', { exact: true })).toBeVisible();
+    await openEditor(canvasElement);
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(3);
+  },
+};
+
+export const SelectedMove: Story = {
+  render: () => renderEditor(),
+  play: async ({ canvasElement }) => {
+    const canvas = await openEditor(canvasElement);
+    await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
+    await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
+    const target = canvas.getByRole('combobox', { name: m.library_collection_move_destination() });
+    await canvas.findByRole('option', { name: 'Weekend reading' });
+    await userEvent.selectOptions(target, collectionStoryDestinationId);
+    const move = canvas.getByRole('button', { name: m.library_collection_move_selected() });
+    await waitFor(() => expect(move).toBeEnabled());
+    await userEvent.click(move);
+    await expect(
+      canvas.getByText(m.library_collection_move_pending({ count: 2, title: 'Weekend reading' })),
+    ).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
+    await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
+    await openEditor(canvasElement);
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(2);
   },
 };

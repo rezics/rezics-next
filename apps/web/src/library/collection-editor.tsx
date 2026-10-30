@@ -1,16 +1,16 @@
-import { ListRow, ListRowControl } from '@rezics/ui/list-row';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { Link } from '@tanstack/react-router';
-import { ArrowUpIcon, EllipsisIcon, GripVerticalIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 import type { DragEvent, ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
+import { CollectionMemberDetails } from './collection-member-row';
 import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
 import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
@@ -37,30 +37,20 @@ export function CollectionSubjectList({
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()) : null;
         return (
-          <ListRow
-            key={subject?.id ?? `unavailable-${index}`}
-            className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4"
-          >
-            <div className="w-24 shrink-0 sm:w-40">
+          <ListRow key={subject?.id ?? `unavailable-${index}`} className="flex min-w-0 items-start gap-4 py-2">
+            {href ? <ListRowLink href={href.href}>{title}</ListRowLink> : null}
+            <div className="w-[72px] shrink-0 sm:w-24">
               <SubjectCover
                 subject={subject}
                 ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
                 size="fill"
               />
             </div>
-            <div className="min-w-24 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
-                {href ? (
-                  <Link to={href.to} params={href.params} className="text-primary underline-offset-4 hover:underline">
-                    {title}
-                  </Link>
-                ) : (
-                  title
-                )}
+                <span aria-hidden={href ? true : undefined}>{title}</span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {m.library_column_type()}: {subject?.typeLabel ?? m.library_other()}
-              </p>
+              <CollectionMemberDetails member={{ subject }} listPresentations={listPresentations} />
             </div>
             {subject && onCopy ? (
               <ListRowControl>
@@ -188,7 +178,7 @@ export function CollectionMemberList({
         return (
           <ListRow
             key={member.id}
-            className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl p-2 sm:flex-nowrap sm:gap-4 sm:p-4"
+            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-2 ${rowRatio === '16:9' || rowRatio === '4:3' ? 'grid-cols-[auto_128px_minmax(0,1fr)] sm:grid-cols-[auto_192px_minmax(0,1fr)]' : 'grid-cols-[auto_72px_minmax(0,1fr)] sm:grid-cols-[auto_96px_minmax(0,1fr)]'}`}
             data-member={member.id}
             onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
             onDrop={
@@ -212,8 +202,18 @@ export function CollectionMemberList({
                 : undefined
             }
           >
+            {href ? <ListRowLink href={href.href}>{title}</ListRowLink> : null}
             {editing ? (
-              <ListRowControl className="shrink-0">
+              <ListRowControl className="flex flex-col items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex size-8 cursor-grab items-center justify-center text-muted-foreground"
+                  data-drag-handle
+                  draggable={!busy}
+                  onDragStart={beginDrag}
+                >
+                  <GripVerticalIcon />
+                </span>
                 <Checkbox
                   checked={selectedIds.has(member.id)}
                   disabled={busy || !onSelectionChange}
@@ -222,23 +222,17 @@ export function CollectionMemberList({
                 />
               </ListRowControl>
             ) : null}
-            <div className="w-24 shrink-0 sm:w-40">
+            <div className="min-w-0 [&_button]:relative [&_button]:z-10">
               <SubjectCover subject={member.subject} ratio={rowRatio} size="fill" />
             </div>
-            <div className="min-w-24 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
-                {href ? (
-                  <Link to={href.to} params={href.params} className="text-primary underline-offset-4 hover:underline">
-                    {title}
-                  </Link>
-                ) : (
-                  <span>{title}</span>
-                )}
+                <span aria-hidden={href ? true : undefined}>{title}</span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {m.library_column_type()}: {member.subject?.typeLabel ?? m.library_other()}
-              </p>
-              {editing && member.subject ? (
+              <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+            </div>
+            {editing && member.subject ? (
+              <ListRowControl className="col-span-2 col-start-2">
                 <Textarea
                   aria-label={`${m.library_member_note()}: ${title}`}
                   className="min-h-16"
@@ -247,13 +241,13 @@ export function CollectionMemberList({
                   value={member.note ?? ''}
                   onChange={(event) => onNoteChange?.(member.id, event.target.value)}
                 />
-              ) : member.subject && member.note ? (
-                <p data-slot="collection-member-note" className="line-clamp-2 text-sm text-muted-foreground">
-                  {member.note}
-                </p>
-              ) : null}
-            </div>
-            <ListRowControl className="flex shrink-0 flex-col items-end gap-1">
+              </ListRowControl>
+            ) : member.subject && member.note ? (
+              <p data-slot="collection-member-note" className="line-clamp-2 text-sm text-muted-foreground">
+                {member.note}
+              </p>
+            ) : null}
+            <ListRowControl className="col-span-2 col-start-2 flex flex-wrap items-center gap-1">
               {onCopy && member.subject ? (
                 <Menu
                   title={m.library_collection_actions()}
@@ -267,15 +261,6 @@ export function CollectionMemberList({
               ) : null}
               {editing ? (
                 <>
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex size-8 cursor-grab items-center justify-center text-muted-foreground"
-                    data-drag-handle
-                    draggable={!busy}
-                    onDragStart={beginDrag}
-                  >
-                    <GripVerticalIcon />
-                  </span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -288,23 +273,23 @@ export function CollectionMemberList({
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    variant="ghost"
+                    size="icon-sm"
                     aria-label={m.library_member_move_down()}
                     disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
                     onClick={() => nextAfter !== undefined && onMove?.(member.id, nextAfter)}
                   >
-                    {m.library_member_move_down()}
+                    <ArrowDownIcon aria-hidden="true" />
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
+                    size="icon-sm"
                     aria-label={m.library_member_remove()}
                     disabled={busy}
                     onClick={() => onRemove?.(member.id)}
                   >
-                    {m.library_member_remove()}
+                    <Trash2Icon aria-hidden="true" />
                   </Button>
                 </>
               ) : null}

@@ -1,3 +1,6 @@
+import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
+import { readCollectionDestination, type CollectionDestination } from './collection-read';
+import { CollectionMemberDetails } from './collection-member-row';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
@@ -270,6 +273,12 @@ export function CollectionPage({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
+  const [destinationId, setDestinationId] = useState('');
+  const [destination, setDestination] = useState<CollectionDestination | null>(null);
+  const [destinationLoading, setDestinationLoading] = useState(false);
+  const [transfer, setTransfer] = useState<{ destination: CollectionDestination; memberIds: string[] } | null>(null);
+  const [bulkUnavailable, setBulkUnavailable] = useState(false);
+  const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
   const [editorMembers, setEditorMembers] = useState<CollectionMember[] | null>(null);
   const [title, setTitle] = useState(page.title);
   const storedKind = page.presentationKindSource === 'owner' ? (page.presentationKind ?? null) : null;
@@ -301,6 +310,30 @@ export function CollectionPage({
   ].join('\n');
 
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    let current = true;
+    setDestination(null);
+    if (!editing || !destinationId) {
+      setDestinationLoading(false);
+      return;
+    }
+    setDestinationLoading(true);
+    void readCollectionDestination({ data: destinationId })
+      .then(
+        (value) => {
+          if (current) setDestination(value);
+        },
+        () => {
+          if (current) setDestination(null);
+        },
+      )
+      .finally(() => {
+        if (current) setDestinationLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [editing, destinationId]);
   useEffect(() => {
     if (editing) {
       setConflict(true);
@@ -344,6 +377,10 @@ export function CollectionPage({
       setDescription(editable.description ?? '');
       setVisibility(editable.visibility ?? 'public');
       setSelectedIds(new Set());
+      setBatchRemovalIds(new Set());
+      setTransfer(null);
+      setDestinationId('');
+      setBulkUnavailable(false);
       setEditing(true);
     } catch {
       setFailure(m.error_message());
@@ -353,6 +390,10 @@ export function CollectionPage({
   }
 
   function cancelEditing() {
+    setBatchRemovalIds(new Set());
+    setTransfer(null);
+    setDestinationId('');
+    setBulkUnavailable(false);
     setMembers(page.members);
     setEditorMembers(null);
     setTitle(page.title);
@@ -385,7 +426,20 @@ export function CollectionPage({
       return key;
     };
     try {
-      const plan = buildCollectionMemberEditPlan(editorMembers ?? page.members, members, page.firstPage);
+      const initial = (editorMembers ?? page.members).filter((member) => !transfer?.memberIds.includes(member.id));
+      const plan = buildCollectionMemberEditPlan(initial, members, page.firstPage);
+      const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
+        if (committed > 0) {
+          await reloadCollection();
+          setEditing(false);
+          setConflict(false);
+          setFailure(m.library_collection_save_partial({ count: committed }));
+        } else if (result.reason === 'conflict') setConflict(true);
+        else {
+          setFailure(writeMessage(result));
+          if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
+        }
+      };
       if (
         title !== page.title ||
         description !== (page.description ?? '') ||
@@ -415,36 +469,86 @@ export function CollectionPage({
         committed += 1;
       }
 
-      const applied = await applyCollectionMemberEditPlan(plan, async (operation) => {
-        const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
-        if (operation.kind === 'remove') {
-          if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
-          const result = await removeCollectionMember({
-            data: { ...common, memberId: operation.memberId, revision: currentRevision },
-            headers: csrfHeaders(),
-          });
-          if (result.ok) {
-            currentRevision = result.revision;
-            const episode = result.undo;
-            if (episode)
-              setUndo((current) =>
-                current.some((item) => item.deletionId === episode.deletionId)
-                  ? current
-                  : [...current, { ...episode, key: crypto.randomUUID() }],
-              );
-          }
-          return result;
-        }
-        if (operation.kind === 'move')
-          return moveCollectionMember({
-            data: { ...common, memberId: operation.memberId, after: operation.after },
-            headers: csrfHeaders(),
-          });
-        return updateMemberNote({
-          data: { ...common, memberId: operation.memberId, note: operation.note },
+      if (transfer) {
+        if (currentRevision === undefined) throw new Error('Missing source revision');
+        const data = {
+          collectionId: page.id,
+          revision: currentRevision,
+          memberIds: transfer.memberIds,
+          destinationCollectionId: transfer.destination.id,
+          destinationRevision: transfer.destination.revision,
+          after: null,
+        };
+        const result = await transferCollectionMembers({
+          data: { ...data, idempotencyKey: keyFor(data) },
           headers: csrfHeaders(),
         });
-      });
+        if (!result.ok) {
+          await fail(result);
+          return;
+        }
+        currentRevision = result.revision;
+        committed += 1;
+      }
+      const removals = plan.filter((operation) => operation.kind === 'remove');
+      const batchRemoval = removals.length > 1 || removals.some((operation) => batchRemovalIds.has(operation.memberId));
+      if (batchRemoval) {
+        if (currentRevision === undefined) throw new Error('Missing source revision');
+        const data = {
+          collectionId: page.id,
+          revision: currentRevision,
+          memberIds: removals.map((operation) => operation.memberId),
+        };
+        const result = await batchRemoveCollectionMembers({
+          data: { ...data, idempotencyKey: keyFor(data) },
+          headers: csrfHeaders(),
+        });
+        if (!result.ok) {
+          await fail(result);
+          return;
+        }
+        currentRevision = result.revision;
+        committed += 1;
+        setUndo((current) => [
+          ...current,
+          ...result.undo
+            .filter((episode) => !current.some((item) => item.deletionId === episode.deletionId))
+            .map((episode) => ({ ...episode, key: crypto.randomUUID() })),
+        ]);
+      }
+      const applied = await applyCollectionMemberEditPlan(
+        batchRemoval ? plan.filter((operation) => operation.kind !== 'remove') : plan,
+        async (operation) => {
+          const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
+          if (operation.kind === 'remove') {
+            if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
+            const result = await removeCollectionMember({
+              data: { ...common, memberId: operation.memberId, revision: currentRevision },
+              headers: csrfHeaders(),
+            });
+            if (result.ok) {
+              currentRevision = result.revision;
+              const episode = result.undo;
+              if (episode)
+                setUndo((current) =>
+                  current.some((item) => item.deletionId === episode.deletionId)
+                    ? current
+                    : [...current, { ...episode, key: crypto.randomUUID() }],
+                );
+            }
+            return result;
+          }
+          if (operation.kind === 'move')
+            return moveCollectionMember({
+              data: { ...common, memberId: operation.memberId, after: operation.after },
+              headers: csrfHeaders(),
+            });
+          return updateMemberNote({
+            data: { ...common, memberId: operation.memberId, note: operation.note },
+            headers: csrfHeaders(),
+          });
+        },
+      );
       committed += applied.completed;
       if (applied.failed) {
         if (committed > 0) {
@@ -529,6 +633,16 @@ export function CollectionPage({
   }
 
   const visibleVisibility = page.visibility ?? page.disclosedVisibility;
+  const destinations = navigationCollections.filter(
+    (collection) => collection.id !== page.id && collection.membershipKind !== 'dynamic',
+  );
+  const memberDraftChanged =
+    editing &&
+    buildCollectionMemberEditPlan(
+      (editorMembers ?? page.members).filter((member) => !transfer?.memberIds.includes(member.id)),
+      members,
+      page.firstPage,
+    ).length > 0;
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: page.id }} pins={pins} collections={navigationCollections} />
@@ -566,7 +680,7 @@ export function CollectionPage({
             </div>
             <MetaLine
               items={[
-                page.memberCount === null ? null : m.library_member_count({ count: page.memberCount }),
+                page.memberCount == null ? null : m.library_member_count({ count: page.memberCount }),
                 visibleVisibility ? visibilityLabel(visibleVisibility) : null,
                 <span>
                   {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
@@ -772,17 +886,78 @@ export function CollectionPage({
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
           {editing && owner ? (
-            <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3">
+            <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
               <p className="me-auto self-center text-sm text-muted-foreground">
                 {m.library_collection_selection_count({ count: selectedIds.size })}
               </p>
-              <Button type="button" variant="outline" disabled aria-describedby="collection-batch-unavailable">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || conflict || bulkUnavailable || selectedIds.size === 0}
+                onClick={() => {
+                  setBatchRemovalIds((current) => new Set([...current, ...selectedIds]));
+                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
+                  setSelectedIds(new Set());
+                }}
+              >
                 {m.library_collection_remove_selected()}
               </Button>
-              <p id="collection-batch-unavailable" className="basis-full text-sm text-muted-foreground">
-                {m.library_collection_batch_unavailable()}
-              </p>
-              <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
+              <label className="min-w-0 basis-full space-y-1 sm:basis-auto">
+                <span className="text-sm">{m.library_collection_move_destination()}</span>
+                <select
+                  className={fieldClass}
+                  value={destinationId}
+                  disabled={pending || conflict || transfer !== null}
+                  onChange={(event) => setDestinationId(event.target.value)}
+                >
+                  <option value="">{m.library_collection_choose_destination()}</option>
+                  {destinations.map((collection) => (
+                    <option key={collection.id} value={collection.id}>
+                      {collection.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  pending ||
+                  conflict ||
+                  bulkUnavailable ||
+                  destinationLoading ||
+                  !destination ||
+                  selectedIds.size === 0 ||
+                  memberDraftChanged ||
+                  transfer !== null
+                }
+                onClick={() => {
+                  if (!destination) return;
+                  const memberIds = members.filter((member) => selectedIds.has(member.id)).map((member) => member.id);
+                  setTransfer({ destination, memberIds });
+                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
+                  setSelectedIds(new Set());
+                }}
+              >
+                {m.library_collection_move_selected()}
+              </Button>
+              {transfer ? (
+                <p role="status" className="basis-full text-sm">
+                  {m.library_collection_move_pending({
+                    count: transfer.memberIds.length,
+                    title: transfer.destination.title,
+                  })}
+                </p>
+              ) : null}
+              {memberDraftChanged && !transfer ? (
+                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_save_first()}</p>
+              ) : null}
+              {bulkUnavailable ? (
+                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_batch_unavailable()}</p>
+              ) : null}
+              {!destinationLoading && (!destinations.length || (destinationId && !destination) || bulkUnavailable) ? (
+                <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
+              ) : null}
             </div>
           ) : null}
           {page.memberState === 'preparing' ? (
@@ -917,7 +1092,12 @@ export function CollectionReadActions({
   );
 }
 
-type ReadMember = { id?: string; subject: CollectionMember['subject']; note?: string | null };
+type ReadMember = {
+  id?: string;
+  subject: CollectionMember['subject'];
+  facts?: CollectionMember['facts'];
+  note?: string | null;
+};
 
 /** Read presentation is separate from the existing occurrence editor; it performs no enrichment reads. */
 export function CollectionReadMembers<Member extends ReadMember>({
@@ -974,6 +1154,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
               />
             }
           >
+            <CollectionMemberDetails member={member} listPresentations={listPresentations} />
             {member.note ? (
               <p data-slot="collection-member-note" className="whitespace-pre-wrap text-sm text-muted-foreground">
                 {member.note}

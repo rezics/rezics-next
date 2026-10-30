@@ -68,7 +68,7 @@ type LibraryFailure = {
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function kernelHeaders(authorization: string, idempotencyKey: string): { 'idempotency-key': string } {
+export function kernelHeaders(authorization: string, idempotencyKey: string): { 'idempotency-key': string } {
   return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
 }
 
@@ -76,10 +76,10 @@ function kernelHeaders(authorization: string, idempotencyKey: string): { 'idempo
  * One session read. A write stops here when the cookie, origin or `X-CSRF-Token` header does not match; the token is
  * accepted from the header only.
  */
-async function writeSession(
+export async function writeSession(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-): Promise<{ authorization: string } | CollectionWriteResult> {
+): Promise<{ authorization: string } | Extract<CollectionWriteResult, { ok: false }>> {
   try {
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
@@ -91,7 +91,7 @@ async function writeSession(
   }
 }
 
-function refused(error: unknown): CollectionWriteResult {
+export function refused(error: unknown): Extract<CollectionWriteResult, { ok: false }> {
   if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
   return { ok: false, reason: 'unavailable' };
 }
@@ -104,7 +104,7 @@ function problemCode(body: unknown): string {
   return isRecord(body) && typeof body.code === 'string' ? body.code : '';
 }
 
-function fromKernel(result: LibraryFailure, id: string): CollectionWriteResult {
+export function fromKernel(result: LibraryFailure, id: string): CollectionWriteResult {
   const status = typeof result.status === 'number' ? result.status : result.error?.status;
   const body = result.error?.value;
   if (isPlatformClosedProblem(status, body)) throw new PlatformClosedError(status ?? 403, body);
@@ -120,7 +120,9 @@ function fromKernel(result: LibraryFailure, id: string): CollectionWriteResult {
   return { ok: false, reason: 'unavailable' };
 }
 
-function asSession(value: { authorization: string } | CollectionWriteResult): value is { authorization: string } {
+export function asSession(
+  value: { authorization: string } | CollectionWriteResult,
+): value is { authorization: string } {
   return 'authorization' in value;
 }
 

@@ -31,6 +31,10 @@ export type CollectionStoryMode =
   | 'presentation'
   | 'expired-undo';
 
+export const collectionStoryDestinationId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd0';
+let destinationRevision = 3;
+let destinationMembers: typeof memberPage.members = [];
+
 let mode: CollectionStoryMode = 'many';
 let finishPendingCreate: (() => void) | undefined;
 const clone = <T>(value: T): T => structuredClone(value);
@@ -66,6 +70,8 @@ const itemIds = members.map((member) => member.id);
 
 export function setCollectionStoryMode(next: CollectionStoryMode): void {
   mode = next;
+  destinationRevision = 3;
+  destinationMembers = [];
   editedCollection = clone(baseCollection);
   editedMembers = clone(members);
   if (next === 'empty') {
@@ -158,11 +164,46 @@ function listResponse(request: Request) {
   return { status: 200, members, next: null };
 }
 
+function destinationCollection() {
+  return {
+    ...clone(baseCollection),
+    id: collectionStoryDestinationId,
+    curatorAccountId: 'story-viewer',
+    title: 'Weekend reading',
+    visibility: 'private',
+    revision: destinationRevision,
+    memberCount: destinationMembers.length,
+  };
+}
+
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: new RegExp(`^/v1/collections/${collectionStoryDestinationId}(/members)?$`),
+    story: ({ request, match }) =>
+      !request.headers.has('authorization')
+        ? { status: 404, code: 'not_found' }
+        : match?.[1]
+          ? { status: 200, members: clone(destinationMembers), next: null }
+          : { status: 200, collection: destinationCollection() },
+  },
+  {
+    method: 'POST',
+    path: new RegExp(
+      `^/v1/collections/${baseCollection.id}/members(?::(?:batchRemove|move)|/\\$(?:batchRemove|move))$`,
+    ),
+    story: ({ request }) => writeBatchStory(request),
+  },
   {
     method: 'GET',
     path: '/v1/collections',
     story: ({ request }) => {
+      if (new URL(request.url).searchParams.get('curatorAccountId') === 'story-viewer')
+        return {
+          status: 200,
+          collections: [collectionResponse(request).collection, destinationCollection()],
+          next: null,
+        };
       if (new URL(request.url).searchParams.has('curatorAccountId')) return undefined;
       if (mode === 'none') return { status: 200, collections: [], next: null };
       if (mode === 'one')
@@ -259,7 +300,73 @@ export const routes: FakeRoute[] = [
   },
 ];
 
-/** Stateful replay of the current operations only. No selected future endpoint is faked as delivered. */
+/** Stateful replay of the delivered atomic commands; all validation precedes fixture mutation. */
+async function writeBatchStory(request: Request): Promise<KernelRecording> {
+  if (!request.headers.has('authorization')) return { status: 403, code: 'forbidden' };
+  if (mode === 'failed-save') return { status: 503, code: 'unavailable' };
+  if (mode === 'conflict-save') return { status: 409, code: 'conflict' };
+  const key = request.headers.get('idempotency-key');
+  if (!key) return { status: 400, code: 'invalid_request' };
+  const replay = receipts.get(key);
+  if (replay) return clone(replay);
+  const body = (await request.json()) as {
+    revision: number;
+    memberIds: string[];
+    destinationCollectionId?: string;
+    destinationRevision?: number;
+    after?: string | null;
+  };
+  if (
+    !Array.isArray(body.memberIds) ||
+    !body.memberIds.length ||
+    body.memberIds.length > 100 ||
+    new Set(body.memberIds).size !== body.memberIds.length
+  )
+    return { status: 400, code: 'invalid_request' };
+  if (body.revision !== editedCollection.revision) return { status: 409, code: 'conflict' };
+  const selected = editedMembers.filter((member) => body.memberIds.includes(member.id));
+  if (selected.length !== body.memberIds.length) return { status: 404, code: 'not_found' };
+  const moving = /(?::move|\/\$move)$/.test(new URL(request.url).pathname);
+  if (
+    moving &&
+    (body.destinationCollectionId !== collectionStoryDestinationId ||
+      body.destinationRevision !== destinationRevision ||
+      body.after !== null)
+  )
+    return { status: 409, code: 'conflict' };
+  const revision = editedCollection.revision + 1;
+  const episodes = moving
+    ? []
+    : selected.map((member) => {
+        const episode = {
+          member: clone(member),
+          index: editedMembers.indexOf(member),
+          deletionId: crypto.randomUUID(),
+          revision,
+          deadline: Date.now() + 720 * 60 * 60 * 1000,
+        };
+        removed.set(member.id, episode);
+        return { memberId: member.id, deletionId: episode.deletionId, revision };
+      });
+  editedMembers = editedMembers.filter((member) => !body.memberIds.includes(member.id));
+  editedCollection.revision = revision;
+  editedCollection.memberCount -= selected.length;
+  let response: KernelRecording;
+  if (moving) {
+    destinationMembers = [...clone(selected), ...destinationMembers];
+    destinationRevision += 1;
+    response = {
+      status: 200,
+      source: collectionResponse(request).collection,
+      destination: destinationCollection(),
+      members: clone(selected),
+    };
+  } else response = { status: 200, collection: collectionResponse(request).collection, removed: episodes };
+  receipts.set(key, clone(response));
+  return response;
+}
+
+/** Stateful replay of the existing individual commands. */
 async function writeStory(request: Request) {
   const observedCollection = editedCollection;
   if (!request.headers.has('authorization')) return { status: 403, code: 'forbidden' };

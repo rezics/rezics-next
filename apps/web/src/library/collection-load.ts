@@ -43,6 +43,7 @@ type CuratedMemberPage = {
     id: string;
     note: string | null;
     addedAt: string;
+    facts?: CollectionPageData['members'][number]['facts'];
     subject?: Parameters<typeof subjectOf>[0] | null;
   }[];
   next: string | null;
@@ -409,8 +410,12 @@ export async function loadEditableCollectionPage(
   const memberCount =
     memberState !== 'ready' || filterStatus
       ? null
-      : owner && (!publicMembership || editor)
-        ? curatedCollection.memberCount
+      : owner
+        ? typeof curatedCollection.memberCount === 'number' &&
+          Number.isSafeInteger(curatedCollection.memberCount) &&
+          curatedCollection.memberCount >= 0
+          ? curatedCollection.memberCount
+          : null
         : !input.filter &&
             !filterStatus &&
             !input.filterIgnored?.length &&
@@ -438,6 +443,7 @@ export async function loadEditableCollectionPage(
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
+      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
     next: members.next,
     revision: collection.revision,

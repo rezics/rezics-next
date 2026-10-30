@@ -31,7 +31,12 @@ export function libraryLabel(label: LibraryLabel | undefined, fallback: string):
 export type LibraryAccount = { handle: string | null; displayName: string | null };
 export type CollectionVisibility = 'private' | 'public' | 'unlisted';
 
+type NativeMembers = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']
+>;
+
 export type CollectionMember = {
+  facts?: NativeMembers['members'][number]['facts'];
   id: string;
   note: string | null;
   addedAt: string;
