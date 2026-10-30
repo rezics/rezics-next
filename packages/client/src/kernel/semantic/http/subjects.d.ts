@@ -83,6 +83,57 @@ export declare const ItemInputSchema: import("typebox").TObject<{
     aliases: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
     statements: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
 }>;
+export declare const RevisionDetailSchema: import("typebox").TObject<{
+    subject: import("typebox").TString;
+    revision: import("typebox").TObject<{
+        revision: import("typebox").TInteger;
+        kind: import("typebox").TString;
+        release: import("typebox").TString;
+    }>;
+    change: import("typebox").TUnion<[import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"record">;
+    }>, import("typebox").TObject<{
+        candidate: import("typebox").TString;
+        property: import("typebox").TString;
+        context: import("typebox").TString;
+        reading: import("typebox").TObject<{
+            decision: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                head: import("typebox").TInteger;
+                verdict: import("typebox").TUnion<[import("typebox").TLiteral<"accept">, import("typebox").TLiteral<"reject">, import("typebox").TLiteral<"abstain">]>;
+                revision: import("typebox").TInteger;
+            }>]>;
+            selected: import("typebox").TBoolean;
+            rank: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
+        }>;
+        kind: import("typebox").TLiteral<"candidate">;
+    }>, import("typebox").TObject<{
+        candidate: import("typebox").TString;
+        property: import("typebox").TString;
+        context: import("typebox").TString;
+        reading: import("typebox").TObject<{
+            decision: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                head: import("typebox").TInteger;
+                verdict: import("typebox").TUnion<[import("typebox").TLiteral<"accept">, import("typebox").TLiteral<"reject">, import("typebox").TLiteral<"abstain">]>;
+                revision: import("typebox").TInteger;
+            }>]>;
+            selected: import("typebox").TBoolean;
+            rank: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
+        }>;
+        kind: import("typebox").TLiteral<"decision">;
+        head: import("typebox").TInteger;
+        verdict: import("typebox").TUnion<[import("typebox").TLiteral<"accept">, import("typebox").TLiteral<"reject">, import("typebox").TLiteral<"abstain">]>;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"adoption">;
+        property: import("typebox").TString;
+        context: import("typebox").TString;
+        head: import("typebox").TInteger;
+        mode: import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"replace">, import("typebox").TLiteral<"suppress">]>;
+        selection: import("typebox").TArray<import("typebox").TObject<{
+            candidate: import("typebox").TString;
+            rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">]>;
+        }>>;
+    }>]>;
+}>;
 type SubjectRouteDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
@@ -1898,6 +1949,135 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                revisions: {
+                    ":revision": {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                                revision: number;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    subject: string;
+                                    revision: {
+                                        revision: number;
+                                        kind: string;
+                                        release: string;
+                                    };
+                                    change: {
+                                        kind: "record";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "candidate";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "decision";
+                                        head: number;
+                                        verdict: "abstain" | "accept" | "reject";
+                                    } | {
+                                        kind: "adoption";
+                                        property: string;
+                                        context: string;
+                                        head: number;
+                                        mode: "inherit" | "replace" | "suppress";
+                                        selection: {
+                                            candidate: string;
+                                            rank: "normal" | "preferred";
+                                        }[];
+                                    };
+                                };
+                                400: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: string;
+                                };
+                                503: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
                     };
                 };
             };

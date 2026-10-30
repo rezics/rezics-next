@@ -2133,6 +2133,135 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         subjects: {
             ":id": {
                 revisions: {
+                    ":revision": {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                                revision: number;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    subject: string;
+                                    revision: {
+                                        revision: number;
+                                        kind: string;
+                                        release: string;
+                                    };
+                                    change: {
+                                        kind: "record";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "candidate";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "decision";
+                                        head: number;
+                                        verdict: "abstain" | "accept" | "reject";
+                                    } | {
+                                        kind: "adoption";
+                                        property: string;
+                                        context: string;
+                                        head: number;
+                                        mode: "inherit" | "replace" | "suppress";
+                                        selection: {
+                                            candidate: string;
+                                            rank: "normal" | "preferred";
+                                        }[];
+                                    };
+                                };
+                                400: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: string;
+                                };
+                                503: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                revisions: {
                     get: {
                         body: unknown;
                         params: {
@@ -5098,20 +5227,111 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 rule: {
                     get: {
                         body: unknown;
-                        params: { collectionId: string };
+                        params: {
+                            collectionId: string;
+                        };
                         query: unknown;
                         headers: unknown;
                         response: {
-                            200: { rule: { filter: unknown; sort: "id"; releaseDigest: string; revision: number; collectionRevision: number; sourceGeneration: string } };
-                            400: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            401: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            403: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            404: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            409: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            422: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
-                            503: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            200: {
+                                rule: {
+                                    filter: unknown;
+                                    sort: "id";
+                                    releaseDigest: string;
+                                    revision: number;
+                                    collectionRevision: number;
+                                    sourceGeneration: string;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
                         };
+                        error: never;
                     };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        collections: {
+            ":collectionId": {
+                rule: {
                     put: {
                         body: {
                             filter: unknown;

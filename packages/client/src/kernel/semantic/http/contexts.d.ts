@@ -1824,6 +1824,135 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
         subjects: {
             ":id": {
                 revisions: {
+                    ":revision": {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                                revision: number;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    subject: string;
+                                    revision: {
+                                        revision: number;
+                                        kind: string;
+                                        release: string;
+                                    };
+                                    change: {
+                                        kind: "record";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "candidate";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "decision";
+                                        head: number;
+                                        verdict: "abstain" | "accept" | "reject";
+                                    } | {
+                                        kind: "adoption";
+                                        property: string;
+                                        context: string;
+                                        head: number;
+                                        mode: "inherit" | "replace" | "suppress";
+                                        selection: {
+                                            candidate: string;
+                                            rank: "normal" | "preferred";
+                                        }[];
+                                    };
+                                };
+                                400: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: string;
+                                };
+                                503: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                revisions: {
                     get: {
                         body: unknown;
                         params: {
