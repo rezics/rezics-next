@@ -1,5 +1,5 @@
 import type { SearchLoaderDeps } from './search-params';
-import { searchFormFields } from './search-params';
+import { discoverySearchHref, searchFormFields } from './search-params';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -31,7 +31,10 @@ export function SearchSort({
           value={sort}
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
           onChange={(event) => {
-            const url = new URL(window.location.href);
+            const url = state ? new URL(discoverySearchHref(locale, {
+              ...state, query, type, facets, cursor: undefined,
+              sort: event.currentTarget.value === 'rating' ? 'rating' : undefined,
+            }), window.location.origin) : new URL(window.location.href);
             url.searchParams.delete('cursor');
             if (event.currentTarget.value === 'rating') url.searchParams.set('sort', 'rating');
             else url.searchParams.delete('sort');

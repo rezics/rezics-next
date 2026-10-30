@@ -25,11 +25,12 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
 
 ## Actual reader journey and missing links
 
-- **Entry:** `apps/web/src/routes/search.tsx` exposes anonymous `/search`; the bare route shows an input,
-  while `q` or `type` loads results. AppShell's shared header submits the ordinary form. Its scoped
-  mode needs an existing supplied route; without one it disables submission/suggestions. The header
-  opens neither advanced admission nor a Zone source. No complete advanced/scoped Web query path is
-  established by this seam.
+- **Entry:** `apps/web/src/routes/search.tsx` exposes anonymous `/search`. The existing BFF supplies
+  released public condition metadata even on the bare route. The shared header's Filters action opens
+  the route's existing desktop region or phone sheet, now including the structured condition editor.
+  AppShell retains its ordinary text form and PhoneShell owns its existing frame. Scoped header mode
+  still requires an actual supplied route; unavailable scopes do not submit as Global. UI exposure
+  does not grant native advanced admission or provide a Zone source.
 - **Request:** `search/search.tsx` calls `POST /v1/subjects:search`, plus
   `POST /v1/subjects:facets`; `search/suggestions.ts` and `/api/search/suggestions` call
   `GET /v1/subjects:suggest`. Kernel `search/http/routes.ts` performs public/bearer admission and
@@ -51,16 +52,25 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   reader. Semantic retains ownership of native streams, counts, qualifiers, disclosure and cursor limits.
   Cards and continuation preserve the selected Realm for fresh native Context resolution; bounded embedded
   statements never supply a native total. This is journey wiring, with native proof and Web visual review separate.
-- **Refinement:** Web uses released definitions but displays only its first eight property controls;
-  its type choices come from sampled facets, not complete configured-kind metadata. The current public
-  facet envelope already omits counts. Its underlying sampled, count-ordered execution still lacks
-  canonical complete value continuation; Web drops `next`. Kind counts are a separate narrow contract,
-  never permission to restore property counts or public totals.
-- **Continuation and failure:** Web transports result cursors and restarts rating 409 once. Its
-  `search-params.ts` accepts only 2,048 cursor characters versus the adopted 4,864-character ceiling;
-  `q` also has a character limit distinct from the API's UTF-8 budget. Other search failures reach a
-  generic error boundary; failed facets can leave hits visible. Complete restart, invalid-input,
-  preparing/readiness, unavailable metadata and final-page states need the shared native response path.
+- **Refinement and condition editing:** `search/condition-editor.tsx` extends the existing Filters
+  region alongside its count-free refinement controls. Released types, facet properties, datatypes,
+  units and qualifier declarations supply the structured AND/OR/NOT controls; qualifiers stay on their
+  statement. Shared filter construction admits edits without persisting expanded saved definitions.
+  The same `condition` URL field reaches the existing typed `subjects:search` caller together with
+  simple text, refinements, kinds and existing opaque filters. Owner operands cannot be added here.
+  No delivered saved-filter/resource selector exists on this surface, so retained references have no
+  invented picker or writer. Native resource and kind applicability admission remains authoritative,
+  including below OR/NOT. The editor adds no counts or per-result reads.
+- **Continuation and failure:** The BFF retains typed native problem pointers for both mixed and
+  explicit legacy reads. The editor associates nested errors with their fields and keeps submitted
+  values, text and other predicates on refusal. Grammar validation retains unfinished edits locally.
+  The current URL contract enforces 512 UTF-8 text bytes and 4,864 cursor characters. Tree, sort and
+  result-language changes start without the previous hit cursor; the existing query signal reaches
+  native fetches. Rating retains its one automatic restart; the other native 409 state offers a fresh
+  read bound to the current tree and language. Missing definitions leave the tree retained with retry.
+  Caller stories are `patterns-discovery-search-condition-editor--nested-phone390`,
+  `--nested-desktop1280`, `--native-pointer-retention`, `--language-and-restart` and
+  `--metadata-unavailable` (the same prefix applies). Native and Web visual proof remain separate.
 - **Private execution:** request-only Collection/Zone/Realm leaves require real native authority,
   including under NOT or a true OR branch. Owner state stays in Library. Contracts exist, but the
   public-filter Source/default consumer binding, eligible owner preparation and complete Account

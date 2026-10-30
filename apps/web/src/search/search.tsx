@@ -30,11 +30,14 @@ import {
   parseLegacySearchPage,
   type LegacySearchPage,
   type DiscoveryState,
+  discoveryFailure,
 } from './discovery';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import { DiscoveryKinds } from './discovery-kinds';
 import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
+import { ConditionEditor } from './condition-editor';
+import { conditionAdmission, conditionMetadata, conditionSearchState, type ConditionMetadata, type SearchProblem } from './condition-editor-model';
 type SearchResult = LegacySearchPage;
 type SearchParams = {
   query: string;
@@ -52,6 +55,8 @@ type SearchParams = {
   condition?: FilterDocument;
 };
 type SearchPageData = {
+  conditionMetadata?: ConditionMetadata;
+  problem?: SearchProblem;
   queryState?: SearchLoaderDeps;
   refinement?: RefinementData;
   ranges?: Record<string, FilterRange>;
@@ -245,23 +250,26 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ? [...new Set([...(knownType ? factProperties(release, knownType) : []), ...years])].slice(0, 4)
       : [];
     let staleCursorRestarted = false;
+    let problem: SearchProblem | undefined;
+    const sendSearch = async (request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0]) => {
+      const response = await kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } });
+      problem = response.status !== 200 ? facetProblem(response.error ?? response.data) : undefined;
+      return response;
+    };
     const searchPromise: Promise<{ result?: SearchResult; discovery?: DiscoveryState }> = hasSearch
       ? (async () => {
           if (!body) return { discovery: { status: 'invalid' } };
           const request = { ...body, ...(properties.length ? { properties } : {}) };
           if (data.representation !== 'subjects-v1') {
-            const mixed = await readDiscovery(request, (request) =>
-              kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } }),
-            );
+            const mixed = await readDiscovery(request, sendSearch);
             staleCursorRestarted = mixed.restarted;
             return { discovery: mixed.discovery };
           }
           const { representation: _representation, kindPage: _metadata, kindCountLeaf: _counts, ...legacy } = request;
-          const { response, restarted } = await readSearchPage(legacy, (request) =>
-            kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } }),
-          );
+          const { response, restarted } = await readSearchPage(legacy, sendSearch);
           staleCursorRestarted = restarted;
-          if (response.error) throw new Error('Search failed');
+          if (response.error || response.status !== 200)
+            return { discovery: discoveryFailure(response.status, response.error ?? response.data) };
           const result = parseLegacySearchPage(response.data);
           if (!result) throw new Error('Invalid Search response');
           return { result };
@@ -303,6 +311,8 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
     return {
       queryState,
+      ...(release ? { conditionMetadata: conditionMetadata(release) } : {}),
+      ...(problem ? { problem } : {}),
       ...(result ? { result } : {}),
       ...(discovery ? { discovery } : {}),
       ...(type ? { type } : {}),
@@ -371,20 +381,35 @@ export function SearchPage({
   initiallyOpen?: boolean;
 }) {
   const [hydrated, setHydrated] = useState(false);
-  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(Boolean(data?.problem?.errors?.length));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
   const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
+  const committedState: SearchLoaderDeps = data?.queryState ?? {
+    query, type, facets: selectedFacets, cursor, sort: data?.sort === 'rating' ? 'rating' : undefined,
+  };
+  const stateKey = JSON.stringify(committedState);
+  const [draft, setDraft] = useState({ key: stateKey, condition: data?.condition, languages: committedState.languages });
+  const [attempted, setAttempted] = useState(false);
+  if (draft.key !== stateKey) {
+    setDraft({ key: stateKey, condition: data?.condition, languages: committedState.languages });
+    setAttempted(false);
+  }
+  const admit = useMemo(() => data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined, [data?.conditionMetadata]);
+  const localIssues = admit?.(draft.condition, committedState) ?? [];
+  const issues = [...(data?.problem?.errors ?? []), ...(attempted ? localIssues : [])];
+  const editedState = conditionSearchState(committedState, draft.condition, draft.languages);
+  const editableData = data ? { ...data, queryState: editedState, condition: draft.condition } : data;
   const number = new Intl.NumberFormat(locale);
   const activeFilterCount =
     (type ? 1 : 0) +
     (data?.queryState?.kinds?.length ?? 0) +
     Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0) +
     Object.keys(data?.ranges ?? {}).length +
-    (data?.condition ? 1 : 0);
+    (draft.condition ? 1 : 0);
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
   const openFilters = useCallback(() => {
@@ -402,26 +427,36 @@ export function SearchPage({
   useEffect(() => {
     if (initiallyOpen) openFilters();
   }, [initiallyOpen, openFilters]);
+  useEffect(() => {
+    if (data?.problem?.errors?.length) openFilters();
+  }, [data?.problem, openFilters]);
 
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
   const hasFilterPanel = Boolean(
-    data?.refinement?.properties.length || data?.typeChoices.length || type || data?.queryState?.kinds?.length,
+    data?.conditionMetadata || data?.refinement?.properties.length || data?.typeChoices.length || type || data?.queryState?.kinds?.length || data?.problem,
   );
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
     [activeFilterCount, openFilters],
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
-  const results = renderResults(query, result, locale, type, selectedFacets, data);
+  const results = renderResults(query, result, locale, type, selectedFacets, editableData);
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    setAttempted(true);
+    if (!localIssues.length) return;
+    event.preventDefault();
+    const form = event.currentTarget;
+    requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+  };
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
       {type && <input type="hidden" name="type" value={type} />}
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
-      {(data?.queryState?.languages ?? []).map((tag) => (
+      {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
       {data?.queryState?.filter && <input type="hidden" name="filter" value={data.queryState.filter} />}
@@ -483,10 +518,10 @@ export function SearchPage({
             ...(type ? { type } : {}),
             facetValues: selectedFacets,
             ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
-            ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
+            ...(draft.languages ? { languages: draft.languages } : {}),
             ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
             ...(data.ranges ? { ranges: data.ranges } : {}),
-            ...(data.condition ? { condition: data.condition } : {}),
+            ...(draft.condition ? { condition: draft.condition } : {}),
           }}
           query={query}
           locale={locale}
@@ -512,7 +547,19 @@ export function SearchPage({
           {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
         />
       )}
-      {data?.condition && <input type="hidden" name="condition" value={JSON.stringify(data.condition)} />}
+      <ConditionEditor
+        value={draft.condition}
+        onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
+        metadata={data?.conditionMetadata}
+        locale={locale}
+        issues={issues}
+        values={Object.fromEntries(data?.refinement?.initial?.status === 'ready' ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values]) : [])}
+        disabled={discovery?.status === 'closed' || discovery?.status === 'denied'}
+        languages={draft.languages}
+        onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
+      />
+      {!data?.conditionMetadata && <a className={linkClass} href={discoverySearchHref(locale, committedState)}>{m.search_facet_retry()}</a>}
+      {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>}
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
@@ -527,6 +574,7 @@ export function SearchPage({
       <form
         id="desktop-filter-form"
         method="get"
+        onSubmit={submit}
         action={`/${locale}/search`}
         className="hidden lg:block lg:col-start-1 lg:row-start-1"
       >
@@ -556,7 +604,7 @@ export function SearchPage({
         onOpenChange={setMobileFiltersOpen}
         title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
       >
-        <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
+        <form id="mobile-filter-form" method="get" action={`/${locale}/search`} onSubmit={submit}>
           {filterContents('mobile')}
         </form>
       </BottomSheet>
