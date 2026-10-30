@@ -36,7 +36,7 @@ type NativeMembers = NonNullable<
 >;
 
 export type CollectionMember = {
-  facts?: Extract<NativeMembers['members'][number], { id: string }>['facts'];
+  facts?: Extract<Extract<NativeMembers, { members: unknown[] }>['members'][number], { id: string }>['facts'];
   id: string;
   note: string | null;
   addedAt: string;
@@ -160,6 +160,7 @@ async function readCollection(client: KernelClient, id: string): Promise<RawColl
 async function readMembers(client: KernelClient, id: string, cursor?: string): Promise<RawMemberPage> {
   const result = await client.collections({ collectionId: id }).members.get({ query: libraryListQuery(cursor) });
   const page = readLibraryResult(result);
+  if (!('members' in page)) throw new Error('Collection members are preparing');
   const members = page.members.map((member) => {
     if (!('id' in member)) throw new Error('Dynamic collection requires dynamic membership reads');
     return member;
