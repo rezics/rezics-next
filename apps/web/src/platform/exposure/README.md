@@ -42,3 +42,9 @@ current `viewerActions` transport asks for that declared type at the fixed Globa
 operation pair can enable confirmation. Missing bindings and source errors are unavailable, never denied by inference.
 The session guard also classifies this route as private so the root cannot prepare anonymous exposure during SSR.
 Messages currently use English fallbacks in every supported locale.
+
+Retained integration acceptance: `bun scripts/worker-check.ts --local -- bun run --cwd apps/auth test`, including
+“Manage existing platform exposure data through native open and close actions preserves exact current native
+authority target privacy and immutable operation readback”. The focused local transport tests exercise the web
+contract with explicitly labeled fixtures; they do not replace native permission-formula, replay/revocation,
+transactional opening, Origin/CSRF, discovery/gate-filtering or end-to-end privacy acceptance.
