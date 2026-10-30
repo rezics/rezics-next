@@ -1,3 +1,5 @@
+import { retainSubjectPageSource } from './subject-page-publication-store.ts';
+import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
 import { withReadTransaction } from './read.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
@@ -146,6 +148,7 @@ export async function proposeStatement(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.subject);
@@ -187,6 +190,7 @@ export async function writeProposal(
   transactionId: string,
   options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & {
     source?: Source | AgentSelfSource;
+    routeKey?: Uint8Array;
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
     allowContent?: boolean;
     /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
@@ -301,6 +305,13 @@ export async function writeProposal(
     }
     throw error;
   }
+  if (options.source && 'source' in options.source && options.routeKey)
+    await retainSubjectPageSource(tx, {
+      subject: { route, id: options.subject },
+      candidates: [candidate],
+      source: options.source,
+      routeKey: options.routeKey,
+    });
   if (privateAccount)
     await keepStatementPrivate(tx, {
       subject: options.subject,
@@ -334,6 +345,7 @@ type EditorialWriteOptions = {
   authorization: CommandAuthorization;
   deadline: number;
   clock?: () => Date;
+  routeKey?: Uint8Array;
 };
 
 async function appendEditorialRevision(
@@ -445,7 +457,20 @@ export async function decideCandidate(
           throw new SubjectInputError([{ pointer: '/candidate', code: 'unsupported' }]);
       }
 
-      const release = candidate.relation ? await readRelease(tx, candidate.release) : null;
+      const publicationRelease = await readRelease(tx, candidate.release);
+      if (!publicationRelease) throw new Error('Candidate release is missing');
+      const publicationBefore =
+        options.context === GLOBAL_CONTEXT
+          ? await subjectPageSlot(
+              tx,
+              options.subject,
+              candidate.property,
+              candidate.slot_id,
+              publicationRelease,
+              options.routeKey,
+            )
+          : null;
+      const release = candidate.relation ? publicationRelease : null;
       const before = release
         ? (await slotView(tx, options.subject, candidate.property, options.context, defaults, candidate.slot_id)).facts
         : [];
@@ -492,7 +517,23 @@ export async function decideCandidate(
           revision,
           candidate.slot_id,
         );
-        const linkEvents = [];
+        const linkEvents: { type: string; subject: string; data: unknown }[] = [];
+        if (publicationBefore)
+          await recordSubjectPageDiff(
+            tx,
+            options.subject,
+            transactionId,
+            publicationBefore,
+            await subjectPageSlot(
+              tx,
+              options.subject,
+              candidate.property,
+              candidate.slot_id,
+              publicationRelease,
+              options.routeKey,
+            ),
+            linkEvents,
+          );
         if (release) {
           const subject = await readAdoptionSubject.run(tx, { route, subject_id: options.subject });
           if (!subject) throw new SubjectNotFoundError();
@@ -648,6 +689,17 @@ export async function adoptCandidates(
       if (!definition.multivalued && options.selection.length > 1)
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
+      const publicationBefore =
+        options.context === GLOBAL_CONTEXT
+          ? await subjectPageSlot(
+              tx,
+              options.subject,
+              options.property,
+              slot,
+              options.release.release,
+              options.routeKey,
+            )
+          : null;
       const beforeFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
         .facts;
       const globalFacts =
@@ -735,6 +787,22 @@ export async function adoptCandidates(
             data: { id: options.subject, revision, kind: 'adopt' },
           },
         ];
+        if (publicationBefore)
+          await recordSubjectPageDiff(
+            tx,
+            options.subject,
+            transactionId,
+            publicationBefore,
+            await subjectPageSlot(
+              tx,
+              options.subject,
+              options.property,
+              slot,
+              options.release.release,
+              options.routeKey,
+            ),
+            events,
+          );
         if (beforeFacts) {
           const afterFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
             .facts;

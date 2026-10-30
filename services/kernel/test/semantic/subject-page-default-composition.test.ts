@@ -94,7 +94,12 @@ async function feed(kernel = app) {
   const response = await kernel.handle(new Request('http://kernel.test/v1/subject-pages?limit=1000'));
   expect(response.status, 'actual mounted public transport precedes runtime discovery').toBe(200);
   const body = (await response.json()) as {
-    subjectPages: { id: string; labels: { language: string; value: string }[]; lastModified?: string }[];
+    subjectPages: {
+      id: string;
+      labels: { language: string; value: string }[];
+      lastModified?: string;
+      originalLanguage?: string;
+    }[];
     next: string | null;
   };
   expect(Object.keys(body).sort()).toEqual(['next', 'subjectPages']);
@@ -159,7 +164,7 @@ test('actual mounted publication runtime is production composition rather than a
   expect(typeof (module as any).subjectPagePublicationFor).toBe('function');
   const production = (module as any).createSubjectPagePublication;
   const made: { input: any; runtime: PublicationRunner }[] = [];
-  // Delegates every call to production; captures construction before any accessor is invoked.
+  // Delegates every call to production; captures the real native construction at first use.
   const factory = spyOn(module as any, 'createSubjectPagePublication').mockImplementation((input: any) => {
     const runtime = production(input);
     made.push({ input, runtime });
@@ -167,9 +172,10 @@ test('actual mounted publication runtime is production composition rather than a
   });
   try {
     app = createKernel(options());
+    expect(made).toHaveLength(0);
+    const runtime = (module as any).subjectPagePublicationFor(app) as PublicationRunner;
     expect(made).toHaveLength(1);
     expect(made[0]!.input).toEqual({ pool: db.pool, access, clock, routeKey });
-    const runtime = (module as any).subjectPagePublicationFor(app) as PublicationRunner;
     expect(runtime).toBe(made[0]!.runtime);
     expect((module as any).subjectPagePublicationFor(app)).toBe(runtime);
     expect(made).toHaveLength(1);
@@ -202,10 +208,12 @@ test('actual mounted publication runtime is production composition rather than a
       clock,
       routeKey,
     });
-    // New kernel, new mounted runtime, same durable job/checkpoint. Accessor never drives construction.
+    // New kernel defers its own native runtime; the durable job/checkpoint survives.
     app = createKernel(options());
-    expect(made).toHaveLength(2);
+    expect(made).toHaveLength(1);
     const restarted = (module as any).subjectPagePublicationFor(app) as PublicationRunner;
+    expect(made).toHaveLength(2);
+    expect(made[1]!.input).toEqual({ pool: db.pool, access, clock, routeKey });
     expect(restarted).toBe(made[1]!.runtime);
     expect(restarted).not.toBe(runtime);
     now = new Date(now.getTime() + 60_000);
@@ -213,9 +221,14 @@ test('actual mounted publication runtime is production composition rather than a
     expect(await store.readCurrent(subject)).toEqual({
       id: subject.id,
       labels: [{ language: 'en', value: 'Historical source' }],
+      originalLanguage: 'ja',
     });
     const restored = (await feed()).subjectPages.find((s) => s.id === subject.id);
-    expect(restored).toEqual({ id: subject.id, labels: [{ language: 'en', value: 'Historical source' }] });
+    expect(restored).toEqual({
+      id: subject.id,
+      labels: [{ language: 'en', value: 'Historical source' }],
+      originalLanguage: 'ja',
+    });
     expect(Object.hasOwn(restored!, 'lastModified')).toBe(false);
     for (let repeat = 0; repeat < 3; repeat++) {
       expect(await restarted.step({ limit: 32 })).toEqual({ processed: 0, next: null, done: true });

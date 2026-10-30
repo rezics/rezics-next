@@ -1,3 +1,5 @@
+import { retainSubjectPageContinuation } from './subject-page-publication-store.ts';
+import { invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -154,5 +156,11 @@ export async function mergeSubjectsInCommand(
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: SUBJECT_MERGED, subject: options.redirected, data: { id: options.redirected, survivor: options.survivor } },
   ];
+  await retainSubjectPageContinuation(tx, {
+    subject: { route, id: options.redirected },
+    kind: 'merge',
+    changeId: transactionId,
+  });
+  await invalidateSubjectPage(tx, options.redirected, transactionId, events);
   return { value: { survivor: options.survivor, redirected: options.redirected, revision }, events };
 }

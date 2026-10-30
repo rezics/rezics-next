@@ -5599,3 +5599,543 @@ CREATE INDEX record_retention_document_pending ON semantic.record_retention_docu
 
 CREATE INDEX record_retention_disclosure ON semantic.statement_disclosure(route,subject_id,candidate_id,erasure_key);
 
+
+-- Subject page publication objects from the worker schema.
+-- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_bootstrap_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.visible>0 AND (TG_OP='INSERT' OR OLD.visible=0) THEN
+    UPDATE semantic.subject_page_bootstrap
+    SET version=version+1, source_key=NULL, state='pending', available_at=now(), worker=NULL, lease_until=NULL
+    WHERE partition_no=NEW.partition_no AND state='done';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+
+-- Name: subject_page_valid_witnesses(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_valid_witnesses(value jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT jsonb_typeof(value) = 'array' AND jsonb_array_length(value) <= 8
+    AND (SELECT count(*) = count(DISTINCT (entry->>'kind', entry->>'key'))
+         AND coalesce(bool_and(coalesce(entry->>'kind' IN ('fact','cover','relation')
+             AND jsonb_typeof(entry->'key') = 'string', false)), true)
+         FROM jsonb_array_elements(value) entry)
+$$;
+
+
+--
+
+-- Name: subject_page_work_home_changed(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_work_home_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE home integer; delta integer;
+BEGIN
+  IF TG_TABLE_NAME='subject_page_bootstrap' THEN home := NEW.partition_no; ELSE home := NEW.route >> 4; END IF;
+  delta := CASE WHEN NEW.state<>'done' THEN 1 ELSE 0 END;
+  IF TG_OP='UPDATE' THEN delta := delta-CASE WHEN OLD.state<>'done' THEN 1 ELSE 0 END; END IF;
+  IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
+  RETURN NEW;
+END $$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+
+-- Name: subject_page_bootstrap; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_bootstrap (
+    partition_no integer NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    source_key jsonb,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    CONSTRAINT subject_page_bootstrap_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_page_bootstrap_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+
+-- Name: subject_page_change; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_change (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    "position" bigint NOT NULL,
+    change_id text NOT NULL,
+    component_kind text,
+    component_key text,
+    before_state jsonb NOT NULL,
+    after_state jsonb NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_change_check CHECK (((component_kind IS NULL) = (component_key IS NULL))),
+    CONSTRAINT subject_page_change_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_change_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
+    CONSTRAINT subject_page_change_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_component; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_component (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    component_kind text NOT NULL,
+    component_key text NOT NULL,
+    generation bigint NOT NULL,
+    shown boolean NOT NULL,
+    digest text,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    last_change_position bigint NOT NULL,
+    source_version bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT subject_page_component_check CHECK ((shown = (digest IS NOT NULL))),
+    CONSTRAINT subject_page_component_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_component_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
+    CONSTRAINT subject_page_component_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_component_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_continuation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_continuation (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    kind text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_continuation_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_continuation_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_continuation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_delivery; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_delivery (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_kind text NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    event_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_delivery_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_delivery_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_delivery_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_delivery_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_dependency; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_dependency (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_kind text NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    component_key text NOT NULL,
+    source_version bigint NOT NULL,
+    present boolean NOT NULL,
+    event_id text NOT NULL,
+    CONSTRAINT subject_page_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_dependency_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_dependency_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_fanout; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_fanout (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    source_key text[] DEFAULT '{}'::text[] NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    CONSTRAINT subject_page_fanout_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_fanout_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_fanout_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_fanout_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_fanout_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+
+-- Name: subject_page_owner; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_owner (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_owner_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_owner_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_owner_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_owner_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_owner_dependency; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_owner_dependency (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    source_route integer NOT NULL,
+    source_subject_id uuid NOT NULL,
+    component_key text NOT NULL,
+    source_version bigint NOT NULL,
+    present boolean NOT NULL,
+    event_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_owner_dependency_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_owner_dependency_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_owner_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_owner_dependency_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_owner_dependency_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_publication; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_publication (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    readiness text DEFAULT 'cold'::text NOT NULL,
+    completed_position bigint DEFAULT 0 NOT NULL,
+    change_position bigint DEFAULT 0 NOT NULL,
+    public_effective_at timestamp with time zone,
+    evidence text DEFAULT 'missing'::text NOT NULL,
+    witnesses jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT subject_page_publication_check CHECK (((evidence = 'known'::text) = (public_effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_publication_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_publication_generation_check CHECK ((generation > 0)),
+    CONSTRAINT subject_page_publication_readiness_check CHECK ((readiness = ANY (ARRAY['cold'::text, 'repairing'::text, 'ready'::text]))),
+    CONSTRAINT subject_page_publication_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_publication_witnesses_check CHECK (semantic.subject_page_valid_witnesses(witnesses))
+);
+
+
+--
+
+-- Name: subject_page_repair; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_repair (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    generation bigint NOT NULL,
+    phase text DEFAULT 'descriptive'::text NOT NULL,
+    source_key text[] DEFAULT '{}'::text[] NOT NULL,
+    high_water bigint DEFAULT 0 NOT NULL,
+    replay_position bigint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    dirty boolean DEFAULT false NOT NULL,
+    CONSTRAINT subject_page_repair_phase_check CHECK ((phase = ANY (ARRAY['bootstrap'::text, 'descriptive'::text, 'relations'::text, 'evidence'::text, 'replay'::text, 'done'::text]))),
+    CONSTRAINT subject_page_repair_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_repair_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+
+-- Name: subject_page_source; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_source (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    CONSTRAINT subject_page_source_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_source_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+
+-- Name: subject_page_work_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_work_home (
+    partition_no integer NOT NULL,
+    pending integer NOT NULL,
+    CONSTRAINT subject_page_work_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_page_work_home_pending_check CHECK ((pending >= 0))
+);
+
+
+--
+
+-- Name: subject_page_bootstrap subject_page_bootstrap_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_bootstrap
+    ADD CONSTRAINT subject_page_bootstrap_pkey PRIMARY KEY (partition_no);
+
+
+--
+
+-- Name: subject_page_change subject_page_change_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_change
+    ADD CONSTRAINT subject_page_change_pkey PRIMARY KEY (route, subject_id, "position");
+
+
+--
+
+-- Name: subject_page_change subject_page_change_route_subject_id_change_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_change
+    ADD CONSTRAINT subject_page_change_route_subject_id_change_id_key UNIQUE (route, subject_id, change_id);
+
+
+--
+
+-- Name: subject_page_component subject_page_component_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_component
+    ADD CONSTRAINT subject_page_component_pkey PRIMARY KEY (route, subject_id, component_kind, component_key);
+
+
+--
+
+-- Name: subject_page_continuation subject_page_continuation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_continuation
+    ADD CONSTRAINT subject_page_continuation_pkey PRIMARY KEY (route, subject_id, kind);
+
+
+--
+
+-- Name: subject_page_delivery subject_page_delivery_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_delivery
+    ADD CONSTRAINT subject_page_delivery_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, change_id, event_id);
+
+
+--
+
+-- Name: subject_page_dependency subject_page_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_dependency
+    ADD CONSTRAINT subject_page_dependency_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, component_key);
+
+
+--
+
+-- Name: subject_page_fanout subject_page_fanout_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_fanout
+    ADD CONSTRAINT subject_page_fanout_pkey PRIMARY KEY (route, owner_kind, owner_key, change_id);
+
+
+--
+
+-- Name: subject_page_owner_dependency subject_page_owner_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_owner_dependency
+    ADD CONSTRAINT subject_page_owner_dependency_pkey PRIMARY KEY (route, owner_kind, owner_key, source_route, source_subject_id, component_key);
+
+
+--
+
+-- Name: subject_page_owner subject_page_owner_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_owner
+    ADD CONSTRAINT subject_page_owner_pkey PRIMARY KEY (route, owner_kind, owner_key);
+
+
+--
+
+-- Name: subject_page_publication subject_page_publication_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_publication
+    ADD CONSTRAINT subject_page_publication_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+
+-- Name: subject_page_repair subject_page_repair_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_repair
+    ADD CONSTRAINT subject_page_repair_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+
+-- Name: subject_page_source subject_page_source_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_source
+    ADD CONSTRAINT subject_page_source_pkey PRIMARY KEY (route, subject_id, candidate_id);
+
+
+--
+
+-- Name: subject_page_work_home subject_page_work_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_work_home
+    ADD CONSTRAINT subject_page_work_home_pkey PRIMARY KEY (partition_no);
+
+
+--
+
+-- Name: subject_page_component_witness; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_component_witness ON semantic.subject_page_component USING btree (route, subject_id, generation, component_kind, component_key) WHERE (shown AND (component_kind <> 'label'::text));
+
+
+--
+
+-- Name: subject_page_dependency_component; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_dependency_component ON semantic.subject_page_dependency USING btree (route, subject_id, component_key, owner_kind, owner_route, owner_key) WHERE present;
+
+
+--
+
+-- Name: subject_page_fanout_runnable; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_fanout_runnable ON semantic.subject_page_fanout USING btree (route, state, available_at, owner_kind, owner_key, change_id);
+
+
+--
+
+-- Name: subject_page_owner_dependency_present; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_owner_dependency_present ON semantic.subject_page_owner_dependency USING btree (route, owner_kind, owner_key, source_route, source_subject_id, component_key) WHERE present;
+
+
+--
+
+-- Name: subject_page_repair_runnable; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING btree (route, state, available_at, subject_id);
+
+
+--
+
+-- Name: partition_subjects subject_page_bootstrap_population; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_bootstrap_population AFTER INSERT OR UPDATE OF visible ON semantic.partition_subjects FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_bootstrap_population();
+
+
+--
+
+-- Name: subject_page_bootstrap subject_page_bootstrap_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_bootstrap_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--
+
+-- Name: subject_page_change subject_page_change_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_change_immutable BEFORE DELETE OR UPDATE ON semantic.subject_page_change FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+
+-- Name: subject_page_fanout subject_page_fanout_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_fanout_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_fanout FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--
+
+-- Name: subject_page_repair subject_page_repair_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_repair FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--

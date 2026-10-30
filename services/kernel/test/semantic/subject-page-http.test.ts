@@ -31,7 +31,12 @@ const actions = [
   'moderation:hide',
   'moderation:takedown',
 ];
-type Entry = { id: string; labels: { language: string; value: string }[]; lastModified?: string };
+type Entry = {
+  id: string;
+  labels: { language: string; value: string }[];
+  lastModified?: string;
+  originalLanguage?: string;
+};
 type Page = { subjectPages: Entry[]; next: string | null };
 const subjects: Record<string, any> = {};
 let ordered: { route: number; id: string }[];
@@ -228,9 +233,12 @@ async function page(limit?: number, cursor?: string, headers?: Record<string, st
   expect(body.next === null || typeof body.next === 'string').toBe(true);
   expect(body.subjectPages.length).toBeLessThanOrEqual(limit ?? 20);
   for (const entry of body.subjectPages) {
-    expect(Object.keys(entry).sort()).toEqual(
-      Object.hasOwn(entry, 'lastModified') ? ['id', 'labels', 'lastModified'] : ['id', 'labels'],
-    );
+    expect(Object.keys(entry).sort()).toEqual([
+      'id',
+      'labels',
+      ...(Object.hasOwn(entry, 'lastModified') ? ['lastModified'] : []),
+      ...(Object.hasOwn(entry, 'originalLanguage') ? ['originalLanguage'] : []),
+    ]);
     expect(entry.labels).toEqual([...entry.labels].sort((a, b) => a.language.localeCompare(b.language, 'en')));
     for (const label of entry.labels) expect(Object.keys(label).sort()).toEqual(['language', 'value']);
     if (Object.hasOwn(entry, 'lastModified'))
@@ -263,6 +271,7 @@ test('independent real HTTP traversal needs only native store and source primiti
       { language: 'ja', value: 'Public 日本語' },
     ],
     lastModified: new Date(origin).toISOString(),
+    originalLanguage: 'ja',
   });
   for (const name of [
     'title',
@@ -400,4 +409,43 @@ test('signed global cursors reject tampering, foreign purpose, wrong limits, exp
       prior.moved_to,
     ]);
   }
+}, 120_000);
+
+test('mounted feed forwards current public original language without inferring unknown metadata', async () => {
+  const mono = (language: string, rank: 'normal' | 'preferred') => ({
+    property: { id: 'schema:name' },
+    value: { type: 'value', content: { language, text: 'Original name' } },
+    rank,
+  });
+  const make = async (name: string, statements: Record<string, unknown[]>) =>
+    (
+      await post(
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: name },
+          statements: { 'schema:url': [statement('schema:url', 'https://example.test/public')], ...statements },
+        },
+        201,
+        keyIn(0),
+      )
+    ).subject;
+  const preferred = await make('Preferred', {
+    'schema:name': [mono('ja', 'normal'), mono('fr', 'preferred')],
+    'schema:inLanguage': [statement('schema:inLanguage', 'en')],
+  });
+  const fallback = await make('Fallback', { 'schema:inLanguage': [statement('schema:inLanguage', 'ja')] });
+  const unknown = await make('Unknown', {});
+  const entries = (await page(1000)).subjectPages;
+  expect(entries.find((entry) => entry.id === preferred.id)?.originalLanguage).toBe('fr');
+  expect(entries.find((entry) => entry.id === fallback.id)?.originalLanguage).toBe('ja');
+  expect(
+    Object.hasOwn(
+      entries.find((entry) => entry.id === unknown.id)!,
+      'originalLanguage',
+    ),
+  ).toBe(false);
+  const selected = preferred.statements['schema:name'].find((fact: { rank: string }) => fact.rank === 'preferred').id;
+  await post(`/v1/subjects/${preferred.id}/candidates/${selected}:hide`, { reason: 'Withhold selected original name' });
+  expect((await page(1000)).subjectPages.find((entry) => entry.id === preferred.id)?.originalLanguage).toBe('ja');
 }, 120_000);

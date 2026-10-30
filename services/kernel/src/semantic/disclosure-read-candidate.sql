@@ -6,7 +6,10 @@ WITH input AS NOT MATERIALIZED (
 SELECT s.visibility,
        s.security_revision::text AS security_revision,
        (c.candidate_id IS NOT NULL OR f.statement_id IS NOT NULL) AS known,
-       (coalesce(c.erasure_private,false) OR h.candidate_id IS NOT NULL OR d.candidate_id IS NOT NULL OR
+       (coalesce(c.erasure_private,false) OR EXISTS (
+         SELECT 1 FROM semantic.retraction t WHERE t.route = i.route
+           AND t.subject_id = i.subject_id AND t.candidate_id = i.candidate_id
+       ) OR h.candidate_id IS NOT NULL OR d.candidate_id IS NOT NULL OR
          (b.principal_kind = 'account' AND
            (a.account_id IS NULL OR a.state <> 'active' OR a.authn_fenced))) AS hidden
 FROM input i

@@ -145,7 +145,12 @@ async function adopt(
     expected_head: expectedHead,
   });
 }
-type Entry = { id: string; lastModified?: string; labels: { language: string; value: string }[] };
+type Entry = {
+  id: string;
+  lastModified?: string;
+  originalLanguage?: string;
+  labels: { language: string; value: string }[];
+};
 type Page = { subjectPages: Entry[]; next: string | null };
 async function page(limit = 1000, cursor?: string, headers?: Record<string, string>): Promise<Page> {
   const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
@@ -156,9 +161,16 @@ async function page(limit = 1000, cursor?: string, headers?: Record<string, stri
   expect(answer.body.subjectPages.length).toBeLessThanOrEqual(limit);
   expect(answer.body.next === null || typeof answer.body.next === 'string').toBe(true);
   for (const entry of answer.body.subjectPages) {
-    expect(Object.keys(entry).sort()).toEqual(
-      Object.hasOwn(entry, 'lastModified') ? ['id', 'labels', 'lastModified'] : ['id', 'labels'],
-    );
+    expect(Object.keys(entry).sort()).toEqual([
+      'id',
+      'labels',
+      ...(Object.hasOwn(entry, 'lastModified') ? ['lastModified'] : []),
+      ...(Object.hasOwn(entry, 'originalLanguage') ? ['originalLanguage'] : []),
+    ]);
+    if (Object.hasOwn(entry, 'originalLanguage')) {
+      expect(typeof entry.originalLanguage).toBe('string');
+      expect(entry.originalLanguage).toMatch(/^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$/);
+    }
     if (Object.hasOwn(entry, 'lastModified')) {
       expect(typeof entry.lastModified).toBe('string');
       expect(new Date(entry.lastModified!).toISOString()).toBe(entry.lastModified);
@@ -265,6 +277,7 @@ test('subject page feed includes only current anonymously indexable pages', asyn
   }
   expect(ids).not.toContain(ordered[1]);
   expect(ids).toContain(publicBook.id);
+  expect(entries.find(({ id }) => id === publicBook.id)?.originalLanguage).toBe('ja');
   expect(entries.find(({ id }) => id === publicBook.id)?.labels).toEqual([
     { language: 'en', value: 'Published' },
     { language: 'ja', value: 'Published 日本語' },
@@ -572,7 +585,7 @@ test('preexisting public rows without retained time omit the field until a prove
     const keys = Object.keys(row);
     await admin.query(
       `INSERT INTO semantic.fact (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,
-      Object.values(row),
+      Object.entries(row).map(([key, value]) => (key === 'body' ? JSON.stringify(value) : value)),
     );
   }
   await admin.query(`INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES (0,1)
@@ -580,7 +593,7 @@ test('preexisting public rows without retained time omit the field until a prove
   await runtime.requestRebuild({ route: 0, id });
   await converge(runtime);
   const old = await entry(id);
-  expect(old).toEqual({ id, labels: [{ language: 'en', value: 'No retained time' }] });
+  expect(old).toEqual({ id, labels: [{ language: 'en', value: 'No retained time' }], originalLanguage: 'ja' });
   expect(Object.hasOwn(old!, 'lastModified')).toBe(false);
   at(52);
   const unshown = await propose(id, 'en');

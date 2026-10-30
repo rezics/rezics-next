@@ -17,6 +17,7 @@ apply here.
     id: string;
     labels: { language: string; value: string }[];
     lastModified?: string;
+    originalLanguage?: string;
   }[];
   next: string | null;
 }
@@ -29,6 +30,19 @@ Accept-Language. Global-public readability, no closure/removal/merge redirect,
 and current positive evidence beyond labels are necessary for every entry.
 An adopted public fact, selected public cover or shown relation can qualify;
 unselected proposals, private Context state and labels alone cannot.
+
+This technical, unfiltered crawler feed is outside the filtered-list useful-page
+transport contract. Short or empty 200 responses and one-home raw cursor steps
+are intentional; every returned entry still requires current disclosure. This
+exception does not apply to Zone, TypeList, Collection or library filters.
+
+`readCurrent` alone derives optional `originalLanguage` from currently publicly
+disclosed selected `schema:name` facts: preferred ranks exclude normal ranks,
+then the first admitted monolingual language in native public ordering wins.
+If none is admitted, apply the same rank and ordering rule to
+`schema:inLanguage`. Use the Web subject language tag rule. Unknown language is
+absent; labels, locale and source kinds never infer it. This metadata neither
+qualifies a subject nor changes its meaningful time.
 
 Use the existing `subjectPage` candidate primitive when its owning task lands.
 Its source step is one partition, ordered by `(route, subject_id)`, with
@@ -172,10 +186,10 @@ mechanism or globally queryable source reverse index is introduced.
 pool, its resolved real Access instance, `clock: () => Date`, and the required
 canonical `routeKey: Uint8Array` already owned by the kernel/worker. Bind existing
 current-reader dependencies internally; callers cannot supply witness answers.
-The factory returns the runner interface below. Its production runtime is constructed and mounted by `createKernel`, shared with
-the feed's omission scheduler, and obtained for tests through exported
-`subjectPagePublicationFor(app)`. That accessor returns the mounted instance;
-it must not manufacture a dormant test instance. `src/worker.ts` invokes the
+The factory returns the runner interface below. `createKernel` mounts deferred construction so its Access
+factory remains unresolved until actual use. The first feed or exported `subjectPagePublicationFor(app)`
+use constructs the production runtime with the kernel-resolved native Access; later calls and the feed's
+omission scheduler share that actual instance. The accessor must not manufacture a dormant test instance. `src/worker.ts` invokes the
 same runtime implementation and durable queue through the existing worker
 lifecycle. Wire the source-fence Relay adapter into that lifecycle, including
 bounded fanout, retry and shutdown; no GET-triggered in-memory background scan.

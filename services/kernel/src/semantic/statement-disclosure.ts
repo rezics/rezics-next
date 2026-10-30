@@ -1,3 +1,4 @@
+import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import type { Release } from '@rezics/definitions';
@@ -250,6 +251,7 @@ export async function changeStatementDisclosure(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.candidate);
@@ -296,6 +298,14 @@ export async function changeStatementDisclosure(
         if (priorRetraction) return { value: { candidate: options.candidate, disclosed: row.disclosed }, events };
         const release = await readRelease(tx, row.release);
         if (!release) throw new Error('Disclosure release is missing');
+        const publicationBefore = await subjectPageSlot(
+          tx,
+          row.subject_id,
+          row.property,
+          row.slot_id,
+          release,
+          options.routeKey,
+        );
         const before = await disclosureViews(tx, row);
         await insertRetractRevision.run(tx, {
           route,
@@ -331,13 +341,31 @@ export async function changeStatementDisclosure(
             subject: row.subject_id,
             data: { subject: row.subject_id, revision, security_revision: Number(security.security_revision), changes },
           });
+        await recordSubjectPageDiff(
+          tx,
+          row.subject_id,
+          transactionId,
+          publicationBefore,
+          await subjectPageSlot(tx, row.subject_id, row.property, row.slot_id, release, options.routeKey),
+          events,
+        );
         return { value: { candidate: options.candidate, disclosed: row.disclosed }, events };
       }
+      const publicationRelease = await readRelease(tx, row.release);
+      if (!publicationRelease) throw new Error('Disclosure release is missing');
+      const publicationBefore = await subjectPageSlot(
+        tx,
+        row.subject_id,
+        row.property,
+        row.slot_id,
+        publicationRelease,
+        options.routeKey,
+      );
       const before = row.disclosed ? null : await disclosureViews(tx, row);
       const updated = await updateDisclosure.run(tx, { route, candidate_id: options.candidate });
       // Already disclosed is a successful one-way operation, including retries with another receipt.
       const subject = row.subject_id;
-      const events = [
+      const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.statement_disclosed.v1',
           subject,
@@ -354,6 +382,14 @@ export async function changeStatementDisclosure(
       });
       const release = await readRelease(tx, row.release);
       if (!security || !release) throw new Error('Disclosure state is missing');
+      await recordSubjectPageDiff(
+        tx,
+        subject,
+        transactionId,
+        publicationBefore,
+        await subjectPageSlot(tx, subject, row.property, row.slot_id, publicationRelease, options.routeKey),
+        events,
+      );
       const changes =
         visibility.visibility === 'visible' && before ? await disclosureChanges(tx, row, release, before) : [];
       return {

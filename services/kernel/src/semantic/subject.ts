@@ -1,3 +1,5 @@
+import { initializeSubjectPagePublication, retainSubjectPageSource } from './subject-page-publication-store.ts';
+import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import {
   disclosureAccount,
   keepStatementPrivate,
@@ -163,6 +165,7 @@ export async function writeSubject(
   transactionId: string,
   options: Pick<Parameters<typeof createSubject>[1], 'target' | 'item' | 'release'> & {
     source?: Source | AgentSelfSource;
+    routeKey?: Uint8Array;
   },
 ) {
   const { route, id: subjectId } = options.target;
@@ -300,6 +303,27 @@ export async function writeSubject(
       data: { subject: subjectId, revision: 1, security_revision: 0, changes },
     });
   }
+  if (options.source && 'source' in options.source && options.routeKey)
+    await retainSubjectPageSource(tx, {
+      subject: { route, id: subjectId },
+      candidates: facts.flatMap((f) => (f.statement_id ? [f.statement_id] : [])),
+      source: options.source,
+      routeKey: options.routeKey,
+    });
+  await initializeSubjectPagePublication(tx, { route, id: subjectId });
+  await recordSubjectPageDiff(
+    tx,
+    subjectId,
+    transactionId,
+    new Map(),
+    await subjectPageFacts(
+      tx,
+      subjectId,
+      facts.filter((fact) => !privateAccounts.has(fact.statement_id!)),
+      options.release.release,
+    ),
+    events,
+  );
   return {
     value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
       revision: 1,
@@ -957,6 +981,7 @@ export async function updateSubjectIdentity(
     release: { digest: string; release: Release };
     authorize: AccessCheck;
     deadline?: number;
+    clock?: () => Date;
   },
 ) {
   const route = routeOf(options.subject);
@@ -965,6 +990,7 @@ export async function updateSubjectIdentity(
     pool,
     {
       partition: partitionOf(route),
+      clock: options.clock,
       ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
       authorization: {
         action: 'subject:create',
@@ -1015,9 +1041,30 @@ export async function updateSubjectIdentity(
         labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
       });
       const keysChanged = options.labels !== undefined || type !== before.type;
+      const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
+      await recordSubjectPageDiff(
+        tx,
+        options.subject,
+        transactionId,
+        await subjectPageFacts(
+          tx,
+          options.subject,
+          before.facts.filter((f) => f.kind === 'label'),
+          options.release.release,
+        ),
+        await subjectPageFacts(
+          tx,
+          options.subject,
+          (await holderFacts(tx, options.subject, options.release.release)).facts.filter((f) => f.kind === 'label'),
+          options.release.release,
+        ),
+        publicationEvents,
+      );
+      if (type !== before.type) await invalidateSubjectPage(tx, options.subject, transactionId, publicationEvents);
       return {
         value: { revision },
         events: [
+          ...publicationEvents,
           {
             type: 'com.rezics.subject.revised.v1',
             subject: options.subject,

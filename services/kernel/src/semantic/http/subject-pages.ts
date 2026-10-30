@@ -1,6 +1,12 @@
 import { t } from 'elysia';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
-import type { createApp } from '../../http/app.ts';
+import type { subjectRoutes } from './subjects.ts';
+import { PageCursorError } from '../page.ts';
+import { GLOBAL_CONTEXT } from '../definitions.ts';
+import { globalReadEligibility } from '../eligibility.ts';
+import { withReadTransaction } from '../read.ts';
+import type { Pool } from 'pg';
+import type { SubjectPageFeed } from '../subject-page-feed.ts';
 
 const response = t.Object(
   {
@@ -8,6 +14,7 @@ const response = t.Object(
       t.Object(
         {
           id: t.String({ format: 'uuid' }),
+          originalLanguage: t.Optional(t.String()),
           lastModified: t.Optional(t.String({ format: 'date-time', pattern: 'Z$' })),
           labels: t.Array(t.Object({ language: t.String(), value: t.String() }, { additionalProperties: false })),
         },
@@ -19,7 +26,10 @@ const response = t.Object(
   { additionalProperties: false },
 );
 
-export function subjectPageRoutes(app: ReturnType<typeof createApp>) {
+export function subjectPageRoutes(
+  app: ReturnType<typeof subjectRoutes>,
+  dependencies: { pool: Pool; feed(): SubjectPageFeed },
+) {
   return app.get(
     '/v1/subject-pages',
     {
@@ -31,7 +41,8 @@ export function subjectPageRoutes(app: ReturnType<typeof createApp>) {
         200: response,
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
-        503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
+        403: problemSchema('forbidden'),
+        503: problemSchema('partition_unavailable', 'overloaded', 'deadline_exceeded'),
       },
       detail: {
         operationId: 'subject_pages.list',
@@ -40,8 +51,20 @@ export function subjectPageRoutes(app: ReturnType<typeof createApp>) {
         security: [{ bearerAuth: [] }, {}],
       },
     },
-    () => {
-      throw new ProblemError('semantic_not_ready');
+    async ({ query, authorize }) => {
+      const check = await authorize({
+        route: 0,
+        id: GLOBAL_CONTEXT,
+        eligibility: globalReadEligibility('subject:read'),
+      });
+      const allowed = await withReadTransaction(dependencies.pool, check);
+      if (!allowed) throw new ProblemError('forbidden');
+      try {
+        return await dependencies.feed().page(query);
+      } catch (error) {
+        if (error instanceof PageCursorError) throw new ProblemError('invalid_request');
+        throw error;
+      }
     },
   );
 }

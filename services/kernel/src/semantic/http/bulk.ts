@@ -304,6 +304,7 @@ export function bulkRoutes(
               );
               const { component, ...result } = await admission.run('normal', job, () =>
                 batchCommand(pool, {
+                  routeKey,
                   command: pending.command,
                   route: pending.route!,
                   actor,

@@ -7,13 +7,11 @@ import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, Resource } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
-
 export type RealAccessCheck = {
   persona: string;
   action: string;
   resource: { route: number; id: string };
 };
-
 export type RealAccessFixture<Persona extends string> = {
   auth: AuthenticationConfig;
   access(config: AccessConfig): Access;
@@ -26,12 +24,11 @@ export type RealAccessFixture<Persona extends string> = {
   checks: RealAccessCheck[];
   readChecks: RealAccessCheck[];
 };
-
 export async function createRealAccess<const Personas extends Readonly<Record<string, string>>>(
   admin: Pool,
   accounts: Personas,
   actions: readonly string[],
-  options: { clock?: () => Date } = {},
+  options: { clock?: () => Date; credentialClock?: () => Date } = {},
 ): Promise<RealAccessFixture<keyof Personas & string>> {
   configureTestReceiptKeys(admin);
   type Persona = keyof Personas & string;
@@ -45,15 +42,16 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     fetch: async () => Response.json({ keys: [jwk] }),
   };
   const bearers = new Map<Persona, string>();
-
-  async function mintBearer(persona: Persona, epoch = 1): Promise<string> {
+  async function mintBearer(persona: Persona): Promise<string> {
     const accountId = accounts[persona];
     if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
-    const issuedAt = Math.floor((options.clock?.() ?? new Date()).getTime() / 1000);
+    const issued = options.credentialClock?.() ?? new Date();
+    if (!Number.isFinite(issued.getTime())) throw new Error('Invalid credential clock');
+    const issuedAt = Math.floor(issued.getTime() / 1000);
     return new SignJWT({
       client_id: 'web',
       scope: actions.join(' '),
-      authn_epoch: epoch,
+      authn_epoch: 1,
       auth_time: issuedAt,
       amr: ['pwd'],
     })
@@ -65,18 +63,9 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
       .setExpirationTime(issuedAt + 5 * 60)
       .sign(signing.privateKey);
   }
-
   async function renew(persona: Persona): Promise<void> {
-    const accountId = accounts[persona];
-    if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
-    const result = await admin.query(
-      'SELECT state, minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
-      [routeOf(accountId), accountId],
-    );
-    if (result.rows[0]?.state !== 'active') throw new Error('Fixture issuer requires an active account');
-    bearers.set(persona, await mintBearer(persona, Number(result.rows[0].epoch)));
+    bearers.set(persona, await mintBearer(persona));
   }
-
   for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
     const route = routeOf(accountId);
     if (route === null) throw new Error(`Invalid account id for persona ${persona}`);
@@ -86,7 +75,6 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     );
     await renew(persona);
   }
-
   const checks: RealAccessCheck[] = [];
   const readChecks: RealAccessCheck[] = [];
   const access = (config: AccessConfig): Access => {
@@ -108,24 +96,21 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
       },
     });
   };
-
   async function grant(resource: Resource, persona: Persona, action: string): Promise<void> {
     const accountId = accounts[persona];
     await admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-       VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
+VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
       [resource.route, resource.id, accountId, action],
     );
   }
-
   async function revoke(resource: Resource, persona: Persona, action: string): Promise<void> {
     await admin.query(
       `DELETE FROM access.resource_grant
-       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,
+WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,
       [resource.route, resource.id, accounts[persona], action],
     );
   }
-
   return {
     auth,
     access,

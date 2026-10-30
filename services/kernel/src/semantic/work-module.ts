@@ -12,6 +12,12 @@ import {
 } from './events.ts';
 import { stepIdentityEpochAdmission, wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
 import { runCommand } from '../command/command.ts';
+import { createAccess } from '../access/index.ts';
+import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
+import roles from '../access/resource-roles.json';
+import { createSubjectPagePublication } from './subject-page-publication.ts';
+import { createSubjectPagePublicationRelay } from './subject-page-publication-relay.ts';
+import { registerSubjectPagePublicationWork } from './publication-work.ts';
 import { linkProjection } from './links.ts';
 import { installIdentityEpochBootstrap } from './identity-epoch-bootstrap-install.ts';
 import { synchronizeAccountAgent } from '../access/account-agent-effect.ts';
@@ -20,7 +26,7 @@ import { beginSemanticErasure, createSemanticLocatorEffect, SEMANTIC_ERASURE_SCH
 import { registerSemanticErasureWork } from './account-erasure-work.ts';
 
 import { registerRecordRetentionWork } from './retention-work.ts';
-import { registerProviderReviewWork } from './provider-review-queue.ts';
+import { providerReviewProjection, registerProviderReviewWork } from './provider-review-queue.ts';
 
 const ACCOUNT_TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
 
@@ -46,6 +52,19 @@ export const semanticWorkModule: WorkModule = {
   async register(context) {
     // Establish the writer cut before DBOS can resume an old bootstrap delivery.
     await installIdentityEpochBootstrap(context.pool);
+    const config = readMembershipWorkConfig(context.env);
+    const names = new Set(Object.values(roles.roles).flat());
+    const actions = new Map(
+      [...names].map((action) => [
+        action,
+        { anonymous: action === 'subject:read' || action === 'definitions:read' || action === 'presentation:read' },
+      ]),
+    );
+    const access = createAccess({ actions, auth: config.auth, clock: context.clock });
+    const binding = { pool: context.pool, access, clock: context.clock, routeKey: config.routeKey };
+    const publication = createSubjectPagePublication(binding);
+    const relay = createSubjectPagePublicationRelay(binding);
+    registerSubjectPagePublicationWork(context, publication);
     const scheduleErasure = registerSemanticErasureWork(context);
     await registerRecordRetentionWork(context);
     registerProviderReviewWork(context);
@@ -97,7 +116,7 @@ export const semanticWorkModule: WorkModule = {
         // Four bounded wake chains share the existing effect registration and queue limits.
         events: Array.from({ length: 4 }, (_, partition) => identityBootstrapWake(partition, 1n)),
       }));
-      return startRelays(context.pool, [linkProjection(context.pool)]);
+      return startRelays(context.pool, [linkProjection(context.pool), providerReviewProjection(context.pool), relay]);
     });
   },
 };

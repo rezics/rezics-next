@@ -14,7 +14,10 @@ their HTTP-first checks, mounted runtime accessor and privacy assertions.
 `{ pool: Pool; access: Access; clock: KernelClock; routeKey: Uint8Array }`, with the resolved real Access,
 not its factory. They bind native selection, moderation, disclosure and owner
 readers internally; neither accepts callbacks supplying publication truth.
-Factories are synchronous and do no work until a method is called.
+Factories are synchronous and do no work until a method is called. Kernel composition defers
+construction until the feed or mounted publication accessor is first used, then memoizes the actual
+production runtime. The existing constructor receives the kernel-resolved native Access before returning;
+creating a kernel alone does not resolve Access. Repeated accessor calls return that same runtime.
 `routeKey` is required and is the same canonical secret already owned by
 `createKernel`/the worker; this adds no kernel dependency. Bootstrap derives
 `tupleRoute(routeKey, source, external_id)` for retained imported components.
@@ -37,6 +40,7 @@ type PublicationEntry = {
   id: string;
   labels: { language: string; value: string }[];
   lastModified?: string;
+  originalLanguage?: string;
 };
 type PublicationStore = {
   read(subject: SubjectKey): Promise<PublicationSnapshot | null>;
@@ -81,6 +85,17 @@ It schedules uncertain missing proof through the durable queue; a ready settled
 noindex result or missing historical time alone does not enqueue again.
 It reads labels with the existing descriptive cap of 512 and owners in batches
 of at most 256. Snapshot readiness and witness identities confer no authority.
+
+Only this current-proof producer supplies optional `originalLanguage`, using
+currently disclosed selected preferred names, otherwise normal names, then the
+same rank rule for `schema:inLanguage`, in native ordering and with the Web tag
+admission rule. Unknown language is absent; label order and meaningful time are
+unchanged. HTTP forwards this metadata without another selector.
+
+The technical unfiltered crawler feed preserves one-home raw limit+1 traversal,
+short or empty 200 responses and cursor advancement over omitted candidates.
+It is outside filtered-list useful-page transport; this exception does not
+extend to Zone, TypeList, Collection or library filters.
 
 Component identity is stable: labels use the language tag; fact, cover and
 relation keys use the selected candidate/statement UUID, including compact
@@ -461,7 +476,7 @@ optional UTC time and strict limit assertions remain intact.
 | Relay                     | `createSubjectPagePublicationRelay({ pool, access, clock, routeKey })` exported from `subject-page-publication-relay.ts` synchronously returns the existing `Relay`: `{ consumer: string; run(partition: number): Promise<BatchResult> }`. `access` is the resolved real instance. No callback supplies envelopes, effective time or current publication truth. | `subject-page-publication-relay.test.ts` starts with real native relations and outbox envelopes. A single-connection transport delegates all work and faults only the checkpoint update after a destination commit. A new adapter replays it. The same test follows owner change, bounded native fanout, durable repair-request outbox and separate subject-home delivery.              |
 | Store ports used by Relay | `applySubjectPageDependencyDelta`, `applySubjectPageOwnerChange`, `enqueueSubjectPageRepair`; owner fanout is run by `createSubjectPagePublication`. All publication SQL remains exclusively in `subject-page-publication-store.ts`.                                                                                                                            | Point inspection of actual reverse membership and retained removal rows, real version replay, no publication/dependency/coverage/progress prefills. Late membership is delivered only after native owner fanout completes and must consume retained original evidence.                                                                                                                  |
 | Content original period   | Existing native `POST /v1/sourceFences:takedown`, `source-fence-events.ts` v1 event, and `readFences(client, tuples)` from `content/source-fences.ts`. The optional pair is `takenDownAt` / `takedownId`, read from the original row. Field group remains part of the identity.                                                                                 | Native imported proposal/selection precedes the real takeDown. Repeated receipts and new commands in the same period preserve that pair; later Relay clocks never substitute for it. Missing/standing and legacy missing-pair evidence remain unknown. No restore API, new fence store or assumption of one period forever is required.                                                 |
-| Mounted kernel runtime    | `subjectPagePublicationFor(app)` returns the instance already constructed by `createKernel` using the real factory, pool, resolved Access, route key and clock. The omission scheduler uses this same instance.                                                                                                                                                 | `subject-page-default-composition.test.ts` wraps the actual factory while delegating construction, observes it before accessor calls, checks object identity, durable omission enqueue and real bounded step/restart convergence on historical source rows with absent time.                                                                                                            |
+| Mounted kernel runtime    | `createKernel` mounts deferred publication construction. The first feed or `subjectPagePublicationFor(app)` use constructs the actual runtime with the real factory, pool, resolved native Access, route key and clock; later calls and the omission scheduler share that instance.                                                                                                                                                 | `subject-page-default-composition.test.ts` wraps the actual factory while delegating construction, observes no construction before first use and one native construction at first use, checks every constructor argument, object identity, durable omission enqueue and real bounded step/restart convergence on historical source rows with absent time.                                                                                                            |
 | Default worker            | `startWorker(config)` uses default `KERNEL_WORK_MODULES`, one existing `semantic` WorkModule and the existing one DBOS registration/launch/shutdown lifecycle. Publication and Relay receive the same production dependencies.                                                                                                                                  | The composition file spawns the real default worker without a fixture module override. Wrappers delegate real registration, factories, services and DBOS lifecycle; a legal historical subject must actually converge, and all started semantic services must stop. Default Source composition is a prerequisite only here, never in isolated transport/store/repair tests.             |
 
 Twelve independent native targets and ten imported fence homes exceeding the

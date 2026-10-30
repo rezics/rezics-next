@@ -16,7 +16,12 @@ import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from
 
 // Shared interface declarations only: importing these types never registers this test elsewhere.
 export type SubjectKey = { route: number; id: string };
-export type PublicationEntry = { id: string; labels: { language: string; value: string }[]; lastModified?: string };
+export type PublicationEntry = {
+  id: string;
+  labels: { language: string; value: string }[];
+  lastModified?: string;
+  originalLanguage?: string;
+};
 export type PublicationSnapshot = {
   generation: string;
   readiness: 'cold' | 'repairing' | 'ready';
@@ -52,6 +57,7 @@ const actions = [
   'context:accept',
   'context:adopt',
   'moderation:hide',
+  'moderation:takedown',
 ];
 const routeKey = new Uint8Array(32).fill(81);
 const real = await createRealAccess(admin, accounts, actions, { clock });
@@ -68,7 +74,7 @@ const app = createKernel({
       async authorize(tx, actor, action, resource, evidence, time) {
         const allowed = await base.authorize(tx, actor, action, resource, evidence, time);
         if (allowed && time && !action.endsWith(':read')) {
-          liveTime = authoritativeTimeValue(time);
+          liveTime = new Date(authoritativeTimeValue(time)).toISOString();
           // Make a second domain-clock call observably wrong without replacing command execution.
           now = new Date(now.getTime() + 37);
         }
@@ -191,7 +197,7 @@ test('local public component changes retain command time while private activity 
     subject_page_publication: '(route, subject_id)',
     subject_page_component: '(route, subject_id, component_kind, component_key)',
     subject_page_dependency: '(route, subject_id, owner_kind, owner_route, owner_key, component_key)',
-    subject_page_change: '(route, subject_id, position)',
+    subject_page_change: '(route, subject_id, "position")',
     subject_page_repair: '(route, subject_id)',
     subject_page_owner_dependency: '(route, owner_kind, owner_key, source_route, source_subject_id, component_key)',
     subject_page_fanout: '(route, owner_kind, owner_key, change_id)',
@@ -224,7 +230,7 @@ test('local public component changes retain command time while private activity 
     ).rows,
   ).toEqual([{ is_nullable: 'YES' }]);
   const key = { route: routeOf(subject.id)!, id: subject.id };
-  async function shown(time: string, label = 'Local clock') {
+  async function shown(time: string, label = 'Local clock', originalLanguage: string | null = 'ja') {
     const snapshot = await store.read(key);
     expect(snapshot?.publicEffectiveAt).toBe(time);
     expect(snapshot?.evidence).toBe('known');
@@ -235,6 +241,7 @@ test('local public component changes retain command time while private activity 
       id: subject.id,
       labels: [{ language: 'en', value: label }],
       lastModified: time,
+      ...(originalLanguage === null ? {} : { originalLanguage }),
     });
   }
   await shown(createdAt);
@@ -263,23 +270,23 @@ test('local public component changes retain command time while private activity 
     selection: [{ candidate, rank: 'normal' }],
     expected_head: head.rows[0].head,
   });
-  await shown(liveTime);
+  await shown(liveTime, 'Local clock', 'en');
   at(4);
   const hidePath = `/v1/subjects/${subject.id}/candidates/${candidate}:hide`;
   const hideBody = { reason: 'Selected removal' };
   const receipt = randomUUID();
   await post(hidePath, hideBody, 200, receipt);
   const hiddenAt = liveTime;
-  await shown(hiddenAt);
+  await shown(hiddenAt, 'Local clock', null);
   at(5);
   await post(`/v1/subjects/${subject.id}/candidates/${candidate}:restore`, { reason: 'Selected restoration' });
   const restoredAt = liveTime;
-  await shown(restoredAt);
+  await shown(restoredAt, 'Local clock', 'en');
   const beforeReplay = await store.read(key);
   at(6);
   await post(hidePath, hideBody, 200, receipt);
   expect(await store.read(key)).toEqual(beforeReplay);
-  await shown(restoredAt);
+  await shown(restoredAt, 'Local clock', 'en');
 
   // Identity writes use the real Access formula at the live attempt, as the native helper requires.
   const actor = await access!.authenticate(real.bearer('editor'), { pool, deadline: Date.now() + 30_000 });
@@ -301,7 +308,7 @@ test('local public component changes retain command time while private activity 
   await updateSubjectIdentity(pool, identityOptions);
   expect(liveTime, 'identity commands must forward the configured domain clock').toBe(labelRequestedAt);
   const labelAt = liveTime;
-  await shown(labelAt, 'Changed label');
+  await shown(labelAt, 'Changed label', 'en');
   const title = (await post('/v1/subjects', { type: 'schema:Book', labels: { en: 'Title only' } }, 201)).subject;
   expect(await store.readCurrent({ route: routeOf(title.id)!, id: title.id })).toBeNull();
   const privateOnly = await proposal(title.id, 'fr');
@@ -345,7 +352,7 @@ test('local public component changes retain command time while private activity 
     const keys = Object.keys(row);
     await admin.query(
       `INSERT INTO semantic.fact (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,
-      Object.values(row),
+      Object.entries(row).map(([key, value]) => (key === 'body' ? JSON.stringify(value) : value)),
     );
   }
   const oldKey = { route: 0, id: oldId };
@@ -503,6 +510,8 @@ test('native publication transition and current proof cost excludes unrelated co
               route: otherRoute,
               subject_id: id,
               recorded_transaction_id: tx,
+              release: null,
+              relation: false,
             })),
           };
           if (axis === 'degree') {
@@ -607,3 +616,75 @@ test('native publication transition and current proof cost excludes unrelated co
     await db.close();
   }
 }, 240_000);
+
+test('publication original language follows current public names ranks fallback and unknown omission', async () => {
+  const path = '../../src/semantic/subject-page-publication-store.ts';
+  const module = await import(path);
+  const store: PublicationStore = module.createSubjectPagePublicationStore({ pool, access: access!, clock, routeKey });
+  const make = async (name: string, facts: Record<string, unknown[]>) =>
+    (
+      await post(
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: name, fr: `${name} français`, ja: `${name} 日本語` },
+          statements: { 'schema:url': [statement('schema:url', 'https://example.test/public-survivor')], ...facts },
+        },
+        201,
+      )
+    ).subject;
+  const mono = (language: string, rank: 'normal' | 'preferred') => ({
+    property: { id: 'schema:name' },
+    value: { type: 'value', content: { language, text: `Original ${language}` } },
+    rank,
+  });
+  const current = async (subject: { id: string }) => {
+    const entry = await store.readCurrent({ route: routeOf(subject.id)!, id: subject.id });
+    expect(entry?.id).toBe(subject.id);
+    expect(entry!.labels.map((label) => label.language)).toEqual(['en', 'fr', 'ja']);
+    return entry!;
+  };
+  const preferred = await make('Preferred name language', {
+    'schema:name': [mono('ja', 'normal'), mono('fr', 'preferred')],
+    'schema:inLanguage': [statement('schema:inLanguage', 'en')],
+  });
+  expect((await current(preferred)).originalLanguage).toBe('fr');
+  const normal = await make('Normal name language', {
+    'schema:name': [mono('ja', 'normal')],
+    'schema:inLanguage': [statement('schema:inLanguage', 'en')],
+  });
+  expect((await current(normal)).originalLanguage).toBe('ja');
+  const fallback = await make('Language property fallback', {
+    'schema:inLanguage': [statement('schema:inLanguage', 'en')],
+  });
+  expect((await current(fallback)).originalLanguage).toBe('en');
+  const unknown = await make('Unknown original language', {});
+  expect(Object.hasOwn(await current(unknown), 'originalLanguage')).toBe(false);
+
+  const candidate = (
+    await post(
+      `/v1/subjects/${fallback.id}/candidates`,
+      {
+        statement: {
+          ...mono('ja', 'normal'),
+          references: [{ parts: [statement('schema:url', 'https://example.test/original-name')] }],
+        },
+      },
+      201,
+    )
+  ).candidate as string;
+  await post(`/v1/subjects/${fallback.id}/candidates/${candidate}:accept`, {
+    context: GLOBAL_CONTEXT,
+    expected_head: null,
+  });
+  await post(`/v1/subjects/${fallback.id}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'schema:name',
+    mode: 'replace',
+    selection: [{ candidate, rank: 'normal' }],
+    expected_head: null,
+  });
+  expect((await current(fallback)).originalLanguage).toBe('ja');
+  await post(`/v1/subjects/${fallback.id}/candidates/${candidate}:hide`, { reason: 'Withhold original name' });
+  expect((await current(fallback)).originalLanguage).toBe('en');
+});

@@ -1,3 +1,4 @@
+import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -191,6 +192,7 @@ export async function moderateSubject(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.subject);
@@ -276,6 +278,8 @@ export async function moderateSubject(
           },
         },
       ];
+      if ((current.visibility === 'visible') !== (nextVisibility === 'visible'))
+        await invalidateSubjectPage(tx, options.subject, transactionId, events);
       return {
         value: { subject: options.subject, visibility: nextVisibility, security_revision: securityRevision },
         events,
@@ -311,6 +315,7 @@ export async function moderateStatement(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.subject);
@@ -354,6 +359,12 @@ export async function moderateStatement(
       if (!statementTransition(options.action, currentVisibility)) throw new ModerationConflictError();
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
+      const publicationRelease = await readRelease(tx, current.release);
+      if (!publicationRelease) throw new Error('Subject release is missing');
+      const publicationBefore =
+        current.visibility === 'visible'
+          ? await subjectPageSlot(tx, options.subject, property, slot, publicationRelease, options.routeKey)
+          : new Map();
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
       const contexts = new Map<string, { before: FactRow[]; after: FactRow[] }>();
       if (located.relation && current.visibility === 'visible')
@@ -427,6 +438,16 @@ export async function moderateStatement(
         contexts,
       );
       if (links) events.push(links);
+      await recordSubjectPageDiff(
+        tx,
+        options.subject,
+        transactionId,
+        publicationBefore,
+        current.visibility === 'visible'
+          ? await subjectPageSlot(tx, options.subject, property, slot, publicationRelease, options.routeKey)
+          : new Map(),
+        events,
+      );
       return {
         value: {
           subject: options.subject,

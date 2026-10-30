@@ -216,7 +216,7 @@ test('durable publication repair advances a fixed combined key budget and settle
     const keys = Object.keys(row);
     await db.admin.query(
       `INSERT INTO semantic.fact (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,
-      Object.values(row),
+      Object.entries(row).map(([key, value]) => (key === 'body' ? JSON.stringify(value) : value)),
     );
   }
   await db.admin.query(`INSERT INTO semantic.partition_subjects(partition_no,visible) VALUES (0,1)

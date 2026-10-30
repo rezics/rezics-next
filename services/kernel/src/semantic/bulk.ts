@@ -1,3 +1,5 @@
+import locatePublicationCandidate from './moderation-read-live-candidate.sql';
+import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
@@ -139,6 +141,7 @@ export async function batchCommand(
     release: { digest: string; release: Release };
     deadline: number;
     clock: () => Date;
+    routeKey?: Uint8Array;
   },
 ): Promise<Value & { component: SubjectComponent }> {
   const { command, actor, route } = options;
@@ -185,6 +188,7 @@ export async function batchCommand(
             target,
             item: command.subject,
             release: options.release,
+            ...(options.routeKey ? { routeKey: options.routeKey } : {}),
             source,
           });
           await insertClaim.run(tx, {
@@ -217,6 +221,7 @@ export async function batchCommand(
             // original snapshot available to a transaction retry.
             statement: imported ? structuredClone(command.statement) : command.statement,
             release: options.release,
+            ...(options.routeKey ? { routeKey: options.routeKey } : {}),
             source,
             allowContent: imported,
           };
@@ -308,6 +313,21 @@ export async function batchCommand(
           origin.field_group !== source.field_group
         )
           throw new EditorialConflictError();
+        const publicationLocated = await locatePublicationCandidate.run(tx, {
+          route,
+          subject_id: command.subject,
+          candidate_id: command.candidate,
+        });
+        const publicationBefore = publicationLocated?.property
+          ? await subjectPageSlot(
+              tx,
+              command.subject,
+              publicationLocated.property,
+              publicationLocated.slot_id,
+              options.release.release,
+              options.routeKey,
+            )
+          : new Map();
         const revision = subject.revision + 1;
         await insertRetractRevision.run(tx, {
           route,
@@ -337,9 +357,28 @@ export async function batchCommand(
           field_group: source.field_group,
           candidate_id: command.candidate,
         });
+        const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
+        await recordSubjectPageDiff(
+          tx,
+          command.subject,
+          transactionId,
+          publicationBefore,
+          publicationLocated?.property
+            ? await subjectPageSlot(
+                tx,
+                command.subject,
+                publicationLocated.property,
+                publicationLocated.slot_id,
+                options.release.release,
+                options.routeKey,
+              )
+            : new Map(),
+          publicationEvents,
+        );
         return {
           value: { status: 200, value: { revision } },
           events: [
+            ...publicationEvents,
             {
               type: SUBJECT_REVISED,
               subject: command.subject,

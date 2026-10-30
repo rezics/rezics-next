@@ -87,7 +87,14 @@ function population(axis: Axis): Population {
         'semantic.revision': [
           { route, subject_id: id, revision: 1, kind: 'create', release: bundledDigest, recorded_transaction_id: tx },
         ],
-        'semantic.fact': facts.map((fact) => ({ ...fact, route, subject_id: id, recorded_transaction_id: tx })),
+        'semantic.fact': facts.map((fact) => ({
+          ...fact,
+          route,
+          subject_id: id,
+          recorded_transaction_id: tx,
+          release: null,
+          relation: false,
+        })),
       };
       if (axis === 'degree') {
         const relation = itemFacts(

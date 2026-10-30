@@ -199,7 +199,17 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string, rel
   const route = routeOf(subjectId);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
   const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input, release);
-  if (violations.length) throw new SubjectInputError(violations);
+  // Typed statement fragments describe an existing subject; creation validates its full item separately.
+  const statementFragment =
+    _type !== undefined &&
+    release !== undefined &&
+    isObject(input) &&
+    Object.keys(input).every((key) => key === 'statements') &&
+    isObject(input.statements);
+  const errors = statementFragment
+    ? violations.filter((violation) => violation.pointer !== '/labels' || violation.code !== 'required')
+    : violations;
+  if (errors.length) throw new SubjectInputError(errors);
   const facts: Fact[] = [];
   const put = (
     kind: Fact['kind'],

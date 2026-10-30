@@ -34,7 +34,7 @@ import readSubject from '../../src/semantic/read-subject.sql';
 import readVisibility from '../../src/semantic/read-visibility.sql';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
 import { capture, openGrowthDatabase } from '../support/growth.ts';
-import { testKernel } from '../support/test-kernel.ts';
+import { testRouteKey, TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -50,9 +50,11 @@ const accounts = {
 const actions = ['subject:create', 'subject:read', 'subject:merge', 'moderation:hide'];
 const real = await createRealAccess(admin, accounts, actions);
 const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
-const kernel = testKernel({
+const kernel = createKernel({
   pool,
-  auth: real.auth,
+  routeKey: testRouteKey(),
+  requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+  access: real.access,
   tokens,
   writeRate: real.writeRate,
 });

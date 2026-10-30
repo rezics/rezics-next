@@ -1,3 +1,10 @@
+import {
+  applySubjectPageOwnerChange,
+  enqueueSubjectPageRepair,
+  readSubjectPageContinuation,
+  type PublicationOrigin,
+} from './subject-page-publication-store.ts';
+import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
@@ -40,7 +47,11 @@ async function upsertByContext<T extends { context_id?: string }>(
 }
 
 type Verification = { account: string; receipt: string };
-type Move = { phase: 'links' | 'outbound' | 'members' | 'done'; cursor: string[] };
+type Move = {
+  phase: 'links' | 'outbound' | 'members' | 'done';
+  cursor: string[];
+  publication_origin?: PublicationOrigin | null;
+};
 type Link = {
   context_id: string;
   suppressed: boolean;
@@ -102,6 +113,10 @@ async function register(
   initial: Move = { phase: 'links', cursor: [] },
   verification?: Verification,
 ): Promise<{ survivor: string; state: Move }> {
+  const origin = initial.publication_origin ??
+    (await withReadTransaction(pool, (client) =>
+      readSubjectPageContinuation(client, { subject: { route: routeOf(id)!, id }, kind: 'merge' }),
+    )) ?? { changeId: `legacy:merge:${id}`, time: { effectiveAt: null, evidence: 'missing' as const } };
   for (;;) {
     const route = routeOf(survivor)!;
     const result = await runCommand<{ redirect: string | null; state: Move | null }>(
@@ -119,6 +134,7 @@ async function register(
           member_id: id,
           phase: initial.phase,
           cursor: initial.cursor,
+          publication_origin: origin,
         });
         const state = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
         return {
@@ -146,6 +162,11 @@ async function register(
             sequence: last.sequence + 1,
             target: survivor,
             transaction_id: transactionId,
+          });
+          await applySubjectPageOwnerChange(tx, {
+            owner: { kind: 'subject', route: routeOf(id)!, key: id },
+            changeId: `${origin.changeId}:repoint:${id}:${survivor}`,
+            time: origin.time,
           });
         }
         return { value: survivor, events: [projected(survivor)] };
@@ -247,11 +268,16 @@ export async function moveMergePage(
           ? { phase: 'members', cursor: [members.at(-1)!.member_id] }
           : { phase: 'done', cursor: [] };
     }
+    next.publication_origin = state.publication_origin ?? null;
     return { value: { links, outbound, members, next }, events: [projected(survivor)] };
   });
   // Repoint at most this page of members. Their pending link moves get separate continuations.
   for (const member of page.value.members)
-    await register(pool, member.member_id, survivor, { phase: member.phase, cursor: member.cursor });
+    await register(pool, member.member_id, survivor, {
+      phase: member.phase,
+      cursor: member.cursor,
+      publication_origin: state.publication_origin ?? null,
+    });
   const route = routeOf(survivor)!;
   if (page.value.outbound.length) {
     const sourceRoute = routeOf(id)!;
@@ -374,6 +400,16 @@ export async function moveMergePage(
         })),
       });
     }
+    await enqueueSubjectPageRepair(tx, {
+      subject: { route, id: survivor },
+      cause: 'continuation',
+      delivery: {
+        owner: { kind: 'subject', route: routeOf(id)!, key: id },
+        changeId: state.publication_origin?.changeId ?? `legacy:merge:${id}`,
+        eventId: `merge:${id}:${state.phase}:${JSON.stringify(state.cursor)}`,
+        time: state.publication_origin?.time ?? { effectiveAt: null, evidence: 'missing' },
+      },
+    });
     await updateMember.run(tx, {
       route,
       subject_id: survivor,
@@ -401,6 +437,9 @@ export async function reverseAccountAgentLinks(
   const route = routeOf(options.survivor);
   const nodeRoute = routeOf(options.movedFrom);
   if (route === null || nodeRoute === null) throw new TypeError('Account agent links must have routed subjects');
+  const publicationOrigin = (await withReadTransaction(pool, (client) =>
+    readSubjectPageContinuation(client, { subject: { route: nodeRoute, id: options.movedFrom }, kind: 'unverify' }),
+  )) ?? { changeId: `legacy:unverify:${options.receipt}`, time: { effectiveAt: null, evidence: 'missing' as const } };
   let after: { property: string; source: string; statement: string; filter: string; context: string } = {
     property: '',
     source: NIL,
@@ -462,6 +501,16 @@ export async function reverseAccountAgentLinks(
           },
           'inbound',
         );
+        await enqueueSubjectPageRepair(tx, {
+          subject: { route: nodeRoute, id: options.movedFrom },
+          cause: 'continuation',
+          delivery: {
+            owner: { kind: 'subject', route: nodeRoute, key: options.movedFrom },
+            changeId: publicationOrigin.changeId,
+            eventId: `unverify:${options.receipt}:${JSON.stringify(after)}`,
+            time: publicationOrigin.time,
+          },
+        });
         return { value: null, events: [projected(options.movedFrom)] };
       });
     }

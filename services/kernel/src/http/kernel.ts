@@ -64,6 +64,12 @@ import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { providerReviewQueueRoutes } from '../semantic/http/provider-review-queue.ts';
+import {
+  createSubjectPagePublication,
+  mountSubjectPagePublication,
+  type SubjectPagePublication,
+} from '../semantic/subject-page-publication.ts';
+import { createSubjectPageFeed, type SubjectPageFeed } from '../semantic/subject-page-feed.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
@@ -332,7 +338,27 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
     },
   );
-  subjectPageRoutes(subjects as unknown as ReturnType<typeof createApp>);
+  let publication: SubjectPagePublication | undefined;
+  let subjectPageFeed: SubjectPageFeed;
+  function resolvePublication(): SubjectPagePublication {
+    if (publication) return publication;
+    const publicationConfig = {
+      pool: dependencies.pool,
+      access: resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+      clock: sourceClock,
+      routeKey: dependencies.routeKey,
+    };
+    publication = createSubjectPagePublication(publicationConfig);
+    subjectPageFeed = createSubjectPageFeed({ ...publicationConfig, tokens, publication });
+    return publication;
+  }
+  subjectPageRoutes(subjects, {
+    pool: dependencies.pool,
+    feed: () => {
+      resolvePublication();
+      return subjectPageFeed;
+    },
+  });
   sourceRecordRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -587,6 +613,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   assertInternalActionDeclarations(actions);
   assertDeclaredResourceTypes(zones, dependencies.resourceRoles, actions);
   dependencies.onAccessReady?.(resolveAccess({ actions, realmRoleReader }));
+  mountSubjectPagePublication(zones, resolvePublication);
   return zones as Kernel;
 }
 

@@ -1086,6 +1086,7 @@ function subjectRoutes(
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
+              routeKey,
               subject: params.id,
               candidate: params.candidate,
               decision: 'accept',
@@ -1161,6 +1162,7 @@ function subjectRoutes(
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
+              routeKey,
               subject: params.id,
               candidate: params.candidate,
               decision: 'reject',
@@ -1232,6 +1234,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1306,6 +1309,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1380,6 +1384,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1460,6 +1465,7 @@ function subjectRoutes(
         try {
           const { component, adoption, revision } = await admission.run('normal', job, () =>
             adoptCandidates(pool, {
+              routeKey,
               subject: params.id,
               context: body.context,
               property: body.property,
@@ -2049,6 +2055,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             changeStatementDisclosure(pool, {
+              routeKey,
               candidate: params.id,
               actor,
               authorization,
@@ -2108,6 +2115,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             changeStatementDisclosure(pool, {
+              routeKey,
               candidate: params.id,
               retract: true,
               actor,

@@ -51,6 +51,34 @@ const contextLifecycle = Type.Object(
   { additionalProperties: false },
 );
 
+export const SUBJECT_PAGE_DEPENDENCIES_CHANGED = 'com.rezics.semantic.subject_page.dependencies_changed.v1' as const;
+export const SUBJECT_PAGE_REPAIR_QUEUED = 'com.rezics.semantic.subject_page.repair_queued.v1' as const;
+export const SUBJECT_PAGE_REPAIR_REQUESTED = 'com.rezics.semantic.subject_page.repair_requested.v1' as const;
+export const SUBJECT_PAGE_WORK_COMMITTED = 'com.rezics.semantic.subject_page.work_committed.v1' as const;
+const publicationSubject = Type.Object(
+  { route: Type.Integer({ minimum: 0, maximum: 65535 }), id: UUID },
+  { additionalProperties: false },
+);
+const publicationOwner = Type.Object(
+  {
+    kind: Type.Union([Type.Literal('subject'), Type.Literal('source-fence')]),
+    route: Type.Integer({ minimum: 0, maximum: 65535 }),
+    key: Type.String(),
+  },
+  { additionalProperties: false },
+);
+const publicationTime = Type.Object(
+  {
+    effectiveAt: Type.Union([Type.String(), Type.Null()]),
+    evidence: Type.Union([Type.Literal('known'), Type.Literal('missing')]),
+  },
+  { additionalProperties: false },
+);
+const publicationComponent = Type.Object(
+  { kind: Type.Union(['label', 'fact', 'cover', 'relation'].map((value) => Type.Literal(value))), key: Type.String() },
+  { additionalProperties: false },
+);
+
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
   'com.rezics.semantic.provider-review.projected.v1': Type.Object({}, { additionalProperties: false }),
@@ -99,6 +127,50 @@ export const SEMANTIC_EVENTS = {
       source: Type.String({ pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
       external_id: Type.String({ minLength: 1, maxLength: 255 }),
       metadata_revision: revision,
+    },
+    { additionalProperties: false },
+  ),
+  [SUBJECT_PAGE_WORK_COMMITTED]: Type.Object(
+    {
+      partition: Type.Integer({ minimum: 0, maximum: 4095 }),
+      kind: Type.Union(
+        ['bootstrap', 'subject', 'fanout', 'dependency', 'owner', 'delivery'].map((value) => Type.Literal(value)),
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  [SUBJECT_PAGE_REPAIR_QUEUED]: Type.Object(
+    { subject: publicationSubject, cause: Type.Union([Type.Literal('missing-proof'), Type.Literal('explicit')]) },
+    { additionalProperties: false },
+  ),
+  [SUBJECT_PAGE_DEPENDENCIES_CHANGED]: Type.Object(
+    {
+      deltas: Type.Array(
+        Type.Object(
+          {
+            subject: publicationSubject,
+            component: publicationComponent,
+            owner: publicationOwner,
+            sourceVersion: Type.String({ pattern: '^[0-9]+$' }),
+            eventId: Type.String(),
+            changeId: Type.String(),
+            present: Type.Boolean(),
+            time: publicationTime,
+          },
+          { additionalProperties: false },
+        ),
+        { minItems: 1, maxItems: 16 },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  [SUBJECT_PAGE_REPAIR_REQUESTED]: Type.Object(
+    {
+      subject: publicationSubject,
+      owner: publicationOwner,
+      changeId: Type.String(),
+      eventId: Type.String(),
+      time: publicationTime,
     },
     { additionalProperties: false },
   ),

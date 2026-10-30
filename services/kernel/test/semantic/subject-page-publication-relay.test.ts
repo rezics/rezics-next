@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { runCommand, type CommandEvent, type CommandTransaction } from '../../src/command/command.ts';
+import { noEffect, runCommand, type CommandEvent, type CommandTransaction } from '../../src/command/command.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import type { Relay } from '../../src/events/relays.ts';
 import type { Access } from '../../src/request/access.ts';
@@ -422,7 +422,7 @@ test('native removal deltas retain tombstones and older real membership cannot r
         outbox,
       });
       expect(outbox).toEqual([]);
-      return { value: null, events: outbox };
+      return noEffect(null);
     });
   expect(await reverse(owner, subject)).toEqual(removed);
   expect(await p.store.read(subject)).toEqual(stable);
@@ -480,9 +480,21 @@ test('Content native original period evidence survives repeated takeDown, readFe
   const input = { source: source.source, externalId, fieldGroup: 'facts', reason: 'Original period' };
   const receipt = randomUUID();
   await post('/v1/sourceFences:takedown', input, 200, receipt);
+  const nativeTime = await db.admin.query<{ taken_down_at: string; matches_command_time: boolean }>(
+    `SELECT taken_down_at::text AS taken_down_at,
+      taken_down_at = $5::timestamptz AS matches_command_time
+     FROM content.source_fences
+     WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+    [tuple.route, tuple.source, tuple.external_id, tuple.field_group, removedAt],
+  );
+  expect(nativeTime.rows).toHaveLength(1);
+  expect(nativeTime.rows[0]!.matches_command_time).toBe(true);
+  const nativeTakenDownAt = nativeTime.rows[0]!.taken_down_at;
   const fence = (await readFences(db.admin, [tuple]))[0] as any;
   expect(fence.takenDown).toBe(true);
-  expect(fence.takenDownAt, 'actual Content prerequisite retains original command time').toBe(removedAt);
+  expect(fence.takenDownAt, 'readFences preserves the native PostgreSQL timestamp representation').toBe(
+    nativeTakenDownAt,
+  );
   expect(fence.takedownId).toBeString();
   const eventType = 'com.rezics.content.source_fence.taken_down.v1';
   const original = (await observed(partitionOf(tuple.route))).filter(
@@ -491,7 +503,7 @@ test('Content native original period evidence survives repeated takeDown, readFe
   expect(original.length).toBeGreaterThan(0);
   expect(original[0]!.data).toMatchObject({
     field_group: 'facts',
-    takenDownAt: removedAt,
+    takenDownAt: nativeTakenDownAt,
     takedownId: fence.takedownId,
   });
   at(23);
@@ -499,13 +511,13 @@ test('Content native original period evidence survives repeated takeDown, readFe
   await post('/v1/sourceFences:takedown', input);
   expect((await readFences(db.admin, [tuple]))[0]).toMatchObject({
     takenDown: true,
-    takenDownAt: removedAt,
+    takenDownAt: nativeTakenDownAt,
     takedownId: fence.takedownId,
   });
   for (const event of (await observed(partitionOf(tuple.route))).filter(
     (e) => e.type === eventType && (e.data as any).external_id === externalId,
   ))
-    expect(event.data).toMatchObject({ takenDownAt: removedAt, takedownId: fence.takedownId });
+    expect(event.data).toMatchObject({ takenDownAt: nativeTakenDownAt, takedownId: fence.takedownId });
   await drainRelay(p.relay, partitionOf(tuple.route));
   await drain(p.runner);
   await drainRelay(p.fresh(), partitionOf(tuple.route));

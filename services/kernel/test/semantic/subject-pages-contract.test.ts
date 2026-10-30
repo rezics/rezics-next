@@ -13,7 +13,12 @@ afterAll(() => pool.end());
 
 type Feed = ClientKernel['~Routes']['v1']['subject-pages']['get'];
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type ExpectedPage = { id: string; lastModified?: string; labels: { language: string; value: string }[] };
+type ExpectedPage = {
+  id: string;
+  lastModified?: string;
+  originalLanguage?: string;
+  labels: { language: string; value: string }[];
+};
 const preciseQuery: Equal<Feed['query'], { cursor?: string; limit?: number | string }> = true;
 const preciseResponse: Equal<Feed['response'][200], { subjectPages: ExpectedPage[]; next: string | null }> = true;
 

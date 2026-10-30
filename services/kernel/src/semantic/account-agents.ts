@@ -1,4 +1,6 @@
 import { recordSemanticProducerRole } from './erasure-producer.ts';
+import { initializeSubjectPagePublication, retainSubjectPageContinuation } from './subject-page-publication-store.ts';
+import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -184,10 +186,20 @@ async function syncAgentLabel(
       context: GLOBAL_CONTEXT,
     },
   );
+  const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
+  await recordSubjectPageDiff(
+    tx,
+    row.id,
+    transactionId,
+    await subjectPageFacts(tx, row.id, agentFacts(row.labels), release.release),
+    await subjectPageFacts(tx, row.id, agentFacts(labels), release.release),
+    publicationEvents,
+  );
   return {
     subject,
     changed: true,
     events: [
+      ...publicationEvents,
       { type: SUBJECT_REVISED, subject: row.id, data: { id: row.id, revision: row.revision + 1, kind: 'identity' } },
     ],
   };
@@ -213,6 +225,7 @@ async function createUnlabeledAgent(
   await createRevision.run(tx, { route, subject_id: id, release, transaction_id: transactionId, source: null });
   await identityEpochStore.initializeSubject(tx, id);
   await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
+  await initializeSubjectPagePublication(tx, { route, id });
   return {
     value: resolveItem(id, [], type, {}, { revision: 1, release, context: GLOBAL_CONTEXT }),
     events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }],
@@ -540,6 +553,13 @@ export async function unverifyAccountAgent(
         context: GLOBAL_CONTEXT,
       },
     );
+    const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
+    await retainSubjectPageContinuation(tx, {
+      subject: { route: nodeRoute, id: agentId },
+      kind: 'unverify',
+      changeId: transactionId,
+    });
+    await invalidateSubjectPage(tx, agentId, transactionId, publicationEvents);
     return {
       value: {
         survivor: mapping.subject,
@@ -549,6 +569,7 @@ export async function unverifyAccountAgent(
         verificationReceipt: mapping.receipt_id,
       },
       events: [
+        ...publicationEvents,
         { type: SUBJECT_REVISED, subject: agentId, data: { id: agentId, revision, kind: 'merge' } },
         ...(changes.length
           ? [

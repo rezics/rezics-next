@@ -43,9 +43,11 @@ explicit platform authority and seed review requirements. Ordinary provider impo
 ## Worker lifecycle
 
 `semanticWorkModule` in `work-module.ts` is registered once as `semantic` in `KERNEL_WORK_MODULES`, after
-community and before search. Registration adds one service starter through `WorkContext.addService`. After the
-single DBOS launch, that starter runs the existing `linkProjection` through `startRelays` on the same native worker
-pool, retaining the `semantic_links` consumer, event handling, checkpoints, freshness and relation disclosure.
+community and before search. Registration adds publication maintenance and one relay starter through
+`WorkContext.addService`. After the single DBOS launch, the relay starter runs `linkProjection` and the publication
+Relay through `startRelays` on the same native worker pool, retaining the `semantic_links` consumer, event handling,
+checkpoints, freshness and relation disclosure. Publication repair uses the existing maintenance queue and drains
+in-flight work on service shutdown.
 The module registers `semantic_erasure` for native tombstones, `semantic_erasure_local` for bounded local
 continuation and `semantic_erasure_locator` for native source delivery. Tombstones synchronize the real agent
 and close the participant fence before discovery. Source-home role locators, payload minimization and permanent
@@ -57,32 +59,37 @@ The service returns the actual relay stop handle. Work shutdown stops scheduling
 before SDK, client and pool teardown; a later starter failure also drains this service. Repeated stop and worker
 signals use the existing worker lifecycle. Relay cadence, concurrency and pool-size validation retain their existing
 bounds. Projection cost remains the existing [Links projection write](#links-projection-write) Cost entry.
-This module composes the native relation projector, delivered identity workflow and local erasure effects. It
-does not create another process, queue or participant.
+This module composes the native relation projector, publication repair and Relay, delivered identity workflow and
+local erasure effects. It does not create another process, queue or participant.
 Native registration, convergence and drain evidence lives in `test/semantic/work-module.test.ts`.
 
 ## Subject page feed
 
 The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).
 Its response contains `subjectPages` with `id`, public display `labels` (`language` and `value`), and optional
-`lastModified`, plus `next` (a cursor or null). A present `lastModified` is a UTC ISO 8601 date-time, never null.
+`lastModified` and `originalLanguage`, plus `next` (a cursor or null). A present `lastModified` is a UTC ISO 8601 date-time, never null.
 Legacy rows whose original public effective time was never stored omit it until their next proven meaningful public
 change; web omits XML `lastmod` when it is absent. A known time records the last meaningful change to what the
 page shows.
 
-The eventual feed lists only readable, visible, nonclosed, nonremoved, nonmerged Global subjects with a public fact
+The feed lists only readable, visible, nonclosed, nonremoved, nonmerged Global subjects with a public fact
 beyond the title. Title-only pages are `noindex`. Every returned subject must be readable now. A candidate may be
 temporarily omitted when it cannot be proved listable, and known `lastModified` values may lag while foreign-change
 relays catch up. Finite relay convergence and the next completed repair pass correct omissions and times. Processing
 or rebuild time and private activity never determine freshness. Merged subject reads retain the API 308 and web 301;
 removed and unreadable subjects retain an indistinguishable 404.
 
-Publication transport, durable Relay delivery and final default composition remain pending on this base.
-Their independent native acceptance is documented in [the slice handoff](subject-pages-slices.md#remaining-transport-relay-and-default-composition-acceptance).
-Valid empty/default requests must return 200 with the closed envelope; malformed cursors use the existing 400
-`invalid_request` contract. The current readiness stub does not satisfy these assertions. The independent HTTP
-fixture needs the native store and candidate source, while default worker and foreign catch-up dependencies belong
-to their separate acceptance. The original full API and growth tests remain mandatory for the complete feature.
+This technical unfiltered feed is outside the [filtered-list useful-page contract](../../../../docs/filtered-lists.md).
+It consumes a raw limit+1 candidate window in one home; short or empty 200 responses and cursor advancement remain
+valid, with current disclosure for every returned entry. This exception does not apply to Zone, TypeList,
+Collection or library filters.
+
+The transport uses the mounted native publication service, and the default Semantic worker registers durable
+repair and Relay delivery. Independent native acceptance is documented in
+[the slice handoff](subject-pages-slices.md#remaining-transport-relay-and-default-composition-acceptance).
+Valid empty/default requests return 200 with the closed envelope; malformed cursors use the existing 400
+`invalid_request` contract. The original full API, growth, foreign catch-up and default composition tests remain
+mandatory; local typechecking alone does not prove those runtime outcomes.
 
 ## Admitted identity Source support
 
@@ -1316,3 +1323,62 @@ No account-T, caller callback, author Actor or direct Content/Core SQL substitut
 - Growth check: the original `growth-deletion.test.ts` retains its 64/512/4096 native proof after integration.
   Focused source/body, held revisit, rollback and restart cases are in `record-retention.test.ts` and
   `test/zones/record-retention.test.ts`. These outcomes are unexecuted in the current typecheck-only stage.
+
+## Native subject page publication
+
+`createSubjectPagePublicationStore({ pool, access, clock, routeKey })` reads persisted publication points and proves
+current inclusion through the original public Access and subject gates. It uses the canonical kernel route key,
+the public statement audience, current Global selection and moderation, consent disclosure, relation target gates
+and imported tuple fences. At most eight stored identities are attempted. Labels alone confer no inclusion.
+Unknown historical time remains absent; original command time is retained across meaningful removals and replay.
+Target Access evidence is prepared from bounded witness hints before the final read acquires a connection.
+The final snapshot rechecks current selection, target state and authorization; hints confer no inclusion.
+`readCurrent` also produces optional `originalLanguage` from currently public selected `schema:name` facts,
+preferring preferred rank when present, otherwise normal rank, in native page order. The first valid monolingual
+language wins; otherwise the same rank/order rule applies to `schema:inLanguage`. Tag admission matches
+`apps/web/src/subject/language.ts`. Unknown language is omitted. Labels, locale and source kind cannot supply it;
+this display metadata adds neither inclusion evidence nor a publication clock and does not reorder labels.
+
+Native creation, identity labels, Global selection and selected rank changes, selected moderation, bulk retraction,
+consent disclosure, account-agent labels, verification reversal and merge gates record bounded component deltas.
+Proposals, unselected decisions, private Context activity, unchanged imports and physical expansion add no public
+clock. Derived link moves carry original evidence through durable continuation metadata and request bounded repair.
+The store owns all publication persistence and route-local CAS, claim, bootstrap, dependency and fanout ports.
+Forward dependencies live with the source subject; reverse memberships and tombstones live with their owners.
+Dependency producer events join the command's ordinary event array and commit with the native command, ledger and
+forward deltas. The store's autonomous missing-proof request emits the registered local `repair_queued.v1` marker
+through the ordinary command result. It carries no public transition time. Repair and Relay runners remain separate
+integrations.
+
+### Native publication transition cost
+
+- Touches: affected component/dependency points, the subject publication point and immutable subject-local ledger;
+  bounded source continuation metadata and the existing command outbox envelope.
+- Bound: O(changed components × log N), within the native 512-fact cap and bounded selected slot. No subject-degree,
+  history or dependent enumeration is added to native commands.
+- Growth check: `test/semantic/subject-page-local-publication.test.ts`: `native publication transition and current proof cost excludes unrelated components and history`.
+- Native outcomes: `test/semantic/publication-native-hooks.test.ts`: `every native public mutation records only its actual shown component transitions`.
+
+### Current publication proof cost
+
+- Touches: original gates and bounded descriptive labels, the two bounded current name/language slots and their
+  candidate provenance and tuple fences, at most eight keyed current witness checks and public target gates.
+  Each candidate check reads its latest statement identity through the indexed route/subject/candidate key; it
+  does not fold the subject's relation degree or candidate history. Missing proof coalesces into one durable
+  subject-home repair point.
+- Bound: fixed per-witness work independent of subject degree and history, owner batches at most 256 and Content
+  fence batches at most 100. A settled empty projection and missing time alone do not restart repair.
+- Growth check: `test/semantic/subject-page-local-publication.test.ts`: `native publication transition and current proof cost excludes unrelated components and history`; `test/semantic/publication-native-hooks.test.ts`: `native publication cost diagnostics identify any degree-wide statement`.
+- Metadata outcomes: `test/semantic/subject-page-local-publication.test.ts`: `publication original language follows current public names ranks fallback and unknown omission`;
+  `test/semantic/publication-native-hooks.test.ts`: `publication language admission and rank priority use only currently disclosed selections`.
+
+### Durable publication store cost
+
+- Touches: one route-led publication/lease/checkpoint range and at most 32 supplied repair or owner fanout keys.
+- Bound: home-checked transactions, generation/version CAS and idempotent identities; no cross-home write or global
+  reverse range. Live component dependency ranges lead with `(route, subject_id, component_key)`; live reverse
+  ranges lead with `(route, owner_kind, owner_key)`. Both exclude retained removal tombstones. Committing an unfinished
+  page releases its lease and makes the next page runnable immediately.
+- Integration checks belong to the independent repair runner acceptance:
+  `test/semantic/subject-page-repair.test.ts`: `durable publication repair advances a fixed combined key budget and settles`;
+  `test/semantic/growth-subject-page-repair.test.ts`: `repair store and current witness reads remain bounded as unrelated state grows`.
