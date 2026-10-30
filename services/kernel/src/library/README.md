@@ -60,6 +60,9 @@ Current implementation evidence is narrower than the capability:
   runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints do not close them.
   Content reaction commands exist, but inspected worktree/dev has no `readLiked`/`readLikedVersion` implementation;
   obtain actual raw/version and DDL receipts rather than inferring delivery from an earlier receipt description.
+- `work-module.ts` registers Collection listing and the [terminal participant boundary](erasure-participant.md).
+  It runs the integrated entry/copy/follow purge pages, records explicit pending evidence and never mistakes those
+  pages for a complete graph or no-data proof. Full graph cleanup and shared custody remain incomplete.
 
 ### Scoped subject-search status
 
@@ -433,7 +436,7 @@ action or a new user request. Terminal account deletion is the explicit first-sc
 payload is due at T, with no 30-day wait or account restore lifecycle. Use existing shared command/effects, DBOS and
 queue surfaces with owner-specific indexed page adapters. This does not request or depend on a generic deletion
 engine, custody registry, lifecycle state machine or replacement of shared owner history. `work/retention.ts`
-collects terminal DBOS history by age and does not erase Library records; `work.ts` registers listing effects only.
+collects terminal DBOS history by age and does not erase Library records; `work.ts` registers listing effects and the pending terminal participant described below.
 
 A native runnable intent must survive commit-before-enqueue. Source selection takes **1 <= P <= 100 indexed source
 rows before later eligibility filters**, including retained/ineligible rows and lookahead candidates, or uses a
@@ -462,7 +465,7 @@ receipts, not an empty ordinary read, outbox checkpoint or DBOS success.
 Missing production adapters and code paths (policy timing is settled by the shared contract):
 
 - **Accounts and Library work:** terminal account deletion at T is the first-scope behavior. Accounts publishes
-  `account-tombstoned.v1`; Library has no consumer. Bind each page to the terminal account row and T under the
+  `account-tombstoned.v1`; Library registers bounded partial fact cleanup with explicit pending graph evidence. Bind each page to the terminal account row and T under the
   authoritative account lock, and enqueue bounded cleanup durably without making account deletion wait. Do not add
   account restore, an account restore window, an account-generation counter or an account-restoration event.
   Ordinary owner writes must take the `shareAccount` barrier; purge work must not impersonate an active human or
@@ -484,10 +487,10 @@ any effect. Accounts owns one erasure coordinator with a fixed versioned partici
 financial Commerce, content/media, community/ratings/notices, Semantic/Zones, Search, Imports, and shared history and
 delivery. Library acknowledges actual complete cleanup or no applicable data, never dispatch. Minimal completion
 persists in PostgreSQL outside DBOS history to prevent late resurrection. Financial Commerce acknowledges its own
-retention/minimization separately. Accounts emits `account-tombstoned.v1`; Library's registered worker has no terminal
-consumer/coordinator integration. Current active-account command checks do not establish complete read/producer
-fencing: direct unlisted Collection eligibility lacks a deleted-curator check, and publication/listing cutover is
-incomplete. Cleanup is asynchronous: no consumer wait, platform grant or 30-day delay precedes the T fence or private
+retention/minimization separately. Accounts emits `account-tombstoned.v1`; Library's registered terminal consumer
+purges only entries/copies/follows and never acknowledges incomplete graph evidence. Private/unlisted Collection
+headers and member pages check the current curator tombstone. Complete producer fencing and publication/listing
+cutover remain incomplete. Cleanup is asynchronous: no consumer wait, platform grant or 30-day delay precedes the T fence or private
 cleanup. The general policy's hold rule does not imply a first-public Library hold path, which is
 deferred and not a prerequisite for account cleanup here.
 
@@ -610,7 +613,7 @@ state, revision, source generation, transaction/update time and deletion/720-hou
 snapshots session values and retains an exact private Undo episode. `collection-reads.ts`, `views.ts`, the member/entry/log page SQL,
 `sitemap-page.sql`, `listing-source.sql`, `listing-apply.sql`, `listing.ts` and `work.ts` were inspected: Collection
 reads gate active state, sitemap uses an active/public partial index, listing source/apply is asynchronous and
-unstamped, and the registered worker has no restore/purge consumer. `maintenance-session-page.sql` and
+unstamped, and the registered terminal consumer only purges entries/copies/follows; no full graph or ordinary restore/purge worker exists. `maintenance-session-page.sql` and
 `maintenance-history-page.sql` provide indexed page shapes, not deletion. The current label contract already
 defines original-deadline undo and effective reservation capacity; labels have no profile pin. Its native DAOs do
 not establish route/receipt integration or whole-graph cleanup.
@@ -628,8 +631,8 @@ Implementation follows the existing command/effects/DBOS surfaces with owner-spe
 Library deletion engine. The [native terminal review](../../../../docs/research/library-terminal-native-implementation-review.md)
 is graph/locator evidence; its older retained-log recommendation is superseded here by published-log erasure.
 Completion requires each phase and shared store-owner acknowledgement, not dispatch, empty ordinary reads or an
-entry/copy/follow-only purge. Current coordinator integration, full native graph pages, public A freeze and exact
-shared-payload minimization remain unimplemented.
+entry/copy/follow-only purge. The default terminal participant is registered, but full native graph pages, public A freeze and exact
+shared-payload minimization remain unimplemented; see its [proof boundary](erasure-participant.md).
 
 ### Projection freshness
 

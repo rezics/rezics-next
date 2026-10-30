@@ -242,6 +242,14 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
       if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
+      // T hides nonpublic contributions even from a known-ID anonymous/unlisted
+      // read. Authentication of the viewer alone cannot fence the curator's data.
+      if (sink.row && sink.row.visibility !== 'public') {
+        const curatorRoute = routeOf(sink.row.curatorAccountId);
+        const curator =
+          curatorRoute === null ? null : await readAccount(client, curatorRoute, sink.row.curatorAccountId);
+        if (!curator || curator.state === 'deleted') return null;
+      }
       return disclose(sink.row, allowed, account, viewer);
     });
   }
