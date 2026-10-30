@@ -156780,6 +156780,12 @@
                         "const": "vndb",
                         "type": "string"
                       },
+                      "sourceAlias": {
+                        "maxLength": 32,
+                        "minLength": 1,
+                        "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                        "type": "string"
+                      },
                       "sourceRecordId": {
                         "maxLength": 1024,
                         "minLength": 1,
@@ -157523,6 +157529,12 @@
                     ],
                     "type": "object"
                   },
+                  "sourceAlias": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                    "type": "string"
+                  },
                   "sourceRecordId": {
                     "maxLength": 1024,
                     "minLength": 1,
@@ -157595,6 +157607,12 @@
                     },
                     "source": {
                       "const": "vndb",
+                      "type": "string"
+                    },
+                    "sourceAlias": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
                       "type": "string"
                     },
                     "sourceRecordId": {
@@ -158313,6 +158331,12 @@
                   "count": {
                     "const": 0,
                     "type": "number"
+                  },
+                  "sourceAlias": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+                    "type": "string"
                   },
                   "sourceRecordId": {
                     "maxLength": 1024,

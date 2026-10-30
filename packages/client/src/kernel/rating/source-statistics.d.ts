@@ -6,6 +6,7 @@ import type { KernelClock } from '../clock.ts';
 export declare const SOURCE_STATISTIC_WRITE_ACTION = "source_statistic:write";
 type SourceStatistic = {
     source: 'vndb';
+    sourceAlias?: string;
     sourceRecordId: string;
     scale: {
         min: number;
@@ -19,6 +20,7 @@ type SourceStatistic = {
 };
 type Input = Omit<SourceStatistic, 'source'>;
 type ClearInput = Readonly<{
+    sourceAlias?: string;
     sourceRecordId: string;
     count: 0;
     asOf: string;
@@ -3898,6 +3900,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         response: {
                             200: {
                                 source: "vndb";
+                                sourceAlias?: string;
                                 sourceRecordId: string;
                                 scale: {
                                     min: number;
@@ -4022,6 +4025,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     ":source": {
                         put: {
                             body: {
+                                sourceAlias?: string;
                                 sourceRecordId: string;
                                 scale: {
                                     min: number;
@@ -4044,6 +4048,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             response: {
                                 200: {
                                     source: "vndb";
+                                    sourceAlias?: string;
                                     sourceRecordId: string;
                                     scale: {
                                         min: number;
@@ -4196,11 +4201,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             vendor: string;
             types: {
                 input: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
                 };
                 output: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
@@ -4208,6 +4215,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             } | undefined;
             validate(value: unknown): {
                 value: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
@@ -4221,11 +4229,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             };
             jsonSchema: {
                 input: () => import("typebox").TObject<{
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                     sourceRecordId: import("typebox").TString;
                     count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
                 }>;
                 output: () => import("typebox").TObject<{
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                     sourceRecordId: import("typebox").TString;
                     count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
@@ -4572,11 +4582,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 vendor: string;
                 types: {
                     input: {
+                        sourceAlias?: string;
                         sourceRecordId: string;
                         count: 0;
                         asOf: string;
                     };
                     output: {
+                        sourceAlias?: string;
                         sourceRecordId: string;
                         count: 0;
                         asOf: string;
@@ -4584,6 +4596,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 } | undefined;
                 validate(value: unknown): {
                     value: {
+                        sourceAlias?: string;
                         sourceRecordId: string;
                         count: 0;
                         asOf: string;
@@ -4597,11 +4610,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
+                        sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                         sourceRecordId: import("typebox").TString;
                         count: import("typebox").TLiteral<0>;
                         asOf: import("typebox").TString;
                     }>;
                     output: () => import("typebox").TObject<{
+                        sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                         sourceRecordId: import("typebox").TString;
                         count: import("typebox").TLiteral<0>;
                         asOf: import("typebox").TString;
@@ -4747,6 +4762,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     request: Request;
     store: {};
     body: {
+        sourceAlias?: string;
         sourceRecordId: string;
         count: 0;
         asOf: string;
@@ -4788,11 +4804,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             vendor: string;
             types: {
                 input: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
                 };
                 output: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
@@ -4800,6 +4818,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             } | undefined;
             validate(value: unknown): {
                 value: {
+                    sourceAlias?: string;
                     sourceRecordId: string;
                     count: 0;
                     asOf: string;
@@ -4813,11 +4832,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             };
             jsonSchema: {
                 input: () => import("typebox").TObject<{
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                     sourceRecordId: import("typebox").TString;
                     count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
                 }>;
                 output: () => import("typebox").TObject<{
+                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
                     sourceRecordId: import("typebox").TString;
                     count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;

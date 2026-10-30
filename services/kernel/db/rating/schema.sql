@@ -252,6 +252,7 @@ CREATE TABLE rating.source_statistic (
     licence text NOT NULL,
     attribution text NOT NULL,
     transaction_id uuid NOT NULL,
+    source_alias text DEFAULT 'vndb'::text NOT NULL,
     CONSTRAINT source_statistic_attribution_check CHECK (((char_length(attribution) >= 1) AND (char_length(attribution) <= 2000))),
     CONSTRAINT source_statistic_check CHECK ((scale_max > scale_min)),
     CONSTRAINT source_statistic_check1 CHECK (((mean >= (scale_min)::numeric) AND (mean <= (scale_max)::numeric))),
@@ -260,6 +261,7 @@ CREATE TABLE rating.source_statistic (
     CONSTRAINT source_statistic_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 1024))),
     CONSTRAINT source_statistic_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT source_statistic_scale_min_check CHECK ((scale_min >= 0)),
+    CONSTRAINT source_statistic_source_alias_check CHECK ((((octet_length(source_alias) >= 1) AND (octet_length(source_alias) <= 32)) AND (source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
     CONSTRAINT source_statistic_source_check CHECK ((source = 'vndb'::text)),
     CONSTRAINT source_statistic_source_record_id_check CHECK (((char_length(source_record_id) >= 1) AND (char_length(source_record_id) <= 1024)))
 );
