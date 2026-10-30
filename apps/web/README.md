@@ -2421,7 +2421,8 @@ through the same source and render `RealmShelf`; only Search failure is construc
 intentional clearing, unavailable versus empty and the frozen surface. They invent no permission or successful
 publication. `tests/publication-subject-picker.test.ts` records the assigned acceptance journey and focused
 retry/conflict/late-response boundaries for integration. Acceptance, native, browser and screenshot execution are
-deferred by the current minimal verification contract.
+deferred by the current minimal verification contract. Local `bun run --cwd apps/web typecheck` passes with no
+type errors.
 
 Source read: the existing review picker, Search suggestions loader, shared EntityPicker, native Community shelf
 contract and the community design's referenced Discourse `lib/guardian/category_guardian.rb` at
