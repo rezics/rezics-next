@@ -281,7 +281,7 @@ function observeStorybook(): void {
           errors: [...errors],
         };
       if (render.phase !== outcome?.phase) return undefined;
-      return outcome && { ...outcome, status: errors.length ? 'error' : outcome.status, errors: [...errors] };
+      return outcome && { ...outcome, ...(errors.length ? { status: 'error' } : {}), errors: [...errors] };
     },
   };
   Object.defineProperty(preview, '__STORYBOOK_ADDONS_CHANNEL__', {
@@ -402,7 +402,13 @@ async function settle(page: Page, id: string, pageErrors: readonly string[] = []
           const render = preview.__STORYBOOK_PREVIEW__?.currentRender;
           return (
             preview.__REZICS_STORY_OUTCOME__?.read() ??
-            (render && { storyId: render.id, renderId: render.renderId, cycle: 0, phase: render.phase, errors: [] })
+            (render && {
+              storyId: render.id,
+              renderId: render.renderId,
+              cycle: 0,
+              phase: render.phase ?? 'missing',
+              errors: [],
+            })
           );
         })
         .catch(() => unavailable('unavailable')),
