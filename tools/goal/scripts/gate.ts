@@ -15,8 +15,12 @@ export function runGoalGate(
 ): number {
   const cwd = join(root, 'tools/goal');
   const steps = [
-    { args: ['install', '--frozen-lockfile'], limits: { ...INSTALL_PROCESS_LIMITS, ...limits.install } },
-    { args: ['run', 'check'], limits: { ...GOAL_GATE_CHECK_LIMITS, ...limits.check } },
+    {
+      args: ['install', '--frozen-lockfile'],
+      purpose: 'preparation' as const,
+      limits: { ...INSTALL_PROCESS_LIMITS, ...limits.install },
+    },
+    { args: ['run', 'check'], purpose: 'check' as const, limits: { ...GOAL_GATE_CHECK_LIMITS, ...limits.check } },
   ];
   for (const step of steps) {
     const command = ['bun', ...step.args];
@@ -26,6 +30,7 @@ export function runGoalGate(
         args: command.slice(1),
         cwd,
         step: command.join(' '),
+        purpose: step.purpose,
         limits: step.limits,
       });
       if (output.stdout) process.stdout.write(output.stdout);

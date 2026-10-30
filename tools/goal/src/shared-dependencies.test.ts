@@ -152,6 +152,104 @@ async function expectProcessStopped(pid: number): Promise<void> {
   expect(processIsAlive(pid)).toBe(false);
 }
 
+test('shared and private install failures preserve structured infrastructure classification and their original cause', async () => {
+  const h = fixture();
+  try {
+    for (const mode of ['shared-exit', 'private-exit', 'shared-timeout']) {
+      const worktree = h.tree(mode);
+      const stores = join(h.root, `${mode}-stores`);
+      const bin = join(h.root, `${mode}-bin`);
+      const pidFile = join(h.root, `${mode}.pid`);
+      const timedOut = mode === 'shared-timeout';
+      const shared = mode !== 'private-exit';
+      const diagnostic =
+        mode === 'shared-exit' ? 'Installing package @fixture/broken@4.5.6' : '+ @fixture/completed@1.0.0';
+      mkdirSync(bin);
+      mkdirSync(join(stores, '.building-unrelated'), { recursive: true });
+      writeFileSync(join(stores, '.building-unrelated', 'owned-by-another-install'), 'keep');
+      writeFileSync(
+        join(bin, 'bun'),
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi
+mkdir -p node_modules/.bun/partial
+echo '${diagnostic}' >&2
+sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'
+${timedOut ? 'wait' : 'exit 29'}
+`,
+        { mode: 0o755 },
+      );
+      const module = new URL('./shared-dependencies.ts', import.meta.url).href;
+      const runner = new URL('./install-process.ts', import.meta.url).href;
+      const source = `
+import { installShared, installPrivate, DependencyInstallError } from ${JSON.stringify(module)};
+import { BoundedProcessError } from ${JSON.stringify(runner)};
+try {
+  const limits = { startupMs: 2000, runMs: 2000, budgetMs: ${timedOut ? 250 : 2000}, terminationMs: 500 };
+  ${shared ? `installShared(process.cwd(), ${JSON.stringify(stores)}, limits)` : 'installPrivate(process.cwd(), limits)'};
+  throw new Error('Expected dependency installation to fail');
+} catch (error) {
+  if (!(error instanceof DependencyInstallError)) throw error;
+  const cause = error.cause;
+  if (!(cause instanceof BoundedProcessError)) throw new Error('Original process cause was lost');
+  console.log(JSON.stringify({
+    infrastructure: error.infrastructure, step: error.step, workspace: error.workspace,
+    packageName: error.packageName ?? null, message: error.message,
+    cause: { infrastructure: cause.infrastructure, timedOut: cause.timedOut, phase: cause.phase,
+      exitCode: cause.exitCode, step: cause.step, workspace: cause.workspace,
+      packageName: cause.packageName ?? null, stderr: cause.stderr }
+  }));
+  process.exitCode = 1;
+}`;
+      const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GOAL_')));
+      const started = performance.now();
+      const child = Bun.spawn([process.execPath, '-e', source], {
+        cwd: worktree,
+        env: { ...childEnv, PATH: `${bin}:${process.env.PATH ?? ''}` },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code).toBe(1);
+      expect(stderr).toBe('');
+      const result = JSON.parse(stdout);
+      const step = `bun install --frozen-lockfile${shared ? ' --backend=copyfile' : ''}`;
+      const packageName = mode === 'shared-exit' ? '@fixture/broken' : null;
+      expect(result).toMatchObject({
+        infrastructure: true,
+        step,
+        workspace: 'fixture',
+        packageName,
+        cause: {
+          infrastructure: true,
+          step,
+          workspace: 'fixture',
+          packageName,
+          timedOut,
+          phase: timedOut ? 'run' : 'exit',
+          exitCode: timedOut ? 124 : 29,
+          stderr: `${diagnostic}\n`,
+        },
+      });
+      expect(result.message).toContain('Infrastructure failure');
+      expect(result.message).toContain(diagnostic);
+      expect(performance.now() - started).toBeLessThan(2_000);
+      await expectProcessStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+      expect(readdirSync(stores).filter((name) => /^[a-f0-9]{64}$/.test(name))).toEqual([]);
+      expect(readdirSync(stores).filter((name) => name.startsWith('.building-'))).toEqual(['.building-unrelated']);
+      expect(readFileSync(join(stores, '.building-unrelated', 'owned-by-another-install'), 'utf8')).toBe('keep');
+      if (shared) expect(readdirSync(join(stores, '.leases'))).toEqual([]);
+      expect(existsSync(join(worktree, 'node_modules', '.goal-private-dependencies'))).toBe(false);
+    }
+  } finally {
+    h.close();
+  }
+}, 10_000);
+
 test(
   'a timed out shared install is an infrastructure failure, reaps descendants, releases its lease, and publishes no store',
   async () => {

@@ -67,6 +67,8 @@ export type BoundedProcessOptions = {
   cwd: string;
   step: string;
   workspace?: string;
+  /** Preparation exits are infrastructure failures; ordinary check exits retain their assertion classification. */
+  purpose?: 'preparation' | 'check';
   limits?: Partial<ProcessLimits>;
   env?: NodeJS.ProcessEnv;
 };
@@ -96,10 +98,15 @@ export class BoundedProcessError extends Error {
     stdout: string;
     stderr: string;
     fallbackError?: string;
+    purpose?: 'preparation' | 'check';
   }) {
     const { step, workspace, result, stdout, stderr, fallbackError } = options;
     const packageName = packageFromOutput(`${stdout}\n${stderr}`);
-    const infra = result.timedOut || result.phase === 'supervisor' || Boolean(result.error || result.cleanupError);
+    const infra =
+      options.purpose === 'preparation' ||
+      result.timedOut ||
+      result.phase === 'supervisor' ||
+      Boolean(result.error || result.cleanupError || fallbackError);
     const labels = [`phase=${result.phase}`, `step=${JSON.stringify(step)}`, `workspace=${JSON.stringify(workspace)}`];
     labels.push(`package=${JSON.stringify(packageName ?? 'unknown')}`);
     const summary = result.timedOut
@@ -108,7 +115,7 @@ export class BoundedProcessError extends Error {
         ? `ETIMEDOUT: Infrastructure failure: process group cleanup failed (${labels.join(', ')}): ${result.cleanupError}`
         : result.phase === 'supervisor' || result.error || fallbackError
           ? `Infrastructure failure: could not start or supervise process (${labels.join(', ')}): ${result.error ?? fallbackError}`
-          : `Process failed (${labels.join(', ')}, exit=${result.code ?? result.signal ?? 'unknown'})`;
+          : `${infra ? 'Infrastructure failure: preparation process failed' : 'Process failed'} (${labels.join(', ')}, exit=${result.code ?? result.signal ?? 'unknown'})`;
     const diagnostics = [stdout && `stdout:\n${stdout}`, stderr && `stderr:\n${stderr}`].filter(Boolean).join('\n');
     super(diagnostics ? `${summary}\n${diagnostics}` : summary);
     this.name = 'BoundedProcessError';
@@ -279,6 +286,7 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
       result: result!,
       stdout,
       stderr,
+      ...(options.purpose ? { purpose: options.purpose } : {}),
       ...(fallbackError ? { fallbackError } : {}),
     });
   return { code: result.code, stdout, stderr };

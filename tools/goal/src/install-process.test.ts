@@ -36,6 +36,45 @@ function captureFailure(action: () => unknown): BoundedProcessError {
   throw new Error('Expected the bounded process to fail');
 }
 
+test('nonzero preparation exits are infrastructure failures while nonzero checks remain check failures', async () => {
+  const h = temporaryDirectory();
+  try {
+    for (const purpose of ['preparation', 'check'] as const) {
+      const pidFile = join(h.path, `${purpose}.pid`);
+      const step = purpose === 'preparation' ? 'bun install --frozen-lockfile' : 'bun run check';
+      const started = performance.now();
+      const error = captureFailure(() =>
+        runBoundedInstallProcess({
+          command: 'sh',
+          args: [
+            '-c',
+            `sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; echo 'Installing package @fixture/failing@1.0.0' >&2; exit 23`,
+          ],
+          cwd: h.path,
+          workspace: '@fixture/workspace',
+          purpose,
+          step,
+          limits: { startupMs: 2_000, runMs: 2_000, terminationMs: 500 },
+        }),
+      );
+
+      expect(error.infrastructure).toBe(purpose === 'preparation');
+      expect(error.summary.includes('Infrastructure failure')).toBe(purpose === 'preparation');
+      expect(error.phase).toBe('exit');
+      expect(error.timedOut).toBe(false);
+      expect(error.exitCode).toBe(23);
+      expect(error.step).toBe(step);
+      expect(error.workspace).toBe('@fixture/workspace');
+      expect(error.packageName).toBe('@fixture/failing');
+      expect(error.stderr).toContain('Installing package @fixture/failing@1.0.0');
+      expect(performance.now() - started).toBeLessThan(2_000);
+      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+    }
+  } finally {
+    h.close();
+  }
+});
+
 test(
   'a timed out install kills its hanging descendant within the termination budget and names installer output',
   async () => {
@@ -201,6 +240,34 @@ async function invokeGoalGate(root: string, bin: string, limits: object) {
   ]);
   return { code, output: `${stdout}${stderr}` };
 }
+
+test('the Goal gate classifies nonzero installs as infrastructure and nonzero checks as assertions', async () => {
+  for (const failingStep of ['install', 'check']) {
+    const fixture = gateFixture(
+      `#!/bin/sh\nif [ "$1" = "install" ]; then\n  echo goal-install-started\n  if [ '${failingStep}' = 'install' ]; then echo 'Resolving dependencies' >&2; exit 19; fi\n  exit 0\nfi\necho goal-check-started\necho fixture-assertion-failed >&2\nexit 17\n`,
+    );
+    try {
+      const result = await invokeGoalGate(fixture.path, fixture.bin, {});
+      expect(result.code).toBe(failingStep === 'install' ? 19 : 17);
+      expect(result.output).toContain('goal-install-started');
+      expect(result.output).toContain('workspace="@fixture/goal"');
+      expect(result.output).toContain('package="unknown"');
+      if (failingStep === 'install') {
+        expect(result.output).toContain('Infrastructure failure: preparation process failed');
+        expect(result.output).toContain('step="bun install --frozen-lockfile"');
+        expect(result.output).not.toContain('goal-check-started');
+      } else {
+        expect(result.output).toContain('goal-check-started');
+        expect(result.output).toContain('fixture-assertion-failed');
+        expect(result.output).toContain('Process failed');
+        expect(result.output).toContain('step="bun run check"');
+        expect(result.output).not.toContain('Infrastructure failure');
+      }
+    } finally {
+      fixture.close();
+    }
+  }
+});
 
 test(
   'the Goal gate bounds install setup, reports the exact step and workspace, and does not start checks after timeout',

@@ -17,7 +17,7 @@ import {
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
-import { runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
+import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
 
 const hour = 60 * 60 * 1000;
 function manifestPaths(root: string): string[] {
@@ -52,18 +52,35 @@ export function dependencyKey(root: string): string {
       .update('\0');
   return hash.digest('hex');
 }
+export class DependencyInstallError extends Error {
+  readonly infrastructure = true;
+  readonly step: string;
+  readonly workspace: string;
+  readonly packageName: string | undefined;
+
+  constructor(root: string, step: string, cause: unknown) {
+    super(`Infrastructure failure: dependency install failed in ${root}: ${String(cause)}`, { cause });
+    this.name = 'DependencyInstallError';
+    this.step = cause instanceof BoundedProcessError ? cause.step : step;
+    this.workspace = cause instanceof BoundedProcessError ? cause.workspace : root;
+    this.packageName = cause instanceof BoundedProcessError ? cause.packageName : undefined;
+  }
+}
+
 function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits>): void {
   const args = ['install', '--frozen-lockfile', ...(shared ? ['--backend=copyfile'] : [])];
+  const step = `bun ${args.join(' ')}`;
   try {
     runBoundedInstallProcess({
       command: 'bun',
       args,
       cwd: root,
-      step: `bun ${args.join(' ')}`,
+      step,
+      purpose: 'preparation',
       ...(limits ? { limits } : {}),
     });
   } catch (error) {
-    throw new Error(`Dependency install failed in ${root}: ${String(error)}`, { cause: error });
+    throw new DependencyInstallError(root, step, error);
   }
 }
 /** Workspace directories (relative to root) that have a package.json. */
