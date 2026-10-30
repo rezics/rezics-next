@@ -201,7 +201,25 @@ would not bind the admitted immutable input.
 Until the actual source owners and Semantic provide these native boundaries, ALL-role completion and its positive
 custody/growth schedules remain unavailable. In particular, empty derived tables cannot acknowledge Library
 publication. Published undo additionally requires actual mapping, Search and coordinator publication; a locally
-finished Library page cannot supply it. No successful participant export or native acceptance is claimed here.
+finished Library page cannot supply it.
+
+`identity-epoch-participant.ts:stepLibraryIdentityEpoch` now supplies the exact `IdentityEpochStep` entry point.
+It validates the native job reference and reads the actual Store job in a bounded read-only transaction. Unknown,
+PREPARING, cancelling and cancelled jobs are refused before any Library effect. An admitted job without actual
+ALL-role custody raises `identity_epoch_unavailable`; it does not advance a frontier, create a manifest or receipt,
+reconcile an empty result, or register a substitute participant. If the Store already holds this job's complete
+Library receipt, replay releases the read home and invokes `reconcileStepReceipt` on that exact native locator.
+The Store remains responsible for its native transaction/component, scope and receiving-custody validation.
+
+This unavailable boundary cannot produce the first Library ACK. Its effect path still needs the actual Semantic
+owner-home admission implementation using the existing ABI, the canonical source observation/registration and
+six-driver generation writers, and the follow owner's canonical target/support/total/fence and receiving producers.
+Their exact missing callable declarations must come from those owners; the raw readers in the inventory above
+provide no replacement. No source factory, business writer, owner-home permit or completion flag is invented here.
+No new stores, account-bearing copies, DBOS records or erasure acknowledgements are introduced. Existing native
+sources, canonical generations, follow delivery rows and Semantic control/receipt copies retain their owning
+minimizer obligations; Library erasure and shared outbox/DBOS custody remain independent and pending.
+No native positive, reversal, composition or growth acceptance is claimed for this entry point.
 
 ### Native owner state-write sequencing (required; runtime incomplete)
 
