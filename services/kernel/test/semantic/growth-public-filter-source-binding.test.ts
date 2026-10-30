@@ -398,7 +398,10 @@ test('original capture survives native derived execution windows and exact relea
     expect(costs.reduce((sum, cost) => sum + cost.engineSearches, 0)).toBeLessThanOrEqual(6);
     expect(costs.reduce((sum, cost) => sum + cost.outputSlots, 0)).toBeLessThanOrEqual(2);
     // Existing shared role attribution asserts paired <=2 SQL/64+2*(behind+changed) separately
-    // from WHOLE native/engine/page limits. Binding metadata gets no extra request allowance.
+    // from whole-page SQL/engine-count limits. Binding metadata gets no extra request allowance.
+    // createPublicFilterConsumerFixture exposes nativeReceipts/engineResponses, not actual
+    // request/response wire-byte totals. This helper's PostgreSQL bytes cannot prove combined
+    // PostgreSQL+engine byte acceptance; that Search-owned measurement export is still missing.
     await assertPageCapture(
       'public-source-original-native-window',
       whole.capture,
