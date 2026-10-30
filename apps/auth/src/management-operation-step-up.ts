@@ -9,11 +9,12 @@ export const managementReturnTargets = {
   membership: '/organizations/members',
   transfer: '/operators/transfer',
   'transfer-acceptance': '/operators/transfer',
+  opening: '/automated/open',
 } as const;
 export type PendingManagementOperationStepUp = ManagementOperationInput & {
   kind: ManagementOperationKind;
   returnTo: (typeof managementReturnTargets)[ManagementOperationKind];
-  phase: 'awaiting' | 'returned';
+  phase: 'awaiting' | 'returned' | 'submitted';
 };
 export type ManagementOperationStepUpSelection =
   | { kind: 'ordinary' }
@@ -36,7 +37,9 @@ function valid(value: unknown): value is PendingManagementOperationStepUp & { ve
     typeof pending.operationKey === 'string' &&
     !!pending.operationKey &&
     pending.operationKey.length <= 4096 &&
-    (pending.phase === 'awaiting' || pending.phase === 'returned')
+    (pending.phase === 'awaiting' ||
+      pending.phase === 'returned' ||
+      (pending.kind === 'opening' && pending.phase === 'submitted'))
   );
 }
 export function storePendingManagementOperationStepUp(input: ManagementOperationInput): boolean {
@@ -104,6 +107,8 @@ export function selectManagementOperationStepUp(query: string): ManagementOperat
   return { kind: 'management', pending: state.value };
 }
 function signature(operation: ManagementOperationInput['operation']): string {
+  if (operation.kind === 'opening')
+    return JSON.stringify([operation.kind, operation.operatorAccountId, operation.subjectAccountId]);
   // Canonical field order: callers need not construct object properties in storage order.
   if (operation.kind === 'rename')
     return JSON.stringify([operation.kind, operation.accountId, operation.handle, operation.expectedHandle]);
@@ -124,6 +129,32 @@ function signature(operation: ManagementOperationInput['operation']): string {
     operation.operatorAccountId,
     operation.kind === 'transfer' ? (operation.acceptance ?? null) : operation.sourceOperationKey,
   ]);
+}
+/** Persist only the non-authority descriptor/key before the one issuance attempt.
+ * A lost response must never turn a returned continuation into another issuance. */
+export function markManagementOpeningSubmitted(input: ManagementOperationInput): boolean {
+  const state = pendingManagementOperationStepUpState();
+  if (
+    input.operation.kind !== 'opening' ||
+    state.kind === 'invalid' ||
+    (state.kind === 'pending' &&
+      (state.value.phase !== 'returned' || !pendingManagementOperationMatches(state.value, input)))
+  )
+    return false;
+  const pending = {
+    ...input,
+    kind: 'opening',
+    returnTo: managementReturnTargets.opening,
+    phase: 'submitted',
+    version: 1,
+  };
+  if (!valid(pending)) return false;
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(pending));
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function pendingManagementOperationMatches(
   pending: PendingManagementOperationStepUp,

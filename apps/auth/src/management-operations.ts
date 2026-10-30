@@ -83,17 +83,25 @@ export function managementSessionMatches(session: ManagementSession, input: Mana
   );
 }
 
-function failure(result: Exclude<AuthPostResult, { ok: true }>): ManagementOperationResult {
+function failure(
+  result: Exclude<AuthPostResult, { ok: true }>,
+): Exclude<ManagementOperationResult, { kind: 'complete' }> {
   if (result.status === 401 && result.code === 'step_up_required') return { kind: 'step-up' };
   if ([400, 401, 403, 409, 413, 415].includes(result.status) && result.code === 'account_operation_denied')
     return { kind: 'refused' };
   return { kind: 'unavailable' };
 }
 
-/** Invoke only from the page's explicit submit, including after a fresh return.
- * The immutable snapshot survives every await and the immediate uncertain retry.
- * Completion reports the native operation result, never a later readback claim. */
-export async function executeManagementOperation(input: ManagementOperationInput): Promise<ManagementOperationResult> {
+type ManagementApprovalResult =
+  | { kind: 'approved'; input: ManagementOperationInput; reference: string; expiresAt: string }
+  | Exclude<ManagementOperationResult, { kind: 'complete' }>;
+
+/** Shared closed approval stage. Opening selects its dedicated issuance path;
+ * all caller, continuation, freshness and native approval checks stay here. */
+export async function approveManagementOperation(
+  input: ManagementOperationInput,
+  path: 'mutation' | 'opening' = 'mutation',
+): Promise<ManagementApprovalResult> {
   let snapshot: ManagementOperationInput;
   try {
     snapshot = JSON.parse(JSON.stringify(input)) as ManagementOperationInput;
@@ -108,7 +116,8 @@ export async function executeManagementOperation(input: ManagementOperationInput
     snapshot.operationKey.length > 4096 ||
     typeof snapshot.accountId !== 'string' ||
     !snapshot.accountId ||
-    !isManagementOperation(snapshot.operation)
+    !isManagementOperation(snapshot.operation) ||
+    (snapshot.operation.kind === 'opening') !== (path === 'opening')
   )
     return { kind: 'refused' };
   const continuation = pendingManagementOperationStepUpState();
@@ -138,6 +147,19 @@ export async function executeManagementOperation(input: ManagementOperationInput
     Date.parse(approval.expiresAt) <= Date.now()
   )
     return { kind: 'unavailable' };
+  return { kind: 'approved', input: snapshot, reference: approval.reference, expiresAt: approval.expiresAt };
+}
+
+/** Invoke only from the page's explicit submit, including after a fresh return.
+ * The immutable snapshot survives every await and the immediate uncertain retry.
+ * Completion reports the native operation result, never a later readback claim. */
+export async function executeManagementOperation(input: ManagementOperationInput): Promise<ManagementOperationResult> {
+  const approval = await approveManagementOperation(input);
+  if (approval.kind !== 'approved') return approval;
+  const snapshot = approval.input;
+  // Also narrows the shared approval result: opening never reaches mutation
+  // dispatch, mutation retry or the accountId result parser.
+  if (snapshot.operation.kind === 'opening') return { kind: 'refused' };
   if (snapshot.operation.kind === 'transfer-acceptance')
     return {
       kind: 'complete',

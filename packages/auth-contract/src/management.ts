@@ -7,9 +7,11 @@ export const AUTH_MANAGEMENT_SCOPES = Object.freeze({
   membership: Object.freeze(['organization:membership'] as const),
   transfer: Object.freeze(['account:manage'] as const),
   'transfer-acceptance': Object.freeze(['account:manage'] as const),
+  opening: Object.freeze(['account:manage'] as const),
 });
 
 export type ManagementOperation =
+  | Omit<Extract<AccountOperation, { kind: 'opening' }>, 'authorization'>
   | Omit<Extract<AccountOperation, { kind: 'rename' }>, 'authorization'>
   | Omit<Extract<AccountOperation, { kind: 'membership' }>, 'authorization'>
   | (Omit<Extract<AccountOperation, { kind: 'transfer' }>, 'authorization'> & { acceptance?: string })
@@ -34,7 +36,11 @@ export type ManagementSessionResult =
   | { kind: 'signed-out' }
   | { kind: 'unavailable' };
 export type ManagementOperationResult =
-  | { kind: 'complete'; operationKind: Exclude<ManagementOperationKind, 'transfer-acceptance'>; accountId: string }
+  | {
+      kind: 'complete';
+      operationKind: Exclude<ManagementOperationKind, 'transfer-acceptance' | 'opening'>;
+      accountId: string;
+    }
   | { kind: 'complete'; operationKind: 'transfer-acceptance'; reference: string; expiresAt: string }
   | { kind: 'refused' }
   | { kind: 'step-up' }
@@ -66,6 +72,13 @@ function fields(value: Record<string, unknown>, required: string[], optional: st
 /** Closed native descriptors only; no authorization, Actor, proof or callback input. */
 export function isManagementOperation(value: unknown): value is ManagementOperation {
   if (!record(value)) return false;
+  if (value.kind === 'opening')
+    return (
+      fields(value, ['kind', 'operatorAccountId', 'subjectAccountId']) &&
+      text(value.operatorAccountId) &&
+      text(value.subjectAccountId) &&
+      value.operatorAccountId !== value.subjectAccountId
+    );
   if (value.kind === 'rename')
     return (
       fields(value, ['kind', 'accountId', 'handle', 'expectedHandle']) &&

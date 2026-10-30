@@ -8,6 +8,7 @@ const pageRoutes = [
   '/account/delete',
   '/organizations/new',
   '/automated/new',
+  '/automated/open',
   '/organizations/delete',
   '/account/rename',
   '/organizations/members',

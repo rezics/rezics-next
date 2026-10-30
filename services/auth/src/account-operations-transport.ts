@@ -74,6 +74,7 @@ const OPERATION_FIELDS: Record<string, readonly string[]> = {
   'transfer-acceptance': ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'sourceOperationKey'],
   membership: ['kind', 'organizationId', 'memberAccountId', 'role', 'reservationId'],
   'fence-operator': ['kind', 'accountId'],
+  opening: ['kind', 'operatorAccountId', 'subjectAccountId'],
 };
 type Workflows = Pick<
   ReturnType<typeof createAccountWorkflows>,
@@ -148,6 +149,15 @@ export function accountOperationTransport(
       const management = Object.hasOwn(body, 'accountId');
       if (management) text(body.accountId);
       const automated = operation.kind === 'automated';
+      const opening = operation.kind === 'opening';
+      if (
+        opening &&
+        (command === 'execute' ||
+          !management ||
+          request.headers.has('authorization') ||
+          request.headers.get('sec-fetch-site') === 'cross-site')
+      )
+        return denied(400);
       if (
         automated &&
         (!management ||
@@ -172,7 +182,7 @@ export function accountOperationTransport(
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         return response({ reference: approval.reference, expiresAt: approval.expiresAt });
       }
-      if (operation.kind === 'transfer-acceptance') return denied(400);
+      if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return denied(400);
       if (body.acceptance !== undefined) {
         if (
           operation.kind !== 'transfer' ||

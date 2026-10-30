@@ -9,6 +9,7 @@ import {
   accountManagementReadTransport,
   type AccountManagementReadAccess,
 } from './account-management-read-transport.ts';
+import { operatorSessionTransport } from './operator-session-transport.ts';
 import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
@@ -168,17 +169,22 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     handler: accountOperationTransport(
       service,
       workflows,
-      accountManagementReadTransport(
+      operatorSessionTransport(
         service,
-        accountManagementMembershipTransport(
+        workflows,
+        accountManagementReadTransport(
           service,
-          credentialEffectTransport(service, workflows.handler, options),
-          (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
-            .readOrganizationMembershipCommandState
-            ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
-            : undefined,
+          accountManagementMembershipTransport(
+            service,
+            credentialEffectTransport(service, workflows.handler, options),
+            (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
+              .readOrganizationMembershipCommandState
+              ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
+              : undefined,
+          ),
+          options.accountManagementReads ?? options.accountOperations,
         ),
-        options.accountManagementReads ?? options.accountOperations,
+        options.accountOperations,
       ),
       options.accountOperations,
     ),

@@ -877,6 +877,68 @@ Final deployment approval resolution and the original lifecycle outcome driver
 remain application integration work, including binding state suspension to Access
 policy. `fenceOperator` provides the durable fencing fanout itself.
 
+## Operated actor session opening transport
+
+`/automated/open` is an additive Auth page and production fetch trigger. It uses
+the existing `rezics-auth-account-management` registration with the exact
+`opening: ['account:manage']` operation profile. The registration ceiling remains
+the same three scopes. Ordinary sign-in, organization/deletion profiles, deployment
+availability contracts and the shared Web AccountMenu are unchanged.
+
+The closed protocol is:
+
+```ts
+// POST /account-operations/approve
+{
+  accountId: initiatingHumanId,
+  operationKey: originalKey,
+  operation: { kind: 'opening', operatorAccountId, subjectAccountId },
+}
+// -> { reference, expiresAt }
+// POST /operator-sessions/open: the exact same body plus reference
+// -> actual native SessionProof with genuine Set-Cookie headers
+// { account_id, client_id, scope, authn_epoch, auth_time, amr: ['operator'] }
+```
+
+Both transports require current fresh human proof and the exact selected profile.
+The browser reuses the shared management approval stage, including its immutable
+snapshot and exact pending/session checks; only issuance and its result parser are separate.
+Approval uses native Access approval; opening resolves the reference for that
+current caller before invoking only `createAccountWorkflows.openOperatorSession`.
+That existing workflow rechecks current operator authority, floors, consent and the
+exact session-purpose opening, then Auth consumes it once. It returns Auth's HTTP
+response verbatim, including native session cleanup on failed establishment. No
+session, cookie or proof is a workflow result or DBOS payload. Missing host Access
+composition answers 503. Generic execution explicitly rejects `opening` in both
+the host and the browser helper.
+
+Selection is private and explicit. The page reads the selected subject's existing
+native `/v1/accounts/{id}/management` projection through an Origin-protected server
+function. It uses the actual actor identity and current operator metadata, then
+requires the delivered `/account-management/operators/relation` native point read
+to match that projection's exact subject, operator, reservation and version. URL
+roles or assumed equality to the human supply no authority. Either source being
+unavailable, or their tuples differing, disables confirmation. The
+page explains the browser identity switch and names only the actual authorized
+subject and operator. Step-up returns only to `/automated/open`; navigation and
+reauthentication never issue a session. Confirmation is required again on return.
+
+Immediately before the single issuance attempt the shared private pending record
+is marked submitted. It contains only the original descriptor, human, key and
+continuation phase, never the approval or private metadata. The approval reference
+exists only in the ephemeral request stack. A lost or ambiguous response is UNKNOWN
+and is never automatically replayed. Readback uses native `/session` alone and
+displays a matching subject with operator authentication as the actual current
+session, without claiming which request established it. It neither refreshes
+cached metadata nor restores a cached human session. Another opening requires a
+deliberate new key, fresh same-human sign-in, current metadata, new confirmation
+and native authorization. Automated proof is kept separate from the human-only
+management proof; displayed scopes are only the actual native receipt-bound scopes.
+
+Focused fixtures are `test/operator-session-transport.test.ts` and the Auth pages'
+`test/operator-session-opening.test.ts`. This transport adds no native authority,
+credential writer, relation, permission evaluator or deployment proof.
+
 ## Operated actor creation transport
 
 `/automated/new` is an additive Auth page and production fetch trigger. It does not
