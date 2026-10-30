@@ -273,18 +273,12 @@ presentation producer lands; ordinary visual review and native/promoted-main pro
 Implementation decisions: an explicit native 404 is treated like concealed detail denial, never deletion evidence;
 a transient failed inspection cannot reuse old current-status choices; write responses without presentation keep
 new status text raw rather than borrowing a current label. Outside the declared paths, `copies-actions.ts` adds the
-existing server-function binding and stops attaching current profiles to historical rows. The local Web typecheck
-also exposed a base defect: the native candidate DTO now includes payload-free deleted tombstones, but the shared
-Web `Candidate` alias still treated them as complete candidates. Minimal corrections in `subject/candidates.ts`
-(type-refined existing payload filtering), `features/catalogue/context-curation.ts` (same filter before slot reads),
-`features/catalogue/statement-consent.ts` (terminal tombstone before payload access) and
-`features/catalogue/value-explanation.ts` (same existing payload exclusion before explanation reads) keep deleted
-payloads out of editors and repair the resulting dependent typing failures without changing native behavior or response contracts.
+existing server-function binding and stops attaching current profiles to historical rows. The shared candidate
+tombstone filtering, explanation guards and terminal consent handling already present in the current base remain unchanged.
 Read-only reference source:
 main `.reference/INDEX.md`, `shelves/bookwyrm/bookwyrm/models/shelf.py` and Bangumi's
 `shelves/bangumi-server/openapi/components/user_subject_collection{,_modify_payload}.yaml`; no reference code copied.
-Local foreground `bun run --cwd apps/web typecheck` passed on the committed implementation with no type errors
-in 1,321 files. This is the only verification for this source slice; the new acceptance tests and story plays remain unrun.
+Local foreground Web typing is the only verification for this source slice; the new acceptance tests and story plays remain unrun.
 
 **Labels.** Sole authority: [independent labels](../library-labels.md); delivered [cap research](library-label-cap-independent-current.md)
 and [second investigation](library-label-cap-independent-deep.md) back same-row reservations/restore semantics.
