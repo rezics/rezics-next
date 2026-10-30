@@ -175,6 +175,50 @@ key and are enrolled and conservatively deferred by the existing minimizer. Term
 Source proof alone grants neither a nonpersonal family disposition nor History copy
 closure. No existing erasure/copy producer is bypassed.
 
+## Terminal ownership and required native reads
+
+This module owns the missing discharge/technical-transfer transition. The earlier name
+`IdentitySourceConsumerDischarge` does not designate a foreign producer or an exported
+interface. Retained preparation is not completion of that transition. The transition must
+enumerate the complete bounded original admission/replay and receiving dependency
+cut, including every OLD/NEW/first-apply/handoff scope, future verification undo and admitted
+in-flight reversal/replay. It must serialize that cut durably against later consumers and
+bind current native owner/restore and replay/undo generations. For transfer it must also
+prove the genuine receiving owner's acceptance of the exact immutable technical obligation
+and its continued proof needs. Its final receipt must be consumable and lockable at the
+original source home without foreign I/O in the caller's command.
+
+The required Library owner module is `library/identity-scope-effects.ts`, with its exact
+`readLibraryScopeEffectsPage` and `verifyLibraryScopeEffectsSeal` exports. That module and
+those exports are absent from the integrated source used for this implementation attempt.
+No local expected-set engine, declaration-only adapter or unavailable-as-empty result can
+replace them. Their absence prevents establishing either exhaustive effects or sealed zero.
+
+Semantic also needs a bounded read over the **actual admitted retained directory**, rather
+than over caller-supplied scopes. The required owner read must:
+
+- Accept the exact accepted job and a native continuation within the existing eight-scalar,
+  2048-byte frontier, raw-page and work allowances.
+- Enumerate every expected retained scope and its real `IdentityPrearmTicketLocator`,
+  including the native exhausted/empty directory evidence. Replays must resolve the same
+  admitted directory generation, not the current registration set.
+- Preserve the current Source seal and native writer fence for each scope while its
+  OLD/NEW/first-apply/handoff expected selections are enumerated through the Library owner.
+- Charge failed, control and foreign work and release its home before returning. A later
+  relevant writer must extend the retained obligation or reject against the terminal fence.
+
+`readIdentityPrearmTicket` currently resolves only an already supplied ticket; its SQL
+requires an unreleased directory and live bridge. It cannot enumerate the admitted cut or
+recover its released directory. `readIdentityReceivingSelection` resolves one record and
+cannot supply the missing enumeration. `createIdentityScopedObservations` and the native
+Source prearm adapter currently return unavailable. These are separate native read/fence
+requirements; a participant's final frontier does not satisfy them.
+
+Until those owner reads are present, the existing read port prepares retention and returns
+null, and verify rejects it. This is pending product work, not terminal delivery. No terminal
+state, transfer receipt, empty scope seal or positive acceptance is inferred from this
+documentation. The existing undo-only Accounts source remains indispensable after T.
+
 ## Cost and evidence
 
 Reads use released homes and fixed native source/claim/job keys. Directory pages
