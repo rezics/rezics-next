@@ -126,6 +126,7 @@ const typed = [
   'POST /v1/contexts/:id/$restore',
   'POST /v1/subjects/$search',
   'GET /v1/subjects/$suggest',
+  'GET /v1/trendingSearches',
   'GET /v1/payoutStatements',
   'GET /v1/payoutStatements/:statementId',
   'GET /v1/payoutStatements/:statementId/lines',
@@ -406,4 +407,9 @@ test('subject HTTP refuses an unlicensed document and any media value before att
       errors: [expectedError],
     });
   }
+});
+
+test('trending Search keeps the adopted Search exposure group', () => {
+  const operation = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths['/v1/trendingSearches']?.get;
+  expect(operation).toMatchObject({ 'x-exposure': 'gate:search', 'x-action': 'subject:read' });
 });
