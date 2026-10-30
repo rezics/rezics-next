@@ -267,11 +267,13 @@ test('native ingress reservations refuse excess requests before reading and rele
     expect(await refused.json()).toMatchObject({ code: 'overloaded' });
     expect(reads).toBe(0);
   } finally {
-    for (const controller of controllers) {
+    const responses: Response[] = [];
+    // Drain one reader at a time so command admission does not become the limiting budget.
+    for (const [index, controller] of controllers.entries()) {
       controller.enqueue(new TextEncoder().encode('{"count":2,"enabled":true}'));
       controller.close();
+      responses.push(await pending[index]!);
     }
-    const responses = await Promise.all(pending);
     const failures = await Promise.all(
       responses
         .filter((response) => response.status !== 200)

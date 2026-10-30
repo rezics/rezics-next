@@ -147,9 +147,9 @@ export function createApp({
       );
       const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest;
       bodyBudget ??= new IngressBodyBudget(budget);
-      if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
-      bodyReservations.set(request, reservation);
       try {
+        if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
+        bodyReservations.set(request, reservation);
         return await parseBoundedBody(request, limit, bodyModeOf(detail));
       } catch (error) {
         boundedBodyErrors.set(request, error);
