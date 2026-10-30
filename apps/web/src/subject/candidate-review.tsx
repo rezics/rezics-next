@@ -26,11 +26,13 @@ export function CandidateReview({
   locale,
   transport,
   initialProperty,
+  exactCandidate,
 }: {
   id: string;
   locale: string;
   transport: CandidateTransport;
   initialProperty?: string | undefined;
+  exactCandidate?: string;
 }) {
   const options = { locale: locale as never };
   const [opened, setOpened] = useState(false);
@@ -62,6 +64,8 @@ export function CandidateReview({
     try {
       const next = await transport.read(field || undefined, cursor);
       setRead(next);
+      if (next.ok && exactCandidate)
+        setCandidate(next.page?.candidates.find((item) => item.id === exactCandidate && item.retracted === null));
       if (!next.ok) setFailure(next);
     } catch {
       setRead(undefined);
@@ -183,7 +187,7 @@ export function CandidateReview({
                 <select
                   className={`${button} block w-full`}
                   value={property}
-                  disabled={busy || confirmation}
+                  disabled={busy || confirmation || !!exactCandidate}
                   onChange={(event) => {
                     setProperty(event.target.value);
                     void load(event.target.value);
@@ -200,29 +204,34 @@ export function CandidateReview({
               {current.page && !candidate && (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">{m.candidate_list_hint({}, options)}</p>
-                  {!current.page.candidates.length && <p>{m.candidate_empty({}, options)}</p>}
+                  {(!current.page.candidates.length ||
+                    (exactCandidate && !current.page.candidates.some((item) => item.id === exactCandidate))) && (
+                    <p>{exactCandidate ? m.correction_exact_missing({}, options) : m.candidate_empty({}, options)}</p>
+                  )}
                   <ul className="space-y-3">
-                    {current.page.candidates.map((item) => (
-                      <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
-                        <CandidateValue snak={item.statement} related={current.public.related} locale={locale} />
-                        <CandidateProvenance candidate={item} read={current} locale={locale} />
-                        <button
-                          type="button"
-                          className={button}
-                          disabled={busy || item.retracted !== null}
-                          onClick={() => {
-                            setCandidate(item);
-                            setResult(undefined);
-                            setFailure(undefined);
-                            request.current = null;
-                          }}
-                        >
-                          {item.retracted !== null
-                            ? m.candidate_retracted({}, options)
-                            : m.candidate_review({}, options)}
-                        </button>
-                      </li>
-                    ))}
+                    {current.page.candidates
+                      .filter((item) => !exactCandidate || item.id === exactCandidate)
+                      .map((item) => (
+                        <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
+                          <CandidateValue snak={item.statement} related={current.public.related} locale={locale} />
+                          <CandidateProvenance candidate={item} read={current} locale={locale} />
+                          <button
+                            type="button"
+                            className={button}
+                            disabled={busy || item.retracted !== null}
+                            onClick={() => {
+                              setCandidate(item);
+                              setResult(undefined);
+                              setFailure(undefined);
+                              request.current = null;
+                            }}
+                          >
+                            {item.retracted !== null
+                              ? m.candidate_retracted({}, options)
+                              : m.candidate_review({}, options)}
+                          </button>
+                        </li>
+                      ))}
                   </ul>
                   {current.page.next && (
                     <button
@@ -332,7 +341,7 @@ export function CandidateReview({
               setCandidate(undefined);
               setResult(undefined);
               setFailure(undefined);
-              setProperty('');
+              setProperty(initialProperty ?? '');
               request.current = null;
             }}
           >

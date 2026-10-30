@@ -14,6 +14,7 @@ export type CandidateRead =
       fields: CandidateField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      session?: string;
     };
 export type CandidateCommand = {
   id: string;
@@ -24,6 +25,7 @@ export type CandidateCommand = {
   key: string;
   slot?: CandidateSlot;
   rank?: 'normal' | 'preferred';
+  session?: string;
 };
 export type CandidateResult =
   | CandidateFailure
@@ -31,6 +33,7 @@ export type CandidateResult =
       ok: true;
       kind: 'accepted' | 'selected' | 'pending';
       public: SubjectRead | null;
+      session?: string;
     };
 
 export const candidateContext = '00000000-0000-8000-8000-000000000000';
@@ -84,6 +87,7 @@ export async function readCandidates(
   property?: string,
   cursor?: string,
   slot?: CandidateSlot,
+  session?: string,
 ): Promise<CandidateRead> {
   try {
     if (slot) {
@@ -102,7 +106,9 @@ export async function readCandidates(
       return { ok: true, public: current.data, fields: [], names: {}, page: result.data };
     }
     // This ordinary reader intentionally has no viewer authorization or private overlay.
-    const current = await client.subjects({ id }).get();
+    const current = await client
+      .subjects({ id })
+      .get(session ? { headers: { 'rezics-session-token': session } } : undefined);
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
     if (!property) return { ok: true, public: current.data, fields: [], names: {}, page: null };
     const result = await client.subjects({ id }).candidates.get({
@@ -128,7 +134,16 @@ export async function readCandidates(
           labels: read.data.subject.labels,
         } as SubjectRead['related'][string];
     }
-    return { ok: true, public: current.data, fields: [], names: {}, page: result.data };
+    return {
+      ok: true,
+      public: current.data,
+      fields: [],
+      names: {},
+      page: result.data,
+      ...(new Headers(result.headers).get('rezics-session-token')
+        ? { session: new Headers(result.headers).get('rezics-session-token')! }
+        : {}),
+    };
   } catch {
     return candidateFailure(503);
   }
@@ -146,7 +161,13 @@ export async function selectCandidate(
 ): Promise<CandidateResult> {
   try {
     const endpoint = client.subjects({ id: input.id });
-    const options = { headers: { authorization, 'idempotency-key': input.key } as { 'idempotency-key': string } };
+    const options = {
+      headers: {
+        authorization,
+        'idempotency-key': input.key,
+        ...(input.session ? { 'rezics-session-token': input.session } : {}),
+      } as { 'idempotency-key': string },
+    };
     const result =
       input.operation === 'accept'
         ? await endpoint
@@ -180,6 +201,9 @@ export async function selectCandidate(
             ? 'accepted'
             : 'pending',
       public: current,
+      ...(new Headers(result.headers).get('rezics-session-token')
+        ? { session: new Headers(result.headers).get('rezics-session-token')! }
+        : {}),
     };
   } catch {
     return candidateFailure(503);

@@ -27,6 +27,7 @@ import { accountOf } from './account-read';
 import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
 import { SubjectPurchaseSlot } from './subject-slots';
+import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import {
   bestRank,
   ExternalValue,
@@ -548,6 +549,14 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       return [
         <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
           {gated ? <SpoilerGate label={options.messages.spoilerShow}>{body}</SpoilerGate> : body}
+          <StatementCorrectionLink
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale).text}
+            statement={statement.id}
+            property={property}
+            datatype={statement.property.data_type}
+            locale={options.locale}
+          />
         </dd>,
       ];
     });

@@ -153,7 +153,7 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
     },
     confirm: (command: CandidateCommand) => selectCandidate(client, 'Bearer fixture', command),
   };
-  return { id, candidate, client, publicRead, transport, calls };
+  return { id, candidate, client, publicRead, transport, calls, fetcher };
 }
 
 // Component and page stories use isolated instances; this module adds no global route override.

@@ -133,6 +133,36 @@ current-withdrawal and screenshot review remain integration proof across no-JS, 
 themes. The reusable [public reading pattern](../apps/web/src/subject/reading-state/index.tsx) has one story identity
 across those globals and is the same component used by About.
 
+## Propose a cited correction
+
+A signed-in reader can choose **Propose correction** beside an existing scalar fact in Details (also available
+where that fact appears in the overview). The canonical subject route `/subjects/{id}/{slug}/edit` retains the
+exact subject, property and selected statement address. The editor names the subject and its released Type,
+shows the current assertion and citations, and identifies Global as the proposal context. Missing and hidden
+subjects use the same concealed unavailable state; a moved subject resolves through existing canonical routes.
+
+Controls follow the current emitted property definition: text and value language, URL or external code, date
+precision with its declared calendar, and quantity with explicit admitted units and optional bounds. No unit,
+calendar, date precision or word-count coverage is inferred. Known, unknown and no-value remain distinct.
+Qualifiers use the property's admitted definitions. Citations retain their statement-level groups and parts.
+Unsupported qualifier or citation values remain visible and are submitted intact with an explanation; an assertion
+that is no longer safe under current definitions is rejected without narrowing it. Definition labels use the
+existing locale fallback; a value's language remains authored data.
+
+The session BFF sends the generated client's `POST /v1/subjects/{id}/candidates` with only `{statement}` and an
+idempotency key. It uses current session authorization and CSRF handling; ingestion Source metadata, term-map
+replacement, relations, media and rich document authoring are outside this form. A `schema:name` fact does not
+replace labels. The native endpoint owns current Type/release validation, permission and source provenance.
+Invalid, denied, stale and unavailable outcomes retain the draft. Reloading definitions retains the draft too.
+An uncertain outcome freezes editing until an exact retry resolves the original request and key.
+
+Success means **proposed, awaiting review**. It does not accept, adopt or mutate the selected assertion. The
+returned candidate identity and session consistency token feed the existing comparison/review region. That
+region selects only that exact candidate, including when it requires continuation; another candidate never
+stands in for it. Acceptance and Global adoption remain separate explicit confirmations, followed by the
+ordinary anonymous reader. Only the reader's exact selected statement confirms public selection. The public
+link uses existing canonical subject handling.
+
 ## Imported suggestions
 
 The canonical subject overview and Details offer signed-in readers an **Imported suggestions** region after the
