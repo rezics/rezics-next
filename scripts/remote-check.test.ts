@@ -26,6 +26,7 @@ import {
   BASE_RETENTION_SECONDS,
   controlSocketDirectoryPath,
   installedPackageCacheCheck,
+  landingMarkerScript,
   returnsProbe,
   readHosts,
   runScript,
@@ -4677,6 +4678,155 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     sentinelHolder.kill();
     await sentinelHolder.exited;
     expect(sentinelLockStatus).not.toBe(0);
+  }
+
+  const landingRoot = join(testRoot, 'landing-host');
+  const landingId = 'native-priority-head';
+  const landingStartedMs = Date.now();
+  const landingMarker = Bun.spawn(
+    [
+      'bash',
+      '-c',
+      landingMarkerScript(landingId, 1, String(landingStartedMs), 1000, CHECK_SLOT_MEMORY_BYTES).replaceAll(
+        '/srv/rezics-check',
+        landingRoot,
+      ),
+    ],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+  );
+  let priorityTake: ReturnType<typeof Bun.spawn> | undefined;
+  let backfillTake: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    await waitForOutput(landingMarker, 'LANDING_MARKER\n');
+    const beforeOpportunity = spawnSync(
+      'bash',
+      [
+        '-c',
+        nativeSlotScript(landingRoot, {
+          slots: 2,
+          slotLimit: 2,
+          ordinaryCapacity: 1,
+          ordinaryAdmissionLimit: 1,
+          pollMs: 1000,
+        }),
+      ],
+      { input: 'ordinary-before-opportunity\n', encoding: 'utf8', env: environment, timeout: 5000 },
+    );
+    expect(beforeOpportunity.status).toBe(75);
+    expect(Date.now() - landingStartedMs).toBeLessThan(1000);
+
+    priorityTake = Bun.spawn(
+      [
+        'bash',
+        '-c',
+        nativeSlotScript(landingRoot, {
+          slots: 2,
+          slotLimit: 2,
+          ordinaryCapacity: 1,
+          ordinaryAdmissionLimit: 1,
+          priority: 'landing',
+          landingWaiterId: landingId,
+          pollMs: 1000,
+        }),
+      ],
+      { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+    );
+    priorityTake.stdin.write('native-priority-head-run\n');
+    await priorityTake.stdin.flush();
+    await waitForSlotToken(priorityTake, 1);
+    const ordinarySlot = join(landingRoot, 'slots', '0.lock');
+    const landingLock = join(landingRoot, 'slots', `landing-wait-${landingId}.lock`);
+    expect(spawnSync('/usr/bin/flock', ['-n', ordinarySlot, '-c', 'true']).status).not.toBe(0);
+    await priorityTake.stdin.end();
+    expect(await priorityTake.exited).toBe(0);
+
+    const remainingOpportunity = landingStartedMs + 1020 - Date.now();
+    if (remainingOpportunity > 0) await Bun.sleep(remainingOpportunity);
+    backfillTake = Bun.spawn(
+      [
+        'bash',
+        '-c',
+        nativeSlotScript(landingRoot, {
+          slots: 2,
+          slotLimit: 2,
+          ordinaryCapacity: 1,
+          ordinaryAdmissionLimit: 1,
+          pollMs: 1000,
+        }),
+      ],
+      { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+    );
+    backfillTake.stdin.write('ordinary-after-opportunity\n');
+    await backfillTake.stdin.flush();
+    await waitForSlotToken(backfillTake, 1);
+    expect(spawnSync('/usr/bin/flock', ['-n', ordinarySlot, '-c', 'true']).status).not.toBe(0);
+    expect(spawnSync('/usr/bin/flock', ['-n', landingLock, '-c', 'true']).status).not.toBe(0);
+    await backfillTake.stdin.end();
+    expect(await backfillTake.exited).toBe(0);
+  } finally {
+    for (const take of [backfillTake, priorityTake]) {
+      if (!take) continue;
+      try {
+        await take.stdin.end();
+      } catch {}
+      await take.exited;
+    }
+    try {
+      await landingMarker.stdin.end();
+    } catch {}
+    await landingMarker.exited;
+  }
+
+  const legacyRoot = join(testRoot, 'legacy-landing-host');
+  const legacyId = 'native-legacy-priority-head';
+  const legacyArrivalMicros = (Date.now() - 3000) * 1000;
+  const legacyMarker = Bun.spawn(
+    [
+      'bash',
+      '-c',
+      landingMarkerScript(legacyId, 1, String(legacyArrivalMicros), 1500, CHECK_SLOT_MEMORY_BYTES).replaceAll(
+        '/srv/rezics-check',
+        legacyRoot,
+      ),
+    ],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+  );
+  let legacyTake: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    await waitForOutput(legacyMarker, 'LANDING_MARKER\n');
+    legacyTake = Bun.spawn(
+      [
+        'bash',
+        '-c',
+        nativeSlotScript(legacyRoot, {
+          slots: 2,
+          slotLimit: 2,
+          ordinaryCapacity: 1,
+          ordinaryAdmissionLimit: 1,
+          pollMs: 500,
+        }),
+      ],
+      { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+    );
+    legacyTake.stdin.write('ordinary-after-legacy-marker-age\n');
+    await legacyTake.stdin.flush();
+    await waitForSlotToken(legacyTake, 1);
+    expect(
+      spawnSync('/usr/bin/flock', ['-n', join(legacyRoot, 'slots', `landing-wait-${legacyId}.lock`), '-c', 'true']).status,
+    ).not.toBe(0);
+    await legacyTake.stdin.end();
+    expect(await legacyTake.exited).toBe(0);
+  } finally {
+    if (legacyTake) {
+      try {
+        await legacyTake.stdin.end();
+      } catch {}
+      await legacyTake.exited;
+    }
+    try {
+      await legacyMarker.stdin.end();
+    } catch {}
+    await legacyMarker.exited;
   }
 
   const memoryRoot = join(testRoot, 'memory-host');

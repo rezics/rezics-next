@@ -474,6 +474,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_memory_bytes=
     read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ] && [ "${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
     case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
     case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
@@ -537,7 +538,7 @@ cat >/dev/null
 }
 
 /** Holds a priority marker until a landing run starts, gives up or is aborted. */
-function landingMarkerScript(
+export function landingMarkerScript(
   id: string,
   slots: number,
   arrivalOrder: string,
@@ -662,6 +663,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_slots=; marker_started=; marker_sequence=; marker_estimate_ms=; marker_memory_bytes=
     read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
+    if [ -n "$marker_slots" ] && [ "${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
     case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
     case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
@@ -1877,7 +1879,7 @@ async function acquire(
   let landingMarkerHost: string | undefined;
   const landingWaiterId = priority !== undefined && !gate ? randomUUID() : undefined;
   const landingArrivalOrder = landingWaiterId
-    ? String(Math.floor((performance.timeOrigin + performance.now()) * 1_000))
+    ? String(Math.floor(performance.timeOrigin + performance.now()))
     : undefined;
   const multiWaiterId = !gate && priority === undefined && slots > 1 ? randomUUID() : undefined;
   const priorityClass = gate ? 'gate' : (priority ?? (slots > 1 ? 'multi-slot' : 'ordinary'));
