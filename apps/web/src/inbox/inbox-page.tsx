@@ -13,6 +13,13 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import {
+  emptyInboxPagination,
+  inboxTransportFailure,
+  nextInboxPage,
+  readableInboxPage,
+  receiveInboxPage,
+} from './inbox-pagination';
+import {
   markInboxSeen,
   readInboxPage,
   type InboxPage,
@@ -110,32 +117,34 @@ export function InboxRows({
   );
 }
 
-export function InboxPageView() {
+async function readPage(cursor?: string): Promise<InboxPage> {
+  return readInboxPage({ data: cursor ? { cursor } : {} }) as Promise<InboxPage>;
+}
+
+export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readPage } = {}) {
   const { state, csrfToken } = useSession();
   const queryClient = useQueryClient();
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [older, setOlder] = useState<ResolvedInboxPage | null>(null);
+  const [pagination, setPagination] = useState(emptyInboxPagination);
+  const { cursor } = pagination;
   const marked = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const marking = useRef(false);
   const [seenFailed, setSeenFailed] = useState(false);
   const [seenRetry, setSeenRetry] = useState(0);
-  const accumulatedCursor = useRef<string | undefined>(undefined);
   const pageQuery = useQuery({
     queryKey: [...queryKey, cursor ?? null],
-    queryFn: () => readInboxPage({ data: cursor ? { cursor } : {} }) as Promise<InboxPage>,
+    queryFn: () => loadPage(cursor),
     ...personalRead,
     enabled: personalRead.enabled && state === 'signed-in',
+    retry: false,
   });
+  const received = receiveInboxPage(pagination, pageQuery.isError ? inboxTransportFailure : pageQuery.data);
+  // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
+  if (received !== pagination) setPagination(received);
+  const readable = readableInboxPage(received);
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
-
-  useEffect(() => {
-    if (!cursor || !page || accumulatedCursor.current === cursor) return;
-    accumulatedCursor.current = cursor;
-    setOlder((previous) => ({ items: [...(previous?.items ?? []), ...page.items], next: page.next }));
-  }, [cursor, page]);
 
   useEffect(() => {
     if (cursor !== undefined || !csrfToken || marking.current || marked.current || seenFailed) return;
@@ -163,12 +172,34 @@ export function InboxPageView() {
   }, [cursor, page?.items, queryClient, csrfToken, seenRetry, seenFailed]);
 
   const loadMore = () => {
-    if (!page?.next) return;
-    setOlder((previous) => previous ?? page);
-    setCursor(page.next);
+    if (pageQuery.isFetching || !page?.next) return;
+    const next = nextInboxPage(received);
+    if (next === received) void pageQuery.refetch();
+    else setPagination(next);
   };
-  const items = older?.items ?? page?.items ?? [];
-  const next = page?.next ?? null;
+  const failed = pageQuery.isError || operationState !== null;
+  const failure = failed ? (
+    <section
+      role="status"
+      data-response-status={operationState?.failure.status ?? ''}
+      data-response-code={operationState?.failure.code ?? ''}
+      className="mt-6 rounded-lg border border-border p-5"
+    >
+      <p className="text-muted-foreground">
+        {operationState?.state === 'closed'
+          ? m.inbox_closed()
+          : operationState?.state === 'preparing'
+            ? m.inbox_preparing()
+            : m.inbox_unavailable()}
+      </p>
+      {cursor !== undefined && readable?.items.length ? (
+        <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
+      ) : null}
+      <Button variant="outline" className="mt-4" onClick={() => void pageQuery.refetch()} disabled={pageQuery.isFetching}>
+        {m.inbox_retry()}
+      </Button>
+    </section>
+  ) : null;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
@@ -189,35 +220,30 @@ export function InboxPageView() {
       ) : null}
       {state !== 'signed-in' || pageSignedOut ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_sign_in()}</p>
-      ) : pageQuery.isPending ? (
+      ) : pageQuery.isPending && !readable ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
-      ) : pageQuery.isError || operationState ? (
-        <section
-          role="status"
-          data-response-status={operationState?.failure.status ?? ''}
-          data-response-code={operationState?.failure.code ?? ''}
-          className="mt-6 rounded-lg border border-border p-5"
-        >
-          <p className="text-muted-foreground">
-            {operationState?.state === 'closed'
-              ? m.inbox_closed()
-              : operationState?.state === 'preparing'
-                ? m.inbox_preparing()
-                : m.inbox_unavailable()}
-          </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => void pageQuery.refetch()}
-            disabled={pageQuery.isFetching}
-          >
-            {m.inbox_retry()}
-          </Button>
-        </section>
-      ) : items.length === 0 && !next ? (
-        <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
       ) : (
-        <InboxRows page={{ items, next }} {...(next ? { onLoadMore: loadMore } : {})} loading={pageQuery.isFetching} />
+        <>
+          {readable ? (
+            readable.items.length === 0 && !readable.next ? (
+              !failed && !pageQuery.isFetching ? (
+                <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
+              ) : null
+            ) : (
+              <InboxRows
+                page={readable}
+                {...(!failed && readable.next ? { onLoadMore: loadMore } : {})}
+                loading={pageQuery.isFetching}
+              />
+            )
+          ) : null}
+          {pageQuery.isFetching && readable ? (
+            <p role="status" className="mt-4 text-muted-foreground">
+              {m.inbox_loading()}
+            </p>
+          ) : null}
+          {failure}
+        </>
       )}
     </main>
   );

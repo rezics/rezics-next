@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { useMemo } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { readInboxPage, type InboxPage } from '../inbox/inbox-read';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
@@ -9,10 +11,10 @@ const meta = {
   title: 'Patterns/Account/Inbox',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
+    docs: {
+      description: {
+        component:
+          'The real Inbox component with controlled page IO for pagination recovery. Reuses the existing mixed native-shaped fixture through readInboxPage; no second notice fixture or native proof. Review the same IDs with phone390/desktop1280, locale and theme globals.',
       },
     },
   },
@@ -26,6 +28,96 @@ function Example({ fixture }: { fixture: string }) {
     </PatternStory>
   );
 }
+
+const secondCursor = 'opaque.signed+second/cursor==';
+const thirdCursor = 'opaque.signed+third/cursor==';
+const fourthCursor = 'opaque.signed+fourth/cursor==';
+
+function PaginationExample({ denied = false }: { denied?: boolean }) {
+  const loadPage = useMemo(() => {
+    let attempts = 0;
+    return async (cursor?: string): Promise<InboxPage> => {
+      if (cursor === secondCursor) {
+        attempts++;
+        if (denied) return { signedIn: true, state: 'unavailable', failure: { status: 403, code: 'forbidden' } };
+        if (attempts === 1)
+          return {
+            signedIn: true,
+            state: 'preparing',
+            failure: { status: 503, code: 'dependency_unavailable', retryable: true },
+          };
+      }
+      if (cursor === thirdCursor) return { signedIn: true, state: 'ready', items: [], next: fourthCursor };
+      // Only the IO sequence is controlled; rows still come from the existing inbox source adapter.
+      const page = await readInboxPage({ data: {} });
+      if (!page.signedIn || page.state !== 'ready') return page;
+      if (cursor === undefined) return { ...page, items: page.items.slice(0, 1), next: secondCursor };
+      if (cursor === secondCursor) return { ...page, items: page.items.slice(0, 2), next: thirdCursor };
+      await expect(cursor).toBe(fourthCursor);
+      return { ...page, items: page.items.slice(1), next: null };
+    };
+  }, [denied]);
+  return (
+    <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
+      <InboxPageView loadPage={loadPage} />
+    </PatternStory>
+  );
+}
+
+export const PaginationRecovery: Story = {
+  render: () => <PaginationExample />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const list = within(await view.findByRole('list'));
+    const original = list.getByRole('link');
+    const href = original.getAttribute('href');
+    const loadMore = await view.findByRole('button', { name: m.inbox_load_more() });
+    await waitFor(() => expect(loadMore).toBeEnabled());
+    await userEvent.click(loadMore);
+    await view.findByText(m.inbox_page_retry_hint());
+    await expect(list.getAllByRole('listitem')).toHaveLength(1);
+    await expect(original).toHaveAttribute('href', href);
+    original.focus();
+    await expect(original).toHaveFocus();
+    await expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
+    await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(2));
+    await expect(view.queryByText(m.inbox_page_retry_hint())).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.inbox_load_more() }));
+    await waitFor(() => expect(view.getByRole('button', { name: m.inbox_load_more() })).toBeEnabled());
+    await expect(list.getAllByRole('listitem')).toHaveLength(2);
+    await expect(view.queryByText(m.inbox_empty())).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.inbox_load_more() }));
+    await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(3));
+    await expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
+    await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
+      '01a17a3b-0884-721b-91ef-d7ffd7bb5801',
+      '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
+      '01a17a3b-0884-721b-91ef-d7ffd7bb5803',
+    ]);
+  },
+};
+
+export const PaginationDenied: Story = {
+  render: () => <PaginationExample denied />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('list');
+    const loadMore = await view.findByRole('button', { name: m.inbox_load_more() });
+    await waitFor(() => expect(loadMore).toBeEnabled());
+    await userEvent.click(loadMore);
+    await view.findByText(m.inbox_unavailable());
+    const status = view.getByRole('status');
+    await expect(status).toHaveAttribute('data-response-status', '403');
+    await expect(status).toHaveAttribute('data-response-code', 'forbidden');
+    await expect(view.queryByRole('list')).toBeNull();
+    await expect(view.queryByRole('link')).toBeNull();
+    await expect(view.queryByText(m.inbox_empty())).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.inbox_retry() }));
+    await expect(status).toHaveAttribute('data-response-status', '403');
+    await expect(view.queryByRole('list')).toBeNull();
+  },
+};
 export const NativeRows: Story = {
   render: () => <Example fixture="mixed" />,
   play: async ({ canvasElement }) => {
