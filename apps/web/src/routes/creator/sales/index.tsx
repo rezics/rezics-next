@@ -18,6 +18,7 @@ export const Route = createFileRoute('/creator/sales/')({
     pageHead({ title: m.creator_sales_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   pendingComponent: () => <CreatorSalesPage page={{ kind: 'loading' }} locale={getLocale()} />,
   component: function CreatorSalesRoute() {
-    return <CreatorSalesPage page={Route.useLoaderData()} locale={getLocale()} {...Route.useSearch()} />;
+    const search = creatorSalesSearch(Route.useSearch());
+    return <CreatorSalesPage page={Route.useLoaderData()} locale={getLocale()} {...search} />;
   },
 });
