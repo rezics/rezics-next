@@ -44,7 +44,7 @@ test('private platform erasure progress shows exact native pending retention and
   expect(first).toEqual(ready());
   expect(html(first)).toContain(m.erasure_pending());
   expect(html(first)).toContain('shared-history');
-  expect(html(first)).toContain(`datetime="${at}"`);
+  expect(html(first)).toContain(`dateTime="${at}"`);
   expect(html(first)).toContain(m.erasure_not_reported());
   expect(html(first)).toContain(m.erasure_late_yes());
   expect(html(first)).toContain(m.erasure_frontier_yes());
@@ -64,7 +64,7 @@ test('private platform erasure progress shows exact native pending retention and
   const retained = await read();
   expect(retained).toEqual(ready(retention));
   expect(html(retained)).toContain(m.erasure_retention_help());
-  expect(html(retained)).toContain(`datetime="${completedAt}"`);
+  expect(html(retained)).toContain(`dateTime="${completedAt}"`);
   expect(html(retained)).not.toContain(`<h2>${m.erasure_complete()}</h2>`);
   body = { ...retention, state: 'complete', retentionOutstanding: false };
   const complete = await read();
