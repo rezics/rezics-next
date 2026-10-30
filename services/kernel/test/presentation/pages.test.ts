@@ -247,7 +247,7 @@ test('the kernel contract documents the page read', () => {
 test('native subject redirect, credentials and aggregate observations retain standalone authority', async () => {
   const personas = { reader: '019a1b2c-3d4e-7f00-8a00-ed170e000002' };
   const access = await createRealAccess(admin, personas, ['subject:create', 'subject:merge', 'subject:read']);
-  for (const action of ['subject:create', 'subject:merge'])
+  for (const action of ['subject:create', 'subject:merge', 'gate:subject_identity'])
     await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'reader', action);
   const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
   const native = createKernel({

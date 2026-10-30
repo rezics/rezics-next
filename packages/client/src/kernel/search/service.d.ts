@@ -22,6 +22,8 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
+/** The standalone result-slot bound, also used before aggregate dispatch. */
+export declare function validateSearchLimit(value: unknown): number;
 export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release, }: {
     pool: Pool;
     client: OpenSearch;
