@@ -255,7 +255,10 @@ test('real worker-check starts the generated acceptance command once and its ret
         maxBuffer: 2 * 1024 * 1024,
       },
     );
-    expect(start.status).toBe(0);
+    if (start.status !== 0)
+      throw new Error(
+        `worker-check start failed with status ${String(start.status)}: ${start.stderr?.trim() || start.stdout?.trim() || start.error?.message || 'no diagnostic output'}`,
+      );
     const id = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
     const returnedId = requireSmokeWaitingCheckId(id === undefined ? [] : [id]);
     expect(returnedId).toBe(id!);
