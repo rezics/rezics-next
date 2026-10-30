@@ -4,7 +4,7 @@ import type { BuyerOrder, BuyerOrderPage } from './orders';
 
 function price(order: BuyerOrder, locale: string): string {
   const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency: order.currency.toUpperCase() });
-  const digits = formatter.resolvedOptions().maximumFractionDigits;
+  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
   return formatter.format(order.unitAmountMinor / 10 ** digits);
 }
 

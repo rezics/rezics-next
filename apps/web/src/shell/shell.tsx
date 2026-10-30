@@ -104,7 +104,7 @@ function useOfferedDestinations(session: ShellSession) {
   const libraryAdmitted = useOperation('library_entry.list');
   const ordersAdmitted = useOperation('order.list');
   return destinations.filter((item) => {
-    if (!item.signedIn) return true;
+    if (!('signedIn' in item)) return true;
     return session === 'signed-in' && (item.signedIn === 'library' ? libraryAdmitted : ordersAdmitted);
   });
 }

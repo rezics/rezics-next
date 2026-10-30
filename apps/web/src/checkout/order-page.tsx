@@ -1,4 +1,4 @@
-import { useOperation } from '../kernel/exposure';
+import { Exposure, useOperation } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useState } from 'react';
