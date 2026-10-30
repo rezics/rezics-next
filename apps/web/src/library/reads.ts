@@ -61,7 +61,7 @@ type RawSubject = {
 };
 type RawCollection = {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
