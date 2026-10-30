@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
-import { PageStory, pagePaths, pageReady, searchEmptyReady, searchRatingReady, searchReady, searchTypedReady } from './page';
+import {
+  PageStory,
+  pagePaths,
+  pageReady,
+  searchEmptyReady,
+  searchRatingReady,
+  searchReady,
+  searchTypedReady,
+} from './page';
 
 const meta = { title: 'Pages/Discovery/Search', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;

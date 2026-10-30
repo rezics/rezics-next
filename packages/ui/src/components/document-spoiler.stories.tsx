@@ -2,7 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 
-const meta = { title: 'Components/Document Spoiler', component: DocumentSpoiler } satisfies Meta<typeof DocumentSpoiler>;
+const meta = { title: 'Components/Document Spoiler', component: DocumentSpoiler } satisfies Meta<
+  typeof DocumentSpoiler
+>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

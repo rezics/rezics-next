@@ -26,7 +26,15 @@ type Story = StoryObj<typeof meta>;
 
 const profileSubjectId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
 
-function CopiesPattern({ mode, subjectId, retired = false }: { mode: CopiesStoryMode; subjectId?: string; retired?: boolean }) {
+function CopiesPattern({
+  mode,
+  subjectId,
+  retired = false,
+}: {
+  mode: CopiesStoryMode;
+  subjectId?: string;
+  retired?: boolean;
+}) {
   setCopiesStoryMode(mode);
   if (subjectId) setCopyKindsStory(retired);
   const { data } = useSuspenseQuery({

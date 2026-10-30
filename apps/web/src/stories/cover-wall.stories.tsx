@@ -147,7 +147,11 @@ function Wall({ density }: { density?: CoverDensity }) {
 
 export const Default: Story = {
   name: 'Mixed media wall',
-  render: () => <PatternStory><Wall /></PatternStory>,
+  render: () => (
+    <PatternStory>
+      <Wall />
+    </PatternStory>
+  ),
 };
 export const Small: Story = {
   name: 'Small cards',

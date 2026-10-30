@@ -65,7 +65,15 @@ describe('storybook review build', () => {
       (entry) => entry.type === 'story' && entry.title.startsWith('Pages/'),
     );
     expect(pages.length).toBeGreaterThanOrEqual(countStories(resolve(app, 'src/stories')));
-    expect(Object.values(index.entries).filter((entry) => entry.type === 'story').every((entry) => ['Overview', 'Pages/', 'Patterns/', 'Components/', 'shadcn/'].some((tier) => entry.title === tier || entry.title.startsWith(tier)))).toBe(true);
+    expect(
+      Object.values(index.entries)
+        .filter((entry) => entry.type === 'story')
+        .every((entry) =>
+          ['Overview', 'Pages/', 'Patterns/', 'Components/', 'shadcn/'].some(
+            (tier) => entry.title === tier || entry.title.startsWith(tier),
+          ),
+        ),
+    ).toBe(true);
     expect(Object.values(uiIndex.entries).filter((entry) => entry.type === 'story').length).toBeGreaterThanOrEqual(
       countStories(resolve(root, 'packages/ui/src')),
     );

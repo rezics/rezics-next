@@ -40,11 +40,16 @@ function story(name: string, layout: ShelfLayout, size: ShelfSize = 'm', state?:
       if (layout === 'table' && window.matchMedia('(max-width: 639px)').matches) return;
       const layoutNav = within(await view.findByRole('navigation', { name: m.library_layout() }));
       const layoutLabel =
-        layout === 'grid' ? m.library_layout_grid() : layout === 'list' ? m.library_layout_list() : m.library_layout_table();
+        layout === 'grid'
+          ? m.library_layout_grid()
+          : layout === 'list'
+            ? m.library_layout_list()
+            : m.library_layout_table();
       await expect(await layoutNav.getByRole('link', { name: layoutLabel }).getAttribute('aria-current')).toBe('true');
       if (layout === 'grid') {
         const sizeNav = within(await view.findByRole('navigation', { name: m.library_size() }));
-        const sizeLabel = size === 's' ? m.library_size_small() : size === 'l' ? m.library_size_large() : m.library_size_medium();
+        const sizeLabel =
+          size === 's' ? m.library_size_small() : size === 'l' ? m.library_size_large() : m.library_size_medium();
         await expect(await sizeNav.getByRole('link', { name: sizeLabel }).getAttribute('aria-current')).toBe('true');
       }
     },

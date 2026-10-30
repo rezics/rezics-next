@@ -19,9 +19,7 @@ const storyValues: Record<string, { value: string; labels: Record<string, string
       labels: { en: 'Antoine de Saint-Exupéry', 'zh-Hans': '安托万·德·圣埃克苏佩里' },
     },
   ],
-  'schema:genre': [
-    { value: '01a17dfd-5da5-76da-bc50-a1fb5dbc87d2', labels: { en: 'Fable', 'zh-Hans': '寓言' } },
-  ],
+  'schema:genre': [{ value: '01a17dfd-5da5-76da-bc50-a1fb5dbc87d2', labels: { en: 'Fable', 'zh-Hans': '寓言' } }],
   'schema:datePublished': [],
 };
 

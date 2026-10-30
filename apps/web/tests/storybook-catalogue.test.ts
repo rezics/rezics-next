@@ -66,9 +66,9 @@ describe('Storybook catalogue', () => {
     ];
     expect(uiTitles).toEqual(['Components', 'shadcn']);
     expect(Object.values(web.entries).some((entry) => entry.title === 'Overview')).toBe(true);
-    expect(Object.values(web.entries).some((entry) => entry.title === 'Review' || entry.title.startsWith('Review/'))).toBe(
-      false,
-    );
+    expect(
+      Object.values(web.entries).some((entry) => entry.title === 'Review' || entry.title.startsWith('Review/')),
+    ).toBe(false);
     expect(
       Object.values(web.entries).filter((entry) => entry.type === 'docs' && entry.title === 'Overview'),
     ).toHaveLength(1);
@@ -163,9 +163,9 @@ describe('Storybook catalogue', () => {
     );
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
-    expect(stories.some((entry) => entry.title === 'Patterns/Library/Cover wall' && entry.name === 'Mixed media wall')).toBe(
-      true,
-    );
+    expect(
+      stories.some((entry) => entry.title === 'Patterns/Library/Cover wall' && entry.name === 'Mixed media wall'),
+    ).toBe(true);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${server.url}index.html?path=/story/${pattern!.id}`);
     const frame = page.frameLocator('#storybook-preview-iframe');
