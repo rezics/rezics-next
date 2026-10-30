@@ -182,6 +182,7 @@ const initial: Snapshot = { data: emptyRecent(), status: 'loading', next: null, 
 // One browser coordinator serves the shared input and History page. No personal state is populated during SSR.
 let snapshot = initial,
   session = 'unknown',
+  sessionOwner: string | null = null,
   generation = 0,
   busy = -1,
   inFlight: string | undefined;
@@ -245,7 +246,7 @@ async function synchronize() {
   try {
     const result = await readRecent({ data: undefined });
     if (!live()) return;
-    if (!result.accountId) return fail();
+    if (!result.accountId || (sessionOwner && result.accountId !== sessionOwner)) return fail();
     if (snapshot.accountId !== result.accountId) {
       const provisional = snapshot.accountId ? [] : snapshot.data.pending;
       update({ accountId: result.accountId });
@@ -314,16 +315,19 @@ async function synchronize() {
     }
   }
 }
-function setSession(value: string) {
-  if (session === value) return;
+function setSession(value: string, accountId: string | null) {
+  if (session === value && sessionOwner === accountId) return;
+  sessionOwner = accountId;
   generation++;
   session = value;
   inFlight = undefined;
   update({ ...initial, status: value === 'signed-out' ? 'local' : 'loading' });
   if (value === 'signed-out') {
     try {
-      if (localStorage.getItem(marker))
-        for (const key of Object.keys(localStorage)) if (key.startsWith(RECENT_STORAGE)) localStorage.removeItem(key);
+      const accountCache = localStorage.getItem(marker);
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith('rezics.search-history.v1:') || (accountCache && key.startsWith(RECENT_STORAGE)))
+          localStorage.removeItem(key);
       save(restoreRecent(localStorage.getItem(RECENT_STORAGE + 'anonymous')));
     } catch {
       /* Memory remains usable. */
@@ -331,14 +335,14 @@ function setSession(value: string) {
   } else void synchronize();
 }
 export function useRecentSearches() {
-  const { state } = useSession(),
+  const { state, subject } = useSession(),
     client = useContext(QueryClientContext);
   const current = useSyncExternalStore(
     subscribe,
     () => snapshot,
     () => initial,
   );
-  useEffect(() => setSession(state), [state]);
+  useEffect(() => setSession(state, subject ?? null), [state, subject]);
   useEffect(() => {
     const refresh = () => void synchronize();
     const events = ['focus', 'online', 'storage'];
@@ -379,7 +383,7 @@ export function useRecentSearches() {
     lastVisit = key;
     if (scope) changeRecent({ kind: 'use', entry: JSON.parse(scope) as RecentEntry });
   });
-  const visible = state === session ? current : initial;
+  const visible = state === session && (subject ?? null) === sessionOwner ? current : initial;
   return {
     entries: visible.data.entries,
     status: visible.status,

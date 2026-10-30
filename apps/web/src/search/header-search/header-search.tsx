@@ -238,7 +238,13 @@ export function HeaderSearchView({
         {expanded && (
           <div className="flex min-h-0 flex-1 flex-col">
             {!query.trim() && (
-              <RecentPanel recent={recent} history={history} discovery={discovery} onSelect={onRecent} onQuery={onQuery} />
+              <RecentPanel
+                recent={recent}
+                history={history}
+                discovery={discovery}
+                onSelect={onRecent}
+                onQuery={onQuery}
+              />
             )}
             {status && (
               <p id={`${id}-status`} role="status" className="px-4 py-5 text-sm text-muted-foreground">
@@ -450,7 +456,7 @@ export function HeaderSearch({
     const action = headerSearchAction(locale, scope);
     if (!action || (!query.trim() && !scope)) return;
     history?.remember(query, scope);
-    if (query.trim()) recent.remember({ kind: 'query', text: query.trim(), languages: [locale] });
+    if (!history && query.trim()) recent.remember({ kind: 'query', text: query.trim(), languages: [locale] });
     const url = new URL(action, window.location.origin);
     url.searchParams.delete('q');
     url.searchParams.delete('cursor');
@@ -544,7 +550,7 @@ export function HeaderSearch({
             event.preventDefault();
             const hit = subjects[state.activeIndex]!;
             history?.remember(state.query, state.scope);
-            recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
+            if (!history) recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -557,7 +563,7 @@ export function HeaderSearch({
             return;
           }
           history?.remember(state.query, state.scope);
-          recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
+          if (!history) recent.remember({ kind: 'query', text: state.query.trim(), languages: [locale] });
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);

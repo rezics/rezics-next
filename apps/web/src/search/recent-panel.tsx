@@ -51,63 +51,66 @@ export function RecentPanel({
   return (
     <div data-search-discovery className="px-2 py-4">
       {recent ?? (
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2 px-2">
-          <h2 className="font-semibold">{all ? m.header_search_history() : m.header_search_recent()}</h2>
-          <button type="button" className={control} aria-expanded={all} onClick={() => setAll(!all)}>
-            {all ? m.header_search_recent() : m.header_search_history()}
-            <ChevronRight aria-hidden="true" className="size-4" />
-          </button>
-        </div>
-        <p className="px-2 text-xs text-muted-foreground">
-          {history?.persistence === 'unavailable'
-            ? m.shell_account_unavailable()
-            : history?.persistence === 'memory'
-              ? m.header_search_history_memory()
-              : history?.sync === 'pending'
-                ? m.header_search_history_pending()
-                : m.header_search_history_local()}
-        </p>
-        {entries.length ? (
-          <ul>
-            {entries.slice(0, all ? 32 : 5).map((entry) => (
-              <li key={entry.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className={`${control} min-w-0 flex-1 text-start`}
-                  onClick={() => onSelect?.(entry)}
-                >
-                  {entry.scope?.image ? (
-                    <img alt="" src={entry.scope.image} className="size-9 rounded-full object-cover" />
-                  ) : entry.scope ? (
-                    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">
-                      <UserRound className="size-4" />
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-2 px-2">
+            <h2 className="font-semibold">{all ? m.header_search_history() : m.header_search_recent()}</h2>
+            <button type="button" className={control} aria-expanded={all} onClick={() => setAll(!all)}>
+              {all ? m.header_search_recent() : m.header_search_history()}
+              <ChevronRight aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+          <p className="px-2 text-xs text-muted-foreground">
+            {history?.persistence === 'unavailable'
+              ? m.shell_account_unavailable()
+              : history?.persistence === 'memory'
+                ? m.header_search_history_memory()
+                : history?.sync === 'pending'
+                  ? m.header_search_history_pending()
+                  : m.header_search_history_local()}
+          </p>
+          {entries.length ? (
+            <ul>
+              {entries.slice(0, all ? 32 : 5).map((entry) => (
+                <li key={entry.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className={`${control} min-w-0 flex-1 text-start`}
+                    onClick={() => onSelect?.(entry)}
+                  >
+                    {entry.scope?.image ? (
+                      <img alt="" src={entry.scope.image} className="size-9 rounded-full object-cover" />
+                    ) : entry.scope ? (
+                      <span
+                        aria-hidden="true"
+                        className="grid size-9 shrink-0 place-items-center rounded-full bg-muted"
+                      >
+                        <UserRound className="size-4" />
+                      </span>
+                    ) : (
+                      <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate">{entry.query || entry.scope?.name}</span>
+                      {entry.query && entry.scope ? (
+                        <span className="block truncate text-xs text-muted-foreground">{entry.scope.name}</span>
+                      ) : null}
                     </span>
-                  ) : (
-                    <Clock aria-hidden="true" className="mx-2 size-5 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="block truncate">{entry.query || entry.scope?.name}</span>
-                    {entry.query && entry.scope ? (
-                      <span className="block truncate text-xs text-muted-foreground">{entry.scope.name}</span>
-                    ) : null}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`${control} shrink-0`}
-                  aria-label={m.header_search_remove_recent({ name: entry.query || entry.scope?.name || '' })}
-                  onClick={() => history?.remove(entry.id)}
-                >
-                  <X aria-hidden="true" className="size-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty()}</p>
-        )}
-      </section>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${control} shrink-0`}
+                    aria-label={m.header_search_remove_recent({ name: entry.query || entry.scope?.name || '' })}
+                    onClick={() => history?.remove(entry.id)}
+                  >
+                    <X aria-hidden="true" className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty()}</p>
+          )}
+        </section>
       )}
       {discovery?.trendingQueries?.length ? (
         <section className="space-y-2 pt-5">
