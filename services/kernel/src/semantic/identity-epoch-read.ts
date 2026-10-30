@@ -6,6 +6,7 @@ import owners from './identity-epoch-read-owners.sql';
 import sources from './identity-epoch-read-sources.sql';
 import pending from './identity-epoch-read-pending.sql';
 import current from './identity-epoch-read-current.sql';
+import { identitySourceSupportJob } from './identity-source-support-scope.ts';
 
 /** Bounded exact mapping proof, with source and control homes released independently. */
 export async function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
@@ -98,8 +99,29 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
     const claim = pendingRows.find(
       (group) => group.partition_no === source.control_partition && group.terminal === source.control_group,
     );
-    if (claim?.pending_job)
-      return { state: 'pending', original, job: { jobId: claim.pending_job, epoch: BigInt(claim.pending_epoch) } };
+    if (claim?.pending_job) {
+      const job = identitySourceSupportJob();
+      // The actual mapping must already be installed for THIS job, with its ordinary
+      // source/owner/dirty/redirect checks above intact. Old mappings cannot borrow
+      // a pending destination's identity, and another job never gains availability.
+      if (
+        job &&
+        claim.pending_job === job.jobId &&
+        BigInt(claim.pending_epoch) === job.epoch &&
+        BigInt(source.epoch) === job.epoch
+      )
+        return {
+          state: 'mapped',
+          original,
+          terminal: source.terminal,
+          epoch: job.epoch,
+        };
+      return {
+        state: 'pending',
+        original,
+        job: { jobId: claim.pending_job, epoch: BigInt(claim.pending_epoch) },
+      };
+    }
     return { state: 'mapped', original, terminal: source.terminal, epoch: BigInt(basis.published_epoch) };
   });
 }

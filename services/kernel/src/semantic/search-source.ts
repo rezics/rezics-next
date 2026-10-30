@@ -13,6 +13,25 @@ import readReleases from './search-source-releases.sql';
 import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
+import { accessCheck } from '../request/access.ts';
+import { mintReadTime } from '../command/command.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { readPartition } from '../partition/partition.ts';
+import { subjectReadEligibility } from './eligibility.ts';
+import { withPublicStatementReader } from './statement-disclosure.ts';
+import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
+import { identityEpochStore } from './identity-epoch-store.ts';
+import type { IdentityJobRef } from './identity-epoch-contract.ts';
+import type {
+  PublicFilterCost,
+  PublicFilterProjectionPage,
+  PublicFilterProjectionRequest,
+  PublicFilterSource,
+  PublicFilterSourceFactory,
+} from './public-filter-source-contract.ts';
+import readVisibility from './read-visibility.sql';
+import { withReadTransaction } from './read.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 
 type SubjectRow = {
   route: number;
@@ -360,4 +379,108 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
       });
     },
   };
+}
+
+/** Internal same-job operation. The ordinary Source retains ALL native projection guards.
+ * Only exact installed identity mappings become readable inside the scoped invocation.
+ * This operation does not use subjectSource's history fold or its sampled scalar arrays.
+ */
+export async function readIdentitySourceProjection(
+  config: Parameters<PublicFilterSourceFactory>[0],
+  source: PublicFilterSource,
+  request: Omit<PublicFilterProjectionRequest, 'subject'> & {
+    job: IdentityJobRef;
+    original: string;
+    terminal: string;
+  },
+): Promise<
+  | {
+      status: 'projected';
+      projection: PublicFilterProjectionPage | null;
+      cost: PublicFilterCost;
+    }
+  | { status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }
+> {
+  let cost: PublicFilterCost = {
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  };
+  const charge = (field: 'dependencyPoints' | 'accessPoints', points = 1) => {
+    cost = { ...cost, [field]: cost[field] + points };
+  };
+  try {
+    const route = routeOf(request.original);
+    if (route === null) throw new TypeError('Projection original must be a native routed ID');
+    requireAccessDeadline(request.context.deadline);
+    // Prepare current anonymous evidence before acquiring the original home. No caller
+    // actor or editor AsyncLocal audience can replace the public resource/disclosure view.
+    const resource = { route, id: request.original };
+    charge('accessPoints');
+    const authorize = await accessCheck(
+      config.access,
+      { kind: 'anonymous' },
+      'subject:read',
+      { ...resource, eligibility: subjectReadEligibility(resource) },
+      { pool: config.pool, deadline: request.context.deadline },
+    );
+    const visible = await withRequestDeadline(request.context.deadline, () =>
+      withReadTransaction(config.pool, async (tx) => {
+        charge('dependencyPoints');
+        const owner = await readPartition(tx, partitionOf(route));
+        if (!owner || owner.writeState !== 'active') return 'unavailable' as const;
+        charge('dependencyPoints');
+        const state = await readVisibility.run(tx, {
+          route,
+          subject_id: request.original,
+        });
+        // Missing original is unknown native support, not a withheld/absent projection.
+        if (!state) return 'unavailable' as const;
+        if (state.visibility !== 'visible') return 'withheld' as const;
+        requireAccessDeadline(request.context.deadline);
+        const at = await mintReadTime(tx, config.clock);
+        return (await authorize(tx, at)) ? ('visible' as const) : ('withheld' as const);
+      }),
+    );
+    if (visible === 'unavailable') return { status: 'unavailable', cost };
+    if (visible === 'withheld') return { status: 'projected', projection: null, cost };
+    return await withPublicStatementReader(() =>
+      withIdentitySourceSupportJob(request.job, async () => {
+        charge('dependencyPoints');
+        const mapping = await identityEpochStore.readMapping(config.pool, request.original);
+        if (mapping.state === 'pending') return { status: 'unready', cost };
+        if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
+        if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        const page = await source.readPublicFilterProjectionPage({
+          subject: request.original,
+          meaning: request.meaning,
+          frontier: request.frontier,
+          inputLimit: request.inputLimit,
+          context: request.context,
+        });
+        cost = Object.fromEntries(
+          Object.entries(cost).map(([key, value]) => [key, value + page.cost[key as keyof PublicFilterCost]]),
+        ) as PublicFilterCost;
+        if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
+        if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        charge('dependencyPoints');
+        const current = await identityEpochStore.readMapping(config.pool, request.original);
+        if (current.state !== 'mapped' || current.epoch !== request.job.epoch || current.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        requireAccessDeadline(request.context.deadline);
+        return { status: 'projected', projection: page, cost };
+      }),
+    );
+  } catch (error) {
+    if (classifyUnavailability(error)) return { status: 'unavailable', cost };
+    throw error;
+  }
 }

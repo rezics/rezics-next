@@ -50,11 +50,43 @@ are committed dependencies, not successful adapters. The production
 `search/public-filter-consumer.ts:createPublicFilterConsumerOperations` remains MISSING. Source never exports
 that test helper from production or clones its engine, registration, Source or ACK implementation.
 
-The actual native registered public Source identity/read-definition resolution is MISSING. A reader-only Source
-object or matching function/config strings cannot establish that binding. Source must independently resolve and
-validate native persisted identity, immutable definition, covered/start cuts and execution; Search `readStatus`
-is diagnostic, never Source admission evidence. No new resolver, registration method or factory covers this gap.
-The existing three Source operation names and `publicFilterSource` factory remain the entire selected boundary.
+The selected native public Source binding declarations now live in
+`public-filter-source-binding.ts`: `NativePublicSource`, `PublicFilterSourceDefinition`,
+`PublicFilterSourceBinding` and `createPublicFilterSourceBinding(pool, routing, access)`.
+`resolve({source, meaning, capture}, context)` must resolve the actual Source instance and full immutable
+compiler input to a native definition. `join({queried, execution?}, context)` resolves native queried observation,
+covered cut and retained execution. The implementation on this base is an explicitly provisional unavailable
+adapter; matching strings or object identity never become registration or Source coverage. The adjacent
+`subject-source-key-pages.ts` carries the agreed rebuild-only key-page declarations and unavailable adapter.
+Both adapters are replaced by the native producer on integration.
+
+### Admitted-job support bridge
+
+`identity-source-support.ts:createIdentitySourceSupportReader` consumes those exact definitions and existing
+projection types. Its request and result are closed in `identity-source-support-contract.ts`. It independently
+resolves the native Source/meaning/capture binding before traversal and again before returning a page.
+It reads immutable admitted generations rather than changed mappings or returned hits, and resolves current
+terminals only after complete genuine native mapping-step custody and an exact current control-job comparison. Each bounded step releases its home before
+reading another home or the Source. Outer completion requires end-of-keyset reads for every admitted input and
+completion of every current projection sub-frontier. A progress page cannot certify exhaustion.
+
+The bridge owns `search-source.ts:readIdentitySourceProjection`, an internal operation using the ordinary
+anonymous original eligibility, fresh native T and sticky public statement audience before the actual Source
+projection. Its asynchronous identity scope admits only an already installed mapping for the exact pending
+job and epoch. Existing source, owner, dirty, current redirect and control checks remain. The scope cannot
+make a previous mapping, another job, cancellation or moved ownership available and never changes permission.
+Ordinary reads outside that scope remain pending. Missing original or incomplete proof is unavailable/unready;
+only an actual current original visibility/Access refusal yields a null projection. Full candidate, related-item,
+account, source-tuple and field disclosure remain with the native projection producer.
+
+The existing native token sealing primitive binds a bounded support cursor to job/epoch, owner, immutable input
+refs, native mapping custody and exact Source definition. It retains only scalar key locators and one native
+projection continuation within eight scalar keys and 2048 payload bytes, never source bodies, arrays of originals
+or cached allow decisions. Input limits include
+examined originals and native projection inputs; one-key steps can retain an original and spend their next step
+on its projection. Missing producer modules remain unavailable. This bridge exports no engine writer registration,
+drain, ACK, participant completion, publication or account-erasure operation. The few native outcomes in
+`test/semantic/identity-source-support-outcomes.test.ts` remain later integration proof, without a stub pass.
 
 Actual consumer call sites inspected are `search/service.ts:createSearchService` (its local `admitQuery` calls
 `admitFilter`/`compileFilter` and current hit disclosure) and `search/indexer.ts:createSubjectIndexer`. They do not

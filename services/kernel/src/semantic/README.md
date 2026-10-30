@@ -84,6 +84,33 @@ Valid empty/default requests must return 200 with the closed envelope; malformed
 fixture needs the native store and candidate source, while default worker and foreign catch-up dependencies belong
 to their separate acceptance. The original full API and growth tests remain mandatory for the complete feature.
 
+## Admitted identity Source support
+
+`identity-source-support.ts:createIdentitySourceSupportReader(config)` exports the closed
+[request, record and page declarations](identity-source-support-contract.ts). Configuration is exactly
+`Parameters<PublicFilterSourceFactory>[0]`. `readPage` accepts the actual `IdentityJobRef`, FAA
+`PublicFilterSourceDefinition`, opaque frontier/null, examined `inputLimit` and existing read context.
+A record identifies the admitted original, its actual installed terminal and native projection page, or an
+actually withheld null projection. Progress retains the native projection sub-frontier. Complete closes all
+immutable input generations and their projection continuations; it grants no query permission or publication.
+
+The reader walks the same `identity_epoch_input` generations and `identity_epoch_original` keyset as
+`identityEpochStore.pageChanges`. It examines one original per step so even `inputLimit: 1` remains an upper
+bound. Exhaustion requires an actual end-of-keyset read for every retained input, including destination/self and
+unchanged originals. A current mapping supplies the terminal only after actual complete native mapping custody;
+it never supplies population coverage. The scoped projection operation in `search-source.ts` uses current
+anonymous original eligibility and the native Source's own Type, release, candidate, tuple, field, account and
+related-item guards. Exact-job installed mappings become available only inside that asynchronous operation;
+ordinary pending reads retain their existing behavior. Hidden originals cannot borrow visible terminal facts.
+
+FAA's agreed declarations are in `public-filter-source-binding.ts` and `subject-source-key-pages.ts`.
+Their adapters are visibly provisional and always unavailable until replaced by the real native producers.
+`public-filter-source.ts` and the actual mapping producer are absent on this base. The bridge never substitutes
+`subjectSource`'s history fold, sampled scalar arrays or caller-created registrations for those producers.
+Native binding, projection and admitted-job outcome acceptance remain deferred; the new native outcome test
+requires those actual producers and contains no success fallback. No support page certifies Search writer drain,
+participant receiving/control completion, identity publication or account erasure.
+
 ## Item identity metadata
 
 `readItemIdentityVersion` is an internal validation helper for callers that already read the full type through
@@ -769,7 +796,7 @@ and refuses incomplete or changed observations with native unavailability. It ne
 
 ### Anchored subject read
 
-- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived under Subject summaries.
+- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived in the [Cost table](#cost).
 - Bound: Rows O(F + 12 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. The display fills add O((i + 1) × (labels + 65)) rows for i ≤ 256 related ids and O(subject, edition and media partitions) statements. Access still runs one permission check per related id.
 - Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`; `test/semantic/growth-reads.test.ts`: `Anchored subject read stays within its bound as the subject's history grows`.
 
@@ -838,7 +865,7 @@ The continuation names the last processed candidate. The key-only extra row rema
 
 ### Item projection and related labels
 
-- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived under Subject summaries. Grow the related partitions and the total; the subject and its six related ids stay fixed.
+- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived in the [Cost table](#cost). Grow the related partitions and the total; the subject and its six related ids stay fixed.
 - Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Independent of P. The additional summary fill costs O(i × (labels + 65)) rows and O(subject, edition and media partitions) statements. Access permission checks remain one per related id and are bounded by that same fixed id list.
 - Growth check: `test/semantic/growth-reads.test.ts`: `semantic covering reads use unforced indexed access as populations grow`.
 
@@ -1051,7 +1078,7 @@ The global context is inserted once by migration and has no runtime semantic rea
 ### Graph read
 
 - Touches: for each depth, one index range of at most `limit + 1` rows per `(node, property, direction)`, batched into one statement per partition, plus one count probe per expansion. Every forward and inverse range, including recursive walk branches, and both count probes are pinned to Global. Community projection rows cannot change graph membership, truncation counts or continuation pages. A batched visibility/type read per discovered partition retains the existing traversal frontier. After releasing the traversal connection, the bounded node set uses `readSubjectSummaries`, allowing Access to prepare evidence through the pool. It receives the active release, the whole parsed language list and current related-subject authorization, including for representative editions. Each node carries `summary`; `type` and `label` copy `summary.type` and `summary.label.value` (an absent label copies as the empty string).
-- Bound: at most eight explicit properties, two directions, depth two, 25 rows per expansion and 500 emitted edges. The anchor plus at most 500 discovered nodes means at most 501 summary inputs, split into **at most two chunks of 256 ids**. The shared primitive still rejects more than 256 input ids. Graph traversal rows remain O(min(500, (p × l)²)); summary rows add O(i × (labels + 65)) for i ≤ 501, with the bounded image and representative probes described under Subject summaries. Summary statements are O(fixed chunks × (subject partitions + edition partitions + media partitions)); access checks retain their separately documented evidence costs. Traversal and summary reads use the unforced planner. Cost is independent of graph size beyond these bounds.
+- Bound: at most eight explicit properties, two directions, depth two, 25 rows per expansion and 500 emitted edges. The anchor plus at most 500 discovered nodes means at most 501 summary inputs, split into **at most two chunks of 256 ids**. The shared primitive still rejects more than 256 input ids. Graph traversal rows remain O(min(500, (p × l)²)); summary rows add O(i × (labels + 65)) for i ≤ 501, with the bounded image and representative probes in the [Cost table](#cost). Summary statements are O(fixed chunks × (subject partitions + edition partitions + media partitions)); access checks retain their separately documented evidence costs. Traversal and summary reads use the unforced planner. Cost is independent of graph size beyond these bounds.
 - Disclosure: missing, hidden, taken-down and unauthorized nodes have no summary and are omitted together with incident edges and their truncation entries. Nodes disconnected from the anchor after disclosure are omitted too; if the anchor loses disclosure during filling, all three arrays are empty. Filtering retains the original node, edge and truncation ordering and never refills a page or increases a budget. Counts and continuation cursors of retained expansions keep their existing semantics. Covers use current content availability and the shared private-statement and language-selection rules; unavailable or unreadable selected editions and media yield a null cover.
 - Growth check: `test/semantic/graph-read.test.ts`: `a graph read costs the same whatever the size of the graph beyond its bounds`; indexed runtime plan check: `test/semantic/graph-read.test.ts`: `graph and summary covering reads use unforced indexed access as their populations grow`; isolation regression: `test/semantic/graph-context.test.ts`: `the Global graph excludes community-only forward and inverse relations and counts`.
 - API and measured chunk check: `test/semantic/graph-summaries.test.ts`: `graph nodes carry the shared current display summary`, `undisclosed graph nodes disclose no summary or attached edges`, and `bounded graph summary filling preserves the shared 256 ID limit`.
@@ -1146,7 +1173,9 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
   The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
 
-### Current list presentation facts
+### List presentation cost
+
+See [the runtime contract](#current-list-presentation-facts).
 
 - Touches: at most 100 raw originals, native current identity/control points, original and terminal
   Access/source headers, active Type metadata, at most four configured properties and three output

@@ -18,3 +18,12 @@ export type {
 } from './facet-population-contract.ts';
 
 export { createFacetPopulationSource } from './facet-population.ts';
+
+export { createIdentitySourceSupportReader } from './identity-source-support.ts';
+export type {
+  IdentitySourceSupportRequest,
+  IdentitySourceSupportRecord,
+  IdentitySourceSupportPage,
+  IdentitySourceSupportReader,
+  IdentitySourceSupportReaderFactory,
+} from './identity-source-support-contract.ts';
