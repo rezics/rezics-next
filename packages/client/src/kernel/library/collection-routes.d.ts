@@ -176,6 +176,15 @@ export declare const savedDynamicCollectionSchema: import("typebox").TObject<{
     revision: import("typebox").TInteger;
     membershipKind: import("typebox").TLiteral<"dynamic">;
 }>;
+export declare const collectionPublicationSchema: import("typebox").TObject<{
+    generation: import("typebox").TString;
+    state: import("typebox").TLiteral<"complete">;
+    itemCount: import("typebox").TInteger;
+}>;
+export declare const collectionPublicationRequestSchema: import("typebox").TObject<{
+    revision: import("typebox").TInteger;
+    subjectIds: import("typebox").TArray<import("typebox").TString>;
+}>;
 export declare const collectionResourceSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     membershipKind: import("typebox").TLiteral<"curated">;
@@ -4219,6 +4228,175 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        collections: {
+            ":collectionId": {
+                $publishSelected: {
+                    post: {
+                        body: {
+                            revision: number;
+                            subjectIds: string[];
+                        };
+                        params: {
+                            collectionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                collection: {
+                                    id: string;
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    membershipKind: "dynamic";
+                                };
+                                publication: {
+                                    generation: string;
+                                    state: "complete";
+                                    itemCount: number;
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;

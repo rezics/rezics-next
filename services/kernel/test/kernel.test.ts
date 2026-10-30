@@ -279,6 +279,7 @@ const typed = [
   'GET /v1/collections/:collectionId',
   'PATCH /v1/collections/:collectionId',
   'PUT /v1/collections/:collectionId/rule',
+  'POST /v1/collections/:collectionId/$publishSelected',
   'DELETE /v1/collections/:collectionId',
   'POST /v1/collections/:collectionId/$restore',
   'GET /v1/collections/:collectionId/members',

@@ -19,6 +19,7 @@ import type { SearchService } from '../search/service-scope.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
+import { createCollectionPublications } from './collection-publication.ts';
 import { collectionPresentation } from './collection-presentation.ts';
 import { parseCollectionRule, requireCollectionRuleExecution } from './collection-rules.ts';
 import { listSitemapCollections } from './sitemap.ts';
@@ -122,6 +123,18 @@ const {
 } = collectionSchema.properties;
 export const savedDynamicCollectionSchema = t.Object(
   { ...dynamicMetadata, membershipKind: t.Literal('dynamic') },
+  closed,
+);
+export const collectionPublicationSchema = t.Object(
+  {
+    generation: t.String({ format: 'uuid' }),
+    state: t.Literal('complete'),
+    itemCount: t.Integer({ minimum: 0, maximum: 100 }),
+  },
+  closed,
+);
+export const collectionPublicationRequestSchema = t.Object(
+  { revision, subjectIds: t.Array(t.String({ format: 'uuid' }), { maxItems: 100, uniqueItems: true }) },
   closed,
 );
 export const collectionResourceSchema = t.Union([
@@ -310,6 +323,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   const { pool, tokens, clock } = dependencies;
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
+  let publications: ReturnType<typeof createCollectionPublications> | undefined;
+  const publish = () =>
+    (publications ??= createCollectionPublications({
+      pool,
+      access: dependencies.access(),
+      tokens,
+      clock,
+    }));
   const viewDependencies = () => ({
     ...dependencies,
     access: dependencies.access(),
@@ -356,6 +377,31 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   }
   const sitemapQuery = strict(SitemapQuerySchema);
   return app
+    .post(
+      customMethod('/v1/collections/:collectionId', 'publishSelected'),
+      {
+        params: collectionParams,
+        headers,
+        body: strict(collectionPublicationRequestSchema),
+        response: {
+          200: t.Object({ collection: savedDynamicCollectionSchema, publication: collectionPublicationSchema }, closed),
+          ...failures,
+        },
+        detail: detail('collection.publish_selected', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => publish().publishSelected(actor, params.collectionId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        const collection = await written(result.value.collection, actor);
+        if (collection.membershipKind !== 'dynamic') throw new ProblemError('dependency_unavailable');
+        return { collection, publication: result.value.publication };
+      },
+    )
     .get(
       '/v1/sitemap/collections',
       {

@@ -138,7 +138,8 @@ Current implementation evidence is narrower than the capability:
 The first four use the actual caller-owned Core command transaction with current `collection:update` authority
 bound to that Collection; they hold its curator's native `shareAccount` fence through commit. The caller supplies
 an explicitly selected membership set through ordinary Source/subject admission and emits its ordinary Collection
-update event. These hooks do not implement query evaluation, another command runner, grants or a public HTTP API.
+update event. These hooks do not implement query evaluation, another command runner or grants. The ordinary
+selected-set HTTP consumer is `collection-publication.ts`, described below.
 The native output test calls them through real Access-authorized Core commands. The production native source
 reader consumes their selected COMPLETE facts; no private-query producer or test inserts ready output.
 
@@ -165,6 +166,58 @@ actual destination-disposition producer, a third allocation returns `dependency_
 lease, infers NoData or deletes a source copy. Source-local inventory returns the exact retained generation keys
 and member counts in one indexed bounded range. It does not certify receiving/control/reader cleanup or terminal
 account erasure. Terminal public freeze and the actual shared disposition binding remain pending.
+
+### Explicit selected-set publication
+
+`POST /v1/collections/{collectionId}:publishSelected` takes the closed body `{revision,subjectIds}` and ordinary
+Idempotency-Key. `subjectIds` is an explicit selection of 0–100 distinct raw native Subject IDs. Calling this
+method consents to publishing the current title/description/presentation metadata and changing visibility to
+`public`, together with **only that verified selected set**. An explicit `[]` requests an empty publication; an
+omitted array is invalid. This is not publication of an entire saved-query snapshot. Complete saved-query result
+publication remains a separate producer and outcome; neither a first page nor a query-wide count fulfills it.
+
+The target must be an actual stored active saved-dynamic Collection with the current caller as curator. Curated
+Collections and logical built-ins retain their existing live semantics and are concealed as unsupported targets.
+Another owner, including an owner on the same route, cannot read the private rule through this command. Ordinary
+current `collection:update`, private leaf scopes/gates/Access, account share fencing and native header CAS apply.
+All of those checks also precede Core receipt replay. Selected original and terminal identity/disclosure and actual
+Source membership are prepared after releasing the parent home. Every raw reference and every complete-original
+private fact reference consumes current original/terminal disclosure before fact hydration and canonical
+deduplication; an unobserved original cannot borrow a positive from a different alias. Saved predicates use the
+existing owner-filter interpreter and native complete-original closure, never a publisher evaluator or raw-point
+self fallback. A selected nonmember is concealed, and an unproved selection returns `503 dependency_unavailable`
+without a write. No whole-source scan, result truncation, query count, Actor or permission payload is published.
+
+Preparation consumes the existing `bindOwnerFilterRead`, `CollectionSource`, `readOwnerFilterCandidateClosure`
+and scoped-observation declarations. The binding must supply the same actual command attempt T, source and scoped
+capture. The current native read binding and complete-original closure are typed unavailable adapters; the scoped
+Semantic producer also remains unavailable. Consequently this checkout cannot yet claim successful native selected
+publication, including empty publication. Their real producer modules replace those adapters; the publisher grants
+no allowance, readiness, positive/empty membership or permission in their place. It deliberately refuses an activated
+public output as evidence of current private saved-query membership. A producer must supply that owner Source before
+a later selection can be verified; changing a header alone never opens personal predicate output to public reads.
+
+The consumer transfers one existing work reservation, holds conservative charges for the native output work before
+verification, and charges all raw identity/disclosure, Source and private fact work to the remainder. It allocates
+no extra raw100 budget for output. Exceeding any dimension is unavailable, even for a syntactically valid 100-ID
+selection. The final owning transaction compares the exact native source generation, visibility, incarnation,
+revision and stored definition and revalidates the scoped capture through its existing source-local `tx` port.
+No foreign home is opened while the parent is held. Relevant changes roll back the entire command.
+
+One authorized Core command changes public visibility/header revision, calls begin/append/complete on the existing
+output hooks, and emits the ordinary Collection updated/listing events and receipt. Only COMPLETE advances the
+source fence and selects the generation. Complete A stays selected until verified complete B commits; no building
+generation or partial set is returned. The existing two-retained-generation refusal and uncertain destination
+disposition stay unchanged: no timeout deletion, NoData inference, cleanup ACK, new participant or worker is added.
+Account erasure/minimization retains its existing ownership and pending native proof.
+
+The closed response is `{collection,publication:{generation,state:'complete',itemCount}}`. `collection` is the
+saved-dynamic metadata DTO, without predicates, pins, curated counts/times/order or member notes; `itemCount` is
+the exact verified canonical selection size, privately returned to the current curator, not a public query count.
+No pending or unavailable response can masquerade as a complete empty result. `collection-publication.test.ts`
+adds ordinary native empty/nonempty, exact-selection, membership denial, CAS/source race, replay/current authority,
+two-generation refusal and closed-input cases using the existing fixture. Those cases require the actual pending
+Source producers; source typing is not native, privacy, whole-command, protected-use, visual or promoted-main proof.
 
 The independent canonical runtime cannot be completed by substituting `identityEpochStore.readMappings` for the
 shared whole-source observation. That real API observes at most 100 specified originals; it does not register or

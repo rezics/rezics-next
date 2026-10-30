@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
+import type { CommandAttempt } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -66,7 +67,8 @@ export type OwnerFilterReadBinding = Readonly<{
 }>;
 
 /** Owned unavailable adapter for the common native read's existing T/reservation/scoped capture handoff.
- * It must be replaced by the actual Source composition, not a caller Date, new budget or synthetic scope.
+ * A command consumer passes its actual attempt; the producer must bind that exact T and partition instead of
+ * minting a read T. It must be replaced by the actual Source composition, not a Date, new budget or synthetic scope.
  */
 export async function bindOwnerFilterRead(
   _dependencies: Dependencies,
@@ -74,6 +76,7 @@ export async function bindOwnerFilterRead(
   _collectionId: string,
   _admission: CollectionMemberAdmission,
   _deadline: number,
+  _attempt?: CommandAttempt,
 ): Promise<Unavailable | Readonly<{ status: 'bound'; binding: OwnerFilterReadBinding }>> {
   return { status: 'unavailable' };
 }
