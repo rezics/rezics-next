@@ -40,7 +40,22 @@ bun services/importer/src/cli.ts \
 
 `--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input. `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API.
 
-Wikidata JSONL uses the registered `wikidata-4` converter and the shipped catalogue vocabulary. Supported
+Wikidata input accepts the decompressed native mixed Item/Property JSON dump directly, with one entity per
+line inside its JSON array; existing item-only JSONL input also works. No item extraction or caller-side filter
+is needed. The [official JSON dump guidance](https://www.wikidata.org/w/index.php?title=Wikidata:Database_download&oldid=2479770906#JSON_dumps_(recommended))
+documents this mixed format (verified 2026-10-30).
+
+The reader admits `type: 'item'` with canonical `Q[1-9][0-9]*` identity and recognizes `type: 'property'` only
+with canonical `P[1-9][0-9]*` identity. Either kind's `lastrevid`, when present, must be a positive safe integer.
+Properties pass the same bounded JSON, byte and array-framing validation, then are excluded before conversion
+and source staging. They create no subjects, commands, schema definitions, source membership or `sourceRecords`
+metadata and do not increment `skipped`. Unknown types, mismatched identities and malformed native revisions
+invalidate the entire acquisition before effects or baseline replacement. Lexemes, EntitySchemas and user/talk
+content remain unsupported. Properties do not count toward item survival: a replacement containing only
+Properties still triggers the existing mass-disappearance guard when prior items all vanish.
+
+Yielded Wikidata items use the registered `wikidata-4` converter and the shipped catalogue vocabulary. The public
+pure converter remains item-only. Supported
 names, dates, URLs and unresolved author statements retain their source references, supported qualifiers and
 ranks through editor acceptance/adoption and public reads. A refresh creates new cited proposals under the
 same returned subject identity; it preserves independent Context selections. Exact quantities with unsupported,
@@ -418,6 +433,12 @@ state while effects remain unresolved. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Native mixed Wikidata acquisition
+
+- Touches: each existing bounded JSON line plus type, identity and optional native revision validation; only admitted Q items stage indexed source rows and public effects.
+- Bound: O(input bytes) scan with unchanged record/chunk retention caps, no per-property retained set or durable rows, and unchanged item reconciliation bounds.
+- Growth check: `tests/wikidata-mixed-dump.test.ts` exercises the production coordinator with mixed input, unchanged and changed refresh, property-only mass-stop and invalid acquisition. Its real durable in-memory stores and typed external API fake prove local coordination, not real server authorization, PostgreSQL work or promotion. Existing reader growth/retention cases remain the measured cost evidence; the connected native item/public bulk journeys above supply separate API evidence.
 
 ### Review and resume a bounded partial source reduction
 

@@ -216,13 +216,18 @@ export async function* readDump(
             key = String(payload.id);
           } else {
             const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
+            const identity =
+              payload.type === 'item' ? /^Q[1-9][0-9]*/ : payload.type === 'property' ? /^P[1-9][0-9]*/ : null;
             if (
-              payload.type !== 'item' ||
+              !identity ||
               typeof payload.id !== 'string' ||
-              !/^Q[1-9]\d*$/.test(payload.id) ||
+              // Compare the whole match: JavaScript's $ also admits a final newline.
+              identity.exec(payload.id)?.[0] !== payload.id ||
               (hasRevision && !positive(payload.lastrevid))
             )
               return invalid();
+            // Properties consume framing but never become catalogue source members.
+            if (payload.type === 'property') continue;
             key = payload.id;
             if (hasRevision) revision = String(payload.lastrevid);
           }
