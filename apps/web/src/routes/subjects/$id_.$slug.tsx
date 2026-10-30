@@ -126,17 +126,20 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           url.searchParams.delete('undoLabelId');
           url.searchParams.delete('undoAssignmentId');
           url.searchParams.delete('undoRevision');
+          url.searchParams.delete('undoKey');
           url.searchParams.delete('ratingFailure');
           if (result.ok && intent === 'unassign' && result.restoreRevision !== undefined) {
             url.searchParams.set('labelResult', 'label-removed');
             url.searchParams.set('undoLabelId', String(fields?.get('labelId') ?? ''));
             url.searchParams.set('undoAssignmentId', String(fields?.get('assignmentId') ?? ''));
             url.searchParams.set('undoRevision', String(result.restoreRevision));
+            url.searchParams.set('undoKey', crypto.randomUUID());
           } else if (!result.ok) {
             if (intent === 'restore') {
               url.searchParams.set('undoLabelId', String(fields?.get('labelId') ?? ''));
               url.searchParams.set('undoAssignmentId', String(fields?.get('assignmentId') ?? ''));
               url.searchParams.set('undoRevision', String(fields?.get('revision') ?? ''));
+              url.searchParams.set('undoKey', String(fields?.get('idempotencyKey') ?? ''));
             }
             const value =
               result.reason === 'capacity'
@@ -184,6 +187,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoLabelId?: string;
     undoAssignmentId?: string;
     undoRevision?: number;
+    undoKey?: string;
   } => ({
     realm: validatePageRealm(search.realm),
     ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
@@ -192,6 +196,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
     ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
     ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
+    ...(typeof search.undoKey === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
+      ? { undoKey: search.undoKey } : {}),
     ...(typeof search.undoRevision === 'number' ||
     (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
       ? { undoRevision: Number(search.undoRevision) }
@@ -260,6 +266,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 function SubjectRoute() {
   const { tabs, verification } = Route.useLoaderData();
   const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
+  const { undoKey } = Route.useSearch();
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const locale = getLocale();
@@ -355,6 +362,7 @@ function SubjectRoute() {
                     labels: null,
                   }
                 }
+                {...(library && undoKey ? { data: { ...library, labelUndoKey: undoKey } } : {})}
               />
             </SubjectHeaderActions>
           )}
