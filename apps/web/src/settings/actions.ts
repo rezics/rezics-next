@@ -7,6 +7,12 @@ import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } fr
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from './profile-data';
 import { parseProfileWrite } from './profile-write-input';
 import {
+  loadManagedAccounts,
+  managedAccountsException,
+  parseManagedAccountsCursors,
+  type ManagedAccountsResult,
+} from './managed-accounts-read';
+import {
   changePreferences,
   changeCollectionVisibility,
   changeNotifications,
@@ -134,4 +140,21 @@ export const saveNotifications = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<NotificationWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return changeNotifications(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const readManagedAccountsInventory = createServerFn({ method: 'GET' })
+  .validator(parseManagedAccountsCursors)
+  .handler(async ({ data }): Promise<ManagedAccountsResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    try {
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      const subject = sessionSubject(request);
+      if (!authorization || !subject) return { ok: false, kind: 'denied', status: null, code: null };
+      // The native endpoint verifies that this is the current human, never an operated account.
+      return loadManagedAccounts(kernelClient(), authorization, subject, data);
+    } catch (error) {
+      return managedAccountsException(error);
+    }
   });

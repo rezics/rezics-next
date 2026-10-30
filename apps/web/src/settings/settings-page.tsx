@@ -18,6 +18,8 @@ import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
 import { AccountSafetyCard } from './account-safety';
+import { ManagedAccountsSection } from './managed-accounts';
+import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections } from './sections-navigation';
 
 function SettingsFailure({
@@ -74,9 +76,11 @@ function SettingsFailure({
 function SettingsSections({
   page,
   csrfToken,
+  managedAccountsIO,
 }: {
   page: Extract<SettingsPage, { signedIn: true }>;
   csrfToken: string | null;
+  managedAccountsIO?: ManagedAccountsIO;
 }) {
   const collectionsAdmitted = useOperation('account.collections');
   const verificationAdmitted = useOperation('agent_verification.request');
@@ -171,7 +175,7 @@ function SettingsSections({
         <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
           <PublicViewsSection />
         </section>
-        <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6">
+        <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
           <AccountSafetyCard
             state="signed-in"
             securityHref={page.securityHref}
@@ -179,13 +183,22 @@ function SettingsSections({
             csrfToken={formCsrfToken}
             onReload={() => window.location.reload()}
           />
+          <ManagedAccountsSection io={managedAccountsIO} />
         </section>
       </div>
     </div>
   );
 }
 
-export function SettingsPageView({ page, csrfToken }: { page: SettingsPage; csrfToken: string | null }) {
+export function SettingsPageView({
+  page,
+  csrfToken,
+  managedAccountsIO,
+}: {
+  page: SettingsPage;
+  csrfToken: string | null;
+  managedAccountsIO?: ManagedAccountsIO;
+}) {
   const location = useLocation();
   return (
     <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
@@ -193,7 +206,7 @@ export function SettingsPageView({ page, csrfToken }: { page: SettingsPage; csrf
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
       {page.signedIn ? (
-        <SettingsSections page={page} csrfToken={csrfToken} />
+        <SettingsSections page={page} csrfToken={csrfToken} managedAccountsIO={managedAccountsIO} />
       ) : (
         <AccountSafetyCard state="signed-out" returnTo={location.publicHref} />
       )}
