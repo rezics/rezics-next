@@ -266,16 +266,12 @@ async function batchRealms(client: AccessClient, ids: readonly string[]): Promis
 function requiredBanKeys(
   actor: Actor,
   boards: readonly Row[],
-  realms: readonly RealmBatchRow[],
 ): BanKey[] {
   if (actor.kind !== 'account') return [];
-  const realmById = new Map(realms.map((realm) => [realm.realm_id, realm]));
   const accountIds = new Set([actor.accountId, ...(actor.requestedBy?.split(':')[3] ? [actor.requestedBy.split(':')[3]!] : [])]);
   const realmIds = new Set<string>();
   for (const board of boards) {
-    if (!board.realm_id) continue;
-    const realm = realmById.get(board.realm_id);
-    if (board.visibility !== 'published' || realm?.visibility === 'protected') realmIds.add(board.realm_id);
+    if (board.realm_id && board.visibility !== 'published') realmIds.add(board.realm_id);
   }
   return [...realmIds].map((realmId) => ({
     route: route(realmId),
@@ -296,7 +292,7 @@ function createBanEvidence(
   boards: readonly Row[],
   realms: readonly RealmBatchRow[],
 ): { read(at: string): Promise<ReadonlySet<string>>; current(): Promise<ReadonlySet<string>> } {
-  const keys = requiredBanKeys(actor, boards, realms);
+  const keys = requiredBanKeys(actor, boards);
   let evidence: Promise<ReadonlySet<string>> | undefined;
   let evidenceAt: string | undefined;
   return {
@@ -942,7 +938,7 @@ export async function discloseBoardPageThreads(
       if (!matched.has(id)) return false;
       const post = postByThread.get(id)!;
       const revision = revisionByPost.get(post.id)!;
-      return post.availability === 'available' && revision.availability === 'available';
+      return !postWithheld.get(post.id) && post.availability === 'available' && revision.availability === 'available';
     });
     const bodies = await batchRows(
       client,
