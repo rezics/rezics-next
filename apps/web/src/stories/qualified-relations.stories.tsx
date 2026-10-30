@@ -8,7 +8,7 @@ import { getLocale } from '../paraglide/runtime.js';
 const meta = { title: 'Pages/Subjects/Qualified Relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-function Reader({ error = false }: { error?: boolean }) {
+function QualifiedRelationsReader({ error = false }: { error?: boolean }) {
   const [client] = useState(() => new QueryClient());
   const page = qualifiedRelationsPage(
     error ? { realm: qualifiedRealm, continuation: { node: 'cast', cursor: 'refuse' }, error: 409 } : {},
@@ -21,24 +21,5 @@ function Reader({ error = false }: { error?: boolean }) {
     </QueryClientProvider>
   );
 }
-export const Phone390: Story = {
-  parameters: {
-    viewport: {
-      viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' } },
-      defaultViewport: 'phone390',
-    },
-  },
-  render: () => <Reader />,
-};
-export const Desktop1280: Story = {
-  parameters: {
-    viewport: {
-      viewports: {
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-      defaultViewport: 'desktop1280',
-    },
-  },
-  render: () => <Reader />,
-};
-export const ContextConflict: Story = { render: () => <Reader error /> };
+export const Reader: Story = { render: () => <QualifiedRelationsReader /> };
+export const ContextConflict: Story = { render: () => <QualifiedRelationsReader error /> };
