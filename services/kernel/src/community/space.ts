@@ -174,7 +174,7 @@ export async function readSpaceForViewer(
 export function spaceReadEligibility(identity: Resource): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
   const native = spaceEligibilityAccessWork<Awaited<ReturnType<typeof eligibilityRead.run>>>(resource);
-  return createResourcePublicEligibility({
+  return createResourcePublicEligibility<NonNullable<Awaited<ReturnType<typeof eligibilityRead.run>>>>({
     resource,
     action: 'space:read',
     work: native.work,

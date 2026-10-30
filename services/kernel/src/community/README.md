@@ -167,7 +167,7 @@ These declarations admit work only. Every verification still uses Access's suppl
 authoritative T, current lifecycle/head/binding comparisons and ordinary grant and
 denial formula. Receipts belong to one callback context/result and charge dispatched
 plan bounds even on empty results; successful receipts release only undispatched
-branches and unused projection bytes. Failure or timeout retains the full envelope.
+branches, unused projection bytes and unused empty seeks. Failure or timeout retains the full envelope.
 No membership, actor, authentication, scope or general formula accounting is supplied
 by these resource callbacks; those remain Access's independent producers. Unsupported
 identity/time variants have no bound and are refused before callback IO. Focused
