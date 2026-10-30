@@ -19,9 +19,9 @@ SELECT 'post'::text AS kind, p.post_id AS id, p.thread_id AS thread_id,
        p.deleted_at AS deleted_at,
        p.purge_started_at IS NULL AND NOT p.purge_completed AND h.availability = 'available' AS restorable,
        d.decision_id AS decision_id, NULL::boolean AS matches
-FROM content.post p
+FROM input i
+JOIN content.post p ON p.route = i.route AND p.post_id = i.id
 JOIN content.revision h ON h.route = p.route AND h.thread_id = p.thread_id
   AND h.post_id = p.post_id AND h.revision_id = p.head_revision_id
 LEFT JOIN content.moderation_decision d ON d.route = p.route AND d.target_kind = 'post'
-  AND d.target_id = p.post_id AND d.security_revision = p.security_revision
-WHERE (p.route, p.post_id) = ANY (SELECT route, id FROM input);
+  AND d.target_id = p.post_id AND d.security_revision = p.security_revision;

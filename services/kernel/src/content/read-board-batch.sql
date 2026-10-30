@@ -14,5 +14,5 @@ SELECT 'board'::text AS kind, b.board_id AS id, NULL::uuid AS thread_id,
        b.purpose AS board_purpose, NULL::jsonb AS vote_citation, b.realm_id AS realm_id,
        NULL::timestamptz AS deleted_at, false AS restorable, NULL::uuid AS decision_id,
        NULL::boolean AS matches
-FROM content.board b
-WHERE (b.route, b.board_id) = ANY (SELECT route, id FROM input);
+FROM input i
+JOIN content.board b ON b.route = i.route AND b.board_id = i.id;

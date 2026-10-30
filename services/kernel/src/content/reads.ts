@@ -27,6 +27,7 @@ import readThreadPlace from './read-thread-place.sql';
 import currentBan from '../community/ban-current.sql';
 import type {
   Anchored,
+  AnchoredPosition,
   BoardId,
   BoardView,
   ErasedPlaceholder,
@@ -1697,7 +1698,11 @@ export async function discloseThreads(
       'thread',
       threadIds.map((id) => batchKey(id)),
     );
-    return new Map(rows.map((row) => [row.id, row.board_id!]).filter((entry) => !!entry[1]));
+    const boardByThread = new Map<string, string>();
+    for (const row of rows) {
+      if (row.board_id) boardByThread.set(row.id, row.board_id);
+    }
+    return boardByThread;
   });
   const groups = new Map<string, string[]>();
   for (const id of threadIds) {
