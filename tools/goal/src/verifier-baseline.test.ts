@@ -410,16 +410,19 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
   git(infraRoot, 'update-ref', 'refs/heads/dev', infraHead, infraBase);
   const infraContext = context(infraRoot, [task('infra-change', infraBase, infraHead)]);
   const transportCalls: string[] = [];
-  const infraRunner = runner(async (command) => {
+  const infraRunner = runner(async (command, cwd) => {
     if (command.includes('affected-check')) {
-      transportCalls.push(command.join(' '));
-      return { passed: false, output: 'RemoteTransportError: SSH connection reset', timedOut: false };
+      const revision = git(cwd, 'rev-parse', 'HEAD');
+      transportCalls.push(revision);
+      return revision === infraBase
+        ? { passed: false, output: 'RemoteTransportError: SSH connection reset', timedOut: false }
+        : { passed: false, output: 'AssertionError: baseline comparison unavailable', timedOut: false };
     }
     return { passed: true, output: '', timedOut: false };
   });
   try {
     await verifyDev({ ...infraContext, runGate: infraRunner });
-    expect(transportCalls).toHaveLength(6);
+    expect(transportCalls).toEqual([infraBase, infraBase, infraBase]);
     expect(infraContext.store.devVerifierFindings()).toEqual(
       expect.arrayContaining([expect.objectContaining({ status: 'unknown' })]),
     );
