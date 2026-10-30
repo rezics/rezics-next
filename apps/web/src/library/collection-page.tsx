@@ -38,7 +38,12 @@ import {
   updateMemberNote,
   type CollectionWriteResult,
 } from './collection-edit';
-import type { EditableCollectionPage } from './collection-load';
+import {
+  collectionRenderPolicy,
+  type CollectionPageResult,
+  type CollectionPolicyPage,
+  type EditableCollectionPage,
+} from './collection-load';
 import { admitsCollectionOperation, type CollectionMemberUndo } from './collection-records';
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { pageHead, type HeadContext } from '../shell/head';
@@ -72,12 +77,7 @@ const publicOrigin = createIsomorphicFn()
   );
 
 export function collectionPageHead(
-  page:
-    | Pick<
-        EditableCollectionPage,
-        'id' | 'title' | 'description' | 'curator' | 'members' | 'memberCount' | 'visibility'
-      >
-    | Pick<DynamicCollectionPageData, 'id' | 'title' | 'description' | 'curator' | 'members'>,
+  page: Pick<CollectionPageResult, 'id' | 'title' | 'description' | 'curator' | 'members'> & CollectionPolicyPage,
   suppliedContext?: HeadContext,
   laterPage = false,
 ) {
@@ -87,6 +87,9 @@ export function collectionPageHead(
     locale: getLocale(),
     path,
   };
+  const policy = collectionRenderPolicy(page, laterPage);
+  if (page.visibility === 'private')
+    return pageHead({ title: m.not_found_heading(), robots: 'noindex, follow' }, context);
   const title = pageText(libraryTitleValue(page.title), context.locale).text;
   const imageSubject = page.members[0]?.subject;
   const cover = imageSubject?.cover;
@@ -161,17 +164,21 @@ export function collectionPageHead(
             name: title,
             ...(description ? { description } : {}),
             url: `${context.origin}/${context.locale}${path}`,
-            mainEntity: {
-              '@type': 'ItemList',
-              ...('memberCount' in page ? { numberOfItems: page.memberCount } : {}),
-              itemListOrder: 'https://schema.org/ItemListOrderAscending',
-              itemListElement: items,
-            },
+            ...(policy.completeItemList
+              ? {
+                  mainEntity: {
+                    '@type': 'ItemList',
+                    numberOfItems: items.length,
+                    itemListOrder: 'https://schema.org/ItemListOrderAscending',
+                    itemListElement: items,
+                  },
+                }
+              : {}),
           },
           { '@type': 'BreadcrumbList', itemListElement: breadcrumbs },
         ],
       },
-      ...(laterPage || ('visibility' in page && page.visibility === 'private') ? { robots: 'noindex, follow' } : {}),
+      ...(!policy.indexable ? { robots: 'noindex, follow' } : {}),
     },
     context,
   );
@@ -235,12 +242,14 @@ export function CollectionPage({
   page,
   queryKey,
   refreshPage,
+  readEditorPage,
   cursor,
   search,
 }: {
   page: EditableCollectionPage;
   queryKey: readonly unknown[];
   refreshPage: () => Promise<EditableCollectionPage>;
+  readEditorPage?: () => Promise<EditableCollectionPage>;
   cursor: string | undefined;
   layout?: 'grid' | 'list';
   search?: Record<string, string | string[]>;
@@ -249,7 +258,7 @@ export function CollectionPage({
   const queryClient = useQueryClient();
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
-  const owner = updateAdmitted && page.visibility !== null;
+  const owner = updateAdmitted && page.visibility !== null && (page.memberState ?? 'ready') === 'ready';
   const deleteAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:delete', 'collection.delete');
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = navigation.data?.pins ?? { state: 'closed' as const };
@@ -260,6 +269,7 @@ export function CollectionPage({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
+  const [editorMembers, setEditorMembers] = useState<CollectionMember[] | null>(null);
   const [title, setTitle] = useState(page.title);
   const storedKind = page.presentationKindSource === 'owner' ? (page.presentationKind ?? null) : null;
   const [kind, setKind] = useState(storedKind);
@@ -311,22 +321,38 @@ export function CollectionPage({
     await router.invalidate();
   }
 
-  function beginEditing() {
-    writeKeys.current.clear();
+  async function beginEditing() {
+    if (pending) return;
+    setPending(true);
     setFailure('');
-    setConflict(false);
-    setMembers(page.members);
-    setTitle(page.title);
-    setKind(storedKind);
-    setCoverMediaId(page.coverMediaId ?? null);
-    setDescription(page.description ?? '');
-    setVisibility(page.visibility ?? 'public');
-    setSelectedIds(new Set());
-    setEditing(true);
+    try {
+      const editable = readEditorPage ? await readEditorPage() : page;
+      if (editable.revision !== page.revision) {
+        setConflict(true);
+        return;
+      }
+      if ((editable.memberState ?? 'ready') !== 'ready' || editable.filterStatus) throw new Error('Collection members are not ready');
+      writeKeys.current.clear();
+      setConflict(false);
+      setEditorMembers(editable.members);
+      setMembers(editable.members);
+      setTitle(editable.title);
+      setKind(editable.presentationKindSource === 'owner' ? (editable.presentationKind ?? null) : null);
+      setCoverMediaId(editable.coverMediaId ?? null);
+      setDescription(editable.description ?? '');
+      setVisibility(editable.visibility ?? 'public');
+      setSelectedIds(new Set());
+      setEditing(true);
+    } catch {
+      setFailure(m.error_message());
+    } finally {
+      setPending(false);
+    }
   }
 
   function cancelEditing() {
     setMembers(page.members);
+    setEditorMembers(null);
     setTitle(page.title);
     setKind(storedKind);
     setCoverMediaId(page.coverMediaId ?? null);
@@ -357,7 +383,7 @@ export function CollectionPage({
       return key;
     };
     try {
-      const plan = buildCollectionMemberEditPlan(page.members, members, page.firstPage);
+      const plan = buildCollectionMemberEditPlan(editorMembers ?? page.members, members, page.firstPage);
       if (
         title !== page.title ||
         description !== (page.description ?? '') ||

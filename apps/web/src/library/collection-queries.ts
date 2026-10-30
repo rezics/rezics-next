@@ -2,25 +2,27 @@ import { readCollectionTypeOptions } from './collection-presentation';
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import { personalRead, publicRead, readQueryKey } from '../kernel/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
-import { loadEditableCollectionPage, loadDynamicMembers, type CollectionPageResult } from './collection-load';
-import { prepareSession, viewerCredential } from '../session/request';
+import { collectionRenderPolicy, loadEditableCollectionPage, type CollectionPageResult } from './collection-load';
 import { readRelease } from '../subject/definitions';
 import { readCollectionFilterParams } from './collection-filter-params';
 import { facetProperties } from '@rezics/filter';
 import { requestLocale } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
+import { isPublicCacheRender, recordPublicPageCachePolicy } from '../security/page-cache';
 
 function validatePageInput(input: unknown): {
   id: string;
   cursor?: string;
   credentialMode: ReadCredentialMode;
+  editor?: boolean;
+  filterActive: boolean;
   search?: Record<string, string | string[]>;
 } {
   if (
@@ -30,6 +32,10 @@ function validatePageInput(input: unknown): {
     typeof input.id !== 'string' ||
     !input.id ||
     input.id.length > 128 ||
+    ('editor' in input &&
+      input.editor !== undefined &&
+      (typeof input.editor !== 'boolean' ||
+        (input.editor && (!('credentialMode' in input) || input.credentialMode !== 'session')))) ||
     ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
     ('credentialMode' in input &&
       input.credentialMode !== undefined &&
@@ -50,16 +56,21 @@ function validatePageInput(input: unknown): {
   }
   return {
     id: input.id,
+    filterActive:
+      'search' in input && input.search !== null && typeof input.search === 'object' && hasActiveFilter(input.search),
+    ...('editor' in input && input.editor === true ? { editor: true } : {}),
     ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
     credentialMode: 'credentialMode' in input && input.credentialMode === 'session' ? 'session' : 'anonymous',
     ...(Object.keys(search).length ? { search } : {}),
   };
 }
 
-function hasActiveFilter(search: Record<string, string | string[]> | undefined): boolean {
+function hasActiveFilter(search: object | undefined): boolean {
   return Object.entries(search ?? {}).some(([key, value]) => {
-    if (!/^(f|r)\./.test(key)) return false;
-    return Array.isArray(value) ? value.some(Boolean) : Boolean(value);
+    if (key !== 'type' && !/^[frl]\./.test(key)) return false;
+    return Array.isArray(value)
+      ? value.some((entry) => typeof entry === 'string' && Boolean(entry))
+      : typeof value === 'string' && Boolean(value);
   });
 }
 
@@ -67,13 +78,15 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(async ({ data }): Promise<CollectionPageResult> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    recordPublicPageCachePolicy(request, 'private');
     const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
     const filtersOn =
       configuredFilters === undefined
         ? import.meta.env.DEV
         : configuredFilters === true || configuredFilters === 'true';
     let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
-    let filterStatus: 'failed' | undefined = !filtersOn && hasActiveFilter(data.search) ? 'failed' : undefined;
+    let filterStatus: 'failed' | undefined = !filtersOn && data.filterActive ? 'failed' : undefined;
     let filterProperties: {
       id: string;
       label: string;
@@ -113,12 +126,12 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
           type,
         );
       } catch {
-        if (hasActiveFilter(requested)) filterStatus = 'failed';
+        if (data.filterActive) filterStatus = 'failed';
       }
     }
     const page = await loadEditableCollectionPage(
       kernelClient(),
-      getRequest(),
+      request,
       env as Partial<SessionEnv>,
       {
         ...data,
@@ -142,8 +155,9 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
           ),
         )
       : {};
-    return {
+    const result = {
       ...page,
+      filterActive: data.filterActive,
       typeRatios,
       listPresentations,
       ...(!('preparing' in page)
@@ -158,6 +172,15 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         ? { filterProperties, filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] } }
         : {}),
     };
+    if (data.credentialMode === 'anonymous') {
+      recordPublicPageCachePolicy(request, collectionRenderPolicy(result).cache);
+      const notReady = 'preparing' in result ? result.preparing || result.unavailable : result.memberState !== undefined && result.memberState !== 'ready';
+      if (notReady && isPublicCacheRender(request)) {
+        setResponseStatus(503, 'Service Unavailable');
+        setResponseHeader('retry-after', '1');
+      }
+    }
+    return result;
   });
 
 export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
@@ -189,27 +212,14 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    const signedOut = await prepareSession(request, env as Partial<SessionEnv>).then(
-      (stale) => stale,
-      () => true,
-    );
-    const authorization = signedOut ? null : viewerCredential(request);
     let filter;
+    let filterStatus: 'failed' | undefined;
     const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
     const filtersOn =
       configuredFilters === undefined
         ? import.meta.env.DEV
         : configuredFilters === true || configuredFilters === 'true';
-    if (!filtersOn && hasActiveFilter(data.search))
-      return {
-        members: [],
-        next: null,
-        preparing: false,
-        retryAfterMs: 1000,
-        unavailable: false,
-        filterStatus: 'failed',
-      };
+    if (!filtersOn && hasActiveFilter(data.search)) filterStatus = 'failed';
     if (filtersOn && data.search) {
       try {
         const type = typeof data.search.type === 'string' ? data.search.type : 'schema:Book';
@@ -223,24 +233,30 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
           type,
         ).document;
       } catch {
-        if (hasActiveFilter(data.search))
-          return {
-            members: [],
-            next: null,
-            preparing: false,
-            retryAfterMs: 1000,
-            unavailable: false,
-            filterStatus: 'failed',
-          };
+        if (hasActiveFilter(data.search)) filterStatus = 'failed';
       }
     }
-    return loadDynamicMembers(
+    const page = await loadEditableCollectionPage(
       kernelClient(),
-      data.id,
-      data.cursor,
-      authorization ? { headers: { authorization } } : {},
-      filter,
+      getRequest(),
+      env as Partial<SessionEnv>,
+      {
+        id: data.id,
+        ...(data.cursor ? { cursor: data.cursor } : {}),
+        ...(filter ? { filter } : {}),
+        ...(filterStatus ? { filterStatus } : {}),
+      },
+      'session',
     );
+    if (!('preparing' in page)) throw notFound();
+    return {
+      members: page.members,
+      next: page.next,
+      preparing: page.preparing,
+      retryAfterMs: page.retryAfterMs,
+      unavailable: page.unavailable,
+      ...(page.filterStatus ? { filterStatus: page.filterStatus } : {}),
+    };
   });
 
 export function collectionPageQuery(

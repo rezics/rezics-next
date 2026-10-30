@@ -19,7 +19,8 @@ function family(item: CollectionItem) {
       (typeof sitemapLocales)[number],
       string
     >,
-    ...(typeof item.lastModified === 'string' ? { lastmod: item.lastModified } : {}),
+    // The native feed currently returns header updatedAt, which does not cover public member changes.
+    // Omit lastmod until the owner supplies meaningful public publication time.
   };
 }
 

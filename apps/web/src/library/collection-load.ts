@@ -4,6 +4,7 @@ import {
   type CollectionTypeOption,
   type CollectionListPresentations,
 } from './collection-presentation';
+import { notFound } from '@tanstack/react-router';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
@@ -178,6 +179,7 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     firstPage: boolean;
     /** The viewer's follow state, or null when the viewer cannot follow this collection. */
     following: boolean | null;
+    filterActive?: boolean;
     filter?: FilterDocument;
     filterIgnored?: string[];
     filterType?: string;
@@ -190,6 +192,43 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     /** Public visibility can be shown without granting owner controls. */
     disclosedVisibility?: 'public' | 'unlisted';
   };
+
+export type CollectionPolicyPage = Partial<
+  Pick<
+    EditableCollectionPage,
+    | 'memberState'
+    | 'visibility'
+    | 'disclosedVisibility'
+    | 'cursor'
+    | 'filterActive'
+    | 'filter'
+    | 'filterStatus'
+    | 'filterIgnored'
+    | 'publicExport'
+    | 'firstPage'
+    | 'next'
+  >
+> & { preparing?: boolean };
+
+/** The native disclosure result, request variant and readiness jointly select HTTP/head policy. */
+export function collectionRenderPolicy(page: CollectionPolicyPage, laterPage = false) {
+  const indexable =
+    !('preparing' in page) &&
+    (page.memberState === undefined || page.memberState === 'ready') &&
+    page.visibility === null &&
+    page.disclosedVisibility === 'public' &&
+    !laterPage &&
+    page.cursor === undefined &&
+    !page.filterActive &&
+    page.filter === undefined &&
+    !page.filterStatus &&
+    !page.filterIgnored?.length;
+  return {
+    cache: indexable ? ('public' as const) : ('private' as const),
+    indexable,
+    completeItemList: indexable && page.publicExport === true && page.firstPage === true && page.next === null,
+  };
+}
 
 function accountOf(account: { handle: string | null; displayName: string | null } | null | undefined) {
   return account
@@ -211,6 +250,7 @@ export async function loadEditableCollectionPage(
   sessionEnv: Partial<SessionEnv>,
   input: {
     id: string;
+    editor?: boolean;
     cursor?: string;
     filter?: FilterDocument;
     filterIgnored?: string[];
@@ -223,15 +263,28 @@ export async function loadEditableCollectionPage(
 ): Promise<CollectionPageResult> {
   let authorization: string | null = null;
   if (credentialMode === 'session') {
-    // A session that cannot be read leaves the collection readable to everyone.
-    const signedOut = await prepareSession(request, sessionEnv).then(
-      (stale) => stale,
-      () => true,
-    );
+    const signedOut = await prepareSession(request, sessionEnv);
     authorization = signedOut ? null : viewerCredential(request);
   }
   const viewer = authorization ? sessionSubject(request) : undefined;
   const headers = authorization ? { headers: { authorization } } : {};
+  const collectionResult = await client.collections({ collectionId: input.id }).get({
+    query: libraryFullQuery(),
+    ...headers,
+  });
+  const collectionEnvelope = readLibraryResult(collectionResult);
+  // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
+  const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
+  // Public browsing always uses the anonymous member/facet population, including for its curator.
+  const publicMembership = 'visibility' in collection && collection.visibility !== 'private';
+  const editor =
+    input.editor === true &&
+    credentialMode === 'session' &&
+    viewer !== undefined &&
+    'curatorAccountId' in collection &&
+    viewer === collection.curatorAccountId;
+  if (input.editor && !editor) throw notFound();
+  const memberHeaders = publicMembership && !editor ? {} : headers;
   const filterState: { status: EditableCollectionPage['filterStatus'] } = { status: input.filterStatus };
   const readMembers = async (cursor?: string, filter = input.filter) => {
     if (filterState.status === 'failed') return { status: 200, data: { members: [], next: null } };
@@ -241,7 +294,9 @@ export async function loadEditableCollectionPage(
     };
     let result: unknown;
     try {
-      result = await client.collections({ collectionId: input.id }).members.get({ query: query as never, ...headers });
+      result = await client
+        .collections({ collectionId: input.id })
+        .members.get({ query: query as never, ...memberHeaders });
     } catch (error) {
       if (![202, 400, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
       result = error;
@@ -254,22 +309,16 @@ export async function loadEditableCollectionPage(
     if (filter && status === 202) filterState.status = 'preparing';
     return result;
   };
-  const [collectionResult, first, viewerActions] = await Promise.all([
-    client.collections({ collectionId: input.id }).get({ query: libraryFullQuery(), ...headers }),
-    readMembers(input.cursor).then(
-      (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
-      (error: unknown) => {
-        if (error instanceof StaleCursorError) return { stale: true as const };
-        if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
-        throw error;
-      },
-    ),
-    readCollectionViewerActions(client, input.id, authorization),
-  ]);
+  const viewerActions = authorization ? await readCollectionViewerActions(client, input.id, authorization) : undefined;
+  const first = await readMembers(input.cursor).then(
+    (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
+    (error: unknown) => {
+      if (error instanceof StaleCursorError) return { stale: true as const };
+      if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
+      throw error;
+    },
+  );
   const membersResult = first.stale ? await readMembers() : first.page;
-  const collectionEnvelope = readLibraryResult(collectionResult);
-  // One boundary cast carries the documented union until the generated client supports it.
-  const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
   const filterStatus = filterState.status;
   if (collection.membershipKind === 'dynamic') {
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
@@ -282,8 +331,8 @@ export async function loadEditableCollectionPage(
       ...(input.filterParams ? { filterParams: input.filterParams } : {}),
       following,
     };
-    const status = first.stale ? 200 : resultStatus(membersResult);
-    if (!first.stale && status === 202) {
+    const status = resultStatus(membersResult);
+    if (status === 202) {
       return {
         id: collection.id,
         title: dynamicCollectionTitle(collection, getLocale()),
@@ -299,7 +348,7 @@ export async function loadEditableCollectionPage(
         ...filterFields,
       };
     }
-    if (!first.stale && status === 503) {
+    if (status === 503) {
       return {
         id: collection.id,
         title: dynamicCollectionTitle(collection, getLocale()),
@@ -351,15 +400,21 @@ export async function loadEditableCollectionPage(
     authorization && !owner && curatedCollection.visibility !== 'private'
       ? await readCollectionFollow(client, input.id, authorization)
       : null;
-  const visibleMembers = owner ? members.members : members.members.filter((member) => member.subject != null);
-  const memberCount =
-    memberState !== 'ready' || filterStatus
-      ? null
-      : owner
-        ? curatedCollection.memberCount
-        : !input.filter && !filterStatus && (first.stale || input.cursor === undefined) && members.next === null
-          ? visibleMembers.length
-          : null;
+  const visibleMembers =
+    owner && (!publicMembership || editor)
+      ? members.members
+      : members.members.filter((member) => member.subject != null);
+  const memberCount = memberState !== 'ready' || filterStatus
+    ? null
+    : owner && (!publicMembership || editor)
+      ? curatedCollection.memberCount
+      : !input.filter &&
+          !filterStatus &&
+          !input.filterIgnored?.length &&
+          (first.stale || input.cursor === undefined) &&
+          members.next === null
+        ? visibleMembers.length
+        : null;
   return {
     ...collectionPresentationOf(collectionEnvelope.collection),
     ...(owner && collectionEnvelope.collection.coverMediaId !== undefined
@@ -394,6 +449,14 @@ export async function loadEditableCollectionPage(
     ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
     ...(input.filterParams ? { filterParams: input.filterParams } : {}),
     ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-    publicExport: curatedCollection.visibility === 'public' && memberState === 'ready' && !filterStatus,
+    publicExport:
+      memberState === 'ready' &&
+      credentialMode === 'anonymous' &&
+      curatedCollection.visibility === 'public' &&
+      input.cursor === undefined &&
+      !input.filter &&
+      !filterStatus &&
+      !input.filterIgnored?.length &&
+      members.next === null,
   };
 }

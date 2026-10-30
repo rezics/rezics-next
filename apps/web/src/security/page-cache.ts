@@ -21,6 +21,12 @@ export class PublicCacheReadError extends Error {
 const activePublicRenders = new WeakMap<Request, number>();
 const dehydratedPageData = new WeakMap<Request, unknown>();
 const publicPageFailures = new WeakMap<Request, number>();
+const publicPagePolicies = new WeakMap<Request, 'public' | 'private'>();
+
+/** A Collection result must explicitly authorize public HTML caching after native disclosure. */
+export function recordPublicPageCachePolicy(request: Request, policy: 'public' | 'private'): void {
+  if (isPublicCacheRender(request)) publicPagePolicies.set(request, policy);
+}
 
 export async function duringPublicCacheRender<T>(request: Request, render: () => Promise<T>): Promise<T> {
   activePublicRenders.set(request, (activePublicRenders.get(request) ?? 0) + 1);
@@ -28,8 +34,10 @@ export async function duringPublicCacheRender<T>(request: Request, render: () =>
     return await render();
   } finally {
     const depth = activePublicRenders.get(request) ?? 1;
-    if (depth <= 1) activePublicRenders.delete(request);
-    else activePublicRenders.set(request, depth - 1);
+    if (depth <= 1) {
+      activePublicRenders.delete(request);
+      publicPagePolicies.delete(request);
+    } else activePublicRenders.set(request, depth - 1);
   }
 }
 
@@ -145,7 +153,9 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       if (failureStatus !== undefined)
         return privateNoStore(response, failureStatus === 403 || response.status === 200 ? failureStatus : undefined);
       if (!eligible) return privateNoStore(response);
-      if (isCollectionNotFound(request, response) || isSubjectFailure(request, response))
+      if (isSubjectFailure(request, response))
+        return privateNoStore(response);
+      if (isCollectionPage(request) && (response.status !== 200 || publicPagePolicies.get(request) !== 'public'))
         return privateNoStore(response);
       if (!isPublicCacheableResponse(response)) return privateNoStore(response);
 
@@ -178,7 +188,17 @@ export function pageCacheKey(request: Request): Request {
 }
 
 export function isPageCacheRequest(request: Request): boolean {
-  return isPublicPageGetRequest(request) && !request.headers.has('cookie') && !request.headers.has('authorization');
+  return (
+    isPublicPageGetRequest(request) &&
+    !request.headers.has('cookie') &&
+    !request.headers.has('authorization') &&
+    !(
+      isCollectionPage(request) &&
+      [...new URL(request.url).searchParams].some(
+        ([key, value]) => Boolean(value) && (key === 'cursor' || key === 'type' || /^[frl]\./.test(key)),
+      )
+    )
+  );
 }
 
 function isPublicPageGetRequest(request: Request): boolean {
@@ -230,8 +250,8 @@ function privateNoStore(response: Response, status = response.status): Response 
   });
 }
 
-function isCollectionNotFound(request: Request, response: Response): boolean {
-  return response.status === 404 && /(?:^|\/)collections\/[^/]+\/?$/u.test(new URL(request.url).pathname);
+function isCollectionPage(request: Request): boolean {
+  return /(?:^|\/)collections\/[^/]+\/?$/u.test(new URL(request.url).pathname);
 }
 
 function isSubjectFailure(request: Request, response: Response): boolean {

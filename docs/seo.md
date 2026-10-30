@@ -60,6 +60,25 @@ A signed-in or offer page whose path shares a prefix with indexed pages, or that
 A Realm-routed or Zone-routed view of a subject that shows the same facts as the general page has its canonical
 link on the general page.
 
+## Collection rendering and sharing
+
+Collection HTML first reads the current native header and members anonymously, including when the request
+carries a session. Authorized private navigation and curator controls load through private/no-store server
+functions after hydration. Signed-in public browsing uses the anonymous membership and facet population;
+private rules, totals, hidden members and session credentials never enter public HTML or its dehydrated data.
+Native complete published output remains the authority for dynamic Collections, including complete A while B
+is pending. Web neither evaluates private predicates for publication nor creates a source cache.
+
+Only an explicitly disclosed public, ready first page without active or ignored filters permits public HTML
+caching. Unlisted/private, filtered, later, preparing and error results are noindex and private/no-store.
+Concealed public 404s retain that status and no metadata, while an authorized reader can recover private content
+after hydration. The existing public HTML cache lifetime remains unchanged.
+
+A complete ItemList is emitted only for the first unfiltered fully completed public curated result with
+`next: null`. Preview rows never stand in for a full count or export; unsafe or pending totals stay absent.
+The current Collection feed's `lastModified` is its header update time and does not cover all shown member
+changes. Omit Collection sitemap `lastmod` until the owner supplies meaningful public publication time.
+
 ## Metadata
 
 Every indexed page sets, per locale:

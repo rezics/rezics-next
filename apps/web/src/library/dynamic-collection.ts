@@ -45,6 +45,7 @@ export type DynamicCollectionPage = {
   preparing: boolean;
   retryAfterMs: number;
   unavailable: boolean;
+  filterActive?: boolean;
   filter?: FilterDocument;
   filterIgnored?: string[];
   filterType?: string;
