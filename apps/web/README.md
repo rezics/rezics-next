@@ -171,7 +171,9 @@ explicit constructed exact API responses inside AppShell for Pages. Web schedule
 Use existing phone390/desktop1280, locale and light/dark globals. Published checks fixed attribution and keyboard
 navigation; Unavailable retries fresh exact responses by keyboard. Refused/Withdrawn/Versionmismatch conceal bytes.
 Fixtures are not native recordings or buyer proof. `tests/content-edition.test.ts` records the two focused reader
-outcomes for later integration; this delivery runs workspace typing only, with acceptance and visual review pending.
+outcomes for later integration. Local Web and UI workspace typechecks pass; acceptance execution and visual review
+remain pending. Typing also required adding the missing `sourceRecords: []` to the existing catalogue creation and
+terms fixtures; those explicit samples contain no source records.
 The implementation reuses the repository's exact-revision reader, shell, subject point and public identity boundary.
 The UI README's external shelf references do not apply to this document surface; no external reference project was used.
 
