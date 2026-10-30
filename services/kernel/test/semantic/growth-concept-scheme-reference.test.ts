@@ -58,7 +58,16 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
           statement: {
             property: { id: 'schema:url' },
             value: { type: 'value', content: 'https://example.test/native-history' },
-            references: [],
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: 'https://example.test/history-source' },
+                  },
+                ],
+              },
+            ],
           },
         });
       const route = routeOf(id)!;
@@ -217,52 +226,57 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
           );
         },
         operation,
-        warmup: async (db) => {
-          const measured = await capture(db, operation, { includeBackends: true });
-          const cost = costOf(measured.capture);
-          expect(measured.capture.statements.join('\n')).not.toMatch(
-            /consumer_checkpoint|projection_pending|semantic\.(?:outbound_link|inbound_link)\b/,
-          );
-          const plans = JSON.stringify(measured.capture.plans);
-          expect(plans).toContain('fact_pkey');
-          expect(plans).toContain('revision_identity_version');
-          if (representation !== 'compact') {
-            expect(plans).toContain('adoption_pkey');
-            expect(plans).toContain('candidate_pkey');
-          }
-          if (tuple) expect(plans).toContain('source_fences_pkey');
-          // The harness counts examined and removed rows and applies the shared
-          // measured-layout rule. Inspect useful key conditions too, including
-          // the complete empty/mismatched slot path; no planner settings change.
-          for (const relation of [
-            'subject',
-            'fact',
-            'candidate',
-            'adoption',
-            'revision',
-            ...(tuple ? ['source_fences'] : []),
-          ]) {
-            const scans = nodes(measured.capture.plans, relation).filter((node) => /Index/.test(node['Node Type']));
-            if (scans.length) expect(scans.some((node) => String(node['Index Cond']).includes('route'))).toBe(true);
-          }
-          console.log(
-            JSON.stringify({
-              representation,
-              axis,
-              rows: cost.rows,
-              blocks: cost.blocks,
-              statements: cost.statements,
-              controls: cost.controlStatements,
-              requestBytes: cost.requestBytes,
-              responseBytes: cost.responseBytes,
-              bytes: measured.value.bytes,
-              connections: new Set(measured.capture.statementBackends).size,
-              relations: cost.relations,
-            }),
-          );
-        },
       });
+      const measured = await capture(world.db, operation, { includeBackends: true });
+      const cost = costOf(measured.capture);
+      expect(measured.capture.statements.join('\n')).not.toMatch(
+        /consumer_checkpoint|projection_pending|semantic\.(?:outbound_link|inbound_link)\b/,
+      );
+      const plans = JSON.stringify(measured.capture.plans);
+      expect(plans).toContain('fact_pkey');
+      expect(plans).toContain('revision_identity_version');
+      if (representation !== 'compact') {
+        expect(plans).toContain('adoption_pkey');
+        expect(plans).toContain('candidate_pkey');
+      }
+      if (tuple) expect(plans).toContain('source_fences_pkey');
+      // The harness counts examined and removed rows and applies the shared
+      // measured-layout rule. Inspect useful key conditions too, including
+      // the complete empty/mismatched slot path; no planner settings change.
+      for (const relation of [
+        'subject',
+        'fact',
+        'candidate',
+        'adoption',
+        'revision',
+        ...(tuple ? ['source_fences'] : []),
+      ]) {
+        const scans = nodes(measured.capture.plans, relation).filter((node) => /Index/.test(node['Node Type']));
+        if (scans.length) expect(scans.some((node) => String(node['Index Cond']).includes('route'))).toBe(true);
+      }
+      console.log(
+        JSON.stringify({
+          representation,
+          axis,
+          rows: cost.rows,
+          blocks: cost.blocks,
+          statements: cost.statements,
+          controls: cost.controlStatements,
+          requestBytes: cost.requestBytes,
+          responseBytes: cost.responseBytes,
+          bytes: measured.value.bytes,
+          connections: new Set(measured.capture.statementBackends).size,
+          relations: cost.relations,
+        }),
+      );
       expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+      console.log(
+        JSON.stringify({
+          representation,
+          axis,
+          samples: report.samples.map(({ scale, cost, counted }) => ({ scale, cost, counted })),
+        }),
+      );
     }
   }
 }, 240_000);
