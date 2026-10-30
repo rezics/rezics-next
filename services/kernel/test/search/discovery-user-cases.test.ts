@@ -131,6 +131,7 @@ async function facets(
       return response.body as FacetDiscovery200Response;
     }
     expect(response.status, JSON.stringify(response.body)).toBe(503);
+    assert(typeof response.body.code === 'string');
     expect(['index_not_ready', 'semantic_not_ready']).toContain(response.body.code);
     expect(response.headers.get('retry-after')).toBeTruthy();
     if (Date.now() >= deadline)
