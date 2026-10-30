@@ -145,6 +145,7 @@ test('exact native due discovery retains all raw control rows and byte costs at 
     async prepare() {
       time = origin + windowMs;
     },
+    async warmup() {},
     async operation() {
       const result = await purgeLabelRetentionPage(
         { pool: db.pool, clock },
@@ -193,6 +194,7 @@ test('default native worker child pages charge Core and SDK rows blocks statemen
       await prepareGraph(101);
       observedRows = observedStatements = observedRequestBytes = observedResponseBytes = 0;
     },
+    async warmup() {},
     async operation() {
       const pages = await workerRun();
       expect(pages.reduce((n, p) => n + (p.output as { removed: number }).removed, 0)).toBe(102);
@@ -237,8 +239,7 @@ test('selected child graph grows linearly while every default worker page stays 
     async prepare(_db, scale) {
       await prepareGraph(scale);
     },
-    async warmup(_db, scale) {
-      await prepareGraph(scale);
+    async warmup() {
       await workerRun();
     },
     async operation(_db, scale) {
