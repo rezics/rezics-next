@@ -52,9 +52,11 @@ export type LeafRequest = Readonly<{
     revalidate: string | null;
     budget: LeafWork;
 }>;
-type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
-  ? Readonly<{ actor?: never; nativeT?: never; work: W }>
-  : never;
+type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext ? Readonly<{
+    actor?: never;
+    nativeT?: never;
+    work: W;
+}> : never;
 export type LeafOptions = Readonly<{
     access: Access;
     routeKey: Uint8Array;
@@ -70,3 +72,4 @@ export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions
  * not ready; they never prepare Access, query SQL, or claim a current fact or coverage.
  */
 export declare function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence>;
+export {};

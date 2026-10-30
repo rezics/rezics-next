@@ -34,9 +34,11 @@ export interface WorkReceipt {
     readonly reservationId: string;
     readonly used: WorkDimensions;
 }
-type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
-  ? Readonly<{ actor?: never; at?: never; work: W }>
-  : never;
+type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext ? Readonly<{
+    actor?: never;
+    at?: never;
+    work: W;
+}> : never;
 export type CollectionSourceContext = Readonly<{
     deadline: number;
 }> & (Readonly<{

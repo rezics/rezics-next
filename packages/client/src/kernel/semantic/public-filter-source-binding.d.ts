@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
-import type { DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
 import type { Access } from '../request/access.ts';
 import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
-import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicSuggestionCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-import type { PrivacyReductionStart, PublicFilterDependencyKey, PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator, PrivacyReductionObservation, PrivacyReductionObservationRequest, PublicFilterCost, PublicFilterProjectionMeaning, PublicFilterSource } from './public-filter-source-contract.ts';
+import { type DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
+import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicCanonicalCaptureInput, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from '../search/public-filter-consumer-contract.ts';
+import type { PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning, PublicFilterSource, PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator, PrivacyReductionStart, PrivacyReductionObservation, PrivacyReductionObservationRequest } from './public-filter-source-contract.ts';
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
 export type JoinedPopulationRequest = Readonly<{
     kind: 'queried';
@@ -28,18 +28,20 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
     readPrivacyReductionHeads(request: JoinedPopulationRequest, context: PublicFilterConsumerContext): Promise<PrivacyReductionObservation>;
 }
 export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-export type PublicSourceCaptureInput = PublicFilterConsumerCaptureInput | DiscoveryConsumerCaptureInput | PublicSuggestionCaptureInput;
 export type NativePublicSource = Readonly<{
     id: string;
     partition: number;
     epoch: number;
     configuration: string;
 }>;
+/** Immutable root input. Refill size/frontier belongs to Search's retained execution lineage. */
+export type PublicFilterSourceCaptureInput = PublicFilterConsumerCaptureInput | DiscoveryConsumerCaptureInput | PublicSuggestionCaptureInput;
+export type PublicSourceCaptureInput = PublicFilterSourceCaptureInput;
 export type PublicFilterSourceDefinition = Readonly<{
     source: NativePublicSource;
     readDefinition: string;
     meaning: PublicFilterProjectionMeaning;
-    capture: PublicSourceCaptureInput;
+    capture: PublicFilterSourceCaptureInput;
     dependencyKeys: readonly PublicFilterDependencyKey[];
 }>;
 export type PublicFilterBindingFailure = Readonly<{
@@ -51,7 +53,7 @@ export type PublicFilterSourceBinding = Readonly<{
     resolve(request: Readonly<{
         source: PublicFilterSource;
         meaning: PublicFilterProjectionMeaning;
-        capture: PublicSourceCaptureInput;
+        capture: PublicFilterSourceCaptureInput;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'resolved';
         definition: PublicFilterSourceDefinition;
@@ -76,6 +78,7 @@ export type PublicFilterSourceBinding = Readonly<{
         cost: PublicFilterCost;
     }> | PublicFilterBindingFailure>;
 }>;
+/** Source-owned bootstrap state; the consumer and retained observation remain Search-owned. */
 export type PublicSourceBootstrap = Readonly<{
     id: string;
     definition: PublicFilterSourceDefinition;
@@ -128,7 +131,7 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
     begin(request: Readonly<{
         source: PublicFilterSource;
         meaning: PublicFilterProjectionMeaning;
-        capture: PublicSourceCaptureInput;
+        capture: PublicFilterSourceCaptureInput;
         consumer: PublicFilterConsumer;
         snapshot: 'pit' | 'prepared';
     }>, context: PublicFilterConsumerContext): Promise<PublicSourceBootstrapResult>;
@@ -163,6 +166,5 @@ export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Rea
         execution: string;
     }>, context: PublicFilterConsumerContext): ReturnType<PublicFilterSourceBinding['join']>;
 }>;
-/** PROVISIONAL agreed producer adapter. The owning native implementation replaces this module on landing.
- * No local registry, caller object, or structural Source can establish native binding here. */
-export declare function createPublicFilterSourceBinding(_pool: Pool, _routing: Uint8Array, _access: Access): PublicFilterSourceBootstrapBinding;
+/** Native Source-owned registration; the origin association only locates the constructor configuration. */
+export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;

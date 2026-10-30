@@ -1243,6 +1243,11 @@ declare const productEventTypes: {
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
+    readonly 'com.rezics.semantic.public-source.advanced.v1': Type.TObject<{
+        id: Type.TString;
+        bootstrap: Type.TString;
+        execution: Type.TString;
+    }>;
     readonly 'com.rezics.semantic.provider-review.projected.v1': Type.TObject<{}>;
     readonly 'com.rezics.semantic.composite.registered.v1': Type.TObject<{
         context: Type.TString;

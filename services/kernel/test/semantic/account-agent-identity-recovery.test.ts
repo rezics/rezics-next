@@ -102,7 +102,7 @@ test('Exact retained original account identity admission input and native accept
     if (originals.has(client)) return;
     const query = client.query;
     originals.set(client, query);
-    client.query = function (...args: unknown[]) {
+    client.query = function (this: PoolClient, ...args: unknown[]) {
       const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
       if (/access\.agent_identity_intent|semantic\.definition_activation|semantic\.subject\b/.test(sql))
         throw new Error('Recovery recursed into current source/release/subject');

@@ -160,6 +160,14 @@ type CommandContext = {
     transactionId: string;
     time: AuthoritativeTime;
 };
+/** Original source writers consume the executor's actual codec result, never a second HMAC.
+ * Available only after authorization and replay lookup, on the original transaction. */
+export declare function currentCommandReceipt(tx: CommandTransaction): Readonly<{
+    principal: CommandPrincipal;
+    kind: string;
+    key: string;
+    storageKey: string;
+}>;
 /** Completion metadata only. The caller must retain the queried intent's action/resource policy. */
 export declare function hasOwnCommandCompletion(tx: CommandTransaction, receipt: PrincipalCommandReceipt): Promise<boolean>;
 export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
