@@ -696,6 +696,43 @@ key and body, verify the returned account, and require normal confirmation plus
 fresh caller-bound native approval. `return_to` is navigation only; it selects
 neither client nor scopes. The native organizations platform gate remains mandatory.
 
+Account management uses the separate native first-party client
+`rezics-auth-account-management`, registered by the same trusted create-or-match
+path. Its exact registration ceiling is `account:update`, `organization:membership`
+and `account:manage`. `AUTH_MANAGEMENT_SCOPES` and `managementOperationProfile`
+publish the selected live profiles: rename requests only `account:update`, membership
+only `organization:membership`, and transfer/transfer acceptance only `account:manage`.
+Native authentication materializes current consent; registration and navigation grant
+no permissions. The fixed organization/delete client and ordinary login are unchanged.
+
+`apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
+`loadManagementSession()`, `managementOperationProfile(kind)` and
+`executeManagementOperation({ operationKey, operation, accountId })`. Here `accountId`
+is the initiating human, not necessarily the managed subject. Both existing operation
+routes accept this optional comparison field. When supplied, the host compares the
+native fresh human's account, client and exact operation profile before obtaining an
+Access token through `accessTokenForProof`; no browser proof or bearer is accepted.
+Existing native approval resolution and workflow authorization still decide authority.
+Transfer acceptance is approve-only: its complete result contains the real `reference`
+and `expiresAt`, to be used as the source transfer's `acceptance`. It never executes.
+Other complete results contain the native subject `accountId`. Refusal, step-up,
+unavailable dependencies and uncertain execution are distinct typed outcomes.
+
+Page owners supply the forms for `/account/rename`, `/organizations/members` and
+`/operators/transfer`; the Auth page server and production triggers dispatch these
+paths. On explicit submit, retain one immutable key and descriptor. If step-up is
+needed, `storePendingManagementOperationStepUp(input)` and
+`managementOperationStepUpUrl(operation.kind)` save and select the exact continuation.
+Password/passkey login checks the returned native human and profile, rechecks the
+saved body/key, and returns only to that kind's fixed route. Return does not approve
+or execute. The page reads `pendingManagementOperationStepUpState()`, restores the
+descriptor and key, resets its confirmation, and calls `executeManagementOperation`
+only on a second explicit submit. It must reject a mismatched continuation using
+`pendingManagementOperationMatches`, and clear it only on completion or explicit
+cancellation. Awaiting, substituted or malformed continuations cannot execute.
+Stale sessions require another step-up; approval expiry and current native checks
+still apply. An unknown execution result is not final workflow/readback evidence.
+
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
 system pool must name that same database. The SDK creates and migrates its schema;

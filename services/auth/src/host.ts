@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+import { authManagementClient } from './auth-management-client.ts';
 import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
@@ -173,6 +174,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
               scopes: [...new Set(Object.values(AUTH_PAGE_OPERATION_SCOPES).flat())],
               mode: 'create-or-match',
             });
+            await auth.internal.registerClient(authManagementClient);
           } catch (error) {
             if (error instanceof Error && 'status' in error && (error.status === 400 || error.status === 401))
               throw new AuthHostConfigurationError('operation-client');

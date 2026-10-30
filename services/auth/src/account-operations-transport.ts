@@ -1,5 +1,6 @@
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
+import { managementCallerMatches } from './auth-management-client.ts';
 
 /** Kernel workflow approval and platform gate ports, bound by the composition.
  * The transport hands them an Access bearer from a live Auth proof scope and
@@ -120,14 +121,17 @@ export function accountOperationTransport(
       const body = await readJsonObject(request);
       const names =
         command === 'approve'
-          ? ['operationKey', 'operation']
-          : ['operationKey', 'operation', 'reference', 'acceptance'];
+          ? ['operationKey', 'operation', 'accountId']
+          : ['operationKey', 'operation', 'reference', 'acceptance', 'accountId'];
       if (Object.keys(body).some((field) => !names.includes(field))) return denied(400);
       const key = text(body.operationKey);
       const operation = operationOf(body.operation);
+      const management = Object.hasOwn(body, 'accountId');
+      if (management) text(body.accountId);
       const context = access.context();
       if (command === 'approve') {
         const approval = await service.internal.withFreshHuman({ headers: request.headers }, async (proof) => {
+          if (management && !managementCallerMatches(proof, body.accountId, operation)) deny(403);
           const token = await service.internal.accessTokenForProof(proof);
           if (operation.kind === 'organization' && !(await access.admitGroup(token, GATED_GROUP, context))) return null;
           return access.approve(
@@ -151,9 +155,15 @@ export function accountOperationTransport(
       const authorization = text(body.reference);
       const executable = { ...operation, authorization } as AccountOperation;
       // The caller proves the person; the workflow resolves the approval again.
-      await service.internal.withFreshHuman({ headers: request.headers, fresh: false }, async (proof) =>
-        access.resolveForCaller(await service.internal.accessTokenForProof(proof), authorization, executable, context),
-      );
+      await service.internal.withFreshHuman({ headers: request.headers, fresh: management }, async (proof) => {
+        if (management && !managementCallerMatches(proof, body.accountId, operation)) deny(403);
+        return access.resolveForCaller(
+          await service.internal.accessTokenForProof(proof),
+          authorization,
+          executable,
+          context,
+        );
+      });
       const input = { key, authorization } as const;
       switch (operation.kind) {
         case 'organization':

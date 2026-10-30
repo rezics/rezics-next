@@ -12,6 +12,7 @@ import { securityDevice, type SecurityPasskey } from './security';
 import { performSecurityAction, type SecurityActionResult } from './security-reconciliation';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 import { SIGN_IN_CLIENT_ID, SIGN_IN_SCOPE, signInResult, type SignInResult } from './sign-in';
+import { managementOperationProfile, type ManagementOperationKind } from '@rezics/auth-contract';
 
 export const passkeysSupported = browserSupportsWebAuthn;
 export const passkeyAutofillSupported = browserSupportsWebAuthnAutofill;
@@ -48,7 +49,13 @@ function isCancellation(error: unknown): boolean {
 export async function signInWithPasskey({
   autofill = false,
   operation,
-}: { autofill?: boolean; operation?: AccountOperationStepUpKind } = {}): Promise<PasskeySignInResult> {
+  management,
+}: {
+  autofill?: boolean;
+  operation?: AccountOperationStepUpKind;
+  management?: ManagementOperationKind;
+} = {}): Promise<PasskeySignInResult> {
+  if (operation && management) return { ok: false, reason: 'unavailable' };
   const fetched = await signInOptions();
   if (!fetched.ok) return signInResult(fetched);
 
@@ -60,9 +67,11 @@ export async function signInWithPasskey({
   }
   // The challenge is spent once the response is sent.
   held = null;
-  const profile = operation
-    ? accountOperationProfile(operation)
-    : { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
+  const profile = management
+    ? managementOperationProfile(management)
+    : operation
+      ? accountOperationProfile(operation)
+      : { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
   return signInResult(await authPost('/signin/passkey', { response, ...profile }));
 }
 

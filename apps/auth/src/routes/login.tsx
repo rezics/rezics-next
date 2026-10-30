@@ -18,6 +18,8 @@ import {
 } from '../passkeys';
 import { signIn, signInTarget } from '../sign-in';
 import { ErrorAlert } from '../alert';
+import { selectManagementOperationStepUp } from '../management-operation-step-up';
+import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
 
 const emailId = 'login-email';
 const emailErrorId = 'login-email-error';
@@ -74,10 +76,10 @@ function LoginPage() {
 
   // The browser offers passkeys in the email field once its autocomplete token is on the page.
   useEffect(() => {
-    if (passkeySupport !== 'autofill') return;
+    if (passkeySupport !== 'autofill' || selectManagementOperationStepUp(query).kind !== 'ordinary') return;
     startAutofill();
     return () => WebAuthnAbortService.cancelCeremony();
-  }, [passkeySupport]);
+  }, [passkeySupport, query]);
 
   function startAutofill() {
     void signInWithPasskey({ autofill: true }).then(finishPasskey);
@@ -103,6 +105,18 @@ function LoginPage() {
     setMessage('');
     setEmailError('');
     setPasswordError('');
+    if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
+      const outcome = await confirmStepUpWithPasskey(query, window.location.origin);
+      if (outcome.ok) {
+        window.location.assign(outcome.target);
+        return;
+      }
+      submitting.current = false;
+      setPending(false);
+      setPasskeyPending(false);
+      setMessage(outcome.message ?? '');
+      return;
+    }
     const result = await signInWithPasskey();
     finishPasskey(result);
     // Showing the prompt replaced the autofill ceremony, so offer autofill again if the person backed out.
@@ -126,6 +140,18 @@ function LoginPage() {
     setMessage('');
     setEmailError('');
     setPasswordError('');
+    if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
+      const outcome = await confirmStepUp(email, password, query, window.location.origin);
+      setPassword('');
+      if (outcome.ok) {
+        window.location.assign(outcome.target);
+        return;
+      }
+      submitting.current = false;
+      setPending(false);
+      setMessage(outcome.message ?? '');
+      return;
+    }
     const result = await signIn(email, password);
     setPassword('');
     if (result.ok) {

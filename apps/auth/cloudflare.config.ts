@@ -8,6 +8,9 @@ const pageRoutes = [
   '/account/delete',
   '/organizations/new',
   '/organizations/delete',
+  '/account/rename',
+  '/organizations/members',
+  '/operators/transfer',
 ];
 
 export default {

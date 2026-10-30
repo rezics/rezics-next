@@ -13,6 +13,8 @@ const pagePaths = new Set([
   '/account/rename',
   '/organizations/new',
   '/organizations/delete',
+  '/organizations/members',
+  '/operators/transfer',
 ]);
 const assetPrefix = '/auth-assets/';
 

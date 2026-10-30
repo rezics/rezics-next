@@ -1,0 +1,172 @@
+export {
+  managementOperationProfile,
+  type ManagementOperation,
+  type ManagementOperationInput,
+  type ManagementOperationResult,
+  type ManagementSession,
+  type ManagementSessionResult,
+} from '@rezics/auth-contract';
+
+import {
+  isManagementOperation,
+  managementOperationProfile,
+  type ManagementOperationInput,
+  type ManagementOperationResult,
+  type ManagementSession,
+  type ManagementSessionResult,
+} from '@rezics/auth-contract';
+import { authPost, type AuthPostResult } from './api';
+import {
+  pendingManagementOperationMatches,
+  pendingManagementOperationStepUpState,
+} from './management-operation-step-up';
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Reads the real native proof projection; no fabricated identity or empty-success fallback. */
+export async function loadManagementSession(): Promise<ManagementSessionResult> {
+  try {
+    const response = await fetch('/session', {
+      credentials: 'same-origin',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status !== 200) return { kind: 'unavailable' };
+    const body: unknown = await response.json();
+    if (
+      !record(body) ||
+      Object.keys(body).some(
+        (key) => !['account_id', 'client_id', 'scope', 'authn_epoch', 'auth_time', 'amr'].includes(key),
+      ) ||
+      typeof body.account_id !== 'string' ||
+      !body.account_id ||
+      typeof body.client_id !== 'string' ||
+      !body.client_id ||
+      !Array.isArray(body.scope) ||
+      !body.scope.every((scope) => typeof scope === 'string') ||
+      !Number.isSafeInteger(body.authn_epoch) ||
+      (body.authn_epoch as number) < 0 ||
+      !Number.isSafeInteger(body.auth_time) ||
+      (body.auth_time as number) < 0 ||
+      (body.auth_time as number) > Math.floor(Date.now() / 1000) ||
+      !Array.isArray(body.amr) ||
+      body.amr.length !== 1 ||
+      !['pwd', 'pop'].includes(body.amr[0])
+    )
+      return { kind: 'unavailable' };
+    return {
+      kind: 'ready',
+      accountId: body.account_id,
+      clientId: body.client_id,
+      scopes: body.scope,
+      authTime: body.auth_time as number,
+      authnEpoch: body.authn_epoch as number,
+      amr: body.amr as ('pwd' | 'pop')[],
+    };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+export function managementSessionMatches(session: ManagementSession, input: ManagementOperationInput): boolean {
+  const profile = managementOperationProfile(input.operation.kind);
+  return (
+    session.accountId === input.accountId &&
+    session.clientId === profile.client_id &&
+    session.scopes.length === profile.scope.length &&
+    session.scopes.every((scope, index) => scope === profile.scope[index]) &&
+    Date.now() / 1000 - session.authTime <= 600
+  );
+}
+
+function failure(result: Exclude<AuthPostResult, { ok: true }>): ManagementOperationResult {
+  if (result.status === 401 && result.code === 'step_up_required') return { kind: 'step-up' };
+  if ([400, 401, 403, 409, 413, 415].includes(result.status) && result.code === 'account_operation_denied')
+    return { kind: 'refused' };
+  return { kind: 'unavailable' };
+}
+
+/** Invoke only from the page's explicit submit, including after a fresh return.
+ * The immutable snapshot survives every await and the immediate uncertain retry.
+ * Completion reports the native operation result, never a later readback claim. */
+export async function executeManagementOperation(input: ManagementOperationInput): Promise<ManagementOperationResult> {
+  let snapshot: ManagementOperationInput;
+  try {
+    snapshot = JSON.parse(JSON.stringify(input)) as ManagementOperationInput;
+  } catch {
+    return { kind: 'refused' };
+  }
+  if (
+    !snapshot ||
+    Object.keys(snapshot).some((key) => !['operationKey', 'operation', 'accountId'].includes(key)) ||
+    typeof snapshot.operationKey !== 'string' ||
+    !snapshot.operationKey ||
+    snapshot.operationKey.length > 4096 ||
+    typeof snapshot.accountId !== 'string' ||
+    !snapshot.accountId ||
+    !isManagementOperation(snapshot.operation)
+  )
+    return { kind: 'refused' };
+  const continuation = pendingManagementOperationStepUpState();
+  if (
+    continuation.kind === 'invalid' ||
+    (continuation.kind === 'pending' &&
+      (!pendingManagementOperationMatches(continuation.value, snapshot) || continuation.value.phase !== 'returned'))
+  )
+    return { kind: 'refused' };
+  const current = await loadManagementSession();
+  if (current.kind === 'unavailable') return { kind: 'unavailable' };
+  if (current.kind === 'signed-out') return { kind: 'step-up' };
+  if (current.accountId !== snapshot.accountId) return { kind: 'refused' };
+  if (!managementSessionMatches(current, snapshot)) return { kind: 'step-up' };
+
+  const approved = await authPost('/account-operations/approve', snapshot);
+  if (!approved.ok) return failure(approved);
+  const approval = approved.body;
+  if (
+    !record(approval) ||
+    Object.keys(approval).sort().join(',') !== 'expiresAt,reference' ||
+    typeof approval.reference !== 'string' ||
+    !approval.reference ||
+    approval.reference.length > 4096 ||
+    typeof approval.expiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(approval.expiresAt)) ||
+    Date.parse(approval.expiresAt) <= Date.now()
+  )
+    return { kind: 'unavailable' };
+  if (snapshot.operation.kind === 'transfer-acceptance')
+    return {
+      kind: 'complete',
+      operationKind: 'transfer-acceptance',
+      reference: approval.reference,
+      expiresAt: approval.expiresAt,
+    };
+
+  // Cookie substitution after approval is compared again in the real host against accountId and the exact profile.
+  const body = { ...snapshot, reference: approval.reference };
+  let executed = await authPost('/account-operations/execute', body);
+  const uncertain = !executed.ok && executed.status === 503;
+  if (!executed.ok && executed.status === 503 && executed.code === 'unavailable')
+    executed = await authPost('/account-operations/execute', body);
+  if (!executed.ok) {
+    const outcome = failure(executed);
+    return uncertain || outcome.kind === 'unavailable' ? { kind: 'unknown' } : outcome;
+  }
+  const expectedAccountId =
+    snapshot.operation.kind === 'rename'
+      ? snapshot.operation.accountId
+      : snapshot.operation.kind === 'membership'
+        ? snapshot.operation.memberAccountId
+        : snapshot.operation.previous.subjectAccountId;
+  if (
+    !record(executed.body) ||
+    Object.keys(executed.body).join(',') !== 'accountId' ||
+    executed.body.accountId !== expectedAccountId
+  )
+    return { kind: 'unknown' };
+  return { kind: 'complete', operationKind: snapshot.operation.kind, accountId: expectedAccountId };
+}
