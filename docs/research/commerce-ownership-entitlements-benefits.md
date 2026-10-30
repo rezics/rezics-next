@@ -47,7 +47,7 @@ The refund policy distinguishes playtime from the purchase date and covers gifts
 
 A consumer can use the receipt to locate the purchasing account and request a refund; approval depends on circumstances and region. A receipt or downloaded app alone cannot establish every current in-app right. [Consumer refunds](https://support.apple.com/en-us/118223) App Store Connect roles govern developer administrative privileges; the Account Holder signs agreements. Financial reports contain finalized proceeds and payments. Apple expressly warns against using the transaction payload's price/currency as revenue-reconciliation evidence. [Roles](https://developer.apple.com/help/app-store-connect/manage-your-team/overview-of-accounts-and-roles/), [payments](https://developer.apple.com/help/app-store-connect/getting-paid/overview-of-receiving-payments/), [transaction payload](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload)
 
-**Unknown.** App-specific use/download gates, progress, cache handling, consumable restoration and gifting/copy rules beyond the documented product types cannot be generalized. **Inference:** buyer rights, signed transaction evidence, consumption counters and seller administration are four authorities, even within one ecosystem.
+**Unknown.** App-specific use/download gates, wishlist/library presentation, progress, cache handling, consumable restoration and gifting/copy rules beyond the documented product types cannot be generalized. **Inference:** buyer rights, signed transaction evidence, consumption counters and seller administration are four authorities, even within one ecosystem.
 
 ### Kindle: a licence, reader state and a gift copy
 
@@ -55,7 +55,7 @@ A consumer can use the receipt to locate the purchasing account and request a re
 
 Gift purchasing has distinct copy semantics: prepaid multi-copy purchases create a redemption link per copy; unredeemed copies can be re-gifted or refunded subject to marketplace-specific deadlines. This is not transfer of a redeemed personal licence. KDP also distinguishes royalty accrual for the gift options. [Buying and gifting](https://kdp.amazon.com/en_US/help/topic/G200652260) The customer return policy permits eligible accidental ebook returns, whereas KDP royalties use specified price, territory, tax and delivery conditions. Neither reading progress nor a headline royalty percentage is a complete financial history. [Kindle returns](https://digprjsurvey.amazon.com/csad/help/node/GKM69DUUYKQWKWX7), [KDP royalties](https://kdp.amazon.com/en_US/help/topic/G200644210)
 
-**Unknown.** The surveyed pages do not disclose a public authorization API, exact ordinary repeat-purchase cardinality, chargeback reinstatement, or relationships among wishlist, personal collection, receipt and downloaded-cache rows. **Inference:** distinguish one person's content licence from an unredeemed, separately identifiable gift claim; cached bytes and progress are not fresh proof of access.
+**Unknown.** The surveyed pages do not disclose a public authorization API, exact ordinary repeat-purchase cardinality, chargeback reinstatement, seller order-level visibility/payout detail beyond royalty rules, or relationships among wishlist, personal collection, receipt and downloaded-cache rows. **Inference:** distinguish one person's content licence from an unredeemed, separately identifiable gift claim; cached bytes and progress are not fresh proof of access.
 
 ### Bandcamp: receipt recovery and collection access
 
