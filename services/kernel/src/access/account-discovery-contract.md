@@ -75,7 +75,7 @@ tombstones remain a separate contract; discovery never obtains membership from `
 | Public activity flags | account's `public_views`, `speakers_listed`; `account-views-read.sql` point batches | current native row, never a permission mirror; underlying content still checks its own Access |
 | Attribution | account full key; requested-ID `public-identity-page.sql` | independent allowlist; no discovery/count authority |
 | Source progress | `core.partition(partition_no)` position; command/event position and account anchor | same-snapshot position and rows; transaction UUID and wall time cannot order deliveries |
-| Proposed Account row version | account full key plus new Accounts-owned monotone `discovery_revision` | advance on every relevant mutation, including both sides of handle publication and restoration; never reuse after purge/restore |
+| Proposed Account row version | account full key plus new Accounts-owned monotone `discovery_revision` | advance on relevant Account-anchor mutations and foreign-dependency re-projection commands; never reuse after purge/restore |
 | Proposed native generation census | `access.account_discovery_population(partition_no)` on the same native partition | exact active/unfenced count; delta and Account mutation commit together, read with partition position; not a text-query counter |
 | Proposed dependent work | owner source key `(owner, partition, route, id)` plus physical generation/incarnation and revision | durable indexed frontier/locator; bounded resumable work, not scanning receipts or account history |
 
@@ -222,8 +222,15 @@ handoff assembly described below; Web owns real recorded API stories after that 
 
 On each Account partition, revision, native public mutation, population-census delta, durable event and reduction/dependency intent commit
 or roll back together. Cross-anchor handle lifecycle already has reserved/held/publication phases: only exact
-active claims can supply handle text. Each phase which changes either native side dirties the affected source
-key before it can become public. No distributed SQL transaction or duplicated claim authority is introduced.
+active claims can supply handle text. Each phase which changes either native side commits its own keyed reduction intent and partition-position
+custody on that side. A claim command cannot increment an Account row on a foreign partition in the same
+transaction. Its durable intent schedules an idempotent Account-anchor re-projection command, which advances
+`discovery_revision` and records the consumed claim key/position before an index writer may publish that handle
+version. Account source reads still check the live exact claim; a changed foreign dependency immediately
+invalidates old query safety even while this command is pending. A writer must match both the Account revision
+and consumed claim dependency position to its source snapshot, or resnapshot after the re-projection command.
+This prevents two claim states with one Account revision from overwriting one another. No distributed SQL
+transaction or duplicated claim authority is introduced.
 The Search whole-query observation must reject an old immutable index/PIT after reductions on **either** anchor,
 including NOT, zero-hit, order and broader count populations; checking returned IDs is insufficient.
 
