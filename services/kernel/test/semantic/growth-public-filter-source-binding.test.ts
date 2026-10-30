@@ -322,7 +322,7 @@ test('original capture survives native derived execution windows and exact relea
       filterDocument: undefined,
       text: parseText('native -excluded'),
     };
-    await f.create('schema:Book');
+    const book = await f.create('schema:Book');
     const captured = await consumer.operations.capture({ plan: root, snapshot: 'pit' }, readContext());
     if (captured.status === 'preparing') {
       const repair = await consumer.operations.repairStep(captured.repair, readContext());
@@ -350,6 +350,8 @@ test('original capture survives native derived execution windows and exact relea
         expect(first.status).toBe('queried');
         if (first.status !== 'queried')
           throw new Error('Native execution unavailable; no substitute query is admitted');
+        expect(first.result.hits.map((hit) => hit.id)).toContain(book);
+        expect(first.window.examined).toBeGreaterThan(0);
         const joined = await binding.join({ queried: first.queried, execution: first.execution }, context);
         expect(joined.status).toBe('joined');
         if (joined.status !== 'joined') throw new Error(joined.reason);
