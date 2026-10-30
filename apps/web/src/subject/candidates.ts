@@ -4,6 +4,7 @@ type Endpoint = ReturnType<KernelClient['subjects']>;
 export type CandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
 export type Candidate = CandidatePage['candidates'][number];
 export type CandidateField = { id: string; label: string };
+export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
 export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
 export type CandidateRead =
   | CandidateFailure
@@ -21,6 +22,8 @@ export type CandidateCommand = {
   operation: 'accept' | 'adopt';
   head: number | null;
   key: string;
+  slot?: CandidateSlot;
+  rank?: 'normal' | 'preferred';
 };
 export type CandidateResult =
   | CandidateFailure
@@ -80,8 +83,24 @@ export async function readCandidates(
   id: string,
   property?: string,
   cursor?: string,
+  slot?: CandidateSlot,
 ): Promise<CandidateRead> {
   try {
+    if (slot) {
+      // A relation comparison needs no per-candidate hydration: use supplied related summaries.
+      const [current, result] = await Promise.all([
+        client.subjects({ id }).get(),
+        client.subjects({ id }).candidates.get({
+          query: { property: property!, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
+          headers: { authorization },
+        }),
+      ]);
+      if (!current.data || current.status !== 200) return candidateFailure(current.status);
+      if (current.data.subject.id !== id || current.data.subject.context !== candidateContext)
+        return candidateFailure(400);
+      if (!result.data || result.status !== 200) return candidateFailure(result.status);
+      return { ok: true, public: current.data, fields: [], names: {}, page: result.data };
+    }
     // This ordinary reader intentionally has no viewer authorization or private overlay.
     const current = await client.subjects({ id }).get();
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
@@ -137,8 +156,9 @@ export async function selectCandidate(
             {
               context: candidateContext,
               property: input.property,
+              ...input.slot,
               mode: 'replace',
-              selection: [{ candidate: input.candidate, rank: 'normal' }],
+              selection: [{ candidate: input.candidate, rank: input.rank ?? 'normal' }],
               expected_head: input.head,
             },
             options,

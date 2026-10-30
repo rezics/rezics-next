@@ -29,6 +29,8 @@ import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
 import { SubjectCommunityContext } from './subject-community-view';
+import { subjectUrlForView } from '../../subject/subject-href';
+import { candidateContext } from '../../subject/candidates';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -427,6 +429,21 @@ export function SubjectPage({
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {overview && <SubjectSourcesLink />}
             {curation}
+            {overview &&
+              read &&
+              !page.account &&
+              read.subject.context === candidateContext &&
+              page.context?.population.kind !== 'realm' && (
+                <a
+                  className={`${linkClass} ${linkColor}`}
+                  href={subjectUrlForView(
+                    subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale),
+                    'relation-edit',
+                  )}
+                >
+                  {m.relation_title({}, { locale: locale as never })}
+                </a>
+              )}
           </div>
         </PageData>
       </PageHost>

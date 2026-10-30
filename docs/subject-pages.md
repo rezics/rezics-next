@@ -162,6 +162,35 @@ The current native candidate read requires a property and, for relation slots, a
 subject-wide candidate or relation-slot discovery read. This region therefore covers descriptive property slots,
 including classifications, and does not offer an invented list of imported relation targets or a raw-id entry.
 
+## Relation contributions
+
+The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the
+subject's canonical identity and shared frame; Realm readings do not expose a Global writer. A Realm query on the
+editor shows the unsupported Context state. There is no browser Context override.
+
+After session preparation, contributors choose an effective released relation property and a real target through
+the existing subject picker, or edit one of the public reader's existing relations. Classification properties stay
+in descriptive-field review. Qualifiers use released property meanings and item pickers for roles and declared
+keys. Existing qualifiers, original names and reference parts survive replacement proposals. Citations are attached
+to the immutable statement submitted through native candidate proposal, not to a presentation document.
+
+Review addresses exactly the property plus target, or an existing unresolved `sameAs` IRI, and the declared item
+qualifier key when present. Target and `sameAs` are mutually exclusive. Twenty candidates and their continuation
+belong to that address. The comparison shows the public selection for that slot, proposed qualifiers, evidence,
+source details, decision and selected rank. Unresolved references remain unresolved; unavailable summaries never
+become invented identities. Related labels come from supplied summaries or the existing bounded suggestion response.
+
+Accept and reject use the observed candidate decision head. Adoption uses the observed slot adoption head and
+replaces only that target/key slot with one normal or preferred selection. Retracted and deprecated suggestions
+cannot be selected. Each confirmation has its own idempotency key; uncertain retries keep the exact request and key.
+A 409 retains both draft and comparison, requires a reread and another explicit confirmation, and never silently
+resubmits against a new head. Current denial removes review data from display; missing or hidden remains concealed.
+
+Successful commands reread the ordinary public subject with session continuity. Only the exact candidate in that
+slot at an admitted selected rank confirms public selection. A committed adoption with no confirmed public result
+stays pending. The canonical reader is refreshed and linked after confirmation; private proposal JSON never replaces
+its data. The editor's page stories use the shared shell and locale/theme/viewport globals.
+
 ## Principles
 
 - **Readers first.** A page shows covers, titles, people, scores, what people say and what to do next, in words
