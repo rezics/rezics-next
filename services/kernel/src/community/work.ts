@@ -96,13 +96,33 @@ export const communityWorkModule: WorkModule = {
       name: 'community.member-count.segment',
       ...COMMAND_STEP_RETRIES,
     });
+    const continueCount = DBOS.registerStep(
+      async (partition: number) => {
+        await context.client.enqueue(
+          {
+            workflowName: 'community.member-count.continue',
+            queueName: 'maintenance',
+            workflowID: `community:member-count:${createHash('sha256').update(`${DBOS.workflowID}:${partition}`).digest('hex')}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          partition,
+        );
+      },
+      { name: 'community.member-count.enqueue', ...COMMAND_STEP_RETRIES },
+    );
+    const countBatch = async (start: number) => {
+      let partition = start;
+      // Bound workflow history as well as each native segment. Only the home
+      // locator crosses the continuation; the source frontier stays native.
+      for (let segment = 0; segment < 50 && partition < PARTITIONS; segment++) {
+        if (!(await countSegment(partition))) partition++;
+      }
+      if (partition < PARTITIONS) await continueCount(partition);
+    };
+    DBOS.registerWorkflow(countBatch, { name: 'community.member-count.continue' });
     DBOS.registerWorkflow(
       async () => {
-        for (let partition = 0; partition < PARTITIONS; partition++) {
-          while (await countSegment(partition)) {
-            /* Each segment releases its home. */
-          }
-        }
+        await countBatch(0);
       },
       { name: 'community.member-count.upkeep' },
     );

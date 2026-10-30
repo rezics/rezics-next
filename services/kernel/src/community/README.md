@@ -735,8 +735,8 @@ still match. The independent `contextId` pointer is preserved; it grants no edit
 Accounts owns `member-count.ts` and its `RealmMemberCount = Readonly<{count:number, version:string}>` export.
 `readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returns that native current result
 or null when unknown. Content binds this original module at the reader's existing before/final Realm anchors;
-it neither initializes nor maintains counts. Until the native source/version/removal coverage and bounded
-initialization land, the permitted declaration throws unavailable. Source errors and null remain unknown,
+it neither initializes nor maintains counts. The native source below supplies only covered current results.
+Source errors and null remain unknown,
 never zero; a changed final count/version is withheld without retry. This registration grants no membership,
 role admission, removal or creator authority.
 
@@ -764,7 +764,7 @@ Row triggers cover every actual insert/update/delete, including physical account
 reconciliation. They lock the same source control before changes and update its version, count and temporal horizon
 in the original source transaction. A replay/no-op/refusal changes nothing. A real close removes one contribution;
 a same-T deletion follows the actual row deletion; a later rejoin adds one. Account tombstones, inverse/terminal
-facts, role loss and pending erasure statuses never decrement. The existing membership engine remains the sole
+facts, Access role loss and pending erasure statuses never decrement. The existing membership engine remains the sole
 transition, reservation and causal-proof owner, with its original receipts, grants and outbox atomicity. There is no
 new erasure participant or account-bearing journal. Uncovered TRUNCATE is refused. Source positions are numeric
 metadata on existing membership rows; Realm progress stores only numeric positions and resource keys. Deleting a
@@ -781,6 +781,8 @@ completion. During installation writers advance the source version but coverage 
 changes to visited or post-cut keys apply once; unvisited cut keys are read in their actual current state later.
 No seed can overwrite a live delta, clear pending work or reset the source version. All progress is native and
 restartable; DBOS retains partition locators and continuation only, and each segment releases its home connection.
+Each upkeep workflow runs at most fifty native segments before enqueueing its partition locator on the same
+maintenance queue, bounding durable workflow history independently of the size of the source.
 
 Native open SQL creates an immediate open-ended interval at its injected command T. Close SQL writes the actual
 end at its command T (or deletes the same-T row); it does not schedule a future transition. The read horizon is at
