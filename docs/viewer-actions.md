@@ -170,3 +170,38 @@ taken-down and unknown subjects are all concealed even when an independent subje
 - Growth check: `services/kernel/test/access/growth-viewer-actions-surfaces.test.ts` fixes 20 displayed rows and
   measures anonymous, permitted, missing-scope and concealed outcomes at three geometric scales independently for
   each growth axis. The complete frozen surface suite binds through native Auth, Access, Semantic and Library HTTP.
+
+### Account management operations
+
+`createKernel` registers `access.account` with `accountViewerActionResource`. Its bounded full-key reader
+`readAccountActionStates(client, ids)` supplies active, unfenced account eligibility; pending, fenced, deleted and
+unknown management references all return `not_found`. Public identity visibility and `account:read` grants confer
+no mutation permission. This private batch does not change the ordinary public identity tombstone DTO.
+
+Mounted Account routes declare their actual resource types and `x-account-authority`: `profile` for the editable
+profile GET and profile PATCH, `self` for preferences, and `verification` for verification request/read/withdraw.
+`compileViewerActionBindings` preserves those declarations. No unmounted operator, governance or issuer operation
+is invented. The native conditional actions count toward the existing 64-action and 256-binding limits.
+
+The installed `prepareReadDecisions` handle supplies `prepareAccountAuthority(ids)` for at most 100 Account keys.
+Prepare it before target checkout with `account:read`, `account:update` and `account:manage` admitted for
+`access.account`. Its server-only `decide(client, { kind, action, ids }, T)` returns the actual action and the existing
+`allowed`/`explicit` decisions. It binds the verified actor, fixed deadline, shared T, exact targets and current
+operator relationship. It accepts no client-selected operator, principal, proof callback or authorization boolean.
+
+Profile reads and advertised updates share the command's `accountProfileAuthorityAnchor`: an ordinary target uses
+`account:update` on itself; an operated actor uses `account:manage` on its current operator. Native formula pages
+evaluate those anchors on released connections before the target snapshot rechecks the exact relationship.
+Preferences additionally require the verified actor to equal the target. Verification uses a human actor's own
+`account:read`/`account:update`, or `account:manage` on a target organization, matching its mounted handlers.
+Each operation keeps its gate and exact consented action scope, including conditional management actions.
+
+Preparation reads at most 100 targets and 101 actor/operator keys in pages of at most 100, followed by at most one
+native page per actual action (each at most 100 anchors). Target revalidation uses full-key pages, without nested
+checkout, ACL enumeration, history scans or one HTTP read per row. All evidence is request-local.
+
+The public profile fetches these private actions after hydration through its session BFF. Links require both the
+returned action and operation ID. It refetches on mount, focus, reconnect and session-context changes, discards
+controls while fetching, and offers retry on unavailability. Existing Settings, Accounts and verification pages
+remain the destinations; the security link uses the configured issuer's existing `/security` page. These links do
+not add managed profile forms or new issuer operations.

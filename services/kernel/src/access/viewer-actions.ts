@@ -12,7 +12,13 @@ import { withConnection } from '../database/pool.ts';
 import type { createApp } from '../http/app.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../http/request.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
-import { prepareReadDecisions, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import {
+  prepareReadDecisions,
+  type Access,
+  type AccessClient,
+  type Actor,
+  type AccountAuthorityKind,
+} from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 
 /** Trusted owner read, shared with its ordinary resource reader. Absence and the
@@ -27,8 +33,14 @@ export type ViewerActionBinding = Readonly<{
   operationId: string;
   exposure: Exposure;
   authority: 'resource' | 'own-account';
+  accountAuthority?: AccountAuthorityKind;
 }>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
+
+/** Include conditional native anchors in the same per-type/action limit. */
+export function viewerActionBindingActions(binding: ViewerActionBinding): readonly string[] {
+  return binding.accountAuthority ? ['account:read', 'account:update', 'account:manage'] : [binding.action];
+}
 
 /** No module-maintained operation list: only mounted direct declarations and
  * explicit different authority anchors participate in this catalogue. */
@@ -54,13 +66,30 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
     )
       throw new Error(`${route.method} ${route.path}: invalid x-authority-resource-types`);
     const action = actionLabelOfMountedRoute(route);
+    const accountAuthority = detail['x-account-authority'];
+    if (
+      accountAuthority !== undefined &&
+      (!['profile', 'self', 'verification'].includes(String(accountAuthority)) ||
+        authority !== 'resource' ||
+        types.length !== 1 ||
+        types[0] !== 'access.account' ||
+        !['account:read', 'account:update'].includes(action) ||
+        (accountAuthority === 'profile' && action !== 'account:update'))
+    )
+      throw new Error(`${route.method} ${route.path}: invalid x-account-authority`);
     if (typeof detail.operationId !== 'string') throw new Error(`${route.method} ${route.path}: missing operationId`);
     for (const type of types as string[]) {
       const bindings = result.get(type) ?? [];
       bindings.push(
-        Object.freeze({ action, operationId: detail.operationId, exposure: parseExposure(detail), authority }),
+        Object.freeze({
+          action,
+          operationId: detail.operationId,
+          exposure: parseExposure(detail),
+          authority,
+          ...(accountAuthority === undefined ? {} : { accountAuthority: accountAuthority as AccountAuthorityKind }),
+        }),
       );
-      if (bindings.length > 256 || new Set(bindings.map((binding) => binding.action)).size > 64)
+      if (bindings.length > 256 || new Set(bindings.flatMap(viewerActionBindingActions)).size > 64)
         throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);
       result.set(type, bindings);
     }
@@ -135,7 +164,8 @@ export async function readViewerActions(
   for (const type of selected.keys()) {
     admit(type, deps.resources.get(type)!.readAction);
     for (const binding of deps.bindings.get(type) ?? []) {
-      admit(binding.authority === 'own-account' ? 'access.account' : type, binding.action);
+      for (const action of viewerActionBindingActions(binding))
+        admit(binding.authority === 'own-account' ? 'access.account' : type, action);
     }
   }
   const actions = new Set([...typeActions.values()].flatMap((values) => [...values]));
@@ -144,6 +174,11 @@ export async function readViewerActions(
     const decisions = await prepareReadDecisions(deps.access, { actor, actions, typeActions, context });
     const time = viewerActionReadTime(deps.access, context);
     const at = authoritativeTimeValue(time);
+    const accountIds = selected.get('access.account');
+    const needsAccountAuthority =
+      accountIds && (deps.bindings.get('access.account') ?? []).some((binding) => binding.accountAuthority);
+    if (needsAccountAuthority && !decisions.prepareAccountAuthority) throw new ProblemError('dependency_unavailable');
+    const accountAuthority = needsAccountAuthority ? await decisions.prepareAccountAuthority!(accountIds) : undefined;
     const groups = new Set<string>();
     for (const type of selected.keys())
       for (const binding of deps.bindings.get(type) ?? [])
@@ -159,23 +194,25 @@ export async function readViewerActions(
           for (const binding of deps.bindings.get(type) ?? []) {
             if (binding.exposure.kind !== 'gate') continue;
             const group = binding.exposure.group;
-            const key = group;
-            if (actor.kind !== 'account' || !actor.scopes.includes(binding.action)) continue;
-            if (!gates.has(key))
-              gates.set(
-                key,
-                open.has(group) ||
-                  (await authorizePlatformGate(
-                    deps.access,
-                    actor,
-                    [`gate:${group}`, 'gate:any'],
-                    binding.action,
-                    GLOBAL_CONTEXT,
-                    context,
-                    at,
-                    client,
-                  )),
-              );
+            for (const action of viewerActionBindingActions(binding)) {
+              const key = `${group}/${action}`;
+              if (actor.kind !== 'account' || !actor.scopes.includes(action)) continue;
+              if (!gates.has(key))
+                gates.set(
+                  key,
+                  open.has(group) ||
+                    (await authorizePlatformGate(
+                      deps.access,
+                      actor,
+                      [`gate:${group}`, 'gate:any'],
+                      action,
+                      GLOBAL_CONTEXT,
+                      context,
+                      at,
+                      client,
+                    )),
+                );
+            }
           }
         const results = new Map<
           string,
@@ -210,7 +247,7 @@ export async function readViewerActions(
             ...new Set([
               owner.readAction,
               ...(deps.bindings.get(type) ?? [])
-                .filter(({ authority }) => authority === 'resource')
+                .filter(({ authority, accountAuthority }) => authority === 'resource' && !accountAuthority)
                 .map(({ action }) => action),
             ]),
           ].sort();
@@ -231,6 +268,24 @@ export async function readViewerActions(
                 time,
               ),
             );
+          const nativeAccounts = new Map<string, Awaited<ReturnType<NonNullable<typeof accountAuthority>['decide']>>>();
+          for (const binding of deps.bindings.get(type) ?? []) {
+            if (!binding.accountAuthority || !accountAuthority) continue;
+            const key = `${binding.accountAuthority}/${binding.action}`;
+            if (!nativeAccounts.has(key))
+              nativeAccounts.set(
+                key,
+                await accountAuthority.decide(
+                  client,
+                  {
+                    kind: binding.accountAuthority,
+                    action: binding.action,
+                    ids,
+                  },
+                  time,
+                ),
+              );
+          }
           for (const id of ids) {
             if (!(id in eligibility) || !allowed.get(owner.readAction)?.[id]?.allowed) {
               results.set(`${type}/${id}`, { error: 'not_found' });
@@ -238,20 +293,26 @@ export async function readViewerActions(
             }
             const entries = new Map<string, Set<string>>();
             for (const binding of deps.bindings.get(type) ?? []) {
+              const native = binding.accountAuthority
+                ? nativeAccounts.get(`${binding.accountAuthority}/${binding.action}`)?.[id]
+                : undefined;
+              const action = native?.action ?? binding.action;
               if (
-                !(binding.authority === 'own-account'
-                  ? ownAllowed.get(binding.action)
-                  : allowed.get(binding.action)?.[id]?.allowed) ||
+                !(binding.accountAuthority
+                  ? native?.allowed
+                  : binding.authority === 'own-account'
+                    ? ownAllowed.get(binding.action)
+                    : allowed.get(binding.action)?.[id]?.allowed) ||
                 (binding.exposure.kind === 'gate' &&
                   !open.has(binding.exposure.group) &&
                   (actor.kind !== 'account' ||
-                    !actor.scopes.includes(binding.action) ||
-                    !gates.get(binding.exposure.group)))
+                    !actor.scopes.includes(action) ||
+                    !gates.get(`${binding.exposure.group}/${action}`)))
               )
                 continue;
-              const operations = entries.get(binding.action) ?? new Set<string>();
+              const operations = entries.get(action) ?? new Set<string>();
               operations.add(binding.operationId);
-              entries.set(binding.action, operations);
+              entries.set(action, operations);
             }
             results.set(`${type}/${id}`, {
               viewerActions: [...entries]

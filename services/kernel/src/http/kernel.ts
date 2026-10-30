@@ -11,11 +11,13 @@ import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import {
   compileViewerActionBindings,
+  viewerActionBindingActions,
   viewerActionsRoutes,
   type ViewerActionResources,
   type ViewerActionBindings,
 } from '../access/viewer-actions.ts';
 import { subjectViewerActionResources } from '../semantic/viewer-actions.ts';
+import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
 import { realmViewerActionResource } from '../community/realm.ts';
 import { spaceViewerActionResource } from '../community/space.ts';
@@ -472,6 +474,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const viewerResources = new Map([
     ...subjectViewerActionResources,
+    ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],
     ['community.realm', realmViewerActionResource],
     ['community.space', spaceViewerActionResource],
@@ -494,7 +497,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   for (const [type, resource] of viewerResources) {
     const actions = new Set([
       resource.readAction,
-      ...(viewerBindings.get(type) ?? []).map((binding) => binding.action),
+      ...(viewerBindings.get(type) ?? []).flatMap(viewerActionBindingActions),
     ]);
     if (actions.size > 64)
       throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);

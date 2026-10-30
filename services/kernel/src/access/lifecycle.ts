@@ -29,6 +29,7 @@ import {
 import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
 import { readAccount } from './account-data.ts';
+import { accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
 import accountRead from './lifecycle-account.sql';
 import handleRead from './lifecycle-handle-read.sql';
 import handleReserve from './lifecycle-handle-reserve.sql';
@@ -1558,10 +1559,8 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
       const subject = await withConnection(pool, (client) => readAccount(client, route, input.accountId));
-      const operatorId = subject?.kind === 'actor' && subject.state === 'active' ? subject.operatorAccountId : null;
-      const authorization = operatorId
-        ? await authorize(context, 'account:manage', operatorId)
-        : await authorize(context, 'account:update', input.accountId);
+      const anchor = accountProfileAuthorityAnchor(subject, input.accountId);
+      const authorization = await authorize(context, anchor.action, anchor.id);
       const allowed = authorization.check;
       let displayNameChanged = false;
       return execute(
@@ -1591,7 +1590,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           const account = await locked(tx, input.accountId);
           displayNameChanged =
             Object.hasOwn(patch, 'displayName') && account.displayName !== (patch.displayName as string | null);
-          requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
+          requireAllowed(account.kind === subject?.kind && account.operatorAccountId === subject.operatorAccountId);
           requireAllowed(await allowed(tx));
           if (Object.hasOwn(patch, 'speakersListed') && account.kind !== 'organization')
             throw new ProblemError('invalid_request');

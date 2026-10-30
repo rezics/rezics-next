@@ -577,6 +577,8 @@ export function accessRoutes(
         },
         detail: {
           operationId: 'account.read_editable_profile',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'profile',
           'x-action': 'account:update',
           'x-exposure': 'public',
           security: [{ bearerAuth: [] }],
@@ -604,7 +606,12 @@ export function accessRoutes(
           200: withHeaders(t.Object({ accountId: id }, closed), { [SESSION_HEADER]: t.String() }),
           ...failures,
         },
-        detail: { ...detail('account.update'), 'x-action': 'account:update' },
+        detail: {
+          ...detail('account.update'),
+          'x-action': 'account:update',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'profile',
+        },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -648,6 +655,8 @@ export function accessRoutes(
         },
         detail: {
           ...detail('account.request_verification'),
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
           'x-action': 'account:update',
           'x-exposure': 'gate:agent_verification',
         },
@@ -675,6 +684,8 @@ export function accessRoutes(
         response: { 200: agentVerificationRequestEnvelope, ...publicReadFailures, 403: problemSchema('forbidden') },
         detail: {
           operationId: 'account.read_verification_request',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
           'x-action': 'account:read',
           'x-exposure': 'gate:agent_verification',
           security: [{ bearerAuth: [] }],
@@ -713,6 +724,8 @@ export function accessRoutes(
         },
         detail: {
           ...detail('account.withdraw_verification'),
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
           'x-action': 'account:update',
           'x-exposure': 'gate:agent_verification',
         },
@@ -924,6 +937,8 @@ export function accessRoutes(
         response: { 200: preferences, ...failures },
         detail: {
           operationId: 'account.read_preferences',
+          'x-resource-types': ['access.account'],
+          'x-account-authority': 'self',
           'x-exposure': 'public',
           'x-action': 'account:read',
           security: [{ bearerAuth: [] }],
@@ -965,7 +980,12 @@ export function accessRoutes(
           ...failures,
           409: problemSchema('conflict'),
         },
-        detail: { ...detail('account.set_preferences'), 'x-action': 'account:update' },
+        detail: {
+          ...detail('account.set_preferences'),
+          'x-action': 'account:update',
+          'x-resource-types': ['access.account'],
+          'x-account-authority': 'self',
+        },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

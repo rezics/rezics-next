@@ -319,6 +319,21 @@ export function createAccess(config: AccessConfig): Access {
         gateReads.set(context, { actor, handle, time, checks: new Map() });
       }
       return Object.freeze({
+        ...(handle.prepareAccountAuthority
+          ? {
+              async prepareAccountAuthority(ids: readonly string[]) {
+                const authority = await handle.prepareAccountAuthority!(ids);
+                return Object.freeze({
+                  async decide(...args: Parameters<typeof authority.decide>) {
+                    const answer = await authority.decide(deadlineClient(args[0], deadline), args[1], args[2]);
+                    requireAccessDeadline(deadline);
+                    if (identity && identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+                    return answer;
+                  },
+                });
+              },
+            }
+          : {}),
         decide(client, batch, time) {
           // Validation in the inner port always precedes any dependency access.
           // Expiry is bounded again here, including the verified token lifetime.

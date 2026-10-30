@@ -2,6 +2,7 @@ import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { readAccount, type Account } from './account-data.ts';
+import { readAccountActionStates, accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
 import { installAccountStandingCheck } from './account-standing.ts';
 import { accessCommandAttempt } from './command-admission.ts';
 import {
@@ -18,6 +19,8 @@ import {
   type AccessRealmRoleReader,
   type PrepareReadDecisionsInput,
   type ReadDecisions,
+  type AccountAuthority,
+  type AccountAuthorityDecision,
   AuthenticationError,
   type Access,
   type AccessClient,
@@ -797,6 +800,126 @@ export function createAccess(config: PermissionConfig): Access {
         }
         const handle: ReadDecisions = Object.freeze({
           decide: (client, batch, time) => decide(client, batch, time),
+          async prepareAccountAuthority(requestedIds): Promise<AccountAuthority> {
+            if (
+              !requestedIds.length ||
+              requestedIds.length > 100 ||
+              new Set(requestedIds).size !== requestedIds.length ||
+              requestedIds.some((id) => readRoute(id) === null) ||
+              ['account:read', 'account:update', 'account:manage'].some(
+                (action) => !admitted.has(action) || (typeActions && !typeActions.get('access.account')?.has(action)),
+              )
+            )
+              throw new RangeError('Invalid Account authority batch');
+            const ids = Object.freeze([...requestedIds]);
+            const subjects = new Map((await readAccountActionStates(pool, ids)).map((row) => [row.id, row]));
+            const foreignIds = [
+              ...new Set([
+                ...(identity.kind === 'account' ? [identity.accountId] : []),
+                ...[...subjects.values()].flatMap((row) =>
+                  row.kind === 'actor' && row.operatorAccountId ? [row.operatorAccountId] : [],
+                ),
+              ]),
+            ];
+            type AccountState = Awaited<ReturnType<typeof readAccountActionStates>>[number];
+            const foreign = new Map<string, AccountState>();
+            for (let offset = 0; offset < foreignIds.length; offset += 100)
+              for (const row of await readAccountActionStates(pool, foreignIds.slice(offset, offset + 100)))
+                foreign.set(row.id, row);
+            const live = (row: AccountState | undefined) => row?.state === 'active' && !row.fenced;
+            const acting = identity.kind === 'account' ? foreign.get(identity.accountId) : undefined;
+            const currentActor =
+              identity.kind === 'account' &&
+              live(acting) &&
+              acting?.kind === 'actor' &&
+              Number.isSafeInteger(identity.authnEpoch) &&
+              identity.authnEpoch >= 1 &&
+              BigInt(acting.minimumAuthnEpoch) <= BigInt(identity.authnEpoch);
+            const anchors = new Map<string, Set<string>>();
+            const add = (action: string, id: string) => {
+              const values = anchors.get(action) ?? new Set<string>();
+              values.add(id);
+              anchors.set(action, values);
+            };
+            for (const subject of subjects.values()) {
+              if (!live(subject)) continue;
+              const anchor = accountProfileAuthorityAnchor(subject, subject.id);
+              add(anchor.action, anchor.id);
+              if (identity.kind === 'account' && subject.id === identity.accountId) {
+                add('account:read', subject.id);
+                add('account:update', subject.id);
+              }
+              if (subject.kind === 'organization') add('account:manage', subject.id);
+            }
+            const answers = new Map<string, Readonly<Record<string, AccessDecision>>>();
+            if (currentActor)
+              for (const [action, keys] of anchors)
+                answers.set(
+                  action,
+                  await decide(pool, { action, resourceType: 'access.account', ids: [...keys] }, time),
+                );
+            requireAccessDeadline(deadline);
+            // The handle binds identity, T, actions, full target keys and CURRENT
+            // operator relationship. Foreign formula work is already released.
+            return Object.freeze({
+              async decide(client, batch, decisionTime = time) {
+                if (
+                  authoritativeTimeValue(decisionTime) !== authoritativeTimeValue(time) ||
+                  !['profile', 'self', 'verification'].includes(batch.kind) ||
+                  !['account:read', 'account:update'].includes(batch.action) ||
+                  (batch.kind === 'profile' && batch.action !== 'account:update') ||
+                  !batch.ids.length ||
+                  batch.ids.length > 100 ||
+                  new Set(batch.ids).size !== batch.ids.length ||
+                  batch.ids.some((id) => !ids.includes(id))
+                )
+                  throw new RangeError('Invalid Account authority binding');
+                return within(deadline, async () => {
+                  const current = new Map(
+                    (await readAccountActionStates(deadlineClient(client, deadline), batch.ids)).map((row) => [
+                      row.id,
+                      row,
+                    ]),
+                  );
+                  const result: Record<string, AccountAuthorityDecision> = Object.create(null);
+                  for (const id of batch.ids) {
+                    const before = subjects.get(id);
+                    const row = current.get(id);
+                    const profile = accountProfileAuthorityAnchor(before, id);
+                    let action = batch.action;
+                    let anchor = id;
+                    let eligible =
+                      currentActor &&
+                      live(row) &&
+                      row?.kind === before?.kind &&
+                      row?.operatorAccountId === before?.operatorAccountId;
+                    if (batch.kind === 'profile') {
+                      action = profile.action;
+                      anchor = profile.id;
+                      eligible = eligible && (!profile.operatorId || live(foreign.get(profile.operatorId)));
+                    } else if (batch.kind === 'self') {
+                      eligible = eligible && identity.kind === 'account' && identity.accountId === id;
+                    } else {
+                      const self = identity.kind === 'account' && identity.accountId === id;
+                      action = self ? batch.action : 'account:manage';
+                      eligible =
+                        eligible &&
+                        acting?.operatorAccountId === null &&
+                        ((self && row?.kind === 'actor') || (!self && row?.kind === 'organization'));
+                    }
+                    const answer = answers.get(action)?.[anchor];
+                    result[id] = Object.freeze({
+                      action,
+                      allowed: eligible && answer?.allowed === true,
+                      explicit: eligible && answer?.explicit === true,
+                    });
+                  }
+                  requireAccessDeadline(deadline);
+                  return Object.freeze(result);
+                });
+              },
+            });
+          },
         });
         readEvidence.set(handle, {
           time,

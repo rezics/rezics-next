@@ -8,7 +8,10 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/sha
 import type { ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
-import { accountOf, viewIsPublic } from './account-read';
+import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
+import { useQuery } from '@tanstack/react-query';
+import { personalRead } from '../../kernel/query';
+import { useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
@@ -22,6 +25,65 @@ function dateText(value: unknown, locale: string): string | null {
   return Number.isFinite(date.getTime())
     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
     : null;
+}
+
+/** Private controls start after hydration and disappear throughout every refresh. */
+function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
+  const session = useSession();
+  const query = useQuery({
+    ...personalRead,
+    queryKey: ['account-viewer-actions', id, session.state, session.subject, session.csrfToken],
+    enabled: personalRead.enabled && session.state === 'signed-in',
+    queryFn: () => readAccountViewerActions({ data: id }),
+    gcTime: 0,
+    retry: false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
+  });
+  if (session.state !== 'signed-in' || query.isPending || query.isFetching) return null;
+  const options = { locale: value.locale as never };
+  if (query.isError || query.data?.state === 'unavailable')
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        {m.settings_unavailable_title({}, options)}{' '}
+        <button type="button" className={linkClass} onClick={() => void query.refetch()}>
+          {m.settings_retry({}, options)}
+        </button>
+      </p>
+    );
+  const allowed = (action: string, operation: string) => accountOperationAllowed(query.data, action, operation);
+  const profile = ['account:update', 'account:manage'].some(
+    (action) => allowed(action, 'account.update') && allowed(action, 'account.read_editable_profile'),
+  );
+  const settings =
+    allowed('account:read', 'account.read_preferences') && allowed('account:update', 'account.set_preferences');
+  const verification = ['account:read', 'account:manage'].some((action) =>
+    allowed(action, 'account.read_verification_request'),
+  );
+  const prefix = `/${encodeURIComponent(value.locale)}`;
+  const securityHref = settings && query.data?.state === 'ready' ? query.data.securityHref : null;
+  if (!profile && !settings && !verification) return null;
+  return (
+    <nav
+      aria-label={m.av_accounts({}, options)}
+      data-slot="account-management-links"
+      className="flex flex-wrap gap-x-4 gap-y-2 text-sm"
+    >
+      {settings && <value.link href={`${prefix}/settings`}>{m.settings_heading({}, options)}</value.link>}
+      {profile && <value.link href={`${prefix}/accounts`}>{m.av_accounts({}, options)}</value.link>}
+      {verification && (
+        <value.link href={`${prefix}/accounts/${encodeURIComponent(id)}/verification`}>
+          {m.av_application({}, options)}
+        </value.link>
+      )}
+      {securityHref && (
+        <a href={securityHref} className={linkClass}>
+          {m.account_security_settings({}, options)}
+        </a>
+      )}
+    </nav>
+  );
 }
 
 export function accountSchemaType(profile: { kind: string; automated?: boolean }): string {
@@ -83,6 +145,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
           )}
           {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
           {value.subject ? <AccountFollow targetId={value.subject} /> : null}
+          <AccountManagementLinks key={profile.id} id={profile.id} value={value} />
           {profile.verified && profile.subject && (
             <p className="text-sm" data-slot="agent-verified">
               <value.link

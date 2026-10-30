@@ -1,5 +1,57 @@
 import type { CoverSummary } from '@rezics/ui/cover';
 import { isRecord } from './shared';
+import { createServerFn } from '@tanstack/react-start';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+
+export type AccountViewerActions =
+  | { state: 'ready'; actions: { action: string; operations: string[] }[]; securityHref: string | null }
+  | { state: 'unavailable' };
+
+/** Personal BFF read: the browser supplies only the displayed Account key. */
+export const readAccountViewerActions = createServerFn({ method: 'GET' })
+  .validator((value: unknown) => {
+    if (
+      typeof value !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    )
+      throw new Error('Invalid account');
+    return value;
+  })
+  .handler(async ({ data }): Promise<AccountViewerActions> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, viewerCredential } = await import('../../session/request');
+    const { kernelClient } = await import('../../kernel/client');
+    const { securityHrefFromIssuer } = await import('../../settings/account-safety-links');
+    try {
+      const request = getRequest();
+      await prepareSession(request, env);
+      const authorization = viewerCredential(request);
+      if (!authorization) return { state: 'ready', actions: [], securityHref: null };
+      const result = await kernelClient().viewerActions.post(
+        { resources: [{ type: 'access.account', id: data }] },
+        { headers: { authorization } },
+      );
+      if (result.error || result.status !== 200) return { state: 'unavailable' };
+      const resource = result.data?.resources.find((item) => item.type === 'access.account' && item.id === data);
+      return resource && 'viewerActions' in resource
+        ? { state: 'ready', actions: resource.viewerActions, securityHref: securityHrefFromIssuer(env.AUTH_ISSUER) }
+        : { state: 'ready', actions: [], securityHref: null };
+    } catch {
+      return { state: 'unavailable' };
+    }
+  });
+
+export function accountOperationAllowed(
+  value: AccountViewerActions | undefined,
+  action: string,
+  operation: string,
+): boolean {
+  return (
+    value?.state === 'ready' &&
+    value.actions.some((entry) => entry.action === action && entry.operations.includes(operation))
+  );
+}
 
 /** The public profile `GET /v1/accounts?handle=` returns for one active account. */
 export type AccountProfile = {
