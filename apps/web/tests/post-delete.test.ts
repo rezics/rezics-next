@@ -434,7 +434,7 @@ async function eventually(read: () => boolean | Promise<boolean>, label: string)
 async function deleteFromMenu(page: Page, postId: string) {
   const slot = page.locator(`#post-${postId}`);
   await slot.getByRole('button', { name: 'More actions' }).click();
-  await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+  await page.getByText('Delete', { exact: true }).click();
   await page.getByRole('button', { name: 'Delete content', exact: true }).click();
   await slot.locator('[data-slot="tombstone"]').waitFor({ state: 'visible' });
   return slot;
