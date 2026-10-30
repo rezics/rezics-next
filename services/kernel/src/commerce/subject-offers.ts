@@ -79,7 +79,7 @@ export function listSubjectOffers(
   deps: Dependencies, actor: Actor, subject: string,
   input: { cursor?: string; limit?: number; deadline: number },
 ): Promise<SubjectOffersPage> {
-  return withRequestDeadline(input.deadline, async () => {
+  return withRequestDeadline(input.deadline, async (): Promise<SubjectOffersPage> => {
     const size = input.limit ?? 10;
     if (!Number.isInteger(size) || size < 1 || size > SUBJECT_OFFER_RAW_LIMIT) throw new ProblemError('invalid_request');
     if (routeOf(subject) === null) throw new ProblemError('not_found');
