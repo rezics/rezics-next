@@ -12,6 +12,7 @@ import type { SessionEnv } from '../session/client';
 import { recordPageReadCacheControl } from '../security/page-cache';
 import { createNativeEditionApi } from './edition-api';
 import { loadContentEdition, type ContentEditionState, type EditionContext } from './edition-model';
+import { loadDocumentMedia } from './edition-media';
 
 export const readContentEdition = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
@@ -45,6 +46,7 @@ export const readContentEdition = createServerFn({ method: 'GET' })
       }
       const client = kernelClient();
       const context: EditionContext = {
+        media: (ids, credential) => loadDocumentMedia(client, ids, credential),
         async subject(id) {
           const result = await client.subjects({ id }).get({
             ...(authorization ? { headers: { authorization } } : {}),

@@ -186,13 +186,32 @@ The bounded current subject point supplies the heading/backlink only for the exa
 following. The existing single-account identity batch supplies a visible creator name; deleted or missing identities
 are omitted. Optional identity failure leaves a neutral Edition heading and the successfully read document intact.
 No profile, avatar, history or unrelated edition read enriches the page. Licence and fixed revision attribution follow
-the canonical shared DocumentBody. The wire has no native derivative summaries, so images explicitly remain unavailable
-through the shared renderer's image hook; no original, hotlink or guessed paid media URL is emitted. Native derivative
-summary/transport integration remains pending. Other document references keep the shared
-renderer behavior; unresolved mentions reveal no inferred identity.
+the existing Web `document-body.tsx` wrapper. After the exact fixed document passes validation, its actual image nodes
+supply original media IDs for one independent shared `loadDocumentMedia(client, ids, authorization)` read. Repeated
+references share that read, external URLs are excluded, and more than 32 unique image IDs leave images unavailable
+without starting a partial batch. An empty document image set makes no media request. Returned entries must match
+the exact requested IDs; omission conveys only unavailability. Media failure retains the independently authorized
+fixed document and visible subject/creator labels.
 
-Cost per visit or manual retry: at most two exact protected edition reads, followed by at most one exact subject point
-and one creator identity point. Draft/withdrawn or malformed metadata stops after the first read; unconfigured
+Media decoration belongs only to the server consumer page, whose `media` field contains native image DTOs or typed
+unavailability. The closed edition metadata and revision HTTP representations above remain unchanged. The original
+`threads/document-media.ts` module owns the loader and re-exports `NativeDocumentImage` from `document-media-image.tsx`.
+The explicit DocumentBody image callback passes that component only its matching DTO, recorded alt text and locale.
+Its returned derivative variants use the existing authorized Worker download route through `coverSrc`; media source,
+container, ancestry, fence and lifecycle authorization remain independent of edition delivery. The renderer owns
+native media credit and download failure display. Edition permission grants no generic post or image access.
+
+Those original shared media files and Kernel's `content/media-presentation.ts` are absent in this checkout.
+`content-editions/edition-media.tsx` is an isolated consumer boundary using the declared exact DTO/export shapes.
+It resolves only the original shared module when present, using Vite's exact-path module glob and a direct original
+module import for Bun. Until it is present, reads return typed unavailable and the existing localized unavailable
+image remains visible. This boundary adds no native endpoint, permission authority or derivative renderer. Other
+document references retain shared renderer behavior; unresolved mentions reveal no inferred identity.
+
+Cost per visit or manual retry: at most two exact protected edition reads, followed by at most one exact subject point,
+one creator identity point and one shared media batch of at most 32 unique original IDs. Media has no per-image
+requests, retries or refill; derivative bytes separately use the existing current-authorized download route.
+Draft/withdrawn or malformed metadata stops after the first read; unconfigured
 delivery issues no native edition requests. Identity calls cannot authorize bytes. Native bounds remain owned by the source producer;
 there are no lists, page walks or per-reference fanouts. Local validation/rendering is linear in the one document.
 
@@ -200,6 +219,8 @@ The reusable `stories/patterns/content-edition` folder and Page stories use the 
 explicit constructed exact API responses inside AppShell for Pages. Web scheduled review and Commerce handoff IDs are:
 
 - `patterns-commerce-contenteditionreader--published`
+- `patterns-commerce-contenteditionreader--publishedimages`
+- `patterns-commerce-contenteditionreader--missingimage`
 - `patterns-commerce-contenteditionreader--longtext`
 - `patterns-commerce-contenteditionreader--loading`
 - `patterns-commerce-contenteditionreader--unavailable`
@@ -208,12 +229,19 @@ explicit constructed exact API responses inside AppShell for Pages. Web schedule
 - `patterns-commerce-contenteditionreader--versionmismatch`
 - The same suffixes with prefix `pages-commerce-contenteditionreader--`.
 
-Use existing phone390/desktop1280, locale and light/dark globals. Published checks fixed attribution and keyboard
-navigation; Unavailable retries fresh exact responses by keyboard. Refused/Withdrawn/Versionmismatch conceal bytes.
-Fixtures are not native recordings or buyer proof. `tests/content-edition.test.ts` records the two focused reader
-outcomes for later integration. Local Web and UI workspace typechecks pass; acceptance execution and visual review
-remain pending. Typing also required adding the missing `sourceRecords: []` to the existing catalogue creation and
-terms fixtures; those explicit samples contain no source records.
+The new Page IDs are `pages-commerce-contenteditionreader--publishedimages` and
+`pages-commerce-contenteditionreader--missingimage`. Their source is
+`src/stories/content-edition.stories.tsx`, reusing
+`src/stories/patterns/content-edition/content-edition.stories.tsx` and `content-edition-fixtures.tsx` in that folder.
+Use Web's normal 390/1280 light/dark review with existing locale/theme/viewport globals; there are no new width,
+theme or locale story exports. Published checks fixed attribution and keyboard navigation; Publishedimages supplies
+an independent native-shaped image response and document illustration with actual 320/640 WebP fixture derivatives.
+Missingimage omits that same reference, covering missing or revoked media without inferring either cause.
+The isolated consumer boundary keeps Publishedimages unavailable until the original shared renderer lands; the story
+assertions require the actual image afterward. Unavailable retries fresh exact responses by keyboard.
+Refused/Withdrawn/Versionmismatch conceal bytes. Constructed fixtures establish neither native buyer delivery nor
+visual approval. `tests/content-edition.test.ts` adds the named authorized-image acceptance and bounded-reference
+cases for later integration; acceptance execution and visual review remain pending.
 The implementation reuses the repository's exact-revision reader, shell, subject point and public identity boundary.
 The UI README's external shelf references do not apply to this document surface; no external reference project was used.
 

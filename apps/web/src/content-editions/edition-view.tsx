@@ -5,6 +5,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import type { ContentEditionState } from './edition-model';
+import { NativeDocumentImage } from './edition-media';
 
 /** A fixed document reader has no shadcn equivalent; controls and document typography retain their shared owners. */
 export function ContentEditionReader({
@@ -22,6 +23,9 @@ export function ContentEditionReader({
   const published = page.state === 'published' ? page : null;
   const subject = published?.subject?.id === published?.metadata.targetSubjectId ? published?.subject : null;
   const creator = published?.creator?.id === published?.metadata.creatorAccountId ? published?.creator : null;
+  const images = new Map(
+    published?.media.kind === 'ready' ? published.media.images.map((image) => [image.id, image]) : [],
+  );
   const retryable = page.state !== 'published' && page.state !== 'loading';
   return (
     <article
@@ -70,15 +74,8 @@ export function ContentEditionReader({
           <DocumentBody
             document={published.body}
             locale={locale}
-            renderImage={({ alt }) => (
-              <span
-                className="block rounded-xl bg-muted p-5 text-sm text-muted-foreground"
-                role="img"
-                aria-label={alt || m.content_edition_image_unavailable()}
-              >
-                {m.content_edition_image_unavailable()}
-                {alt ? ` — ${alt}` : ''}
-              </span>
+            renderImage={({ mediaId, alt }) => (
+              <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
             )}
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">

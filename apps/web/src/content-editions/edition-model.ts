@@ -1,11 +1,14 @@
-import { serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { serializeDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import { UUID } from '../checkout/price';
 import { parseEditionMetadata, parseEditionRevision, type EditionApi, type EditionMetadata } from './edition-api';
+import type { DocumentImagePresentation, DocumentMediaRead } from './edition-media';
 
 export type EditionSubject = { id: string; label: string };
 export type EditionCreator = { id: string; name: string };
 export type EditionContext = {
   subject(id: string): Promise<EditionSubject | null>;
   creator(id: string): Promise<EditionCreator | null>;
+  media?(ids: readonly string[], authorization: string): Promise<DocumentMediaRead>;
 };
 export type ContentEditionState =
   | { state: 'loading' }
@@ -19,7 +22,42 @@ export type ContentEditionState =
       body: DocumentSnapshot;
       subject: EditionSubject | null;
       creator: EditionCreator | null;
+      media: { kind: 'ready'; images: readonly DocumentImagePresentation[] } | { kind: 'unavailable' };
     };
+
+/** Original image references in this one delivered document; overflow never starts a partial/refill read. */
+function documentImageIds(body: DocumentSnapshot): string[] | null {
+  const ids = new Set<string>();
+  const visit = (node: DocumentNode): boolean => {
+    const id = node.attrs?.src;
+    if (node.type === 'image' && typeof id === 'string' && UUID.test(id)) ids.add(id);
+    return ids.size <= 32 && (node.content ?? []).every(visit);
+  };
+  return visit(body.doc) ? [...ids] : null;
+}
+
+async function readMedia(
+  body: DocumentSnapshot,
+  authorization: string,
+  context?: EditionContext,
+): Promise<Extract<ContentEditionState, { state: 'published' }>['media']> {
+  const ids = documentImageIds(body);
+  if (!ids) return { kind: 'unavailable' };
+  if (!ids.length) return { kind: 'ready', images: [] };
+  if (!context?.media) return { kind: 'unavailable' };
+  try {
+    const result = await context.media(ids, authorization);
+    if (result.kind !== 'ready') return { kind: 'unavailable' };
+    // Omission is only unavailability. Ignore unrelated entries and retain exact original IDs.
+    const images = ids.flatMap((id) => {
+      const image = result.images.get(id);
+      return image?.id === id ? [image] : [];
+    });
+    return { kind: 'ready', images };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
 
 /** Native post digests cover the canonical document bytes, not JSON.stringify's object order. */
 export async function editionDocumentDigest(body: DocumentSnapshot): Promise<string> {
@@ -57,12 +95,11 @@ export async function loadContentEdition(
     )
       return { state: 'version-mismatch', status: 502 };
 
-    const [subject, creator] = context
-      ? await Promise.allSettled([
-          context.subject(metadata.targetSubjectId),
-          context.creator(metadata.creatorAccountId),
-        ])
-      : [];
+    const [subject, creator, media] = await Promise.allSettled([
+      context?.subject(metadata.targetSubjectId),
+      context?.creator(metadata.creatorAccountId),
+      readMedia(revision.body, authorization, context),
+    ]);
     return {
       state: 'published',
       metadata,
@@ -70,6 +107,7 @@ export async function loadContentEdition(
       subject: subject?.status === 'fulfilled' && subject.value?.id === metadata.targetSubjectId ? subject.value : null,
       creator:
         creator?.status === 'fulfilled' && creator.value?.id === metadata.creatorAccountId ? creator.value : null,
+      media: media.status === 'fulfilled' ? media.value : { kind: 'unavailable' },
     };
   } catch {
     return { state: 'unavailable', status: 503, reason: 'dependency' };

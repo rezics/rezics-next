@@ -11,6 +11,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Published: Story = { ...pattern.Published };
+export const Publishedimages: Story = { ...pattern.Publishedimages };
+export const Missingimage: Story = { ...pattern.Missingimage };
 export const Longtext: Story = { ...pattern.Longtext };
 export const Loading: Story = { ...pattern.Loading };
 export const Unavailable: Story = { ...pattern.Unavailable };

@@ -3,6 +3,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
 import {
   ContentEditionExample,
+  editionImage,
+  editionImageAlt,
   editionText,
   editionViewports,
   revisionId,
@@ -29,6 +31,27 @@ export const Published: Story = {
     await expect(link).toHaveAttribute('href', expect.stringContaining(`/subjects/${subjectId}/`));
     for (let step = 0; step < 45 && document.activeElement !== link; step += 1) await userEvent.tab();
     await expect(link).toHaveFocus();
+  },
+};
+export const Publishedimages: Story = {
+  args: { state: 'published-images' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(editionText);
+    const image = await canvas.findByRole('img', { name: editionImageAlt });
+    await expect(image).toHaveAttribute('alt', editionImageAlt);
+    await expect(image).toHaveAttribute('src', expect.stringMatching(`/media/${editionImage.id}/webp-(320|640)$`));
+    await expect(canvas.getByText(revisionId)).toBeVisible();
+  },
+};
+export const Missingimage: Story = {
+  args: { state: 'missing-image' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(editionText);
+    await expect(await canvas.findByRole('img', { name: editionImageAlt })).toBeVisible();
+    await expect(canvasElement.querySelector('img')).toBeNull();
+    await expect(canvas.getByText(revisionId)).toBeVisible();
   },
 };
 export const Longtext: Story = {

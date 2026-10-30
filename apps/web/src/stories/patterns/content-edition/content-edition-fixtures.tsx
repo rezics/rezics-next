@@ -16,6 +16,7 @@ import {
   type ContentEditionState,
 } from '../../../content-editions/edition-model';
 import { ContentEditionPage } from '../../../content-editions/edition-view';
+import type { DocumentImagePresentation } from '../../../content-editions/edition-media';
 import { AppShell } from '../../../shell/shell';
 import { EditionRoute } from '../../../routes/editions/$id';
 import { deLocalizeUrl, localizeUrl } from '../../../paraglide/runtime.js';
@@ -27,8 +28,25 @@ export const creatorId = '0192f3a0-6c1e-7b2a-9d4e-000000000090';
 export const revisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 export const editionText =
   'The quiet ending leaves room for the reader to pause. A fixed edition preserves the words as they were published.';
+export const editionImageAlt = 'Three connected panels lead from a draft to the highlighted fixed edition.';
+export const editionImage: DocumentImagePresentation = {
+  id: '0192f3a0-6c1e-7b2a-9d4e-000000000070',
+  containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000071',
+  digest: '723ef41a1bb70dc6b4fc06c67b20ecc48dc996c5ab5773f98735f57e725efdc6',
+  width: 640,
+  height: 320,
+  variants: [
+    { format: 'webp', width: 320, height: 160 },
+    { format: 'webp', width: 640, height: 320 },
+  ],
+  placeholder: null,
+  focalPoint: null,
+  credit: null,
+};
 export type EditionExampleState =
   | 'published'
+  | 'published-images'
+  | 'missing-image'
   | 'longtext'
   | 'loading'
   | 'unavailable'
@@ -38,11 +56,25 @@ export type EditionExampleState =
 
 /** Constructed exact native responses, never a recording or proof of buyer delivery. */
 export async function editionFixture(state: EditionExampleState = 'published') {
-  const body = fromPlainText(
+  const text = fromPlainText(
     state === 'longtext'
       ? Array.from({ length: 32 }, (_, index) => `${index + 1}. ${editionText}`).join('\n\n')
       : editionText,
+    'blocks',
   );
+  const body =
+    state === 'published-images' || state === 'missing-image'
+      ? {
+          ...text,
+          doc: {
+            ...text.doc,
+            content: [
+              ...text.doc.content!,
+              { type: 'image', attrs: { id: 'edition-illustration', src: editionImage.id, alt: editionImageAlt } },
+            ],
+          },
+        }
+      : text;
   const metadata: EditionMetadata = {
     editionId,
     editionRevision: '1',
@@ -94,6 +126,11 @@ async function readExample(state: EditionExampleState): Promise<ContentEditionSt
   return loadContentEdition(api, editionId, 'Bearer story-buyer', {
     subject: async (id) => ({ id, label: 'Reading the quiet ending' }),
     creator: async (id) => ({ id, name: 'Mina Chen' }),
+    // Constructed independent media responses; omission makes no claim about why an image is unavailable.
+    media: async () => ({
+      kind: 'ready',
+      images: new Map(state === 'published-images' ? [[editionImage.id, editionImage]] : []),
+    }),
   });
 }
 

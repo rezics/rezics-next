@@ -283,6 +283,197 @@ test('the assigned real current-authorized journey binds its native source while
   expect(binding).toContain('viewerCredential(request)');
 });
 
+test('Native authorized document images in the real paid edition reader', async () => {
+  const { metadata, revision } = await fixture();
+  const { loadDocumentMedia } = await import('../src/content-editions/edition-media');
+  const image: import('../src/content-editions/edition-media').DocumentImagePresentation = {
+    id: creatorId,
+    containerId: subjectId,
+    digest: 'a'.repeat(64),
+    width: 640,
+    height: 320,
+    variants: [
+      { format: 'webp', width: 320, height: 160 },
+      { format: 'webp', width: 640, height: 320 },
+    ],
+    placeholder: null,
+    focalPoint: null,
+    credit: {
+      rightsHolder: 'Example illustrator',
+      via: { name: 'Illustration source', url: 'https://example.com/illustration' },
+      license: 'CC-BY-4.0',
+      obligations: ['cc:Attribution'],
+    },
+  };
+  let mediaState: 'allowed' | 'omitted' | 'failed' = 'allowed';
+  let bodyDenied = false;
+  let sourceMissing = false;
+  const paths: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+      expect(request.headers.get('authorization')).toBe('Bearer actual-buyer');
+      expect(request.redirect).toBe('manual');
+      expect(request.cache).toBe('no-store');
+      if (path === `/v1/contentEditions/${id}`)
+        return Response.json(metadata, { headers: { [SESSION_HEADER]: 'current-edition-session' } });
+      expect(request.headers.get(SESSION_HEADER)).toBe('current-edition-session');
+      if (path === `/v1/contentEditions/${id}/revision`)
+        return bodyDenied || sourceMissing
+          ? Response.json({ code: 'unavailable' }, { status: bodyDenied ? 403 : 404 })
+          : Response.json(revision);
+      expect(path).toBe('/v1/media/presentations');
+      expect(request.method).toBe('POST');
+      expect(await request.json()).toEqual({ ids: [creatorId] });
+      if (mediaState === 'failed') return Response.json({ code: 'unavailable' }, { status: 503 });
+      return Response.json({ images: mediaState === 'allowed' ? [image] : [] });
+    }) as typeof fetch,
+  });
+  const api = createNativeEditionApi(client);
+  const context = {
+    subject: async (point: string) => ({ id: point, label: 'A readable subject' }),
+    creator: async (point: string) => ({ id: point, name: 'Visible creator' }),
+    media: (ids: readonly string[], authorization: string) => loadDocumentMedia(client, ids, authorization),
+  };
+  const page = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(page.state).toBe('published');
+  if (page.state !== 'published') throw new Error('Expected the authorized fixed edition');
+  expect(page.media).toEqual({ kind: 'ready', images: [image] });
+  const rendered = html(page);
+  expect(rendered).toContain('<img');
+  expect(rendered).toContain('alt="The fixed illustration"');
+  expect(rendered).toMatch(new RegExp(`/media/${creatorId}/webp-(320|640)`));
+  expect(rendered).toContain('Example illustrator');
+  expect(rendered).toContain('CC-BY-4.0');
+  expect(rendered).toContain('Visible creator');
+  expect(rendered).toContain('A readable subject');
+  for (const forbidden of ['Bearer', '/original', '<main', '/posts/', 'objectKey', 'sourceUrl'])
+    expect(rendered).not.toContain(forbidden);
+  expect(paths).toEqual([`/v1/contentEditions/${id}`, `/v1/contentEditions/${id}/revision`, '/v1/media/presentations']);
+
+  for (const state of ['omitted', 'failed'] as const) {
+    mediaState = state;
+    const fresh = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+    expect(fresh.state).toBe('published');
+    if (fresh.state !== 'published') throw new Error('Independent image failure must retain the authorized document');
+    expect(fresh.media).toEqual(state === 'omitted' ? { kind: 'ready', images: [] } : { kind: 'unavailable' });
+    const unavailable = html(fresh);
+    expect(unavailable).toContain(fixedText);
+    expect(unavailable).toContain(m.content_edition_image_unavailable());
+    expect(unavailable).not.toContain('<img');
+    expect(unavailable).not.toContain('Example illustrator');
+  }
+  expect(paths.filter((path) => path === '/v1/media/presentations')).toHaveLength(3);
+  bodyDenied = true;
+  const refused = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(refused).toEqual({ state: 'refused', status: 403 });
+  expect(html(refused)).not.toContain(fixedText);
+  bodyDenied = false;
+  sourceMissing = true;
+  const missing = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(missing.state).toBe('unavailable');
+  expect(html(missing)).not.toContain(fixedText);
+  expect(paths.filter((path) => path === '/v1/media/presentations')).toHaveLength(3);
+});
+
+test('edition image decoration uses one bounded batch of exact current document references without refill', async () => {
+  const { api, metadata, revision } = await fixture();
+  const image = (id: string): import('../src/content-editions/edition-media').DocumentImagePresentation => ({
+    id,
+    containerId: subjectId,
+    digest: 'a'.repeat(64),
+    width: 320,
+    height: 160,
+    variants: [{ format: 'webp', width: 320, height: 160 }],
+    placeholder: null,
+    focalPoint: null,
+    credit: null,
+  });
+  const mediaCalls: { ids: readonly string[]; authorization: string }[] = [];
+  const context = {
+    subject: async () => null,
+    creator: async () => null,
+    media: async (ids: readonly string[], authorization: string) => {
+      mediaCalls.push({ ids, authorization });
+      return {
+        kind: 'ready',
+        images: new Map([
+          [creatorId, image(creatorId)],
+          [subjectId, image(subjectId)],
+        ]),
+      } as const;
+    },
+  };
+  const withBody = async (body: DocumentSnapshot) => {
+    const sha256 = await editionDocumentDigest(body);
+    return loadContentEdition(
+      {
+        readMetadata: async () => ({ state: 'available', value: { ...metadata, sha256 } }),
+        readRevision: async () => ({ state: 'available', value: { ...revision, sha256, body } }),
+      },
+      id,
+      'Bearer actual-buyer',
+      context,
+    );
+  };
+  const repeated: DocumentSnapshot = {
+    ...body,
+    doc: {
+      type: 'doc',
+      content: [
+        ...body.doc.content!,
+        {
+          type: 'blockquote',
+          content: [
+            { type: 'image', attrs: { id: 'nested-image', src: creatorId, alt: 'Repeated image' } },
+            { type: 'image', attrs: { id: 'missing-image', src: revisionId, alt: 'Unavailable image' } },
+            { type: 'image', attrs: { id: 'external-image', src: 'https://example.com/image.webp', alt: 'External' } },
+          ],
+        },
+      ],
+    },
+  };
+  const ready = await withBody(repeated);
+  expect(mediaCalls).toEqual([{ ids: [creatorId, revisionId], authorization: 'Bearer actual-buyer' }]);
+  expect(ready.state).toBe('published');
+  if (ready.state !== 'published') throw new Error('Expected the fixed document');
+  expect(ready.media).toEqual({ kind: 'ready', images: [image(creatorId)] });
+
+  const many = (count: number): DocumentSnapshot => ({
+    ...body,
+    doc: {
+      type: 'doc',
+      content: Array.from({ length: count }, (_, index) => ({
+        type: 'image',
+        attrs: {
+          id: `image-${index}`,
+          src: `0192f3a0-6c1e-7b2a-9d4e-${String(index + 100).padStart(12, '0')}`,
+          alt: `Illustration ${index + 1}`,
+        },
+      })),
+    },
+  });
+  await withBody(many(32));
+  expect(mediaCalls).toHaveLength(2);
+  expect(mediaCalls[1]!.ids).toHaveLength(32);
+  const overflow = await withBody(many(33));
+  expect(overflow.state).toBe('published');
+  if (overflow.state !== 'published') throw new Error('An image bound does not refuse the authorized text');
+  expect(overflow.media).toEqual({ kind: 'unavailable' });
+  await withBody(fromPlainText('A fixed text-only document'));
+  expect(mediaCalls).toHaveLength(2);
+  const mismatched = await loadContentEdition(
+    { ...api, readRevision: async () => ({ state: 'available', value: { ...revision, sha256: '0'.repeat(64) } }) },
+    id,
+    'Bearer actual-buyer',
+    context,
+  );
+  expect(mismatched.state).toBe('version-mismatch');
+  expect(mediaCalls).toHaveLength(2);
+});
+
 test('native transport decodes closed owner responses and conceals malformed, changed, unavailable and unpublished sources without extra requests', async () => {
   const { metadata, revision } = await fixture();
   for (const scenario of [
