@@ -312,6 +312,10 @@ export function AuthoredField({
               {m.correction_reload({}, o)}
             </Button>
           </section>
+        </>
+      )}
+      {(current || command) && property && (
+        <>
           {draft && failure !== 'denied' && (
             <form
               className="space-y-4"
@@ -405,7 +409,7 @@ export function AuthoredField({
               )}
             </form>
           )}
-          {proposed && id && (
+          {proposed && id && current && (
             <section className="space-y-4">
               {!reviewing ? (
                 <Button variant="outline" onClick={() => setReviewing(true)}>
