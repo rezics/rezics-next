@@ -68,6 +68,7 @@ export function workerCheckProtocol(worktree: string, contractText = ''): string
     'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit.',
     'Goal owns check continuation for detached checks: if one is still running, finish this turn with the waiting exit object and let the controller resume you with the result records. Do not keep the model or a tool waiting for the check.',
     'When the controller resumes you with check results, use the supplied result records exactly. A missing, unknown, or nonzero result is not a pass. Do not return another waiting result for those same check ids; finish from the supplied results or run a genuinely changed acceptance only when the current contract requires a fresh result.',
+    'A terminal success result must use `"checks":[]`; include check UUIDs only in a waiting result for checks that are still running. Do not repeat completed check ids in a success result.',
     'A previous session may contain the superseded instruction to wait on that same check with `bun scripts/worker-check.ts --wait <id>`. That instruction is obsolete: do not follow it or invoke `--wait`.',
   ];
   const localRunner = join(worktree, 'scripts/worker-check.ts');

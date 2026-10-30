@@ -92,6 +92,7 @@ function expectCurrentCheckProtocol(prompt: string): void {
   expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
   expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
   expect(prompt).toContain('Do not return another waiting result for those same check ids');
+  expect(prompt).toContain('A terminal success result must use `"checks":[]`');
   expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
   expect(prompt).toContain(
     'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',

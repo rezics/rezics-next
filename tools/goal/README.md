@@ -32,7 +32,8 @@ the terminal result or records that the run ended without one, then resumes the 
 records. The waiting result has the shape `{"status":"waiting","checks":["<bare UUID>"]}`; replace the placeholder with
 the exact UUID and do not add a label or prefix to that string. A resumed worker does not return another waiting result
 for the same check ids; it uses the supplied records as evidence and runs a new acceptance check only after relevant
-edits when the current contract requires it. If `scripts/worker-check.ts` is absent from the worktree and the contract
+edits when the current contract requires it. A terminal success result has an empty `checks` array; only still-running
+checks appear in a waiting result. If `scripts/worker-check.ts` is absent from the worktree and the contract
 does not name another existing wrapper path, the worker runs the command in the foreground from the worktree root and
 does not add a wrapper. Workers do not run the root typecheck, affected checks or other
 regression checks. The task's acceptance command defines when its work is done.

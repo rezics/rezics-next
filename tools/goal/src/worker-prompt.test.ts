@@ -166,6 +166,7 @@ test('a resumed prompt supersedes a saved legacy check wait and states the bare 
     expect(prompt).toContain('The controller waits for the terminal result');
     expect(prompt).toContain('use the supplied result records exactly');
     expect(prompt).toContain('Do not return another waiting result for those same check ids');
+    expect(prompt).toContain('A terminal success result must use `"checks":[]`');
     expect(prompt).toContain('one automatic infrastructure rerun');
   } finally {
     rmSync(worktree, { recursive: true, force: true });
