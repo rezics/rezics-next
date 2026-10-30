@@ -582,6 +582,14 @@ Current source receipts are narrower than runtime readiness:
 
 Owner indexed/prepared plans, Collection/dynamic source integration, full native driver bindings and composed-budget
 proof remain required.
+
+The Library-owned native caller now lives in `owner-filter-plan.ts`. It consumes the shared compiler, native fact
+points, Source allowance/receipts, selective scope observation, confidential list cursor and existing durable
+MembersPreparation reservation. It evaluates all deduplicated leaves before Boolean composition and requires a
+full page or actual exhaustion. Complete authorized original/fact closure and the common native read's actual
+T/reservation/capture remain explicit unavailable bindings. The Semantic scope and public capture adapters retain
+their exact producer declarations and unavailable outcomes. This source stage does not establish native useful
+pages, complete privacy coverage, worker convergence or Goal completion.
 The shared released-fixture specification exists, but required released data may remain red. Commerce's native
 population specification is a real producer requirement, not evidence that its runtime population exists.
 

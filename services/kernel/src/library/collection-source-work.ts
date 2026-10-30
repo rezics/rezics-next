@@ -56,6 +56,49 @@ export class NativeCollectionWork {
     return this.remaining[axis] - this.used[axis] - this.held[axis];
   }
 
+  /** Transfer the remaining reservation to ONE existing producer ledger, never a second allowance.
+   * The parent cannot dispatch while it is held. Unlike an SQL footprint this is not itself native work:
+   * the child reserves its actual operation bounds before dispatch and returns those charges unchanged.
+   */
+  async compose<T extends { readonly work: WorkReceipt }>(
+    operation: (allowance: WorkAllowance) => Promise<T>,
+  ): Promise<T> {
+    this.assertReady();
+    if (Date.now() >= this.deadline) throw this.unavailable();
+    const remaining = zero();
+    for (const axis of axes) {
+      remaining[axis] = this.available(axis);
+      this.held[axis] += remaining[axis];
+    }
+    const settle = (receipt: WorkReceipt) => {
+      if (receipt.reservationId !== this.allowance.reservationId)
+        throw new TypeError('Foreign source work receipt');
+      for (const axis of axes)
+        if (!Number.isSafeInteger(receipt.used[axis]) || receipt.used[axis] < 0 || receipt.used[axis] > remaining[axis])
+          throw new TypeError('Composed source exceeded its reservation');
+      for (const axis of axes) {
+        this.held[axis] -= remaining[axis];
+        this.used[axis] += receipt.used[axis];
+      }
+    };
+    try {
+      const result = await operation({ reservationId: this.allowance.reservationId, remaining });
+      settle(result.work);
+      return result;
+    } catch (error) {
+      // Without a completed receipt no dispatched child work can be refunded. Poison the parent so a
+      // caller cannot catch an unavailable child and use its unknown work to continue the same page.
+      for (const axis of axes) {
+        this.held[axis] -= remaining[axis];
+        this.used[axis] += remaining[axis];
+      }
+      this.failure = error instanceof Error ? error : new Error('Composed source failed');
+      if (error instanceof Error)
+        Object.defineProperty(error, 'work', { get: () => this.receipt(), configurable: true });
+      throw error;
+    }
+  }
+
   assertReady(): void {
     if (this.failure) throw this.failure;
   }

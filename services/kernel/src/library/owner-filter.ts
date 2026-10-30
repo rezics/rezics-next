@@ -102,6 +102,7 @@ export type CollectionMemberAdmission = {
   plan: CurrentOwnerFilterPlan | null;
   /** Immutable admitted meaning and exact expanded query; private cursor/preparation input, never permission. */
   releaseDigest: string | null;
+  release: Release | null;
   queryDigest: string;
   /** Bound only after every expanded private-family branch has passed current viewer-self admission. */
   owner: OwnerFilterLeafProvider | null;
@@ -402,6 +403,7 @@ export type CollectionMemberQuery = {
   limit?: number;
   filter?: string;
   sort?: string;
+  view?: 'BASIC' | 'FULL';
 };
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
@@ -443,6 +445,7 @@ export async function admitCollectionMemberQuery(
     throw new ProblemError('unsupported_query', { errors: [{ pointer: '/sort', code: 'unsupported' }] });
   let filter: FilterDocument | undefined;
   let releaseDigest: string | null = null;
+  let release: Release | null = null;
   if (options.filter !== undefined) {
     if (typeof options.filter !== 'string')
       throw new ProblemError('invalid_request', { errors: [{ pointer: '/filter', code: 'invalid_type' }] });
@@ -454,6 +457,7 @@ export async function admitCollectionMemberQuery(
       // Expand saved filters before collecting private dependencies. Never erase owner nodes to fit a plan.
       filter = admitFilter(filter, snapshot.release, { owner: true });
       releaseDigest = snapshot.digest;
+      release = snapshot.release;
     } catch (error) {
       invalidFilter(error);
     }
@@ -492,6 +496,7 @@ export async function admitCollectionMemberQuery(
     sort: 'id',
     plan: filter === undefined ? null : compileCurrentOwnerFilter(filter),
     releaseDigest,
+    release,
     queryDigest:
       'sha256:' +
       createHash('sha256')

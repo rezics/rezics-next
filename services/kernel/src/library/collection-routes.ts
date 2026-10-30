@@ -14,6 +14,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { FactSchema } from '../search/http/routes.ts';
 import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
@@ -23,7 +24,8 @@ import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array };
+type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array;
+  workClient?: () => Promise<WorkClient> };
 const closed = { additionalProperties: false } as const;
 // Domain commands and reads distinguish malformed resource IDs from malformed JSON.
 const id = t.String();
@@ -284,6 +286,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       tokens,
       clock,
       routeKey: dependencies.routeKey,
+      ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
     }));
   async function written(value: Collection, actor: Actor) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
@@ -554,7 +557,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                     ...subjectFields,
                     facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
                   }),
-                  t.Object({ kind: t.Literal('dynamic'), subjectId: id, ...subjectFields }, closed),
+                  t.Object({ kind: t.Literal('dynamic'), subjectId: id, ...subjectFields,
+                    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
+                  }, closed),
                 ]),
               ),
               next: nullableString,
@@ -563,18 +568,24 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           ),
           ...failures,
           422: problemSchema('unsupported_query'),
+          202: t.Object({ preparing: t.Literal(true) }, closed),
         },
         detail: detail('collection_member.list', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () =>
+        const result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
-            ? read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline)
+            ? read().readMembers(actor, params.collectionId, query, job.deadline)
             : query.view === 'FULL'
               ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
+        if ('preparing' in result) {
+          set.status = 202;
+          set.headers['retry-after'] = '1';
+        }
+        return result;
       },
     )
     .post(

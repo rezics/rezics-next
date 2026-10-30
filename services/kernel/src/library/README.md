@@ -70,8 +70,8 @@ Current implementation evidence is narrower than the capability:
   `owner-filter.ts`. It uses strict JSON and shared release admission, expands saved filters before private-family
   admission, binds owner facts to the authenticated viewer, and checks each family's native list scopes and gates.
   BASIC and FULL requests both reach that admission. Filtered/canonical execution remains explicitly
-  `dependency_unavailable`: the owner candidate/support directory is absent, and `CollectionSource` has no native
-  implementation. Admission consumes the actual `compileCurrentOwnerFilter` exports, which share Search's Boolean
+  `dependency_unavailable`: the native owner directory exists, but complete Source execution is not integrated.
+  Admission consumes the actual `compileCurrentOwnerFilter` exports, which share Search's Boolean
   interpreter with catalogue-only compilation. No raw ordinal window is returned as
   a filtered page. Existing unfiltered occurrence reads retain their current contract.
 - Admission now also returns `owner: OwnerFilterLeafProvider | null`. Its full-key native entry, live-parent label,
@@ -90,6 +90,18 @@ Current implementation evidence is narrower than the capability:
   reserved allowance, returning only the real producer's opaque Source handle. These exports do not discover
   candidates, prove complete canonical absence, authorize originals/terminals, allocate another budget or implement
   the unavailable native Source/support execution.
+- `owner-filter-plan.ts` supplies the common caller, bounded native candidate matching, shared Source reservation
+  composition, selective identity revalidation, confidential current-basis cursors and useful-page enforcement.
+  It gathers the current live entry winner before matching state; label, session and holding branches retain
+  independent native support. FULL attaches the existing shared summary/facts batch and revalidates afterwards.
+  A sparse admitted read delegates durable reservation and enqueue to `MembersPreparation`; only an actual
+  preparing episode can produce the existing 202 body. BASIC and FULL share the same native admission path.
+  `bindOwnerFilterRead` and `readOwnerFilterCandidateClosure` are explicit owned unavailable adapters for the
+  actual caller T/reservation/scoped capture and complete authorized original/fact closure. They perform no I/O,
+  manufacture no identity/source evidence and return no successful empty result. The Semantic scope/public-capture
+  modules use exact published declarations with unavailable producer adapters. Complete native population,
+  current disclosure, retained preparation/default worker integration and physical bounds still require the
+  real producer bodies and combined native verification; source typing does not certify those outcomes.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.

@@ -515,6 +515,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   // Collection FULL facts use this server route key and the admitted route job deadline.
   const collections = collectionRoutes(labels as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    workClient,
     routeKey: dependencies.routeKey,
     tokens,
     clock,
