@@ -32,13 +32,18 @@ Financial erasure/custody and actual native/DBOS growth gaps remain open.
 fixed-version benefit/quantity one, separate from subject/payment/Library/future item identities. Historic subject-only
 orders retain UNKNOWN benefit mapping until explicit authorized mapping. Partial-refund compatibility and terminal
 no-restoration remain. The exact first target is adopted: native authored `content.edition`, `edition:read`, fixed revision ID/SHA256.
-Commerce now has bounded immutable capture storage, HTTP DTOs and owner-scoped native entitlement data reads.
-Fresh offer/order/Checkout admission fails closed because Content's real `edition-sale.ts` declaration/producer
-is absent in this base; no synthetic authority or native success is claimed. Paid evidence and revocation persist,
-last-verified active entitlements survive transient unavailability, and absent/revoked entitlements cannot be minted
-or restored. The sole offer-consent writer owns observed expectedOfferRevision and its digest; its implementation
-is not present in this base. Accounts opaque fact integration and Content final source/ancestry reads, subject
-discovery, owned navigation, native sale/use proof, reviewed UI and promoted-main journey remain pending.
+Commerce has bounded immutable capture storage, HTTP DTOs and native entitlement data reads. It now imports the
+canonical Accounts benefit type and exact authenticated/mechanical Content sale entrypoints. Released per-attempt
+preparation preserves normal parent authorization and receipt ordering; physical Checkout has a one-use in-memory
+lifetime fence. Verified exact bindings permit paid grant/restore independently of financial truth and revocation.
+Content's entrypoints in this base are agreed unavailable declarations, pending its real native original-publisher
+and current-consent verifier. The bounded sequential reads do not establish a cross-home simultaneous snapshot;
+Content still rechecks current authority before final bytes. Fresh sale stays closed while that runtime is absent.
+The delivered sole offer-consent writer supplies observed expectedOfferRevision and its digest; the composed
+fresh body preserves its revision conflict check after authorized exact receipt replay. The native Commerce
+buyer-fact reader is composed with Accounts Access independently of Content sale reads. Content final
+source/ancestry reads, subject discovery, owned navigation, native sale/use proof, reviewed UI and promoted-main
+journey remain pending.
 Tax/unit, reserves/carry/payability, richer external attestation and authenticated recovery require the explicit
 owner/Root commercial/shared adoption recorded in the purchase contract before runtime bodies.
 

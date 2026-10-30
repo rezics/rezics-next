@@ -15,7 +15,7 @@ import type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
 export type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
 
 /** Commerce's bounded immutable delivery terms. Content supplies every source fact.
- * This DTO describes storage, not Content's pending sale-port callable declaration.
+ * This DTO describes storage, not reusable permission to sell or deliver bytes.
  */
 export type CapturedContentEdition = Readonly<{
   benefit: ContentEditionBenefit;

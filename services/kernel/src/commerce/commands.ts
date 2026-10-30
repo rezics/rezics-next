@@ -1,4 +1,11 @@
-import { captureCurrentContentEdition, requireCurrentContentEdition, withoutUnverifiedBenefit } from './benefit.ts';
+import {
+  captureCurrentContentEdition,
+  isContentEditionUnavailable,
+  requireCurrentContentEdition,
+  requireMechanicalContentEdition,
+  sameCapturedContentEdition,
+  withoutUnverifiedBenefit,
+} from './benefit.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -8,6 +15,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
@@ -19,6 +27,8 @@ import {
   runCommand,
   type CommandEvent,
   type CommandAuthorization,
+  type CommandAttempt,
+  type AuthoritativeTime,
   type CommandTransaction,
   type CommandOutcome,
   type PrincipalCommandReceipt,
@@ -108,12 +118,83 @@ function updated(orderId: string, revision: number): CommandEvent {
   return { type: 'com.rezics.commerce.order.updated.v1', subject: orderId, data: { orderId, revision } };
 }
 
+/** Compose internal preparation without replacing any parent authorization or
+ * creation registry proof. Each opaque handle belongs to exactly one physical
+ * attempt; retries run both preparations again with no resource client held.
+ */
+function withSalePreparation<T>(
+  parent: CommandAuthorization,
+  read: (attempt: CommandAttempt, deadline: number) => Promise<T>,
+) {
+  type Prepared = {
+    attempt: CommandAttempt;
+    parentEvidence: unknown;
+    deadline: number;
+    result: { value: T } | { error: unknown };
+  };
+  const proofs = new WeakMap<object, Prepared>();
+  const admitted = new WeakMap<CommandTransaction, Prepared>();
+  const authorization: CommandAuthorization = {
+    ...parent,
+    async prepare(attempt) {
+      const parentEvidence = await parent.prepare?.(attempt);
+      // Content has its own native read T. This bounded result is neither a
+      // cross-home simultaneous snapshot nor authority for final byte delivery.
+      const deadline = Math.min(Date.now() + 1_000, deadlineFor(1_000));
+      let result: Prepared['result'];
+      try {
+        result = { value: await read(attempt, deadline) };
+      } catch (error) {
+        // Only fresh sale failures are delayed past normal authorization/receipt.
+        // An authorized exact replay must not depend on today's target availability.
+        if (!isContentEditionUnavailable(error) && !(error instanceof GrantDeniedError)) throw error;
+        result = { error };
+      }
+      const proof = Object.freeze({});
+      proofs.set(proof, { attempt, parentEvidence, deadline, result });
+      return proof;
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (!prepared || prepared.attempt !== attempt) throw parent.denied();
+      proofs.delete(proof as object);
+      const mode = await parent.authorize(tx, attempt, prepared.parentEvidence);
+      admitted.set(tx, prepared);
+      return mode;
+    },
+    async finalize(tx, attempt) {
+      const prepared = admitted.get(tx);
+      if (!prepared || prepared.attempt !== attempt) throw parent.denied();
+      await parent.finalize?.(tx, attempt, prepared.parentEvidence);
+      admitted.delete(tx);
+    },
+  };
+  return {
+    authorization,
+    at(tx: CommandTransaction, time: AuthoritativeTime): T {
+      const prepared = admitted.get(tx);
+      if (!prepared || prepared.attempt.time !== time) throw parent.denied();
+      if ('error' in prepared.result) throw prepared.result.error;
+      requireAccessDeadline(prepared.deadline);
+      return prepared.result.value;
+    },
+    deadlineAt(tx: CommandTransaction, time: AuthoritativeTime): number {
+      const prepared = admitted.get(tx);
+      if (!prepared || prepared.attempt.time !== time) throw parent.denied();
+      return prepared.deadline;
+    },
+  };
+}
+
 /** Actor arguments are verified Access identities. Checkout methods are trusted
  * internal ports, not client operations: their receipts are attributed to the buyer.
  */
 export function createCommerceCommands(config: { pool: Pool; access: Access; royaltyBasisPoints?: number }) {
   const { pool, access } = config;
   const royaltyBasisPoints = config.royaltyBasisPoints ?? 9000;
+  // Never written to a receipt or workflow result. Only this physical invocation's
+  // committed admission may reach a provider call, once and inside its sale lifetime.
+  const liveCreations = new WeakMap<CheckoutCreationAdmission, { orderId: string; deadline: number }>();
   if (!Number.isInteger(royaltyBasisPoints) || royaltyBasisPoints < 0 || royaltyBasisPoints > 10000)
     throw new RangeError('Invalid configured royalty rate');
   // Access's request identity has bounded cached account evidence. On commands
@@ -195,15 +276,18 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         },
       },
     });
+    const sale = withSalePreparation(accountAuthorization(actor, authorization), async (_attempt, deadline) =>
+      captureCurrentContentEdition(input.contentEditionId ?? '', { pool, access }, { actor, deadline }),
+    );
     return runCommand(
       pool,
       {
         ...options(actor, r, 'commerce.offer.create', requestKey, input),
-        authorization: accountAuthorization(actor, authorization),
+        authorization: sale.authorization,
       },
       async (tx, command) => {
         // Replay is already resolved. Legacy subject-only creates may replay, never mint a benefit.
-        const contentEdition = await captureCurrentContentEdition(input.contentEditionId ?? '');
+        const contentEdition = sale.at(tx, command.time);
         if (
           contentEdition.creatorAccountId !== seller.accountId ||
           contentEdition.benefit.resource.id !== input.contentEditionId ||
@@ -312,18 +396,28 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         },
       },
     });
+    const sale = withSalePreparation(accountAuthorization(actor, authorization), async (attempt, deadline) => {
+      const offer = parent.at(attempt.time);
+      return requireCurrentContentEdition(offer.contentEdition, { pool, access }, { actor, deadline });
+    });
     return runCommand(
       pool,
       {
         ...options(actor, r, 'commerce.order.create', requestKey, { offerId, expectedOfferRevision }),
-        authorization: accountAuthorization(actor, authorization),
+        authorization: sale.authorization,
       },
       async (tx, command) => {
         const offer = parent.at(command.time);
         if (offer.state !== 'active') throw new OfferUnavailableError();
         // The command body runs only after current authorization and exact receipt replay.
         if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
-        await requireCurrentContentEdition(offer.contentEdition);
+        const contentEdition = sale.at(tx, command.time);
+        if (
+          !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
+          offer.creatorAccountId !== contentEdition.creatorAccountId ||
+          offer.targetSubjectId !== contentEdition.targetSubjectId
+        )
+          throw new GrantDeniedError();
         const order = await store.insertOrder(
           tx,
           r,
@@ -360,12 +454,21 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     const order = await store.readOrder(pool, r, id);
     if (!order) throw new GrantDeniedError();
     const attemptId = Bun.randomUUIDv7();
+    const physical = new Map<string, number>();
+    const sale = withSalePreparation(creationAuthorization(order), async (_attempt, deadline) => {
+      const current = await store.readOrder(pool, r, id);
+      if (!current || current.buyerAccountId !== order.buyerAccountId) throw new GrantDeniedError();
+      return {
+        order: current,
+        contentEdition: await requireMechanicalContentEdition(current.contentEdition, { pool, access }, { deadline }),
+      };
+    });
     const result = await runCommand<CheckoutCreationAdmission>(
       pool,
       {
         partition: partitionOf(r),
         deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-        authorization: creationAuthorization(order),
+        authorization: sale.authorization,
         receipt: {
           actorAccountId: order.buyerAccountId,
           kind: 'commerce.checkout.create',
@@ -384,7 +487,15 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         // Pre-migration uncertainty has no trustworthy request/first-call evidence. Never guess it.
         if (!stored && current.settlement === 'unknown') return done({ kind: 'unknown' });
         // Released current native target authority is indispensable before any fresh provider call.
-        await requireCurrentContentEdition(current.contentEdition);
+        const prepared = sale.at(tx, command.time);
+        if (
+          current.revision !== prepared.order.revision ||
+          current.buyerAccountId !== prepared.order.buyerAccountId ||
+          current.creatorAccountId !== prepared.contentEdition.creatorAccountId ||
+          current.targetSubjectId !== prepared.contentEdition.targetSubjectId ||
+          !sameCapturedContentEdition(current.contentEdition, prepared.contentEdition)
+        )
+          throw new CommandUnavailableError('contention', partitionOf(r));
         const request: CheckoutRequest = {
           orderId: id,
           buyerAccountId: current.buyerAccountId,
@@ -427,13 +538,28 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           transaction_id: command.transactionId,
         });
         if (!changed) throw new RangeError('Commerce order revision exhausted');
+        const admission: CheckoutCreationAdmission = { kind: 'ready', attempt, first: !stored, observedAt };
+        physical.clear();
+        physical.set(command.transactionId, sale.deadlineAt(tx, command.time));
         return {
-          value: { kind: 'ready', attempt, first: !stored, observedAt },
+          value: admission,
           events: [updated(id, changed.revision)],
         };
       },
     );
+    // runCommand normalizes fresh responses through receipt JSON. Attach the
+    // nonserialized lifetime only after commit, using this exact transaction's
+    // in-memory record; historical receipt responses never acquire admission.
+    const deadline = physical.get(result.transactionId);
+    if (!result.replayed && result.value.kind === 'ready' && deadline !== undefined)
+      liveCreations.set(result.value, { orderId: id, deadline });
     return result.value;
+  }
+  function consumeCheckoutCreationAdmission(id: string, admission: CheckoutCreationAdmission): void {
+    const live = liveCreations.get(admission);
+    liveCreations.delete(admission);
+    if (!live || live.orderId !== id || admission.kind !== 'ready') throw new GrantDeniedError();
+    requireAccessDeadline(live.deadline);
   }
   async function recordCheckout(id: string, body: CheckoutOutcome) {
     const r = routeOf(id);
@@ -640,12 +766,27 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           digest: digest({ orderId: id }),
         };
     const authorization = refreshAuthorization(claim?.order ?? order, snapshot.sessionId, intent);
+    // Provider evidence was already read on released connections. A missing target
+    // forbids only new/restored benefit; financial truth and revocation still apply.
+    const sale = withSalePreparation(authorization, async (_attempt, deadline) => {
+      const current = await store.readOrder(pool, r, id);
+      if (!current || current.buyerAccountId !== order.buyerAccountId) throw new GrantDeniedError();
+      try {
+        return {
+          order: current,
+          contentEdition: await requireMechanicalContentEdition(current.contentEdition, { pool, access }, { deadline }),
+        };
+      } catch (error) {
+        if (!isContentEditionUnavailable(error)) throw error;
+        return null;
+      }
+    });
     try {
       const result = await runCommand(
         pool,
         {
           partition: partitionOf(r),
-          authorization,
+          authorization: sale.authorization,
           receipt: {
             actorAccountId: order.buyerAccountId,
             ...intent,
@@ -684,9 +825,28 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
                 ? { changed: false }
                 : { ...decision, entitlement: { kind: 'none' } };
           }
-          // No Content producer is installed. Financial truth/revocation remain independent;
-          // neither a historical subject nor a stored approval may mint/restore access.
-          decision = withoutUnverifiedBenefit(decision);
+          let verified = false;
+          try {
+            const prepared = sale.at(tx, command.time);
+            const current = prepared?.contentEdition;
+            verified =
+              prepared !== null &&
+              current !== undefined &&
+              state.order.revision === prepared.order.revision &&
+              state.order.buyerAccountId === prepared.order.buyerAccountId &&
+              state.order.creatorAccountId === current.creatorAccountId &&
+              state.order.targetSubjectId === current.targetSubjectId &&
+              sameCapturedContentEdition(state.order.contentEdition, current) &&
+              (!state.entitlement ||
+                (state.entitlement.accountId === state.order.buyerAccountId &&
+                  state.entitlement.orderId === state.order.id &&
+                  state.entitlement.offerId === state.order.offerId &&
+                  state.entitlement.targetSubjectId === state.order.targetSubjectId &&
+                  sameCapturedContentEdition(state.entitlement.contentEdition, current)));
+          } catch (error) {
+            if (!isContentEditionUnavailable(error)) throw error;
+          }
+          if (!verified) decision = withoutUnverifiedBenefit(decision);
           if (
             decision.changed &&
             decision.entitlement.kind === 'none' &&
@@ -763,6 +923,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     createOrder,
     recordCheckout,
     beginCheckoutCreation,
+    consumeCheckoutCreationAdmission,
     applyCheckoutSnapshot,
     beginCheckoutRefresh,
     applyClaimedCheckoutSnapshot,

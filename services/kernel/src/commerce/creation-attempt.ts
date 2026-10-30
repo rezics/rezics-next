@@ -60,6 +60,9 @@ export async function createCheckoutForOrder(
   // refresh the deadline; use the later of the native observation and the local clock.
   const now = Math.max(Date.now(), Date.parse(admission.observedAt) + performance.now() - started);
   if (now >= creationRetryUntil(attempt)) return uncertain();
+  // This process-local one-use admission expires with the actual released sale
+  // preparation. A receipt/workflow replay or delayed continuation cannot reuse it.
+  commands.consumeCheckoutCreationAdmission(orderId, admission);
   let outcome: CheckoutOutcome;
   try {
     outcome = { session: await stripe.createCheckoutSession(attempt.request, attempt.providerKey) };

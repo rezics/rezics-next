@@ -85,7 +85,8 @@ account, creator-readable current ancestry, and available published or explicitl
 publisher, moderator, imported author field or ordinary grant cannot establish authorship or copyright. This
 metadata is a declared licence, not an exclusive rights claim. Commerce does not implement that verifier.
 
-The closed benefit type is Access's canonical `ContentEditionBenefit`, re-exported by [model](model.ts). Commerce's captured DTO is:
+The canonical closed benefit type is `ContentEditionBenefit` in
+[Accounts](../access/authenticated-benefit.ts); [model](model.ts) re-exports it. Commerce's captured DTO is:
 
 ```ts
 type CapturedContentEdition = Readonly<{
@@ -110,17 +111,51 @@ body is forbidden. Immutable SQL guards include null historical mapping. No migr
 subject, newest revision, label or payment metadata. Historical reads/authorized receipt replays retain identity;
 a new subject-only create cannot silently create a benefit. Price changes never change the capture.
 
-**Source delivered, producer pending.** This base has no `content/edition-sale.ts` or closed callable declaration.
-[benefit](benefit.ts) exposes only the typed `content-edition-sale-port-pending` unavailable state, with no
-injected verifier or synthetic success. Ordinary current Commerce create authorization and receipt replay happen
-before fresh target admission. Fresh offer/order/Checkout creation fails closed; the adapter must be replaced by
-the real Content import with its actual dependencies/result before any sale is enabled. Source licence and sale
-terms reference must be mapped from that producer, not invented from request input. Capture/recheck call sites
-bound the work; no foreign client is held across provider I/O and no earlier check is reusable permission.
+**Commerce binding delivered, Content runtime pending.** [benefit](benefit.ts) imports the exact
+`readContentEditionSaleAuthority({pool, access, clock?}, editionId, {actor, deadline})` and server-only
+`readContentEditionMechanicalSaleAuthority({pool, access, clock?}, editionId, {deadline})` owner entrypoints.
+The [Content module](../content/edition-sale.ts) currently contains only their agreed typed unavailable declarations.
+Content must replace those declarations with its actual bounded native verifier and current Auth consent binding,
+restoring the real original publisher independently for `edition:sell` and `post:revise`. No seller/buyer Actor is
+manufactured by Commerce. Fresh sale remains unavailable until that producer is delivered.
+
+`captureContentEditionSaleAuthority` copies only the native benefit/creator/subject/source/licence and rejects
+inconsistent source revision/hash or edition identity. `saleTermsReference` is a JSON tuple of the actual native
+edition ID, immutable revision ID/hash and publication `editionRevision`. It is a publication reference, never a
+permission token. `sameCapturedContentEdition` compares every immutable field, including that reference. The
+`captureCurrentContentEdition` / `requireCurrentContentEdition` helpers use the actual request Actor;
+`requireMechanicalContentEdition` uses only Content's mechanical entrypoint for trusted order work.
+
+The private `withSalePreparation` composition in [commands](commands.ts) forwards parent `prepare`, `authorize`
+and `finalize` with the exact original evidence, preserving the creation registry and account floor before receipt
+disclosure. Content I/O runs after parent preparation and before resource checkout, once per physical command
+attempt. An opaque in-memory handle binds its result/error to that exact attempt and native transaction. Known
+fresh-target refusal/unavailability is retained until the fresh body, so normal currently authorized exact receipt
+replay can return history without another sale. Successful preparation is bounded to at most one second and never
+stored as permission in a receipt. The body compares the immutable binding and native buyer/order revision;
+order creation retains the exact offer read by its existing parent anchor at the attempt's T. The sole consent
+writer supplies `expectedOfferRevision` and the command digest; the fresh body checks that revision after receipt
+replay and before target binding/capture. No second price writer is added.
+
+Each physical Checkout create/retry prepares mechanical authority before buyer/order locking, then admits the
+immutable provider attempt under current buyer/revision/time fences. `consumeCheckoutCreationAdmission` consumes
+a process-local one-use deadline immediately before provider I/O in [creation-attempt](creation-attempt.ts).
+Serialized/replayed admission objects and expired continuations cannot call Stripe. Missing authority creates no
+provider effect or automatic failed payment; earlier uncertainty remains unknown. Existing immutable parameters,
+provider key, conservative 23-hour window and expiry rules remain in force.
+
+These are sequential bounded native reads, not a cross-home simultaneous snapshot. The target may change after
+Content releases its read and before Commerce commits or the provider call begins; Commerce's one-second fence
+limits reuse but cannot lock Content across homes. Final Content byte delivery always rechecks current native
+buyer scope, subject/ancestry, exact source/version/licence and final authority. No native client spans Content or
+provider I/O, and no stored capture or earlier sale approval authorizes bytes.
 
 Paid financial truth, named evidence and refund/dispute revocations still apply when target authority is missing.
 Absent/revoked entitlements cannot be granted/restored without complete paid evidence AND current Content sale
-authority. A last-verified active entitlement is preserved through transient target unavailability; unavailable
+authority. Paid application prepares mechanical authority after released provider evidence and before buyer apply.
+Verified exact bindings permit the existing atomic grant/restore; unavailable/null/mismatched bindings suppress
+only grant/restore, including a mismatched retained entitlement. A last-verified active entitlement is preserved
+through transient target unavailability; unavailable
 mapping does not fabricate payment failure/refund or erase history. Full-refund/dispute revoke the same row with
 its original binding; partial-refund and terminal account/receipt/admission rules remain unchanged.
 
@@ -159,6 +194,10 @@ No cache, mirror, grant SQL or client fact/selector endpoint is introduced.
 Source composition is present. The focused native acceptance is retained in
 `test/commerce/content-edition-buyer-fact.test.ts`; execution, current Content use, full journey/native evidence and
 promotion on main are deferred to controller integration. No supplied fact alone establishes delivered paid use.
+
+Unpublish/erasure makes delivery unavailable without inventing a refund; no alternate revision is substituted and
+no Library record is created. Verification for this binding delivery is limited to the local kernel compiler
+check; generated OpenAPI/client artifacts and native/interface gates remain controller work.
 
 ### Private buyer history
 
