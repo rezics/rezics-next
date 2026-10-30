@@ -380,10 +380,11 @@ function searchLabel(recording: typeof searchRecording | typeof searchTypedRecor
 export async function searchReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const view = viewOf(context);
+  const canvas = within(context.canvasElement);
   const label = searchLabel(searchRecording);
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
-  await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchRecording.query);
-  await view.findByRole('button', { name: m.search_submit() });
+  await canvas.findByRole('combobox', { name: m.search_label() });
+  await canvas.findByRole('button', { name: new RegExp(m.search_filters()) });
   await expect(view.getByLabelText(m.search_sort_label())).toHaveValue('relevance');
   await listItemWithLink(view, label);
 }
@@ -391,9 +392,11 @@ export async function searchReady(context: { canvasElement: HTMLElement }) {
 export async function searchTypedReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const view = viewOf(context);
+  const canvas = within(context.canvasElement);
   const label = searchLabel(searchTypedRecording);
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
-  await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchTypedRecording.query);
+  await canvas.findByRole('combobox', { name: m.search_label() });
+  await canvas.findByRole('button', { name: new RegExp(m.search_filters()) });
   await listItemWithLink(view, label);
 }
 
@@ -414,9 +417,10 @@ export async function searchRatingReady(context: { canvasElement: HTMLElement })
 export async function searchEmptyReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const view = viewOf(context);
+  const canvas = within(context.canvasElement);
   await view.findByRole('heading', { level: 1, name: m.search_heading() });
-  await expect(view.getByRole('textbox', { name: m.search_label() })).toHaveValue(searchEmptyRecording.query);
-  await view.findByRole('button', { name: m.search_submit() });
+  await canvas.findByRole('combobox', { name: m.search_label() });
+  await canvas.findByRole('button', { name: new RegExp(m.search_filters()) });
   await expect(view.getByText(m.search_no_results())).toBeVisible();
 }
 

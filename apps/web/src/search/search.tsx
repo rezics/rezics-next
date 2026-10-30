@@ -838,7 +838,7 @@ export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchSco
         />
         <button
           type="button"
-          aria-label={`Filters (${activeConditions})`}
+          aria-label={`${m.search_filters()} (${activeConditions})`}
           className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent"
           onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}
         >

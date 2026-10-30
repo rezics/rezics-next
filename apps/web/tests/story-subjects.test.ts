@@ -60,6 +60,10 @@ function localizedRecording(base: string, locale: string): string {
   return join(recorded, file!);
 }
 
+function recordedSubjectId(): string {
+  return readJson(join(recorded, 'subject.json')).subject.id;
+}
+
 test('recorded and fake story subjects use identities and metadata from the shared subject set', async () => {
   const entries = await subjects();
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
@@ -92,9 +96,26 @@ test('recorded and fake story subjects use identities and metadata from the shar
   for (const name of storyRecordings) {
     const files = [join(recorded, `${name}.json`), ...locales.map((locale) => localizedRecording(name, locale))];
     for (const file of files) {
-      for (const subject of storySubjectsIn(name, readJson(file)))
+      for (const subject of storySubjectsIn(name, readJson(file))) {
+        if (name === 'subject-page') {
+          expect(subject.id, `${file}: recorded subject`).toBe(recordedSubjectId());
+          continue;
+        }
         expect(byId.has(subject.id), `${name}: ${subject.id}`).toBe(true);
+      }
     }
+  }
+});
+
+test('subject-page aggregate and its subject references keep the same recorded target identity', () => {
+  const stableId = recordedSubjectId();
+  for (const file of [join(recorded, 'subject-page.json'), join(recorded, 'subject-page-zh-Hans.json')]) {
+    const page = readJson(file);
+    expect(page.subject).toBe(stableId);
+    expect(page.reads.r0.body.subject.id).toBe(stableId);
+    expect(page.reads.r0.body.summary.id).toBe(stableId);
+    expect(Object.keys(page.reads)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6']);
+    expect(Object.keys(page.views)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8']);
   }
 });
 

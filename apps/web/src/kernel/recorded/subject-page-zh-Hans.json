@@ -1,5 +1,5 @@
 {
-  "subject": "01a186da-0514-7685-9a80-18f46d3d3c91",
+  "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
   "profile": "sha256:47976876913edbfa03e4f2641f4c20d3ce57528e1f2d2fe9f23dc67b1665c885",
   "template": { "scope": "base", "key": "schema:CreativeWork" },
   "document": {
@@ -160,8 +160,7 @@
       "status": 200,
       "body": {
         "subject": {
-          "cover": null,
-          "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+          "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
           "type": "schema:Book",
           "revision": 1,
           "release": "sha256:eb8bc8b685e4f8e12897e0e9ac0ab978a8eff60102053081bd95ef4af0688702",
@@ -191,13 +190,13 @@
             "wdt:P361": 0
           },
           "labels": {
-            "en": "The Little Prince",
-            "zh-Hans": "小王子",
-            "zh-Hant": "小王子",
             "ja": "星の王子さま",
-            "ko": "어린 왕자",
             "de": "Der kleine Prinz",
             "fr": "Le Petit Prince",
+            "zh-Hant": "小王子",
+            "zh-Hans": "小王子",
+            "ko": "어린 왕자",
+            "en": "The Little Prince",
             "es": "El Principito"
           },
           "descriptions": {
@@ -275,10 +274,10 @@
         },
         "account": null,
         "summary": {
-          "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
+          "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
           "type": "schema:Book",
           "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-          "label": { "value": "小王子", "language": "zh-Hans" },
+          "label": { "value": "Le Petit Prince", "language": "fr" },
           "creativeWork": true,
           "cover": null
         },

@@ -8,6 +8,7 @@ import { facetProperties } from '@rezics/filter';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { stackRun } from '../../../scripts/stack-run.ts';
+import { normalizeRecording, normalizeSearchRecording, stableRecording } from './recording-normalization';
 import { storySubjects } from '../src/kernel/story-subjects';
 
 // Names on the command line select the recordings to write; with none, every recording is written.
@@ -33,6 +34,7 @@ const boardTitle = 'Stories of the little prince';
 const threadTitle = 'Letters from B-612';
 const ownedThreadTitle = 'Baobab seedlings: a watering schedule';
 const searchPrefix = 'webrec';
+const typedSearchPrefix = 'webrectyped';
 const pagePrefix = 'webrecpage';
 const matchingQuery = 'The';
 const typedQuery = 'Prince';
@@ -794,34 +796,6 @@ async function recordLibrary(input: {
 }
 
 /** Keep story content and identities stable while adding newly recorded response fields. */
-function stableRecording(value: unknown, previous: unknown): unknown {
-  if (previous === undefined) return value;
-  const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
-  if (typeof value === 'string' && typeof previous === 'string') return previous;
-  if (Array.isArray(value) && Array.isArray(previous))
-    return previous.map((item, index) => stableRecording(value[index], item));
-  if (!value || typeof value !== 'object' || !previous || typeof previous !== 'object') return previous;
-  const current = value as Record<string, unknown>;
-  const before = previous as Record<string, unknown>;
-  const oldIds = Object.keys(before).filter((key) => key.match(uuid));
-  const newIds = Object.keys(current).filter((key) => key.match(uuid));
-  return Object.fromEntries([
-    ...Object.entries(current).filter(([name]) => !Object.hasOwn(before, name) && !newIds.includes(name)),
-    ...Object.entries(before).flatMap(([name, item]) => {
-      if (['cover', 'label', 'labels'].includes(name) && !Object.hasOwn(current, name)) return [];
-      const recordedName = oldIds.includes(name) ? (newIds[oldIds.indexOf(name)] ?? name) : name;
-      return [
-        [
-          name,
-          ['cover', 'label', 'labels'].includes(name)
-            ? current[recordedName]
-            : stableRecording(current[recordedName], item),
-        ],
-      ];
-    }),
-  ]);
-}
-
 const homeRecordingNames = new Set([
   'home-page',
   ...['de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'].map((locale) => `home-page-${locale}`),
@@ -836,51 +810,6 @@ export function selectsRecording(name: string, names: readonly string[]): boolea
 export function recordingSnapshot(name: string, value: unknown, previous: unknown): unknown {
   const generated = name === 'definitions-active' || name === 'definitions-release' || homeRecordingNames.has(name);
   return stableRecording(value, generated ? undefined : previous);
-}
-
-/** Recorded story rows use the shared identity, labels and cover, projected to the story locale. */
-function applyStorySubjects(value: unknown, locale: string, name: string): unknown {
-  if (Array.isArray(value)) return value.map((item) => applyStorySubjects(item, locale, name));
-  if (!value || typeof value !== 'object') return value;
-  const result = Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [key, applyStorySubjects(child, locale, name)]),
-  ) as Record<string, unknown>;
-  if (typeof result.id !== 'string' || typeof result.type !== 'string' || !(result.labels || result.label))
-    return result;
-  const labelValues = [
-    ...(result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels)
-      ? Object.values(result.labels)
-      : []),
-    typeof result.label === 'string'
-      ? result.label
-      : result.label && typeof result.label === 'object' && 'value' in result.label
-        ? result.label.value
-        : undefined,
-  ].filter((label): label is string => typeof label === 'string');
-  const candidates = storySubjects.filter((entry) =>
-    labelValues.some((label) => Object.values(entry.labels as Record<string, string>).includes(label)),
-  );
-  const subject = storySubjects.find((entry) => entry.id === result.id) ?? candidates[0];
-  if (subject) {
-    result.id = subject.id;
-    const labels = subject.labels as Record<string, string>;
-    const localizedLabel = labels[locale] ?? labels.en ?? Object.values(labels)[0]!;
-    result.type = subject.type;
-    if (result.labels && typeof result.labels === 'object' && !Array.isArray(result.labels))
-      result.labels = { ...subject.labels };
-    if (typeof result.label === 'string') result.label = localizedLabel;
-    else if (result.label && typeof result.label === 'object' && !Array.isArray(result.label))
-      result.label = { ...result.label, value: localizedLabel, language: locale };
-    if (result.summary && typeof result.summary === 'object' && !Array.isArray(result.summary)) {
-      const summary = { ...result.summary } as Record<string, unknown>;
-      if (summary.label && typeof summary.label === 'object' && !Array.isArray(summary.label))
-        summary.label = { ...summary.label, value: localizedLabel, language: locale };
-      summary.cover = subject.cover ?? null;
-      result.summary = summary;
-    }
-    result.cover = subject.cover ?? null;
-  }
-  return result;
 }
 
 /**
@@ -1660,7 +1589,7 @@ async function main(): Promise<void> {
   };
   await createSubjectIndex(opensearch, searchPrefix, 1);
   const index = subjectIndexName(searchPrefix, 1);
-  for (const id of [subjectId, ...homeIndexed.map((hit) => hit.id)]) {
+  for (const id of homeIndexed.map((hit) => hit.id)) {
     const snapshot = await source.read(subjectPartition(id), [id]);
     await opensearch.bulk(bulkLines(index, documentActions(snapshot, [id])), { query: { refresh: 'wait_for' } });
   }
@@ -1692,11 +1621,17 @@ async function main(): Promise<void> {
     throw new Error(`search-facets returned ${facetsResponse.status}: ${JSON.stringify(facets)}`);
   recorded.set('search-facets', { ...facets, status: facetsResponse.status, query: matchingQuery });
   // Keep full label maps in recordings; replay projects them to the language list requested by each story.
-  const searchFor = async (name: string, text: string, extra: JsonObject = {}, request: JsonObject = {}) => {
+  const searchFor = async (
+    name: string,
+    text: string,
+    extra: JsonObject = {},
+    request: JsonObject = {},
+    handle = appHandle,
+  ) => {
     let english: JsonObject | undefined;
     for (const locale of ['en', 'zh-Hans']) {
       const response = await retryOverloaded(async () =>
-        appHandle.handle(
+        handle.handle(
           new Request('http://kernel.test/v1/subjects:search', {
             method: 'POST',
             headers: { 'content-type': 'application/json', 'accept-language': locale },
@@ -1714,15 +1649,53 @@ async function main(): Promise<void> {
   };
   const matched = await searchFor('search', matchingQuery);
   const unmatched = await searchFor('search-empty', emptyQuery);
+
+  // The full subject record belongs to its typed-search fixture; the ordinary Pages/Search story uses only its
+  // registered story subjects so the subject-page recorder seed does not duplicate the same work there.
+  await createSubjectIndex(opensearch, typedSearchPrefix, 1);
+  const typedIndex = subjectIndexName(typedSearchPrefix, 1);
+  const typedSnapshot = await source.read(subjectPartition(subjectId), [subjectId]);
+  await opensearch.bulk(bulkLines(typedIndex, documentActions(typedSnapshot, [subjectId])), {
+    query: { refresh: 'wait_for' },
+  });
+  await opensearch.request('POST', '/_aliases', {
+    actions: [{ add: { index: typedIndex, alias: subjectAlias(typedSearchPrefix) } }],
+  });
+  const typedSearch = createSearchService({
+    pool: database,
+    client: opensearch,
+    prefix: typedSearchPrefix,
+    source,
+    cursors,
+  });
+  const typedHandle = createKernel({
+    pool: database,
+    routeKey: Buffer.from(kernelRouteKey, 'base64url'),
+    search: typedSearch,
+  });
   const typed = await searchFor(
     'search-typed',
     typedQuery,
     { filter: { and: [{ type: { in: [subjectType] } }] }, properties },
     { filterType: subjectType },
+    typedHandle,
   );
   const hits = matched.subjects;
-  if (!Array.isArray(hits) || !hits.some((hit) => objectBody(hit, 'search hit').id === subjectId))
-    throw new Error(`Search for ${matchingQuery} did not return the recorded subject: ${JSON.stringify(matched)}`);
+  const expectedSearchIds = homeIndexed
+    .filter((hit) =>
+      hit.labels.some(
+        ({ value }) =>
+          typeof value === 'string' && value.toLocaleLowerCase().includes(matchingQuery.toLocaleLowerCase()),
+      ),
+    )
+    .map((hit) => hit.id);
+  const matchedIds = Array.isArray(hits) ? hits.map((hit) => objectBody(hit, 'search hit').id) : [];
+  if (
+    matchedIds.length !== expectedSearchIds.length ||
+    new Set(matchedIds).size !== matchedIds.length ||
+    expectedSearchIds.some((id) => !matchedIds.includes(id))
+  )
+    throw new Error(`Search for ${matchingQuery} returned unexpected story subjects: ${JSON.stringify(matched)}`);
   const typedHit = Array.isArray(typed.subjects)
     ? typed.subjects.map((hit) => objectBody(hit, 'typed search hit')).find((hit) => hit.id === subjectId)
     : undefined;
@@ -1730,14 +1703,6 @@ async function main(): Promise<void> {
     throw new Error(
       `The typed search for ${typedQuery} did not return facts for the recorded subject: ${JSON.stringify(typed)}`,
     );
-  if (
-    !hits.some(
-      (hit) =>
-        objectBody(hit, 'search hit').id === subjectId &&
-        Object.keys(objectBody(objectBody(hit, 'search hit').descriptions, 'search descriptions')).length > 0,
-    )
-  )
-    throw new Error(`The search hit has no descriptions: ${JSON.stringify(matched)}`);
   if (!Array.isArray(unmatched.subjects) || unmatched.subjects.length !== 0)
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
 
@@ -1822,23 +1787,38 @@ async function main(): Promise<void> {
   const unknown = only.filter((name) => !recorded.has(name) && !optionalRecordings.has(name));
   if (unknown.length)
     throw new Error(`Unknown recordings: ${unknown.join(', ')}. Recorded: ${[...recorded.keys()].join(', ')}`);
+  const stableSubjectRecording = objectBody(
+    await Bun.file(join(app, 'src/kernel/recorded/subject.json')).json(),
+    'stable subject recording',
+  );
+  const stableSubject = objectBody(stableSubjectRecording.subject, 'stable subject');
+  const stableSubjectId = stableSubject.id;
+  if (typeof stableSubjectId !== 'string') throw new Error('The stable subject recording has no subject id.');
+  const subjectAliases = new Map([[subjectId, stableSubjectId]]);
   const written: string[] = [];
   for (const [name, body] of recorded) {
     if (!selectsRecording(name, only)) continue;
     const file = join(output, `${name}.json`);
     written.push(file);
-    const previous = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
+    const generated = name === 'definitions-active' || name === 'definitions-release';
+    const oldRecording = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    const freshSnapshot = generated || homeRecordingNames.has(name);
+    const previous = freshSnapshot ? undefined : oldRecording;
     const locale =
       homeRecordingNames.has(name) && name !== 'home-page'
         ? name.slice('home-page-'.length)
         : name.endsWith('-zh-Hans')
           ? 'zh-Hans'
           : 'en';
-    const canonical = applyStorySubjects(body, locale, name);
-    await writeFile(
-      file,
-      JSON.stringify(applyStorySubjects(recordingSnapshot(name, canonical, previous), locale, name)),
-    );
+    const subjectPage = name === 'subject-page' || name === 'subject-page-zh-Hans';
+    const typedSearch = name === 'search-typed' || name === 'search-typed-zh-Hans';
+    const isSearch = ['search', 'search-zh-Hans', 'search-typed', 'search-typed-zh-Hans'].includes(name);
+    const normalized = isSearch
+      ? normalizeSearchRecording(body, previous, locale, typedSearch ? subjectAliases : new Map())
+      : normalizeRecording(body, previous, locale, subjectPage ? subjectAliases : new Map());
+    const snapshot = freshSnapshot ? recordingSnapshot(name, normalized, oldRecording) : normalized;
+    await writeFile(file, JSON.stringify(snapshot));
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   if (written.length) {
@@ -1891,8 +1871,10 @@ export async function runRecord(argv: readonly string[] = Bun.argv.slice(2)): Pr
 }
 
 if (import.meta.main) {
-  runRecord().catch((error: unknown) => {
+  try {
+    process.exitCode = await runRecord();
+  } catch (error: unknown) {
     console.error(error);
     process.exitCode = 1;
-  });
+  }
 }

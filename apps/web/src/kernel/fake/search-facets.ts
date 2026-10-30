@@ -30,7 +30,7 @@ async function storySearch(request: Request): Promise<KernelRecording | undefine
   } catch {
     return;
   }
-  if (body.text === typedSearch.query) return typedSearch as KernelRecording;
+  if (body.text === typedSearch.query) return { ...typedSearch, status: 200 } as KernelRecording;
   if (body.text === emptySearch.query) return emptySearch as KernelRecording;
 }
 

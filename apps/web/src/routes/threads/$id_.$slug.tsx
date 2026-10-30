@@ -397,7 +397,7 @@ function PostSlot({
         {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
         restoreError={restoreError}
         onCopyLink={copyLink}
-        {...(post.availability === 'erased' && post.restorableUntil
+        {...(post.availability === 'erased' && 'restorableUntil' in post && post.restorableUntil
           ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) }
           : {})}
       />

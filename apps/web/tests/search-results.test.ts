@@ -166,6 +166,7 @@ let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
     let output = '';
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
@@ -176,6 +177,7 @@ function site(): Promise<string> {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        PUBLIC_ORIGIN: origin,
         KERNEL_ORIGIN: fake.url.origin,
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: 'rezics-website',
@@ -186,7 +188,6 @@ function site(): Promise<string> {
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
@@ -203,17 +204,33 @@ function site(): Promise<string> {
 
 let browser: Browser | undefined;
 
-async function open(path: string, javaScriptEnabled = true): Promise<Page> {
+async function open(path: string, javaScriptEnabled = true, width = 1280): Promise<Page> {
   const origin = await site();
   browser ??= await chromium.launch();
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
+    viewport: { width, height: 860 },
     reducedMotion: 'reduce',
     javaScriptEnabled,
   });
   const page = await context.newPage();
+  const browserErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('response', (response) => {
+    if (response.status() >= 400) browserErrors.push(`${response.status()} ${response.url()}`);
+  });
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (javaScriptEnabled) await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  if (javaScriptEnabled) {
+    try {
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    } catch (error) {
+      throw new Error(`Search page did not hydrate. Browser errors: ${browserErrors.join('\n') || 'none'}`, {
+        cause: error,
+      });
+    }
+  }
   return page;
 }
 
@@ -267,6 +284,7 @@ test(
         const first = row(page, spec.title, 0);
         const link = first.getByRole('link', { name: spec.title, exact: true });
         expect(await link.getAttribute('lang')).toBe(spec.language);
+        expect(await link.getAttribute('href')).toContain(kokoro.id);
         const label = first.getByText(spec.type, { exact: true });
         expect(await label.count()).toBe(1);
         expect(await label.getAttribute('lang')).toBe(spec.language);
@@ -275,6 +293,12 @@ test(
         expect(await description.getAttribute('lang')).toBe(spec.language);
         expect(await first.locator('em').count()).toBe(0);
         const second = row(page, spec.title, 1);
+        expect(await second.getByRole('link', { name: spec.title, exact: true }).getAttribute('href')).toContain(
+          kokoroTwo.id,
+        );
+        expect(await link.getAttribute('href')).not.toBe(
+          await second.getByRole('link', { name: spec.title, exact: true }).getAttribute('href'),
+        );
         expect(await second.getByText(spec.other, { exact: true }).count()).toBe(1);
         expect(await second.getByText(spec.type, { exact: true }).count()).toBe(1);
       } finally {
@@ -358,6 +382,10 @@ test(
             .getByRole('main')
             .getByRole('link', { name: spec.language === 'en' ? 'Later page book' : '次頁の本' })
             .waitFor();
+          const nextLink = page
+            .getByRole('main')
+            .getByRole('link', { name: spec.language === 'en' ? 'Later page book' : '次頁の本' });
+          expect(await nextLink.getAttribute('href')).toContain(later.id);
           expect(searches(before)).toHaveLength(2);
           const [firstPage, secondPage] = searches(before).map((call) => call.body!);
           expect(secondPage!.cursor).toBe(cursor);
@@ -370,6 +398,43 @@ test(
           await page.context().close();
         }
       }
+    }
+  },
+  timeout,
+);
+
+test(
+  'search result links, header controls and rows remain usable at a phone width',
+  async () => {
+    const before = calls.length;
+    const page = await open('/en/search?q=Kokoro', true, 390);
+    try {
+      expect(searches(before)).toHaveLength(1);
+      expect(searches(before)[0]!.body?.limit).toBe(100);
+      const searchTrigger = page.getByRole('button', { name: 'Search subjects' });
+      expect(await searchTrigger.count()).toBe(1);
+      await searchTrigger.click();
+      const headerSearch = page.getByRole('combobox', { name: 'Search subjects' });
+      await headerSearch.waitFor();
+      expect(await headerSearch.isVisible()).toBe(true);
+      expect(await page.getByRole('button', { name: /Filters/ }).count()).toBe(1);
+      await page.keyboard.press('Escape');
+      const rendered = await page
+        .locator('main [data-slot="list-row"]')
+        .evaluateAll((elements) =>
+          elements.map((element) => element.querySelector<HTMLAnchorElement>('a[href*="/subjects/"]')?.href ?? ''),
+        );
+      expect(rendered.map((href) => new URL(href).pathname.match(/\/subjects\/([^/]+)/)?.[1])).toEqual([
+        kokoro.id,
+        kokoroTwo.id,
+        bare.id,
+      ]);
+      const width = await page.evaluate(() =>
+        Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      );
+      expect(width).toBeLessThanOrEqual(390);
+    } finally {
+      await page.context().close();
     }
   },
   timeout,

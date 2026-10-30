@@ -139,9 +139,13 @@ async function searchStory(
   const query = typeof body.text === 'string' ? body.text : undefined;
   const type = requestType(body.filter);
   if (query === undefined) return undefined;
-  const recording = Object.values(recordings).find(
+  const baseName = type ? 'search-typed' : 'search';
+  const recording = [...languages.map((language) => recordings[`${baseName}-${language}`]), recordings[baseName]].find(
     (candidate) =>
-      candidate.query === query && (candidate.filterType ?? undefined) === type && Array.isArray(candidate.subjects),
+      candidate !== undefined &&
+      candidate.query === query &&
+      (candidate.filterType ?? undefined) === type &&
+      Array.isArray(candidate.subjects),
   );
   return recording ? bodyFromRecording(recording, languages) : undefined;
 }

@@ -1,6 +1,100 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { normalizeRecording, normalizeSearchRecording } from '../scripts/recording-normalization';
+
+test('Search recording normalization follows current response rows and keeps the prior stable timestamp', () => {
+  const genjiId = '01a1773a-f700-7078-8000-000000000001';
+  const princeId = '01a17dfd-5dbf-738a-9405-9dfa9a8ec069';
+  const previous = {
+    as_of: '2026-10-29T00:00:00Z',
+    subjects: Array.from({ length: 5 }, (_, index) => ({
+      id: index === 0 ? genjiId : princeId,
+      type: 'schema:Book',
+      labels: { en: index === 0 ? 'The Tale of Genji' : 'The Little Prince' },
+    })),
+  };
+  const current = {
+    as_of: '2026-10-30T00:00:00Z',
+    subjects: [
+      { id: genjiId, type: 'schema:Book', labels: { en: 'The Tale of Genji' } },
+      { id: princeId, type: 'schema:Book', labels: { en: 'The Little Prince' } },
+    ],
+  };
+
+  const normalized = normalizeSearchRecording(current, previous, 'zh-Hans') as {
+    as_of: string;
+    subjects: { id: string; labels: Record<string, string> }[];
+  };
+  expect(normalized.subjects.map(({ id }) => id)).toEqual([genjiId, princeId]);
+  expect(normalized.subjects.map(({ labels }) => labels['zh-Hans'])).toEqual(['源氏物语', '小王子']);
+  expect(normalized.as_of).toBe(previous.as_of);
+  expect(normalizeSearchRecording(normalized, previous, 'zh-Hans')).toEqual(normalized);
+});
+
+test('Search recording normalization never aliases fixture identities by a matching title', () => {
+  const sharedTitle = 'The Little Prince';
+  const subjects = [
+    { id: '01a17a3b-0884-721b-91ef-d7ffd7bb58e4', type: 'schema:Book', labels: { en: sharedTitle } },
+    { id: '01a17dfd-5dbf-738a-9405-9dfa9a8ec068', type: 'schema:Book', labels: { en: sharedTitle } },
+  ];
+
+  const normalized = normalizeSearchRecording({ subjects }, undefined, 'en') as {
+    subjects: { id: string; labels: Record<string, string> }[];
+  };
+  expect(normalized.subjects.map(({ id }) => id)).toEqual(subjects.map(({ id }) => id));
+  expect(normalized.subjects.map(({ labels }) => labels.en)).toEqual([sharedTitle, sharedTitle]);
+});
+
+test('subject-page normalization applies its explicit recorder identity to every aggregate reference', () => {
+  const transientId = '00000000-0000-4000-8000-000000000001';
+  const recordedId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
+  const staleId = '01a17dfd-5dbf-738a-9405-9dfa9a8ec069';
+  const current = {
+    subject: transientId,
+    views: { '0': { id: 'view-0' }, '1': { id: 'view-1' } },
+    reads: {
+      r0: {
+        body: {
+          subject: { id: transientId, type: 'schema:Book', labels: { en: 'The Little Prince' } },
+          summary: { id: transientId, type: 'schema:Book' },
+          related: { schema: 'preserved' },
+        },
+      },
+      r1: { body: { links: [{ subjectId: transientId }, { subjectId: '00000000-0000-4000-8000-000000000002' }] } },
+    },
+  };
+  const previous = {
+    subject: recordedId,
+    views: { '0': { id: 'view-0' }, '1': { id: 'view-1' } },
+    reads: {
+      r0: {
+        body: {
+          subject: { id: staleId, type: 'schema:Book', labels: { en: 'The Little Prince' } },
+          summary: { id: staleId, type: 'schema:Book' },
+          related: { schema: 'preserved' },
+        },
+      },
+      r1: { body: { links: [{ subjectId: staleId }, { subjectId: '00000000-0000-4000-8000-000000000099' }] } },
+    },
+  };
+
+  const normalized = normalizeRecording(
+    current,
+    previous,
+    'en',
+    new Map([[transientId, recordedId]]),
+  ) as typeof current;
+  expect(normalized.subject).toBe(recordedId);
+  expect(normalized.reads.r0.body.subject.id).toBe(recordedId);
+  expect(normalized.reads.r0.body.summary.id).toBe(recordedId);
+  expect(normalized.reads.r1.body.links.map(({ subjectId }) => subjectId)).toEqual([
+    recordedId,
+    '00000000-0000-4000-8000-000000000099',
+  ]);
+  expect(Object.keys(normalized.views)).toEqual(['0', '1']);
+  expect(Object.keys(normalized.reads)).toEqual(['r0', 'r1']);
+});
 
 const root = resolve(import.meta.dir, '../../..');
 const stackAvailable =

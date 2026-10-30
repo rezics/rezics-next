@@ -21,26 +21,12 @@
         "fr": "Le Petit Prince",
         "es": "El Principito"
       },
-      "summary": {
-        "id": "01a17dfd-5dbf-738a-9405-9dfa9a8ec069",
-        "type": "schema:Book",
-        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
-        "label": { "value": "The Little Prince", "language": "en" },
-        "creativeWork": true,
-        "cover": null
-      },
-      "descriptions": {
-        "en": "A poetic novella in which a pilot stranded in the Sahara meets a young prince from a tiny asteroid and learns what is essential.",
-        "fr": "Conte poétique d'un aviateur tombé en panne dans le Sahara, qui rencontre un petit prince venu d'un minuscule astéroïde.",
-        "ja": "砂漠に不時着した飛行士が、小さな星から来た王子さまと出会い、大切なものは目に見えないと教わる詩的な物語。",
-        "zh-Hant": "迫降撒哈拉沙漠的飛行員，遇見來自小行星的小王子，並學會什麼才是重要的事。"
-      },
+      "summary": null,
+      "descriptions": {},
       "cover": null
     }
   ],
-  "total": { "value": 2, "relation": "exact" },
   "next": null,
   "as_of": "2026-10-27T11:31:57.344Z",
-  "status": 200,
   "query": "The"
 }
