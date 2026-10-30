@@ -1,5 +1,9 @@
 import { createResourcePublicEligibility } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
+import { readRealm, realmReadEligibility, type RealmView } from '../community/realm.ts';
+import realmHead from '../community/realm-read.sql';
+import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type AccessCheck, type Actor, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -15,6 +19,7 @@ import type { DownloadDecision, DownloadVariant, MediaDependencies } from './med
 import read from './read-download-media.sql';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
+type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
 export type DownloadContext = Readonly<{
   deadline: number;
   routeKey?: Uint8Array;
@@ -44,6 +49,46 @@ async function point(client: AccessClient, id: string, slot: { format: string; w
 }
 const signature = (value: unknown) => JSON.stringify(value);
 const usable = (row: Row) => !row.erased && !row.collection_pending && !row.taken_down;
+
+function realmSignature(value: RealmView | RealmHeadRow): string {
+  const realm =
+    'realm_id' in value
+      ? {
+          realmId: value.realm_id,
+          spaceId: value.space_id,
+          state: value.state,
+          visibility: value.visibility,
+          contextId: value.context_id,
+          boardSchemeId: value.board_scheme_id,
+          headRevisionId: value.head_revision_id,
+          createdAt: value.created_at,
+          creator: value.creator,
+          predecessor: value.predecessor,
+          title: value.title,
+          summary: value.summary,
+          revisionCreatedAt: value.revision_created_at,
+          author: value.author,
+          votes: value.votes as Record<string, unknown>,
+        }
+      : value;
+  return JSON.stringify([
+    realm.realmId,
+    realm.spaceId,
+    realm.state,
+    realm.visibility,
+    realm.contextId,
+    realm.boardSchemeId,
+    realm.headRevisionId,
+    new Date(realm.createdAt).toISOString(),
+    realm.creator,
+    realm.predecessor,
+    realm.title,
+    realm.summary,
+    new Date(realm.revisionCreatedAt).toISOString(),
+    realm.author,
+    Object.entries(realm.votes).sort(([left], [right]) => left.localeCompare(right)),
+  ]);
+}
 
 /** No image bytes or object-store operations cross this boundary. Prepared
  * facts are independently anchored and released, then revalidated at each home.
@@ -203,6 +248,23 @@ export async function downloadMedia(
       pool: dependencies.pool,
       deadline: context.deadline,
     };
+    let realmId: string | null = board.realm_id;
+    let realmInitial: RealmView | null = null;
+    let realmCheck: AccessCheck | null = null;
+    let realmRoute: number | null = null;
+    if (realmId !== null) {
+      realmRoute = route(realmId);
+      realmInitial = await readRealm(dependencies, actor, realmId, { deadline: context.deadline });
+      if (!realmInitial) return denied;
+      const realmResource = { route: realmRoute, id: realmId };
+      realmCheck = await accessCheck(
+        dependencies.access,
+        actor,
+        'realm:read',
+        { ...realmResource, eligibility: realmReadEligibility(realmResource) },
+        accessContext,
+      );
+    }
     async function prepare(row: MediaParent): Promise<AccessCheck> {
       const action = `${row.kind}:read`;
       const resource = { route: route(row.id), id: row.id };
@@ -282,15 +344,33 @@ export async function downloadMedia(
       return current !== null && signature(current) === signature(board) && (await boardCheck(client));
     });
     if (!boardVisible) return denied;
-    return await snapshot(r, async (client) => {
+    const currentMedia = await snapshot(r, async (client) => {
       const current = await point(client, mediaId, slot);
-      if (!current || !usable(current) || signature(current) !== signature(initial)) return denied;
+      if (!current || !usable(current) || signature(current) !== signature(initial)) return null;
       const currentChain = await mediaParentChain(client, current.container_id);
-      if (signature(currentChain) !== signature(chain)) return denied;
-      for (const check of checks) if (!(await check(client))) return denied;
-      if (!(await mediaCheck(client))) return denied;
-      return bytesDecision(current, mediaId, variant, publiclyVisible, context.deadline);
+      if (signature(currentChain) !== signature(chain)) return null;
+      for (const check of checks) if (!(await check(client))) return null;
+      if (!(await mediaCheck(client))) return null;
+      return current;
     });
+    if (!currentMedia) return denied;
+    if (realmId !== null) {
+      if (realmRoute === null || !realmInitial || !realmCheck || board.realm_id !== realmId) return denied;
+      const currentRealm = await snapshot(realmRoute, async (client) => {
+        const time = await mintReadTime(client);
+        try {
+          if (!(await realmCheck!(client, time))) return false;
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'not_found') return false;
+          throw error;
+        }
+        const at = authoritativeTimeValue(time);
+        const rows = await realmHead.run(client, { route: realmRoute!, id: realmId!, at });
+        return rows !== null && realmSignature(rows) === realmSignature(realmInitial!);
+      });
+      if (!currentRealm) return denied;
+    }
+    return bytesDecision(currentMedia, mediaId, variant, publiclyVisible, context.deadline);
   } catch (error) {
     if (error instanceof GrantDeniedError || error instanceof RangeError) return denied;
     throw error;
