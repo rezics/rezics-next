@@ -232,8 +232,19 @@ export function PublicationEditor({
                     </p>
                   )}
                   <fieldset disabled={disabled} className="min-w-0 space-y-4">
-                    <legend className="mb-4 font-semibold">{profile.label}</legend>
-                    {profile.description && <p className="text-sm text-muted-foreground">{profile.description}</p>}
+                    <legend lang={profile.labelLang ?? undefined} className="mb-4 font-semibold">
+                      {profile.label}
+                    </legend>
+                    {profile.description && (
+                      <p lang={profile.descriptionLang ?? undefined} className="text-sm text-muted-foreground">
+                        {profile.description}
+                        {profile.descriptionLang && profile.descriptionLang !== locale && (
+                          <span lang={locale} className="ms-2">
+                            {m.guide_fallback({ language: profile.descriptionLang }, o)}
+                          </span>
+                        )}
+                      </p>
+                    )}
                     <Field data-invalid={invalid('/labels') || undefined}>
                       <FieldLabel htmlFor="publication-label">{m.catalogue_create_label({}, o)}</FieldLabel>
                       <Input

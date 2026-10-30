@@ -12,6 +12,7 @@ import {
   type TermDraft,
 } from './create-subject';
 import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
+import { definitionText } from './definition-guide';
 
 export type PublicationItem = InitialSubject & { statements: Record<string, StatementInput[]> };
 export type PublicationCommand = { work: string; relation: string; item: PublicationItem; key: string };
@@ -21,7 +22,9 @@ export type PublicationRead =
 export type PublicationProfile = {
   id: string;
   label: string;
+  labelLang: string | null;
   description: string;
+  descriptionLang: string | null;
   relations: string[];
   fields: string[];
 };
@@ -61,19 +64,22 @@ export function publicationProfiles(release: Release, workType: string, locale: 
         : undefined;
   const definition = profile ? release.types[profile] : undefined;
   if (!profile || !definition) return [];
-  const label = pickText(definition.labels, locale).text;
+  const label = definitionText(definition.labels, locale);
+  const description = definitionText(definition.descriptions, locale);
   const relations = ['schema:exampleOfWork', ...(profile === 'rezics:AnimeRelease' ? ['bf:hasPart'] : [])].filter(
     (id) =>
       definition.properties.includes(id) &&
       !!release.properties[id]?.relation &&
       publicationTarget(release, workType, id),
   );
-  if (!label || !relations.length) return [];
+  if (!label.text || !relations.length) return [];
   return [
     {
       id: profile,
-      label,
-      description: pickText(definition.descriptions ?? {}, locale).text,
+      label: label.text,
+      labelLang: label.lang,
+      description: description.text,
+      descriptionLang: description.lang,
       relations,
       fields: fields.filter(
         (id) =>

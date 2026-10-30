@@ -199,3 +199,37 @@ test('uncertain retries keep the exact draft/key and a confirmed creation only r
     expect(delayed.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
   }
 });
+
+test('English publication metadata uses its actual requested-language description or an honest existing fallback without changing creation or conflict outcomes', async () => {
+  for (const scenario of ['ready', 'conflict'] as const) {
+    const fixture = publicationFixture(scenario, 'en');
+    const read = await fixture.transport.load();
+    if (!read.ok) throw new Error('Expected work');
+    const edition = fixture.release.types['bf:Instance']!;
+    expect(edition.descriptions?.en).toBeUndefined();
+    expect(read.profiles[0]).toMatchObject({
+      label: edition.labels.en,
+      labelLang: 'en',
+      description: edition.descriptions!.de,
+      descriptionLang: 'de',
+    });
+    expect(publicationProfiles(fixture.release, 'schema:Book', 'es')[0]).toMatchObject({
+      description: edition.descriptions!.es,
+      descriptionLang: 'es',
+    });
+    expect(publicationProfiles(fixture.release, 'schema:VideoGame', 'en')[0]).toMatchObject({
+      description: fixture.release.types['wd:Q20631656']!.descriptions!.en,
+      descriptionLang: 'en',
+    });
+    const result = await fixture.transport.submit({
+      work: read.public.subject.id,
+      relation: 'schema:exampleOfWork',
+      item: draft(read).item,
+      key,
+    });
+    expect(result).toMatchObject(
+      scenario === 'ready' ? { ok: true, id: publicationCreatedId } : { ok: false, reason: 'conflict' },
+    );
+    expect(fixture.receipts.size).toBe(scenario === 'ready' ? 1 : 0);
+  }
+});
