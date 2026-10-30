@@ -226,7 +226,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
         const response = await kernelClient(data.locale).subjects.$search.post(body, {
           fetch: { signal: getRequest().signal },
         });
-        if ([401, 403, 409].includes(response.status)) recovery = searchRecoveryFromResponse(response);
+        if (response.error || response.status !== 200) recovery = searchRecoveryFromResponse(response);
         return response;
       },
     );
@@ -547,7 +547,13 @@ export function SearchPage({
               data: { ...data.queryState!, facetValues: selectedFacets, locale, kindCursor },
               signal,
             });
-            if (!signal.aborted && sourceData && currentData.current === sourceData && response.recovery)
+            if (
+              !signal.aborted &&
+              sourceData &&
+              currentData.current === sourceData &&
+              response.recovery &&
+              ['session', 'closed', 'denied', 'restart'].includes(response.recovery.status)
+            )
               setInvalidation({ owner: sourceData, state: response.recovery });
             return response;
           }}

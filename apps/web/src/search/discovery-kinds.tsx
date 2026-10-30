@@ -6,6 +6,9 @@ import { m } from '../paraglide/messages.js';
 import { localizedLabel } from './results';
 import { discoveryMessage } from './discovery-results';
 import type { DiscoveryKinds as Kinds, DiscoveryKindsState } from './discovery';
+import type { SearchRecoveryState } from './search-recovery';
+import { searchRecoveryMessage } from './search-recovery-view';
+import { useSearchRetryWait } from './search-recovery-retry';
 
 /** Registry pages are explicit bounded reads; rows and initial count evidence remain in place. */
 export function DiscoveryKinds({
@@ -19,23 +22,27 @@ export function DiscoveryKinds({
   selected: string[];
   locale: string;
   hydrated: boolean;
-  load: (cursor: string, signal: AbortSignal) => Promise<DiscoveryKindsState>;
+  load: (cursor: string, signal: AbortSignal) => Promise<DiscoveryKindsState & { recovery?: SearchRecoveryState }>;
 }) {
   const [pages, setPages] = useState([initial]);
   const [status, setStatus] = useState<DiscoveryKindsState['status']>();
+  const [recovery, setRecovery] = useState<SearchRecoveryState>();
+  const waiting = useSearchRetryWait(recovery && recovery.status !== 'ready' ? recovery.retryAt : undefined);
   const pending = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => pending.current?.abort(), []);
   const values = pages.flatMap((page) => page.values);
   const next = pages.at(-1)?.next;
   const consumed = useRef(new Set<string>());
   async function more() {
-    if (!next || pending.current) return;
+    if (!next || pending.current || waiting) return;
     const controller = new AbortController();
     pending.current = controller;
     setStatus('loading');
+    setRecovery(undefined);
     try {
       const result = await load(next, controller.signal);
       if (controller.signal.aborted) return;
+      setRecovery(result.recovery);
       if (result.status === 'ready') {
         const seen = new Set(values.map((kind) => kind.id));
         if (
@@ -92,11 +99,12 @@ export function DiscoveryKinds({
       </ul>
       {status && (
         <p role={status === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
-          {discoveryMessage(status)}
+          {recovery ? searchRecoveryMessage(recovery) : discoveryMessage(status)}
         </p>
       )}
+      {waiting && <p className="text-sm text-muted-foreground">{m.search_recovery_wait()}</p>}
       {next && (
-        <Button type="button" variant="outline" disabled={!hydrated || status === 'loading'} onClick={more}>
+        <Button type="button" variant="outline" disabled={!hydrated || status === 'loading' || waiting} onClick={more}>
           {m.discovery_more_kinds()}
         </Button>
       )}

@@ -158,7 +158,7 @@ test('current authority and restart invalidation remove hits and independently r
   }
   expect(searchPageForRecovery(protectedData)).toBe(protectedData);
   expect(searchUnavailablePage(state).queryState).toBe(state);
-  expect(searchUnavailablePage(state).condition).toBe(tree);
+  expect(searchUnavailablePage(state).condition).toBe(state.condition);
   expect(searchUnavailablePage(state).recovery?.status).toBe('unavailable');
   const metadata = { types: {}, properties: {} };
   expect(searchUnavailablePage(state, metadata).conditionMetadata).toBe(metadata);
