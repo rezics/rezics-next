@@ -1,3 +1,4 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createPool } from '../../../src/database/pool.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
 import { createCommerceWork } from '../../../src/commerce/work.ts';
@@ -26,4 +27,6 @@ const work = await composeWork(
   { pool, client, databaseUrl, executorId: 'purchase-history' },
 );
 await work.launch();
+// Match the existing Commerce native fixtures without changing queue capacity or policies.
+for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
 console.log('ready');

@@ -7,6 +7,7 @@ import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import type { Actor } from '../../../src/request/access.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { cookies, password, nativeFixture } from '../../access/native-account-bindings-fixture.ts';
 import { openGrowthDatabase } from '../../support/growth.ts';
@@ -113,7 +114,12 @@ export async function purchaseHistoryFixture() {
     expect((await request(`/v1/platform/exposure/${group}:open`, people.staff, {})).status).toBe(200);
   const access = app.testAccess;
   const context = () => ({ pool: db.pool, deadline: Date.now() + 30_000 });
-  const actor = (person: Persona) => access.authenticate(person.bearer, context());
+  const credentials = new WeakMap<Actor, string>();
+  async function actor(person: Persona) {
+    const authenticated = await access.authenticate(person.bearer, context());
+    credentials.set(authenticated, person.bearer);
+    return authenticated;
+  }
   const commands = createCommerceCommands({ pool: db.pool, access });
   await createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' }).create(
     { ...context(), actor: await actor(people.staff) },
@@ -211,7 +217,16 @@ export async function purchaseHistoryFixture() {
     people,
     peer,
     actor,
-    commands,
+    commands: {
+      ...commands,
+      // A direct command gets its own native authentication deadline, like an HTTP request.
+      // Reuse the exact bearer, including its consent, rather than renewing an old actor proof.
+      async createOrder(buyer: Actor, offerId: string, key: string) {
+        const bearer = credentials.get(buyer);
+        if (bearer === undefined) throw new Error('History commands require a native fixture credential');
+        return commands.createOrder(await access.authenticate(bearer, context()), offerId, key);
+      },
+    },
     offer,
     request,
     client,
