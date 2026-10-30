@@ -22,14 +22,8 @@ async function errorReady({ canvasElement }: { canvasElement: HTMLElement }) {
   const main = within(await view.findByRole('main'));
   await main.findByRole('heading', { name: m.error_heading() });
   await expect(view.getAllByRole('main')).toHaveLength(1);
-  await expect(main.getByRole('link', { name: m.status_home(), exact: true })).toHaveAttribute(
-    'href',
-    `/${getLocale()}`,
-  );
-  await expect(main.getByRole('link', { name: m.status_search(), exact: true })).toHaveAttribute(
-    'href',
-    `/${getLocale()}/search`,
-  );
+  await expect(main.getByRole('link', { name: m.status_home() })).toHaveAttribute('href', `/${getLocale()}`);
+  await expect(main.getByRole('link', { name: m.status_search() })).toHaveAttribute('href', `/${getLocale()}/search`);
   await expect(shellErrorReads()).toBe(1);
   return main;
 }

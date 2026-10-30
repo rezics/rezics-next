@@ -307,8 +307,18 @@ test(
       expect(await main.getByRole('link', { name: 'Home', exact: true }).getAttribute('href')).toBe('/en');
       expect(await main.getByRole('link', { name: 'Search', exact: true }).getAttribute('href')).toBe('/en/search');
       const before = offerReads;
+      const failedRead = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.startsWith('/_serverFn/') && response.url().includes(offer.offer.id),
+      );
       await retry.click();
-      await retry.waitFor();
+      expect((await failedRead).status()).toBe(503);
+      await page.waitForFunction(() => {
+        const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('main button')).find(
+          (button) => button.textContent === 'Try again',
+        );
+        return retry && !retry.disabled;
+      });
       // A failed explicit attempt keeps noindex and never discloses the target or signs the reader in.
       expect(offerReads).toBe(before + 1);
       expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');

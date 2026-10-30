@@ -1,5 +1,5 @@
 import { notFound } from '@tanstack/react-router';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
 import { dependencyUnavailable, MediaProblem } from '../media/kernel';
 import type { OfferPageData } from './offer';
@@ -19,6 +19,8 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     if (result.status >= 500 && result.status <= 599) {
       const failure = dependencyUnavailable(result.status);
       const retryAfter = new Headers(result.headers).get('retry-after');
+      setResponseStatus(result.status);
+      if (retryAfter) setResponseHeader('retry-after', retryAfter);
       throw new MediaProblem(failure.problem, retryAfter ? { 'retry-after': retryAfter } : undefined);
     }
     throw new Error('Kernel offer read failed');
