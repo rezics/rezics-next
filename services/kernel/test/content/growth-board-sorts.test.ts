@@ -98,7 +98,12 @@ test(
           const postId = newId(route);
           const revisionId = newId(route);
           const transactionId = randomUUID();
-          const at = new Date(Date.UTC(2099, 0, 1) - ordinal * 1000).toISOString();
+          // For oldest, keep later distractors newer than the fixed first 200 candidate window.
+          const at = new Date(
+            sort === 'oldest' && ordinal >= candidateLimit && ordinal < baseline.from
+              ? Date.UTC(2099, 0, 1) + ordinal * 1000
+              : Date.UTC(2099, 0, 1) - ordinal * 1000,
+          ).toISOString();
           const hidden = ordinal < candidateLimit - pageSize - 1 || (ordinal >= candidateLimit && ordinal % 4 < 2);
           const visibility = hidden ? (ordinal % 2 === 0 ? 'protected' : 'taken_down') : 'published';
           if (ordinal >= candidateLimit - pageSize - 1 && ordinal < candidateLimit) visible.push(threadId);
