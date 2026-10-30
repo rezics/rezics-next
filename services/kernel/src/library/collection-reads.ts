@@ -290,7 +290,12 @@ export function createCollectionReads(
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
-  const readKind = createCollectionKindReads(dependencies);
+  const readKind = createCollectionKindReads({
+    pool,
+    access,
+    ...(dependencies.routeKey ? { routeKey: dependencies.routeKey } : {}),
+    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+  });
   const builtins = createBuiltinRuntime(dependencies);
 
   return {

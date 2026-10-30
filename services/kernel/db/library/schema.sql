@@ -3233,3 +3233,7 @@ CREATE TABLE library.collection_kind_retired (
 );
 CREATE INDEX collection_kind_retired_account ON library.collection_kind_retired
   (route, account_id, collection_id, audience, generation);
+
+-- Exact kind-observation custody lookup; existing owner-leading indexes retain cleanup authority.
+CREATE INDEX collection_kind_retired_capture ON library.collection_kind_retired
+  (route, collection_id, account_id, capture) WHERE octet_length(capture)<=512;

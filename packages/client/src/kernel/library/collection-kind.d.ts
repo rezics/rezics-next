@@ -6,6 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { IdentityScopedObservations, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { type NativeLibrarySourceCustody } from './native-source-custody.ts';
 import { type CollectionSource, type CollectionAliasProgress, type CollectionSourceObservation, type CollectionSourceContext, type PreparedCollectionSource, type WorkAllowance, type WorkReceipt } from './collection-source.ts';
+import type { WorkClient } from '../work/client.ts';
 /** Presentation arithmetic only. These values are not Source, identity or disclosure evidence. */
 export type AutomaticCollectionKind = {
     presentationKind: string;
@@ -118,17 +119,18 @@ export type CollectionKindSourceBindings = Readonly<{
     source(access: Access): CollectionSource;
     identity: IdentityScopedObservations;
     custody: NativeLibrarySourceCustody;
+    dependencies: CollectionKindPreparationDependencies;
 }>;
-/** Real producer factories; replacement bodies integrate under their authoritative module names. */
-export declare function collectionKindSourceBindings(dependencies: {
+export type CollectionKindPreparationDependencies = Readonly<{
     pool: Pool;
     clock?: KernelClock;
-}): CollectionKindSourceBindings;
-/**
- * Explicit provisional owned adapter. Complete native Type/disclosure capture and audience preparation are not
- * executable yet; do not borrow Library capture as public capture, invent a work Actor, or reinterpret missing
- * coverage as empty. The owned consumer/storage/worker below is independent of this missing binding body.
- */
+    access?: Access;
+    routeKey?: Uint8Array;
+    workClient?: WorkClient;
+}>;
+/** Real producer factories. Missing service configuration never becomes a worker principal. */
+export declare function collectionKindSourceBindings(dependencies: CollectionKindPreparationDependencies): CollectionKindSourceBindings;
+/** Native preparation owner; Source traversal remains in readCollectionKindSourcePage. */
 export type CollectionKindPreparation = Omit<CollectionKindNative, 'page'> & {
     resume(input: {
         capture: CollectionKindCapture;
@@ -186,10 +188,7 @@ export declare function readCollectionKindSourcePage(input: CollectionKindSource
 }>;
 export declare function validateCollectionKindPage(page: CollectionKindPage, after: string | null, frontier?: string | null): void;
 /** Fixed metadata/proof points only. Read callers retain their own Collection authorization and final reread. */
-export declare function createCollectionKindReads(dependencies: {
-    pool: Pool;
-    clock?: KernelClock;
-}, native?: CollectionKindNative): (actor: Actor, row: {
+export declare function createCollectionKindReads(dependencies: CollectionKindPreparationDependencies, native?: CollectionKindNative): (actor: Actor, row: {
     id: string;
     presentationKind: string | null;
     sourceGeneration: string;

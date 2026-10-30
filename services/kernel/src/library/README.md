@@ -1962,7 +1962,8 @@ The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`
 constant-size override/observation projection from repair-side dominant-Type arithmetic over complete canonical
 visible support. The arithmetic supplies no Source, identity or disclosure proof. Owner overrides return `owner`.
 A complete admitted kind observation alone can return `empty`; the metadata member count is not native population
-proof. A source without that observation returns null/`pending`. Cover fallback keeps its own observation contract. The automatic kind binding is `collection-kind-preparation.ts`, composed by the default read factory and registered
+proof. A source without that observation returns null/`pending`. Cover fallback keeps its own observation contract.
+The automatic kind binding is `collection-kind-preparation.ts`, composed by the default read factory and registered
 Collection-kind worker. Ordered member-cover derivation must connect here using the existing
 `collection-source-native.ts` `observe`/`page`/`probe` source generation and current-disclosure observations, including
 `collection-source-native-header.sql`; it must not sample the first page. The bounded FULL fact integration at
@@ -1976,7 +1977,9 @@ retains native capture, Semantic capture/revision and the observation's exact cu
 checks follow foreign waits. Adoption uses the real same-home live Core client and account-T; custody accepts that
 operational context directly. Retirement requires the actual retired observation and releases only its exact hold.
 Existing kind observation/retired rows retain these private locators under their existing owner indexes and fixed
-Library cleanup inventory. No new retained store, participant, Source purge or destination acknowledgement is added.
+Library cleanup inventory. An exact `(route,collection_id,account_id,capture)` partial index bounds retired
+native locators of at most 512 bytes; older oversized locators remain retained. No new retained store, participant,
+Source purge or destination acknowledgement is added.
 
 This is source delivery, not complete native proof. `createIdentityScopedObservations` is still an unavailable
 Semantic producer. Its existing identity scope does not retain complete current Type/disclosure/Access provenance;

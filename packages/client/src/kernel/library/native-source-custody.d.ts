@@ -103,7 +103,7 @@ export interface NativeLibrarySourceCustody {
         capture: NativeSourceCapture;
         work: WorkReceipt;
     }>;
-    /** Same native partition command client and T as adoption; never a foreign checkout/callback. */
+    /** Same live native command or admitted operational client and T; never a foreign checkout/callback. */
     readAndHold(input: NativeSourceCaptureWork & {
         client: CommandTransaction;
         at: AuthoritativeTime;

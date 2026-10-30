@@ -51,7 +51,7 @@ function audience(actor: Actor): string {
   ])).digest('hex')}`;
 }
 function locator(capture: CollectionKindCapture): { fence: string; captureId: string; holdId: string; scopeCaptureId: string; revision: string } | null {
-  if (Buffer.byteLength(capture.token) > 4096) return null;
+  if (Buffer.byteLength(capture.token) > 512) return null;
   try {
     const value: unknown = JSON.parse(capture.token);
     if (!Array.isArray(value) || value.length !== 6 || value[0] !== 1 ||
@@ -189,7 +189,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
       });
     },
     resume(input) {
-      return guarded(async () => {
+      return guarded<Awaited<ReturnType<CollectionKindPreparation['resume']>>>(async () => {
         if (input.capture.audience !== publicAudience || !deps.access || !deps.routeKey) return unavailable();
         const read = await resolve(input.capture, anonymous, input.deadline);
         if (!read) return unavailable();
@@ -272,7 +272,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         if (!key || route === null || !deps.workClient) return unavailable();
         return runOperationalTransaction(deps.pool, { mode: 'work-step', partition: partitionOf(route),
           kind: 'library.collectionKind.retire', accounts: [input.accountId], workClient: deps.workClient,
-          deadline: input.deadline, clock: deps.clock }, async (tx) => {
+          deadline: input.deadline, ...(deps.clock ? { clock: deps.clock } : {}) }, async (tx) => {
           const work = new CollectionSourceLedger(allowance(), input.deadline);
           const retired = await work.bounded({ statements: 1, nativeRows: 1, nativePoints: 1, bytes: 256 }, () =>
             retiredCapture.run(tx, { route, collection_id: input.collectionId, account_id: input.accountId, capture: input.token }));
