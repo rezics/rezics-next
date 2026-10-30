@@ -18,7 +18,7 @@ function CountsResponseStory({ scenario }: { scenario: Scenario }) {
   const query = useQuery(
     privateFollowCountsQuery(viewer, context, async () => {
       const client = createKernelClient('https://kernel.example.test', {
-        fetch: async (input) => {
+        fetch: (async (input) => {
           if (scenario === 'loading') return new Promise<Response>(() => {});
           const outgoing = String(input).endsWith('/outgoing');
           const status = scenario === 'unavailable' ? 503 : scenario === 'denied' && !outgoing ? 404 : 200;
@@ -34,7 +34,7 @@ function CountsResponseStory({ scenario }: { scenario: Scenario }) {
             status,
             headers: { 'cache-control': 'private, no-store', ...(status === 503 ? { 'retry-after': '7' } : {}) },
           });
-        },
+        }) as typeof fetch,
       });
       return { viewer, ...(await readFollowCounts(client, 'Bearer story-transport', context)) };
     }),
