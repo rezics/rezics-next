@@ -298,7 +298,7 @@ and native test command do not inherit that descriptor or nonce. Worker-check va
 set `infrastructureFailure` or authorize transport fallback. A failed returns copy retains an already recovered lifetime cause.
 
 `PhysicalResourceReceipt` schema 1 records the configured host/run, observed host boot, owning supervisor
-PID/start/group and actual scope cgroup path/device/inode/systemd invocation. The owner samples only that cgroup's
+PID/start/group and observed per-run slice cgroup path/device/inode and actual scope systemd invocation. The owner samples only that cgroup's
 `cpu.stat:usage_usec` and `memory.peak`, on a fixed 5-second cadence plus preparation, command and terminal edges
 (at most 1444 rows / 500000 returned bytes under the two-hour cap). Rows contain host-monotonic `monoMs`, phase,
 raw counters, `intervalMs`, interval `cores`, and explicit `unavailable`. `sampledMaxCores` is the maximum delta

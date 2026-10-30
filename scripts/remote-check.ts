@@ -1377,7 +1377,7 @@ def verify_native_packages(root, entries):
                             os.environ['REMOTE_CHECK_PREPARATION_REVISION']], check=True, cwd=package_root)
             checks.append({'name': 'bun', 'version': version,
                            'revision': os.environ['REMOTE_CHECK_PREPARATION_REVISION']})
-    return checks
+    return sorted(checks, key=lambda item: (item['name'], item['version']))
 
 
 def native_entries(root, entries):
@@ -1666,7 +1666,8 @@ def supervise():
                     break
             remaining = owned_processes()
             if remaining and stopped_at is None:
-                failure = failure or 'installer left owned descendants'
+                if not preparation_done:
+                    failure = failure or 'installer left owned descendants'
                 stopped_at = time.monotonic()
                 stop_owned(signal.SIGTERM)
             if not remaining and not selected.get_map():
@@ -1774,6 +1775,13 @@ class Resources:
                 scope = 'rezics-check-' + self.receipt['run'] + '.scope'
                 if RESOURCE_CGROUP_OVERRIDE is None and scope not in group.split('/'):
                     continue
+                if RESOURCE_CGROUP_OVERRIDE is None:
+                    # The observed run slice includes this scope and its labelled containers.
+                    slice_name = 'rezics-check-' + self.receipt['run'].replace('-', '_') + '.slice'
+                    components = group.split('/')
+                    if slice_name not in components:
+                        continue
+                    group = '/'.join(components[:components.index(slice_name) + 1])
                 path = Path(RESOURCE_CGROUP_OVERRIDE) if RESOURCE_CGROUP_OVERRIDE else Path(RESOURCE_CGROUP_ROOT) / group.lstrip('/')
                 stat = path.stat()
                 if RESOURCE_CGROUP_OVERRIDE:
@@ -1968,6 +1976,11 @@ def local_command():
     interrupted = []
     for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
+    parent = os.getppid()
+    if ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0) != 0:
+        raise RuntimeError('local command parent-death custody unavailable')
+    if os.getppid() != parent or parent == 1:
+        return 143
     child = subprocess.Popen(sys.argv[2:], start_new_session=True)
     stopped_at = None
     while True:

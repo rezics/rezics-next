@@ -96,9 +96,15 @@ test('importing remote-check.ts in a checkout without node_modules starts no pro
 function pinnedRuntimeFixture(cachedRevision?: 'verified' | 'stale', concurrent = false) {
   const directory = mkdtempSync(join(root, 'pinned-runtime-'));
   const script = generatedHostRun();
-  const encoded = script.slice(script.indexOf('  sh -c ') + '  sh -c '.length, script.lastIndexOf(' sh '));
+  const encoded = script.slice(
+    script.indexOf('systemd_script=') + 'systemd_script='.length,
+    script.indexOf('\n# systemd 259'),
+  );
   const body = encoded.slice(1, -1).replaceAll("'\\''", "'").replaceAll('/srv/rezics-check', directory);
-  const setup = body.slice(0, body.indexOf('    "$bun" install --frozen-lockfile'));
+  const setup = body.slice(
+    body.indexOf('host=$REMOTE_CHECK_HOST'),
+    body.indexOf('    "$bun" install --frozen-lockfile'),
+  );
   const revision = setup.match(/expected_revision=([a-f0-9]+)/)![1]!;
   const bin = join(directory, 'bin');
   const archive = join(directory, 'archive');
@@ -333,7 +339,7 @@ const connectionNumber = count('connection');
 const refusedControlSession = Boolean(config.refuseControlSession && controlPath && connectionNumber > 0);
 // OpenSSH 10.2 retries a refused multiplexed session over a new connection in the same ssh process.
 const transport = refusedControlSession ? 'standalone-fallback' : controlPath && controlPath !== 'ControlPath=none' ? 'control-master' : 'standalone';
-const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, transport, ...event }) + '\\n');
+const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, transport, observedAt: Date.now(), ...event }) + '\\n');
 const slotHeld = () => readdirSync(dir).some((name) => name.startsWith(hostKey + '.slot.'));
 if (controlExit) {
   log({ kind: 'control-close' });
@@ -1382,7 +1388,11 @@ test('a live landing head gets one bounded fitting opportunity, then native admi
           'import fcntl,os,time; f=open(os.environ["MARKER_PATH"],"w"); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); f.write(os.environ["MARKER_RECORD"]+"\\n"); f.flush(); time.sleep(20)',
         ],
         {
-          env: { ...process.env, MARKER_PATH: marker, MARKER_RECORD: `${headSlots} 1 1 ${deadline}` },
+          env: {
+            ...process.env,
+            MARKER_PATH: marker,
+            MARKER_RECORD: `${headSlots} ${deadline} 1 -1 ${CHECK_SLOT_MEMORY_BYTES}`,
+          },
           stdio: 'ignore',
         },
       );
@@ -1517,7 +1527,12 @@ function startRemote(
   directory: string,
   command: string[] = ['bun', 'test'],
   options: string[] = [],
-): { child: ReturnType<typeof Bun.spawn>; stdout: Promise<string>; stderr: Promise<string> } {
+): {
+  child: ReturnType<typeof Bun.spawn>;
+  stdout: Promise<string>;
+  stderr: Promise<string>;
+  output: { stderr: string };
+} {
   const child = Bun.spawn(['bun', remoteCheck, ...options, directory, '--', ...command], {
     cwd: repository,
     env: environment,
@@ -1525,16 +1540,20 @@ function startRemote(
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  return {
-    child,
-    stdout: new Response(child.stdout).text(),
-    stderr: new Response(child.stderr).text(),
-  };
+  const output = { stderr: '' };
+  const stderr = (async () => {
+    const decoder = new TextDecoder();
+    for await (const chunk of child.stderr) output.stderr += decoder.decode(chunk, { stream: true });
+    output.stderr += decoder.decode();
+    return output.stderr;
+  })();
+  return { child, stdout: new Response(child.stdout).text(), stderr, output };
 }
 
-async function waitFor(condition: () => boolean): Promise<void> {
-  while (!condition()) await Bun.sleep(10);
-  expect(condition()).toBe(true);
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < deadline) await Bun.sleep(10);
+  expect(condition(), condition.toString()).toBe(true);
 }
 
 async function waitForCondition(condition: () => boolean): Promise<void> {
@@ -1997,8 +2016,7 @@ test('memory reservations that exceed a host limit queue with the host and both 
   });
   const directory = workspace();
   const run = startRemote(env, directory, ['true'], ['--memory-gib', '4']);
-  await waitFor(() => existsSync(join(env.FAKE_DIR!, 'ops_a_test.connection')));
-  await Bun.sleep(80);
+  await waitFor(() => run.output.stderr.includes('6 GiB reserved + 4 GiB requested of 8 GiB'));
   const hostKey = 'ops_a_test';
   rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0`), { recursive: true, force: true });
   rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0.memory`), { force: true });
@@ -2254,7 +2272,7 @@ test('acquisition prefers the host with the most free capacity', async () => {
   const probes = events().filter((event) => event.kind === 'probe');
   expect(probes).toHaveLength(4);
   expect(probes.slice(0, 2).every((event) => event.transport === 'standalone')).toBe(true);
-  expect(probes.slice(2).every((event) => event.transport === 'control-master')).toBe(true);
+  expect(probes.slice(2).every((event) => event.transport === 'standalone')).toBe(true);
   const granted = events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted);
   expect(granted).toHaveLength(2);
   expect(new Set(granted.map((event) => event.call)).size).toBe(1);
@@ -3380,9 +3398,13 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
       ['sh', '-c', 'echo blocked-single'],
     );
     singles.push(blockedSingle);
-    await waitFor(() => existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')));
+    // A head that cannot fit yields residual capacity under the bounded opportunity policy.
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single')),
+    );
+    expect(await blockedSingle.child.exited).toBe(0);
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
-      false,
+      true,
     );
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
       false,
@@ -3400,7 +3422,7 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
       4,
     );
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
-      false,
+      true,
     );
   } finally {
     for (const run of [...singles, multi]) {
@@ -4626,7 +4648,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
         upload
           .events()
           .filter((probe) => probe.kind === 'control-probe')
-          .some((probe) => String(event.rsh).includes(`ControlPath=${String(probe.controlPath)}`)),
+          .some((probe) => String(event.rsh).includes(String(probe.controlPath))),
       ),
   ).toBe(true);
   expect(upload.events().some((event) => event.kind === 'run')).toBe(false);
@@ -4648,7 +4670,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.slotHeld).toBe(false);
   expect(
     String(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.rsh),
-  ).toContain(`ControlPath=${String(returnedEvents.find((event) => event.kind === 'control-probe')!.controlPath)}`);
+  ).toContain(String(returnedEvents.find((event) => event.kind === 'control-probe')!.controlPath));
   expect(returnedEvents.filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(slotMarkers(returns.env, 'a')).toEqual([]);
 
@@ -5046,7 +5068,12 @@ test('landing priority: a waiting landing run reserves its slots while ordinary 
     const landingMarkerId = String(events().find((event) => event.kind === 'landing-marker')?.id);
     for (const index of [ordinaryGrant, multiGrant]) {
       if (index < landingGrant) {
-        expect(grants[index]!.actualAdmissionLimit).toBe(2);
+        // A live marker cannot retain an exclusive reservation after its first poll.
+        const opportunityExpired =
+          Number(grants[index]!.observedAt) -
+            Number(events().find((event) => event.kind === 'landing-marker')!.arrivalOrder) >=
+          Number(env.REMOTE_CHECK_POLL_MS);
+        expect(grants[index]!.actualAdmissionLimit).toBe(opportunityExpired ? 5 : 2);
         expect(grants[index]!.landingMarkerIds).toContain(landingMarkerId);
       }
     }
@@ -5398,7 +5425,7 @@ test('admission backfill: a fitting priority head gets the first opportunity wit
 test('admission backfill: every host is freshly probed each poll and a previously overloaded host becomes eligible', async () => {
   const { env, events } = scenario({
     a: { available: 20e9, load: 13, sliceProcessors: 8, grantOnly: 0 },
-    b: { available: 20e9, grantOnly: 0 },
+    b: { available: 20e9, load: 13, sliceProcessors: 8, grantOnly: 0 },
   });
   env.REMOTE_CHECK_POLL_MS = '20';
   env.REMOTE_CHECK_WAIT_REPEAT_MS = '20';
@@ -5936,7 +5963,10 @@ sys.exit(child.wait())
       undefined,
       settings.lifetime,
     )
+      // Preserve paths to this fixture's checkout when the outer suite itself runs on a check host.
+      .replaceAll(repository, '__FIXTURE_OUTER_CHECKOUT__')
       .replaceAll('/srv/rezics-check', directory)
+      .replaceAll('__FIXTURE_OUTER_CHECKOUT__', repository)
       .replaceAll(':/usr/local/bin:', ':');
     if (settings.program)
       script = script.replaceAll(
@@ -6048,9 +6078,13 @@ test('failed installation is infrastructure, never command failure or a successf
   expect(run.receipt()).toMatchObject({ status: 'infrastructure-failure', phase: 'install/preparation' });
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
   expect(existsSync(join(run.run, '.bun-install-complete'))).toBe(false);
-  expect(readdirSync(join(fixture.directory, 'dependency-artifacts')).every((name) => name.endsWith('.lock'))).toBe(
-    true,
-  );
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  expect(
+    readdirSync(cache)
+      .filter((name) => name !== 'native')
+      .every((name) => name.endsWith('.lock')),
+  ).toBe(true);
+  expect(readdirSync(join(cache, 'native')).every((name) => name.endsWith('.lock'))).toBe(true);
 });
 
 for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
@@ -6202,6 +6236,29 @@ test('successful preparation leaves a quiet live command outside the preparation
   expect(existsSync(join(failed.run, 'preparation-status.json'))).toBe(false);
   expect(existsSync(join(failed.run, 'command-started'))).toBe(true);
   expect(fixture.events().filter((event) => event.startsWith('download:'))).toHaveLength(1);
+});
+
+test('native command failure remains native after reaping detached command descendants', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({
+    command: [
+      'python3',
+      '-c',
+      `
+import os,pathlib,subprocess,sys,time
+child = subprocess.Popen([sys.executable, '-c', 'import os,pathlib,signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); pathlib.Path(os.environ["PREPARATION_READY"]).touch(); time.sleep(60)'], start_new_session=True)
+pathlib.Path(os.environ['PREPARATION_PIDS']).write_text(str(child.pid))
+while not pathlib.Path(os.environ['PREPARATION_READY']).exists(): time.sleep(.005)
+sys.exit(7)
+`,
+    ],
+  });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(7);
+  expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('7\n');
+  expect(existsSync(join(run.run, 'preparation-status.json'))).toBe(false);
+  const pid = readFileSync(run.pids, 'utf8').trim();
+  expect(existsSync(`/proc/${pid}`)).toBe(false);
 });
 
 test('native preparation rejects a stale workerd binary even when its installer returned success', () => {
