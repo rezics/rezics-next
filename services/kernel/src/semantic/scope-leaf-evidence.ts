@@ -235,10 +235,10 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
   const slotId = statementSlotId(request.subject, leaf.property);
   const pending = new Map<string, { row: NativeCandidate; rank: 'normal' | 'preferred'; witness: string }>();
   let complete = false;
-  // Candidate/fact ranges are useful for finding current positives, but their end
-  // is not a completeness certificate. In particular, an empty range cannot
-  // establish absence across compact, expanded, proposal, and retained old data.
-  let relationRangeEndedWithoutProof = false;
+  // A fresh exact pair observation can prove absence from both complete native
+  // domains. Any raw row returns immediately as partial evidence; only a fresh
+  // invocation that gets an empty seek from every domain/value may certify empty.
+  let relationEmptyPairProven = false;
   const continueAt = (next: LeafProgress, start: LeafProgress) => {
     const previous = request.after ?? start;
     if (next.phase === previous.phase && next.valueOrdinal === previous.valueOrdinal && next.after === previous.after)
@@ -340,9 +340,10 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
       if (phase === 'compact') { phase = 'witness'; after = null; }
       else { ordinal++; phase = 'compact'; after = null; }
     }
-    // Reaching the end only settles this bounded seek. No native owner currently
-    // supplies the additional completeness evidence required for empty_pair.
-    relationRangeEndedWithoutProof = true;
+    // Both SQL ranges enumerate the complete current-source possible-pair
+    // superset (compact assertions and all native candidates). A resumed suffix
+    // cannot establish the omitted prefix, even when its own seeks are empty.
+    relationEmptyPairProven = request.after === null && request.revalidate === null;
   });
   const facts: SelectedLeafFact[] = [];
   for (const chosen of pending.values()) {
@@ -358,7 +359,7 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
     if (basisOf(anchor, request) !== basis) throw new LeafBasisChanged();
     if (!await check(client, options.nativeT)) throw new LeafNotReady();
   });
-  if (relationRangeEndedWithoutProof) throw new LeafNotReady();
+  if (relationEmptyPairProven) evidence.coverage = { kind: 'empty_pair', basis };
   if (complete) evidence.coverage = { kind: 'selection', basis };
   return evidence;
 }
