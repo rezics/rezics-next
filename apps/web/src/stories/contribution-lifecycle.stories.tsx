@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ContributionLifecycle } from '../features/catalogue/contribution-lifecycle-view';
 import { contributionFixture, type ContributionScenario } from '../kernel/fake/contribution-lifecycle';
 import { CandidateValue } from '../features/pages/data';
@@ -82,16 +82,34 @@ type Story = StoryObj<typeof meta>;
 
 async function withdraw(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  const region = within(canvas.getByRole('region', { name: m.contribution_title() }));
-  await userEvent.click(region.getByRole('button', { name: m.contribution_withdraw() }));
-  expect(region.getByText(m.contribution_confirm_delete())).toBeTruthy();
+  const region = within(await canvas.findByRole('region', { name: m.contribution_title() }));
+  const button = region.getByRole('button', { name: m.contribution_withdraw() });
+  await expect(button).toBeVisible();
+  await userEvent.click(button);
+  const dialog = await confirmationDialog(canvasElement);
+  expect(dialog.getByText(m.contribution_confirm_delete())).toBeTruthy();
   // Intent is confirmed explicitly; opening the confirmation sends no mutation.
-  await userEvent.click(region.getByRole('button', { name: m.contribution_confirm() }));
+  await userEvent.click(dialog.getByRole('button', { name: m.contribution_confirm() }));
   return { canvas, region };
 }
-async function restore(region: ReturnType<typeof within>) {
-  await userEvent.click(await region.findByRole('button', { name: m.contribution_restore() }));
-  await userEvent.click(region.getByRole('button', { name: m.contribution_confirm() }));
+async function confirmationDialog(canvasElement: HTMLElement) {
+  const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+  await waitFor(async () => {
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-open');
+  });
+  return within(dialog);
+}
+async function restore(canvasElement: HTMLElement, region: ReturnType<typeof within>) {
+  const button = await region.findByRole('button', { name: m.contribution_restore() });
+  await waitFor(async () => {
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
+  });
+  await userEvent.click(button);
+  const dialog = await confirmationDialog(canvasElement);
+  await expect(dialog.getByText(m.contribution_confirm_restore())).toBeVisible();
+  await userEvent.click(dialog.getByRole('button', { name: m.contribution_confirm() }));
 }
 
 export const Ready: Story = {};
@@ -101,7 +119,7 @@ export const WithdrawAndRestore: Story = {
     expect(await region.findByText(m.contribution_deleted())).toBeTruthy();
     expect(canvas.queryByTestId('contribution-private-value')).toBeNull();
     expect(region.getByText(m.contribution_subject_available())).toBeTruthy();
-    await restore(region);
+    await restore(canvasElement, region);
     expect(await region.findByText(m.contribution_restored())).toBeTruthy();
     expect(region.getByText(m.contribution_unselected())).toBeTruthy();
     expect(canvas.queryByTestId('contribution-private-value')).toBeNull();
@@ -120,7 +138,7 @@ export const Expired: Story = {
   args: { scenario: 'expired' },
   play: async ({ canvasElement }) => {
     const { region } = await withdraw(canvasElement);
-    await restore(region);
+    await restore(canvasElement, region);
     expect((await region.findAllByText(m.contribution_expired())).length).toBeGreaterThan(0);
     expect(region.queryByRole('button', { name: m.contribution_restore() })).toBeNull();
     expect(region.queryByRole('button', { name: m.contribution_retry() })).toBeNull();
@@ -161,7 +179,7 @@ export const CurrentWithholding: Story = {
   args: { scenario: 'withheld' },
   play: async ({ canvasElement }) => {
     const { region } = await withdraw(canvasElement);
-    await restore(region);
+    await restore(canvasElement, region);
     expect(await region.findByText(m.contribution_restored())).toBeTruthy();
     expect(region.getByText(m.contribution_candidate_unconfirmed())).toBeTruthy();
   },

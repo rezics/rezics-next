@@ -44,22 +44,32 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
     const request = input instanceof Request ? input : new Request(String(input), init);
     const url = new URL(request.url);
     const key = request.headers.get('idempotency-key');
+    const body = request.body === null ? null : await request.clone().json();
     calls.push({
       method: request.method,
       path: url.pathname,
       authorization: request.headers.get('authorization'),
       session: request.headers.get('rezics-session-token'),
       key,
-      body: request.method === 'POST' ? await request.clone().json() : null,
+      body,
     });
     if (url.pathname === path || url.pathname === `${path}:restoreDeleted`) {
+      const operation = url.pathname === path ? 'delete' : 'restore';
+      if (request.method !== (operation === 'delete' ? 'DELETE' : 'POST'))
+        return json({ code: 'method_not_allowed' }, 405);
       if (scenario === 'loading') return new Promise<Response>(() => {});
-      if (!request.headers.has('authorization') || scenario === 'denied') return json({ code: 'forbidden' }, 403);
+      // This named bearer represents the original proposal's author; provenance grants nothing.
+      if (request.headers.get('authorization') !== 'Bearer fixture' || scenario === 'denied')
+        return json({ code: 'forbidden' }, 403);
+      if (
+        (operation === 'delete' && body !== null) ||
+        (operation === 'restore' && (!body || typeof body !== 'object' || Object.keys(body).length !== 0))
+      )
+        return json({ code: 'invalid_request' }, 400);
       if (scenario === 'invalid') return json({ code: 'invalid_request' }, 422);
       if (scenario === 'unavailable') return json({ code: 'not_found' }, 404);
       if (scenario === 'expired' && request.method === 'POST') return json({ code: 'conflict' }, 409);
       if (!key) return json({ code: 'invalid_request' }, 400);
-      const operation = request.method === 'DELETE' ? 'delete' : 'restore';
       if (receipts.has(key) && receipts.get(key) !== operation) return json({ code: 'conflict' }, 409);
       if (!receipts.has(key)) {
         deleted = operation === 'delete';

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { contributionFixture } from '../src/kernel/fake/contribution-lifecycle';
 import {
   changeContribution,
@@ -94,4 +95,59 @@ test('restore rereads current withholding and never promotes mutation output int
   });
   expect(() => contributionInput({ ...input, source: null })).toThrow();
   expect(() => contributionInput({ ...input, operation: 'purge' })).toThrow();
+});
+
+test('DELETE sends authority and replay headers as options with no body; the fixture rejects the old body shape', async () => {
+  const fixture = contributionFixture();
+  const input = command(fixture);
+  const url = `https://contribution.test/v1/subjects/${input.id}/candidates/${input.candidate}`;
+  const headers = {
+    authorization: 'Bearer fixture',
+    'idempotency-key': input.key,
+    'rezics-session-token': input.session!,
+  };
+  // The former Eden call serialized these options into a DELETE body, without sending its headers.
+  expect((await fixture.fetcher(url, { method: 'DELETE', body: JSON.stringify({ headers }) })).status).toBe(403);
+  expect((await fixture.transport.read(input)).candidate).toBe('available');
+  expect((await fixture.fetcher(url, { method: 'POST', headers, body: '{}' })).status).toBe(405);
+  expect(await fixture.transport.change(input)).toMatchObject({ ok: true, current: { candidate: 'deleted' } });
+  expect(fixture.calls.filter((call) => call.method === 'DELETE').at(-1)).toEqual({
+    method: 'DELETE',
+    path: new URL(url).pathname,
+    authorization: headers.authorization,
+    session: input.session,
+    key: input.key,
+    body: null,
+  });
+});
+
+test('missing native binding stays unavailable, and a restore acknowledgement cannot supply current private values', async () => {
+  const fixture = contributionFixture();
+  const input = command(fixture, 'restore');
+  const calls: string[] = [];
+  let bound = false;
+  const client = createKernelClient('https://unserved-contribution.test', {
+    fetch: (async (request, init) => {
+      const native = request instanceof Request ? request : new Request(String(request), init);
+      calls.push(native.method);
+      return Response.json(
+        native.method === 'POST' && bound
+          ? { statement: fixture.candidate.statement, selected: true }
+          : { code: 'not_found' },
+        { status: native.method === 'POST' && bound ? 200 : 404 },
+      );
+    }) as typeof fetch,
+  });
+  expect(await changeContribution(client, 'Bearer fixture', input)).toEqual({ ok: false, reason: 'unavailable' });
+  expect(calls).toEqual(['POST']);
+  bound = true;
+  const restored = await changeContribution(client, 'Bearer fixture', input);
+  expect(restored).toMatchObject({
+    ok: true,
+    operation: 'restore',
+    current: { subject: 'unavailable', candidate: 'unconfirmed', selected: null },
+  });
+  expect(calls).toEqual(['POST', 'POST', 'GET', 'GET']);
+  expect(JSON.stringify(restored)).not.toContain('1946');
+  expect(JSON.stringify(restored)).not.toContain('statement');
 });

@@ -28,7 +28,7 @@ type DeclaredReply = { status: number; headers: HeadersInit };
  * This is owner deletion, never the existing moderation $restore method.
  */
 type DeclaredContributionPort = {
-  delete: (options: Options) => Promise<DeclaredReply>;
+  delete: (body: undefined, options: Options) => Promise<DeclaredReply>;
   $restoreDeleted: { post: (body: Record<string, never>, options: Options) => Promise<DeclaredReply> };
 };
 
@@ -122,9 +122,10 @@ export async function changeContribution(
         ...(command.session ? { 'rezics-session-token': command.session } : {}),
       },
     };
+    // Eden treats DELETE as a body-bearing verb: headers belong in its second argument.
     response =
       command.operation === 'delete'
-        ? await endpoint.delete(options)
+        ? await endpoint.delete(undefined, options)
         : await endpoint.$restoreDeleted.post({}, options);
   } catch {
     return { ok: false, reason: 'unavailable' };

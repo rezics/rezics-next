@@ -1,5 +1,15 @@
 import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
 import type {
   ContributionAddress,
@@ -46,6 +56,7 @@ export function ContributionLifecycle({
     };
     running.current = true;
     setBusy(true);
+    setConfirmation(null);
     setFailure(undefined);
     try {
       const result = await transport.change(pending.current);
@@ -147,11 +158,6 @@ export function ContributionLifecycle({
                   : m.contribution_unavailable({}, o)}
         </p>
       )}
-      {confirmation && !pending.current && (
-        <p>
-          {confirmation === 'delete' ? m.contribution_confirm_delete({}, o) : m.contribution_confirm_restore({}, o)}
-        </p>
-      )}
       <div className="flex flex-wrap gap-3">
         {state !== 'expired' && failure !== 'denied' && (
           <Button
@@ -159,19 +165,14 @@ export function ContributionLifecycle({
             variant={operation === 'delete' ? 'destructive' : 'default'}
             disabled={busy || needsRead}
             onClick={() => {
-              if (pending.current || confirmation) void change();
+              if (pending.current) void change();
               else {
                 setFailure(undefined);
                 setConfirmation(operation);
               }
             }}
           >
-            {pending.current ? m.contribution_retry({}, o) : confirmation ? m.contribution_confirm({}, o) : action}
-          </Button>
-        )}
-        {confirmation && !pending.current && (
-          <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmation(null)}>
-            {m.candidate_cancel({}, o)}
+            {pending.current ? m.contribution_retry({}, o) : action}
           </Button>
         )}
         {(current || needsRead) && !pending.current && (
@@ -180,6 +181,26 @@ export function ContributionLifecycle({
           </Button>
         )}
       </div>
+      <AlertDialog open={confirmation !== null} onOpenChange={(open) => !open && setConfirmation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{action}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmation === 'delete' ? m.contribution_confirm_delete({}, o) : m.contribution_confirm_restore({}, o)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{m.candidate_cancel({}, o)}</AlertDialogCancel>
+            <AlertDialogAction
+              variant={confirmation === 'delete' ? 'destructive' : 'default'}
+              disabled={busy}
+              onClick={() => void change()}
+            >
+              {m.contribution_confirm({}, o)}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
