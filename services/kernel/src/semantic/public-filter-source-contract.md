@@ -740,7 +740,8 @@ all 4096 Account/claim homes through bounded 100-home owner pages; incomplete ca
 heads are immutable and compared through the Accounts producer, so reduce/restore/repair ACK cannot renew them.
 `adopt` requires exact canonical custody, consumer, definition, snapshot kind and original covered locator.
 The Source adoption row stores only the canonical observation locator, never a copied PIT or execution record.
-Recovery reopens real Search custody without recapturing a cut; abort persists an admission barrier and retains
+Recovery resolves real Search custody without recapturing a cut, including retain/open committed before adoption;
+a missing or uncertain Search record remains pending. Abort persists an admission barrier and retains
 unknown physical custody as pending. The committed Search reader cannot prove closure/transfer from an absent
 or expired observation, so Source cannot finalize that abort on such an answer.
 

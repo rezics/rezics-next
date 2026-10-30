@@ -1,6 +1,6 @@
 INSERT INTO semantic.public_filter_repair_step
   (partition_no,bootstrap,execution,step,predecessor,state,complete)
-SELECT b.partition_no,b.bootstrap,:execution::text,:step::uuid,:predecessor::uuid,:state::text,:complete::boolean
+SELECT b.partition_no,b.bootstrap,:execution::text,:step::uuid,NULLIF(:predecessor::text, '')::uuid,:state::text,:complete::boolean
 FROM semantic.public_filter_bootstrap b JOIN core.partition p ON p.partition_no = b.partition_no
 WHERE b.partition_no = 0 AND b.bootstrap = :bootstrap::uuid AND b.state = 'adopted'
   AND b.owner_epoch = p.epoch AND p.write_state = 'active'

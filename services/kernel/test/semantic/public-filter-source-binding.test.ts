@@ -53,7 +53,7 @@ test('canonical retained observation execution joins preserve complete compiler 
     expect(resolved.status).toBe('resolved');
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
     for (const key of [{kind: 'property',property: 'schema:author'},{kind: 'property',property: 'ex:left'},
-      {kind: 'order',order: 'name'},{kind: 'field',field: 'id'},{kind: 'field',field: 'descriptions'}])
+      {kind: 'order',order: 'name'},{kind: 'field',field: 'id'},{kind: 'field',field: 'descriptions'}] as const)
       expect(resolved.definition.dependencyKeys).toContainEqual(key);
     await search.request('PUT',`/${index}`,{settings: {number_of_shards: 1,number_of_replicas: 0}});
     created = true;

@@ -261,8 +261,8 @@ function checkDeadline(context: PublicFilterConsumerContext): void {
 function measuredPool(pool: Pool, cost: BindingCost): Pool {
   function wrap<T extends object>(target: T): T {
     return new Proxy(target, { get(object,key) {
-      const value = Reflect.get(object,key,object);
-      if (key === 'query') return async (text: string,values?: unknown[]) => {
+      const value: unknown = Reflect.get(object,key,object);
+      if (key === 'query' && typeof value === 'function') return async (text: string,values?: unknown[]) => {
         cost.statements++; cost.inputKeys += values?.length ?? 0;
         cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(values));
         const result = await value.call(object,text,values);
@@ -271,7 +271,7 @@ function measuredPool(pool: Pool, cost: BindingCost): Pool {
         if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
         return result;
       };
-      if (key === 'connect') return async () => wrap(await value.call(object));
+      if (key === 'connect' && typeof value === 'function') return async () => wrap(await value.call(object));
       return typeof value === 'function' ? value.bind(object) : value;
     } });
   }
@@ -465,7 +465,8 @@ export function createPublicFilterSourceBinding(
       queried: joined.queried,start: joined.execution.start,execution: joined.execution.id,context});
     addCost(cost,observed.cost);
     if (observed.status !== 'observed') throw new BindingError(
-      observed.reason === 'identity_pending' ? 'identity_pending' : observed.reason === 'deadline' ? 'deadline' : 'owner_unavailable');
+      'reason' in observed && observed.reason === 'identity_pending' ? 'identity_pending' :
+      'reason' in observed && observed.reason === 'deadline' ? 'deadline' : 'owner_unavailable');
     if (!observed.routingComplete || observed.changed.length || observed.unacknowledged.length || observed.blocking.length)
       throw new BindingError('binding_mismatch');
   }
@@ -480,7 +481,7 @@ export function createPublicFilterSourceBinding(
     const id = nativeId(bootstrap.id);
     if (!request.execution || request.execution.length > 4096 ||
         (request.frontier !== null && !uuid.test(request.frontier))) throw new BindingError('binding_mismatch');
-    const old = await repairRead.run(db,{bootstrap: id,execution: request.execution,predecessor: request.frontier});
+    const old = await repairRead.run(db,{bootstrap: id,execution: request.execution,predecessor: request.frontier ?? ''});
     const replay = old ? decode<RepairRecord>(old.state) : null;
     let state: RepairState;
     if (replay) state = replay.input;
@@ -520,7 +521,8 @@ export function createPublicFilterSourceBinding(
           clock: publicFilterSourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock},async tx => {
           const existing = await repairVersion.run(tx,values);
           if (existing) return noEffect(existing);
-          const inserted = await repairAdvance.run(tx,values);
+          const result = await repairAdvance.run(tx,values);
+          const inserted = Array.isArray(result) ? result[0] : result;
           if (!inserted) throw new BindingError('owner_unavailable');
           return {value: inserted,events: [{type: 'com.rezics.semantic.public-source.advanced.v1',
             subject: state.subject!,data: {id: state.subject!,bootstrap: id,execution: request.execution}}]};
@@ -558,9 +560,9 @@ export function createPublicFilterSourceBinding(
     const step = old?.step ?? randomUUID();
     if (!old) {
       const saved = await repairSave.run(db,{bootstrap: id,execution: request.execution,step,
-        predecessor: request.frontier,state: encode({input: state,next,output} satisfies RepairRecord),complete});
+        predecessor: request.frontier ?? '',state: encode({input: state,next,output} satisfies RepairRecord),complete});
       // A concurrent successor cannot discard an independently produced Source page. Retry its retained predecessor.
-      if (!saved) throw new BindingError('binding_mismatch');
+      if (!(Array.isArray(saved) ? saved[0] : saved)) throw new BindingError('binding_mismatch');
       cost.frontierWrites++;
     }
     return complete ? {status: 'complete',repairs,frontier: null,cost} : {status: 'progress',repairs,frontier: step,cost};
@@ -582,11 +584,11 @@ export function createPublicFilterSourceBinding(
         const release = await readRelease(db, meaning.digest);
         if (!release || !isDeepStrictEqual(release, meaning.release) || !release.types[meaning.type])
           throw new BindingError('definition_missing');
-        const source = await registerSource.run(db, {route_digest: routeDigest});
+        const source = (await registerSource.run(db, {route_digest: routeDigest}))[0];
         if (!source) throw new BindingError('owner_unavailable');
-        const definition = await defineSource.run(db, {source_id: source.source_id,
+        const definition = (await defineSource.run(db, {source_id: source.source_id,
           configuration: source.configuration, route_digest: routeDigest, release_digest: meaning.digest,
-          subject_type: meaning.type, capture_digest: hash(encoded), capture: encoded, dependency_keys: keys});
+          subject_type: meaning.type, capture_digest: hash(encoded), capture: encoded, dependency_keys: keys}))[0];
         if (!definition) throw new BindingError('configuration_changed');
         const native = await loadDefinition(definition.read_definition, db);
         freeze(native);
@@ -646,9 +648,9 @@ export function createPublicFilterSourceBinding(
         requireSameDefinition(resolved.definition, registration.definition);
         if (consumer.readDefinition !== resolved.definition.readDefinition || consumer.meaningDigest !== resolved.definition.meaning.digest)
           throw new BindingError('binding_mismatch');
-        const inserted = await beginBootstrap.run(db, {bootstrap: randomUUID(),
+        const inserted = (await beginBootstrap.run(db, {bootstrap: randomUUID(),
           read_definition: resolved.definition.readDefinition, request_key: hash(encode({consumer, snapshot})),
-          consumer: encode(consumer), snapshot_kind: snapshot, mixed: 'representation' in capture});
+          consumer: encode(consumer), snapshot_kind: snapshot, mixed: 'representation' in capture}))[0];
         if (!inserted) throw new BindingError('configuration_changed');
         const cut = await loadBootstrap('0:' + inserted.bootstrap, db, resolved.definition);
         if (cut.row.state === 'capturing') {
@@ -657,10 +659,10 @@ export function createPublicFilterSourceBinding(
           const native = await readAccountDiscoveryReductionBinding(db, homes, {deadline});
           if (native.heads.length !== homes.length || native.heads.some((head,i) => head.partition !== homes[i]))
             throw new BindingError('owner_unavailable');
-          const advanced = await accountPage.run(db, {bootstrap: inserted.bootstrap, after_partition: cut.row.account_after,
+          const advanced = (await accountPage.run(db, {bootstrap: inserted.bootstrap, after_partition: cut.row.account_after,
             next_partition: cut.row.account_after + homes.length, head_count: homes.length,
             heads: native.heads.map(head => ({partition: head.partition,epoch: head.epoch,
-              revision: String(head.revision), claim_revision: String(head.claimRevision)}))});
+              revision: String(head.revision), claim_revision: String(head.claimRevision)}))}))[0];
           if (!advanced || cut.row.account_after + homes.length !== 4096)
             return {status: 'unready' as const,reason: 'owner_unavailable' as const,cost};
         }
@@ -679,7 +681,7 @@ export function createPublicFilterSourceBinding(
             joined.definition.readDefinition !== cut.definition.readDefinition ||
             encode(joined.queried.consumer) !== encode(cut.bootstrap.consumer) ||
             joined.queried.snapshot.kind !== cut.bootstrap.snapshot) throw new BindingError('binding_mismatch');
-        if (!(await adoptBootstrap.run(db,{bootstrap: cut.row.bootstrap,observation: joined.queried.snapshot.observation})))
+        if (!(await adoptBootstrap.run(db,{bootstrap: cut.row.bootstrap,observation: joined.queried.snapshot.observation}))[0])
           throw new BindingError('binding_mismatch');
         return {status: 'adopted' as const,bootstrap: cut.bootstrap,queried: joined.queried,cost};
       });
@@ -688,7 +690,7 @@ export function createPublicFilterSourceBinding(
       const id = request.bootstrap;
       return run(context,async (cost,db) => {
         const cut = await loadBootstrap(id,db);
-        const result = await abortBootstrap.run(db,{bootstrap: cut.row.bootstrap});
+        const result = (await abortBootstrap.run(db,{bootstrap: cut.row.bootstrap}))[0];
         if (!result) throw new BindingError('configuration_changed');
         // Search's public lookup cannot distinguish closed from unknown/expired/uncertain native custody.
         // Persist the barrier and retain the cut; neither a timeout nor observation_lost proves closure.
@@ -701,8 +703,9 @@ export function createPublicFilterSourceBinding(
         const cut = await loadBootstrap(id,db);
         if (cut.row.state === 'aborting' || cut.row.state === 'aborted' || cut.row.state === 'capturing')
           return {status: 'pending' as const,cost};
-        if (cut.row.state === 'begun') return {status: 'begun' as const,bootstrap: cut.bootstrap,queried: null,cost};
-        const native = await readGenerationPublicationCustody(pool,cut.bootstrap.consumer,0,{deadline},cut.row.queried!);
+        // Search may have committed retain/open before the caller crashed before adoption.
+        // Resolve its actual owner record; an absent/uncertain observation never proves no physical effect.
+        const native = await readGenerationPublicationCustody(pool,cut.bootstrap.consumer,0,{deadline},cut.row.queried ?? undefined);
         addCost(cost,native.cost);
         if (!('definition' in native)) return {...native,cost};
         if (native.queried === null) return {status: 'pending' as const,cost};
@@ -710,7 +713,9 @@ export function createPublicFilterSourceBinding(
         const joined = await binding.join({queried: native.queried},{deadline});
         addCost(cost,joined.cost);
         if (joined.status !== 'joined') return {...joined,cost};
-        if (encode(joined.covered) !== encode(cut.bootstrap.covered)) throw new BindingError('binding_mismatch');
+        if (encode(joined.covered) !== encode(cut.bootstrap.covered)) return {status: 'pending' as const,cost};
+        if (!(await adoptBootstrap.run(db,{bootstrap: cut.row.bootstrap,observation: joined.queried.snapshot.observation}))[0])
+          throw new BindingError('binding_mismatch');
         return {status: 'adopted' as const,bootstrap: cut.bootstrap,queried: joined.queried,cost};
       });
     },
