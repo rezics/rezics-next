@@ -68,5 +68,14 @@ CREATE TABLE core.record_history_purge_set (
 );
 CREATE INDEX record_history_purge_set_runnable
  ON core.record_history_purge_set(source_key,deletion_generation,next_attempt,source_partition,set_locator,set_revision);
+CREATE FUNCTION core.record_history_preserve_purge_set() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' OR (to_jsonb(NEW)-'next_attempt') IS DISTINCT FROM (to_jsonb(OLD)-'next_attempt') THEN
+   RAISE EXCEPTION 'record history native set enrollment is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER record_history_preserve_purge_set BEFORE UPDATE OR DELETE ON core.record_history_purge_set
+ FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_purge_set();
 -- migrate:down
 -- Forward only: preserve original and receiving provenance after payload minimization.

@@ -49,6 +49,27 @@ export async function lockRecordHistoryCopy(
   if (!source || (job.expectedSource && !sameRecordPurgeSource(source, job.expectedSource))) return false;
   if (job.sourceSet) {
     const set = job.sourceSet;
+    // This retained immutable enrollment was produced ONLY by the native member-to-set
+    // index. A real authority for another record cannot authorize a caller-supplied set.
+    // This is History's own exact metadata point, never foreign Source SQL. A receiving
+    // database lacking that enrollment must remain unavailable, not infer membership.
+    const enrolled = await tx.query(
+      `SELECT original_transaction,member_count FROM core.record_history_purge_set
+       WHERE source_key=$1 AND deletion_generation=$2 AND source_partition=$3
+         AND set_locator=$4 AND set_revision=$5 FOR SHARE`,
+      [
+        purgeSourceKey(source),
+        source.reference.deletionGeneration,
+        set.sourcePartition,
+        Buffer.from(set.locator),
+        Buffer.from(set.revision),
+      ],
+    );
+    if (
+      enrolled.rows[0]?.original_transaction !== set.originalTransaction ||
+      enrolled.rows[0]?.member_count !== set.memberCount
+    )
+      return false;
     const found = await tx.query(
       `SELECT producer_version,original_transaction,original_position FROM core.record_history_source_set_copy
        WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3
