@@ -1,15 +1,10 @@
 import type { Meta } from '@storybook/react-vite';
-import * as directory from './board-directory.stories';
+import pattern, * as directory from './board-directory.stories';
 
 const meta = {
   title: 'Pages/Community/Board Directory',
   component: directory.DirectoryExample,
-  parameters: { layout: 'fullscreen', viewport: {
-    options: {
-      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-      desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-    },
-  } },
+  parameters: pattern.parameters,
 } satisfies Meta<typeof directory.DirectoryExample>;
 export default meta;
 export const Current = { ...directory.Current, args: { page: true } };

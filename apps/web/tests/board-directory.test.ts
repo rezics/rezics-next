@@ -16,7 +16,12 @@ import {
 } from '../src/threads/board-directory';
 import { BoardDirectory } from '../src/threads/board-directory-view';
 
-const board: DirectoryBoard = { ...recording.board, purpose: 'discussion', visibility: 'published', availability: 'available' };
+const board: DirectoryBoard = {
+  ...recording.board,
+  purpose: 'discussion',
+  visibility: 'published',
+  availability: 'available',
+};
 function render(request: BoardDirectoryRequest, result: BoardDirectoryState) {
   return renderToString(createElement(BoardDirectory, { request, result, onRetry: () => {} }));
 }
@@ -31,7 +36,10 @@ test('purpose and an exact returned cursor reach the real Global board in one bo
       return { state: 'ready' as const, boards: request.cursor ? [board] : [], next: request.cursor ? null : cursor };
     };
     const reviews = boardDirectoryRequest({ purpose: 'reviews', cursor: 'old-purpose-cursor', limit });
-    const choice = new URL(boardDirectoryHref(boardDirectoryRequest({ purpose: 'discussion', limit }), 'en'), 'https://site.test');
+    const choice = new URL(
+      boardDirectoryHref(boardDirectoryRequest({ purpose: 'discussion', limit }), 'en'),
+      'https://site.test',
+    );
     expect(choice.searchParams.get('purpose')).toBe('discussion');
     expect(choice.searchParams.has('cursor')).toBe(false);
     const request = boardDirectoryRequest({ purpose: choice.searchParams.get('purpose'), limit });
@@ -39,12 +47,17 @@ test('purpose and an exact returned cursor reach the real Global board in one bo
     const html = render(request, sparse);
     expect(html).toContain(m.board_directory_sparse());
     expect(html).not.toContain(m.board_directory_empty());
-    const href = [...html.matchAll(/href="([^"]+)"/gu)].map((match) => match[1]!.replaceAll('&amp;', '&'))
+    const href = [...html.matchAll(/href="([^"]+)"/gu)]
+      .map((match) => match[1]!.replaceAll('&amp;', '&'))
       .find((value) => new URL(value, 'https://site.test').searchParams.has('cursor'));
     expect(href).toBeDefined();
     const next = new URL(href!, 'https://site.test');
     expect(next.searchParams.get('cursor')).toBe(cursor);
-    const destination = boardDirectoryRequest({ purpose: next.searchParams.get('purpose'), cursor: next.searchParams.get('cursor'), limit });
+    const destination = boardDirectoryRequest({
+      purpose: next.searchParams.get('purpose'),
+      cursor: next.searchParams.get('cursor'),
+      limit,
+    });
     const previous = boardDirectoryPrevious(request, sparse, destination);
     expect(previous).toEqual({ request, target: cursor });
     expect(boardDirectoryPrevious(reviews, sparse, destination)).toBeUndefined();
@@ -90,10 +103,16 @@ test('unavailable, sparse and current refusal never become false empty or disclo
     expect(refused).not.toContain(m.board_directory_empty());
     expect(refused).not.toContain('href="/en/boards/' + board.id);
   }
-  const failure = await loadBoardDirectory(request, async () => { throw new Error('Read uncertain'); });
+  const failure = await loadBoardDirectory(request, async () => {
+    throw new Error('Read uncertain');
+  });
   expect(failure).toEqual({ state: 'unavailable' });
   expect(request.cursor).toBe('keep-query');
-  expect(await loadBoardDirectory(request, async () => { throw new PlatformClosedError(403, { code: 'platform_closed' }); })).toEqual({ state: 'closed' });
+  expect(
+    await loadBoardDirectory(request, async () => {
+      throw new PlatformClosedError(403, { code: 'platform_closed' });
+    }),
+  ).toEqual({ state: 'closed' });
   expect(render(request, { state: 'ready', boards: [], next: null })).toContain(m.board_directory_empty());
   expect(render(request, { state: 'loading' })).toContain(m.board_directory_loading());
 });

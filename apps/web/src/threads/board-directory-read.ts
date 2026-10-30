@@ -5,7 +5,8 @@ import { boardDirectoryRequest, loadBoardDirectory } from './board-directory';
 /** The only runtime adapter wiring. Native delivery replaces loadBoardDirectory's unavailable default. */
 export const readBoardDirectory = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Invalid board directory query');
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      throw new TypeError('Invalid board directory query');
     return boardDirectoryRequest({
       purpose: 'purpose' in input ? input.purpose : undefined,
       cursor: 'cursor' in input ? input.cursor : undefined,

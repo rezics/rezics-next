@@ -34,7 +34,11 @@ export async function loadBoardDirectory(
     if (result.state !== 'ready') return result;
     // Native disclosure remains authoritative. Reject unexpected scope/purpose and unavailable rows defensively,
     // without fetching replacement candidates or leaking their names, identities or Context.
-    if (result.boards.length > request.limit) return { state: 'unavailable' };
+    if (
+      result.boards.length > request.limit ||
+      (result.next !== null && (result.next.length === 0 || result.next === request.cursor))
+    )
+      return { state: 'unavailable' };
     return {
       state: 'ready',
       boards: result.boards.filter(

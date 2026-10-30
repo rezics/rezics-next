@@ -60,7 +60,9 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
         {result.state === 'unavailable' ? (
           <div role="status" className="space-y-3">
             <p>{m.board_directory_unavailable()}</p>
-            <Button variant="outline" size="lg" onClick={onRetry}>{m.board_directory_retry()}</Button>
+            <Button variant="outline" size="lg" onClick={onRetry}>
+              {m.board_directory_retry()}
+            </Button>
           </div>
         ) : null}
         {result.state === 'closed' ? (
@@ -80,15 +82,24 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
                   <ListRow key={board.id} className="flex items-center gap-4 py-4">
                     <ListRowLink href={href}>{title}</ListRowLink>
                     <div className="min-w-0 flex-1 space-y-1">
-                      <h2 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">{title}</h2>
-                      <MetaLine className="text-sm text-muted-foreground" items={[
-                        m.board_directory_global(),
-                        purposeLabel(board.purpose),
-                        board.visibility === 'protected' ? m.board_directory_protected() : m.board_directory_public(),
-                      ]} />
+                      <h2 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">
+                        {title}
+                      </h2>
+                      <MetaLine
+                        className="text-sm text-muted-foreground"
+                        items={[
+                          m.board_directory_global(),
+                          purposeLabel(board.purpose),
+                          board.visibility === 'protected' ? m.board_directory_protected() : m.board_directory_public(),
+                        ]}
+                      />
                     </div>
                     <ListRowControl>
-                      <a href={href} aria-label={m.board_directory_open_named({ title })} className={buttonVariants({ variant: 'outline' })}>
+                      <a
+                        href={href}
+                        aria-label={m.board_directory_open_named({ title })}
+                        className={buttonVariants({ variant: 'outline' })}
+                      >
                         {m.board_directory_open()}
                       </a>
                     </ListRowControl>
@@ -96,18 +107,30 @@ export function BoardDirectory({ request, result, previous, onNavigate, onRetry 
                 );
               })}
             </ul>
-          ) : <p className="text-muted-foreground">{result.next === null ? m.board_directory_empty() : m.board_directory_sparse()}</p>
+          ) : (
+            <p className="text-muted-foreground">
+              {result.next === null ? m.board_directory_empty() : m.board_directory_sparse()}
+            </p>
+          )
         ) : null}
       </section>
       {result.state === 'ready' && (canGoBack || next) ? (
         <nav aria-label={m.board_directory_pages()} className="flex flex-wrap gap-3">
           {canGoBack && previous ? (
-            <a href={boardDirectoryHref(previous.request, locale)} onClick={navigate(previous.request)} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            <a
+              href={boardDirectoryHref(previous.request, locale)}
+              onClick={navigate(previous.request)}
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
               {m.board_directory_previous()}
             </a>
           ) : null}
           {next ? (
-            <a href={boardDirectoryHref({ ...request, cursor: next }, locale)} onClick={navigate({ ...request, cursor: next })} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+            <a
+              href={boardDirectoryHref({ ...request, cursor: next }, locale)}
+              onClick={navigate({ ...request, cursor: next })}
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
               {m.board_directory_next()}
             </a>
           ) : null}
