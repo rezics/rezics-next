@@ -73,24 +73,32 @@ test('a read checks access inside its transaction, and a refused read is no subj
   });
 
   const seen: string[] = [];
-  const found = await readSubject(pool, target.id, async (client) => {
-    const { rows } = await client.query<{ isolation: string }>(
-      "SELECT current_setting('transaction_isolation') AS isolation",
-    );
-    seen.push(rows[0]!.isolation);
-    return true;
-  });
+  const found = await readSubject(
+    pool,
+    target.id,
+    async (client) => {
+      const { rows } = await client.query<{ isolation: string }>(
+        "SELECT current_setting('transaction_isolation') AS isolation",
+      );
+      seen.push(rows[0]!.isolation);
+      return true;
+    },
+    undefined,
+    routeKey,
+  );
   expect(found?.subject.labels).toEqual(book.labels);
   expect(seen).toEqual(['repeatable read']);
 
-  expect(await readSubject(pool, target.id, async () => false)).toBeNull();
+  expect(await readSubject(pool, target.id, async () => false, undefined, routeKey)).toBeNull();
   let asked = 0;
   const count = async () => {
     asked++;
     return true;
   };
-  expect(await readSubject(pool, subjectTarget(routeKey, actor.accountId, randomUUID()).id, count)).toBeNull();
-  expect(await readSubject(pool, 'not-an-id', count)).toBeNull();
+  expect(
+    await readSubject(pool, subjectTarget(routeKey, actor.accountId, randomUUID()).id, count, undefined, routeKey),
+  ).toBeNull();
+  expect(await readSubject(pool, 'not-an-id', count, undefined, routeKey)).toBeNull();
   expect(asked).toBe(0);
 });
 

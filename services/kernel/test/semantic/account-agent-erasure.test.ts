@@ -107,7 +107,7 @@ test("an erased account's agent keeps no label, current or past, and a later ens
         deadline: deadlineFor(5_000),
       },
     );
-    return readSubject(pool, agent, check);
+    return readSubject(pool, agent, check, undefined, new Uint8Array(32).fill(1));
   };
   const erased = await ensureAccountAgent(pool, { ...options, name: null });
   expect(erased.subject.labels).toEqual({});
@@ -148,7 +148,7 @@ test("an erased account's agent keeps no label, current or past, and a later ens
 
   const survivor = await catalogue('schema:Person');
   await verifyAccountAgent(pool, { account, catalogue: survivor, receipt: randomUUID() });
-  const verified = await readSubject(pool, survivor, async () => true);
+  const verified = await readSubject(pool, survivor, async () => true, undefined, new Uint8Array(32).fill(1));
   const unchanged = await ensureAccountAgent(pool, { ...options, name: null });
   expect(unchanged.subject.labels).toEqual({ en: 'Catalogue label' });
   expect(unchanged.subject.revision).toBe(verified!.subject.revision);
@@ -189,7 +189,9 @@ test('verification refuses a kind mismatch and software agents', async () => {
       verifyAccountAgent(pool, { account, catalogue: target, receipt: randomUUID() }),
     ).rejects.toBeInstanceOf(AccountAgentVerificationError);
     expect(await snapshot()).toEqual(before);
-    expect((await readSubject(pool, agent, async () => true))?.subject.labels).toEqual({ und: 'Unverified label' });
+    expect(
+      (await readSubject(pool, agent, async () => true, undefined, new Uint8Array(32).fill(1)))?.subject.labels,
+    ).toEqual({ und: 'Unverified label' });
     expect(routeOf(agent)).toBe(route);
   }
 });

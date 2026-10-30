@@ -742,7 +742,14 @@ function subjectRoutes(
         const active = await activeRelease(pool);
         const summaries = active
           ? await readSubjectSummaries(
-              { client: { query: pool.query.bind(pool) }, pool, release: active.release, authorize: authorizeSummary },
+              {
+                client: { query: pool.query.bind(pool) },
+                pool,
+                routeKey,
+                deadline: job.deadline,
+                release: active.release,
+                authorize: authorizeSummary,
+              },
               Object.entries(references).map(([id, value]) => value.redirect ?? id),
               { languages },
             )
@@ -1673,6 +1680,7 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectGraph(pool, tokens, {
+                routeKey,
                 subject: params.id,
                 properties,
                 direction: query.direction,
@@ -1829,6 +1837,7 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectLinks(pool, tokens, {
+                routeKey,
                 context: query.context ?? GLOBAL_CONTEXT,
                 subject: params.id,
                 property: query.property ?? null,
@@ -1954,6 +1963,7 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             readStatementAs(pool, access(), actor, job.deadline, () =>
               listSubjectRelations(pool, tokens, {
+                routeKey,
                 subject: params.id,
                 property: query.property,
                 ...(query.context === undefined ? {} : { context: query.context }),

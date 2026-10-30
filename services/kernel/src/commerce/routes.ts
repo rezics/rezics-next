@@ -32,6 +32,7 @@ export type CommerceDependencies = {
 
 type Dependencies = {
   pool: Pool;
+  routeKey: Uint8Array;
   tokens: KeyRing;
   access: () => Access;
   commerce?: CommerceDependencies;
@@ -241,7 +242,13 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         return admission.run('normal', job, async () => {
           const offer = await store.readOffer(pool, route, params.offerId);
           if (!offer || offer.state === 'delisted') throw new ProblemError('not_found');
-          const summaryDependencies = { pool, access: deps.access(), actor, deadline: job.deadline };
+          const summaryDependencies = {
+            pool,
+            routeKey: deps.routeKey,
+            access: deps.access(),
+            actor,
+            deadline: job.deadline,
+          };
           const summaries =
             languages === undefined
               ? await readSubjectSummaries(summaryDependencies, [offer.targetSubjectId])
@@ -290,9 +297,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           offer: offerView(
             result.value,
             (
-              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
-                result.value.targetSubjectId,
-              ])
+              await readSubjectSummaries(
+                { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
+                [result.value.targetSubjectId],
+              )
             ).get(result.value.targetSubjectId) ?? null,
           ),
         };
@@ -332,9 +340,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           offer: offerView(
             result.value,
             (
-              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
-                result.value.targetSubjectId,
-              ])
+              await readSubjectSummaries(
+                { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
+                [result.value.targetSubjectId],
+              )
             ).get(result.value.targetSubjectId) ?? null,
           ),
         };
@@ -370,9 +379,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           offer: offerView(
             result.value,
             (
-              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
-                result.value.targetSubjectId,
-              ])
+              await readSubjectSummaries(
+                { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
+                [result.value.targetSubjectId],
+              )
             ).get(result.value.targetSubjectId) ?? null,
           ),
         };
@@ -522,7 +532,13 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         return admission.run('normal', job, async () => {
           const order = await store.readOrder(pool, route, params.orderId);
           if (!order || order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
-          const summaryDependencies = { pool, access: deps.access(), actor, deadline: job.deadline };
+          const summaryDependencies = {
+            pool,
+            routeKey: deps.routeKey,
+            access: deps.access(),
+            actor,
+            deadline: job.deadline,
+          };
           const summaries =
             languages === undefined
               ? await readSubjectSummaries(summaryDependencies, [order.targetSubjectId])
@@ -614,7 +630,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
             }
           });
           const summaries = await readSubjectSummaries(
-            { pool, access: deps.access(), actor, deadline: job.deadline },
+            { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
             page.entitlements.map((row) => row.targetSubjectId),
           );
           return {
@@ -650,9 +666,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           entitlement: entitlementView(
             entitlement,
             (
-              await readSubjectSummaries({ pool, access: deps.access(), actor, deadline: job.deadline }, [
-                entitlement.targetSubjectId,
-              ])
+              await readSubjectSummaries(
+                { pool, routeKey: deps.routeKey, access: deps.access(), actor, deadline: job.deadline },
+                [entitlement.targetSubjectId],
+              )
             ).get(entitlement.targetSubjectId) ?? null,
           ),
         };

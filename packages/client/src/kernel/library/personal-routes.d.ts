@@ -5,6 +5,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type ShelfReads } from './shelf-contract.ts';
 type Dependencies = {
+    routeKey: Uint8Array;
     pool: Pool;
     tokens: KeyRing;
     access: () => Access;

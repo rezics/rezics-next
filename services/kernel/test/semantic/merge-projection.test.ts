@@ -126,6 +126,7 @@ async function seedOutboundRelations(id: string, count: number) {
 
 const links = (id: string, seen: Parameters<typeof listSubjectLinks>[2]['seen'] = [], cursor?: string) =>
   listSubjectLinks(pool, tokens, {
+    routeKey: new Uint8Array(32).fill(1),
     subject: id,
     property: null,
     limit: 100,

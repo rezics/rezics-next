@@ -301,7 +301,7 @@ growthTest('Anchored subject read stays within its bound as N grows', 1, async (
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-read-growth'),
-    operation: (database) => readSubject(database.pool, anchor, async () => true),
+    operation: (database) => readSubject(database.pool, anchor, async () => true, undefined, routeKey),
   });
   expect(report.samples).toHaveLength(3);
 });

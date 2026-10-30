@@ -389,6 +389,7 @@ test('a graph read costs the same whatever the size of the graph beyond its boun
   const unrelated = unrelatedSemanticPopulation('graph-read-unrelated', partitionOf(anchorRoute));
   const operation = async () => {
     const graph = await listSubjectGraph(growth.pool, ring, {
+      routeKey: routeKey,
       subject: growthAnchor,
       properties: ['ex:follows'],
       direction: 'out',

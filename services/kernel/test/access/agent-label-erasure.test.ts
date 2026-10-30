@@ -89,7 +89,13 @@ async function lastEvent(accountId: string, type: string): Promise<CloudEvent> {
 }
 
 async function subject(accountId: string) {
-  const result = await readSubject(pool, accountAgentId(accountId), async () => true);
+  const result = await readSubject(
+    pool,
+    accountAgentId(accountId),
+    async () => true,
+    undefined,
+    new Uint8Array(32).fill(38),
+  );
   if (!result) throw new Error('Missing account agent');
   return result.subject;
 }
@@ -256,11 +262,19 @@ test("deleting a verified account reverses the verification first and then erase
     `INSERT INTO access.agent_page(route, subject_id, account_id, verification_receipt_id) VALUES ($1, $2, $3, $4)`,
     [route + 32, catalogueId, account.id, receipt],
   );
-  const catalogueBefore = (await readSubject(pool, catalogueId, async () => true))!.subject;
+  const catalogueBefore = (await readSubject(
+    pool,
+    catalogueId,
+    async () => true,
+    undefined,
+    new Uint8Array(32).fill(38),
+  ))!.subject;
   // A fence must never erase independently maintained catalogue labels through a merged node.
   await lifecycle.raiseFence({ accountId: account.id, key: randomUUID() });
   await applyAccountAgentEffect(pool, await lastEvent(account.id, 'com.rezics.access.authentication-fenced.v1'));
-  expect((await readSubject(pool, catalogueId, async () => true))!.subject).toEqual(catalogueBefore);
+  expect(
+    (await readSubject(pool, catalogueId, async () => true, undefined, new Uint8Array(32).fill(38)))!.subject,
+  ).toEqual(catalogueBefore);
   // Finish deletion from a current terminal row, independently of the caller's revoked session.
   await pool.query(
     `UPDATE access.account SET state = 'deleted', handle = NULL, display_name = NULL
@@ -320,7 +334,9 @@ test("deleting a verified account reverses the verification first and then erase
   await applyAccountAgentEffect(pool, reversed);
   await applyAccountAgentEffect(pool, activation(account.id));
   await expectErased(account.id, [account.name]);
-  expect((await readSubject(pool, catalogueId, async () => true))!.subject.labels).toEqual(catalogueBefore.labels);
+  expect(
+    (await readSubject(pool, catalogueId, async () => true, undefined, new Uint8Array(32).fill(38)))!.subject.labels,
+  ).toEqual(catalogueBefore.labels);
   expect(
     (
       await pool.query('SELECT * FROM access.agent_page WHERE route = $1 AND subject_id = $2', [

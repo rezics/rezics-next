@@ -595,9 +595,16 @@ test('A subject read examines the same rows whatever the number of relations it 
 async function operation(database: GrowthDatabase, scale: number) {
   // These fixture callbacks isolate source cost; native Auth/API discovery has separate acceptance.
   const pageCursor = middleCursor(scale);
-  const subject = await readSubject(database.pool, anchor, async () => true, GLOBAL_CONTEXT);
+  const subject = await readSubject(
+    database.pool,
+    anchor,
+    async () => true,
+    GLOBAL_CONTEXT,
+    new Uint8Array(32).fill(1),
+  );
   if (!subject) throw new Error('Growth anchor disappeared');
   const page = await listSubjectRelations(database.pool, tokenRing, {
+    routeKey: new Uint8Array(32).fill(1),
     subject: anchor,
     property: 'schema:author',
     context: GLOBAL_CONTEXT,

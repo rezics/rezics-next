@@ -891,6 +891,7 @@ export async function listSubjectLinks(
   pool: Pool,
   ring: KeyRing,
   options: {
+    routeKey: Uint8Array;
     subject: string;
     context?: string;
     property: string | null;
@@ -1101,6 +1102,8 @@ export async function listSubjectLinks(
         {
           client: { query: pool.query.bind(pool) },
           pool,
+          routeKey: options.routeKey,
+          deadline,
           release: summaryRelease,
           authorize: options.authorizeSummary ?? (async () => false),
         },
@@ -1159,6 +1162,7 @@ export async function listSubjectRelations(
   pool: Pool,
   ring: KeyRing,
   options: {
+    routeKey: Uint8Array;
     subject: string;
     property: string;
     context?: string;
@@ -1347,6 +1351,8 @@ export async function listSubjectRelations(
     {
       client: { query: pool.query.bind(pool) },
       pool,
+      routeKey: options.routeKey,
+      deadline,
       release: options.release,
       authorize: options.authorizeSummary ?? (async () => false),
     },

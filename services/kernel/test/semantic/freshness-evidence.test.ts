@@ -250,6 +250,7 @@ for (const kind of ['links', 'relations'] as const) {
             const check = await prepareAuthorization();
             return readStatementAs<SubjectLinksPage | SubjectRelationsPage>(pool, access, as, deadline, () => {
               const options = {
+                routeKey: new Uint8Array(32).fill(88),
                 subject: subject.id,
                 property,
                 limit: 20,
@@ -597,6 +598,7 @@ test('a native relations retry cannot reuse a formerly allowed moderator audienc
           const check = await prepareAuthorization();
           return readStatementAs(pool, access, as, deadline, () =>
             listSubjectRelations(pool, tokens, {
+              routeKey: new Uint8Array(32).fill(88),
               subject: holder.id,
               property,
               limit: 20,
@@ -635,7 +637,7 @@ test('FULL display records every backend and the fixed preflight and late prepar
       growth,
       () =>
         withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
-          fullView({ pool: growth.pool, access, tokens }, reader, 'FULL', {
+          fullView({ routeKey: new Uint8Array(32).fill(88), pool: growth.pool, access, tokens }, reader, 'FULL', {
             entries: [{ subjectId: subject.id }],
           }),
         ),

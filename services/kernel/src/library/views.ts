@@ -47,7 +47,7 @@ export function basicQuery<Q extends { view?: string }>({ view: _view, ...query 
   return query;
 }
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
+type Dependencies = { routeKey: Uint8Array; pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Summary = SubjectSummary | { id: string; label: string; type: string };
 type AccountSummary = { id: string; handle: string | null; displayName: string | null };
 type Embedding<T> = T extends readonly (infer R)[]
@@ -81,7 +81,7 @@ class ViewReader {
   ) {}
 
   async subject(id: string): Promise<Summary | null> {
-    const { pool, access } = this.deps;
+    const { pool, access, routeKey } = this.deps;
     const actor = this.actor;
     async function readAnchor(anchorId: string) {
       const route = routeOf(anchorId);
@@ -93,7 +93,7 @@ class ViewReader {
         eligibility: subjectReadEligibility({ route, id: anchorId }),
       };
       const check = await accessCheck(access, actor, 'subject:read', resource, { pool, deadline });
-      return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, undefined, {
+      return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, routeKey, {
         prepareAuthorization: () => accessCheck(access, actor, 'subject:read', resource, { pool, deadline }),
         async authorize(client, id, batch) {
           const route = routeOf(id);

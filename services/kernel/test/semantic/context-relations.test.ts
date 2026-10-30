@@ -296,6 +296,7 @@ test("a Context relation page examines rows bounded by the page and the Context'
       async operation(db) {
         if (direction === 'outbound') {
           const page = await listSubjectRelations(db.pool, ring, {
+            routeKey: new Uint8Array(32).fill(48),
             subject: work,
             property: 'ex:credit',
             context,
@@ -308,6 +309,7 @@ test("a Context relation page examines rows bounded by the page and the Context'
           expect(page.relations.map((row) => row.statement.id)).toEqual([newCredit]);
         } else {
           const page = await listSubjectLinks(db.pool, ring, {
+            routeKey: new Uint8Array(32).fill(48),
             subject: people[1]!,
             property: 'ex:credit',
             context,

@@ -135,7 +135,13 @@ test("every semantic read that embeds a chosen label uses the reader's whole lis
   expect(preview.subject.statements['schema:author'][0].value.content).toBe(person);
   expect(preview.related[person].labels).toEqual(labels);
   const summaries = await readSubjectSummaries(
-    { pool, access: kernelAccess(), actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 },
+    {
+      routeKey: new Uint8Array(32).fill(77),
+      pool,
+      access: kernelAccess(),
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    },
     [book],
     { languages: languageRanges(chain) },
   );
@@ -190,7 +196,13 @@ test('an unmatched reader gets the original Japanese label in pages, previews an
   expect(inverse.links[0].summary.label).toEqual({ value: '日本語の題名', language: 'ja' });
   expect((await call(`/v1/subjects/${book}`, 'ko')).summary.label).toEqual({ value: '日本語の題名', language: 'ja' });
   const summaries = await readSubjectSummaries(
-    { pool, access: kernelAccess(), actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 },
+    {
+      routeKey: new Uint8Array(32).fill(77),
+      pool,
+      access: kernelAccess(),
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    },
     [book],
     { languages: languageRanges('ko') },
   );

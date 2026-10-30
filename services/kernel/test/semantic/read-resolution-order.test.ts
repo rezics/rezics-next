@@ -240,7 +240,7 @@ async function readFullViewDuringStaleProjection(
 ) {
   const barrier = observer.hold({ statement: readLinkCheckpoint.sql }, 'after');
   const request = withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
-    fullView({ pool, access: libraryAccess, tokens }, reader, 'FULL', {
+    fullView({ routeKey: routeKey, pool, access: libraryAccess, tokens }, reader, 'FULL', {
       entries: [{ subjectId: id }],
     }),
   );
@@ -616,7 +616,7 @@ test('FULL display classifies one late Access preparation SQL point per live sub
       async () => {
         for (const subject of subjects) {
           const view = await withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
-            fullView({ pool: growth.pool, access: libraryAccess, tokens }, reader, 'FULL', {
+            fullView({ routeKey: routeKey, pool: growth.pool, access: libraryAccess, tokens }, reader, 'FULL', {
               entries: [{ subjectId: subject.id }],
             }),
           );

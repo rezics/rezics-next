@@ -106,6 +106,7 @@ const reads: ShelfReads = {
 function mount(shelves?: () => ShelfReads) {
   const base = createApp({ pool: db.pool, tokens: testTokens(), clock, access });
   return personalLibraryRoutes(base as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: new Uint8Array(32).fill(1),
     pool: db.pool,
     tokens: testTokens(),
     clock,

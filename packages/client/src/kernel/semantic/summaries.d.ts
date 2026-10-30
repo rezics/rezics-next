@@ -33,7 +33,10 @@ export type SubjectSummary = {
 };
 export type SummaryDependencies = {
     client: Pick<PoolClient, 'query'>;
-    pool?: Pool;
+    pool: Pool;
+    /** Trusted server routing configuration; never selected by the reader. */
+    routeKey: Uint8Array;
+    deadline?: number;
     /** The active release, resolved once by the caller for the whole page. */
     release: Release;
     authorize: (client: Pick<PoolClient, 'query'>, id: string, batch: readonly string[]) => Promise<boolean>;
@@ -42,6 +45,7 @@ export type SummaryDependencies = {
 };
 export type SummaryReaderDependencies = {
     pool: Pool;
+    routeKey: Uint8Array;
     access: Access;
     actor: Actor;
     deadline: number;

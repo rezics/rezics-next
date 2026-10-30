@@ -14,6 +14,7 @@ export type CommerceDependencies = {
 };
 type Dependencies = {
     pool: Pool;
+    routeKey: Uint8Array;
     tokens: KeyRing;
     access: () => Access;
     commerce?: CommerceDependencies;

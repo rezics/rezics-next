@@ -85,7 +85,13 @@ function event(
 }
 
 async function currentSubject(accountId: string) {
-  const result = await readSubject(pool, accountAgentId(accountId), async () => true);
+  const result = await readSubject(
+    pool,
+    accountAgentId(accountId),
+    async () => true,
+    undefined,
+    new Uint8Array(32).fill(1),
+  );
   if (!result) throw new Error(`Missing account agent for ${accountId}`);
   return result.subject;
 }

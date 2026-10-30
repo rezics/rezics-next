@@ -198,6 +198,7 @@ async function operation(database: GrowthDatabase) {
       database.pool,
       { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
       {
+        routeKey: new Uint8Array(32).fill(1),
         subject: target,
         property,
         limit: 20,

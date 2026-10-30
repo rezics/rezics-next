@@ -120,6 +120,7 @@ async function drain(partition: number): Promise<void> {
 
 async function inverse(subject: string) {
   return listSubjectLinks(pool, keyRing, {
+    routeKey: new Uint8Array(32).fill(1),
     subject,
     property: 'schema:author',
     limit: 100,
@@ -157,14 +158,16 @@ test("a reversed verification restores the account's own agent and leaves the ca
   const catalogueCredit = await authorBook(other, catalogueId, 'Catalogue credit');
   await drain(partitionOf(bookRoute));
 
-  const before = await readSubject(pool, catalogueId, async () => true);
+  const before = await readSubject(pool, catalogueId, async () => true, undefined, new Uint8Array(32).fill(1));
   const inverseBefore = await inverse(catalogueId);
   expect(inverseBefore.links.map(({ subject }) => subject)).toEqual([catalogueCredit.subject.id]);
 
   const verificationReceipt = randomUUID();
   await verifyAccountAgent(pool, { account: ownerA.accountId, catalogue: catalogueId, receipt: verificationReceipt });
   await drain(partitionOf(routeOf(agentId)!));
-  expect((await readSubject(pool, catalogueId, async () => true))?.account).toEqual({ id: ownerA.accountId });
+  expect(
+    (await readSubject(pool, catalogueId, async () => true, undefined, new Uint8Array(32).fill(1)))?.account,
+  ).toEqual({ id: ownerA.accountId });
 
   const revocationReceipt = randomUUID();
   const reversed = await unverifyAccountAgent(pool, { account: ownerA.accountId, receipt: revocationReceipt });
@@ -173,14 +176,20 @@ test("a reversed verification restores the account's own agent and leaves the ca
 
   expect(reversed).toMatchObject({ survivor: catalogueId, redirected: agentId });
   expect(repeated.revision).toBe(reversed.revision);
-  const restoredAgent = await readSubject(pool, agentId, async () => true);
+  const restoredAgent = await readSubject(pool, agentId, async () => true, undefined, new Uint8Array(32).fill(1));
   expect(restoredAgent?.subject.labels).toEqual({ en: 'Private name' });
   expect(restoredAgent?.account).toEqual({ id: ownerA.accountId });
   expect((await inverse(agentId)).links.map(({ subject }) => subject).sort()).toEqual(
     movedBooks.map(({ subject }) => subject.id).sort(),
   );
 
-  const restoredCatalogue = await readSubject(pool, catalogueId, async () => true);
+  const restoredCatalogue = await readSubject(
+    pool,
+    catalogueId,
+    async () => true,
+    undefined,
+    new Uint8Array(32).fill(1),
+  );
   expect(restoredCatalogue?.subject.labels).toEqual(before?.subject.labels);
   expect(restoredCatalogue?.account).toBeNull();
   const inverseAfter = await inverse(catalogueId);
@@ -253,7 +262,9 @@ test("reversing a verification moves back only what came from the account's agen
   expect(catalogueLinks.links.map(({ subject }) => subject).sort()).toEqual(
     [originalCredit.subject.id, laterBook.subject.id].sort(),
   );
-  expect((await readSubject(pool, catalogueId, async () => true))?.subject.labels).toEqual(catalogue.subject.labels);
+  expect(
+    (await readSubject(pool, catalogueId, async () => true, undefined, new Uint8Array(32).fill(1)))?.subject.labels,
+  ).toEqual(catalogue.subject.labels);
   const laterSourceAfterReversal = await admin.query(
     'SELECT source FROM semantic.revision WHERE subject_id = $1::uuid ORDER BY revision DESC LIMIT 1',
     [laterBook.subject.id],

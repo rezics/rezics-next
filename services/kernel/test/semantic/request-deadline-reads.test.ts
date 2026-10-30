@@ -43,19 +43,23 @@ const realAccess = await createRealAccess(admin, {}, ['subject:read']);
 
 test("a semantic read's statement timeout is the time left before its request deadline", async () => {
   // Warm the connection and SQL analysis before measuring a short request budget.
-  expect(await readSubject(pool, id, allow)).toBeNull();
+  expect(await readSubject(pool, id, allow, undefined, new Uint8Array(32).fill(13))).toBeNull();
   const outside = timeouts.at(-1)!;
   expect(outside).toBeGreaterThanOrEqual(1);
   expect(outside).toBeLessThanOrEqual(DEFAULT_REQUEST_DEADLINE_MS);
 
   timeouts.length = 0;
-  await withRequestDeadline(Date.now() + 150, () => readSubject(pool, id, allow));
+  await withRequestDeadline(Date.now() + 150, () =>
+    readSubject(pool, id, allow, undefined, new Uint8Array(32).fill(13)),
+  );
   expect(timeouts).toHaveLength(1);
   expect(timeouts[0]).toBeGreaterThanOrEqual(1);
   expect(timeouts[0]).toBeLessThanOrEqual(150);
 
   timeouts.length = 0;
-  await withRequestDeadline(Date.now() + 5_000, () => readSubject(pool, id, allow));
+  await withRequestDeadline(Date.now() + 5_000, () =>
+    readSubject(pool, id, allow, undefined, new Uint8Array(32).fill(13)),
+  );
   expect(timeouts).toHaveLength(1);
   expect(timeouts[0]).toBeGreaterThan(DEFAULT_REQUEST_DEADLINE_MS);
   expect(timeouts[0]).toBeLessThanOrEqual(5_000);
@@ -64,7 +68,9 @@ test("a semantic read's statement timeout is the time left before its request de
 test('a subject read rejects expiry while waiting for its snapshot', async () => {
   delayRead = true;
   try {
-    await expect(withRequestDeadline(Date.now() + 10, () => readSubject(pool, id, allow))).rejects.toMatchObject({
+    await expect(
+      withRequestDeadline(Date.now() + 10, () => readSubject(pool, id, allow, undefined, new Uint8Array(32).fill(13))),
+    ).rejects.toMatchObject({
       reason: 'deadline',
     });
   } finally {

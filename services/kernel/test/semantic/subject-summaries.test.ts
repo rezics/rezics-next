@@ -141,6 +141,7 @@ async function cover(route: number, container: string) {
 function dependencies(client: SummaryDependencies['client'] = db.pool): SummaryDependencies {
   return {
     client,
+    routeKey,
     pool: db.pool,
     release: bundledRelease,
     async authorize(_client, id, batch) {
@@ -406,7 +407,7 @@ test('unknown, hidden, taken-down and unreadable subjects have null summaries', 
   expect(
     (
       await readSubjectSummaries(
-        { pool: db.pool, access: restricted, actor: anonymous, deadline: Date.now() + 60_000 },
+        { routeKey: routeKey, pool: db.pool, access: restricted, actor: anonymous, deadline: Date.now() + 60_000 },
         [book],
       )
     ).get(book),

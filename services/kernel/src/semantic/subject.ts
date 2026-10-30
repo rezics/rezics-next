@@ -401,7 +401,7 @@ export async function readSubject(
   id: string,
   authorize: (client: PoolClient) => Promise<boolean>,
   context = GLOBAL_CONTEXT,
-  routeKey?: Uint8Array,
+  routeKey: Uint8Array,
   summaries: {
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
@@ -587,6 +587,8 @@ export async function readSubject(
           {
             client: { query: pool.query.bind(pool) },
             pool,
+            routeKey,
+            deadline,
             release: active.release,
             authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
           },

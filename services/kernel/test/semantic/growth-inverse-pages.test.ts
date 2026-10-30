@@ -100,6 +100,7 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
       },
       operation: async () => {
         const result = await listSubjectLinks(db.pool, ring, {
+          routeKey: new Uint8Array(32).fill(1),
           subject: anchor,
           property: middle ? 'schema:translator' : 'schema:author',
           filter: arc,

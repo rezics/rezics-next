@@ -40,6 +40,7 @@ import {
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
 type Dependencies = {
+  routeKey: Uint8Array;
   pool: Pool;
   tokens: KeyRing;
   access: () => Access;

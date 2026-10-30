@@ -256,7 +256,9 @@ test("an account's agent label follows its display name and nobody else edits it
   }).catch((error: unknown) => error);
   expect(editError).toBeInstanceOf(AccountAgentLabelEditError);
   expect(editError).toMatchObject({ field: 'labels' });
-  expect((await readSubject(pool, agentId, async () => true))?.subject.labels).toEqual({ ja: 'Renamed display name' });
+  expect(
+    (await readSubject(pool, agentId, async () => true, undefined, new Uint8Array(32).fill(1)))?.subject.labels,
+  ).toEqual({ ja: 'Renamed display name' });
 });
 
 test('only the account itself states facts about or pointing at its unverified agent', async () => {
@@ -278,6 +280,7 @@ test('only the account itself states facts about or pointing at its unverified a
   expect(revision.rows[0]?.source).toEqual({ kind: 'agent', subject: agentId });
   await drain(partitionOf(bookRoute));
   const inverse = await listSubjectLinks(pool, keyRing, {
+    routeKey: new Uint8Array(32).fill(1),
     subject: agentId,
     property: 'schema:author',
     limit: 10,
@@ -315,8 +318,16 @@ test("verification merges the account's agent into the catalogue agent, which su
   expect(firstCatalogue.subject.id < firstAgent).toBe(true);
   expect(first.survivor).toBe(firstCatalogue.subject.id);
   expect(first.redirected).toBe(firstAgent);
-  await expect(readSubject(pool, firstAgent, async () => true)).rejects.toBeInstanceOf(SubjectRedirectError);
-  const firstRead = await readSubject(pool, firstCatalogue.subject.id, async () => true);
+  await expect(
+    readSubject(pool, firstAgent, async () => true, undefined, new Uint8Array(32).fill(1)),
+  ).rejects.toBeInstanceOf(SubjectRedirectError);
+  const firstRead = await readSubject(
+    pool,
+    firstCatalogue.subject.id,
+    async () => true,
+    undefined,
+    new Uint8Array(32).fill(1),
+  );
   expect(firstRead?.account).toEqual({ id: firstAccount });
   expect(firstRead?.subject.labels).toEqual({ en: 'Catalogue name' });
 
@@ -365,7 +376,10 @@ test("verification merges the account's agent into the catalogue agent, which su
   expect(secondCatalogue.subject.id > secondAgent).toBe(true);
   expect(second.survivor).toBe(secondCatalogue.subject.id);
   expect(second.redirected).toBe(secondAgent);
-  expect((await readSubject(pool, secondCatalogue.subject.id, async () => true))?.account).toEqual({
+  expect(
+    (await readSubject(pool, secondCatalogue.subject.id, async () => true, undefined, new Uint8Array(32).fill(1)))
+      ?.account,
+  ).toEqual({
     id: secondAccount,
   });
 });

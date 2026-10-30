@@ -320,6 +320,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
   const commercial = commerceRoutes(app, {
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
@@ -327,6 +328,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   let progress: ReturnType<typeof progressRoutes>;
   progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     clock,
@@ -407,12 +409,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     workClient,
   });
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
   const collections = collectionRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     tokens,

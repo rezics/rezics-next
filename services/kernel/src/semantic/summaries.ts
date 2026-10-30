@@ -2,6 +2,12 @@ import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
+import { tupleRoute } from '../content/imported-contract.ts';
+import type { SourceFenceTuple } from '../content/source-fences.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { fenceKey, readAnchoredFences } from './fences.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
@@ -32,7 +38,10 @@ export type SubjectSummary = {
 };
 export type SummaryDependencies = {
   client: Pick<PoolClient, 'query'>;
-  pool?: Pool;
+  pool: Pool;
+  /** Trusted server routing configuration; never selected by the reader. */
+  routeKey: Uint8Array;
+  deadline?: number;
   /** The active release, resolved once by the caller for the whole page. */
   release: Release;
   authorize: (client: Pick<PoolClient, 'query'>, id: string, batch: readonly string[]) => Promise<boolean>;
@@ -41,6 +50,7 @@ export type SummaryDependencies = {
 };
 export type SummaryReaderDependencies = {
   pool: Pool;
+  routeKey: Uint8Array;
   access: Access;
   actor: Actor;
   deadline: number;
@@ -73,6 +83,9 @@ export async function readSubjectSummaries(
   ids: readonly string[],
   { languages = [] }: { languages?: readonly string[] } = {},
 ): Promise<Map<string, SubjectSummary | null>> {
+  if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
+    throw new TypeError('Subject summaries require the server route key');
+  if (deps.deadline !== undefined) requireAccessDeadline(deps.deadline);
   if (ids.length > 256) throw new RangeError('Subject summaries accept at most 256 ids');
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
   if (!ids.length) return results;
@@ -86,6 +99,8 @@ export async function readSubjectSummaries(
       {
         client,
         pool: reader.pool,
+        routeKey: reader.routeKey,
+        deadline: reader.deadline,
         release: active.release,
         ...(reader.maySeeCover ? { maySeeCover: reader.maySeeCover } : {}),
         async authorize(connection, id, batch) {
@@ -194,6 +209,36 @@ export async function readSubjectSummaries(
   const media: Map<string, CoverReference | null> = mediaIds.length
     ? await checkMediaObjects(deps.client, mediaIds, 'cover')
     : new Map();
+  // Read each exact selected source tuple once, in independently anchored homes.
+  // Media custody and source fences are facts, not permission or disclosure caches.
+  const tuples = new Map<string, SourceFenceTuple>();
+  for (const reference of media.values()) {
+    if (!reference) continue;
+    const { source, external_id, field_group } = reference.source;
+    const tuple = { route: tupleRoute(deps.routeKey, source, external_id), source, external_id, field_group };
+    tuples.set(fenceKey(tuple), tuple);
+  }
+  const homes = new Map<number, SourceFenceTuple[]>();
+  for (const tuple of tuples.values()) {
+    const partition = partitionOf(tuple.route);
+    const group = homes.get(partition) ?? [];
+    group.push(tuple);
+    homes.set(partition, group);
+  }
+  const unfenced = new Set<string>();
+  // Reader calls retain their existing aggregate deadline. Storage-level calls
+  // retain the request's budget, or the existing per-read budget outside a request;
+  // do not impose a new aggregate timeout on their caller-owned authorization work.
+  const deadline = deps.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  for (const [partition, group] of homes) {
+    for (let offset = 0; offset < group.length; offset += 100) {
+      requireAccessDeadline(deadline);
+      const fences = await readAnchoredFences(deps.pool, partition, group.slice(offset, offset + 100));
+      requireAccessDeadline(deadline);
+      for (const fence of fences) if (!fence.takenDown) unfenced.add(fenceKey(fence));
+    }
+  }
+  requireAccessDeadline(deadline);
   for (const [id, mediaId] of covers) {
     if (deps.maySeeCover?.(mediaId, id) === false) continue;
     const reference = media.get(mediaId);
@@ -207,6 +252,9 @@ export async function readSubjectSummaries(
       !reference.credit
     )
       continue;
+    const { source, external_id, field_group } = reference.source;
+    const tuple = { route: tupleRoute(deps.routeKey, source, external_id), source, external_id, field_group };
+    if (!unfenced.has(fenceKey(tuple))) continue;
     summary.cover = {
       media: mediaId,
       width: reference.width,

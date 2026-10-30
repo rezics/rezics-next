@@ -5,6 +5,7 @@ import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 type Dependencies = {
+    routeKey: Uint8Array;
     pool: Pool;
     access: () => Access;
     tokens: KeyRing;

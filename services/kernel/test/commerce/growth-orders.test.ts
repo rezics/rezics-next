@@ -96,9 +96,10 @@ async function createOfferAnchor(targetSubjectId?: string): Promise<Offer> {
 }
 
 async function summaryFor(actor: Awaited<ReturnType<typeof freshActor>>, subjectId: string) {
-  const summaries = await readSubjectSummaries({ pool: db!.pool, access, actor, deadline: Date.now() + 5_000 }, [
-    subjectId,
-  ]);
+  const summaries = await readSubjectSummaries(
+    { routeKey: new Uint8Array(32).fill(1), pool: db!.pool, access, actor, deadline: Date.now() + 5_000 },
+    [subjectId],
+  );
   const summary = summaries.get(subjectId);
   if (!summary) throw new Error(`Subject summary ${subjectId} is unavailable`);
   return summary;

@@ -169,7 +169,7 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
   expect(statements).toHaveLength(5);
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
   await catchUpLinks(partitionOf(route)!);
-  expect(await readSubject(pool, subject.id, allow)).toEqual({
+  expect(await readSubject(pool, subject.id, allow, undefined, routeKey)).toEqual({
     subject,
     account: null,
     summary: {
@@ -356,9 +356,9 @@ test('labels of referenced subjects are read in their own partitions', async () 
 });
 
 test('an unknown or malformed id reads as nothing', async () => {
-  expect(await readSubject(pool, newId(0x0042), allow)).toBeNull();
-  expect(await readSubject(pool, 'not-an-id', allow)).toBeNull();
-  expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
+  expect(await readSubject(pool, newId(0x0042), allow, undefined, routeKey)).toBeNull();
+  expect(await readSubject(pool, 'not-an-id', allow, undefined, routeKey)).toBeNull();
+  expect(await readSubject(pool, randomUUID(), allow, undefined, routeKey)).toBeNull();
 });
 
 test('subject creation accepts authored documents and rejects media in statements, qualifiers and references', () => {

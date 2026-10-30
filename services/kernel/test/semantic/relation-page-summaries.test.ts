@@ -302,6 +302,7 @@ test("a relation page's summaries are bounded by partitions touched", async () =
       }) as typeof db.pool.connect;
       try {
         const page = await listSubjectLinks(db.pool, ring, {
+          routeKey: new Uint8Array(32).fill(97),
           subject: pageTarget.id,
           property: 'schema:exampleOfWork',
           limit: scale,

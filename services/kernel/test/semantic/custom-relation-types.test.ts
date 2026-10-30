@@ -536,7 +536,7 @@ test("a Context's term resolution reads a bounded number of rows however many te
       );
     },
     async operation(db) {
-      const read = await readSubject(db.pool, holder, async () => true, growing);
+      const read = await readSubject(db.pool, holder, async () => true, growing, new Uint8Array(32).fill(50));
       expect(read!.subject.relationCounts).toEqual({ [used]: 0 });
     },
   });

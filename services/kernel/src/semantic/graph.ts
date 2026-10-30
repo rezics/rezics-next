@@ -182,6 +182,7 @@ export async function listSubjectGraph(
   pool: Pool,
   ring: KeyRing,
   options: {
+    routeKey: Uint8Array;
     subject: string;
     properties: readonly string[];
     direction: GraphDirection;
@@ -278,7 +279,13 @@ export async function listSubjectGraph(
     const batch = graph.ids.slice(chunk * SUMMARY_CHUNK_SIZE, (chunk + 1) * SUMMARY_CHUNK_SIZE);
     if (!batch.length) break;
     const filled = await readSubjectSummaries(
-      { client: { query: pool.query.bind(pool) }, pool, release: options.release, authorize: options.authorizeSummary },
+      {
+        client: { query: pool.query.bind(pool) },
+        pool,
+        routeKey: options.routeKey,
+        release: options.release,
+        authorize: options.authorizeSummary,
+      },
       batch,
       { languages: options.languages },
     );

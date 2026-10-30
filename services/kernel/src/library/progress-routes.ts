@@ -17,7 +17,7 @@ import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './prof
 
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
+type Dependencies = { routeKey: Uint8Array; pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });

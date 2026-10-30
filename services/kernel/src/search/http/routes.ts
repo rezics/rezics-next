@@ -91,10 +91,11 @@ export function searchRoutes<App>(
   app: App,
   {
     pool,
+    routeKey,
     search,
     access,
     clock = systemClock,
-  }: { pool: Pool; search?: SearchService; access?: Access | AccessFactory; clock?: KernelClock },
+  }: { pool: Pool; routeKey: Uint8Array; search?: SearchService; access?: Access | AccessFactory; clock?: KernelClock },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -109,6 +110,7 @@ export function searchRoutes<App>(
           {
             client: { query: pool.query.bind(pool) },
             pool,
+            routeKey,
             release: active.release,
             async authorize(connection, id, batch) {
               const route = routeOf(id);
