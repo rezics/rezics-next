@@ -145,7 +145,7 @@ export const PublicItemListExport: Story = {
       configurable: true,
       value: {
         writeText: async (text: string) => {
-            if (denied) throw new globalThis.Error('Clipboard denied');
+          if (denied) throw new globalThis.Error('Clipboard denied');
           copied = text;
         },
       },
