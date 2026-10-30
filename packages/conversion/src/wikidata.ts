@@ -117,7 +117,12 @@ function get(value: ObjectValue, key: string, pointer: string): unknown {
   return descriptor.value;
 }
 function list(value: unknown, limit: number, pointer: string): unknown[] {
-  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > limit)
+  if (
+    utilTypes.isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > limit
+  )
     fail('Source array exceeds its field limit or is malformed', pointer);
   for (let i = 0; i < value.length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));

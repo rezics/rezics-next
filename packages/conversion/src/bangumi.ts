@@ -110,7 +110,8 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   }
   const tags = get('tags');
   if (tags !== undefined) {
-    if (types.isProxy(tags) || !Array.isArray(tags) || Object.getPrototypeOf(tags) !== Array.prototype) invalid('/tags');
+    if (types.isProxy(tags) || !Array.isArray(tags) || Object.getPrototypeOf(tags) !== Array.prototype)
+      invalid('/tags');
     const length: unknown = Object.getOwnPropertyDescriptor(tags, 'length')?.value;
     if (typeof length !== 'number' || !Number.isSafeInteger(length) || length > 64)
       invalid('/tags', 'invalid_record_tag_limit');
