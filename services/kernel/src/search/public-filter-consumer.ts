@@ -708,7 +708,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const parameters = values ?? (typeof query === 'string' ? [] : query.values ?? []);
       cost.statements++;
       cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
-      const result = await db.query({ text, values: parameters, query_timeout: remaining(context) });
+      const request: import('pg').QueryConfig & { query_timeout: number } = {
+        text, values: parameters, query_timeout: remaining(context),
+      };
+      const result = await db.query(request);
       cost.rows += result.rows.length;
       cost.bytes += Buffer.byteLength(encodeState(result.rows));
       if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;

@@ -411,7 +411,7 @@ export async function readPublicFilterRepairSettlement(
   request: Readonly<{ queried: PublicFilterQueriedObservation; execution: string }>,
   context: PublicFilterConsumerContext,
 ): Promise<PublicFilterRepairSettlementResult> {
-  const meter = cost();
+  const meter: Meter = cost();
   const input = structuredClone(request);
   try {
     check(context);
@@ -446,9 +446,12 @@ export async function readPublicFilterRepairSettlement(
     return await withConnection(pool, async (client) => {
       const query = async (statement: string, values: unknown[] = []) => {
         admit();
-        const result = await sql({ query: (text: string, parameters: unknown[]) => client.query({ text,
-          values: parameters, query_timeout: Math.max(1, context.deadline - Date.now()) }) } as Pool,
-          meter, statement, values);
+        const result = await sql({ query: (text: string, parameters: unknown[]) => {
+          const request: import('pg').QueryConfig & { query_timeout: number } = {
+            text, values: parameters, query_timeout: Math.max(1, context.deadline - Date.now()),
+          };
+          return client.query(request);
+        } } as Pool, meter, statement, values);
         admit();
         return result;
       };
@@ -530,6 +533,8 @@ export async function readPublicFilterRepairSettlement(
             meter.accessPoints++;
             meter.dependencyPoints++;
             admit();
+            if (repair.projection.status !== 'progress' && repair.projection.status !== 'complete')
+              throw new Failure('binding_mismatch');
             if (!isDeepStrictEqual(repair.source, repair.projection.source) ||
               repair.source.partition !== subjectPartition(repair.source.subject) ||
               repair.source.subject !== repair.locator.subject) throw new Failure('binding_mismatch');
