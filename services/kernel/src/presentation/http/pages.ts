@@ -298,7 +298,13 @@ export function pageRoutes<App>(
       let probeSession: string | null = null;
       // Run one probe read; its non-200 answer is the page's answer.
       const probe = async (descriptor: PageRead): Promise<ReadResult> => {
-        const probed = await readPage({ dispatch, incoming: request, reads: { probe: descriptor }, session });
+        const probed = await readPage({
+          dispatch,
+          incoming: request,
+          reads: { probe: descriptor },
+          session,
+          ...(languages ? { languages } : {}),
+        });
         probeSession = mergedSession(tokens, scope, probeSession, probed.session);
         const result = probed.results.probe!;
         probes.set(canonicalize(descriptor)!, result);
@@ -427,6 +433,7 @@ export function pageRoutes<App>(
                   incoming: request,
                   reads: { guard: { kind: 'subject', id: subject!.id, context: selected.context.id } },
                   session,
+                  ...(languages ? { languages } : {}),
                 });
                 probeSession = mergedSession(tokens, scope, probeSession, current.session);
                 const result = current.results.guard!;
