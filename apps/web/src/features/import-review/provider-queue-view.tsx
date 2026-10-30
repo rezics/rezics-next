@@ -14,28 +14,24 @@ export function ProviderQueueView({
   locale,
   transport,
   onRetry,
+  onRead,
 }: {
   result: ProviderQueueRead | { ok: false; reason: 'loading' };
   locale: string;
   transport: ProviderReviewTransport;
   onRetry: () => Promise<ProviderQueueRead>;
+  onRead: (read: ProviderQueueRead) => void;
 }) {
   const o = { locale: locale as never };
-  const [refreshed, setRefreshed] = useState<ProviderQueueRead>();
-  const [previous, setPrevious] = useState(result);
-  if (previous !== result) {
-    setPrevious(result);
-    setRefreshed(undefined);
-  }
-  const current = previous === result ? (refreshed ?? result) : result;
+  const current = result;
   const [busy, setBusy] = useState(false);
   async function retry() {
     if (busy) return;
     setBusy(true);
     try {
-      setRefreshed(await onRetry());
+      onRead(await onRetry());
     } catch {
-      setRefreshed({ ok: false, reason: 'unavailable' });
+      onRead({ ok: false, reason: 'unavailable' });
     } finally {
       setBusy(false);
     }
@@ -67,7 +63,8 @@ export function ProviderQueueView({
         page={current.ok ? current.page : undefined}
         locale={locale}
         transport={transport}
-        onRefresh={setRefreshed}
+        onRefresh={onRead}
+        concealRows={!current.ok && (current.reason === 'denied' || current.reason === 'missing')}
       />
     </main>
   );

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { personalRead } from '../../kernel/query';
 import { ProviderQueueView } from '../../features/import-review/provider-queue-view';
 import type { ProviderQueueRead } from '../../features/import-review/provider-queue';
 import {
@@ -22,27 +23,24 @@ export const Route = createFileRoute('/imports/review')({
 function ProviderReviewPage() {
   const { state, csrfToken, subject } = useSession();
   // Keep action drafts scoped to the signed-in viewer; no private queue is server-rendered.
-  return <ViewerQueue key={`${state}:${subject ?? ''}`} state={state} csrfToken={csrfToken} />;
+  return <ViewerQueue key={`${state}:${subject ?? ''}`} state={state} csrfToken={csrfToken} viewer={subject ?? ''} />;
 }
 
-function ViewerQueue({ state, csrfToken }: { state: string; csrfToken: string | null }) {
-  const [result, setResult] = useState<ProviderQueueRead | { ok: false; reason: 'loading' }>({
-    ok: false,
-    reason: 'loading',
-  });
+function ViewerQueue({ state, csrfToken, viewer }: { state: string; csrfToken: string | null; viewer: string }) {
   const headers = { 'X-CSRF-Token': csrfToken ?? '' };
-  useEffect(() => {
-    if (state !== 'signed-in') return;
-    let active = true;
-    loadProviderQueue({ headers }).then(
-      (next) => {
-        if (active) setResult(next);
-      },
-      () => {
-        if (active) setResult({ ok: false, reason: 'unavailable' });
-      },
-    );
-    return () => {
+  const client = useQueryClient();
+  const queryKey = ['provider-review', viewer, getLocale()];
+  const query = useQuery({
+    ...personalRead,
+    queryKey,
+    queryFn: () => loadProviderQueue({ headers }),
+    enabled: personalRead.enabled && state === 'signed-in',
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const result: ProviderQueueRead | { ok: false; reason: 'loading' } = query.data ?? { ok: false, reason: query.isError ? 'unavailable' : 'loading' };
+  return () => {
       active = false;
     };
   }, [state, csrfToken]);
@@ -51,6 +49,7 @@ function ViewerQueue({ state, csrfToken }: { state: string; csrfToken: string | 
       locale={getLocale()}
       result={state === 'signed-in' ? result : { ok: false, reason: state === 'signed-out' ? 'denied' : 'unavailable' }}
       onRetry={() => loadProviderQueue({ headers })}
+      onRead={(read) => client.setQueryData(queryKey, read)}
       transport={{
         confirm: (command) => confirmProviderDecision({ data: command, headers }),
         refresh: (batch) =>

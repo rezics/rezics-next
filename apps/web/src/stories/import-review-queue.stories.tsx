@@ -55,6 +55,7 @@ function StoryQueue({
         result={changed ?? fixture.result}
         locale={locale}
         transport={fixture.transport}
+        onRead={setChanged}
         onRetry={async () => ({ ok: true, page: fixture.page })}
       />
     </>
@@ -89,9 +90,7 @@ async function select(canvasElement: HTMLElement) {
 }
 async function confirm(canvasElement: HTMLElement, reject = false) {
   const canvas = await select(canvasElement);
-  await userEvent.click(
-    canvas.getByRole('button', { name: reject ? m.candidate_reject() : m.candidate_accept(), exact: true }),
-  );
+  await userEvent.click(canvas.getByRole('button', { name: reject ? m.candidate_reject() : m.candidate_accept() }));
   const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
   await userEvent.click(
     within(dialog).getByRole('button', { name: reject ? m.provider_confirm_reject() : m.provider_confirm_accept() }),
@@ -108,7 +107,7 @@ export const Selection: Story = {
 export const Confirmation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await select(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
     expect(await within(canvasElement.ownerDocument.body).findByRole('alertdialog')).toBeVisible();
   },
 };

@@ -18,6 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import {
   prepareProviderBatch,
   providerRowKey,
+  providerRowIsSelectable,
   providerScopeKey,
   providerSelectionInScope,
   providerSelectionLimit,
@@ -56,11 +57,13 @@ export function ProviderReviewActions({
   locale,
   transport,
   onRefresh,
+  concealRows = false,
 }: {
-  page?: ProviderQueuePage;
+  page?: ProviderQueuePage | undefined;
   locale: string;
   transport: ProviderReviewTransport;
   onRefresh: (read: ProviderQueueRead) => void;
+  concealRows?: boolean;
 }) {
   const o = { locale: locale as never };
   const scope = page ? providerScopeKey(page.scope) : '';
@@ -71,12 +74,14 @@ export function ProviderReviewActions({
   const [readings, setReadings] = useState<ProviderReading[]>([]);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const running = useRef(false);
+  const lastScope = useRef(scope);
+  if (page) lastScope.current = scope;
   // A changed source, Context or status clears checkboxes before the new scope can be acted on.
   if (selection.scope !== scope) setSelection({ scope, ids: [] });
   if (confirmation && providerScopeKey(confirmation.scope) !== scope) setConfirmation(undefined);
   const selected = providerSelectionInScope(selection, scope);
   const visible = page?.rows ?? [];
-  const sameScope = !page || !batch || providerScopeKey(batch.scope) === scope;
+  const sameScope = !batch || providerScopeKey(batch.scope) === lastScope.current;
   const attempted = batch?.attempts.some((attempt) => attempt.result);
   const uncertain = batch?.attempts.some(
     (attempt) => attempt.result && !attempt.result.ok && attempt.result.reason === 'unavailable',
@@ -172,8 +177,7 @@ export function ProviderReviewActions({
                           checked={checked}
                           disabled={
                             locked ||
-                            row.candidate.retracted !== null ||
-                            row.candidate.source?.source !== page.scope.source ||
+                            !providerRowIsSelectable(row, page.scope) ||
                             (!checked && selected.length >= providerSelectionLimit)
                           }
                           onCheckedChange={(value) =>
@@ -249,6 +253,7 @@ export function ProviderReviewActions({
             {batch.attempts.map((attempt) => {
               const reading = readings.find((entry) => entry.subject === attempt.row.subject)?.result;
               const concealed =
+                concealRows ||
                 (attempt.result &&
                   !attempt.result.ok &&
                   (attempt.result.reason === 'denied' || attempt.result.reason === 'missing')) ||
@@ -268,7 +273,8 @@ export function ProviderReviewActions({
                     </>
                   )}
                   <p>{attempt.result ? providerOutcomeText(attempt.result, locale) : m.provider_working({}, o)}</p>
-                  {reading &&
+                  {!concealed &&
+                    reading &&
                     (reading.ok ? (
                       <a
                         className="underline underline-offset-4"

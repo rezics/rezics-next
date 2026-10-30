@@ -71,6 +71,11 @@ export function providerSelectionInScope(selection: { scope: string; ids: string
   return selection.scope === scope ? selection.ids : [];
 }
 
+export function providerRowIsSelectable(row: ProviderDecisionRow, scope: ProviderScope): boolean {
+  const source = row.candidate.source;
+  return row.candidate.retracted === null && !!source && 'source' in source && source.source === scope.source;
+}
+
 /** Seal only explicit checkboxes on this visible page, including each independent decision head. */
 export function prepareProviderBatch(
   scope: ProviderScope,
@@ -84,8 +89,7 @@ export function prepareProviderBatch(
   if (!wanted.size || wanted.size > providerSelectionLimit) return null;
   const rows = new Map(visible.map((row) => [providerRowKey(row), row]));
   const chosen = [...wanted].map((id) => rows.get(id));
-  if (chosen.some((row) => !row || row.candidate.retracted !== null || row.candidate.source?.source !== scope.source))
-    return null;
+  if (chosen.some((row) => !row || !providerRowIsSelectable(row, scope))) return null;
   return {
     scope: { ...scope },
     attempts: chosen.map((row) => ({
