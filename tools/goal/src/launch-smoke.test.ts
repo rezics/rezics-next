@@ -235,6 +235,11 @@ test('real worker-check starts the generated acceptance command once and its ret
     const sourceRef = `refs/heads/${settings.integrationBranch}`;
     for (const file of ['worker-check.ts', 'remote-check.ts', 'check-ledger.ts', 'stack-lease.ts', 'check-memory.ts'])
       writeFileSync(join(devTree, 'scripts', file), fixtureGit(root, ['show', `${sourceRef}:scripts/${file}`]));
+    mkdirSync(join(devTree, 'scripts', 'check-host'), { recursive: true });
+    writeFileSync(
+      join(devTree, 'scripts', 'check-host', 'docker'),
+      fixtureGit(root, ['show', `${sourceRef}:scripts/check-host/docker`]),
+    );
 
     const script = join(devTree, 'scripts/worker-check.ts');
     const marker = join(disposable.path, 'command-starts.txt');
