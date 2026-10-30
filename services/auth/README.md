@@ -912,13 +912,15 @@ session, cookie or proof is a workflow result or DBOS payload. Missing host Acce
 composition answers 503. Generic execution explicitly rejects `opening` in both
 the host and the browser helper.
 
-Selection is private and explicit. The page reads the selected subject's existing
-native `/v1/accounts/{id}/management` projection through an Origin-protected server
-function. It uses the actual actor identity and current operator metadata, then
-requires the delivered `/account-management/operators/relation` native point read
-to match that projection's exact subject, operator, reservation and version. URL
-roles or assumed equality to the human supply no authority. Either source being
-unavailable, or their tuples differing, disables confirmation. The
+Selection is private and explicit. An Origin-protected server function reads the
+delivered `/account-management/operators/relation` native point source using the
+current fresh human and exact opening profile. Missing native source disables
+confirmation. Confirmation can name the actual subject and operator IDs from that
+authorized tuple without inventing labels or operator kind. If the existing native
+`/v1/accounts/{id}/management` projection also permits label disclosure, its exact
+subject, operator, reservation and version must match before displaying its names.
+The opening profile does not gain `account:read` for labels. URL roles or assumed
+equality to the human supply no authority. Contradictory tuples disable confirmation. The
 page explains the browser identity switch and names only the actual authorized
 subject and operator. Step-up returns only to `/automated/open`; navigation and
 reauthentication never issue a session. Confirmation is required again on return.

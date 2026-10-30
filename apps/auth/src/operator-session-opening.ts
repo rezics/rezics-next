@@ -14,7 +14,7 @@ export type OpeningInput = ManagementOperationInput & {
 };
 export type OpeningIdentity = {
   id: string;
-  kind: 'actor' | 'organization';
+  kind: 'actor' | 'organization' | null;
   handle: string | null;
   displayName: string | null;
 };
@@ -99,6 +99,29 @@ export function parseOpeningSource(value: unknown, relation: unknown, input: Ope
     return { kind: 'unavailable' };
   return metadata;
 }
+/** Native source IDs suffice for confirmation. It verifies the operated actor;
+ * it does not disclose the operator's kind, handle or display name. */
+export function parseOpeningRelation(value: unknown, input: OpeningInput): OpeningRead {
+  if (
+    !record(value) ||
+    !fields(value, ['previous', 'expectedVersion']) ||
+    !record(value.previous) ||
+    !fields(value.previous, ['operatorAccountId', 'subjectAccountId', 'reservationId']) ||
+    value.previous.subjectAccountId !== input.operation.subjectAccountId ||
+    value.previous.operatorAccountId !== input.operation.operatorAccountId ||
+    !id(value.previous.reservationId) ||
+    typeof value.expectedVersion !== 'string' ||
+    !/^(0|[1-9][0-9]*)$/.test(value.expectedVersion)
+  )
+    return { kind: 'unavailable' };
+  return {
+    kind: 'ready',
+    metadata: {
+      subject: { id: value.previous.subjectAccountId, kind: 'actor', handle: null, displayName: null },
+      operator: { id: value.previous.operatorAccountId, kind: null, handle: null, displayName: null },
+    },
+  };
+}
 const nativeMetadata = createServerFn({ method: 'POST' })
   .validator((value: unknown): OpeningInput => {
     if (!isOpeningInput(value)) throw new Error('Invalid opening');
@@ -107,6 +130,7 @@ const nativeMetadata = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<OpeningRead> => {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('Cache-Control', 'private, no-store');
+    let source: OpeningRead = { kind: 'unavailable' };
     try {
       const request = getRequest();
       const origin = new URL(request.url).origin;
@@ -142,6 +166,24 @@ const nativeMetadata = createServerFn({ method: 'POST' })
         !['pwd', 'pop'].includes(human.amr[0])
       )
         return { kind: 'unavailable' };
+      const relation = await fetch(new URL('/account-management/operators/relation', issuer), {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subjectAccountId: data.operation.subjectAccountId }),
+        redirect: 'error',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (relation.status !== 200) return { kind: 'unavailable' };
+      const tuple: unknown = await relation.json();
+      source = parseOpeningRelation(tuple, data);
+      if (source.kind !== 'ready') return source;
+      // Names are optional enrichment, never a reason to widen the selected
+      // account:manage profile to account:read. With no authorized projection,
+      // show only the exact IDs disclosed by the native relation source.
+      const { env } = await import('cloudflare:workers');
+      const configured = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+      if (!configured) return source;
       const tokenResponse = await fetch(new URL('/token', issuer), {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -150,12 +192,9 @@ const nativeMetadata = createServerFn({ method: 'POST' })
         cache: 'no-store',
         signal: AbortSignal.timeout(5000),
       });
-      if (tokenResponse.status !== 200) return { kind: 'unavailable' };
+      if (tokenResponse.status !== 200) return source;
       const token: unknown = await tokenResponse.json();
-      if (!record(token) || !text(token.access_token) || token.token_type !== 'Bearer') return { kind: 'unavailable' };
-      const { env } = await import('cloudflare:workers');
-      const configured = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-      if (!configured) return { kind: 'unavailable' };
+      if (!record(token) || !text(token.access_token) || token.token_type !== 'Bearer') return source;
       const kernel = new URL(configured);
       if (
         kernel.username ||
@@ -170,26 +209,17 @@ const nativeMetadata = createServerFn({ method: 'POST' })
             ['localhost', '127.0.0.1', '[::1]'].includes(kernel.hostname))
         )
       )
-        return { kind: 'unavailable' };
+        return source;
       const result = await fetch(new URL(`/v1/accounts/${data.operation.subjectAccountId}/management`, kernel), {
         headers: { Accept: 'application/json', Authorization: `Bearer ${token.access_token}` },
         redirect: 'error',
         cache: 'no-store',
         signal: AbortSignal.timeout(5000),
       });
-      if (result.status !== 200) return { kind: 'unavailable' };
-      const relation = await fetch(new URL('/account-management/operators/relation', issuer), {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectAccountId: data.operation.subjectAccountId }),
-        redirect: 'error',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      });
-      if (relation.status !== 200) return { kind: 'unavailable' };
-      return parseOpeningSource(await result.json(), await relation.json(), data);
+      if (result.status !== 200) return source;
+      return parseOpeningSource(await result.json(), tuple, data);
     } catch {
-      return { kind: 'unavailable' };
+      return source;
     }
   });
 export async function loadOpeningMetadata(input: OpeningInput): Promise<OpeningRead> {
