@@ -533,6 +533,12 @@ Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Librar
 operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive
 or statistics, or the deferred cross-surface discovery matrix.
 
+The separate [Bangumi summary and cover CLI caller](../kernel/test/imports/bangumi-cli-media-fixture.ts)
+connects the account-key entrypoint to the real media reservation/status API, registered jobs, editor selection,
+refreshed pixels and exact cover tuple takedown. Its [verification notes](../../docs/research/imports-audit/bangumi-cli-media.md)
+record the frozen original-byte assertion conflict and distinguish privately retained originals from reencoded
+public variants. A native pass is not claimed for that assertion.
+
 ### Operate a permitted scalar source feed
 
 - Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
