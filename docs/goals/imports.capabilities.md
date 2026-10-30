@@ -64,9 +64,10 @@ Within the existing Provider imports and bridges In surface, the ordinary Bangum
 [supported → ignored music → ignored live action → supported → unchanged journey](../research/imports-audit/cli-bangumi-scope-transition.md).
 Its frozen native child observes complete five-record membership, exact owned retractions, immutable native
 identity/bootstrap/receipts, independent editor selection and fresh cited `bangumi@3` proposals on return.
-The driver uses one existing Auth/API/registered-worker world and actual public replies. Binding is implemented;
-native execution and promotion remain pending until the named managed command passes. The report records
-synthetic metadata-only input, command and evidence limits. This adds no growth series, rights inference,
+The driver uses one existing Auth/API/registered-worker world and actual public replies. Its one frozen native
+child passed at `fbdb5fa5425f4ed8918a23e794015e80485b7d35` with 1,094 assertions and zero failures;
+promotion remains unclaimed. The report records synthetic metadata-only input, the managed command, raw log,
+source/receipt anchors and evidence limits. This adds no growth series, rights inference,
 Music import, metadata ACK migration or six-surface discovery claim; existing deferred cells remain open.
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
 production code, a pass requires actual named-revision execution with all exact scenarios and zero skips/todos,

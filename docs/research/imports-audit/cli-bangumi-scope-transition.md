@@ -56,8 +56,46 @@ red or a native acceptance pass. Raw witness:
 `.temp/goal/checks/worker-check-2026-10-30T08-52-08.129Z-24a9dfca.log`.
 
 The fixture now narrows the actual previous command and checks citation parts while retaining the
-native reference object and hash. The frozen test remains unchanged. Native acceptance of the corrected
-fixture is pending; a helper or local registration pass is not native acceptance.
+native reference object and hash. The frozen test remains unchanged. The corrected managed command passed
+at code revision `fbdb5fa5425f4ed8918a23e794015e80485b7d35`: one named native child above, 1 pass,
+0 fail, 1,094 assertions, no skips or todos. Raw execution log:
+`.temp/goal/checks/worker-check-2026-10-30T09-52-13.907Z-3838f521.log`.
+Line 59 contains the actual observation JSON; lines 62–78 record the pass and managed exit status 0.
+The child ran in the real Auth/API/registered-worker world, not a protocol double.
+
+All five invocations reported `bangumi@3`; persisted native record revisions are `unversioned`.
+The actual catalogue is `https://rezics.com/catalogue/rezics` version `1.0.0`, bundle digest
+`sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`.
+The observed target baseline digests and complete source counts are:
+
+| Input               | Present | Skipped | Book 71001 baseline digest                                         |
+| ------------------- | ------- | ------- | ------------------------------------------------------------------ |
+| Initial Book        | 5       | 2       | `6bb4282aea90e295d9e76e091501b07a433c628b5aff31d05e461851e3be9fda` |
+| Ignored music       | 5       | 3       | `e0812490d20c8a73e5fad6d6e7438175f88b15a6fa8389611abcaf8e699ad523` |
+| Ignored live action | 5       | 3       | `b7833616079047d549ceb444a246e5a4a1991360e405546cce367e7063233c08` |
+| Returned Book       | 5       | 2       | `23c81c03223656f265479c61018d16e452854af4dadf711e4e3f5f14f83975ce` |
+
+Unchanged reopen retained the returned baseline and source generation 4 with no public writes.
+There were nine original immutable receipts, two actual retraction receipts and two fresh returned
+candidates. The target subject remained `01a18c46-5fe9-76de-bc0c-58cd15e185cf`; its original create
+receipt has transaction `01a18c46-5fe7-73b3-bfc0-db53abc12e01`, partition 1420, epoch 1, position 1.
+The retraction receipt transactions are `01a18c46-6450-74d2-8edc-fa1dad7079bd` and
+`01a18c46-6490-731b-8e4e-4869dfef5443`, at positions 7 and 8 in that partition and epoch.
+They retract candidate IDs `67d0a3dc-2fdc-8b57-86fe-58cddd6a6530` and
+`d3a36224-d3f0-8023-9a26-58cd77e5dbd5`. Returned IDs are
+`0e82d918-66ce-8651-b18a-58cd33d6934d` and `8472d33d-9bba-816c-be20-58cd6afb5006`.
+The independent editor selection retained candidate `9beddbe7-a8b9-8e8f-aaee-58cd3efb1641`.
+The raw JSON retains complete receipt keys, request/response bodies and source rows behind these anchors.
+
+Before native admission, edited-file formatting and the explicit local importer compiler passed
+(`node_modules/.bin/bun check --no-script -p services/importer/tsconfig.json`, 147 files).
+The two local children passed with 25 assertions:
+
+- `ordinary Bangumi registration discards ignored fields without visiting them across serialized transitions`
+- `ordinary Bangumi CLI seals the whole transition input before any Auth or public request`
+
+This is an isolated connected native pass. No main/promotion, all-provider, root typecheck or new native
+growth evidence is claimed; canonical/derived growth suites remain unchanged.
 
 ## Source inspection and decisions
 

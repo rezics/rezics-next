@@ -13,8 +13,10 @@ music, then ignored live action, then returns as a revised Book under the same n
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
 `bangumi@3` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
-five-record launch checks. [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md)
-record source inspection and execution status; binding alone does not establish a native pass or promotion.
+five-record launch checks. Its one frozen native child passed with 1,094 assertions at
+`fbdb5fa5425f4ed8918a23e794015e80485b7d35`.
+[Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
+log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-bangumi-scope-transition.test.ts
