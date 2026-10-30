@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { hostname } from 'node:os';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -31,6 +32,11 @@ import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
+import {
+  captureArtifactReturns,
+  registerArtifactDeclarations,
+  writeArtifactCatalog,
+} from '../../../scripts/check-artifacts.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -44,6 +50,112 @@ const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity 
 
 // Cloned from the migrated template once and never used as a template; Reylo reads every analysis from it.
 const ANALYSIS_DATABASE = 'kernel_analysis';
+const SCHEMA_DIAGNOSTICS = 'services/kernel/.temp/schema-diagnostics';
+
+/** A bounded changed range, with pg_dump's object headings even when the change is deep inside a table. */
+function schemaDifference(path: string, expected: string | null, actual: string): string {
+  const before = expected === null ? [] : expected.split('\n');
+  const after = actual.split('\n');
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before[endBefore - 1] === after[endAfter - 1]) {
+    endBefore--;
+    endAfter--;
+  }
+  const clip = (line: string) => (line.length > 160 ? `${line.slice(0, 160)} [line truncated]` : line);
+  const object = (lines: string[]) => {
+    for (let index = Math.min(start, lines.length - 1); index >= 0; index--) {
+      if (lines[index]!.startsWith('-- Name: ')) return clip(lines[index]!);
+    }
+    return 'no preceding pg_dump object heading';
+  };
+  const preview = (lines: string[], prefix: string): string[] => {
+    const rendered = (part: string[]) => part.map((line) => `${prefix}${clip(line)}`);
+    return lines.length <= 32
+      ? rendered(lines)
+      : [...rendered(lines.slice(0, 16)), `... ${lines.length - 32} lines omitted ...`, ...rendered(lines.slice(-16))];
+  };
+  const contextStart = Math.max(0, start - 3);
+  const contextEnd = Math.min(3, before.length - endBefore, after.length - endAfter);
+  return [
+    `--- ${path} (expected${expected === null ? ', MISSING' : ''})`,
+    `+++ ${path} (actual)`,
+    `Expected object: ${object(before)}`,
+    `Actual object: ${object(after)}`,
+    `@@ -${contextStart + 1},${endBefore + contextEnd - contextStart} +${contextStart + 1},${endAfter + contextEnd - contextStart} @@`,
+    ...preview(before.slice(contextStart, start), ' '),
+    ...preview(before.slice(start, endBefore), '-'),
+    ...preview(after.slice(start, endAfter), '+'),
+    ...preview(after.slice(endAfter, endAfter + contextEnd), ' '),
+    'Diff preview is bounded to 32 changed lines per side and 160 characters per line; full dumps are retained.',
+    '',
+  ].join('\n');
+}
+
+/** Compare the generator's already-normalized output verbatim, before any compiler or journey runs. */
+export async function assertSchemaConsistency(
+  dumps: Readonly<Record<string, string>>,
+  moduleDirectory = directory,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  for (const [path, actual] of Object.entries(dumps)) {
+    if (path.length > 300 || !/^db\/(?:[a-z][a-z0-9_]*\/)?schema\.sql$/.test(path)) {
+      fail('Invalid schema dump path; expected db/schema.sql or db/<module>/schema.sql');
+    }
+    const file = Bun.file(resolve(moduleDirectory, path));
+    const expected = (await file.exists()) ? await file.text() : null;
+    if (expected !== null && expected === actual) continue;
+
+    const source = 'Checked source commit/tree: UNKNOWN (no retained source provenance at this boundary).';
+    let message = `${expected === null ? 'Missing expected schema file:' : 'Schema dump differs from'} ${path}.\n${source}`;
+    try {
+      const root = resolve(moduleDirectory, '../..');
+      let parent = resolve(moduleDirectory);
+      for (const component of ['.temp', 'schema-diagnostics']) {
+        parent = resolve(parent, component);
+        try {
+          mkdirSync(parent);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+        const stats = lstatSync(parent);
+        if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error('Unsafe schema diagnostic directory');
+      }
+      const artifacts = mkdtempSync(resolve(parent, 'schema-'));
+      const returned = [relative(root, artifacts).split(sep).join('/')];
+      const stage = env.REZICS_CHECK_ARTIFACTS_DIR;
+      const physicalRunId = env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
+      let handoff = false;
+      if (stage !== undefined && physicalRunId !== undefined) {
+        try {
+          await registerArtifactDeclarations(root, stage, physicalRunId, returned);
+          handoff = true;
+        } catch {
+          message += '\nArtifact handoff unavailable; local diagnostic files remain available.';
+        }
+      }
+      const expectedPath = resolve(artifacts, expected === null ? 'expected.missing.txt' : 'expected.sql');
+      const actualPath = resolve(artifacts, 'actual.sql');
+      const diffPath = resolve(artifacts, 'difference.diff');
+      const diff = schemaDifference(path, expected, actual);
+      writeFileSync(expectedPath, expected ?? `Missing expected schema file: ${path}\n`, { flag: 'wx' });
+      writeFileSync(actualPath, actual, { flag: 'wx' });
+      writeFileSync(diffPath, `${source}\n${diff}`, { flag: 'wx' });
+      message += `\nExpected: ${expectedPath}\nActual: ${actualPath}\nDiff: ${diffPath}\nWorkspace artifact directory: ${returned[0]}\n${diff}`;
+      try {
+        if (handoff) await captureArtifactReturns(root, stage!, physicalRunId!, returned);
+        if (env.REZICS_CHECK_ID) writeArtifactCatalog(root, env.REZICS_CHECK_ID, returned);
+      } catch {
+        message += '\nArtifact return unavailable; local diagnostic files remain available.';
+      }
+    } catch {
+      message += '\nSchema diagnostics could not be retained; schema consistency still failed.';
+    }
+    fail(message);
+  }
+}
 
 function reyloQueriesFor(config: string): string {
   return resolve(dirname(resolve(config)), '.reylo', 'queries');
@@ -760,6 +872,7 @@ export async function placeKernelCheck(
       label: 'kernel check',
       root: locations.root,
       cwd: locations.cwd,
+      returns: [SCHEMA_DIAGNOSTICS],
       command: [
         ...(forwardedEnv.length ? ['env', ...forwardedEnv] : []),
         'bun',
@@ -808,12 +921,7 @@ async function main(): Promise<void> {
   const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
 
   migrate(url);
-  for (const [path, dump] of Object.entries(schemaDumps(url))) {
-    const file = Bun.file(resolve(directory, path));
-    if (!(await file.exists()) || (await file.text()) !== dump) {
-      fail(`Schema dump differs from ${path}; run \`bun run db dump\``);
-    }
-  }
+  await assertSchemaConsistency(schemaDumps(url));
 
   // The copies share the template's schema and object ids, so one analysis holds for all of them.
   await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);

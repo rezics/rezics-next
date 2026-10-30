@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { prepareArtifactRun, readArtifactCatalog, restoreArtifactReturns } from '../../../scripts/check-artifacts.ts';
 import {
+  assertSchemaConsistency,
+  cleanup,
   createPostgresConnectionSampler,
   formatConnectionRunSummary,
   formatFileConnectionResult,
@@ -8,6 +14,131 @@ import {
   reportPostgresErrors,
   startPostgresContainer,
 } from './check.ts';
+
+function schemaFixture(): { root: string; kernel: string; dispose: () => void } {
+  const temporary = resolve(import.meta.dir, '../../../.temp');
+  mkdirSync(temporary, { recursive: true });
+  const root = mkdtempSync(resolve(temporary, 'schema-diagnostics-test-'));
+  const kernel = resolve(root, 'services/kernel');
+  mkdirSync(resolve(kernel, 'db/access'), { recursive: true });
+  return { root, kernel, dispose: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('A genuine schema mismatch retains expected and actual normalized dumps and an actionable bounded structural diff identifying the owning schema path and exact source, while still failing before any journey test; missing expected files remain failures', async () => {
+  const fixture = schemaFixture();
+  try {
+    const path = 'db/access/schema.sql';
+    const heading = '-- Name: profile; Type: TABLE; Schema: access; Owner: -';
+    const prefix = `${heading}\nCREATE TABLE access.profile (\n${Array.from({ length: 50 }, (_, i) => `    column_${i} text,`).join('\n')}\n`;
+    const expected = `${prefix}    display_name text\n);\n`;
+    const actual = `${prefix}    display_name character varying\n);\n`;
+    writeFileSync(resolve(fixture.kernel, path), expected);
+    const physical = randomUUID();
+    const logical = randomUUID();
+    const stage = prepareArtifactRun(fixture.root, physical);
+    let journeyRan = false;
+    let failure = '';
+    try {
+      await assertSchemaConsistency({ [path]: actual }, fixture.kernel, {
+        REZICS_CHECK_ARTIFACTS_DIR: stage,
+        REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID: physical,
+        REZICS_CHECK_ID: logical,
+        DATABASE_URL: 'postgres://secret:never-log-this@localhost/database',
+      });
+      journeyRan = true;
+    } catch (error) {
+      failure = String(error);
+    }
+    expect(journeyRan).toBe(false);
+    expect(failure).toContain(`Schema dump differs from ${path}`);
+    expect(failure).toContain('Checked source commit/tree: UNKNOWN');
+    expect(failure).not.toContain('never-log-this');
+    expect(failure).toContain(heading);
+    expect(failure).toContain('-    display_name text');
+    expect(failure).toContain('+    display_name character varying');
+    expect(readFileSync(resolve(fixture.kernel, path), 'utf8')).toBe(expected);
+
+    const [returned] = readArtifactCatalog(fixture.root, logical);
+    expect(returned).toBeDefined();
+    const artifacts = resolve(fixture.root, returned!);
+    for (const file of ['expected.sql', 'actual.sql', 'difference.diff']) {
+      expect(failure).toContain(resolve(artifacts, file));
+    }
+    cleanup([], () => {
+      throw new Error('no container should be touched');
+    });
+    // Emulate loss of host-local files, then use the ordinary failure return boundary.
+    rmSync(artifacts, { recursive: true });
+    const restored = restoreArtifactReturns(fixture.root, stage, physical, logical);
+    expect(restored.rejected).toEqual([]);
+    expect(restored.missing).toEqual([]);
+    expect(restored.restored).toHaveLength(3);
+    expect(readFileSync(resolve(artifacts, 'expected.sql'), 'utf8')).toBe(expected);
+    expect(readFileSync(resolve(artifacts, 'actual.sql'), 'utf8')).toBe(actual);
+    expect(readFileSync(resolve(artifacts, 'difference.diff'), 'utf8')).toContain(heading);
+
+    await expect(assertSchemaConsistency({ 'db/schema.sql': actual }, fixture.kernel, {})).rejects.toThrow(
+      'Missing expected schema file: db/schema.sql',
+    );
+  } finally {
+    fixture.dispose();
+  }
+});
+
+test('equal schema dumps do not create diagnostics; missing expected dumps retain an explicit missing marker', async () => {
+  const fixture = schemaFixture();
+  try {
+    const actual = 'CREATE TABLE access.profile (id uuid);\n';
+    writeFileSync(resolve(fixture.kernel, 'db/schema.sql'), actual);
+    await assertSchemaConsistency({ 'db/schema.sql': actual }, fixture.kernel, {});
+    const parent = resolve(fixture.kernel, '.temp/schema-diagnostics');
+    expect(existsSync(parent)).toBe(false);
+    await expect(assertSchemaConsistency({ 'db/access/schema.sql': actual }, fixture.kernel, {})).rejects.toThrow(
+      'Missing expected schema file: db/access/schema.sql',
+    );
+    const artifacts = resolve(parent, readdirSync(parent)[0]!);
+    expect(existsSync(resolve(artifacts, 'expected.sql'))).toBe(false);
+    expect(readFileSync(resolve(artifacts, 'expected.missing.txt'), 'utf8')).toContain('db/access/schema.sql');
+    expect(readFileSync(resolve(artifacts, 'actual.sql'), 'utf8')).toBe(actual);
+    expect(readFileSync(resolve(artifacts, 'difference.diff'), 'utf8')).toContain(`+${actual.trim()}`);
+    expect(existsSync(resolve(fixture.kernel, 'db/access/schema.sql'))).toBe(false);
+  } finally {
+    fixture.dispose();
+  }
+});
+
+test('schema diagnostics bound large changes and preserve failure when writing diagnostics fails', async () => {
+  const fixture = schemaFixture();
+  try {
+    const expected = `${' '.repeat(500)}\n`.repeat(500);
+    const actual = `${'x'.repeat(500)}\n`.repeat(500);
+    writeFileSync(resolve(fixture.kernel, 'db/schema.sql'), expected);
+    await expect(assertSchemaConsistency({ 'db/schema.sql': actual }, fixture.kernel, {})).rejects.toThrow(
+      'Schema dump differs from db/schema.sql',
+    );
+    const parent = resolve(fixture.kernel, '.temp/schema-diagnostics');
+    const artifacts = resolve(parent, readdirSync(parent)[0]!);
+    const diff = readFileSync(resolve(artifacts, 'difference.diff'), 'utf8');
+    expect(diff.length).toBeLessThan(16_000);
+    expect(diff).toContain('lines omitted');
+    expect(diff).toContain('line truncated');
+    expect(diff).toContain('- ');
+    expect(diff).toContain('+x');
+    expect(readFileSync(resolve(artifacts, 'actual.sql'), 'utf8')).toBe(actual);
+    rmSync(parent, { recursive: true });
+    writeFileSync(parent, 'not a directory');
+    await expect(assertSchemaConsistency({ 'db/schema.sql': actual }, fixture.kernel, {})).rejects.toThrow(
+      'Schema diagnostics could not be retained; schema consistency still failed',
+    );
+    for (const path of ['../schema.sql', '/db/schema.sql', 'db/../schema.sql', 'db/access\\schema.sql']) {
+      await expect(assertSchemaConsistency({ [path]: actual }, fixture.kernel, {})).rejects.toThrow(
+        'Invalid schema dump path',
+      );
+    }
+  } finally {
+    fixture.dispose();
+  }
+});
 
 test('the check database logs each error with its SQLSTATE', () => {
   const calls: string[][] = [];
