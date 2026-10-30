@@ -156,7 +156,10 @@ test('delivered Auth page deployment never substitutes for the missing exact nat
     {
       AUTH_ISSUER: 'https://auth.test',
       AUTH_MANAGEMENT_PAGE_ROUTES: JSON.stringify([
-        '/account/rename', '/organizations/members', '/operators/transfer', '/organizations/delete',
+        '/account/rename',
+        '/organizations/members',
+        '/operators/transfer',
+        '/organizations/delete',
       ]),
     },
   );
