@@ -16,6 +16,30 @@ import { randomUUID } from 'node:crypto';
 export const CHECK_RECORD_CUSTODY_VERSION = 1 as const;
 export const CHECK_HISTORY_VERSION = 1 as const;
 
+export type ControllerProofBindingV1 = Readonly<{
+  version: 1;
+  token: string;
+  checkId: string;
+  goal: string;
+  taskId: string;
+  attempt: number;
+  sourceCommit: string;
+  sourceTree: string;
+  argv: readonly string[];
+  cwd: string;
+}>;
+
+export type ControllerProofReservationV1 = Readonly<{
+  version: 1;
+  state: 'reserved' | 'revoked';
+  binding: ControllerProofBindingV1;
+}>;
+
+export type ControllerProofStartV1 =
+  | Readonly<{ version: 1; outcome: 'started' | 'replayed'; binding: ControllerProofBindingV1; resultPath: string }>
+  | Readonly<{ version: 1; outcome: 'refused-never-started'; binding: ControllerProofBindingV1; reason: string }>
+  | Readonly<{ version: 1; outcome: 'unavailable'; binding: ControllerProofBindingV1; custody: 'unknown'; reason: string }>;
+
 export type CheckOwnership = { taskId: string; attempt: number };
 export type RunnerIdentity = { pid: number; start: string; boot: string; group: number };
 
@@ -76,9 +100,90 @@ export type CheckRegistration = {
   runnerHost: string;
   runnerIdentity: RunnerIdentity;
   registeredAt: string;
+  controllerProof?: ControllerProofBindingV1;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Closed JSON wire objects: no partial records or extra fields are accepted. */
+function closedObject(value: unknown, keys: readonly string[]): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+      Reflect.ownKeys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) {
+    throw new Error('worker-check: invalid controller proof wire object');
+  }
+  return value as Record<string, unknown>;
+}
+
+export function validateControllerProofBinding(value: unknown): ControllerProofBindingV1 {
+  const item = closedObject(value, [
+    'version', 'token', 'checkId', 'goal', 'taskId', 'attempt', 'sourceCommit', 'sourceTree', 'argv', 'cwd',
+  ]);
+  const ownership = validateOwnership({ taskId: item.taskId, attempt: item.attempt });
+  if (item.version !== 1 || !isCheckId(item.token) || !isCheckId(item.checkId) ||
+      typeof item.goal !== 'string' || !/^[a-z][a-z0-9-]{0,127}$/.test(item.goal) ||
+      typeof item.sourceCommit !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceCommit) ||
+      typeof item.sourceTree !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceTree) ||
+      item.sourceCommit.length !== item.sourceTree.length ||
+      typeof item.cwd !== 'string' || !isAbsolute(item.cwd) || resolve(item.cwd) !== item.cwd ||
+      item.cwd.includes('\0') || item.cwd.length > 4096 ||
+      !Array.isArray(item.argv) || item.argv.length === 0 || item.argv.length > 1024 ||
+      Array.from(item.argv).some((arg) => typeof arg !== 'string' || arg.length > 4096 || arg.includes('\0')) ||
+      item.argv[0].length === 0 || Buffer.byteLength(JSON.stringify(item.argv)) > 48 * 1024) {
+    throw new Error('worker-check: invalid controller proof binding');
+  }
+  return Object.freeze({
+    version: 1, token: item.token, checkId: item.checkId, goal: item.goal, ...ownership,
+    sourceCommit: item.sourceCommit, sourceTree: item.sourceTree,
+    argv: Object.freeze([...item.argv] as string[]), cwd: item.cwd,
+  });
+}
+
+export function validateControllerProofReservation(value: unknown): ControllerProofReservationV1 {
+  const item = closedObject(value, ['version', 'state', 'binding']);
+  if (item.version !== 1 || (item.state !== 'reserved' && item.state !== 'revoked')) {
+    throw new Error('worker-check: invalid controller proof reservation');
+  }
+  return Object.freeze({ version: 1, state: item.state, binding: validateControllerProofBinding(item.binding) });
+}
+
+export function sameControllerProofBinding(left: unknown, right: ControllerProofBindingV1): boolean {
+  try {
+    return JSON.stringify(validateControllerProofBinding(left)) === JSON.stringify(validateControllerProofBinding(right));
+  } catch {
+    return false;
+  }
+}
+
+export function controllerProofReservationPath(registry: string, token: string): string {
+  if (!isCheckId(token)) throw new Error('worker-check: invalid controller proof token');
+  const directory = validatedRegistryDirectory(registry);
+  if (!directory) throw new Error('worker-check: controller proof registry is unavailable');
+  return join(directory, 'proof-reservations', `${token.toLowerCase()}.json`);
+}
+
+/** Binding validation adds to runner custody; it does not itself admit or settle a check. */
+export function validControllerProofRegistration(value: unknown, binding: ControllerProofBindingV1): boolean {
+  try {
+    const expected = validateControllerProofBinding(binding);
+    const item = closedObject(value, [
+      'version', 'checkId', 'resultPath', 'ownership', 'physicalRunId', 'runnerHost',
+      'runnerIdentity', 'registeredAt', 'controllerProof',
+    ]);
+    closedObject(item.ownership, ['taskId', 'attempt']);
+    closedObject(item.runnerIdentity, ['pid', 'start', 'boot', 'group']);
+    const owner = validateOwnership(item.ownership);
+    validateRunnerIdentity(item.runnerIdentity);
+    return item.version === 1 && item.checkId === expected.checkId &&
+      item.resultPath === join(expected.cwd, '.temp/goal/checks/results', `${expected.checkId}.json`) &&
+      isPhysicalRunId(item.physicalRunId) && typeof item.runnerHost === 'string' && item.runnerHost.length > 0 &&
+      typeof item.registeredAt === 'string' && Number.isFinite(Date.parse(item.registeredAt)) &&
+      owner.taskId === expected.taskId && owner.attempt === expected.attempt &&
+      sameControllerProofBinding(item.controllerProof, expected);
+  } catch {
+    return false;
+  }
+}
 
 export function isCheckId(value: unknown): value is string {
   return typeof value === 'string' && UUID.test(value);
