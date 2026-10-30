@@ -259,6 +259,7 @@ const typed = [
   'GET /v1/accounts/:accountId/realms',
   'GET /v1/subjects/:id/source-statistics',
   'PUT /v1/subjects/:id/source-statistics/:source',
+  'POST /v1/subjects/:id/source-statistics/:source/$clear',
   'POST /v1/zones',
   'GET /v1/zones',
   'GET /v1/zones/:id',

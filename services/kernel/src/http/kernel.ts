@@ -435,6 +435,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   declareKernelWriteRates(ratings);
   sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(sourceStatistics), realmRoleReader }),
   });

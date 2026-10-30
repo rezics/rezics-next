@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { CommandAuthorization } from '../command/command.ts';
+import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
@@ -18,9 +18,20 @@ type SourceStatistic = {
     attribution: string;
 };
 type Input = Omit<SourceStatistic, 'source'>;
+type ClearInput = Readonly<{
+    sourceRecordId: string;
+    count: 0;
+    asOf: string;
+}>;
 type Dependencies = {
     pool: Pool;
     access: () => Access;
+    routeKey: Uint8Array;
+    clock?: KernelClock;
+};
+type CommandDependencies = {
+    pool: Pool;
+    routeKey: Uint8Array;
     clock?: KernelClock;
 };
 type WriteInput = {
@@ -32,6 +43,23 @@ type WriteInput = {
     authorization: CommandAuthorization;
     deadline: number;
 };
+type ClearInputCommand = {
+    actor: Actor;
+    subjectId: string;
+    source: string;
+    value: ClearInput;
+    idempotencyKey: string;
+    authorization: CommandAuthorization;
+    deadline: number;
+};
+type ExpectedFenceRevision = Readonly<{
+    source: string;
+    external_id: string;
+    securityRevision: string | null;
+}>;
+type WriteCommandOutcome = CommandOutcome<SourceStatistic> & Readonly<{
+    preparedFenceRevision: string | null;
+}>;
 export declare class SourceStatisticInvalidError extends Error {
     readonly field: string;
     constructor(field: string);
@@ -40,12 +68,13 @@ export declare class SourceStatisticNotFoundError extends Error {
     constructor();
 }
 /** Stores source scores by subject and source. The authorization is always on Global Context. */
-export declare function createSourceStatisticCommands(config: {
-    pool: Pool;
-    clock?: KernelClock;
-}): {
+export declare function createSourceStatisticCommands(config: CommandDependencies): {
     write: (input: WriteInput) => Promise<SourceStatistic>;
-    read: (subjectId: string) => Promise<SourceStatistic[]>;
+    writeCommand: (input: WriteInput) => Promise<WriteCommandOutcome>;
+    clear: (input: ClearInputCommand) => Promise<CommandOutcome<{
+        removed: boolean;
+    }>>;
+    read: (subjectId: string, deadline?: number, expectedFence?: ExpectedFenceRevision) => Promise<SourceStatistic[]>;
 };
 /** Source statistics have their own read/write routes and never enter native vote storage. */
 export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -3985,6 +4014,153 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             };
         };
     };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                "source-statistics": {
+                    ":source": {
+                        put: {
+                            body: {
+                                sourceRecordId: string;
+                                scale: {
+                                    min: number;
+                                    max: number;
+                                };
+                                mean: number;
+                                count: number;
+                                asOf: string;
+                                licence: string;
+                                attribution: string;
+                            };
+                            params: {
+                                id: string;
+                                source: "vndb";
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    source: "vndb";
+                                    sourceRecordId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                    };
+                                    mean: number;
+                                    count: number;
+                                    asOf: string;
+                                    licence: string;
+                                    attribution: string;
+                                };
+                                400: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                401: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                403: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                409: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                503: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -4006,7 +4182,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     schemas: {};
     response: {};
     error: [];
-}, "put", "/v1/subjects/:id/source-statistics/:source", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/subjects/:id/source-statistics/:source/$clear", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
         source: import("typebox").TLiteral<"vndb">;
@@ -4021,41 +4197,20 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             types: {
                 input: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
                 output: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
                 issues?: never;
             } | {
@@ -4067,27 +4222,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             jsonSchema: {
                 input: () => import("typebox").TObject<{
                     sourceRecordId: import("typebox").TString;
-                    scale: import("typebox").TObject<{
-                        min: import("typebox").TInteger;
-                        max: import("typebox").TInteger;
-                    }>;
-                    mean: import("typebox").TNumber;
-                    count: import("typebox").TInteger;
+                    count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
-                    licence: import("typebox").TString;
-                    attribution: import("typebox").TString;
                 }>;
                 output: () => import("typebox").TObject<{
                     sourceRecordId: import("typebox").TString;
-                    scale: import("typebox").TObject<{
-                        min: import("typebox").TInteger;
-                        max: import("typebox").TInteger;
-                    }>;
-                    mean: import("typebox").TNumber;
-                    count: import("typebox").TInteger;
+                    count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
-                    licence: import("typebox").TString;
-                    attribution: import("typebox").TString;
                 }>;
             };
         };
@@ -4191,19 +4332,11 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
-            source: import("typebox").TLiteral<"vndb">;
-            sourceRecordId: import("typebox").TString;
-            scale: import("typebox").TObject<{
-                min: import("typebox").TInteger;
-                max: import("typebox").TInteger;
-            }>;
-            mean: import("typebox").TNumber;
-            count: import("typebox").TInteger;
-            asOf: import("typebox").TString;
-            licence: import("typebox").TString;
-            attribution: import("typebox").TString;
-        }>;
+        204: import("typebox").TVoid & {
+            headers: {
+                readonly "rezics-session-token": import("typebox").TString;
+            };
+        };
     };
     detail: {
         operationId: string;
@@ -4214,7 +4347,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/subjects/:id/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job }: {
+}, {}, "/v1/subjects/:id/source-statistics/:source/$clear">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -4322,19 +4455,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: never;
             }[];
         };
-        200: {
-            source: "vndb";
-            sourceRecordId: string;
-            scale: {
-                min: number;
-                max: number;
-            };
-            mean: number;
-            count: number;
-            asOf: string;
-            licence: string;
-            attribution: string;
-        };
+        204: void;
     }>;
     problem: import("elysia").SelectiveProblem<{
         400: {
@@ -4435,19 +4556,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: never;
             }[];
         };
-        200: {
-            source: "vndb";
-            sourceRecordId: string;
-            scale: {
-                min: number;
-                max: number;
-            };
-            mean: number;
-            count: number;
-            asOf: string;
-            licence: string;
-            attribution: string;
-        };
+        204: void;
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
@@ -4464,41 +4573,20 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 types: {
                     input: {
                         sourceRecordId: string;
-                        scale: {
-                            min: number;
-                            max: number;
-                        };
-                        mean: number;
-                        count: number;
+                        count: 0;
                         asOf: string;
-                        licence: string;
-                        attribution: string;
                     };
                     output: {
                         sourceRecordId: string;
-                        scale: {
-                            min: number;
-                            max: number;
-                        };
-                        mean: number;
-                        count: number;
+                        count: 0;
                         asOf: string;
-                        licence: string;
-                        attribution: string;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
                         sourceRecordId: string;
-                        scale: {
-                            min: number;
-                            max: number;
-                        };
-                        mean: number;
-                        count: number;
+                        count: 0;
                         asOf: string;
-                        licence: string;
-                        attribution: string;
                     };
                     issues?: never;
                 } | {
@@ -4510,27 +4598,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
                         sourceRecordId: import("typebox").TString;
-                        scale: import("typebox").TObject<{
-                            min: import("typebox").TInteger;
-                            max: import("typebox").TInteger;
-                        }>;
-                        mean: import("typebox").TNumber;
-                        count: import("typebox").TInteger;
+                        count: import("typebox").TLiteral<0>;
                         asOf: import("typebox").TString;
-                        licence: import("typebox").TString;
-                        attribution: import("typebox").TString;
                     }>;
                     output: () => import("typebox").TObject<{
                         sourceRecordId: import("typebox").TString;
-                        scale: import("typebox").TObject<{
-                            min: import("typebox").TInteger;
-                            max: import("typebox").TInteger;
-                        }>;
-                        mean: import("typebox").TNumber;
-                        count: import("typebox").TInteger;
+                        count: import("typebox").TLiteral<0>;
                         asOf: import("typebox").TString;
-                        licence: import("typebox").TString;
-                        attribution: import("typebox").TString;
                     }>;
                 };
             };
@@ -4634,19 +4708,11 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            200: import("typebox").TObject<{
-                source: import("typebox").TLiteral<"vndb">;
-                sourceRecordId: import("typebox").TString;
-                scale: import("typebox").TObject<{
-                    min: import("typebox").TInteger;
-                    max: import("typebox").TInteger;
-                }>;
-                mean: import("typebox").TNumber;
-                count: import("typebox").TInteger;
-                asOf: import("typebox").TString;
-                licence: import("typebox").TString;
-                attribution: import("typebox").TString;
-            }>;
+            204: import("typebox").TVoid & {
+                headers: {
+                    readonly "rezics-session-token": import("typebox").TString;
+                };
+            };
         };
         detail: {
             operationId: string;
@@ -4657,7 +4723,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             }[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         };
-    }, {}, "/v1/subjects/:id/source-statistics/:source">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/source-statistics/:source/$clear">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -4682,15 +4748,8 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     store: {};
     body: {
         sourceRecordId: string;
-        scale: {
-            min: number;
-            max: number;
-        };
-        mean: number;
-        count: number;
+        count: 0;
         asOf: string;
-        licence: string;
-        attribution: string;
     };
     query: Record<string, string | undefined>;
     params: {
@@ -4715,7 +4774,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<SourceStatistic>, {
+}) => Promise<undefined>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
         source: import("typebox").TLiteral<"vndb">;
@@ -4730,41 +4789,20 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             types: {
                 input: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
                 output: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
                     sourceRecordId: string;
-                    scale: {
-                        min: number;
-                        max: number;
-                    };
-                    mean: number;
-                    count: number;
+                    count: 0;
                     asOf: string;
-                    licence: string;
-                    attribution: string;
                 };
                 issues?: never;
             } | {
@@ -4776,27 +4814,13 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             jsonSchema: {
                 input: () => import("typebox").TObject<{
                     sourceRecordId: import("typebox").TString;
-                    scale: import("typebox").TObject<{
-                        min: import("typebox").TInteger;
-                        max: import("typebox").TInteger;
-                    }>;
-                    mean: import("typebox").TNumber;
-                    count: import("typebox").TInteger;
+                    count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
-                    licence: import("typebox").TString;
-                    attribution: import("typebox").TString;
                 }>;
                 output: () => import("typebox").TObject<{
                     sourceRecordId: import("typebox").TString;
-                    scale: import("typebox").TObject<{
-                        min: import("typebox").TInteger;
-                        max: import("typebox").TInteger;
-                    }>;
-                    mean: import("typebox").TNumber;
-                    count: import("typebox").TInteger;
+                    count: import("typebox").TLiteral<0>;
                     asOf: import("typebox").TString;
-                    licence: import("typebox").TString;
-                    attribution: import("typebox").TString;
                 }>;
             };
         };
@@ -4900,19 +4924,11 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
-            source: import("typebox").TLiteral<"vndb">;
-            sourceRecordId: import("typebox").TString;
-            scale: import("typebox").TObject<{
-                min: import("typebox").TInteger;
-                max: import("typebox").TInteger;
-            }>;
-            mean: import("typebox").TNumber;
-            count: import("typebox").TInteger;
-            asOf: import("typebox").TString;
-            licence: import("typebox").TString;
-            attribution: import("typebox").TString;
-        }>;
+        204: import("typebox").TVoid & {
+            headers: {
+                readonly "rezics-session-token": import("typebox").TString;
+            };
+        };
     };
     detail: {
         operationId: string;

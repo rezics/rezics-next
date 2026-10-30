@@ -98,6 +98,17 @@ export const SourceStatisticInputSchema = strictContentSchema(
   ),
 );
 
+export const SourceStatisticClearInputSchema = strictContentSchema(
+  t.Object(
+    {
+      sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+      count: t.Literal(0),
+      asOf: t.String({ format: 'date' }),
+    },
+    closed,
+  ),
+);
+
 export const SourceStatisticResponseSchema = t.Object(
   {
     source: t.Literal('vndb'),

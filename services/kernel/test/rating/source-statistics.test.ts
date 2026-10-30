@@ -234,3 +234,37 @@ test('source statistics are concealed when the subject is unreadable', async () 
   );
   await problem(await request('GET', `/v1/subjects/${subjectId}/source-statistics`), 404);
 });
+
+test('the exact source statistic clear method is mounted under the existing writer authority', () => {
+  const operation = openApiDocument(app).paths['/v1/subjects/{id}/source-statistics/{source}:clear']?.post;
+  expect(operation?.operationId).toBe('rating.source_statistic_clear');
+  expect(operation?.['x-action']).toBe('source_statistic:write');
+  expect(operation?.['x-exposure']).toBe('gate:personal_library');
+  expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+});
+
+test('positive source-statistic publication still requires a finite mean and a positive count', async () => {
+  const subjectId = await createTarget();
+  const path = `/v1/subjects/${subjectId}/source-statistics/vndb`;
+  const value = {
+    sourceRecordId: 'positive-validation-record',
+    scale: { min: 0, max: 10 },
+    mean: 8,
+    count: 1,
+    asOf: '2026-10-01',
+    licence: 'CC BY 4.0',
+    attribution: 'VNDB users',
+  };
+  for (const body of [
+    { ...value, count: 0 },
+    { ...value, mean: null },
+    { ...value, count: '1' },
+  ]) {
+    await problem(await request('PUT', path, body, 'importer'), 400);
+  }
+  const rows = await database.admin.query(
+    'SELECT count(*)::int AS n FROM rating.source_statistic WHERE route=$1 AND subject_id=$2',
+    [routeOf(subjectId), subjectId],
+  );
+  expect(rows.rows).toEqual([{ n: 0 }]);
+});

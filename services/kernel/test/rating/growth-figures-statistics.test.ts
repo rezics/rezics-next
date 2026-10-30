@@ -458,7 +458,10 @@ async function seedVoteHistory(db: GrowthDatabase, scale: number, previous: numb
 beforeAll(async () => {
   database = await openGrowthDatabase();
   database.pool.options.max = 1;
-  sourceStatisticCommands = createSourceStatisticCommands({ pool: database.pool });
+  sourceStatisticCommands = createSourceStatisticCommands({
+    pool: database.pool,
+    routeKey: new Uint8Array(32).fill(121),
+  });
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'rating-growth-figures-statistics', alg: 'ES256' };
   app = createKernel({

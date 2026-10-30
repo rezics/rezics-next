@@ -144,7 +144,10 @@ test('a withheld or concealed subject in a TypeList row answers the same not_fou
   const refs = [f.subjects[0]!, f.withheld, f.unknown, f.concealed, f.subjects[1]!];
   for (const credential of [f.alice.credential, f.bob.credential, f.anonymous.credential]) {
     const batch = await read(credential, refs);
-    for (const index of [1, 2, 3]) expect(batch[index]).toEqual({ ...refs[index]!, error: 'not_found' });
+    for (const index of [1, 2, 3]) {
+      const ref = refs[index]!;
+      expect(batch[index]).toEqual({ ...ref, error: 'not_found' });
+    }
     expect(batch[0]).toEqual(offered(refs[0]!, credential === null ? [] : bindings));
     expect(batch[4]).toEqual(offered(refs[4]!, credential === null ? [] : bindings));
   }
