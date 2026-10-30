@@ -90,6 +90,21 @@ test("a subject's public representation becomes schema.org JSON-LD", () => {
     '@type': 'Book',
     '@id': `https://rezics.com/id/${id}`,
     url,
+    '@graph': [
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'REZICS', item: 'https://rezics.com/en' },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'schema:Book',
+            item: 'https://rezics.com/en/search?type=schema%3ABook',
+          },
+          { '@type': 'ListItem', position: 3, name: 'Kokoro', item: url },
+        ],
+      },
+    ],
     name: 'Kokoro',
     description: '1914 novel by Natsume Sōseki',
     alternateName: ['Heart'],
@@ -131,7 +146,7 @@ test('only values the representation discloses are emitted', () => {
     name: 'Le Pauvre Cœur des hommes',
   });
   const bare = build({ labels: {}, descriptions: {}, aliases: {}, statements: {} });
-  expect(Object.keys(bare).sort()).toEqual(['@context', '@id', '@type', 'url']);
+  expect(Object.keys(bare).sort()).toEqual(['@context', '@graph', '@id', '@type', 'url']);
 });
 
 test('types outside schema.org keep their meaning as an additional type', () => {
