@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
@@ -34,7 +34,11 @@ function devFile(path: string): string {
   return result.stdout;
 }
 
-function scriptsRoot(directory: string, changed: Partial<Record<string, (source: string) => string>> = {}): string {
+function scriptsRoot(
+  directory: string,
+  changed: Partial<Record<string, (source: string) => string>> = {},
+  packageManager = (JSON.parse(devFile('package.json')) as { packageManager: string }).packageManager,
+): string {
   const root = join(directory, 'scripts-root');
   for (const path of realScriptPaths) {
     const file = join(root, path);
@@ -45,7 +49,7 @@ function scriptsRoot(directory: string, changed: Partial<Record<string, (source:
   }
   writeFileSync(
     join(root, 'package.json'),
-    `${JSON.stringify({ name: 'check-compatibility-fixture', private: true, packageManager: `bun@${Bun.version}` }, null, 2)}\n`,
+    `${JSON.stringify({ name: 'check-compatibility-fixture', private: true, packageManager }, null, 2)}\n`,
   );
   return root;
 }
@@ -54,7 +58,7 @@ function reportCheck(report: ReturnType<typeof checkScriptCompatibility>, field:
   return report.checks.filter((check) => check.field === field);
 }
 
-test('versioned contract runs real dev worker-check start, wait, result and remote option boundaries', () => {
+test('main consumer exercises actual dev worker-check forms, validates records and probes remote options', () => {
   const directory = temporaryDirectory();
   try {
     const root = scriptsRoot(directory);
@@ -106,14 +110,19 @@ test('versioned contract runs real dev worker-check start, wait, result and remo
   }
 });
 
-test('pinned Bun version and revision are checked by executing the selected binary', () => {
+test('pinned Bun version and revision probes execute against the manifest pin', () => {
   const directory = temporaryDirectory();
   try {
+    const devPin = (JSON.parse(devFile('package.json')) as { packageManager: string }).packageManager;
     const good = checkPinnedBunRuntime(directory, `bun@${Bun.version}`, process.execPath);
     expect(good.map((check) => check.status)).toEqual(['compatible', 'compatible']);
     expect(good[0]!.evidence?.actual).toBe(Bun.version);
     expect(good[1]!.evidence?.actual).toBe(Bun.revision);
 
+    const actualDevPin = checkPinnedBunRuntime(directory, devPin, process.execPath);
+    expect(actualDevPin.find((check) => check.field === 'workerCheck.bun.version')?.status).toBe(
+      devPin === `bun@${Bun.version}` ? 'compatible' : 'incompatible',
+    );
     const mismatch = checkPinnedBunRuntime(directory, 'bun@0.0.0-incompatible', process.execPath);
     expect(mismatch.find((check) => check.field === 'workerCheck.bun.version')?.status).toBe('incompatible');
     expect(mismatch.find((check) => check.field === 'workerCheck.bun.revision')?.status).toBe('compatible');
@@ -144,6 +153,29 @@ test('incompatible worker result fields and missing remote options identify the 
     expect(reportCheck(report, 'remoteCheck.options.--returns').some((check) => check.status === 'incompatible')).toBe(true);
     expect(reportCheck(report, 'remoteCheck.options.--memory-gib').some((check) => check.status === 'compatible')).toBe(true);
     expect(report.incompatibilities.every((issue) => issue.field.length > 0 && issue.command.length > 0)).toBe(true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('missing worker-check and remote-check scripts are reported as incompatible commands', () => {
+  const directory = temporaryDirectory();
+  try {
+    const missingWorkerRoot = scriptsRoot(join(directory, 'worker'));
+    rmSync(join(missingWorkerRoot, 'scripts/worker-check.ts'));
+    const missingWorker = checkScriptCompatibility(missingWorkerRoot);
+    expect(reportCheck(missingWorker, 'workerCheck.script').map((check) => check.status)).toEqual(['incompatible']);
+    expect(missingWorker.incompatibilities.find((issue) => issue.field === 'workerCheck.script')?.command).toContain(
+      join(missingWorkerRoot, 'scripts/worker-check.ts'),
+    );
+
+    const missingRemoteRoot = scriptsRoot(join(directory, 'remote'));
+    rmSync(join(missingRemoteRoot, 'scripts/remote-check.ts'));
+    const missingRemote = checkScriptCompatibility(missingRemoteRoot);
+    expect(reportCheck(missingRemote, 'remoteCheck.script').map((check) => check.status)).toEqual(['incompatible']);
+    expect(missingRemote.incompatibilities.find((issue) => issue.field === 'remoteCheck.script')?.command).toContain(
+      join(missingRemoteRoot, 'scripts/remote-check.ts'),
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

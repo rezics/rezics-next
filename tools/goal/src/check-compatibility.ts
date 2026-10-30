@@ -1,7 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import {
-  accessSync,
-  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CONTRACT_PATH = fileURLToPath(new URL('../contracts/check-scripts.json', import.meta.url));
@@ -76,11 +74,6 @@ export type CompatibilityReport = {
   compatible: boolean;
   checks: CompatibilityCheck[];
   incompatibilities: Array<{ field: string; command: string[]; detail: string }>;
-};
-
-export type CompatibilityOptions = {
-  /** Test and embedding hook; the default is always the versioned contract's scripts-root lookup path. */
-  bunExecutable?: string;
 };
 
 export const CHECK_COMPATIBILITY_CONTRACT = JSON.parse(readFileSync(CONTRACT_PATH, 'utf8')) as CheckCompatibilityContract;
@@ -273,7 +266,7 @@ function readWorkerRecord(root: string, id: string, contract: CheckCompatibility
   }
 }
 
-function writeChildCode(root: string, gatePath?: string, exitCode = 0): string {
+function writeChildCode(gatePath?: string, exitCode = 0): string {
   if (gatePath) {
     return [
       `const fs = await import('node:fs');`,
@@ -332,21 +325,31 @@ function startWorkerCheck(
   exitCode: number,
   contract: CheckCompatibilityContract,
   waitForRelease: boolean,
-): { id?: string; childArgv: string[] } {
+): { id?: string; childArgv: string[]; gatePath?: string } {
   const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
   if (gatePath) rmSync(gatePath, { force: true });
-  const code = writeChildCode(scratchRoot, gatePath, exitCode);
+  const code = writeChildCode(gatePath, exitCode);
   const childArgv = [process.execPath, '-e', code];
   const startArgs = [...contract.workerCheck.startArgv.slice(0, -1), '--local', ...childArgv];
   const command = [process.execPath, workerScript, ...startArgs];
-  const env = { ...process.env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' };
+  const env = {
+    ...process.env,
+    REZICS_CHECK_MEMORY: 'off',
+    REZICS_CHECK_MEMORY_GIB: '1',
+    REZICS_CHECK_MEMORY_DIR: join(scratchRoot, 'memory'),
+    REZICS_CHECK_SCOPE: 'off',
+    REZICS_STACK_LEASE: 'off',
+    REZICS_STACK_LEASE_DIR: join(scratchRoot, 'stack-lease'),
+    TMPDIR: scratchRoot,
+  };
   delete env.KERNEL_CHECK_REMOTE;
   delete env.REMOTE_CHECK_PRIORITY;
   delete env.GOAL_CHECK_WAIT_FILE;
+  delete env.GOAL_TASK_ID;
   const result = run(command, scratchRoot, env);
-  const match = /^check: id ([0-9a-f-]{36})$/m.exec(result.stdout);
-  const id = match?.[1];
-  const validId = typeof id === 'string' && UUID.test(id);
+  const ids = [...result.stdout.matchAll(/^check: id ([0-9a-f-]{36})$/gm)].map((match) => match[1]!);
+  const id = ids[0];
+  const validId = ids.length === 1 && UUID.test(id ?? '');
   commandResultCheck(
     checks,
     waitForRelease ? 'workerCheck.start' : 'workerCheck.failureStart',
@@ -358,7 +361,7 @@ function startWorkerCheck(
       : `Expected a successful start command to print a UUID; received exit ${String(result.status)}.`,
     { id: id ?? null, idIsUuid: validId },
   );
-  return { ...(validId ? { id } : {}), childArgv };
+  return { ...(validId ? { id } : {}), childArgv, ...(gatePath ? { gatePath } : {}) };
 }
 
 function checkWorkerCheckLifecycle(
@@ -375,7 +378,10 @@ function checkWorkerCheckLifecycle(
   pushCheck(checks, 'workerCheck.script', [process.execPath, workerScript], true, 'Required worker-check script exists.');
 
   const pending = startWorkerCheck(checks, workerScript, scratchRoot, 0, contract, true);
-  if (!pending.id) return;
+  if (!pending.id) {
+    if (pending.gatePath) writeFileSync(pending.gatePath, 'release after malformed start output\n');
+    return;
+  }
   const running = readWorkerRecord(scratchRoot, pending.id, contract);
   const startCommand = [
     process.execPath,
@@ -385,16 +391,20 @@ function checkWorkerCheckLifecycle(
     ...pending.childArgv,
   ];
   addRecordChecks(checks, pending.id, scratchRoot, pending.childArgv, 'running', undefined, startCommand, running, contract, true);
-  const gatePath = join(scratchRoot, 'release-child');
+  const gatePath = pending.gatePath!;
   writeFileSync(gatePath, 'continue\n');
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => part === '<id>' ? pending.id! : part);
   const waitCommand = [process.execPath, workerScript, ...waitArgs];
   const pendingWait = run(waitCommand, scratchRoot, process.env);
   const pendingRecord = readWorkerRecord(scratchRoot, pending.id, contract);
+  const pendingLog = pendingWait.stdout
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('check: log '))
+    ?.slice('check: log '.length);
   const pendingWaitOk =
     pendingWait.status === 0 &&
-    new RegExp(`^check: exit status 0$`, 'm').test(pendingWait.stdout) &&
-    new RegExp(`^check: log ${contract.workerCheck.logPathPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm').test(pendingWait.stdout);
+    pendingWait.stdout.split(/\r?\n/).includes('check: exit status 0') &&
+    pendingLog?.replaceAll('\\', '/').startsWith(contract.workerCheck.logPathPrefix) === true;
   commandResultCheck(
     checks,
     'workerCheck.foreground',
@@ -412,10 +422,14 @@ function checkWorkerCheckLifecycle(
   const failureWaitCommand = [process.execPath, workerScript, ...failureWaitArgs];
   const failureWait = run(failureWaitCommand, scratchRoot, process.env);
   const failureRecord = readWorkerRecord(scratchRoot, failure.id, contract);
+  const failureLog = failureWait.stdout
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('check: log '))
+    ?.slice('check: log '.length);
   const failureWaitOk =
     failureWait.status === 7 &&
-    new RegExp(`^check: exit status 7$`, 'm').test(failureWait.stdout) &&
-    new RegExp(`^check: log ${contract.workerCheck.logPathPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm').test(failureWait.stdout);
+    failureWait.stdout.split(/\r?\n/).includes('check: exit status 7') &&
+    failureLog?.replaceAll('\\', '/').startsWith(contract.workerCheck.logPathPrefix) === true;
   commandResultCheck(
     checks,
     'workerCheck.failureForeground',
@@ -455,36 +469,23 @@ function checkBunPin(
   checks: CompatibilityCheck[],
   scriptsRoot: string,
   contract: CheckCompatibilityContract,
-  options: CompatibilityOptions,
 ): void {
   const pin = parsePackageManager(scriptsRoot, checks, contract);
   const lookup = resolve(scriptsRoot, contract.workerCheck.bun.lookup);
-  const executable = options.bunExecutable ? resolve(options.bunExecutable) : lookup;
-  if (!commandExists(executable)) {
+  if (!commandExists(lookup)) {
     pushCheck(
       checks,
       'workerCheck.bun.lookup',
-      [executable, ...contract.workerCheck.bun.versionArgv],
+      [lookup, ...contract.workerCheck.bun.versionArgv],
       false,
       `Pinned Bun executable is missing at the required lookup path ${lookup}.`,
-      { lookup, executable },
+      { lookup },
     );
     return;
   }
   if (pin === undefined) return;
-  for (const check of runtimeCheck(scriptsRoot, pin, executable, contract)) checks.push(check);
-  if (options.bunExecutable) {
-    pushCheck(
-      checks,
-      'workerCheck.bun.lookup',
-      [executable, ...contract.workerCheck.bun.versionArgv],
-      true,
-      `The supplied executable was used to exercise the versioned Bun probe; production lookup remains ${lookup}.`,
-      { lookup, executable },
-    );
-  } else {
-    pushCheck(checks, 'workerCheck.bun.lookup', [executable, ...contract.workerCheck.bun.versionArgv], true, `Pinned Bun was found at ${lookup}.`, { lookup, executable });
-  }
+  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract)) checks.push(check);
+  pushCheck(checks, 'workerCheck.bun.lookup', [lookup, ...contract.workerCheck.bun.versionArgv], true, `Pinned Bun was found at ${lookup}.`, { lookup });
 }
 
 function optionArgs(option: ContractOption): string[] {
@@ -555,7 +556,7 @@ function report(scriptsRoot: string, checks: CompatibilityCheck[], contract: Che
 }
 
 /** Check a scripts checkout using real worker-check and remote-check child processes. */
-export function checkScriptCompatibility(scriptsRoot: string, options: CompatibilityOptions = {}): CompatibilityReport {
+export function checkScriptCompatibility(scriptsRoot: string): CompatibilityReport {
   const root = resolve(scriptsRoot);
   const checks: CompatibilityCheck[] = [];
   if (!existsSync(root) || !statSync(root).isDirectory()) {
@@ -567,7 +568,7 @@ export function checkScriptCompatibility(scriptsRoot: string, options: Compatibi
   mkdirSync(temporaryBase, { recursive: true });
   const scratchRoot = mkdtempSync(join(temporaryBase, 'check-compatibility-'));
   try {
-    checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT, options);
+    checkBunPin(checks, root, CHECK_COMPATIBILITY_CONTRACT);
     checkWorkerCheckLifecycle(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT);
     checkRemoteOptions(checks, root, scratchRoot, CHECK_COMPATIBILITY_CONTRACT);
   } catch (error) {
@@ -596,12 +597,4 @@ export function compatibilityUsageError(args: string[]): CompatibilityReport {
 export function parseCompatibilityArgs(args: string[]): { scriptsRoot: string } | undefined {
   if (args.length !== 2 || args[0] !== '--scripts-root' || !args[1]) return undefined;
   return { scriptsRoot: resolve(args[1]) };
-}
-
-export function compatibilityContractPath(): string {
-  return CONTRACT_PATH;
-}
-
-export function normalizedRelativePath(root: string, path: string): string {
-  return relative(root, path).split(sep).join('/');
 }
