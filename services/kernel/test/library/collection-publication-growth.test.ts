@@ -122,9 +122,8 @@ async function notification(collectionId: string): Promise<CloudEvent> {
     data: row.data,
   };
 }
-async function publish(event: CloudEvent) {
-  await (
-    await client.enqueue(
+async function enqueuePublication(event: CloudEvent) {
+  return client.enqueue(
       {
         workflowName: 'effect',
         queueName: 'effects',
@@ -133,8 +132,10 @@ async function publish(event: CloudEvent) {
       },
       'library_collection_listing',
       event,
-    )
-  ).getResult({ pollingIntervalMs: 10 });
+    );
+}
+async function publish(event: CloudEvent) {
+  await (await enqueuePublication(event)).getResult({ pollingIntervalMs: 10 });
   await client.retrieveWorkflow(event.id).getResult({ pollingIntervalMs: 10 });
 }
 async function count(subjectId: string, expected: number) {
@@ -220,17 +221,26 @@ beforeAll(async () => {
   // Point-lookup plans need a real native baseline at the smallest measured scale.
   // Build both Collection and SDK history through their actual commands/workflows;
   // no fabricated rows, planner switches, harness exceptions or changed bounds.
-  // Fill the native queues in bounded batches matching their normal worker capacity.
-  // Awaiting each empty workflow separately would pay the queue's dispatch interval
-  // 1,500 times without exercising any additional product behavior.
+  // Submit real native history before draining it. Small submission batches bound
+  // command concurrency; the existing queues retain their normal worker capacity.
+  // Waiting for every batch to finish would repeatedly leave both queues empty.
+  const history: { event: CloudEvent; effect: Awaited<ReturnType<typeof enqueuePublication>> }[] = [];
   for (let i = 0; i < 1500; i += 8) {
     if (i % 200 === 0) await refreshBearer();
     await Promise.all(
       Array.from({ length: Math.min(8, 1500 - i) }, async () => {
         const c = await collection();
-        await publish(await notification(c.id));
+        const event = await notification(c.id);
+        history.push({ event, effect: await enqueuePublication(event) });
       }),
     );
+  }
+  console.log('Native publication baseline submitted: 1500 Collections');
+  // One result waiter avoids flooding the SDK polling pool with 1,500 requests.
+  for (const [index, { event, effect }] of history.entries()) {
+    await effect.getResult({ pollingIntervalMs: 10 });
+    await client.retrieveWorkflow(event.id).getResult({ pollingIntervalMs: 10 });
+    if ((index + 1) % 250 === 0) console.log(`Native publication baseline completed: ${index + 1}`);
   }
   await refreshBearer();
 }, 600_000);
