@@ -4,10 +4,13 @@ import {
   createBarrierProofVerifier,
   createNativeWorkflowProofPorts,
   createProvisioningEvidenceVerifier,
+  WEBSITE_CLIENT_ID,
+  type PublicJwks,
   type AuthService,
   type AccountOperationAccess,
 } from '@rezics/auth';
-import { exportJWK, generateKeyPair } from 'jose';
+import { createHash, randomBytes } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createWorkflowApprovals } from '../../../src/access/workflow-approvals.ts';
 import { createAccess } from '../../../src/access/index.ts';
@@ -230,13 +233,27 @@ async function createNativeContentSystemWithOptions(
     // when a durable step restores its initiator.
     const ordinaryScopeList = ordinaryScopes
       ? [...ordinaryScopes]
-      : [...actions.keys()].filter((action) => action !== 'media:complete').sort();
+      : [...new Set([...actions.keys(), ...LIFECYCLE_ACTIONS.keys()])]
+          .filter((action) => action !== 'media:complete')
+          .sort();
     await nativeAuth.internal.registerClient({
       clientId: ordinaryClient.id,
       firstParty: true,
       scopes: ordinaryScopeList,
     });
     const registeredOrdinaryScopes = Object.freeze(ordinaryScopeList);
+    const websiteKeyPair = await generateKeyPair('ES256', { extractable: true });
+    const websiteKeyId = `${namespace}_website`;
+    const websiteCallback = `${issuer}/native-content/callback`;
+    const websiteScopes = [...new Set(['openid', 'offline_access', ...actions.keys()])].sort();
+    await nativeAuth.internal.registerWebsiteClient({
+      publicJwks: {
+        keys: [{ ...(await exportJWK(websiteKeyPair.publicKey)), kid: websiteKeyId, alg: 'ES256', use: 'sig' }],
+      } as PublicJwks,
+      redirectUris: [websiteCallback],
+      postLogoutRedirectUris: [`${issuer}/`],
+      scopes: websiteScopes,
+    });
     await host.start();
 
     const requestAuth = async (path: string, body: unknown, cookie = '') => {
@@ -258,7 +275,86 @@ async function createNativeContentSystemWithOptions(
       if (actor.kind !== 'account') throw new Error('Native Auth did not authenticate an account');
       return { bearer, actor };
     };
-    const password = crypto.randomUUID() + crypto.randomUUID();
+    const websiteAssertion = async (): Promise<string> => {
+      const now = Math.floor(Date.now() / 1000);
+      return new SignJWT({})
+        .setProtectedHeader({ alg: 'ES256', kid: websiteKeyId })
+        .setIssuer(WEBSITE_CLIENT_ID)
+        .setSubject(WEBSITE_CLIENT_ID)
+        .setAudience(issuer)
+        .setIssuedAt(now)
+        .setExpirationTime(now + 120)
+        .setJti(randomBytes(24).toString('base64url'))
+        .sign(websiteKeyPair.privateKey);
+    };
+    const websiteTokenRequest = async (fields: Record<string, string>) => {
+      const form = new URLSearchParams({
+        client_id: WEBSITE_CLIENT_ID,
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: await websiteAssertion(),
+        resource: audience,
+        ...fields,
+      });
+      const response = await nativeAuth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form.toString(),
+        }),
+      );
+      if (!response.ok)
+        throw new Error(`Website Auth token request denied (${response.status}): ${await response.text()}`);
+      return (await response.json()) as { access_token: string; refresh_token: string };
+    };
+    const issueWebsite = async (input: { accountId: string; password: string; scopes: readonly string[] }) => {
+      const requested = [...new Set(input.scopes)].sort();
+      if (requested.some((scope) => !websiteScopes.includes(scope)))
+        throw new TypeError('Website OAuth scopes must be registered protocol scopes or mounted kernel actions');
+      const signed = await requestAuth(
+        '/signin',
+        {
+          account_id: input.accountId,
+          password: input.password,
+          client_id: ordinaryClient.id,
+          scope: registeredOrdinaryScopes,
+        },
+        '',
+      );
+      const cookie = signed.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const verifier = randomBytes(48).toString('base64url');
+      const state = randomBytes(24).toString('base64url');
+      const authorize = new URL(`${issuer}/authorize`);
+      authorize.search = new URLSearchParams({
+        client_id: WEBSITE_CLIENT_ID,
+        redirect_uri: websiteCallback,
+        response_type: 'code',
+        scope: [...new Set(['openid', 'offline_access', ...requested])].sort().join(' '),
+        state,
+        nonce: state,
+        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+        code_challenge_method: 'S256',
+        resource: audience,
+      }).toString();
+      const authorization = await nativeAuth.handler(new Request(authorize, { headers: { cookie } }));
+      if (![302, 303].includes(authorization.status))
+        throw new Error(`Website Auth authorization denied (${authorization.status}): ${await authorization.text()}`);
+      const location = new URL(authorization.headers.get('location') ?? '');
+      if (`${location.origin}${location.pathname}` !== websiteCallback || location.searchParams.get('state') !== state)
+        throw new Error('Website Auth returned an invalid authorization redirect');
+      const code = location.searchParams.get('code');
+      if (!code) throw new Error('Website Auth did not return an authorization code');
+      const tokens = await websiteTokenRequest({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: websiteCallback,
+        code_verifier: verifier,
+      });
+      return credential(new Response(JSON.stringify({ access_token: tokens.access_token }), { status: 200 }));
+    };
+    const password = 'ordinary native registration password';
     const issue = async (input: Parameters<NativeContentSystem['auth']['issue']>[0]): Promise<ContentCredential> => {
       // Auth checks current identity, registered client and consent itself. The
       // supplied delegation reference is resolved by its native assignment reader.
@@ -334,16 +430,17 @@ async function createNativeContentSystemWithOptions(
         const name = `erase_${crypto.randomUUID().replaceAll('-', '')}`;
         const clientId = `${name}_client`;
         const deletionScopes = [...new Set([...registeredOrdinaryScopes, 'account:delete'])];
+        const personPassword = 'ordinary native registration password';
         await nativeAuth.internal.registerClient({ clientId, firstParty: true, scopes: deletionScopes });
         const { accountId } = await host!.workflows.register({
           key: name,
           handle: name,
           email: `${name}@content.test`,
-          password: 'ordinary native registration password',
+          password: personPassword,
         });
         const signed = await requestAuth('/signin', {
           account_id: accountId,
-          password: 'ordinary native registration password',
+          password: personPassword,
           client_id: clientId,
           scope: deletionScopes,
         });
@@ -352,7 +449,12 @@ async function createNativeContentSystemWithOptions(
           .map((value) => value.split(';')[0])
           .join('; ');
         const token = await credential(await requestAuth('/token', {}, cookie));
-        return { accountId, bearer: token.bearer };
+        const website = await issueWebsite({
+          accountId,
+          password: personPassword,
+          scopes: ['media:create', 'media:complete', 'media:read_reservation', 'media:erase', 'realm:participate'],
+        });
+        return { accountId, bearer: token.bearer, websiteBearer: website.bearer };
       },
     };
     const system: NativeContentSystem = {

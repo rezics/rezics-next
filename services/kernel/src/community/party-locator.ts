@@ -1,6 +1,9 @@
 import type { Pool } from 'pg';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
+import type { CommandBasis } from '../command/command.ts';
 import { noEffect, runCommand } from '../command/command.ts';
+import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from '../access/erasure.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -8,8 +11,10 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { COMMUNITY_EVENTS } from './events.ts';
 import source from './party-locator-source.sql';
 import upsert from './party-locator-upsert.sql';
+import { lockErasureFence } from './erasure-fence.ts';
+import { eraseAccountCommunityRecordItem } from './account-erasure-records.ts';
 
-export const COMMUNITY_PLATFORM_BASIS = {
+export const COMMUNITY_PLATFORM_BASIS: CommandBasis = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',
   clientId: 'internal-community-erasure',
   requestedBy: null,
@@ -58,18 +63,33 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
       for (const row of keys) {
         const accountRoute = routeOf(row.account_id);
         if (accountRoute === null) throw new TypeError('Invalid community party identity');
-        await runCommand(
+        if (row.due_at === null) throw new TypeError('Community party locator is missing its due time');
+        const locator = `${row.kind}:${row.owner_route}:${row.owner_id}:${row.key}`;
+        const result = await runCommand<{ late: boolean }>(
           pool,
           { partition: partitionOf(accountRoute), basis: COMMUNITY_PLATFORM_BASIS },
           async (tx) => {
+            if (await lockErasureFence(tx, row.account_id)) {
+              await recordLateErasureItem(tx, { accountId: row.account_id, participant: 'community', locator });
+              return {
+                value: { late: true as const },
+                events: [
+                  {
+                    type: 'com.rezics.access.account-updated.v1',
+                    subject: row.account_id,
+                    data: { accountId: row.account_id },
+                  },
+                ],
+              };
+            }
             const parameters = { ...row, route: accountRoute };
             const inserted = await tx.query(
               upsert.sql,
               upsert.params.map((name) => parameters[name as keyof typeof parameters]),
             );
-            if (inserted.rowCount === 0) return noEffect(null);
+            if (inserted.rowCount === 0) return noEffect({ late: false as const });
             return {
-              value: null,
+              value: { late: false as const },
               events: [
                 {
                   type: 'com.rezics.community.party-locator.projected.v1',
@@ -80,6 +100,23 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
             };
           },
         );
+        if (result.value.late) {
+          const status = await readErasureStatus(pool, row.account_id);
+          if (!status) throw new Error('Community late locator has no committed account erasure');
+          const key = {
+            kind: row.kind,
+            due_at: row.due_at,
+            owner_route: row.owner_route,
+            owner_id: row.owner_id,
+            key: row.key,
+          };
+          for (;;) {
+            const disposition = await eraseAccountCommunityRecordItem({ pool }, row.account_id, key, status.at, true);
+            if (!disposition.pending) break;
+            await DBOS.sleep(600_000);
+          }
+          await resolveLateErasureItem({ pool }, { accountId: row.account_id, participant: 'community', locator });
+        }
       }
     },
   };

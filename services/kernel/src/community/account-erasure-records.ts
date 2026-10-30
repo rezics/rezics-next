@@ -115,6 +115,57 @@ async function erasableOperation(pool: Pool, row: Locator, at: number): Promise<
   });
 }
 
+/** Apply one community party-locator disposition. Late locator effects use this same
+ * source mutation but do not recreate a locator after the community fence closes.
+ */
+export async function eraseAccountCommunityRecordItem(
+  deps: Dependencies,
+  accountId: string,
+  row: Locator,
+  erasedAt: string,
+  late = false,
+  processingAt?: number,
+): Promise<{ pending: boolean; reasonsKeptUntil: string | null }> {
+  instant(erasedAt);
+  const key = await obligation(deps.pool, accountId, erasedAt);
+  const time =
+    processingAt ??
+    (await readKeys(deps.pool, key.route, async (client) => {
+      const value = await mintReadTime(client, deps.clock);
+      return Date.parse(authoritativeTimeValue(value));
+    }));
+  if (row.kind === 'membership_operation' && !(await erasableOperation(deps.pool, row, time)))
+    return { pending: true, reasonsKeptUntil: null };
+  const result = await runCommand(
+    deps.pool,
+    { partition: partitionOf(row.owner_route), basis: COMMUNITY_PLATFORM_BASIS },
+    async (tx) => {
+      const params = { ...row, ...key, purge: late };
+      let kept: string | null = null;
+      let affected = 0;
+      if (row.kind === 'ban_actor') {
+        const changed = await tx.query<{ kept_until: string | null }>(
+          eraseBan.sql,
+          eraseBan.params.map((name) => params[name as keyof typeof params]),
+        );
+        affected = changed.rowCount ?? 0;
+        kept = changed.rows[0]?.kept_until ?? null;
+      } else {
+        const statement =
+          row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict : eraseOperation;
+        const changed = await tx.query(
+          statement.sql,
+          statement.params.map((name) => params[name as keyof typeof params]),
+        );
+        affected = changed.rowCount ?? 0;
+      }
+      return affected ? { value: kept, events: [changed(accountId)] } : noEffect(kept);
+    },
+  );
+  if (row.kind !== 'ban_actor' || result.value === null) await remove(deps.pool, accountId, key.route, row);
+  return { pending: false, reasonsKeptUntil: result.value && row.key !== accountId ? iso(result.value) : null };
+}
+
 /** At most 50 account-partition locator keys and one owner command per key.
  * No initiator is restored: only the already committed erasure obligation grants this platform work.
  * The caller folds reasonsKeptUntil across pages into the single realm_ban.reason retention exception
@@ -138,45 +189,24 @@ export async function eraseAccountCommunityRecordsPage(
   let pending = 0;
   let reasonsKeptUntil: string | null = null;
   for (const row of rows) {
-    if (row.kind === 'membership_operation' && !(await erasableOperation(pool, row, at))) {
+    const result = await eraseAccountCommunityRecordItem(
+      { pool, ...(clock ? { clock } : {}) },
+      accountId,
+      row,
+      input.erasedAt,
+      false,
+      at,
+    );
+    if (result.pending) {
       pending++;
       continue;
     }
-    const result = await runCommand(
-      pool,
-      { partition: partitionOf(row.owner_route), basis: COMMUNITY_PLATFORM_BASIS },
-      async (tx) => {
-        const params = { ...row, ...key, purge: false };
-        // Account route belongs only to locator commands; source statements use owner_route explicitly.
-        let kept: string | null = null;
-        let affected = 0;
-        if (row.kind === 'ban_actor') {
-          const result = await tx.query<{ kept_until: string | null }>(
-            eraseBan.sql,
-            eraseBan.params.map((name) => params[name as keyof typeof params]),
-          );
-          affected = result.rowCount ?? 0;
-          kept = result.rows[0]?.kept_until ?? null;
-        } else {
-          const statement =
-            row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict : eraseOperation;
-          const result = await tx.query(
-            statement.sql,
-            statement.params.map((name) => params[name as keyof typeof params]),
-          );
-          affected = result.rowCount ?? 0;
-        }
-        return affected ? { value: kept, events: [changed(accountId)] } : noEffect(kept);
-      },
-    );
     // A ban against this account is deleted by its target key, including a self-issued ban.
     if (
-      result.value &&
-      row.key !== accountId &&
-      (!reasonsKeptUntil || Date.parse(result.value) > Date.parse(reasonsKeptUntil))
+      result.reasonsKeptUntil &&
+      (!reasonsKeptUntil || Date.parse(result.reasonsKeptUntil) > Date.parse(reasonsKeptUntil))
     )
-      reasonsKeptUntil = iso(result.value);
-    if (row.kind !== 'ban_actor') await remove(pool, accountId, key.route, row);
+      reasonsKeptUntil = result.reasonsKeptUntil;
   }
   return { next: next(rows), found: rows.length, pending, reasonsKeptUntil };
 }

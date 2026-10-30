@@ -295,6 +295,9 @@ CREATE FUNCTION content.guard_post_erasure() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.author_erased AND NOT NEW.author_erased THEN
+    RAISE EXCEPTION 'Author erasure is irreversible' USING ERRCODE = '23514';
+  END IF;
   IF OLD.availability = 'erased' THEN
     IF TG_OP = 'DELETE' THEN
       RAISE EXCEPTION 'Erased post identity must survive cleanup' USING ERRCODE = '23514';
@@ -306,7 +309,9 @@ BEGIN
       RAISE EXCEPTION 'Purged post erasure is irreversible' USING ERRCODE = '23514';
     END IF;
   END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
   IF OLD.purge_started_at IS NOT NULL AND NEW.purge_started_at IS DISTINCT FROM OLD.purge_started_at
      OR OLD.purge_completed AND NOT NEW.purge_completed THEN
     RAISE EXCEPTION 'Post purge is irreversible' USING ERRCODE = '23514';
@@ -459,7 +464,9 @@ BEGIN
      OR NOT EXISTS (
        SELECT 1 FROM content.post p
        WHERE p.route = OLD.route AND p.thread_id = OLD.thread_id AND p.post_id = OLD.post_id
-         AND p.availability = 'erased'
+         AND (p.availability = 'erased' OR
+           (p.author_erased AND p.availability = 'available' AND p.visibility = 'published'
+            AND p.head_revision_id <> OLD.revision_id))
      ) THEN
     RAISE EXCEPTION 'Revisions are immutable except explicit erasure' USING ERRCODE = '23514';
   END IF;
@@ -567,6 +574,47 @@ $_$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: account_erasure_progress; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.account_erasure_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    step bigint DEFAULT 0 NOT NULL,
+    phase text NOT NULL,
+    cursor jsonb,
+    erased_at timestamp with time zone NOT NULL,
+    content_found boolean DEFAULT false NOT NULL,
+    delivery_found boolean DEFAULT false NOT NULL,
+    phase_pending boolean DEFAULT false NOT NULL,
+    statements_kept_until timestamp with time zone,
+    CONSTRAINT account_erasure_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_erasure_progress_erased_at_check CHECK (isfinite(erased_at)),
+    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['authored'::text, 'uploads'::text, 'reactions'::text, 'moderation'::text, 'proof'::text, 'complete'::text]))),
+    CONSTRAINT account_erasure_progress_statements_kept_until_check CHECK (((statements_kept_until IS NULL) OR isfinite(statements_kept_until))),
+    CONSTRAINT account_erasure_progress_step_check CHECK ((step >= 0))
+);
+
+
+--
+-- Name: account_erasure_statement; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.account_erasure_statement (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    due_at timestamp with time zone NOT NULL,
+    owner_route integer NOT NULL,
+    decision_id uuid NOT NULL,
+    CONSTRAINT account_erasure_statement_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_erasure_statement_check1 CHECK ((owner_route = ((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)))),
+    CONSTRAINT account_erasure_statement_due_at_check CHECK (isfinite(due_at)),
+    CONSTRAINT account_erasure_statement_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT account_erasure_statement_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
 
 --
 -- Name: account_upload; Type: TABLE; Schema: content; Owner: -
@@ -695,6 +743,19 @@ CREATE TABLE content.board_thread (
     CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
+-- Name: erasure_fence; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.erasure_fence (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    closed_at timestamp with time zone,
+    CONSTRAINT erasure_fence_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT erasure_fence_closed_at_check CHECK (((closed_at IS NULL) OR isfinite(closed_at)))
 );
 
 
@@ -1040,6 +1101,7 @@ CREATE TABLE content.post (
     deleted_at timestamp with time zone,
     purge_started_at timestamp with time zone,
     purge_completed boolean DEFAULT false NOT NULL,
+    author_erased boolean DEFAULT false NOT NULL,
     CONSTRAINT post_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT post_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT post_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
@@ -1362,6 +1424,22 @@ CREATE TABLE content.thread (
 
 
 --
+-- Name: account_erasure_progress account_erasure_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.account_erasure_progress
+    ADD CONSTRAINT account_erasure_progress_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: account_erasure_statement account_erasure_statement_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.account_erasure_statement
+    ADD CONSTRAINT account_erasure_statement_pkey PRIMARY KEY (route, account_id, due_at, decision_id);
+
+
+--
 -- Name: account_upload account_upload_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1407,6 +1485,14 @@ ALTER TABLE ONLY content.board
 
 ALTER TABLE ONLY content.board_thread
     ADD CONSTRAINT board_thread_pkey PRIMARY KEY (route, board_id, thread_id);
+
+
+--
+-- Name: erasure_fence erasure_fence_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.erasure_fence
+    ADD CONSTRAINT erasure_fence_pkey PRIMARY KEY (route, account_id);
 
 
 --

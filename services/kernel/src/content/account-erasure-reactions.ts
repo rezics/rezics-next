@@ -6,10 +6,52 @@ import reports from './report-locator-page.sql';
 import eraseReport from './account-erasure-reactions-report.sql';
 import removeLocators from './report-locator-delete.sql';
 import clear from './reaction-slot.sql';
+import deleteLikedVersion from './account-erasure-reactions-version-delete.sql';
+import { noteAccountErasureFound } from './account-erasure-progress.ts';
 
 export type ReactionErasureCursor = Readonly<{ phase: 'reactions' | 'reports'; after: string | null }>;
 const first = '00000000-0000-0000-0000-000000000000';
 const pageSize = 50;
+
+async function eraseReportCopy(pool: Pool, accountId: string, reportRoute: number, reportId: string): Promise<void> {
+  await runCommand(pool, { partition: partitionOf(reportRoute) }, async (tx) => {
+    const changed = await eraseReport.run(tx, { route: reportRoute, report_id: reportId, actor_id: accountId });
+    if (!changed) return noEffect(null);
+    return {
+      value: null,
+      events: [
+        {
+          type: 'com.rezics.content.report.evidence-erased.v1',
+          subject: reportId,
+          data: { reportId },
+        },
+      ],
+    };
+  });
+}
+
+/** Applies the report disposition for a locator effect that reaches a closed fence. */
+export async function eraseAccountReportItem(
+  deps: { pool: Pool },
+  accountId: string,
+  reportRoute: number,
+  reportId: string,
+): Promise<void> {
+  await eraseReportCopy(deps.pool, accountId, reportRoute, reportId);
+  const home = route(accountId);
+  await runCommand(deps.pool, { partition: partitionOf(home) }, async (tx) => {
+    const removed = await removeLocators.run(tx, { route: home, actor_id: accountId, report_ids: [reportId] });
+    if (!removed.length) return noEffect(null);
+    return {
+      value: null,
+      events: removed.map((report) => ({
+        type: 'com.rezics.content.report-reporter.erased.v1',
+        subject: report.report_id,
+        data: { reportId: report.report_id },
+      })),
+    };
+  });
+}
 
 function route(id: string): number {
   const value = routeOf(id);
@@ -33,6 +75,11 @@ export async function eraseAccountReactionsPage(
   if (!cursor || cursor.phase === 'reactions') {
     const result = await runCommand(deps.pool, { partition: partitionOf(home) }, async (tx, command) => {
       const page = await reactions.run(tx, parameters);
+      if (page.length)
+        await tx.query(
+          'UPDATE content.account_erasure_progress SET content_found=true WHERE route=$1 AND account_id=$2',
+          [home, accountId],
+        );
       const events: CommandEvent[] = [];
       for (const reaction of page) {
         const [changed] = await clear.run(tx, {
@@ -57,6 +104,16 @@ export async function eraseAccountReactionsPage(
             },
           });
       }
+      let removedLikedVersion = false;
+      if (page.length < pageSize) {
+        const removed = await deleteLikedVersion.run(tx, { route: home, actor_id: accountId });
+        removedLikedVersion = removed.length > 0;
+        if (removedLikedVersion)
+          await tx.query(
+            'UPDATE content.account_erasure_progress SET content_found=true WHERE route=$1 AND account_id=$2',
+            [home, accountId],
+          );
+      }
       const value = {
         next:
           page.length === pageSize
@@ -71,25 +128,9 @@ export async function eraseAccountReactionsPage(
   const { value: page } = await runCommand(deps.pool, { partition: partitionOf(home) }, async (tx) =>
     noEffect(await reports.run(tx, parameters)),
   );
+  if (page.length) await noteAccountErasureFound(deps, accountId, 'content');
   for (const report of page) {
-    await runCommand(deps.pool, { partition: partitionOf(report.report_route) }, async (tx) => {
-      const changed = await eraseReport.run(tx, {
-        route: report.report_route,
-        report_id: report.report_id,
-        actor_id: accountId,
-      });
-      if (!changed) return noEffect(null);
-      return {
-        value: null,
-        events: [
-          {
-            type: 'com.rezics.content.report.evidence-erased.v1',
-            subject: report.report_id,
-            data: { reportId: report.report_id },
-          },
-        ],
-      };
-    });
+    await eraseReportCopy(deps.pool, accountId, report.report_route, report.report_id);
   }
   if (page.length)
     await runCommand(deps.pool, { partition: partitionOf(home) }, async (tx) => {

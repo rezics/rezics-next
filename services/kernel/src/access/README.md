@@ -677,11 +677,14 @@ applies. This mechanical work runs as the platform and restores no initiator. Ne
 `account-updated` event; there is no new event type. Dispatch success is not completion.
 
 Only `erased` may name optional `retained` exceptions, at most 16, each with `store`, `fields`, `purpose` and
-`expiresAt: Date`. Store and field identifiers match `[A-Za-z_][A-Za-z0-9_]{0,63}`; each exception names 1 to 32
-fields, a purpose of 1 to 200 characters and a known expiry strictly after T. Store names are unique within
-an acknowledgement. A participant without a decided expiry stays pending. Exception and field order do not affect
-identity. Each participant's acknowledgement is immutable: the same outcome and exceptions do nothing; any
-difference, unknown participant or missing erasure is refused.
+`expiresAt: Date`. A store is one identifier or two identifiers separated by one dot; each component matches
+`[A-Za-z_][A-Za-z0-9_]{0,63}`. Access keeps the store string literally as supplied and uses it as the exact key for
+acknowledgement identity and resolution; it does not infer a schema or normalize the name. Field identifiers keep the
+same one-identifier grammar and do not allow dots. Each exception names 1 to 32 fields, a purpose of 1 to 200
+characters and a known expiry strictly after T. Store names are unique within an acknowledgement. A participant without
+a decided expiry stays pending. Exception and field order do not affect identity. Each participant's acknowledgement
+is immutable: the same outcome and exceptions do nothing; any difference, unknown participant or missing erasure is
+refused.
 
 The owner names exceptions in its acknowledgement and retention inventory, purges each store at expiry, then calls
 `resolveRetention({ pool }, { accountId, participant, store })` as its own command transaction after that purge

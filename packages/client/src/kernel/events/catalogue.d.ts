@@ -913,6 +913,7 @@ declare const productEventTypes: {
     readonly 'com.rezics.content.post.erased.v1': Type.TObject<{
         postId: Type.TString;
         securityRevision: Type.TString;
+        accountErasure: Type.TOptional<Type.TLiteral<true>>;
     }>;
     readonly 'com.rezics.content.moderation.erasure.v1': Type.TObject<{
         threadId: Type.TString;

@@ -1,11 +1,15 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { noEffect, runCommand } from '../command/command.ts';
+import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { REPORT_EVENTS, type ReportEventData } from './report-events.ts';
+import { lockErasureFence } from './erasure-fence.ts';
+import { eraseAccountReportItem } from './account-erasure-reactions.ts';
+import { markAccountErasureFound } from './account-erasure-progress.ts';
 import read from './report-locator-source.sql';
 import insert from './report-locator-upsert.sql';
 
@@ -60,16 +64,31 @@ export function createReportLocatorEffect(pool: Pool): Effect {
       if (!reporter) return;
       const home = routeOf(reporter);
       if (home === null) throw new TypeError('Invalid reporter identity');
-      await runCommand(pool, { partition: partitionOf(home) }, async (tx) => {
+      const locator = `report:${reportRoute}:${data.reportId}`;
+      const result = await runCommand<{ late: boolean }>(pool, { partition: partitionOf(home) }, async (tx) => {
+        if (await lockErasureFence(tx, reporter)) {
+          await recordLateErasureItem(tx, { accountId: reporter, participant: 'content', locator });
+          await markAccountErasureFound(tx, reporter, 'content');
+          return {
+            value: { late: true as const },
+            events: [
+              {
+                type: 'com.rezics.access.account-updated.v1',
+                subject: reporter,
+                data: { accountId: reporter },
+              },
+            ],
+          };
+        }
         const added = await insert.run(tx, {
           route: home,
           actor_id: reporter,
           report_route: reportRoute,
           report_id: data.reportId,
         });
-        if (!added) return noEffect(null);
+        if (!added) return noEffect({ late: false as const });
         return {
-          value: null,
+          value: { late: false as const },
           events: [
             {
               type: 'com.rezics.content.report-reporter.projected.v1',
@@ -79,6 +98,10 @@ export function createReportLocatorEffect(pool: Pool): Effect {
           ],
         };
       });
+      if (result.value.late) {
+        await eraseAccountReportItem({ pool }, reporter, reportRoute, data.reportId);
+        await resolveLateErasureItem({ pool }, { accountId: reporter, participant: 'content', locator });
+      }
     },
   };
 }

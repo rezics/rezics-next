@@ -256,6 +256,19 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: erasure_fence; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.erasure_fence (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    closed_at timestamp with time zone,
+    CONSTRAINT erasure_fence_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT erasure_fence_closed_at_check CHECK (((closed_at IS NULL) OR isfinite(closed_at)))
+);
+
+
+--
 -- Name: party_locator; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -566,6 +579,14 @@ CREATE TABLE community.space_revision (
     CONSTRAINT space_revision_title_check CHECK (((char_length(title) >= 0) AND (char_length(title) <= 1024)))
 )
 WITH (fillfactor='50');
+
+
+--
+-- Name: erasure_fence erasure_fence_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.erasure_fence
+    ADD CONSTRAINT erasure_fence_pkey PRIMARY KEY (route, account_id);
 
 
 --

@@ -284,6 +284,13 @@ async function runDisclosureWorker(): Promise<void> {
     maxObjectBytes: 20 * 1024 * 1024,
     fetch,
   });
+  const holdAccountUploadIndex = process.argv.includes('--hold-account-upload-index');
+  let releaseAccountUploadIndex: (() => void) | undefined;
+  const accountUploadIndexGate = holdAccountUploadIndex
+    ? new Promise<void>((resolve) => {
+        releaseAccountUploadIndex = resolve;
+      })
+    : Promise.resolve();
   const worker = await startWorker(
     {
       databaseUrl: process.env.DATABASE_URL ?? '',
@@ -294,9 +301,29 @@ async function runDisclosureWorker(): Promise<void> {
       {
         name: 'content',
         async register(context) {
+          const testContext = {
+            ...context,
+            addEffects(effects: Parameters<typeof context.addEffects>[0]) {
+              context.addEffects(
+                effects.map((effect) =>
+                  effect.name === 'content_account_upload_index' && holdAccountUploadIndex
+                    ? {
+                        ...effect,
+                        async run(event) {
+                          if (event.type === 'com.rezics.content.media.reserved.v1') {
+                            console.log('account-upload-index-held');
+                            await accountUploadIndexGate;
+                          }
+                          return effect.run(event);
+                        },
+                      }
+                    : effect,
+                ),
+              );
+            },
+          };
           await createContentWork({
             storage,
-            collectionPartitions: [0],
             access: createContentWorkAccess(systemClock),
             readConsent: createAuthConsentReader({
               url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
@@ -305,19 +332,23 @@ async function runDisclosureWorker(): Promise<void> {
             }),
             routeKey: Buffer.from(process.env.CONTENT_TEST_ROUTE_KEY ?? '', 'base64url'),
             fetchConfig: { allowedHosts: ['images.example.org'] },
-          }).register(context);
-          const erasure = contentEffects(context.pool, context.client).filter(
-            (effect) => effect.name === 'content_author_erasure',
-          );
-          if (erasure.length !== 1) throw new Error('Author-erasure effect is missing');
-          context.addEffects(erasure);
+            registerErasureParticipant: process.env.CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT !== 'true',
+          }).register(testContext);
+          const effectNames = new Set(['content_author_erasure', 'content_media_image']);
+          const effects = contentEffects(context.pool, context.client).filter((effect) => effectNames.has(effect.name));
+          if (effects.length !== effectNames.size) throw new Error('Required native content effects are missing');
+          context.addEffects(effects);
         },
       },
     ],
   );
   console.log('ready');
   for await (const line of console) {
-    if (line === 'stop') {
+    if (line === 'release-account-upload-index') {
+      releaseAccountUploadIndex?.();
+      console.log('account-upload-index-released');
+    } else if (line === 'stop') {
+      releaseAccountUploadIndex?.();
       await worker.stop();
       console.log('stopped');
       break;

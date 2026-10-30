@@ -2,12 +2,16 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { runCommand } from '../command/command.ts';
+import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
+import { lockErasureFence } from './erasure-fence.ts';
+import { eraseAccountAuthoredItem } from './account-erasure-authored.ts';
+import { markAccountErasureFound } from './account-erasure-progress.ts';
 import upsert from './author-item-upsert.sql';
 import remove from './author-item-delete.sql';
 import readAuthor from './author-item-read-author.sql';
@@ -93,54 +97,92 @@ export function createAuthorItemEffect(pool: Pool): Effect {
             });
       if (!authorId) return;
       const authorRoute = route(authorId);
-      const itemKind = event.type === threadCreated ? 'thread' : 'post';
-      const itemId = event.type === threadCreated ? creation!.threadId : change.id;
-      const parameters = {
-        route: authorRoute,
-        author_account_id: authorId,
-        item_kind: itemKind,
-        item_id: itemId,
-        thread_id: restored?.thread_id ?? creation?.threadId,
-        thread_kind: restored?.kind ?? creation?.kind,
-        created_at: restored?.created_at ?? creation?.activityAt,
-        source_epoch: epoch,
-        source_position: position.toString(),
-      };
+      const items: { itemKind: 'thread' | 'post'; itemId: string }[] =
+        event.type === threadCreated
+          ? [
+              { itemKind: 'thread', itemId: creation!.threadId },
+              { itemKind: 'post', itemId: creation!.itemId },
+            ]
+          : [{ itemKind: 'post', itemId: change.id }];
       const digest = createHash('sha256')
         .update(JSON.stringify([event.source, event.sequence, event.id, event.type, event.data]))
         .digest();
       try {
-        await runCommand(
+        const result = await runCommand<{ late: true; locators: string[] } | { late: false }>(
           pool,
           {
             partition: partitionOf(authorRoute),
             receipt: { actorAccountId: projectorId, kind: 'content.author-item.project', key: event.id, digest },
           },
           async (tx) => {
-            const statement = creation || restored ? upsert : remove;
-            const result = await tx.query(
-              statement.sql,
-              statement.params.map((name) => parameters[name as keyof typeof parameters]),
-            );
-            if (result.rowCount === 0) throw new UnchangedAuthorItem();
+            if (creation || restored) {
+              const closedAt = await lockErasureFence(tx, authorId);
+              if (closedAt) {
+                const locators = items.map(
+                  ({ itemKind, itemId }) => `author_item:${itemKind}:${authorRoute}:${itemId}`,
+                );
+                for (const locator of locators)
+                  await recordLateErasureItem(tx, { accountId: authorId, participant: 'content', locator });
+                await markAccountErasureFound(tx, authorId, 'content');
+                return {
+                  value: { late: true as const, locators },
+                  events: [
+                    {
+                      type: 'com.rezics.access.account-updated.v1',
+                      subject: authorId,
+                      data: { accountId: authorId },
+                    },
+                  ],
+                };
+              }
+            }
+            let changed = false;
+            for (const { itemKind, itemId } of items) {
+              const parameters = {
+                route: authorRoute,
+                author_account_id: authorId,
+                item_kind: itemKind,
+                item_id: itemId,
+                thread_id: restored?.thread_id ?? creation?.threadId,
+                thread_kind: restored?.kind ?? creation?.kind,
+                created_at: restored?.created_at ?? creation?.activityAt,
+                source_epoch: epoch,
+                source_position: position.toString(),
+              };
+              const statement = creation || restored ? upsert : remove;
+              const result = await tx.query(
+                statement.sql,
+                statement.params.map((name) => parameters[name as keyof typeof parameters]),
+              );
+              changed ||= (result.rowCount ?? 0) > 0;
+            }
+            if (!changed) throw new UnchangedAuthorItem();
             return {
-              value: null,
-              events: [
-                {
-                  type: 'com.rezics.content.author-item.projected.v1',
-                  subject: authorId,
-                  data: {
-                    authorAccountId: authorId,
-                    itemKind,
-                    itemId,
-                    sourceEpoch: epoch,
-                    sourcePosition: position.toString(),
-                  },
+              value: { late: false as const },
+              events: items.map(({ itemKind, itemId }) => ({
+                type: 'com.rezics.content.author-item.projected.v1',
+                subject: authorId,
+                data: {
+                  authorAccountId: authorId,
+                  itemKind,
+                  itemId,
+                  sourceEpoch: epoch,
+                  sourcePosition: position.toString(),
                 },
-              ],
+              })),
             };
           },
         );
+        if (result.value.late) {
+          for (let index = 0; index < result.value.locators.length; index++) {
+            const { itemKind, itemId } = items[index]!;
+            await eraseAccountAuthoredItem({ pool }, authorId, itemKind, itemId);
+            await resolveLateErasureItem(
+              { pool },
+              { accountId: authorId, participant: 'content', locator: result.value.locators[index]! },
+            );
+          }
+        }
       } catch (error) {
         if (!(error instanceof UnchangedAuthorItem)) throw error;
       }

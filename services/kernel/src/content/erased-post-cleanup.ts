@@ -19,7 +19,7 @@ export type PostPurgeDeadline = number | (() => number);
  */
 export async function clearErasedPostRevisions(
   pool: Pool,
-  input: Readonly<{ postId: string }>,
+  input: Readonly<{ postId: string; accountErasure?: boolean }>,
   deadline: PostPurgeDeadline,
   clockOrErasureJob: (() => Date) | ErasureJob = () => new Date(),
   step: PostPurgeStep = (_name, action) => action(),
@@ -36,7 +36,12 @@ export async function clearErasedPostRevisions(
     return within(end, () =>
       withConnection(pool, async (connection) => {
         const client = deadlineClient(connection, end);
-        await startPurge.run(client, { route, post_id: input.postId, at });
+        await startPurge.run(client, {
+          route,
+          post_id: input.postId,
+          at,
+          account_erasure: input.accountErasure ?? false,
+        });
         const row = await readPurge.run(client, { route, post_id: input.postId });
         return !!row && row.purge_started_at !== null && !row.purge_completed;
       }),

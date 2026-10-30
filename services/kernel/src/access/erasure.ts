@@ -45,6 +45,11 @@ export const ERASURE_PARTICIPANTS = Object.freeze({
 export const ERASURE_PARTICIPANT_VERSION = 1;
 /** Owners register every effect that writes cross-partition erasure locators here. */
 export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>([
+  'content_author_item',
+  'content_report_reporter',
+  'content_party_locator',
+  'content_account_upload_index',
+  'community_party_locator',
   'semantic_erasure',
   'semantic_erasure_locator',
 ]);
@@ -84,6 +89,8 @@ function accountRoute(accountId: string): number {
 
 const identifier = (value: unknown): value is string =>
   typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(value);
+const storeIdentifier = (value: unknown): value is string =>
+  typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63})?$/.test(value);
 
 function exceptions(input: readonly RetentionException[], outcome: ErasureOutcome): StoredException[] {
   if (!Array.isArray(input) || input.length > 16 || (outcome === 'none' && input.length > 0))
@@ -93,7 +100,7 @@ function exceptions(input: readonly RetentionException[], outcome: ErasureOutcom
     .map((entry) => {
       if (
         !entry ||
-        !identifier(entry.store) ||
+        !storeIdentifier(entry.store) ||
         stores.has(entry.store) ||
         !Array.isArray(entry.fields) ||
         entry.fields.length < 1 ||
@@ -177,7 +184,7 @@ export async function resolveRetention(
 ) {
   const { accountId, participant, store } = input;
   const route = accountRoute(accountId);
-  if (!identifier(store)) throw new LifecycleDeniedError();
+  if (!storeIdentifier(store)) throw new LifecycleDeniedError();
   return runCommand(
     deps.pool,
     {

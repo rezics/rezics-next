@@ -1,10 +1,16 @@
 import type { Pool, PoolClient } from 'pg';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
+import { noEffect, runCommand } from '../command/command.ts';
+import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from '../access/erasure.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
+import { lockErasureFence } from './erasure-fence.ts';
+import { eraseAccountModerationItem } from './account-erasure-moderation.ts';
+import { markAccountErasureFound } from './account-erasure-progress.ts';
 
 export function partyRoute(id: string): number {
   const route = routeOf(id);
@@ -97,13 +103,50 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
         return row;
       });
       for (const accountId of new Set(record.parties.filter((id): id is string => id !== null))) {
-        await partyPartition(pool, partyRoute(accountId), async (client) => {
-          await client.query(
+        const accountRoute = partyRoute(accountId);
+        const locator = `${kind}:${ownerRoute}:${record.id}`;
+        const result = await runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
+          if (await lockErasureFence(tx, accountId)) {
+            await recordLateErasureItem(tx, { accountId, participant: 'content', locator });
+            await markAccountErasureFound(tx, accountId, 'content');
+            return {
+              value: true,
+              events: [
+                {
+                  type: 'com.rezics.access.account-updated.v1',
+                  subject: accountId,
+                  data: { accountId },
+                },
+              ],
+            };
+          }
+          await tx.query(
             `INSERT INTO content.party_locator(route,account_id,kind,due_at,owner_route,owner_id)
-            VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-            [partyRoute(accountId), accountId, kind, record.due, ownerRoute, record.id],
+             VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING owner_id`,
+            [accountRoute, accountId, kind, record.due, ownerRoute, record.id],
           );
+          return noEffect(false);
         });
+        if (result.value) {
+          const status = await readErasureStatus(pool, accountId);
+          if (!status) throw new Error('Content late locator has no committed account erasure');
+          for (;;) {
+            const disposition = await eraseAccountModerationItem(
+              { pool },
+              accountId,
+              {
+                kind: kind as 'decision' | 'operation',
+                dueAt: record.due,
+                ownerRoute,
+                ownerId: record.id,
+              },
+              new Date(status.at),
+            );
+            if (!disposition.pending) break;
+            await DBOS.sleep(600_000);
+          }
+          await resolveLateErasureItem({ pool }, { accountId, participant: 'content', locator });
+        }
       }
     },
   };

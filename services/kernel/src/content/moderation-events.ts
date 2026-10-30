@@ -23,7 +23,11 @@ export const MODERATION_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.content.post.erased.v1': Type.Object(
-    { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    {
+      postId: UUID,
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+      accountErasure: Type.Optional(Type.Literal(true)),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.content.moderation.erasure.v1': Type.Object(

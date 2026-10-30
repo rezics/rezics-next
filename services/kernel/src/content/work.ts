@@ -33,6 +33,8 @@ import { createReactionCountEffect } from './reaction-projection.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
 import { createReportLocatorEffect } from './report-locator.ts';
+import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
+import { registerAccountErasureWork } from './account-erasure.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
@@ -78,6 +80,8 @@ type ContentWorkOptions = Readonly<{
   collectionPartitions?: readonly number[];
   /** Delay between attempts of a failed durable step. Production keeps one second; a test may pass a shorter one. */
   stepRetryDelaySeconds?: number;
+  /** Test-only switch for phase tests that exercise the bounded page without its event-driven coordinator. */
+  registerErasureParticipant?: boolean;
 }>;
 
 function validateInput(input: ContentWorkInput): void {
@@ -123,6 +127,7 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
+  if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
@@ -399,10 +404,10 @@ async function registerWork(
     ...retry,
   });
   DBOS.registerWorkflow(
-    async (postId: string) =>
+    async (postId: string, accountErasure: boolean = false) =>
       clearErasedPostRevisions(
         context.pool,
-        { postId },
+        { postId, accountErasure },
         () => Date.now() + 120_000,
         context.clock,
         <T>(name: string, action: () => Promise<T>) => clearErasedPost(name, action) as Promise<T>,
@@ -417,6 +422,7 @@ async function registerWork(
       async run(event) {
         if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS[erasedPostEvent], event.data))
           throw new TypeError('Invalid erased post event');
+        const data = event.data as { postId: string; accountErasure?: true };
         await context.client.enqueue(
           {
             applicationName: WORK_APPLICATION,
@@ -425,7 +431,8 @@ async function registerWork(
             workflowID: `content.erasePost:${event.id}`,
             workflowIDReusePolicy: 'return-existing',
           },
-          (event.data as { postId: string }).postId,
+          data.postId,
+          data.accountErasure === true,
         );
       },
     },
@@ -437,6 +444,7 @@ async function registerWork(
     createAuthorItemEffect(context.pool),
     createReportLocatorEffect(context.pool),
     createPartyLocatorEffect(context.pool),
+    createAccountUploadIndexEffect(context.pool, storage),
   ]);
 }
 

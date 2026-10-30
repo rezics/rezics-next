@@ -382,10 +382,11 @@ test('erased acknowledgements accept at most 16 bounded named exceptions and non
     Array.from({ length: 17 }, (_, i) => retention({ store: `store_${i}` })),
     [retention({ store: '' })],
     [retention({ store: 'a'.repeat(65) })],
-    [retention({ store: 'bad.store' })],
+    [retention({ store: 'bad..store' })],
     [retention({ fields: [] })],
     [retention({ fields: Array.from({ length: 33 }, (_, i) => `field_${i}`) })],
     [retention({ fields: ['bad field'] })],
+    [retention({ fields: ['decision.statement'] })],
     [retention({ fields: ['a'.repeat(65)] })],
     [retention(), retention()],
     [retention({ purpose: '' })],
@@ -396,9 +397,27 @@ test('erased acknowledgements accept at most 16 bounded named exceptions and non
     [retention({ expiresAt: undefined as unknown as Date })],
     [retention({ expiresAt: null as unknown as Date })],
     [retention({ expiresAt: 'unknown' as unknown as Date })],
+    [retention({ store: 'content.moderation_decision' }), retention({ store: 'content.moderation_decision' })],
   ];
   for (const retained of invalid)
     await expect(retain(accountId, retained)).rejects.toBeInstanceOf(LifecycleDeniedError);
+  const invalidStores = [
+    '',
+    '.store',
+    'store.',
+    'a..b',
+    '"store"',
+    'bad store',
+    'bad\tstore',
+    'bad\nstore',
+    'bad\u0000store',
+    'bad/store',
+    'bad;store',
+    `${'a'.repeat(65)}.component`,
+    `component.${'b'.repeat(65)}`,
+  ];
+  for (const store of invalidStores)
+    await expect(retain(accountId, [retention({ store })])).rejects.toBeInstanceOf(LifecycleDeniedError);
   await expect(retain(accountId, [retention()], 'none')).rejects.toBeInstanceOf(LifecycleDeniedError);
   expect((await status(accountId))?.participants.content).toEqual({ outcome: 'pending', retained: [] });
   const retained = Array.from({ length: 16 }, (_, i) =>
@@ -414,6 +433,78 @@ test('erased acknowledgements accept at most 16 bounded named exceptions and non
   const empty = await deleted();
   await retain(empty.accountId, [], 'none');
   expect((await status(empty.accountId))?.participants.content).toEqual({ outcome: 'none', retained: [] });
+});
+
+test('qualified literal store identifiers preserve component boundaries and resolve exactly at expiry', async () => {
+  const { accountId } = await deleted();
+  const qualifiedExpiry = new Date(completedAt.getTime() + 86_400_000);
+  const boundaryExpiry = new Date(completedAt.getTime() + 2 * 86_400_000);
+  const qualified = retention({
+    store: 'content.moderation_decision',
+    fields: ['statement'],
+    purpose: 'Statements of reasons retained for complaints',
+    expiresAt: qualifiedExpiry,
+  });
+  const componentBoundary = retention({
+    store: `${'s'.repeat(64)}.${'c'.repeat(64)}`,
+    fields: ['f'.repeat(64)],
+    expiresAt: boundaryExpiry,
+  });
+  const acknowledged = await retain(accountId, [qualified, componentBoundary]);
+  const before = (await status(accountId))!.participants.content!.retained;
+  expect(before.map(({ store }) => store)).toEqual([
+    'content.moderation_decision',
+    `${'s'.repeat(64)}.${'c'.repeat(64)}`,
+  ]);
+  expect(before[0]).toMatchObject({ fields: ['statement'], resolvedAt: null, overdue: false });
+  expect(before[1]).toMatchObject({ fields: ['f'.repeat(64)], resolvedAt: null, overdue: false });
+  expect((await retain(accountId, [componentBoundary, qualified])).position).toBe(acknowledged.position);
+  await expect(
+    retain(accountId, [{ ...qualified, purpose: 'A changed purpose' }, componentBoundary]),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(
+    resolve(accountId, qualified.store, 'content', new Date(qualifiedExpiry.getTime() - 1)),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  const resolved = await resolve(accountId, qualified.store, 'content', qualifiedExpiry);
+  const resolvedAgain = await resolve(
+    accountId,
+    qualified.store,
+    'content',
+    new Date(qualifiedExpiry.getTime() + 1000),
+  );
+  expect(resolvedAgain.position).toBe(resolved.position);
+  expect((await status(accountId))!.participants.content!.retained).toMatchObject([
+    { store: 'content.moderation_decision', resolvedAt: qualifiedExpiry.toISOString(), overdue: false },
+    { store: `${'s'.repeat(64)}.${'c'.repeat(64)}`, resolvedAt: null, overdue: false },
+  ]);
+});
+
+test('malformed qualified stores are refused by acknowledgement and resolution, including exact unknown keys', async () => {
+  const { accountId } = await deleted();
+  const invalidStores = [
+    '',
+    '.store',
+    'store.',
+    'a..b',
+    '"store"',
+    'bad store',
+    'bad\tstore',
+    'bad\nstore',
+    'bad\u0000store',
+    'bad/store',
+    'bad;store',
+    `${'a'.repeat(65)}.component`,
+    `component.${'b'.repeat(65)}`,
+  ];
+  for (const store of invalidStores)
+    await expect(retain(accountId, [retention({ store })])).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await retain(accountId, [retention({ store: 'content.moderation_decision' })]);
+  for (const store of invalidStores)
+    await expect(resolve(accountId, store)).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(resolve(accountId, 'content.unknown')).rejects.toBeInstanceOf(LifecycleDeniedError);
+  expect((await status(accountId))!.participants.content!.retained).toMatchObject([
+    { store: 'content.moderation_decision', resolvedAt: null },
+  ]);
 });
 
 test('acknowledgement exceptions are immutable, order independent, and repeated acknowledgement is a no-op', async () => {

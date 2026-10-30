@@ -127,8 +127,13 @@ and returned rows constant.
 
 The account-partition `party_locator` projects the committing ban, membership-operation and curator-verdict
 events. The migration backfills existing records. Each locator names the source's exact owner-partition key;
-source rows remain authoritative. Erasure runs as the platform under the committed community erasure obligation,
-without restoring an initiator or holding a connection or transaction across partitions.
+source rows remain authoritative. Each locator effect locks the account's `community.erasure_fence` row in the
+same transaction as its locator write. A pre-close locator is visible to later pages; a post-close effect writes no
+locator, records an Access late item, minimizes its source and resolves the late item after that source commit. The
+community participant closes the fence before paging. Each locator effect adds one locked point read, or one insert
+for an account's first locator; closing the fence is one statement. Erasure runs as the platform under the committed
+community erasure obligation, without restoring an initiator or holding a connection or transaction across
+partitions.
 
 `eraseAccountCommunityRecordsPage` reads at most 50 locator keys and applies these dispositions:
 
@@ -169,6 +174,8 @@ earliest remaining expiry as `nextDueAt`.
 - Growth check: `test/community/account-erasure-records.test.ts`, “an account community record erasure page stays
   within its bound as other Realms' bans, operations and verdicts grow”, with a constant page at 256, 1024 and
   4096 unrelated Realms.
+- Fence cost: each party-locator effect adds one locked account-key read, or one first-account insert; closing is
+  one statement. Rows and statements stay constant per effect, with logarithmic blocks in accounts per partition.
 
 ## Sitemap feeds
 
