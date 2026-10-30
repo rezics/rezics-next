@@ -10,9 +10,9 @@ import {
   createReply,
   createThreadAtomicityWorld,
   documentBytes,
-  grant,
+  fixtureGrant,
   reserveAvailableImage,
-  revoke,
+  revokeFixtureGrant,
   reverseObjectKeys,
   type CallResult,
   type ContentItem,
@@ -172,17 +172,12 @@ async function canonicalRevisionReplayAndReads(): Promise<void> {
 }
 
 async function invalidMediaRollbacksAndPositiveControl(): Promise<void> {
-  const { system, kernel, governance, conceptId, thread, reply } = world;
+  const { system, kernel, conceptId, thread, reply } = world;
   const storage = createMediaStorage();
   try {
-    await grant(
-      system,
-      kernel,
-      governance,
-      { route: thread.route, id: thread.id },
-      system.actors.other.actor.accountId,
-      ['media:create'],
-    );
+    await fixtureGrant(system, { route: thread.route, id: thread.id }, system.actors.other.actor.accountId, [
+      'media:create',
+    ]);
     const first = await reserveAvailableImage(
       system,
       kernel,
@@ -515,7 +510,7 @@ async function nativeDenialsAndControl(): Promise<void> {
   });
   const authorId = system.actors.author.actor.accountId;
   const protectedResource = { route: protectedBoard.route, id: protectedBoard.id };
-  await grant(system, kernel, governance, protectedResource, authorId, ['board:read', 'thread:create']);
+  await fixtureGrant(system, protectedResource, authorId, ['board:read', 'thread:create']);
   const protectedThreadKey = randomUUID();
   const protectedTarget = await call<ThreadResponse>(
     kernel,
@@ -534,7 +529,7 @@ async function nativeDenialsAndControl(): Promise<void> {
   );
   expect(protectedTarget.response.status).toBe(201);
   const protectedPost = protectedTarget.body.thread.firstPost;
-  await revoke(kernel, governance, protectedResource, authorId, ['board:read']);
+  await revokeFixtureGrant(system, protectedResource, authorId, ['board:read']);
 
   const parentKey = randomUUID();
   const parentBefore = await atomicSnapshot(protectedPost.id, [], parentKey);

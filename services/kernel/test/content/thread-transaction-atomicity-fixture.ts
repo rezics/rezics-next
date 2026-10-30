@@ -166,7 +166,7 @@ export async function createGlobalBoard(
   conceptId: string,
   input: { readonly title: string; readonly visibility: 'published' | 'protected' },
 ): Promise<ContentBoard> {
-  await grant(system, kernel, governance, GLOBAL_CONTEXT_RESOURCE, creator.actor.accountId, ['board:create']);
+  await grantByHttp(kernel, governance, GLOBAL_CONTEXT_RESOURCE, creator.actor.accountId, ['board:create']);
   const created = await call<BoardResponse>(kernel, creator, 'POST', '/v1/boards', {
     conceptId,
     title: input.title,
@@ -175,7 +175,7 @@ export async function createGlobalBoard(
   });
   requireStatus(created, 201, 'create fixture board');
   const board = created.body.board;
-  await grant(system, kernel, governance, { route: board.route, id: board.id }, creator.actor.accountId, [
+  await fixtureGrant(system, { route: board.route, id: board.id }, creator.actor.accountId, [
     'board:read',
     'thread:create',
   ]);
@@ -207,8 +207,7 @@ export async function createReply(
   return created.body.post;
 }
 
-export async function grant(
-  _system: ContentSystem,
+export async function grantByHttp(
   kernel: ReturnType<typeof createKernel>,
   governance: ContentCredential,
   resource: Resource,
@@ -224,20 +223,33 @@ export async function grant(
   requireStatus(result, 201, `grant ${actions.join(',')}`);
 }
 
-export async function revoke(
-  kernel: ReturnType<typeof createKernel>,
-  governance: ContentCredential,
+export async function fixtureGrant(
+  system: ContentSystem,
   resource: Resource,
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  const result = await call(kernel, governance, 'POST', '/v1/grants:revoke', {
-    resource,
-    subject: { kind: 'account', id: accountId },
-    actions: [...actions],
-    valid: '(,)',
-  });
-  requireStatus(result, 200, `revoke ${actions.join(',')}`);
+  await system.database.pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     SELECT $1,$2,$3,action,'(,)'::tstzrange,$4 FROM unnest($5::text[]) AS action`,
+    [resource.route, resource.id, accountId, newId(resource.route), [...actions]],
+  );
+}
+
+export async function revokeFixtureGrant(
+  system: ContentSystem,
+  resource: Resource,
+  accountId: string,
+  actions: readonly string[],
+): Promise<void> {
+  const result = await system.database.pool.query(
+    `DELETE FROM access.resource_grant
+     WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=ANY($4::text[])
+       AND valid='(,)'::tstzrange`,
+    [resource.route, resource.id, accountId, [...actions]],
+  );
+  if (result.rowCount !== actions.length)
+    throw new Error(`Fixture grant revocation removed ${result.rowCount ?? 0} of ${actions.length} actions`);
 }
 
 export async function call<T extends object = Record<string, unknown>>(
