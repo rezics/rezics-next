@@ -5,6 +5,9 @@ WITH input AS NOT MATERIALIZED (
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.identity_epoch_participant_work WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_participant_work,
+    EXISTS (SELECT 1 FROM library.identity_epoch_source_basis WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_source_basis,
+    EXISTS (SELECT 1 FROM library.owner_identity_scope WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS owner_identity_scope,
     EXISTS (SELECT 1 FROM library.builtin_collection_reference WHERE route = input.route AND account_id = input.account_id) AS builtin_collection_reference,
     EXISTS (SELECT 1 FROM library.builtin_state_reference_source WHERE route = input.route AND account_id = input.account_id) AS builtin_state_reference_source,
     EXISTS (SELECT 1 FROM library.collection WHERE route = input.route AND curator_account_id = input.account_id) AS collection,
@@ -32,6 +35,9 @@ probe AS (
 SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
+  (identity_epoch_participant_work, 'identity_epoch_participant_work'::text),
+  (identity_epoch_source_basis, 'identity_epoch_source_basis'::text),
+  (owner_identity_scope, 'owner_identity_scope'::text),
   (builtin_collection_reference, 'builtin_collection_reference'::text),
   (builtin_state_reference_source, 'builtin_state_reference_source'::text),
   (collection, 'collection'::text),

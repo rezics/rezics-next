@@ -69,6 +69,11 @@ Logs, caches, exports, replicas, legacy ownership and backup custody remain unkn
 
 ## Locator closure and acknowledgement admission
 
+Identity source invalidation additionally retains `identity_epoch_participant_work`, `identity_epoch_source_basis`
+and `owner_identity_scope`. Their account-leading local probes and the participant blocker inventory expose
+these copies without treating local exhaustion as Source/receiving/control closure. Exact minimizer and late-item
+custody remain required before their private links/bases can be discarded or Library can acknowledge erasure.
+
 `work.ts` listing effects and `listing.ts` commit subject-home derived copies. They do not currently write an
 account-home exact locator. Access now supplies `recordLateErasureItem(tx, {accountId, participant, locator})`,
 `resolveLateErasureItem({pool}, {accountId, participant, locator})` and registration through
@@ -101,8 +106,8 @@ private/unlisted Collection reads check the current curator tombstone before dis
 
 ### Terminal inspection
 
-- Touches: account-partition envelope, exact Access obligation/account/ACK keys, and 22 fixed owner-prefix existence probes. No bulk/history/global JSON scan or full count.
-- Bound: one account home, 5,000ms deadline; at most one match per indexed namespace and 22 fixed store names, less than 2KiB of probe payload. Index work is the sum of 22 logarithmic owner seeks. Missing locators are reported without scanning.
+- Touches: account-partition envelope, exact Access obligation/account/ACK keys, and 25 fixed owner-prefix existence probes. No bulk/history/global JSON scan or full count.
+- Bound: one account home, 5,000ms deadline; at most one match per indexed namespace and 25 fixed store names, less than 2KiB of probe payload. Index work is the sum of 25 logarithmic owner seeks. Missing locators are reported without scanning.
 - Growth check: `test/library/erasure-participant.test.ts` exercises empty and populated native roles; full graph growth/closure remains unavailable, not a measured completion claim.
 
 ### Local fact and owned-graph pages

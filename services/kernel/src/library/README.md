@@ -183,43 +183,76 @@ The [Semantic contract](../semantic/identity-epoch-contract.md#complete-library-
 owns the fixed participant protocol. The following inventory identifies existing native seams and their missing
 custody; it defines no replacement writer or completion interface.
 
-| Existing producer | Native boundary still required |
-| --- | --- |
-| `collection-source-native.ts:readNativeCollectionRawPage` | Member, entry, label, session and copy ranges exist. The function rejects `driver: 'output'`; its metadata reports dynamic output as `unavailable_output`. There is no installed complete-output activation/freeze source to observe. |
-| `canonical-source-store.ts` exported observation, repair and publication functions | Every function throws `dependency_unavailable`. `canonical_source_state` and `canonical_source_fact` describe storage, without an installed generation writer, source registration, first-apply capture or final writer closure. Table absence or emptiness cannot establish coverage. |
-| `follow-store.ts:applyFollow`, `readFollow`, `pageFollows` | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody. |
-| `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority. |
+| Existing producer                                                                       | Native boundary still required                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collection-source-native.ts:readNativeCollectionRawPage`                               | Member, entry, label, session and copy ranges exist. The function rejects `driver: 'output'`; its metadata reports dynamic output as `unavailable_output`. There is no installed complete-output activation/freeze source to observe.                                                                     |
+| `canonical-source-store.ts` exported observation, repair and publication functions      | Every function throws `dependency_unavailable`. `canonical_source_state` and `canonical_source_fact` describe storage, without an installed generation writer, source registration, first-apply capture or final writer closure. Table absence or emptiness cannot establish coverage.                    |
+| `follow-store.ts:applyFollow`, `readFollow`, `pageFollows`                              | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody. |
+| `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority.                                                                                   |
 
-There is also a native effect-admission boundary to resolve with Semantic before owner-home directory effects:
-`IdentityEffect` currently offers `structural {job, original}` and `follow-count {original, terminal, epoch}`.
-`identityEpochStore.admitHomeEffect` requires structural commands to run in the **original's** partition and lock
-that original's pending home gate. The follow-count branch runs in the terminal's partition and rejects a pending
-gate. Neither branch admits a pending identity rekey in an independent Library owner's partition. A released
-pre-read cannot replace the required same-transaction admission, and relabelling an owner as a catalogue original
-would not bind the admitted immutable input.
+Semantic's installed `identity-receiving-effects.ts` now supplies the distinct receiving family. The original-home
+structural gate and ordinary published follow-count gate retain their existing meanings. Independent owner effects
+use `prepareIdentityReceivingEffect`, `lookupIdentityReceivingEffect`, same-transaction `admitHomeEffect` and
+`recordIdentityReceivingEffect`, followed by released-home `reconcileIdentityReceivingEffect`. The closed Source
+producer remains `identity-receiving-source.ts` with `IdentityReceivingSourceProducer`'s exact read/hold/lock/ACK
+exports. That module is absent here; the actual Semantic producer throws unavailable, without a substitute permit.
 
-Until the actual source owners and Semantic provide these native boundaries, ALL-role completion and its positive
-custody/growth schedules remain unavailable. In particular, empty derived tables cannot acknowledge Library
-publication. Published undo additionally requires actual mapping, Search and coordinator publication; a locally
-finished Library page cannot supply it.
+`identity-epoch-participant.ts:stepLibraryIdentityEpoch` retains the exact fixed step ABI. Unknown, PREPARING,
+cancelling and cancelled jobs are refused before Library effects. Complete receipt replay releases the read home
+before Store reconciliation. An admitted job can process one registered source invalidation per invocation; it
+still throws `identity_epoch_unavailable` until genuine ALL-role observation is available. Queue exhaustion is
+never a complete receipt, a ready zero or permission to publish. This producer writes no participant-complete row,
+imports no coordinator and registers no third participant or scheduler.
 
-`identity-epoch-participant.ts:stepLibraryIdentityEpoch` now supplies the exact `IdentityEpochStep` entry point.
-It validates the native job reference and reads the actual Store job in a bounded read-only transaction. Unknown,
-PREPARING, cancelling and cancelled jobs are refused before any Library effect. An admitted job without actual
-ALL-role custody raises `identity_epoch_unavailable`; it does not advance a frontier, create a manifest or receipt,
-reconcile an empty result, or register a substitute participant. If the Store already holds this job's complete
-Library receipt, replay releases the read home and invokes `reconcileStepReceipt` on that exact native locator.
-The Store remains responsible for its native transaction/component, scope and receiving-custody validation.
+The Source owner's normal native handoff can call `prepareLibraryIdentitySourceInvalidation(pool, selection)`
+using the existing `IdentityReceivingSelection`, or recover a retained receiving locator with
+`registerLibraryIdentitySourceInvalidation(pool, effect)`. The Source must persist/retry that handoff: a crash
+between Semantic preparation and local queue registration leaves the already registered expected effect pending.
+The owned scope namespace is `library.identity.source.<role>.invalidate`, with roles member, entry, label,
+session, copy and output. These scopes mean only basis invalidation; they do not acknowledge OLD withdrawal,
+NEW addition, first-apply closure, whole-role rebuild, target fences or completed public output. The Source reader
+must resolve each exact scope/disposition/effect key from its committed manifest, not infer it from selection JSON.
+Its immutable source ID is the actual Collection ID for this handler. An absent canonical state is unavailable.
 
-This unavailable boundary cannot produce the first Library ACK. Its effect path still needs the actual Semantic
-owner-home admission implementation using the existing ABI, the canonical source observation/registration and
-six-driver generation writers, and the follow owner's canonical target/support/total/fence and receiving producers.
-Their exact missing callable declarations must come from those owners; the raw readers in the inventory above
-provide no replacement. No source factory, business writer, owner-home permit or completion flag is invented here.
-No new stores, account-bearing copies, DBOS records or erasure acknowledgements are introduced. Existing native
-sources, canonical generations, follow delivery rows and Semantic control/receipt copies retain their owning
-minimizer obligations; Library erasure and shared outbox/DBOS custody remain independent and pending.
-No native positive, reversal, composition or growth acceptance is claimed for this entry point.
+In the same admitted native receiving transaction, the handler locks the actual source and active owner account,
+retains both working/ready generation bases, clears both ready/build pointers and checkpoints, marks mapping pending,
+and registers structural `(original,source,incarnation,role)` existence. Facts, original IDs, pins, sessions, copies,
+values and write sequences remain untouched. There is no per-fact/session/history directory or membership mirror.
+The actual native receiving effect and its six-scalar frontier commit with those changes. Replays resolve that
+receipt before mutation, so a lost response cannot invalidate a newer build. Source/receiving/control custody and
+Source ACK precede dequeue; an ACK failure leaves the exact work pending. A partial pending index selects one raw
+work key without scanning completed history, including lower-key registrations arriving behind previous work.
+All nested native calls share the existing five-second work deadline or a shorter caller deadline.
+
+The installed `native-source-custody.ts:createNativeLibrarySourceCustody` supplies actual bounded `capturePage`,
+`finishCapture`, same-CommandTransaction/native-T `readAndHold` and `releaseHold`. This participant consumes
+Semantic's receiving record/Source lock rather than substituting metadata for those holds. The missing Source
+adapter must bind its committed manifest to the actual capture identity/receipt and retain the hold through exact
+receiving/control custody. No capture-ID/generation relation is guessed here. Cross-home source/account/control
+custody and public dynamic/frozen output authority remain unavailable. The local queue presently accepts only
+same-home account/source/receiving/control work, under the actual account barrier; it cannot create late private
+control copies after terminal T. Ordinary destination disposition is separate from identity hold release.
+
+Remaining native bindings are the Source manifest/registration and six-driver generation/rebuild implementation,
+complete owner candidate/winner/label/support/first-apply closure, and the existing follow owner's source delivery,
+canonical pair/support/total/outgoing/negative and source/target fences. State repair must use highest live native
+`owner_write_seq` and keep conflicts; null is unbuilt. These handlers supply no alternate business writer or fake
+empty coverage. Actual mapping/Search/coordinator publication is also required for published undo acceptance.
+
+Retention inventory: `identity_epoch_participant_work` stores exact receiving locators at the account/control home;
+`identity_epoch_source_basis` retains detached source bases at that same home; `owner_identity_scope` stores structural
+existence there. All have partition/owner-leading discovery indexes. Receiving native effect/frontier and control
+custody remain in the existing Semantic ledgers, with their existing erasure-role/receipt obligations. Events contain
+job locators only; no new DBOS payload, worker or workflow output is created. These private links and bases survive
+uncertainty until actual irreversible Source/receiving/control closure, never timeout or local count exhaustion.
+Library's erasure probe now names all three stores, and its missing-custody inventory prevents an ACK while their
+minimizer/late-item handoff is absent. Neither local invalidation nor Semantic reference exhaustion proves erasure.
+
+Cost: one exact registered work key, native source/account/gate/receipt points, one source-state mutation and one
+structural directory point per step; zero original fact enumeration, engine calls or history scans. Existing
+command/callback/Source hold/control ACK/replay work and all retained copies remain charged to shared limits.
+No native Cost, positive reversal, full composition or growth pass is claimed. Minimal verification is local
+kernel typing; the existing frozen refusal and later six-driver/custody/growth acceptance remain required.
 
 ### Native owner state-write sequencing (required; runtime incomplete)
 
