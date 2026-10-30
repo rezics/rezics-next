@@ -18,7 +18,14 @@ import {
 if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   test('actual native Auth rate limit uses one replica safe point consume as population grows', async () => {
     const child = Bun.spawn(['bun', 'test', import.meta.path], {
-      env: { ...process.env, NODE_ENV: 'production', AUTH_RATE_GROWTH_CHILD: '1' },
+      // The native graph runs in a child of this placed lane process. Transfer
+      // the lane owner so its direct-child placement check remains valid.
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        AUTH_RATE_GROWTH_CHILD: '1',
+        AUTH_CHECK_LANE_OWNER: String(process.pid),
+      },
       stdout: 'inherit',
       stderr: 'inherit',
     });
