@@ -6956,6 +6956,11 @@ CREATE UNIQUE INDEX candidate_erasure_key ON semantic.candidate USING btree (era
 
 CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
 
+-- Name: candidate_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX candidate_scope_leaf_pair ON semantic.candidate USING btree (route, subject_id, property, ((statement -> 'value'::text) ->> 'content'::text), candidate_id) WHERE (((statement -> 'value'::text) ->> 'type'::text) = 'value'::text AND ((statement -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text);
+
 
 --
 -- Name: candidate_revision_detail; Type: INDEX; Schema: semantic; Owner: -
@@ -7102,6 +7107,11 @@ CREATE UNIQUE INDEX facet_population_successor ON semantic.facet_population_fron
 --
 
 CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject_id, statement_id, log_seq DESC) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND (statement_id IS NOT NULL));
+
+-- Name: fact_scope_leaf_pair; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_scope_leaf_pair ON semantic.fact USING btree (route, subject_id, property, ((body -> 'value'::text) ->> 'content'::text), erasure_key) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND ((body -> 'value'::text) ->> 'type'::text) = 'value'::text AND ((body -> 'value'::text) ->> 'content'::text) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text);
 
 
 --

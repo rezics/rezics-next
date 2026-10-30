@@ -131,9 +131,9 @@ export class LeafNativeWork {
   }
   pair(client: PoolClient, route: number, subject: string, property: string, value: string,
     phase: 'compact' | 'witness', after: string | null) {
-    const input = { route, subject_id: subject, property, value, after: phase === 'compact' ? after ?? '0' : after };
+    const input = { route, subject_id: subject, property, value, after };
     return (phase === 'compact'
-      ? this.query(client, pairCompact, { ...input, after: input.after ?? '0' }, { keys: 1, points: 1, rows: 1, witnesses: 1 })
+      ? this.query(client, pairCompact, input, { keys: 1, points: 1, rows: 1, witnesses: 1 })
       : this.query(client, pairWitness, input, { keys: 1, points: 1, rows: 1, witnesses: 1 }))
       .then((rows) => rows[0] ?? null);
   }

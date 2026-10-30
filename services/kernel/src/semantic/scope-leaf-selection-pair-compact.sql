@@ -6,5 +6,5 @@ WHERE route = :route::integer AND subject_id = :subject_id::uuid AND property = 
   AND body->'value'->>'type' = 'value'
   AND body->'value'->>'content' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND body->'value'->>'content' = :value::text
-  AND erasure_key > :after::bigint
+  AND (:after::bigint IS NULL OR erasure_key > :after::bigint)
 ORDER BY erasure_key LIMIT 1;
