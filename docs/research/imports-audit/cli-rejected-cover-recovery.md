@@ -37,9 +37,9 @@ rights do not license the image. This journey leaves the existing metadata-with-
 
 ## Execution and anchors
 
-Source inspection starts at `9867123c8473ebf7fac2f4865f43f759e49e3995`. The missing caller has been bound;
-that is not a revalidated native product failure or a passing run. No native/main success is claimed here
-before managed acceptance completes.
+Source inspection starts at `9867123c8473ebf7fac2f4865f43f759e49e3995`. Managed acceptance passed on
+`94e003a486ee861a4d5a71083cda671f786bb7b9`, binding the previously missing caller without a production
+implementation change. There was no reached production failure in this attempt. Main promotion is not claimed.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-rejected-cover-recovery.test.ts
@@ -54,6 +54,40 @@ bundled definition digest, actual record revisions/digests/converter revisions, 
 immutable journal bytes/keys, exact receipt locators and committed transaction/response rows, public responses,
 worker registrations/calls and source requests. Original/variant bytes are hashed only in serialized evidence;
 the assertions compare the real byte arrays.
+
+Managed check `35458534-d01d-4db4-9749-0c9af460b943` exited 0: **1 pass, 0 fail, 820 assertions**, no skips or
+todos, and no load reruns. Its raw log is
+`.temp/goal/checks/worker-check-2026-10-30T08-51-52.110Z-f3e94e78.log`; line 81 contains the complete
+`cli-rejected-cover-recovery-evidence` witness, including every original receipt. The caller SHA-256 was
+`b6205559b2e1b7a577325be3170e42d824bdaa8fdb886dfa9884fd152291b3cb`; the actual bundled digest was
+`sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`.
+Local importer compilation passed for 146 files, and edited-file formatting passed before slot admission.
+The managed selected check also completed its compiler, quality and native test phases.
+
+The exact two provider children each returned CLI code 0 for initial rejection, identical reopen and valid
+successor. They retained 3 Bangumi and 7 Open Library original command receipts, including bootstrap responses
+and transactions. The worker recorded 10 executions: four imports, four image jobs and two native purges.
+Four source fetches delivered two 21-byte corrupt inputs and two 151-byte valid PNGs; neither reopen fetched
+or posted media or introduced a worker call. Each available object retained its own original and two variants:
+AVIF (287 bytes) and WebP (78 bytes), both distinct from the PNG. Both old objects remained explicitly rejected,
+with no variants, converter mapping, public attachment or allowed download.
+
+| Child         | Source record revision        | Converter revision | Original source digest                                             | Successor source digest                                            |
+| ------------- | ----------------------------- | ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `bangumi`     | `unversioned` → `unversioned` | `bangumi@3`        | `4d10cbbbadc9c52bab7c02b5656ae7380f515b7b16289cf1fc5a03b989bfc113` | `ed7620e9cd767437062095f7cb0aace01295da3e4fb6996b1eb970eeb9057485` |
+| `openlibrary` | `11` → `12`                   | `open-library@3`   | `c9e1369d4a7389de1fb84fbd93932abe9161d29280ed1882e3dde3021d6b72e9` | `a5cc47346ae766685e814cec4cd3af61df0915dcdfbb708aa2468e3e913eda50` |
+
+Actual native object anchors:
+
+| Child         | Subject                                | Rejected media                         | Available successor media              | Bootstrap receipt transaction          |
+| ------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- |
+| `bangumi`     | `01a18c1c-e25d-734e-b8b7-5868f90518c7` | `01a18c1c-e2e6-76f0-811f-5868724d15a2` | `01a18c1c-eaa1-7251-90bf-58688167c62c` | `01a18c1c-e25c-7420-80f1-a0a76b3cfc5b` |
+| `openlibrary` | `01a18c1c-ec89-74f4-a56f-681336541579` | `01a18c1c-ecc3-7487-94f2-68138b3bcfad` | `01a18c1c-f3fa-703e-a06e-6813fbaeb93e` | `01a18c1c-ec88-73c8-bd76-f03bab62c7de` |
+
+Both bootstrap keys end in `333c04dd151a2a6831c039cb9a651df29198be8a04e16ce861d4b6a34a11c954`, with
+exact prefixes `bangumi:424243:` and `openlibrary:/books/OL900000002M:`. Their native receipt partitions are
+1414 and 1665 respectively, with command kind `subject.batch_create`. The raw witness retains full principal,
+key, response and transaction anchors rather than treating a cached locator as proof of persistence.
 
 Read source: importer CLI, importer planning and deferred-cover paths, media resolver, RunStore/RecordBindings,
 source registry, both native converters, the pinned Open Library edition, native API runtime/observer and identity

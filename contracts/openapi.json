@@ -18370,9 +18370,45 @@
                           "appellantId": {
                             "type": "string"
                           },
+                          "canResolve": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          "decision": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "statement": {
+                                "type": "string"
+                              },
+                              "target": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "post",
+                                      "thread"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "statement",
+                              "target"
+                            ],
+                            "type": "object"
                           },
                           "decisionId": {
                             "type": "string"
@@ -18389,7 +18425,9 @@
                           "decisionId",
                           "appellantId",
                           "statement",
-                          "createdAt"
+                          "createdAt",
+                          "decision",
+                          "canResolve"
                         ],
                         "type": "object"
                       },
@@ -165070,9 +165108,45 @@
                           "appellantId": {
                             "type": "string"
                           },
+                          "canResolve": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          "decision": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "statement": {
+                                "type": "string"
+                              },
+                              "target": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "post",
+                                      "thread"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "id"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "statement",
+                              "target"
+                            ],
+                            "type": "object"
                           },
                           "decisionId": {
                             "type": "string"
@@ -165089,7 +165163,9 @@
                           "decisionId",
                           "appellantId",
                           "statement",
-                          "createdAt"
+                          "createdAt",
+                          "decision",
+                          "canResolve"
                         ],
                         "type": "object"
                       },

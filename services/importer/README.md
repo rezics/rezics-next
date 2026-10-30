@@ -604,8 +604,11 @@ The [frozen native outcome](../kernel/test/imports/cli-rejected-cover-recovery.t
 account-key caller for two independent records, Bangumi JSONL and an Open Library edition TSV, in one native
 Auth/Access/worker world. It observes corrupt-image rejection, same-state reopen, a genuinely changed source,
 private original equality, encoded AVIF/WebP variants, public selected media and download decisions, immutable
-old journals/receipts, and an independent contributor's adopted title. Registration alone is not a passing
-execution; see the [evidence record and limits](../../docs/research/imports-audit/cli-rejected-cover-recovery.md).
+old journals/receipts, and an independent contributor's adopted title. Managed acceptance passed at
+`94e003a486ee861a4d5a71083cda671f786bb7b9`: one native case, two provider children, six successful CLI
+invocations and 820 assertions. See the [evidence record and limits](../../docs/research/imports-audit/cli-rejected-cover-recovery.md)
+for the raw log, actual source/converter/bundle revisions and receipt anchors. This is scoped native evidence;
+integration, promotion and the broader consumer matrix remain open.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-rejected-cover-recovery.test.ts

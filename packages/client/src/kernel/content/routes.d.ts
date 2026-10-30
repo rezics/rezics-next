@@ -7059,6 +7059,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     appellantId: string;
                                     statement: string;
                                     createdAt: string;
+                                    decision: {
+                                        statement: string;
+                                        target: {
+                                            kind: "post" | "thread";
+                                            id: string;
+                                        };
+                                    };
+                                    canResolve: boolean;
                                 }[];
                                 next: string | null;
                             };
@@ -7187,6 +7195,14 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     appellantId: string;
                                     statement: string;
                                     createdAt: string;
+                                    decision: {
+                                        statement: string;
+                                        target: {
+                                            kind: "post" | "thread";
+                                            id: string;
+                                        };
+                                    };
+                                    canResolve: boolean;
                                 }[];
                                 next: string | null;
                             };

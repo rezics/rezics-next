@@ -28,16 +28,18 @@ Missing acceptance below stays owned work, not a claim that a required capabilit
 “Specification validated red” requires recorded failing execution; distinguish missing binding from native product red.
 File presence alone does not earn it.
 
-The ordinary provider import/refresh row also has a newly connected
+The ordinary provider import/refresh row also has a connected
 [`cli-rejected-cover-recovery.test.ts`](../../services/kernel/test/imports/cli-rejected-cover-recovery.test.ts)
 caller: one frozen native case, two independent Bangumi/Open Library children, with ordinary account-key CLI
 rejection, identical-input reopen and changed-cover successor invocations. Native terminal rejection, absence
 of converter mapping/public attachment, new available media/variants, separate cover credit, public editor
-selection, immutable old receipts and independent adopted metadata are asserted in one runtime. This is binding
-and exposure evidence only until the managed command completes; the missing-caller red is not a new native
-product red. The [execution record](../research/imports-audit/cli-rejected-cover-recovery.md) names the exact
-command, actual source inputs, raw receipt/log anchors and limits. It closes no discovery, common-cover web,
-growth or promotion cell by registration alone.
+selection, immutable old receipts and independent adopted metadata passed at
+`94e003a486ee861a4d5a71083cda671f786bb7b9`: one native case, 820 assertions, two provider children and six
+successful CLI invocations. The original gap was a missing caller, not a demonstrated production defect;
+binding the existing production primitives sufficed. The
+[execution record](../research/imports-audit/cli-rejected-cover-recovery.md) names the exact command, actual
+source inputs, raw receipt/log anchors and limits. This pass closes this scoped operator outcome; discovery,
+common-cover web, growth and promotion cells remain open.
 
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
 production code, a pass requires actual named-revision execution with all exact scenarios and zero skips/todos,
