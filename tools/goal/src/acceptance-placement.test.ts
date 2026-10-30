@@ -98,7 +98,7 @@ function localCheckEnvironment(root: string, remoteMarker?: string): NodeJS.Proc
 }
 
 function commandStatus(result: ReturnType<typeof spawnSync>): string {
-  return result.stderr.trim() || result.stdout.trim() || result.error?.message || `status ${result.status}`;
+  return result.stderr?.toString().trim() || result.stdout?.toString().trim() || result.error?.message || `status ${result.status}`;
 }
 
 test('registered local placement survives dispatch, retry, held reshape, and task publication', async () => {
