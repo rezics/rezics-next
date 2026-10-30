@@ -30,6 +30,7 @@ import {
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
+import type { NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
@@ -215,7 +216,7 @@ function sourceFile(statement: string): string {
   return statement.match(/\/\*\s*file=['"]([^'"]+)['"][^*]*\*\//i)?.[1] ?? 'source not embedded in statement';
 }
 
-export async function createLibraryDriver(): Promise<LibraryDriver> {
+export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -341,6 +342,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       }),
     });
 
+    const cursorKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
     const app = createKernel({
       requestDeadlineMs: 30_000,
       pool: db!.pool,
@@ -356,7 +358,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         }),
       }),
       routeKey,
-      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
+      tokens: cursorKeys,
       access: (config) =>
         createAccess({
           ...config,
@@ -420,6 +422,26 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     }
 
     for (const person of knownPeople) await provisionAccount(person);
+
+    async function consent(account: Anchor, requestedScopes: readonly string[]): Promise<string> {
+      const signed = await auth.handler(new Request(`${issuer}/signin`, {
+        method: 'POST', headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: `${account.id}@example.test`, password, client_id: 'web', scope: requestedScopes }),
+      }));
+      if (signed.status !== 200) throw new Error(`Fixture scoped sign-in failed: ${signed.status}`);
+      const cookie = signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+      const issued = await auth.handler(new Request(`${issuer}/token`, {
+        method: 'POST', headers: { origin: issuer, 'content-type': 'application/json', cookie }, body: '{}',
+      }));
+      return (await expectJson<{ access_token: string }>('Issuing scoped fixture token', issued, 200)).access_token;
+    }
+    for (const [name, selected] of Object.entries({
+      ownerReadOnly: ['collection:read', 'subject:read', 'library_entry:read', 'library_entry:list'],
+      libraryOnly: scopes.filter(scope => !scope.startsWith('progress_session:')),
+      progressOnly: scopes.filter(scope => !scope.startsWith('library_entry:')),
+      ungranted: [],
+      unscoped: [],
+    })) tokens.set(name, await consent(ownerAccount, selected));
 
     const byRoute = async (
       token: string | null,
@@ -527,8 +549,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     );
     await expectJson('Suspending fixture persona', suspend, 200);
 
-    await authServer.stop(true);
-    authServer = undefined;
 
     workClient = await createWorkClient(databaseUrl);
     let activeInternalCapture: CapturedStatements | undefined;
@@ -877,7 +897,57 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       return { id: result.subject.id, route: subjectRoute, partition: partitionOf(subjectRoute) };
     }
 
-    const driver: LibraryDriver = {
+    const nativeRequest: NativeConformanceWorld['native']['request'] = (as, input) => {
+      const person = as === 'steward' ? governor : as === 'anonymous' ? null : as === 'owner' || as === 'other' || as === 'suspended' ? accounts[as] : ownerAccount;
+      const bearer = person === null ? null : tokens.get(as) ?? tokenFor(person);
+      return byRoute(bearer, input.method, input.path, input.body, input.headers);
+    };
+    const driver: NativeConformanceWorld = {
+      native: {
+        pool: db.pool,
+        reader: db.admin,
+        databaseUrl,
+        workClient,
+        steward: governor,
+        token(as) {
+          const person = as === 'steward' ? governor : as === 'owner' || as === 'other' || as === 'suspended' ? accounts[as] : ownerAccount;
+          return tokens.get(as) ?? tokenFor(person);
+        },
+        request: nativeRequest,
+        async rawRequest(as, method, path, rawJson, headers = {}) {
+          return app.handle(new Request(`http://kernel.test${path}`, {
+            method, headers: { ...headers, 'content-type': 'application/json',
+              ...(as === 'anonymous' ? {} : { authorization: `Bearer ${driver.native.token(as)}` }) }, body: rawJson,
+          }));
+        },
+        async subject(type, author = 'steward') {
+          const response = await nativeRequest(author, { method: 'POST', path: '/v1/subjects',
+            body: { type, labels: { en: 'Native Library conformance subject' } }, headers: { 'Idempotency-Key': key() } });
+          const result = await expectJson<{ subject: { id: string } }>('Creating native typed subject', response, 201);
+          const route = routeOf(result.subject.id);
+          if (route === null) throw new Error('Semantic returned an unroutable subject');
+          initialSubjectIds.add(result.subject.id);
+          return { id: result.subject.id, route, partition: partitionOf(route) };
+        },
+        async rotateCursorKeys() {
+          cursorKeys.current++;
+          cursorKeys.keys.clear();
+          cursorKeys.keys.set(cursorKeys.current, crypto.getRandomValues(new Uint8Array(32)));
+        },
+        hold: holdExecutor,
+        resume: resumeExecutor,
+        async capture(operation) {
+          await holdExecutor();
+          const internal: CapturedStatements = { statements: [], plans: [] };
+          activeInternalCapture = internal;
+          try {
+            const result = await capture(db!, operation, { includeBackends: true });
+            if (internal.statements.length)
+              throw new Error('Native cross-pool wire/backend attribution unavailable; refusing incomplete cost evidence');
+            return result;
+          } finally { activeInternalCapture = undefined; }
+        },
+      },
       accounts,
       unknown: {
         collectionId: unknown.collectionId,

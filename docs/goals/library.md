@@ -71,7 +71,9 @@ visible as preparation/unavailability, not false empty data.
 
 Retain [Library outcomes](../../specs/library-outcomes.test.ts),
 [label outcomes](../../specs/library-labels-outcomes.test.ts),
-[profile outcomes](../../specs/library-profiles-outcomes.test.ts), native Library suites and owning growth evidence.
+[profile outcomes](../../specs/library-profiles-outcomes.test.ts),
+[dynamic Collection outcomes](../../specs/dynamic-collections-outcomes.test.ts),
+[shelf outcomes](../../specs/library-shelves-outcomes.test.ts), native Library suites and owning growth evidence.
 Cover owner, another viewer, anonymous and suspended/terminal personas, Collection visibility, duplicate occurrences,
 CAS/replay conflicts, progress preservation, private exclusions and sparse filtered pages. Vary definitions and
 Collection kinds across the same capability, including mounted surfaces and lifecycle/shared-payload cleanup.
@@ -80,12 +82,26 @@ Use the owning kernel runner and [verification](../development/verification.md) 
 Pages need real APIs, recorded-response stories, Web visual review and representative locale/theme/device states.
 Documentation separation claims no runtime, native, interface or promotion proof.
 
-The existing native outcome wrappers for labels, profiles, dynamic Collections and shelves are not complete bindings:
-their referenced native drivers are absent. Do not treat a wrapper or an unavailable provider as a passing outcome.
-Complete these bindings only against the delivered production APIs and work contracts. Current implementation
-evidence identifies unresolved runtime seams: Collection source and canonical-source factories throw
-`dependency_unavailable`, and the shelf maintenance derived guard is unimplemented. The production providers must
-land before these whole outcome specifications can be bound and run.
+The five kernel-discoverable wrappers import those original specifications with their expected environment factories.
+Their [native adapters](../../services/kernel/test/library/support/native-conformance.ts) share the existing isolated
+Library fixture: real Auth consent and suspended credentials, Access, compiled/published Definitions, semantic subjects,
+raw kernel requests, production profile migration, label retention and owned executor cleanup. Profile scenario inputs
+are compiler data, including inherited profiles, sparse track units, numeric boundaries and manifest expansion. Entry
+setup threads only the captured revision and incarnation; arbitrary requests remain unmodified.
+
+This is provisional source binding, not whole-suite or Goal completion. Unsupported native surfaces throw explicit
+`dependency_unavailable` errors; no missing-driver pass, modeled backend, skipped case or fabricated readiness replaces
+them. Deferred bindings include the Auth account-operation host; historical pre-profile DATA/receipt restoration;
+semantic primary-type/privacy fixture operations; Collection export/mount/bulk and projection redelivery; native
+preparation, state-reference repair and Search observations; shelf digest/type-work fault seams and shaped growth
+fixtures; and label cleanup run/page/crash observations. SQL measurements refuse incomplete internal-pool attribution.
+Profile migration page/receipt instrumentation and complete privacy inspections also remain deferred. These adapters
+must be replaced by actual producer bindings as those surfaces land. Existing frozen outcomes and their full growth,
+replay, current-authorization and privacy obligations remain required for the controller's combined native checks.
+
+The source stage uses only foreground local kernel typing. Acceptance, useful native outcomes, whole-row privacy,
+integration, promotion and Goal proof remain pending; wrapper discoverability and compiler success establish none of
+those results.
 
 ## External conditions
 
