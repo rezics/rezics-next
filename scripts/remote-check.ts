@@ -474,7 +474,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_memory_bytes=
     read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
-    if [ -n "$marker_slots" ] && [ "${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
+    if [ -n "$marker_slots" ] && [ "\${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
     case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
     case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
@@ -663,7 +663,7 @@ for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
     marker_slots=; marker_started=; marker_sequence=; marker_estimate_ms=; marker_memory_bytes=
     read -r marker_slots marker_started marker_sequence marker_estimate_ms marker_memory_bytes <&7 || true
     case "$marker_slots:$marker_started:$marker_sequence" in *[!0-9:]*|:*|*:) marker_slots=; marker_sequence= ;; esac
-    if [ -n "$marker_slots" ] && [ "${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
+    if [ -n "$marker_slots" ] && [ "\${#marker_started}" -gt 13 ]; then marker_started=$((marker_started / 1000)); fi
     case "$marker_estimate_ms" in ''|none|*[!0-9]*) marker_estimate_ms=-1 ;; esac
     case "$marker_memory_bytes" in ''|*[!0-9]*) marker_memory_bytes=${CHECK_SLOT_MEMORY_BYTES} ;; esac
     if [ -n "$marker_slots" ] && { [ -z "$landing_waiting_sequence" ] || [ "$marker_sequence" -lt "$landing_waiting_sequence" ]; }; then
