@@ -9179,6 +9179,7 @@ CREATE TABLE semantic.public_filter_bootstrap (
   partition_no integer NOT NULL,
   bootstrap uuid NOT NULL,
   read_definition uuid NOT NULL,
+  request_key text NOT NULL,
   consumer text NOT NULL CHECK(octet_length(consumer) <= 16384),
   snapshot_kind text NOT NULL CHECK(snapshot_kind IN ('pit','prepared')),
   native_snapshot pg_snapshot NOT NULL,
@@ -9191,6 +9192,8 @@ CREATE TABLE semantic.public_filter_bootstrap (
   FOREIGN KEY(partition_no, read_definition)
     REFERENCES semantic.public_filter_read_definition(partition_no, read_definition)
 );
+CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bootstrap
+  (partition_no, request_key) WHERE state = 'capturing';
 -- Retained ORIGINAL owner heads, never current truth or an Account allow cache.
 CREATE TABLE semantic.public_filter_bootstrap_account (
   partition_no integer NOT NULL,

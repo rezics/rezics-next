@@ -37,8 +37,8 @@ const cost = () => ({
 });
 
 /**
- * Provisional producer boundary. Native projection and reduction storage has not landed here yet,
- * so every read remains explicitly unready and no empty population or zero head is asserted.
+ * Projection/reduction readers remain pending their native storage. Constructor-origin routing is
+ * internal; the binding independently registers and verifies persisted Source metadata.
  */
 export const publicFilterSource: PublicFilterSourceFactory = (config) => {
   if (!config.pool || typeof config.pool.connect !== 'function' || typeof config.pool.query !== 'function')

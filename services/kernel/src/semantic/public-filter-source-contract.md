@@ -56,13 +56,12 @@ The selected native public Source binding declarations now live in
 `PublicFilterSourceBinding` and `createPublicFilterSourceBinding(pool, routing, access)`.
 `resolve({source, meaning, capture}, context)` must resolve the actual Source instance and full immutable
 compiler input to a native definition. `join({queried, execution?}, context)` resolves native queried observation,
-covered cut and retained execution. The implementation on this base is an explicitly provisional unavailable
-adapter; matching strings or object identity never become registration or Source coverage. Existing
+covered cut and retained execution. Source-owned configuration/read-definition rows are persisted and independently
+validated; matching strings or constructor identity alone never become registration or Source coverage. Existing
 `PublicFilterNativeSource` and `JoinedPopulationRequest` declarations in that module remain intact. The adjacent
-`subject-source-key-pages.ts` retains its existing rebuild-only `readSubjectKeyPage` port and unavailable adapter,
-without a second incompatible `SubjectSourceKeyPages` declaration. The admitted support bridge consumes the
-installed Source factory directly and does not consume the rebuild interface. Provisional adapters remain
-unavailable until their native producers land.
+`subject-source-key-pages.ts` retains its existing rebuild-only `readSubjectKeyPage` compatibility port separately
+from the implemented `SubjectSourceKeyPages.read` native inventory. The admitted support bridge consumes the
+installed Source factory directly and does not consume the rebuild interface. Missing fixed-cut or foreign owner operations remain explicitly unavailable.
 
 ### Admitted-job support bridge
 
@@ -97,9 +96,8 @@ The adopted Source-owned binding is `public-filter-source-binding.ts:PublicFilte
 complete meaning/capture/dependency keys and counted cost, or closed unready/unavailable failure. `join({queried,
 execution?},context)` independently validates that same native definition, canonical queried observation, covered cut
 and optional retained execution with original/terminal own rows. It imports Search's canonical queried type; it is
-not a fourth PublicFilterSource reader. The current module is explicitly a provisional unavailable adapter for the
-agreed declarations, awaiting replacement by the sole Semantic runtime producer. It cannot infer registration from
-three reader shapes or authorize Search publication. The selected additive shared consumer factory input is `binding: PublicFilterSourceBinding`;
+not a fourth PublicFilterSource reader. It registers native Source-owned metadata and validates the actual
+Search-owned immutable custody. Neither operation authorizes Search publication. The selected additive shared consumer factory input is `binding: PublicFilterSourceBinding`;
 its canonical factory declaration and lifecycle implementation remain Search's shared consumer owner's work.
 
 `facet-population-contract.ts` owns the adopted `FacetPopulationRequest` and `FacetPopulationPage` declarations.
@@ -639,8 +637,8 @@ lifetime, with no new scheduler, Source registry, matcher or native acknowledgem
 `population` names the native `PublicFilterSourceBinding.join` result's exact immutable `readDefinition`.
 The canonical `capture` is passed unchanged to native observation and execution readers; input objects and
 fingerprints never establish registration, permission or immutable custody. Joined execution starts must match.
-Missing agreed binding/key-page implementations are provisional fail-unavailable adapters under their agreed
-producer module names. Actual producer implementations replace these adapters on integration.
+The native binding and current key-page implementations preserve explicit unavailability for missing owner
+coverage; their metadata does not establish engine readiness.
 
 Each home retains the first observed ordinary position before its key traversal continues, then fixes the
 last key page's position as its creation/change upper fence. Exact outbox position/sequence seeks drain that
@@ -680,16 +678,17 @@ Source-owned declarations, not a second Search reader or Source service.
 epoch/position and IDs, `identity_pending`, or the closed `unavailable` result. Search's publication bridge adopts
 these exact declarations. `SubjectSourceKeyTraversal` preserves the separate existing `readSubjectKeyPage`
 capability on the ordinary subjectSource; the canonical factory port is `SubjectSourceKeyPages.read`.
-Neither provisional adapter invents runtime Source evidence; the actual native Source
-producer remains responsible for implementation, routing, identity availability and current definition semantics.
+The native current inventory checks routing, identity availability and current owner epoch/position. The separate
+fixed-cut compatibility port remains unavailable until its creation/change handover is established.
 
 ### Adopted native bootstrap binding
 
 `public-filter-source-binding.ts` declares the existing synchronous
 `createPublicFilterSourceBinding(pool, routeKey, access)` factory and its additive
 `PublicFilterSourceBootstrapBinding` subtype. Constructors validate configuration; native work belongs to async
-methods. The current adapter returns typed `owner_unavailable` until the native producer is integrated.
-It never synthesizes Source configuration, a cut, owner coverage or an engine acknowledgement.
+methods. Source-owned registration, native cuts, adoption intent and retained repair state are persisted.
+Missing privacy/projection or foreign physical receipt authority returns typed unavailability; metadata never
+substitutes for owner coverage or an engine acknowledgement.
 
 `resolve` retains the canonical Search capture union (legacy, mixed discovery and suggestion prefix), accepted
 meaning, native Source configuration, expanded root/read definition and dependencies. `join` validates the exact
@@ -732,3 +731,25 @@ adoption intent. `public_filter_bootstrap_account` retains original Account/clai
 repair continuations; `public_filter_repair_advance` owns only subject-home Source advancement.
 Neither table is a Search definition/observation/execution registry. Search remains sole writer of
 its canonical custody, physical incarnation, PIT/prepared and visible engine receipts.
+
+The Source cut is a persisted native `pg_snapshot`, owner epoch and source-home position, identified by the
+bootstrap locator. It precedes PIT/prepared dispatch. It is neither an engine publication fence nor all-home
+privacy coverage: those remain independently required by the existing privacy readers. `begin` checks the
+real Search registration via `readGenerationPublicationCustody`, then records the cut. Mixed roots retain
+all 4096 Account/claim homes through bounded 100-home owner pages; incomplete capture is unready. Original
+heads are immutable and compared through the Accounts producer, so reduce/restore/repair ACK cannot renew them.
+`adopt` requires exact canonical custody, consumer, definition, snapshot kind and original covered locator.
+The Source adoption row stores only the canonical observation locator, never a copied PIT or execution record.
+Recovery reopens real Search custody without recapturing a cut; abort persists an admission barrier and retains
+unknown physical custody as pending. The committed Search reader cannot prove closure/transfer from an absent
+or expired observation, so Source cannot finalize that abort on such an answer.
+
+Repair retains scalar native key/projection frontiers and Source-content digests, without copying projection
+bodies. It enumerates raw original keys, including hidden/rejected inputs, independently of execution hits.
+Native Source advancement commits at the subject's own home through the command fence; only that committed
+bigint position can precede a replacement projection. Projection completion and final original/start/cut
+privacy revalidation remain mandatory. A moved owner, changed Source or missing Account repair owner is
+unavailable. No whole rebuild or creation/change coverage is inferred from one page. Search's committed
+`readPublicFilterConsumerCustody` exposes immutable executions but no visible-winner repair/dispatch settlement
+reader; `settle` therefore preserves that exact foreign absence as `owner_unavailable`, after Source validation.
+This does not prevent Source registration, cuts, adoption, recovery or bounded Source repair metadata progress.

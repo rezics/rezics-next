@@ -38,6 +38,9 @@ export type {
 export { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
 export type {
   NativePublicSource,
+  PublicSourceCaptureInput,
+  PublicFilterNativeSource,
+  JoinedPopulationRequest,
   PublicFilterSourceCaptureInput,
   PublicFilterSourceDefinition,
   PublicFilterBindingFailure,
