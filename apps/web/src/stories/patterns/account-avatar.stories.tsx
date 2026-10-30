@@ -60,7 +60,7 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
   return (
     <PatternStory visitor="Signed In" path="/settings#profile">
       <AppShell>
-        <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+        <div className="min-w-0 p-6">
           <article className="mx-auto max-w-2xl space-y-8">
             <PageHeading>{m.settings_heading()}</PageHeading>
             <section
@@ -72,7 +72,7 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
               <ProfileCard editor={fixture.editor} avatarUpload={fixture.upload} />
             </section>
           </article>
-        </main>
+        </div>
       </AppShell>
     </PatternStory>
   );
