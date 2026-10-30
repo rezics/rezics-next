@@ -483,3 +483,82 @@ test('native media conflicts and lost save responses retain the original draft h
   expect(await patches[0]!.clone().text()).toBe(await patches[1]!.clone().text());
   expect(patches[0]!.headers.get('idempotency-key')).toBe(patches[1]!.headers.get('idempotency-key'));
 });
+
+// The page play function checks the hydrated main and production panel in the normal Storybook queue.
+// This local boundary case also guards the host responses and derivative files used by that page.
+test('actual Realm appearance management Page uses current route/native admission composition and reaches its real main-content without a resource404 or fake permission', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { available, appearancePath, appearanceAddress, appearanceSpaceId } =
+    await import('../src/kernel/fake/community');
+  const { locateRealm, loadSpacePage } = await import('../src/community/space');
+  const { RealmAppearanceSettings } = await import('../src/community/realm-presentation-settings');
+  const { createElement } = await import('react');
+  const { renderToString } = await import('react-dom/server');
+  const { m } = await import('../src/paraglide/messages.js');
+  const story = await Bun.file(new URL('../src/stories/realm-presentation-page.stories.tsx', import.meta.url)).text();
+  expect(story).toContain('<PageStory visitor="Signed In" path={appearancePath} />');
+  expect(story).not.toMatch(/PatternStory|fixtureAdapter|realmAppearance=/);
+  const route = await Bun.file(new URL('../src/routes/spaces/$address.tsx', import.meta.url)).text();
+  expect(route).toContain('<SpacePage page={page} />');
+  const page = await Bun.file(new URL('../src/community/space-page.tsx', import.meta.url)).text();
+  expect(page).toContain('<RealmAppearancePanel realmId={page.realm.id} />');
+
+  const recorded = createStoryRecordedKernelFetch();
+  const requests: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const response = await recorded(request);
+      expect(response.status).toBe(200);
+      return response;
+    },
+  });
+  const request = new Request(`https://site.test/en${appearancePath}`);
+  expect(await locateRealm(client, request, {}, { realmId: available.realmId }, 'anonymous')).toEqual({
+    kind: 'redirect',
+    address: appearanceAddress,
+  });
+  const loaded = await loadSpacePage(client, request, {}, { address: appearanceAddress }, 'anonymous');
+  expect(loaded.space.id).toBe(appearanceSpaceId);
+  expect(loaded.realm?.id).toBe(available.realmId);
+  requests.length = 0;
+  const read = await readRealmAppearance(client, 'Bearer recorded-story-token', available.realmId);
+  expect(read).toEqual({ kind: 'ready', snapshot: available });
+  expect(requests.map((value) => `${value.method} ${new URL(value.url).pathname}`)).toEqual([
+    `GET /v1/realms/${available.realmId}`,
+    'POST /v1/viewerActions',
+    `GET /v1/spaces/${appearanceSpaceId}`,
+    `GET /v1/realms/${available.realmId}`,
+  ]);
+  expect(requests.every((value) => value.headers.get('authorization') === 'Bearer recorded-story-token')).toBe(true);
+  expect(await requests[1]!.clone().json()).toEqual({
+    resources: [{ type: 'community.realm', id: available.realmId }],
+  });
+  expect(await readRealmAppearance(client, 'Bearer another-viewer', available.realmId)).toEqual({ kind: 'hidden' });
+  expect(await readRealmAppearance(client, null, available.realmId)).toEqual({ kind: 'hidden' });
+  const html = renderToString(
+    createElement(RealmAppearanceSettings, {
+      realmId: available.realmId,
+      initial: read,
+      adapter: {
+        read: () => readRealmAppearance(client, 'Bearer recorded-story-token', available.realmId),
+        change: async () => ({ kind: 'unavailable' }),
+        select: async () => ({ kind: 'unavailable' }),
+        upload: async () => {
+          throw new Error('No upload in this read-only boundary case');
+        },
+        resume: async () => {
+          throw new Error('No upload in this read-only boundary case');
+        },
+      },
+    }),
+  );
+  expect(html).toContain(m.realm_appearance_heading());
+  expect(html).toContain('A thoughtful reading room');
+  for (const image of [available.avatar, available.banner]) {
+    const src = realmImageSource(image)!;
+    expect(html).toContain(src);
+    expect(await Bun.file(new URL(`../.storybook${src}`, import.meta.url)).exists()).toBe(true);
+  }
+});
