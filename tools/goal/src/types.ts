@@ -14,6 +14,7 @@ export type TaskKind =
   | 'mechanical';
 export type IntegrationTarget = 'main' | 'integration' | 'stabilize';
 export type TaskClass = TaskKind | 'critical-path';
+export type AcceptancePlacement = 'local' | 'default';
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -107,7 +108,13 @@ export type Brief = {
   kind: TaskKind;
   paths: string[];
   riskAreas: string[];
-  acceptance: { command: string[]; tests: string[]; failing: boolean };
+  acceptance: {
+    command: string[];
+    tests: string[];
+    failing: boolean;
+    /** Omitted briefs keep the existing placement policy; local opts into the audited local command boundary. */
+    placement?: AcceptancePlacement;
+  };
   estimate: { lines: number; files: number };
   criticalPath: boolean;
   waiting: string[];

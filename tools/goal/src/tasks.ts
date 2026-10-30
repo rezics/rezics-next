@@ -17,7 +17,7 @@ import { terminateProcessGroup } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
-import type { Attempt, Profile, Settings, Task } from './types.ts';
+import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { installShared } from './shared-dependencies.ts';
@@ -64,6 +64,21 @@ export class BriefContractUnchangedError extends Error {
 
 function frozenFiles(task: Task): Pick<FrozenFile, 'path' | 'hash'>[] {
   return (task as FrozenTask).frozenFiles ?? [];
+}
+function checkHasTerminalExit(worktree: string, id: string): boolean {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return false;
+  const path = join(worktree, '.temp/goal/checks/results', `${id}.json`);
+  try {
+    const document = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    return (
+      document.status === 'finished' && typeof document.exitCode === 'number' && Number.isSafeInteger(document.exitCode)
+    );
+  } catch {
+    return false;
+  }
+}
+function unresolvedCheckIds(task: Task, attempt: Attempt): string[] {
+  return (attempt.checks ?? []).filter((id) => !checkHasTerminalExit(task.worktree, id));
 }
 type FrozenCommit = { files: FrozenFile[]; formatterError?: string };
 
@@ -349,6 +364,15 @@ export class WorkerTasks {
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     return { brief, taskClass };
   }
+  private assertLocalAcceptanceCustody(task: Task, nextBrief: Brief): void {
+    if (nextBrief.acceptance.placement !== 'local' || task.currentAttempt === 0) return;
+    const prior = this.store.attempt({ taskId: task.id, attempt: task.currentAttempt });
+    const unresolved = unresolvedCheckIds(task, prior);
+    if (unresolved.length)
+      throw new Error(
+        `Cannot start the local acceptance retry while prior check custody is unresolved (check ${unresolved.join(', ')}): no supported worker-check teardown-intent/receipt API is available; no check was cancelled.`,
+      );
+  }
   dispatch(briefFile: string): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile);
     requireNormalDispatch(submittedBrief, taskClass);
@@ -438,6 +462,8 @@ export class WorkerTasks {
     if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
+    const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId).brief;
+    this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
@@ -705,6 +731,11 @@ export class WorkerTasks {
   }
   /** `leased` when the caller already holds the task's lease. */
   private async retryTask(taskId: string, options: RetryOptions, leased = false): Promise<RunningWorker | null> {
+    if (!leased) {
+      const current = this.store.task(taskId);
+      const nextBrief = options.brief === undefined ? current.brief : this.validateBrief(options.brief, taskId).brief;
+      this.assertLocalAcceptanceCustody(current, nextBrief);
+    }
     // Wait for host capacity before taking the task's lease, so a waiting task can still be reshaped or stopped.
     const plan = leased ? undefined : this.retryPlan(taskId, options);
     const targetAttempt = plan && !plan.hold ? this.store.task(taskId).currentAttempt + 1 : undefined;
@@ -734,6 +765,7 @@ export class WorkerTasks {
           }
         : task.pendingBriefChange;
       const nextBrief = reshaped?.brief ?? task.brief;
+      this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length)
         throw new Error('Imported attempts need a dispatchable contract before retry');
