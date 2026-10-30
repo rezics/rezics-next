@@ -9,7 +9,11 @@ import type { RealmHome } from './space';
 import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
 import { changeRealmMembership } from './space-actions';
 import { realmMembershipQuery, refreshRealmMembership } from './realm-membership-queries';
-import { classifyRealmLeaveFailure, realmLeaveReadResolves, type RealmLeaveRecoveryState } from './realm-leave-recovery';
+import {
+  classifyRealmLeaveFailure,
+  realmLeaveReadResolves,
+  type RealmLeaveRecoveryState,
+} from './realm-leave-recovery';
 import { RealmLeaveRecovery, type RealmLeaveCheck } from './realm-leave-recovery.tsx';
 
 /** Membership changes affect participation; following always addresses the carrying Space separately. */
@@ -198,40 +202,46 @@ function PersonalMembership({
 
   return (
     <>
-    <RealmParticipationView
-      memberLabel={memberLabel}
-      admittedAction={admittedAction}
-      state={
-        pending
-          ? 'pending'
-          : leaveRecovery && viewer
-            ? viewer.state
-          : query.isPending || query.isFetching
-            ? 'loading'
-            : query.isError || !viewer
-              ? 'unavailable'
-              : viewer.state
-      }
-      visibility={realm.visibility}
-      busy={busy}
-      ready={!!csrfToken && !leaveRecovery}
-      refresh={refresh}
-      problem={problem}
-      onChange={(action) => void change(action)}
-      onRetry={() => (leaveRecovery ? void checkLeave() : pending ? setPending({ ...pending, cycle: pending.cycle + 1 }) : void query.refetch())}
-    />
-    {leaveRecovery ? (
-      <RealmLeaveRecovery
-        key={leaveRecovery.kind}
-        realmId={realm.id}
-        recovery={leaveRecovery}
-        check={leaveCheck}
+      <RealmParticipationView
+        memberLabel={memberLabel}
+        admittedAction={admittedAction}
+        state={
+          pending
+            ? 'pending'
+            : leaveRecovery && viewer
+              ? viewer.state
+              : query.isPending || query.isFetching
+                ? 'loading'
+                : query.isError || !viewer
+                  ? 'unavailable'
+                  : viewer.state
+        }
+        visibility={realm.visibility}
         busy={busy}
-        ready={!!csrfToken && !query.isError && !query.isFetching}
-        onCheck={() => void checkLeave()}
-        onRetry={() => void change('leave', true)}
+        ready={!!csrfToken && !leaveRecovery}
+        refresh={refresh}
+        problem={problem}
+        onChange={(action) => void change(action)}
+        onRetry={() =>
+          leaveRecovery
+            ? void checkLeave()
+            : pending
+              ? setPending({ ...pending, cycle: pending.cycle + 1 })
+              : void query.refetch()
+        }
       />
-    ) : null}
+      {leaveRecovery ? (
+        <RealmLeaveRecovery
+          key={leaveRecovery.kind}
+          realmId={realm.id}
+          recovery={leaveRecovery}
+          check={leaveCheck}
+          busy={busy}
+          ready={!!csrfToken && !query.isError && !query.isFetching}
+          onCheck={() => void checkLeave()}
+          onRetry={() => void change('leave', true)}
+        />
+      ) : null}
     </>
   );
 }

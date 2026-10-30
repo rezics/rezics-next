@@ -13,8 +13,13 @@ const idempotencyKey = '123e4567-e89b-42d3-a456-426614174000';
 const authorization = 'Bearer current-member';
 const auth = { headers: { authorization } };
 const problem = (effect = 'not_applied') => ({
-  type: 'https://rezics.com/problems/forbidden', title: 'Forbidden', status: 403,
-  code: 'forbidden', retryable: false, effect_status: effect, request_id: 'native-request',
+  type: 'https://rezics.com/problems/forbidden',
+  title: 'Forbidden',
+  status: 403,
+  code: 'forbidden',
+  retryable: false,
+  effect_status: effect,
+  request_id: 'native-request',
   detail: 'An internal explanation must not become an ownership assertion.',
 });
 
@@ -44,7 +49,13 @@ test('A native refused Realm leave preserves membership and gives current-author
       return new Response(null, { status: 204 });
     },
   });
-  const leave = () => requestRealmMembership(client, new Request('https://site.example/action', { method: 'POST', ...auth }), {}, { realmId, action: 'leave', idempotencyKey });
+  const leave = () =>
+    requestRealmMembership(
+      client,
+      new Request('https://site.example/action', { method: 'POST', ...auth }),
+      {},
+      { realmId, action: 'leave', idempotencyKey },
+    );
   const read = () => loadRealmMembership(client, realmId, auth);
   const refused = await leave();
   if (refused.outcome === 'accepted') throw new Error('Expected a native refusal');
@@ -52,9 +63,17 @@ test('A native refused Realm leave preserves membership and gives current-author
   expect(recovery).toEqual({ kind: 'refused', ownerReason: 'unavailable' });
   expect((await read()).state).toBe('member');
   expect(commands).toHaveLength(1);
-  const markup = renderToStaticMarkup(createElement(RealmLeaveRecovery, {
-    realmId, recovery, check: null, busy: false, ready: true, onCheck() {}, onRetry() {},
-  }));
+  const markup = renderToStaticMarkup(
+    createElement(RealmLeaveRecovery, {
+      realmId,
+      recovery,
+      check: null,
+      busy: false,
+      ready: true,
+      onCheck() {},
+      onRetry() {},
+    }),
+  );
   expect(markup).toContain('If you are the last explicit owner');
   expect(markup).not.toContain(problem().detail);
   expect(markup).not.toContain('href='); // Private Access reads wait for an explicit review interaction and hydration.
@@ -65,7 +84,9 @@ test('A native refused Realm leave preserves membership and gives current-author
   expect(commands).toHaveLength(1);
 
   response = 'lost';
-  const uncertain = classifyRealmLeaveFailure(await leave().catch(() => ({ outcome: 'refused' as const })) as Exclude<typeof refused, { outcome: 'accepted' }>);
+  const uncertain = classifyRealmLeaveFailure(
+    (await leave().catch(() => ({ outcome: 'refused' as const }))) as Exclude<typeof refused, { outcome: 'accepted' }>,
+  );
   expect(uncertain.kind).toBe('uncertain');
   const stillMember = await read();
   expect(realmLeaveReadResolves(uncertain, stillMember.state)).toBe(false);
@@ -89,10 +110,22 @@ test('status, detail, unknown effects and erased applied results never identify 
     { code: 'forbidden', detail: 'sole owner must transfer' },
     problem('unknown'),
     { ...problem(), effect_status: undefined },
-    { ...problem('applied'), type: 'https://rezics.com/problems/command_result_erased', code: 'command_result_erased', status: 410 },
+    {
+      ...problem('applied'),
+      type: 'https://rezics.com/problems/command_result_erased',
+      code: 'command_result_erased',
+      status: 410,
+    },
   ]) {
-    const client = createKernelClient('https://kernel.example.test', { fetch: async () => Response.json(body, { status: body.status ?? 403 }) });
-    const result = await requestRealmMembership(client, new Request('https://site.example/action', { method: 'POST', ...auth }), {}, { realmId, action: 'leave', idempotencyKey });
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async () => Response.json(body, { status: body.status ?? 403 }),
+    });
+    const result = await requestRealmMembership(
+      client,
+      new Request('https://site.example/action', { method: 'POST', ...auth }),
+      {},
+      { realmId, action: 'leave', idempotencyKey },
+    );
     if (result.outcome === 'accepted') throw new Error('Unexpected acceptance');
     expect(classifyRealmLeaveFailure(result)).toEqual({ kind: 'uncertain', ownerReason: 'unavailable' });
   }
@@ -112,17 +145,28 @@ test('only the declared closed last-owner problem on leave offers specific owner
     const client = createKernelClient('https://kernel.example.test', {
       fetch: async () => Response.json(body, { status }),
     });
-    const result = await requestRealmMembership(client,
-      new Request('https://site.example/action', { method: 'POST', ...auth }), {},
-      { realmId, action, idempotencyKey });
+    const result = await requestRealmMembership(
+      client,
+      new Request('https://site.example/action', { method: 'POST', ...auth }),
+      {},
+      { realmId, action, idempotencyKey },
+    );
     if (result.outcome === 'accepted') throw new Error('Unexpected acceptance');
     return classifyRealmLeaveFailure(result);
   }
   const recovery = await failure(ownerProblem);
   expect(recovery).toEqual({ kind: 'refused', ownerReason: 'last-owner' });
-  const markup = renderToStaticMarkup(createElement(RealmLeaveRecovery, {
-    realmId, recovery, check: 'checking', busy: true, ready: true, onCheck() {}, onRetry() {},
-  }));
+  const markup = renderToStaticMarkup(
+    createElement(RealmLeaveRecovery, {
+      realmId,
+      recovery,
+      check: 'checking',
+      busy: true,
+      ready: true,
+      onCheck() {},
+      onRetry() {},
+    }),
+  );
   expect(markup).toContain('Another eligible explicit owner is required');
   expect(markup).not.toContain('If you are');
   expect(markup).not.toContain('href=');
@@ -138,7 +182,8 @@ test('only the declared closed last-owner problem on leave offers specific owner
     { ...ownerProblem, type: 'https://other.example/realm_last_owner' },
     { ...ownerProblem, request_id: undefined },
     { ...ownerProblem, status: 403 },
-  ]) expect((await failure(body)).ownerReason).toBe('unavailable');
+  ])
+    expect((await failure(body)).ownerReason).toBe('unavailable');
   expect((await failure(ownerProblem, 'leave', 403)).ownerReason).toBe('unavailable');
   expect(await failure(ownerProblem, 'join')).toEqual({ kind: 'uncertain', ownerReason: 'unavailable' });
 });
