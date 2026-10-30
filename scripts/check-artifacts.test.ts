@@ -82,6 +82,7 @@ test('bounded artifact returns retain missing and oversize evidence without rest
   const stale = join(root, paths[0]!);
   writeFileSync(stale, 'stale proof');
   const oversized = join(root, paths[1]!);
+  writeFileSync(oversized, '');
   truncateSync(oversized, CHECK_ARTIFACTS_MAX_BYTES + 1);
   await captureArtifactReturns(root, stage, physicalRunId, paths);
   const restored = restoreArtifactReturns(root, stage, physicalRunId);

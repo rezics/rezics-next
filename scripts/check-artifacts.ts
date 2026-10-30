@@ -496,9 +496,9 @@ export function restoreArtifactReturns(
       result.rejected.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  const represented = new Set(manifest.entries.map((entry) => entry.path));
   for (const path of manifest.declarations ?? []) {
-    if (!represented.has(path) && !(manifest.oversizePaths ?? []).includes(path)) result.missing.push(path);
+    const represented = manifest.entries.some((entry) => entry.path === path || entry.path.startsWith(`${path}/`));
+    if (!represented && !(manifest.oversizePaths ?? []).includes(path)) result.missing.push(path);
   }
   if (logicalCheckId) {
     writeArtifactCatalog(
