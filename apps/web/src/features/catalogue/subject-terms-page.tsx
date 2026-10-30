@@ -42,6 +42,9 @@ export function SubjectTermsPage({
     queryKey: ['catalogue-terms', id, locale],
     queryFn: () => transport.read(id),
     retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const [language, setLanguage] = useState(locale);
   const [newLanguage, setNewLanguage] = useState('');
@@ -53,7 +56,12 @@ export function SubjectTermsPage({
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const pending = useRef<TermsCommand | null>(null);
-  const base = query.data?.state === 'ready' ? query.data.snapshot : undefined;
+  const base =
+    saved?.reader.state === 'ready'
+      ? saved.reader.snapshot
+      : query.data?.state === 'ready'
+        ? query.data.snapshot
+        : undefined;
   const uncertain = failure?.reason === 'unavailable' && pending.current !== null;
   const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
   const locked = busy || uncertain || stale || !!saved || session !== 'signed-in';
@@ -189,7 +197,7 @@ export function SubjectTermsPage({
           </p>
         )}
         <p className="text-muted-foreground">{m.catalogue_terms_intro({}, options)}</p>
-        {base && (
+        {base && !saved && (
           <a className="underline" href={base.href}>
             {m.catalogue_create_open({}, options)}
           </a>
