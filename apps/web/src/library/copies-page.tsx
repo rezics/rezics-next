@@ -188,7 +188,7 @@ export function CopyForm({
   const selected = choices?.kinds.find((choice) => choice.id === kind);
   const readable = detailState !== 'forbidden';
   const editable = copy ? readable && detailState !== 'loading' : Boolean(selected);
-  const statusChoices = copy?.statusEditing?.state === 'supported' ? copy.statusEditing.statuses ?? [] : [];
+  const statusChoices = copy?.statusEditing?.state === 'supported' ? (copy.statusEditing.statuses ?? []) : [];
   const statusEditable = Boolean(copy && editable && statusChoices.length);
   const [edition, setEdition] = useState(subjectId ?? '');
   const [draft, setDraft] = useState(() => ({
@@ -220,7 +220,10 @@ export function CopyForm({
       };
       if (copy) {
         const status = copyStatusChange(copy, draft.status);
-        if (!status) { setFailure(m.library_copy_failure()); return; }
+        if (!status) {
+          setFailure(m.library_copy_failure());
+          return;
+        }
         const result = await updateCopy({
           data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey, ...status, ...fields },
           headers: csrfHeaders(),
@@ -257,7 +260,13 @@ export function CopyForm({
         });
       } else {
         const result = await createCopy({
-          data: { subjectId: subjectId ?? edition, idempotencyKey: addKey, ...(sendKind ? { kind } : {}), status: draft.status, ...fields },
+          data: {
+            subjectId: subjectId ?? edition,
+            idempotencyKey: addKey,
+            ...(sendKind ? { kind } : {}),
+            status: draft.status,
+            ...fields,
+          },
           headers: csrfHeaders(),
         });
         if (!result.ok) {
@@ -318,7 +327,9 @@ export function CopyForm({
   const content: ReactNode = !readable ? (
     <div className="space-y-4">
       <p role="alert">{m.library_copy_detail_forbidden()}</p>
-      <button type="button" className={quiet} onClick={onClose}>{m.library_copy_cancel()}</button>
+      <button type="button" className={quiet} onClick={onClose}>
+        {m.library_copy_cancel()}
+      </button>
     </div>
   ) : (
     <form
@@ -376,11 +387,15 @@ export function CopyForm({
           <dl className="space-y-2">
             <div>
               <dt className="text-sm text-muted-foreground">{m.library_copy_kind()}</dt>
-              <dd><span lang={copy.kindLabelLanguage}>{copy.kindLabel ?? copy.kind ?? m.library_other()}</span></dd>
+              <dd>
+                <span lang={copy.kindLabelLanguage}>{copy.kindLabel ?? copy.kind ?? m.library_other()}</span>
+              </dd>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">{m.library_copy_status()}</dt>
-              <dd><span lang={copy.statusLabelLanguage}>{copy.statusLabel ?? copy.status}</span></dd>
+              <dd>
+                <span lang={copy.statusLabelLanguage}>{copy.statusLabel ?? copy.status}</span>
+              </dd>
             </div>
           </dl>
           {copy.meaning !== 'known' ? (
@@ -536,11 +551,13 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
         </p>
         <p className="text-sm text-muted-foreground">
-          <MetaLine items={[
-            kind,
-            copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : copy.kind,
-            copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : copy.status,
-          ]} />
+          <MetaLine
+            items={[
+              kind,
+              copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : copy.kind,
+              copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : copy.status,
+            ]}
+          />
         </p>
         {!copy.kindLabel || !copy.statusLabel ? (
           <p className="text-sm text-muted-foreground">{m.library_history_unavailable()}</p>
@@ -593,7 +610,10 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
   const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
   const inspection = useRef(0);
-  const closeEditor = () => { inspection.current += 1; setEditing(undefined); };
+  const closeEditor = () => {
+    inspection.current += 1;
+    setEditing(undefined);
+  };
   async function inspect(copy: CopyItem) {
     const current = ++inspection.current;
     setEditing({
@@ -616,10 +636,21 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
         setDetailState(result.reason);
         if (result.reason === 'forbidden') {
           // Keep only the previously readable raw row; never retain point-detail presentation after denial.
-          setCopies((copies) => copies.map((item) => item.id !== copy.id ? item : {
-            ...item, kindLabel: undefined, statusLabel: undefined, kindLabelLanguage: undefined,
-            statusLabelLanguage: undefined, meaning: undefined, statusEditing: undefined,
-          }));
+          setCopies((copies) =>
+            copies.map((item) =>
+              item.id !== copy.id
+                ? item
+                : {
+                    ...item,
+                    kindLabel: undefined,
+                    statusLabel: undefined,
+                    kindLabelLanguage: undefined,
+                    statusLabelLanguage: undefined,
+                    meaning: undefined,
+                    statusEditing: undefined,
+                  },
+            ),
+          );
         }
       }
     } catch {
@@ -639,7 +670,15 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading>{m.library_copy_heading()}</PageHeading>
         {!page.subjectId || page.profile?.kinds.length ? (
-          <button type="button" className={button} onClick={() => { inspection.current += 1; setDetailState('ready'); setEditing(null); }}>
+          <button
+            type="button"
+            className={button}
+            onClick={() => {
+              inspection.current += 1;
+              setDetailState('ready');
+              setEditing(null);
+            }}
+          >
             {m.library_copy_add()}
           </button>
         ) : null}

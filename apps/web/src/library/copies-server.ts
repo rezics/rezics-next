@@ -1,9 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { CopyItem } from './copies-read';
 
-export type NativeCopy = NonNullable<
-  Awaited<ReturnType<ReturnType<KernelClient['copies']>['get']>>['data']
->['copy'];
+export type NativeCopy = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['copies']>['get']>>['data']>['copy'];
 type NativeField<T, Key extends PropertyKey> = Key extends keyof T ? T[Key] : never;
 export type NativeCopyPresentation = NonNullable<NativeField<NativeCopy, 'presentation'>>;
 type DetailOptions = NonNullable<Parameters<ReturnType<KernelClient['copies']>['get']>[0]>;

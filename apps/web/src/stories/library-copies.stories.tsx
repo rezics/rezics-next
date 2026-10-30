@@ -125,26 +125,43 @@ function HistoricView({ mode }: { mode: HistoricMode }) {
     setCopyKindsStory();
     const original = recording.copies[0]!;
     return {
-      ...original, subject: null, kind: mode === 'unknown' ? 'legacy-unspecified' : 'print',
-      status: 'shelf', idempotencyKey: '10203040-5060-4070-8090-102030405060',
+      ...original,
+      subject: null,
+      kind: mode === 'unknown' ? 'legacy-unspecified' : 'print',
+      status: 'shelf',
+      idempotencyKey: '10203040-5060-4070-8090-102030405060',
       meaning: mode === 'unknown' ? 'unknown' : mode === 'unavailable' ? 'unavailable' : 'known',
-      ...(mode === 'known' || mode === 'retired' ? {
-        kindLabel: 'Print at acceptance', kindLabelLanguage: 'en',
-        statusLabel: 'On shelf at acceptance', statusLabelLanguage: 'en',
-      } : {}),
-      statusEditing: mode === 'known'
-        ? { state: 'supported', statuses: [{ id: 'loan', label: 'On loan now', labelLanguage: 'en' }] }
-        : { state: mode === 'retired' ? 'unsupported' : 'unavailable' },
+      ...(mode === 'known' || mode === 'retired'
+        ? {
+            kindLabel: 'Print at acceptance',
+            kindLabelLanguage: 'en',
+            statusLabel: 'On shelf at acceptance',
+            statusLabelLanguage: 'en',
+          }
+        : {}),
+      statusEditing:
+        mode === 'known'
+          ? { state: 'supported', statuses: [{ id: 'loan', label: 'On loan now', labelLanguage: 'en' }] }
+          : { state: mode === 'retired' ? 'unsupported' : 'unavailable' },
     };
   });
   return (
     <PatternStory visitor="Signed In" path={pagePaths['library-copies']}>
       <div className="w-full max-w-4xl p-4">
-        <CopyForm key={`${copy.id}:${copy.revision}`} copy={copy} inline subjectId={null}
+        <CopyForm
+          key={`${copy.id}:${copy.revision}`}
+          copy={copy}
+          inline
+          subjectId={null}
           // Today's renamed labels are deliberately irrelevant to accepted holding meaning.
           profile={{ kinds: [{ id: 'print', label: 'Renamed at current head', statuses: [] }] }}
-          addKey={copy.idempotencyKey} onClose={() => {}} onCreated={() => {}} onSaved={setCopy}
-          onRemoved={() => {}} onKey={() => {}} />
+          addKey={copy.idempotencyKey}
+          onClose={() => {}}
+          onCreated={() => {}}
+          onSaved={setCopy}
+          onRemoved={() => {}}
+          onKey={() => {}}
+        />
       </div>
     </PatternStory>
   );

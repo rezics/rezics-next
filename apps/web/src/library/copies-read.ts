@@ -42,10 +42,12 @@ export type CopyItem = {
   kindLabelLanguage?: string | undefined;
   statusLabelLanguage?: string | undefined;
   meaning?: 'known' | 'unknown' | 'unavailable' | undefined;
-  statusEditing?: {
-    state: 'supported' | 'unsupported' | 'unavailable';
-    statuses?: { id: string; label: string; labelLanguage?: string }[];
-  } | undefined;
+  statusEditing?:
+    | {
+        state: 'supported' | 'unsupported' | 'unavailable';
+        statuses?: { id: string; label: string; labelLanguage?: string }[];
+      }
+    | undefined;
 };
 
 export type CopiesPageData = {
@@ -112,7 +114,11 @@ type CopyFields = {
   note: string | null;
 };
 type CreateInput = CopyFields & { subjectId: string; kind?: string; idempotencyKey: string };
-type UpdateInput = Omit<CopyFields, 'status'> & { status?: string } & { id: string; revision: number; idempotencyKey: string };
+type UpdateInput = Omit<CopyFields, 'status'> & { status?: string } & {
+  id: string;
+  revision: number;
+  idempotencyKey: string;
+};
 type RemoveInput = { id: string; revision: number; idempotencyKey: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -327,9 +333,7 @@ export async function loadCopiesPage(
   return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
 }
 
-export type CopyDetailResult =
-  | { ok: true; copy: CopyItem }
-  | { ok: false; reason: 'forbidden' | 'unavailable' };
+export type CopyDetailResult = { ok: true; copy: CopyItem } | { ok: false; reason: 'forbidden' | 'unavailable' };
 
 /** Explicit inspection only: one credential-bound point read, with no list/profile follow-up. */
 export async function loadCopyDetail(
@@ -349,8 +353,7 @@ export async function loadCopyDetail(
     });
     // The native point read also conceals denied rows as 404. It is no deletion evidence.
     if ([401, 403, 404].includes(result.status)) return { ok: false, reason: 'forbidden' };
-    if (result.error || !result.data?.copy || result.data.copy.id !== id)
-      return { ok: false, reason: 'unavailable' };
+    if (result.error || !result.data?.copy || result.data.copy.id !== id) return { ok: false, reason: 'unavailable' };
     const copy: NativeCopy = result.data.copy;
     return { ok: true, copy: { ...present(copy), ...nativeCopyPresentation(copy) } };
   } catch {
@@ -361,7 +364,8 @@ export async function loadCopyDetail(
 /** Only an explicitly changed, observed native choice may enter an enhanced status update. */
 export function copyStatusChange(copy: CopyItem, status: string): { status?: string } | undefined {
   if (status === copy.status) return {};
-  return copy.statusEditing?.state === 'supported' && copy.statusEditing.statuses?.some((choice) => choice.id === status)
+  return copy.statusEditing?.state === 'supported' &&
+    copy.statusEditing.statuses?.some((choice) => choice.id === status)
     ? { status }
     : undefined;
 }

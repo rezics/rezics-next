@@ -2,22 +2,17 @@ import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient, type KernelClient } from '@rezics/client';
-import {
-  copyStatusChange,
-  loadCopiesPage,
-  loadCopyDetail,
-  saveCopy,
-  type CopyItem,
-} from '../src/library/copies-read';
-import {
-  nativeCopyPresentation,
-  nativeCopyPresentationQuery,
-  type NativeCopy,
-} from '../src/library/copies-server';
+import { copyStatusChange, loadCopiesPage, loadCopyDetail, saveCopy, type CopyItem } from '../src/library/copies-read';
+import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from '../src/library/copies-server';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('../src/library/copies-actions', () => ({
-  createCopy() {}, updateCopy() {}, deleteCopy() {}, readCopySubject() {}, readCopyDetail() {}, undoCopy() {},
+  createCopy() {},
+  updateCopy() {},
+  deleteCopy() {},
+  readCopySubject() {},
+  readCopyDetail() {},
+  undoCopy() {},
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
@@ -32,29 +27,54 @@ const id = '01a17a3b-7065-7048-8c7f-f4ccfae1f400';
 const key = '10203040-5060-4070-8090-102030405060';
 const subjectId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
 const native = {
-  id, subjectId, kind: 'print', status: 'shelf', revision: 8,
-  location: 'Study', source: 'Bookshop', acquiredOn: '2020-02-29', disposedOn: null, note: 'First copy',
+  id,
+  subjectId,
+  kind: 'print',
+  status: 'shelf',
+  revision: 8,
+  location: 'Study',
+  source: 'Bookshop',
+  acquiredOn: '2020-02-29',
+  disposedOn: null,
+  note: 'First copy',
 } satisfies NativeCopy;
 const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
-  ...native, subject: null, idempotencyKey: key, ...extra,
+  ...native,
+  subject: null,
+  idempotencyKey: key,
+  ...extra,
 });
-const request = () => new Request('https://site.test/en/library/copies', {
-  headers: { authorization: 'Bearer current-viewer' },
-});
+const request = () =>
+  new Request('https://site.test/en/library/copies', {
+    headers: { authorization: 'Bearer current-viewer' },
+  });
 function transport(respond: (req: Request) => Response | Promise<Response>) {
   const calls: Request[] = [];
-  const client = createKernelClient('https://kernel.test', { fetch: (async (input, init) => {
-    const req = new Request(input, init);
-    calls.push(req.clone());
-    return respond(req);
-  }) as typeof fetch });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const req = new Request(input, init);
+      calls.push(req.clone());
+      return respond(req);
+    }) as typeof fetch,
+  });
   return { client, calls };
 }
 const json = (body: unknown, status = 200) => Response.json(body, { status });
-const form = (value: CopyItem, extra: object = {}) => renderToStaticMarkup(createElement(CopyForm, {
-  copy: value, subjectId, addKey: key, inline: true,
-  onClose() {}, onCreated() {}, onSaved() {}, onRemoved() {}, onKey() {}, ...extra,
-}));
+const form = (value: CopyItem, extra: object = {}) =>
+  renderToStaticMarkup(
+    createElement(CopyForm, {
+      copy: value,
+      subjectId,
+      addKey: key,
+      inline: true,
+      onClose() {},
+      onCreated() {},
+      onSaved() {},
+      onRemoved() {},
+      onKey() {},
+      ...extra,
+    }),
+  );
 
 test('raw list keeps two same-edition identities and original facts, with no point-detail requests', async () => {
   const second = { ...native, id: '01a17a3b-7065-7048-8c7f-f4ccfae1f401', kind: 'digital', note: 'Second copy' };
@@ -90,9 +110,14 @@ test('one explicit inspection reads the actual credential-bound point DTO once a
 });
 
 test('undeclared presentation additions cannot manufacture accepted meaning or current editing support', () => {
-  const untyped = { ...native, presentation: {
-    meaning: 'known', kindLabel: 'Invented', statusEditing: { state: 'supported', statuses: [{ id: 'grant', label: 'Access' }] },
-  } };
+  const untyped = {
+    ...native,
+    presentation: {
+      meaning: 'known',
+      kindLabel: 'Invented',
+      statusEditing: { state: 'supported', statuses: [{ id: 'grant', label: 'Access' }] },
+    },
+  };
   expect(nativeCopyPresentation(untyped)).toEqual({ meaning: 'unavailable', statusEditing: { state: 'unavailable' } });
 });
 
@@ -127,9 +152,17 @@ test('transient failure leaves the prior raw list and its holding facts intact',
 });
 
 test('bounded accepted-meaning view preserves old labels despite renamed current choices and a retired pair', () => {
-  const historical = copy({ meaning: 'known', kindLabel: 'Original print label', kindLabelLanguage: 'en',
-    statusLabel: 'Original shelf label', statusLabelLanguage: 'en', statusEditing: { state: 'unsupported' } });
-  const html = form(historical, { profile: { kinds: [{ id: 'print', label: 'Renamed today', statuses: [{ id: 'shelf', label: 'Changed today' }] }] } });
+  const historical = copy({
+    meaning: 'known',
+    kindLabel: 'Original print label',
+    kindLabelLanguage: 'en',
+    statusLabel: 'Original shelf label',
+    statusLabelLanguage: 'en',
+    statusEditing: { state: 'unsupported' },
+  });
+  const html = form(historical, {
+    profile: { kinds: [{ id: 'print', label: 'Renamed today', statuses: [{ id: 'shelf', label: 'Changed today' }] }] },
+  });
   expect(html).toContain('Original print label');
   expect(html).toContain('Original shelf label');
   expect(html).not.toContain('Renamed today');
@@ -143,7 +176,9 @@ test('bounded accepted-meaning view preserves old labels despite renamed current
 
 test('unknown historic and missing-release meaning remain distinct while exposing raw identifiers', () => {
   for (const meaning of ['unknown', 'unavailable'] as const) {
-    const html = form(copy({ kind: 'legacy-unspecified', status: 'owned', meaning, statusEditing: { state: 'unavailable' } }));
+    const html = form(
+      copy({ kind: 'legacy-unspecified', status: 'owned', meaning, statusEditing: { state: 'unavailable' } }),
+    );
     expect(html).toContain('legacy-unspecified');
     expect(html).toContain('owned');
     expect(html).toContain(meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable());
@@ -155,9 +190,14 @@ test('unknown historic and missing-release meaning remain distinct while exposin
 });
 
 test('only captured native status choices can change a status, with no immutable kind editor', () => {
-  const observed = copy({ meaning: 'known', statusLabel: 'Old shelf', statusEditing: {
-    state: 'supported', statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
-  } });
+  const observed = copy({
+    meaning: 'known',
+    statusLabel: 'Old shelf',
+    statusEditing: {
+      state: 'supported',
+      statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
+    },
+  });
   expect(copyStatusChange(observed, 'shelf')).toEqual({});
   expect(copyStatusChange(observed, 'loan')).toEqual({ status: 'loan' });
   expect(copyStatusChange(observed, 'available')).toBeUndefined();
@@ -173,21 +213,53 @@ test('metadata-only PATCH uses actual declared native wire and omits the unsuppo
     const body = await req.json();
     return json({ copy: { ...native, ...body, revision: 9 } });
   });
-  const result = await saveCopy(client, request(), {}, { id, revision: native.revision, idempotencyKey: key,
-    location: native.location, source: native.source, acquiredOn: native.acquiredOn, disposedOn: null, note: 'Updated note' });
-  expect(result).toMatchObject({ ok: true, copy: { id, status: 'shelf', kind: 'print', revision: 9, note: 'Updated note' } });
+  const result = await saveCopy(
+    client,
+    request(),
+    {},
+    {
+      id,
+      revision: native.revision,
+      idempotencyKey: key,
+      location: native.location,
+      source: native.source,
+      acquiredOn: native.acquiredOn,
+      disposedOn: null,
+      note: 'Updated note',
+    },
+  );
+  expect(result).toMatchObject({
+    ok: true,
+    copy: { id, status: 'shelf', kind: 'print', revision: 9, note: 'Updated note' },
+  });
   expect(calls).toHaveLength(1);
   const body: NonNullable<Parameters<ReturnType<KernelClient['copies']>['patch']>[0]> = await calls[0]!.json();
-  expect(body).toEqual({ revision: 8, location: 'Study', source: 'Bookshop', acquiredOn: '2020-02-29', disposedOn: null, note: 'Updated note' });
+  expect(body).toEqual({
+    revision: 8,
+    location: 'Study',
+    source: 'Bookshop',
+    acquiredOn: '2020-02-29',
+    disposedOn: null,
+    note: 'Updated note',
+  });
   expect(calls[0]!.headers.get('authorization')).toBe('Bearer current-viewer');
   expect(calls[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(key));
 });
 
 test('a captured status submit uses its exact observed revision and key, with native validation still decisive', async () => {
-  const observed = copy({ revision: 12, statusEditing: { state: 'supported', statuses: [{ id: 'loan', label: 'On loan' }] } });
+  const observed = copy({
+    revision: 12,
+    statusEditing: { state: 'supported', statuses: [{ id: 'loan', label: 'On loan' }] },
+  });
   const { client, calls } = transport(() => json({ code: 'unsupported_library_profile' }, 422));
-  expect(await saveCopy(client, request(), {}, { ...native, id, revision: observed.revision,
-    idempotencyKey: key, ...copyStatusChange(observed, 'loan') })).toEqual({ ok: false, reason: 'unsupported' });
+  expect(
+    await saveCopy(
+      client,
+      request(),
+      {},
+      { ...native, id, revision: observed.revision, idempotencyKey: key, ...copyStatusChange(observed, 'loan') },
+    ),
+  ).toEqual({ ok: false, reason: 'unsupported' });
   expect(calls).toHaveLength(1);
   expect(await calls[0]!.json()).toMatchObject({ revision: 12, status: 'loan' });
   expect(observed.status).toBe('shelf');

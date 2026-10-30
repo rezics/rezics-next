@@ -73,7 +73,6 @@ const answer = async ({ request }: { request: Request }) => {
     const next = { ...current, ...body, revision: current.revision + 1 };
     Object.assign(current, next);
     return { status: 200, copy: next };
-
   }
   if (!body.kind) return { status: 400, code: 'invalid_request' };
   if (
