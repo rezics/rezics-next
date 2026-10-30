@@ -21,7 +21,7 @@ export async function lookupAccountMention(
       account.handle !== null &&
       account.handle.toLowerCase() === handle.toLowerCase(),
   );
-  return account?.handle
+  return account && 'handle' in account && account.handle
     ? { accountId: account.id, handle: account.handle, ...(account.displayName ? { name: account.displayName } : {}) }
     : null;
 }
