@@ -1009,6 +1009,9 @@ and checkpoints bounded release progress through its original receipted pages an
 captures/graphs remain pending. After the last source-writer hook and fact-source-head barrier it removes bounded
 provably owned writer controls, repeating full control pages. Future Collection writes preserve the actual native
 curator locator on the fence, including parent deletion; capture initialization supplies the same native owner.
+After a never-public private/unlisted head is removed, ordinary cleanup also removes its exact provably owned
+Collection control, after the final DELETE hook. This adds one control-key point and two indexed empty-prefix
+probes; the cleanup result retains its business-graph row count. Shared active-account controls are preserved.
 Account controls derive ownership from their exact native account key. Collection controls with no surviving
 native provenance remain unattributed pending, never guessed from a route or globally searched/backfilled. Public,
 foreign or still-referenced controls remain retained. The erasure probe inventories the capture/receipt/hold FK

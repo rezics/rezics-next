@@ -24,6 +24,7 @@ import state from './collection-retention-state.sql';
 import references from './collection-retention-references.sql';
 import metadata from './collection-retention-metadata.sql';
 import head from './collection-retention-head.sql';
+import retireFence from './native-source-custody-retire-fence.sql';
 import terminalScope from './erasure-scope.sql';
 import { retireNativeCollectionCapturePage, type NativeSourceRetirement } from './native-source-custody.ts';
 
@@ -135,6 +136,9 @@ async function removeLocalPage(
     source_generation: parent.sourceGeneration,
   });
   if (!result) throw new Error('Locked Collection head still has undisposed local children');
+  // The actual locked head above established private disposition. Its final writer hook ran first.
+  // A fixed control point plus two empty-prefix probes; removed counts business graph rows, not writer controls.
+  await retireFence.run(tx, { ...args, account_id: accountId });
   return { status: 'purged', removed: 1 };
 }
 

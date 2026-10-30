@@ -208,7 +208,10 @@ async function finishPrivateCleanup(key: CollectionDeletionKey) {
   for (let n = 0; n < 20; n++) {
     const page = await purgeExpiredCollectionPage({ pool: f.pool, clock }, key);
     expect(page.removed).toBeLessThanOrEqual(100);
-    if (page.status === 'purged') return;
+    if (page.status === 'purged') {
+      expect((await f.pool.query("SELECT 1 FROM library.native_source_fence WHERE route=$1 AND kind='collection' AND owner_id=$2", [key.route, key.collectionId])).rows).toEqual([]);
+      return;
+    }
     expect(page.status).toBe('progress');
   }
   throw new Error('Finite private cleanup did not finish');
