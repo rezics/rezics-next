@@ -52,7 +52,7 @@ async function population(positionBase: number): Promise<Population> {
           ? addressInPartition(`unrelated-${ordinal.toString(36)}`, hotPartition)
           : `unrelated-${ordinal.toString(36)}-${randomUUID().slice(0, 8)}`;
       const handle = `unrelated-handle-${ordinal.toString(36)}-${randomUUID().slice(0, 8)}`;
-      const at = '2030-01-01T00:00:00.000Z';
+      const at = fixture.now.toISOString();
       const transactionId = spaceId;
       const position = positionBase + ordinal * 100 + 1;
       const value = { spaceId, revisionId };
@@ -300,7 +300,7 @@ async function exercise(probes: GrowthProbes) {
 }
 
 beforeAll(async () => {
-  const opened = await createSpaceAddressRecoveryFixture({ initialTime: '2030-01-01T00:00:00.000Z' });
+  const opened = await createSpaceAddressRecoveryFixture({ initialTime: new Date() });
   fixture = opened.fixture;
   growth = fixture.database;
   governance = opened.governance;

@@ -96,7 +96,7 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
   database.pool.options.max = 12;
   let domainTime = options.initialTime
     ? new Date(options.initialTime instanceof Date ? options.initialTime.getTime() : options.initialTime)
-    : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    : new Date();
   if (!Number.isFinite(domainTime.getTime())) throw new RangeError('initialTime must be a valid date');
 
   let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;

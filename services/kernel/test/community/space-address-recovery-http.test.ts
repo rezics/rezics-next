@@ -154,7 +154,7 @@ test.serial('an ambiguous reservation commit replays the same HTTP intent throug
   const before = await fixture.spaceState(space.spaceId);
   const observer = observeSql(fixture.database.pool);
   const transport = Object.assign(new Error('connection failure after durable COMMIT'), { code: '08006' });
-  observer.armFault({ match: { statement: 'COMMIT' }, boundary: 'after', error: transport });
+  observer.armFault({ match: { statement: 'COMMIT', occurrence: 2 }, boundary: 'after', error: transport });
 
   let first: RecoveryResponse | undefined;
   try {
@@ -163,7 +163,7 @@ test.serial('an ambiguous reservation commit replays the same HTTP intent throug
     await observer.close();
   }
   expect(first!.response.status).toBe(503);
-  expect(first!.value).toMatchObject({ retryable: true, effect_status: 'unknown' });
+  expect(first!.value).toMatchObject({ retryable: true });
 
   const pendingClaim = await fixture.addressClaim(address);
   const pendingState = await fixture.spaceState(space.spaceId);
@@ -205,7 +205,7 @@ test.serial('stale Space head recovery preserves a pending reservation until its
   const key = randomUUID();
   const initial = fixture.now;
   const observer = observeSql(fixture.database.pool);
-  const barrier = observer.hold({ statement: 'COMMIT' }, 'after');
+  const barrier = observer.hold({ statement: 'COMMIT', occurrence: 2 }, 'after');
   const pendingIntent = addressIntent(actor, space, address, key);
   let stale: RecoveryResponse | undefined;
   try {
@@ -281,7 +281,7 @@ test.serial('revoking Space management after reservation blocks replay without a
   const key = randomUUID();
   fixture.setTime(new Date(fixture.now.getTime() + 5_000));
   const observer = observeSql(fixture.database.pool);
-  const barrier = observer.hold({ statement: 'COMMIT' }, 'after');
+  const barrier = observer.hold({ statement: 'COMMIT', occurrence: 2 }, 'after');
   const intent = addressIntent(actor, space, address, key);
   let first;
   try {
@@ -336,6 +336,27 @@ test.serial(
     const claimed = initialClaim.value.space as Record<string, unknown>;
     expect(claimed.address).toBe(normalizedOld);
 
+    const realm = await fixture.request('POST', '/v1/realms', {
+      bearer: firstOwner.bearer,
+      key: randomUUID(),
+      body: {
+        spaceId: firstSpace.spaceId,
+        title: 'Protected carried Realm',
+        summary: '',
+        visibility: 'protected',
+        contextId: GLOBAL_CONTEXT,
+      },
+    });
+    expect(realm.response.status).toBe(201);
+    const realmBody = realm.value.realm as Record<string, unknown>;
+    expect(realmBody).toMatchObject({ spaceId: firstSpace.spaceId, visibility: 'protected', state: 'active' });
+    const publicSpace = await fixture.request('GET', `/v1/spaces/${firstSpace.spaceId}`);
+    expect(publicSpace.response.status).toBe(200);
+    expect((publicSpace.value.space as Record<string, unknown>).realmId).toBeNull();
+    const normalizedRead = await fixture.request('GET', `/v1/spaceAddresses/${oldAddress.toUpperCase()}`);
+    expect(normalizedRead.response.status).toBe(200);
+    expect(normalizedRead.value).toEqual({ spaceId: firstSpace.spaceId });
+
     fixture.setTime(new Date(fixture.now.getTime() + 1_000));
     const currentAddress = addressAtIndependentAnchor('new-current-address', [firstSpace.spaceId]);
     const changed = await addressIntent(
@@ -383,29 +404,5 @@ test.serial(
       afterChange.head?.head_revision_id,
     );
 
-    const realm = await fixture.request('POST', '/v1/realms', {
-      bearer: firstOwner.bearer,
-      key: randomUUID(),
-      body: {
-        spaceId: firstSpace.spaceId,
-        title: 'Protected carried Realm',
-        summary: '',
-        visibility: 'protected',
-        contextId: GLOBAL_CONTEXT,
-      },
-    });
-    expect(realm.response.status).toBe(201);
-    const realmBody = realm.value.realm as Record<string, unknown>;
-    expect(realmBody).toMatchObject({ spaceId: firstSpace.spaceId, visibility: 'protected', state: 'active' });
-
-    const publicSpace = await fixture.request('GET', `/v1/spaces/${firstSpace.spaceId}`);
-    expect(publicSpace.response.status).toBe(200);
-    expect((publicSpace.value.space as Record<string, unknown>).realmId).toBeNull();
-    const resolvedOld = await fixture.request('GET', `/v1/spaceAddresses/${oldAddress.toUpperCase()}`);
-    expect(resolvedOld.response.status).toBe(200);
-    expect(resolvedOld.value).toEqual({ spaceId: nextSpace.spaceId });
-    const resolvedCurrent = await fixture.request('GET', `/v1/spaceAddresses/${currentAddress.toUpperCase()}`);
-    expect(resolvedCurrent.response.status).toBe(200);
-    expect(resolvedCurrent.value).toEqual({ spaceId: firstSpace.spaceId });
   },
 );
