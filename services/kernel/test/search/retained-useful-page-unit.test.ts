@@ -49,6 +49,12 @@ const plan = { filterDocument: undefined, text: undefined, sort: 'name' as const
 function operations(overrides: Partial<PublicFilterConsumerOperations> = {}): PublicFilterConsumerOperations {
   return {
     capture: async () => ({ status: 'captured', queried, repair, cost }),
+    captureDiscovery: async () => {
+      throw new Error('unexpected mixed capture');
+    },
+    queryDiscovery: async () => {
+      throw new Error('unexpected mixed query');
+    },
     query: async () => ({
       status: 'queried',
       queried,
