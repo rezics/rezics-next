@@ -108,7 +108,9 @@ async function executeJoinedOperation(
     { idempotencyKey, deadline: Date.now() + 30_000, requestId: randomUUID() },
   );
   if (!result || result.value.kind !== 'like')
-    throw new Error('The native reaction command did not commit a slot change');
+    throw new Error(
+      `The native reaction command did not commit a slot change for ${actor.accountId}/${targetId}: ${JSON.stringify(result)}`,
+    );
 
   const envelopes: Envelope[] = [];
   const batch = await readBatch(db.pool, {
@@ -377,6 +379,12 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     },
     async prepare(_db, scale, repetition) {
       const targetId = measuredTargets.get(scale)!;
+      const occupied = await growth!.admin.query<{ kind: string }>(
+        `SELECT kind FROM content.reaction
+          WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
+        [actorRoute, actorId, targetId],
+      );
+      expect(occupied.rows).toEqual([]);
       captures.set(repetition, await captureEvidence(growth!, actorId, routeOf(targetId)!));
       idempotencyKeys.set(repetition, `reaction-growth-measured-${repetition}-${scale}`);
     },
