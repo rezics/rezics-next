@@ -292,7 +292,7 @@ export async function startReactionEffects(
   const client = await createWorkClient(databaseUrl, pool);
   let worker: ReactionWorker | undefined;
   try {
-    worker = await startReactionWorker(databaseUrl, system.routeKey, options.relay !== false);
+    worker = await startReactionWorker(databaseUrl, system.routeKey, true);
     return {
       pool,
       async pause() {
