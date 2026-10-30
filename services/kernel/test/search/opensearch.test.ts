@@ -18,12 +18,17 @@ async function rootBytes() {
 async function forward(request: Request) {
   const incoming = new URL(request.url);
   const target = new URL(incoming.pathname + incoming.search, url);
-  return fetch(target, {
+  const response = await fetch(target, {
     method: request.method,
     headers: request.headers,
     ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.text() }),
     signal: request.signal,
   });
+  // Fetch exposes decoded bytes while retaining the upstream encoding/length headers.
+  const headers = new Headers(response.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  return new Response(response.body, { status: response.status, headers });
 }
 
 async function withServer(
@@ -153,27 +158,33 @@ test('an oversized never-ending producer is cancelled before EOF and the same cl
 
 test('an honest oversized Content-Length refuses at headers and cancels a body that never sends bytes', async () => {
   const cancelled = Promise.withResolvers<void>();
-  await withServer(
-    (request) =>
-      new URL(request.url).pathname === '/large'
-        ? new Response(
-            new ReadableStream({
-              cancel() {
-                cancelled.resolve();
-              },
-            }),
-            { headers: { 'content-length': String(MAX_BYTES + 1) } },
-          )
-        : forward(request),
+  const root = await rootBytes();
+  let calls = 0;
+  await withWire(
+    (socket) => {
+      calls++;
+      if (calls === 1) {
+        socket.once('close', () => cancelled.resolve());
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${MAX_BYTES + 1}\r\n\r\n`);
+      } else {
+        sendRoot(socket, root);
+      }
+    },
     async (address) => {
       const client = createOpenSearch(address, { timeoutMs: 2000 });
       const error = await unavailable(client.request('GET', '/large'));
       expect(error.message).not.toContain('timed out');
       await cancelled.promise;
       await recovered(client);
+      expect(calls).toBe(2);
     },
   );
 });
+
+function sendRoot(socket: Socket, root: Uint8Array) {
+  socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${root.length}\r\nConnection: close\r\n\r\n`);
+  socket.end(root);
+}
 
 // Raw HTTP is necessary for conflicting/invalid lengths, truncated framing and peer disconnects.
 async function withWire(write: (socket: Socket) => void, run: (address: string) => Promise<void>) {
@@ -220,28 +231,28 @@ test('lying, invalid and missing lengths cannot waive observed bytes or accept p
 });
 
 test('timeout remains active after headers and after partial body bytes and releases each producer', async () => {
+  const root = await rootBytes();
   for (const partial of [false, true]) {
     const cancelled = Promise.withResolvers<void>();
-    await withServer(
-      (request) =>
-        new URL(request.url).pathname === '/slow'
-          ? new Response(
-              new ReadableStream<Uint8Array>({
-                start(controller) {
-                  if (partial) controller.enqueue(encoder.encode('{"waiting":'));
-                },
-                cancel() {
-                  cancelled.resolve();
-                },
-              }),
-            )
-          : forward(request),
+    let calls = 0;
+    await withWire(
+      (socket) => {
+        calls++;
+        if (calls === 1) {
+          socket.once('close', () => cancelled.resolve());
+          socket.write('HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n');
+          if (partial) socket.write('b\r\n{"waiting":\r\n');
+        } else {
+          sendRoot(socket, root);
+        }
+      },
       async (address) => {
         const client = createOpenSearch(address);
         const error = await unavailable(client.request('GET', '/slow', undefined, { timeoutMs: 100 }));
         expect(error.message).toContain('timed out');
         await cancelled.promise;
         await recovered(client);
+        expect(calls).toBe(2);
       },
     );
   }

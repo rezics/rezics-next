@@ -24,4 +24,5 @@ export declare class SearchUnavailableError extends Error {
 }
 export declare function createOpenSearch(url: string, options?: {
     timeoutMs?: number;
+    /** Internal tests may only lower the hard ceiling. */ maxResponseBytes?: number;
 }): OpenSearch;

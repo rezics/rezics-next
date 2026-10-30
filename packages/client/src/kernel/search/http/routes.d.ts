@@ -5,7 +5,7 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
-export declare function searchRoutes<App>(app: App, { pool, search, access, clock }: {
+export declare function searchRoutes<App>(app: App, { pool, search, access, clock, }: {
     pool: Pool;
     search?: SearchService;
     access?: Access | AccessFactory;
