@@ -3,7 +3,7 @@ import { m } from '../paraglide/messages.js';
 export type SettingsSection = {
   id: 'reading' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
   label: string;
-  status?: string;
+  status?: string | undefined;
 };
 
 export function settingsSections({
@@ -15,7 +15,7 @@ export function settingsSections({
   notifications: boolean;
   collections: boolean;
   verification: boolean;
-  readingState?: 'closed' | 'preparing' | 'unavailable';
+  readingState?: 'closed' | 'preparing' | 'unavailable' | undefined;
 }): SettingsSection[] {
   return [
     {

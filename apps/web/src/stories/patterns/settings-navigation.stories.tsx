@@ -14,7 +14,7 @@ const meta = {
   },
 } satisfies Meta<typeof SectionsNavigation>;
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof Example>;
 
 function Example({
   state = 'ready',

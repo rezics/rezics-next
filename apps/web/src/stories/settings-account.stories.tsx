@@ -11,7 +11,7 @@ const meta = {
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof AccountSafetyCard>;
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof Example>;
 
 function Example({ scenario = 'ready' }: { scenario?: AccountSafetyExample }) {
   const [current, setCurrent] = useState(scenario);
