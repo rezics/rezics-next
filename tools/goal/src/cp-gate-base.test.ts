@@ -1,50 +1,67 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { run } from './cli.ts';
+import { createRuntime } from './config.ts';
 import { git } from './merge.ts';
-import { integrationHarness, markdown } from './test-support.ts';
+import { openDb } from './db.ts';
+import { harness, integrationHarness, markdown } from './test-support.ts';
 
-test('run() passes detached train mode to its runtime factory without changing the process environment', async () => {
-  const before = process.env.GOAL_TRAIN_MODE;
-  delete process.env.GOAL_TRAIN_MODE;
-  let received: { trainMode: 'detached' | 'inline' } | undefined;
-  try {
-    const status = await run(['status'], async (options) => {
-      received = options;
-      return {
-        settings: { stateDirectory: '/tmp/goal-cli-test' },
-        db: { close() {} },
-        store: { tasks: () => [] },
-        job: { drain: async () => {} },
-        managerSocket: '/missing',
-      } as never;
+function cliRuntimeFixture() {
+  const h = harness();
+  const databasePath = join(h.settings.stateDirectory, 'control-plane-cli.sqlite');
+  const create = (options?: { trainMode: 'detached' | 'inline' }) => {
+    const runtime = createRuntime({
+      settings: h.settings,
+      ...(options ? { trainMode: options.trainMode } : {}),
+      db: openDb(databasePath),
     });
-    expect(status).toBe(0);
-    expect(received).toEqual({ trainMode: 'detached' });
-    expect(process.env.GOAL_TRAIN_MODE).toBeUndefined();
-  } finally {
-    if (before === undefined) delete process.env.GOAL_TRAIN_MODE;
-    else process.env.GOAL_TRAIN_MODE = before;
-  }
-});
+    runtime.db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    runtime.db
+      .query('INSERT OR IGNORE INTO manager_sessions(id, state) VALUES (?, ?)')
+      .run('fixture-manager', JSON.stringify({}));
+    runtime.train.runWaiting = async () => {};
+    return runtime;
+  };
+  const managerDecision = () => {
+    const db = openDb(databasePath);
+    try {
+      return db.query('SELECT manager FROM manager_turn_decisions WHERE manager = ?').get('fixture-manager');
+    } finally {
+      db.close();
+    }
+  };
+  return { h, create, managerDecision };
+}
 
-async function controlPlaneOutcome(
-  baseFails: boolean | string[],
-  files = ['tools/goal/src/fixtures/environment-probe.test.ts'],
-  baseFiles = files,
-) {
+async function withEnvironment<T>(values: Record<string, string | undefined>, runTest: () => Promise<T>): Promise<T> {
+  const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await runTest();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+async function controlPlaneOutcome(suiteOutput: string, suiteTimedOut = false, baseFailureFile?: string) {
   const h = integrationHarness();
   try {
-    for (const file of baseFiles) {
-      mkdirSync(join(h.root, dirname(file)), { recursive: true });
-      writeFileSync(join(h.root, file), '// fixture test file on base\n');
-    }
-    if (baseFiles.length) {
-      git(h.root, 'add', '--', ...baseFiles);
-      git(h.root, 'commit', '-m', 'Add base test fixtures');
+    if (baseFailureFile) {
+      mkdirSync(join(h.root, 'tools/goal/src/fixtures'), { recursive: true });
+      writeFileSync(join(h.root, baseFailureFile), '// fixture test file on main\n');
+      git(h.root, 'add', '--', baseFailureFile);
+      git(h.root, 'commit', '-m', 'Add main failure fixture');
     }
     h.ensureDev();
+    const mainBefore = h.head('main');
+    const devBefore = h.head('dev');
     const brief = join(h.settings.stateDirectory, 'control-plane.md');
     writeFileSync(
       brief,
@@ -62,135 +79,91 @@ async function controlPlaneOutcome(
       JSON.stringify({ file: 'tools/goal/src/change.ts', content: 'change' }),
     );
     await h.start(task);
-    const output = files.map((file) => `FAIL ${file}\n`).join('');
     const commands: { command: string[]; cwd: string }[] = [];
     await h.train(async (command, cwd) => {
       commands.push({ command: [...command], cwd });
       if (JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', 'tools/goal/src']))
-        return { passed: false, output, timedOut: false };
-      const file = command.at(-1)!;
-      if (command[0] === 'bun' && command[1] === 'test' && files.includes(file)) {
-        const onBase = cwd.includes('control-plane-base-');
-        const baseFileFails = Array.isArray(baseFails) ? baseFails.includes(file) : baseFails;
-        const fails = onBase ? baseFileFails : true;
-        return { passed: !fails, output: fails ? `FAIL ${file}\n` : '', timedOut: false };
-      }
+        return { passed: false, output: suiteOutput, timedOut: suiteTimedOut };
       return { passed: true, output: '', timedOut: false };
     });
-    return { outcome: h.outcomes[0], commands };
+    return {
+      outcome: h.outcomes[0],
+      commands,
+      mainBefore,
+      devBefore,
+      mainAfter: h.head('main'),
+      devAfter: h.head('dev'),
+    };
   } finally {
     h.dispose();
   }
 }
 
-test.serial(
-  'the control-plane gate allows failures reproduced by the same test file on its base',
-  async () => {
-    const { outcome } = await controlPlaneOutcome(true);
-    expect(outcome?.passed).toBe(true);
-  },
-  30_000,
-);
-
-test('run() passes the detached train mode to the code that needs it instead of setting process.env', async () => {
+test('run() passes detached train mode to its runtime factory without changing the process environment', async () => {
   const before = process.env.GOAL_TRAIN_MODE;
-  const received: unknown[] = [];
-  const runtime = {
-    settings: { stateDirectory: '.temp/goal-cli-test' },
-    db: { close() {} },
-    store: { tasks: () => [] },
-    job: { drain: async () => {} },
-    inbox: {},
-    queue: {},
-    train: { runWaiting: async () => {} },
-  };
-  for (const command of ['status', 'train', 'status']) {
-    expect(
-      await run([command], (options) => {
-        received.push(options);
-        return runtime as never;
+  const fixture = cliRuntimeFixture();
+  delete process.env.GOAL_TRAIN_MODE;
+  let received: { trainMode: 'detached' | 'inline' } | undefined;
+  try {
+    const status = await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, () =>
+      run(['status'], (options) => {
+        received = options;
+        return fixture.create(options);
       }),
-    ).toBe(0);
-    expect(process.env.GOAL_TRAIN_MODE).toBe(before);
+    );
+    expect(status).toBe(0);
+    expect(received).toEqual({ trainMode: 'detached' });
+    expect(process.env.GOAL_TRAIN_MODE).toBeUndefined();
+    expect(fixture.managerDecision()).toBeTruthy();
+  } finally {
+    if (before === undefined) delete process.env.GOAL_TRAIN_MODE;
+    else process.env.GOAL_TRAIN_MODE = before;
+    fixture.h.dispose();
   }
-  expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
 });
 
 test.serial(
-  "the control-plane landing check reruns each failing test file alone on the landing's base and refuses only failures that pass on the base or are new in the branch",
+  'run() selects train mode explicitly and attributes manager commands in SQLite without changing env',
   async () => {
-    const shared = 'tools/goal/src/fixtures/shared.test.ts';
-    const regression = 'tools/goal/src/fixtures/regression.test.ts';
-    const added = 'tools/goal/src/fixtures/new.test.ts';
-    const { outcome, commands } = await controlPlaneOutcome(
-      [shared],
-      [shared, regression, added],
-      [shared, regression],
-    );
-    const baseRuns = commands.filter(
-      ({ command, cwd }) => command[1] === 'test' && cwd.includes('control-plane-base-'),
-    );
-    expect(baseRuns.map(({ command }) => command)).toEqual([
-      ['bun', 'test', '--timeout', '30000', regression],
-      ['bun', 'test', '--timeout', '30000', shared],
-    ]);
-    expect(outcome?.passed).toBe(false);
-    expect(outcome?.firstFailure?.excerpt).toContain(regression);
-    expect(outcome?.firstFailure?.excerpt).toContain(added);
-    expect(outcome?.firstFailure?.excerpt).not.toContain(shared);
+    const before = process.env.GOAL_TRAIN_MODE;
+    const fixture = cliRuntimeFixture();
+    const received: unknown[] = [];
+    try {
+      await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, async () => {
+        for (const command of ['status', 'train', 'status']) {
+          expect(
+            await run([command], (options) => {
+              received.push(options);
+              return fixture.create(options);
+            }),
+          ).toBe(0);
+          expect(process.env.GOAL_TRAIN_MODE).toBe(before);
+        }
+      });
+      expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
+      expect(fixture.managerDecision()).toBeTruthy();
+    } finally {
+      fixture.h.dispose();
+    }
   },
-  30_000,
 );
 
 test.serial(
-  'the control-plane gate refuses a test file that fails on the branch and passes on its base',
+  'a required full-suite failure is refused even when the same test failure exists on main',
   async () => {
-    const { outcome } = await controlPlaneOutcome(false);
-    expect(outcome?.passed).toBe(false);
-    expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
-  },
-  30_000,
-);
-
-test.serial(
-  'the control-plane gate compares each failing test file alone on branch and base',
-  async () => {
-    const files = ['tools/goal/src/fixtures/one.test.ts', 'tools/goal/src/fixtures/two.test.ts'];
-    const { outcome, commands } = await controlPlaneOutcome([files[0]!], files);
-    const isolatedRuns = commands.filter(
-      ({ command }) => command[0] === 'bun' && command[1] === 'test' && files.includes(command.at(-1)!),
+    const failureFile = 'tools/goal/src/fixtures/base-regression.test.ts';
+    const { outcome, commands, mainBefore, devBefore, mainAfter, devAfter } = await controlPlaneOutcome(
+      `FAIL ${failureFile}\n`,
+      false,
+      failureFile,
     );
-
-    expect(isolatedRuns.map(({ command }) => command)).toEqual([
-      ['bun', 'test', '--timeout', '30000', files[0]!],
-      ['bun', 'test', '--timeout', '30000', files[1]!],
-      ['bun', 'test', '--timeout', '30000', files[0]!],
-      ['bun', 'test', '--timeout', '30000', files[1]!],
-    ]);
-    expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
-    expect(isolatedRuns[1]?.cwd).not.toContain('control-plane-base-');
-    expect(isolatedRuns[2]?.cwd).toContain('control-plane-base-');
-    expect(isolatedRuns[3]?.cwd).toContain('control-plane-base-');
     expect(outcome?.passed).toBe(false);
-    expect(outcome?.firstFailure?.excerpt).toContain(files[1]);
-    expect(outcome?.firstFailure?.excerpt).not.toContain(files[0]);
-  },
-  30_000,
-);
-
-test.serial(
-  'a failing control-plane test file added on the branch is a new failure',
-  async () => {
-    const file = 'tools/goal/src/fixtures/branch-only.test.ts';
-    const { outcome, commands } = await controlPlaneOutcome([], [file], []);
-    const isolatedRuns = commands.filter(
-      ({ command }) => JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', file]),
-    );
-
-    expect(isolatedRuns.map(({ command }) => command)).toEqual([['bun', 'test', '--timeout', '30000', file]]);
-    expect(isolatedRuns[0]?.cwd).not.toContain('control-plane-base-');
-    expect(outcome?.passed).toBe(false);
-    expect(outcome?.firstFailure?.assertion).toContain('Failures introduced on this branch');
+    expect(outcome?.stage).toBe('gate');
+    expect(outcome?.firstFailure?.excerpt).toContain(failureFile);
+    expect(commands.some(({ command }) => command[1] === 'test' && command.at(-1) === failureFile)).toBe(false);
+    expect(commands.some(({ cwd }) => cwd.includes('control-plane-base-'))).toBe(false);
+    expect(mainAfter).toBe(mainBefore);
+    expect(devAfter).toBe(devBefore);
   },
   30_000,
 );

@@ -542,17 +542,11 @@ existing transport retries, unverified environment classification and failure lo
 captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
-split them into a dev task. A control-plane task starts from `main`, the branch it integrates into, even when `dev` has
-different `tools/goal/` content. This rule also applies if a brief or later retarget names `stabilize`. It rebases onto
-current `main`, formats its changes,
-then runs `bun run --cwd tools/goal typecheck` and `bun test tools/goal/src` before `main` advances. The train compare-and-
-swaps `main`, then merges the checked main commit into `stabilize` and merges that resulting stabilize head into the
-integration branch, also using compare-and-swap. A conflict aborts that merge, leaves its target branch unchanged, and
-notifies the task manager and supermanager. When no stabilize branch exists, the checked main commit merges directly
-into the integration branch. A failed control-plane check is recorded as a gate failure and retried with its failure
-evidence; changes outside the task's declared paths still count as scope growth. Control-plane tasks that change a file
-outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to use their recorded
-target. Tasks from other Goals continue to integrate into the integration branch as before.
+split them into a dev task. Every control-plane landing that changes `tools/goal/` uses the same release path, including
+launch, settle, wake, retry, train and emergency changes. A control-plane task starts from `main`, the branch it
+integrates into, even when `dev` has different `tools/goal/` content. This rule also applies if a brief or later retarget
+names `stabilize`. It rebases onto current `main`, formats its changes, installs root and `tools/goal/` dependencies,
+then runs `bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
 
 Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
@@ -567,6 +561,47 @@ Before disposable cleanup, the real smoke retains a bounded, sanitized per-run r
 booleans, current structured result, current-run event suffix, and check identities/results. Prompts, account settings,
 raw tool arguments and tool output are omitted. Resuming clears the recorded current result until that turn exits;
 an older waiting result cannot stand in for the current failure. Cleanup does not discard this evidence.
+
+Before any release ref moves, the train checks the executable main-consumer/dev-script contract against the exact
+snapshotted dev script tree. It installs dependencies in a detached worktree at that dev commit, then runs
+`bun tools/goal/scripts/check-compatibility.ts --scripts-root <dev-script-worktree>`. The contract verifies the
+main-side worker-check consumer, pinned Bun artifact and remote-check invocation against those dev scripts. The train
+also runs the complete real-boundary lifecycle suite through `tools/goal/scripts/launch-smoke.ts`, passing the expected
+dev tree commit. The disposable scenario starts a real worker, runs and waits for `scripts/worker-check.ts`, wakes and
+resumes the same attempt, and records named scenario and regression evidence. A recorded success names the exact main
+candidate, dev script tree and scenario results. A failed, timed-out, capacity-waiting or incomplete suite or contract
+is unverified and cannot certify `main`; no baseline allowance can turn a required failure into a pass. Candidate
+mutation or a stale main, stabilize or dev ref invalidates the run and starts validation again.
+
+The train precomputes merge candidates for `main`, `stabilize` when that branch exists, and `dev`, then publishes the
+ref changes in one Git compare-and-swap transaction. If `stabilize` is absent, it prepares `main` directly into `dev`.
+Moving refs are re-snapshotted and checked again, preserving unrelated work on `stabilize` and `dev`; branches are never
+reset to `main`. A propagation conflict records its exact files and Git cause once, leaves all release refs unchanged,
+and notifies the task manager and supermanager. Repeated identical conflicts are bounded and quarantined by the
+controller. A durable release record lets a later train recover an interrupted landing, and it never reports the task
+complete while a required branch is missing the recorded release.
+
+Use the normal train for a local emergency patch: have the supermanager write a `control-plane` brief naming the
+changed `tools/goal/` paths and a regression case, dispatch it, then land it through the controller. Do not patch
+`main`, `stabilize` or `dev` directly.
+
+```sh
+bun tools/goal/src/cli.ts dispatch .temp/goal/control-plane-emergency.md
+bun tools/goal/src/cli.ts land <task>
+```
+
+To reproduce the shared compatibility contract locally, use a detached checkout of the dev commit being checked:
+
+```sh
+bun tools/goal/scripts/check-compatibility.ts --scripts-root <dev-script-worktree>
+bun tools/goal/scripts/launch-smoke.ts --expected-dev-script-tree <dev-commit>
+```
+
+The lifecycle smoke uses the cheapest configured Codex model at low effort, with the configured service tier (Fast is
+refused), a five-minute deadline, and a prompt budget of 2000 generated tokens. Fake-agent protocol tests use actual
+detached checks without provider calls. A failed step is returned to the task with its step output. Control-plane tasks
+that change a file outside `tools/goal/` are not routed to `main`; historical tasks that declared such paths continue to
+use their recorded target. Tasks from other Goals continue to integrate into the integration branch as before.
 
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork

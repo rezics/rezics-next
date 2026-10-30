@@ -497,9 +497,22 @@ describe('control-plane launch smoke gate', () => {
         },
         runLaunchSmoke: async (command, cwd) => {
           order.push('smoke');
-          expect(command).toEqual(['bun', 'tools/goal/scripts/launch-smoke.ts']);
+          const candidate = git(cwd, 'rev-parse', 'HEAD');
+          const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+          expect(command).toEqual([
+            'bun',
+            'tools/goal/scripts/launch-smoke.ts',
+            '--expected-dev-script-tree',
+            devScriptTree,
+          ]);
           expect(readFileSync(join(cwd, 'tools/goal/src/launch.ts'), 'utf8')).toBe('candidate\n');
-          return { passed: true, output: 'start: passed\nwake: passed\nsuccess: passed\n', timedOut: false };
+          return {
+            passed: true,
+            output:
+              `start: passed\nwake: passed\nsuccess: passed\n` +
+              `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=launch:passed lifecycle-regressions=retry:passed\n`,
+            timedOut: false,
+          };
         },
       }).run();
       expect(order.at(-1)).toBe('smoke');
@@ -512,7 +525,7 @@ describe('control-plane launch smoke gate', () => {
     }
   });
 
-  test('does not run the smoke for a control-plane candidate outside the launch path', async () => {
+  test('runs the complete lifecycle suite for every control-plane path', async () => {
     const s = controlPlaneLanding('tools/goal/src/other.ts');
     try {
       let smokeRuns = 0;
@@ -520,12 +533,18 @@ describe('control-plane launch smoke gate', () => {
         ...s.options,
         integrationBranch: 'dev',
         runGate: async () => ({ passed: true, output: '', timedOut: false }),
-        runLaunchSmoke: async () => {
+        runLaunchSmoke: async (_command, cwd) => {
           smokeRuns++;
-          return { passed: true, output: '', timedOut: false };
+          const candidate = git(cwd, 'rev-parse', 'HEAD');
+          const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+          return {
+            passed: true,
+            output: `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=landing:passed lifecycle-regressions=landing:passed\n`,
+            timedOut: false,
+          };
         },
       }).run();
-      expect(smokeRuns).toBe(0);
+      expect(smokeRuns).toBe(1);
       expect(s.outcomes[0]?.passed).toBe(true);
       expect(readFileSync(join(s.main, 'tools/goal/src/other.ts'), 'utf8')).toBe('candidate\n');
     } finally {

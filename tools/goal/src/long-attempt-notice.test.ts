@@ -63,7 +63,7 @@ test('a long attempt is reported once when it crosses the threshold, then at mos
   }
 });
 
-test('a long attempt is reported again at once when its last command or commit count changes', () => {
+test('a new command alone does not notify again, while new commits notify immediately and deduplicate', () => {
   const value = setup();
   try {
     const threshold = now + 1;
@@ -75,11 +75,13 @@ test('a long attempt is reported again at once when its last command or commit c
         item: { id: 'new-command', type: 'command_execution', command: 'bun test changed.ts' },
       }) + '\n',
     );
-    expect(value.run(threshold + 1_000)).toBe(1);
+    expect(value.run(threshold + 1_000)).toBe(0);
+    expect(value.run(threshold + 60 * 60_000)).toBe(1);
     writeFileSync(join(value.worker.worktree, 'commit-change.txt'), 'new commit\n');
     git(value.worker.worktree, ['add', 'commit-change.txt']);
     git(value.worker.worktree, ['commit', '-m', 'advance attempt']);
-    expect(value.run(threshold + 2_000)).toBe(1);
+    expect(value.run(threshold + 60 * 60_000 + 1_000)).toBe(1);
+    expect(value.run(threshold + 60 * 60_000 + 2_000)).toBe(0);
     expect(value.delivered).toHaveLength(3);
   } finally {
     value.repo.close();

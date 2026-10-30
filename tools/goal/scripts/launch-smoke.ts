@@ -47,6 +47,7 @@ export type SmokeOptions = {
   report?: (line: string) => void;
   env?: NodeJS.ProcessEnv;
   reportPath?: string;
+  expectedDevScriptTree?: string;
 };
 
 type SmokeReport = {
@@ -55,6 +56,7 @@ type SmokeReport = {
   startedAt: string;
   finishedAt?: string;
   candidate?: string;
+  devScriptTree?: string;
   scenarios: ScenarioEvidence[];
   incidents: ExecutedRegression[];
   suiteRegressions: ExecutedRegression[];
@@ -636,12 +638,12 @@ function fakeStep(
   };
 }
 
-/** Fake-agent seam for the fast protocol tests. The train invokes the no-argument real path. */
+/** Fake-agent seam for the fast protocol tests. The train invokes the real lifecycle suite. */
 export async function runLaunchSmoke(agent?: string, options: SmokeOptions = {}): Promise<void> {
   const root = resolve(options.root ?? resolve(import.meta.dir, '../../..'));
   const report = options.report ?? reportLine;
   if (agent) return runFakeSmoke(agent, root, report, options.env ?? {});
-  return runRealSmoke(root, report, options.reportPath);
+  return runRealSmoke(root, report, options.reportPath, options.expectedDevScriptTree);
 }
 
 async function runFakeSmoke(
@@ -889,7 +891,12 @@ function signalChildGroup(child: ReturnType<typeof spawn>, signal: NodeJS.Signal
   }
 }
 
-async function runRealSmoke(root: string, report: Reporter, requestedReportPath?: string): Promise<void> {
+async function runRealSmoke(
+  root: string,
+  report: Reporter,
+  requestedReportPath?: string,
+  expectedDevScriptTree?: string,
+): Promise<void> {
   let currentStep = 'candidate';
   const startedAt = Date.now();
   const deadline = startedAt + INNER_BUDGET_MS;
@@ -976,6 +983,13 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
     } catch {
       git(clone, 'fetch', '--quiet', sourceRoot, `${devRef}:${remoteDev}`);
     }
+    const devScriptTree = git(clone, 'rev-parse', `${remoteDev}^{commit}`);
+    if (expectedDevScriptTree && expectedDevScriptTree !== devScriptTree)
+      throw new Error(
+        `dev script tree changed before lifecycle validation: expected ${expectedDevScriptTree}, found ${devScriptTree}`,
+      );
+    evidence.devScriptTree = devScriptTree;
+    persistReport(root, reportPath, evidence);
     devTree = join(temporary, 'dev');
     git(clone, 'worktree', 'add', '--detach', devTree, remoteDev);
     devWorktreeAdded = true;
@@ -1013,6 +1027,14 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
     const completed = readReport(reportPath);
     if (completed.status !== 'passed')
       throw new Error('inner lifecycle suite exited without complete passing evidence');
+    const scenarioEvidence = completed.scenarios.map(({ id, status }) => `${id}:${status}`).join(',');
+    const regressionEvidence = completed.suiteRegressions.map(({ id, status }) => `${id}:${status}`).join(',');
+    if (!scenarioEvidence || !regressionEvidence)
+      throw new Error('inner lifecycle suite omitted named scenario or regression evidence');
+    report(
+      `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} ` +
+        `scenarios=${scenarioEvidence} lifecycle-regressions=${regressionEvidence}`,
+    );
     saveRunEvidence({ status: 'passed', completedAt: new Date().toISOString() });
     report(`evidence: ${reportPath}`);
   } catch (error) {
@@ -1704,11 +1726,17 @@ export function parseSmokeArguments(args: string[]): SmokeOptions {
   const options: SmokeOptions = {};
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
-    if (value !== '--report') throw new Error(`unknown launch-smoke argument: ${value}`);
-    const path = args[++index];
-    if (!path) throw new Error('--report requires a path');
-    if (options.reportPath) throw new Error('--report can be supplied only once');
-    options.reportPath = path;
+    if (value === '--report') {
+      const path = args[++index];
+      if (!path) throw new Error('--report requires a path');
+      if (options.reportPath) throw new Error('--report can be supplied only once');
+      options.reportPath = path;
+    } else if (value === '--expected-dev-script-tree') {
+      const tree = args[++index];
+      if (!tree) throw new Error('--expected-dev-script-tree requires a commit');
+      if (options.expectedDevScriptTree) throw new Error('--expected-dev-script-tree can be supplied only once');
+      options.expectedDevScriptTree = tree;
+    } else throw new Error(`unknown launch-smoke argument: ${value}`);
   }
   return options;
 }
