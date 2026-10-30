@@ -92,7 +92,7 @@ async function unavailableReady({ canvasElement }: { canvasElement: HTMLElement 
 }
 
 export const Home: Story = {
-  id: 'pages-zones-home-with-mounted-collections',
+  parameters: { __id: 'pages-zones-home-with-mounted-collections' },
   name: 'Static home',
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
@@ -105,28 +105,28 @@ export const PrivateOwner: Story = {
 };
 
 export const Subject: Story = {
-  id: 'pages-zones-subject-page-in-a-zone',
+  parameters: { __id: 'pages-zones-subject-page-in-a-zone' },
   name: 'Configured static page',
   play: configuredPageReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/guide`} />,
 };
 
 export const AlternateAppearance: Story = {
-  id: 'pages-zones-alternate-appearance-preset',
+  parameters: { __id: 'pages-zones-alternate-appearance-preset' },
   name: 'Configured page appearance',
   play: configuredAppearanceReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/guide`} />,
 };
 
 export const Preparing: Story = {
-  id: 'pages-zones-preparing-page-continues-in-the-browser',
+  parameters: { __id: 'pages-zones-preparing-page-continues-in-the-browser' },
   name: 'Unknown configured route',
   play: unknownZoneReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/not-configured`} />,
 };
 
 export const Unavailable: Story = {
-  id: 'pages-zones-preparing-page-waits-for-the-kernel',
+  parameters: { __id: 'pages-zones-preparing-page-waits-for-the-kernel' },
   name: 'Unavailable read',
   play: unavailableReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${unavailableZone}`} />,
