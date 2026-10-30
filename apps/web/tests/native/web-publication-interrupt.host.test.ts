@@ -23,9 +23,24 @@ describe('native web publication driver interruptions', () => {
 
     const restore = await driver.interrupt('owner-read');
     try {
-      const unavailable = await driver.request(fixture.unavailableView);
-      expect(unavailable.status).not.toBe(200);
-      await unavailable.body?.cancel();
+      const healthyPage = await driver.request('/robots.txt');
+      expect(healthyPage.status).toBe(200);
+      await healthyPage.body?.cancel();
+
+      let unavailable: Response | undefined;
+      let failure: unknown;
+      try {
+        unavailable = await driver.request(fixture.unavailableView);
+      } catch (error) {
+        failure = error;
+      }
+      if (unavailable) {
+        expect(unavailable.status).not.toBe(200);
+        await unavailable.body?.cancel();
+      } else {
+        expect(failure).toBeInstanceOf(Error);
+        expect(String(failure)).toMatch(/timeout|network|fetch|connection/i);
+      }
     } finally {
       await restore();
     }

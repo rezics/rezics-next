@@ -70,8 +70,9 @@ async function childPids(pid: number): Promise<number[]> {
   }
 }
 
-async function ownedStackHost(): Promise<ProcessInfo> {
+async function ownedStackHost(exclude: ReadonlySet<number>): Promise<ProcessInfo> {
   for (const pid of await childPids(process.pid)) {
+    if (exclude.has(pid)) continue;
     const info = await processInfo(pid);
     if (
       info?.command.includes('tests/native/stack.ts') &&
@@ -150,7 +151,9 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
 
 export async function createWebPublicationDriver(): Promise<WebPublicationDriver> {
   const factoryStarted = performance.now();
+  const existingChildren = new Set(await childPids(process.pid));
   const stack = await startNativeWebStack();
+  const host = await ownedStackHost(existingChildren);
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
   const interruptionRestores = new Set<() => Promise<void>>();
@@ -584,7 +587,6 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       publicOrigin = origin;
     },
     async interrupt(kind) {
-      const host = await ownedStackHost();
       const target = kind === 'subject-view' ? await durableWorker(host.pid) : host;
       if (kind === 'owner-read') {
         // Cache fixture bearer credentials before stopping the stack host. The
