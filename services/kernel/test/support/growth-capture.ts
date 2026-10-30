@@ -18,6 +18,7 @@ export type GrowthDatabase = {
 export type SeedingCount = { statements: number; rowsWritten: number };
 
 type ActiveCapture = {
+  readonly mode: 'measured' | 'warmup';
   statementRecords: StatementRecord[];
   plans: unknown[];
   planDatabases: string[];
@@ -64,7 +65,6 @@ type CaptureState = {
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
-const warmupCapture = new AsyncLocalStorage<GrowthDatabase>();
 type RunCapture = Map<GrowthDatabase, Set<string>> & {
   readonly databases: Set<GrowthDatabase>;
   readonly backends: Set<number>;
@@ -579,19 +579,31 @@ export async function capture<T>(
   operation: () => Promise<T>,
   options: { readonly includeBackends?: boolean } = {},
 ): Promise<{ value: T; capture: Capture }> {
+  return captureInternal(database, operation, options, false);
+}
+
+async function captureInternal<T>(
+  database: GrowthDatabase,
+  operation: () => Promise<T>,
+  options: { readonly includeBackends?: boolean },
+  explicitWarmup: boolean,
+): Promise<{ value: T; capture: Capture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
   const parentActive = state.active;
-  if (parentActive && currentAttribution(state)?.capture !== parentActive && warmupCapture.getStore() !== database)
+  const ownsParent = parentActive !== undefined && currentAttribution(state)?.capture === parentActive;
+  if (parentActive && !(parentActive.mode === 'warmup' && ownsParent))
     throw new Error('A growth capture is already active for this database');
   if (state.setupError) throw state.setupError;
 
+  const mode = explicitWarmup || (parentActive?.mode === 'warmup' && ownsParent) ? 'warmup' : 'measured';
   const active: ActiveCapture = {
+    mode,
     statementRecords: [],
     plans: [],
     planDatabases: [],
     planStatements: [],
-    includeBackends: options.includeBackends === true || warmupCapture.getStore() === database,
+    includeBackends: options.includeBackends === true || mode === 'warmup',
     planBackends: [],
     backgroundPlans: [],
     backgroundPlanDatabases: [],
@@ -678,9 +690,9 @@ export async function capture<T>(
   }
 }
 
-/** Runs a warm-up in a recording capture while allowing the hook to open its own nested capture. */
+/** Runs an explicitly owned warm-up capture; nested captures inherit warm-up custody. */
 export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
-  return warmupCapture.run(database, () => capture(database, operation, { includeBackends: true }));
+  return captureInternal(database, operation, { includeBackends: true }, true);
 }
 
 function databaseName(database: GrowthDatabase): string {

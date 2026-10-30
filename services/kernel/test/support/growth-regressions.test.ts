@@ -1,6 +1,8 @@
 import pg from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { capture, checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from './growth.ts';
+import { captureWarmup } from './growth-capture.ts';
+import { statementOccurrences } from './growth-report.ts';
 import { seed, type Population } from './growth-seed.ts';
 
 const schema = 'growth_regressions_test';
@@ -61,6 +63,95 @@ test('a warmup capture is allowed and its writes settle before the first measure
       expect(result.rows[0]!.visible).toBe(result.rows[0]!.pages);
     },
   });
+});
+
+test('same-database measured nesting rejects before child effects and preserves the parent capture', async () => {
+  const sentinelId = 1_000_000 + Math.floor(Math.random() * 1_000_000);
+  let childCalls = 0;
+  const parent = await capture(db, async () => {
+    await db.pool.query('SELECT 431 AS parent_before_rejected_child');
+    await expect(
+      capture(db, async () => {
+        childCalls++;
+        await db.pool.query(`INSERT INTO ${table} VALUES ($1, 'nested child ran')`, [sentinelId]);
+      }),
+    ).rejects.toThrow('A growth capture is already active for this database');
+    await db.pool.query('SELECT 432 AS parent_after_rejected_child');
+  });
+
+  expect(childCalls).toBe(0);
+  const sentinel = await db.admin.query(`SELECT id FROM ${table} WHERE id = $1`, [sentinelId]);
+  expect(sentinel.rows).toEqual([]);
+  expect(parent.capture.statements).toEqual([
+    'SELECT 431 AS parent_before_rejected_child',
+    'SELECT 432 AS parent_after_rejected_child',
+  ]);
+  expect(parent.capture.plans).toHaveLength(2);
+  expect(parent.capture.planStatements).toEqual([0, 1]);
+  const occurrences = statementOccurrences(parent.capture).statements;
+  expect(occurrences.map(({ statement }) => statement)).toEqual([
+    'SELECT ? AS parent_before_rejected_child',
+    'SELECT ? AS parent_after_rejected_child',
+  ]);
+  expect(occurrences.map(({ plans }) => plans)).toEqual([[0], [1]]);
+  expect(occurrences.flatMap(({ planDocuments }) => planDocuments)).toEqual(parent.capture.plans);
+
+  const independent = await capture(db, () => db.pool.query('SELECT 433 AS independent_after_rejected_child'));
+  expect(independent.capture.statements).toEqual(['SELECT 433 AS independent_after_rejected_child']);
+  expect(independent.capture.plans).toHaveLength(1);
+});
+
+test('checkGrowth rejects an operation that opens a measured capture on its database', async () => {
+  let operationCalls = 0;
+  let nestedCallbackCalls = 0;
+  await expect(
+    checkGrowth(db, {
+      name: 'measured operation opens a nested capture',
+      scales: [1, 4, 16],
+      warmups: 1,
+      repetitions: 1,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {},
+      async operation(database) {
+        operationCalls++;
+        await capture(database, async () => {
+          nestedCallbackCalls++;
+          await database.pool.query('SELECT 434 AS nested_measured_operation');
+        });
+      },
+    }),
+  ).rejects.toThrow('A growth capture is already active for this database');
+  expect(operationCalls).toBe(2);
+  expect(nestedCallbackCalls).toBe(1);
+});
+
+test('captureWarmup cannot replace an active measured parent or enter nested child work', async () => {
+  const sentinelId = 2_000_000 + Math.floor(Math.random() * 1_000_000);
+  let warmupCalls = 0;
+  let nestedCaptureCalls = 0;
+  const parent = await capture(db, async () => {
+    await db.pool.query('SELECT 435 AS measured_parent_before_warmup');
+    await expect(
+      captureWarmup(db, async () => {
+        warmupCalls++;
+        await capture(db, async () => {
+          nestedCaptureCalls++;
+          await db.pool.query(`INSERT INTO ${table} VALUES ($1, 'nested warmup ran')`, [sentinelId]);
+        });
+      }),
+    ).rejects.toThrow('A growth capture is already active for this database');
+    await db.pool.query('SELECT 436 AS measured_parent_after_warmup');
+  });
+
+  expect(warmupCalls).toBe(0);
+  expect(nestedCaptureCalls).toBe(0);
+  const sentinel = await db.admin.query(`SELECT id FROM ${table} WHERE id = $1`, [sentinelId]);
+  expect(sentinel.rows).toEqual([]);
+  expect(parent.capture.statements).toEqual([
+    'SELECT 435 AS measured_parent_before_warmup',
+    'SELECT 436 AS measured_parent_after_warmup',
+  ]);
+  expect(parent.capture.plans).toHaveLength(2);
 });
 
 test('writes through a connection to another database settle there, not by relation name in the growth database', async () => {
