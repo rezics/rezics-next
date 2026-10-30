@@ -570,3 +570,17 @@ than injected entries. Invalid archive staging exits 2, matching scalar input
 admission; interruption still exits 130. Files and SQLite close on either path.
 The [evidence notes](../../docs/research/imports-audit/cli-file-admission.md) describe
 captured anchors and limits. This caller adds no growth measurement or input cap.
+
+## Concurrent ordinary CLI operators
+
+Use the same `--state` path for independent configured `--source-alias` feeds. A live CLI owns its exact alias
+while acquiring input, including while stdin waits before EOF. Another CLI for that alias exits 5 before Auth
+or public writes; a different alias can seal and publish in the same SQLite file. Cancel the owner through
+SIGINT and reopen with the same state and complete source input. Source claims, own-reference resolution,
+receipts and tuple fences remain confined to their configured alias even when native provider keys coincide.
+
+The frozen [concurrent native journey](../kernel/test/imports/concurrent-cli-owners.test.ts) binds actual concurrent
+`runImportCli` calls to one native Auth/Access/application/worker world. Its [evidence description](../../docs/research/imports-audit/concurrent-cli-owners.md)
+covers held acquisition, same-alias refusal, independent publication, cancellation/reopening, immutable prior
+identities/receipts, and exact-tuple fence visibility. The importer-local companion proves only pre-effect
+ownership and cleanup. Native execution and growth evidence are separate; this caller introduces no growth series.
