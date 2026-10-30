@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
 
 const viewports = {
@@ -42,4 +44,29 @@ export const Delisted: Story = {
   name: 'Delisted',
   play: offerDelistedReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths['offer-delisted']} />,
+};
+
+export const KernelUnavailable: Story = {
+  name: 'Kernel Unavailable',
+  play: async ({ canvasElement }) => {
+    const originalFetch = window.fetch;
+    window.fetch = async (input, init) => {
+      const request = input instanceof Request ? input : undefined;
+      const target = request?.url ?? (input instanceof URL ? input.href : input);
+      const url = new URL(target, window.location.href);
+      const method = init?.method ?? request?.method ?? 'GET';
+      if (url.pathname === '/checkout' && method === 'POST') return new Response(null, { status: 503 });
+      return originalFetch(input, init);
+    };
+    try {
+      const main = await within(canvasElement).findByRole('main');
+      const view = within(main);
+      await userEvent.click(await view.findByRole('button', { name: m.offer_buy() }));
+      await view.findByText(m.offer_retry_note());
+      await view.findByRole('button', { name: m.offer_retry() });
+    } finally {
+      window.fetch = originalFetch;
+    }
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
 };
