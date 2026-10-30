@@ -2,9 +2,13 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProgressRow } from '@rezics/ui/progress-row';
+import definitionsRecording from '../src/kernel/recorded/definitions-release.json';
+import { progressSessionProfile } from '../src/library/progress-profile';
+import type { ProgressLabelInput } from '../src/library/progress-label';
+import type { Release } from '../src/subject/definitions';
 
 const source = async (path: string) => Bun.file(new URL(path, import.meta.url)).text();
-const shared = (input: Record<string, unknown>) => input as never;
+const recordedRelease = definitionsRecording.release as unknown as Release;
 const catalogues = Object.fromEntries(
   await Promise.all(
     ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'es', 'fr'].map(async (locale) => [
@@ -31,29 +35,49 @@ mock.module('../src/paraglide/messages.js', () => ({
 
 test('one shared progress formatter uses the localized unit forms and shares', async () => {
   const { progressView } = await import('../src/library/progress-label.ts');
-  const amount = (unit: string, value: string, total: string | null = null) =>
-    shared({
-      mode: 'scalar_amount',
-      unit,
-      amount: value,
-      total,
-      completedUnitCount: 0,
-      locator: null,
-    });
+  const amount = (unit: string, value: string, total: string | null = null, locale = 'en'): ProgressLabelInput => ({
+    mode: 'scalar_amount',
+    unit,
+    ...progressSessionProfile(recordedRelease, '', 'scalar_amount', unit, locale),
+    amount: value,
+    total,
+    completedUnitCount: 0,
+    locator: null,
+  });
 
-  expect(progressView(amount('chapter', '5'), 'en')).toEqual({ text: 'Ch 5', percent: null });
-  expect(progressView(amount('page', '118'), 'en')).toEqual({ text: 'p. 118', percent: null });
-  expect(progressView(amount('episode', '3', '12'), 'en')).toEqual({ text: 'Ep 3/12', percent: 25 });
+  expect(progressView(amount('chapter', '5'), 'en')).toEqual({ text: '5 chapters', percent: null });
+  expect(progressView(amount('page', '118'), 'en')).toEqual({ text: '118 pages', percent: null });
+  expect(progressView(amount('episode', '3', '12'), 'en')).toEqual({ text: '3 / 12 episodes', percent: 25 });
   expect(progressView(amount('percent', '64'), 'en')).toEqual({ text: '64%', percent: 64 });
-  expect(progressView(amount('chapter', '5'), 'zh-Hans')?.text).toBe('第5章');
-  expect(progressView(amount('episode', '3', '12'), 'zh-Hans')?.text).toBe('3/12 集');
-  expect(progressView(amount('page', '118'), 'zh-Hans')?.text).toBe('第118页');
+  expect(progressView(amount('page', '1'), 'en')).toEqual({ text: '1 page', percent: null });
+  expect(progressView(amount('page', '1', '12'), 'en')).toEqual({ text: '1 / 12 pages', percent: (1 / 12) * 100 });
+  expect(progressView(amount('page', '118.000001'), 'en')?.text).toBe('118.000001 pages');
+  expect(progressView(amount('chapter', '5', null, 'zh-Hans'), 'zh-Hans')?.text).toBe('5章');
+  expect(progressView(amount('episode', '3', '12', 'zh-Hans'), 'zh-Hans')?.text).toBe('3/12集');
+  expect(progressView(amount('page', '118', null, 'zh-Hans'), 'zh-Hans')?.text).toBe('118页');
   const chinese = [
-    progressView(amount('chapter', '5'), 'zh-Hans')?.text,
-    progressView(amount('episode', '3', '12'), 'zh-Hans')?.text,
-    progressView(amount('page', '118'), 'zh-Hans')?.text,
+    progressView(amount('chapter', '5', null, 'zh-Hans'), 'zh-Hans')?.text,
+    progressView(amount('episode', '3', '12', 'zh-Hans'), 'zh-Hans')?.text,
+    progressView(amount('page', '118', null, 'zh-Hans'), 'zh-Hans')?.text,
   ].join(' ');
   expect(chinese).not.toMatch(/\b(?:Ch|Ep|p\.)\b/i);
+
+  const { parseUnitBatch } = await import('../src/library/progress-reads');
+  const sparse = parseUnitBatch('1,3,7');
+  expect(sparse).toEqual({ ok: true, ids: ['1', '3', '7'] });
+  if (!sparse.ok) throw new Error('Expected the sparse unit IDs');
+  expect(
+    progressView(
+      {
+        ...amount('chapter', '3', '12'),
+        ...progressSessionProfile(recordedRelease, '', 'completed_units', 'chapter', 'en'),
+        mode: 'completed_units',
+        amount: null,
+        completedUnitCount: sparse.ids.length,
+      },
+      'en',
+    ),
+  ).toEqual({ text: '3 / 12 chapters', percent: 25 });
 
   for (const name of ['progress-page.tsx', 'progress-session.tsx', 'continue.tsx']) {
     const text = await source(`../src/library/${name}`);
@@ -62,19 +86,24 @@ test('one shared progress formatter uses the localized unit forms and shares', a
   }
 });
 
-test('cursor positions use their locator as the row label on the pages and Continue card', async () => {
+test('cursor labels preserve free text and use exact positions when supplied on pages and Continue', async () => {
   const { progressView } = await import('../src/library/progress-label.ts');
-  const cursor = shared({
+  const cursor: ProgressLabelInput = {
     mode: 'cursor_position',
     unit: 'chapter',
+    ...progressSessionProfile(recordedRelease, '', 'cursor_position', 'chapter', 'en'),
     amount: null,
     total: null,
     completedUnitCount: 0,
     locator: 'Part 2, chapter 14',
-  });
+  };
   expect(progressView(cursor, 'en')).toEqual({ text: 'Part 2, chapter 14', percent: null });
-  expect(progressView(cursor, 'zh-Hans')).toEqual({ text: '第2部分，第14章', percent: null });
+  expect(progressView(cursor, 'zh-Hans')).toEqual({ text: 'Part 2, chapter 14', percent: null });
   expect(progressView({ ...cursor, locator: null }, 'en')).toEqual({ text: 'In progress', percent: null });
+  expect(progressView({ ...cursor, position: '42.000001' }, 'en')).toEqual({
+    text: '42.000001 chapters',
+    percent: null,
+  });
 
   const index = await source('../src/library/progress-page.tsx');
   const session = await source('../src/library/progress-session.tsx');
@@ -103,7 +132,7 @@ test('a known share and its label share one row, while an unknown share has no e
   expect(unknown).toContain('>p. 118</span>');
 });
 
-test('the signed-in home story renders one Continue card for every recorded active session up to the row limit', async () => {
+test('the retained Continue presentation fixture preserves every recorded active session up to the row limit', async () => {
   const continueEntries = (await Bun.file(
     new URL('../src/kernel/recorded/library-continue-entries.json', import.meta.url),
   ).json()) as {
@@ -130,17 +159,57 @@ test('the signed-in home story renders one Continue card for every recorded acti
     }),
   );
   expect(storySessions.flatMap(({ progressSessions }) => progressSessions)).toHaveLength(active.length);
-  const bySubject = new Map(recorded.map((session) => [session.subjectId, session]));
+  const { recordedContinueSessions } = await import('../src/kernel/fake/library-continue');
+  const { continueProgress } = await import('../src/library/continue-read');
+  const presented = recordedContinueSessions('en');
+  const bySubject = new Map(presented.map((session) => [session.subjectId, session]));
   const { progressView } = await import('../src/library/progress-label.ts');
   const rows = active.map((entry) => {
     const session = bySubject.get(entry.subjectId);
     expect(session, entry.subject.label).toBeDefined();
-    return progressView(shared(session!), 'en')!;
+    const progress = continueProgress(session!);
+    expect(progress).toMatchObject({
+      sessionId: session!.id,
+      mode: session!.mode,
+      unit: session!.unit,
+      unitLabel: session!.unitLabel,
+      unitLabelLanguage: session!.unitLabelLanguage,
+      unitCountForms: session!.unitCountForms,
+      dimension: session!.dimension,
+      amount: session!.amount,
+      total: session!.total,
+      position: session!.position,
+      locator: session!.locator,
+      completedUnitCount: session!.completedUnitCount,
+    });
+    return progressView(progress, 'en')!;
   });
   expect(rows).toHaveLength(active.length);
-  for (const label of ['Part 2, chapter 14', 'Ep 3/12', 'p. 118', '64%', 'Ch 5'])
+  for (const label of ['42 chapters', '3 / 12 episodes', '118 pages', '64%', '5 chapters'])
     expect(rows.map((row) => row.text)).toContain(label);
   expect(rows.filter((row) => row.percent !== null).length).toBeGreaterThanOrEqual(2);
+  expect(presented.map(({ id }) => id)).toEqual(recorded.map(({ id }) => id));
+  expect(presented.find(({ mode }) => mode === 'cursor_position')).toMatchObject({
+    locator: 'Part 2, chapter 14',
+    position: '42',
+    amount: null,
+  });
+  for (const [locale, pageLabel] of [
+    ['en', '118 pages'],
+    ['de', '118 Seiten'],
+    ['es', '118 páginas'],
+    ['fr', '118 pages'],
+    ['ja', '118ページ'],
+    ['ko', '118쪽'],
+    ['zh-Hans', '118页'],
+    ['zh-Hant', '118頁'],
+  ] as const) {
+    const session = recordedContinueSessions(locale).find(({ unit }) => unit === 'page')!;
+    const progress = continueProgress(session)!;
+    expect(progress.unitLabelLanguage, locale).toBe(locale);
+    expect(progress.unitCountForms, locale).toEqual(session.unitCountForms);
+    expect(progressView(progress, locale)?.text, locale).toBe(pageLabel);
+  }
 
   const cards = rows.map((row) =>
     renderToStaticMarkup(
@@ -148,17 +217,17 @@ test('the signed-in home story renders one Continue card for every recorded acti
     ),
   );
   expect(cards.some((card) => card.includes('role="progressbar"'))).toBe(true);
-  const withoutShare = cards.find((card) => card.includes('p. 118'));
+  const withoutShare = cards.find((card) => card.includes('118 pages'));
   expect(withoutShare).toBeDefined();
   expect(withoutShare).not.toContain('role="progressbar"');
 
   const continueCard = await source('../src/library/continue.tsx');
   const fake = await source('../src/kernel/fake.ts');
   expect(continueCard).toContain('<CoverCard');
-  expect(continueCard).toContain('progress={{');
+  expect(continueCard).toContain('progress: {');
   expect(continueCard).not.toContain('ProgressRow');
   expect(continueCard).toContain('value: progress?.percent == null ? null : progress.percent / 100');
-  expect(continueCard).toContain('label: progress?.text');
+  expect(continueCard).toContain('label: progressLabel');
   expect(fake).toContain("'library-continue-entries'");
   expect(fake).toContain("'library-continue-progress-sessions'");
 });
@@ -174,7 +243,9 @@ test('progress page state, completed-unit empty state, and published logs keep t
   expect(sessionHeader).toContain('stateLabel(session.state)');
   expect(sessionHeader).not.toContain('modeLabel(session.mode)');
   expect(sessionHeader).not.toContain('unitLabel(session.unit)');
-  expect(index).toContain('modeChoices.map');
+  expect(index).toMatch(
+    /choices\s*\?\.map\(\(allowed\) => modeChoices\.find\(\(choice\) => choice\.value === allowed\.mode\)!\)/,
+  );
   expect(session).not.toMatch(/m\.library_progress_mode_(?:amount|cursor|units)\(\)/);
   expect(session).toContain('m.library_progress_units_empty()');
   expect(session).not.toContain('m.library_progress_empty()');

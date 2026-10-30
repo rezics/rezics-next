@@ -1,10 +1,30 @@
 import entriesRecording from '../recorded/library-continue-entries.json';
 import sessionsRecording from '../recorded/library-continue-progress-sessions.json';
 import homePageRecording from '../recorded/home-page.json';
+import definitionsRecording from '../recorded/definitions-release.json';
+import { progressSessionProfile } from '../../library/progress-profile';
+import type { Release } from '../../subject/definitions';
 import { recordedBookState } from './library-entry-states.ts';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { chosenLabels, isRecord } from './languages.ts';
+
+/**
+ * Presentation for these pre-profile recordings, from the fixed vocabulary in their retained release.
+ * This is not a native DTO or evidence of current write support. Never resolve it through the active head.
+ */
+export function recordedContinueSessions(locale: string) {
+  return sessionsRecording.progressSessions.map((session) => {
+    const mode = session.mode;
+    if (mode !== 'scalar_amount' && mode !== 'cursor_position' && mode !== 'completed_units')
+      throw new Error('Unrecognized recorded progress mode');
+    return {
+      ...session,
+      mode,
+      ...progressSessionProfile(definitionsRecording.release as unknown as Release, '', mode, session.unit, locale),
+    };
+  });
+}
 
 type ContinueHeader = {
   id: string;

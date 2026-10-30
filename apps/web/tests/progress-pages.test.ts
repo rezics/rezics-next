@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { progressDefaultUnit } from '../src/library/progress-default-unit.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { progressFormChoices } from '../src/library/progress-profile.ts';
 
 const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 
@@ -14,18 +16,25 @@ test('progress pages show current progress before opening an update form', async
   expect(session).toMatch(/editing \?\s*\(\s*phone \?/);
 });
 
-test('default progress units follow subject type', async () => {
+test('default progress units follow only published supported declarations', async () => {
   expect(progressDefaultUnit(['schema:Book'])).toBe('page');
-  expect(progressDefaultUnit(['schema:Text'])).toBe('page');
-  expect(progressDefaultUnit(['schema:Movie'])).toBe('episode');
-  expect(progressDefaultUnit(['schema:VideoGame'])).toBe('percent');
+  expect(progressDefaultUnit(['schema:Text'])).toBe('');
+  expect(progressDefaultUnit(['schema:Movie'])).toBe('minute');
+  expect(progressDefaultUnit(['schema:VideoGame'])).toBe('minute');
+  expect(progressDefaultUnit(['schema:TVSeries'])).toBe('episode');
+  expect(progressDefaultUnit(['wd:Q689445'])).toBe('percent');
+  expect(progressDefaultUnit(['unknown:Book'])).toBe('');
+  expect(progressFormChoices(bundledRelease, 'schema:Text', 'en')).toBeUndefined();
+  expect(progressFormChoices(bundledRelease, 'schema:Book', 'en')?.[0]?.units[0]?.id).toBe('page');
   const page = await read('../src/library/progress-page.tsx');
   expect(page).toContain('progressDefaultUnit');
 });
 
-test('progress labels use localized messages for locator parts and chapters', async () => {
+test('progress labels use released unit metadata and preserve free-text locators', async () => {
   const label = await read('../src/library/progress-label.ts');
-  expect(label).toContain('library_progress_locator');
+  expect(label).toContain('progress.locator');
+  expect(label).toContain('progress.unitLabel');
+  expect(label).toContain('progress.unitCountForms');
   expect(label).not.toMatch(/`[^`]*(?:Part|chapter|Chapter)[^`]*`/);
   for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
     const messages = (await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json()) as Record<

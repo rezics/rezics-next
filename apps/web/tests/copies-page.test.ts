@@ -6,10 +6,13 @@ import {
   edition,
   lists,
   make,
+  observe,
   open,
   refuseNextCopyWriteOnce,
   reset,
 } from './library-copies.browser';
+import { browserSessionToken } from './session-token';
+import zhHans from '../messages/zh-Hans.json';
 
 const timeout = 300_000;
 
@@ -50,7 +53,13 @@ test(
       await surface.waitFor();
       const form = surface.getByRole('form', { name: 'Add a copy' });
       expect(await form.getByLabel('Edition').count()).toBe(1);
+      expect(await form.getByLabel('Status').count()).toBe(0);
+      await form.getByLabel('Edition').fill(edition);
+      await form.getByLabel('Status').waitFor();
+      await form.getByLabel('Kind', { exact: true }).selectOption('physical');
+      expect(await form.getByLabel('Status').inputValue()).toBe('owned');
       expect(await form.getByLabel('Status').count()).toBe(1);
+      expect(await form.count()).toBe(1);
       expect(await form.getByLabel('Location').count()).toBe(0);
       await surface.getByRole('button', { name: 'More' }).click();
       expect(await form.getByLabel('Location').count()).toBe(1);
@@ -93,9 +102,15 @@ test(
       await page.getByRole('button', { name: '新增一份复本' }).click();
       const surface = page.getByRole('dialog');
       await surface.waitFor();
-      await surface.getByRole('button', { name: '更多' }).click();
+      const form = surface.getByRole('form', { name: zhHans.library_copy_add });
+      await form.getByLabel(zhHans.library_copy_edition).fill(edition);
+      await form.getByLabel(zhHans.library_copy_status).waitFor();
+      const details = form.getByRole('button', { name: zhHans.library_copy_more, exact: true });
+      expect(await details.getAttribute('aria-expanded')).toBe('false');
+      await details.click();
+      expect(await details.getAttribute('aria-expanded')).toBe('true');
       expect(await page.locator('input[type=date]').count()).toBe(0);
-      await surface.getByRole('button', { name: '取得日' }).click();
+      await surface.getByRole('button', { name: zhHans.library_copy_acquired }).click();
       expect(await page.getByRole('grid').count()).toBe(1);
       expect(await page.getByRole('grid').getAttribute('aria-label')).toContain('2026');
     } finally {
@@ -111,6 +126,9 @@ test(
     reset();
     const { page, access } = await open('/en/library/copies');
     try {
+      const guard = await browserSessionToken(page);
+      expect(guard).toBeTruthy();
+      const requests = observe(page);
       const row = article(page, 'First copy');
       await row.getByRole('button', { name: 'More actions' }).click();
       await page.getByRole('menuitem', { name: 'Edit copy' }).click();
@@ -121,14 +139,21 @@ test(
       await dialog.waitFor({ state: 'detached' });
       expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
       expect(calls.find((call) => call.method === 'PATCH')?.authorization).toBe(`Bearer ${access}`);
+      expect(requests[0]!.headers()['x-csrf-token']).toBe(guard);
 
       await page.getByRole('button', { name: 'Add a copy' }).click();
       const add = page.getByRole('dialog');
       refuseNextCopyWriteOnce();
       await add.getByLabel('Edition').fill(edition);
+      await add.getByLabel('Status').waitFor();
+      await add.getByLabel('Kind', { exact: true }).selectOption('physical');
+      await add.getByLabel('Status').selectOption('owned');
       await add.getByRole('button', { name: 'Add copy' }).click();
       expect(await add.getByRole('alert').innerText()).toContain('could not be saved');
       expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+      expect(calls.find((call) => call.method === 'POST')).toMatchObject({
+        body: { subjectId: edition, kind: 'physical', status: 'owned' },
+      });
 
       await add.getByRole('button', { name: 'Cancel' }).click();
       const current = article(page, 'First copy');

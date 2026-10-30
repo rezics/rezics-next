@@ -1,4 +1,5 @@
 import type { ProgressChoices, ProgressInputRules } from './progress-profile';
+import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -36,14 +37,15 @@ export type ProgressChange = {
   remove: string[];
 };
 
-export type ProgressSessionCore = {
+export type ProgressSessionCore = Pick<
+  ProgressLabelInput,
+  'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension'
+> & {
   id: string;
   subjectId: string;
   versionSubjectId: string | null;
   mode: ProgressMode;
   unit: string;
-  unitLabel?: string;
-  dimension?: string;
   inputRules?: ProgressInputRules;
   total: string | null;
   amount: string | null;
@@ -144,6 +146,11 @@ function presentSession(session: RawSession): ProgressSessionCore {
     versionSubjectId: session.versionSubjectId,
     mode: session.mode,
     unit: session.unit,
+    ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
+    ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
+    ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
+    ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
+    ...(session.inputRules === undefined ? {} : { inputRules: session.inputRules }),
     total: session.total,
     amount: session.amount,
     locator: session.locator,

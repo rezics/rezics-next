@@ -13,6 +13,9 @@ import {
   removePersonalLibraryEntry,
 } from '../src/library/entries-read';
 import { progressView } from '../src/library/progress-label';
+import { progressSessionProfile } from '../src/library/progress-profile';
+import definitionsRecording from '../src/kernel/recorded/definitions-release.json';
+import type { Release } from '../src/subject/definitions';
 import { loadProgressIndex, startProgress } from '../src/library/progress-reads';
 import { loadSubjectLibrarySlot } from '../src/library/subject-slot';
 import * as copiesRead from '../src/library/copies-read';
@@ -24,6 +27,7 @@ const copyId = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
 const sessionId = '0192f3a0-6c1e-7b2a-9d4e-000000000013';
 const unknownState = 'profile-reading-state';
 const unknownStatus = 'profile-copy-condition';
+const unknownKind = 'profile-copy-kind';
 const unknownUnit = 'profile-reading-measure';
 const stamp = '2026-04-02T15:04:05.000Z';
 const entryRecord = {
@@ -38,6 +42,7 @@ const copyRecord = {
   id: copyId,
   subjectId,
   status: unknownStatus,
+  kind: unknownKind,
   revision: 2,
   location: null,
   source: null,
@@ -123,10 +128,11 @@ test('library reads keep unknown IDs, render neutral labels, and retain their ex
   );
 
   const copies = await loadCopiesPage(client, request, {}, {});
-  expect(copies.copies).toMatchObject([{ id: copyId, status: unknownStatus }]);
+  expect(copies.copies).toMatchObject([{ id: copyId, kind: unknownKind, status: unknownStatus }]);
 
   const progress = await loadProgressIndex(client, request, {}, { subjectId });
-  expect(progress.sessions).toMatchObject([{ id: sessionId, unit: unknownUnit }]);
+  expect(progress.sessions).toMatchObject([{ id: sessionId, unit: unknownUnit, amount: '3', total: '10' }]);
+  expect(progress.sessions[0]?.unitLabel).toBeUndefined();
 
   const slotEnv = {
     AUTH_ISSUER: 'https://auth.test',
@@ -172,13 +178,23 @@ test('library reads keep unknown IDs, render neutral labels, and retain their ex
       },
       'en',
     )?.text,
-  ).toBe('Other');
+  ).toBe('3 / 10');
+  const release = definitionsRecording.release as unknown as Release;
+  expect(progressSessionProfile(release, '', 'scalar_amount', unknownUnit, 'en')).toEqual({});
   expect(
     progressView(
-      { mode: 'scalar_amount', unit: 'page', amount: '3', total: '10', completedUnitCount: 0, locator: null },
+      {
+        mode: 'scalar_amount',
+        unit: 'page',
+        ...progressSessionProfile(release, '', 'scalar_amount', 'page', 'en'),
+        amount: '3',
+        total: '10',
+        completedUnitCount: 0,
+        locator: null,
+      },
       'en',
     )?.text,
-  ).toBe(m.home_continue_page_of({ amount: '3', total: '10' }, { locale: 'en' }));
+  ).toBe('3 / 10 pages');
 
   expect(
     (await removePersonalLibraryEntry(client, request, {}, { subjectId, revision: 3, idempotencyKey: copyId })).ok,
@@ -219,6 +235,7 @@ test('library reads keep unknown IDs, render neutral labels, and retain their ex
       {},
       {
         subjectId,
+        kind: 'physical',
         status: 'owned',
         location: null,
         source: null,
@@ -242,6 +259,7 @@ test('library reads keep unknown IDs, render neutral labels, and retain their ex
   expect(calls.find((call) => call.method === 'POST' && call.path === '/v1/copies')).toMatchObject({
     body: {
       subjectId,
+      kind: 'physical',
       status: 'owned',
       location: null,
       source: null,
