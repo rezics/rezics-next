@@ -20,8 +20,7 @@ type FeedModule = { feed?: SitemapFeed<unknown> };
 
 /** Loads one feed per module; the pages and their 1,000-item limit belong to the feed implementation. */
 export function sitemapFeeds(): SitemapFeed<unknown>[] {
-  if (typeof import.meta.glob !== 'function')
-    return [boards, collections, realms, spaces, subjects, threads];
+  if (typeof import.meta.glob !== 'function') return [boards, collections, realms, spaces, subjects, threads];
   const modules = import.meta.glob('./feeds/*.ts', { eager: true }) as Record<string, FeedModule>;
   return Object.entries(modules)
     .sort(([left], [right]) => left.localeCompare(right))
