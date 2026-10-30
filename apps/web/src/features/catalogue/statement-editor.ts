@@ -148,6 +148,9 @@ export async function proposeStatement(
     );
     if (result.status !== 201 || !result.data) {
       if (result.status === 201 || (result.status >= 500 && result.status !== 503)) continuity?.uncertain?.();
+      const problem = result.error?.value;
+      if (problem && typeof problem === 'object' && 'code' in problem && problem.code === 'idempotency_conflict')
+        return { ok: false, reason: 'stale' };
       const errors = violations(result.error?.value);
       return { ...candidateFailure(result.status), ...(errors ? { errors } : {}) };
     }

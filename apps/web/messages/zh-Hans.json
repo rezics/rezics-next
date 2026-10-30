@@ -2314,5 +2314,15 @@
   "library_collection_move_destination": "移至收藏集",
   "library_collection_choose_destination": "选择收藏集",
   "library_collection_move_pending": "保存后，{count} 位成员将移至“{title}”。",
-  "library_collection_move_save_first": "请先保存或取消成员编辑，再选择移动。"
+  "library_collection_move_save_first": "请先保存或取消成员编辑，再选择移动。",
+  "recipe_title": "创建食谱",
+  "recipe_edit": "修正食谱",
+  "recipe_empty": "已发布的食谱字段暂不可用，请稍后重试。",
+  "recipe_created": "食谱已创建，初始事实已选入当前阅读。",
+  "recipe_ingredients_help": "食材文字、材料链接和饮食声明各自独立。链接请选择已有条目，并为声明提供来源。",
+  "recipe_correct": "提出修正",
+  "recipe_replace_method": "编写新做法",
+  "recipe_method_help": "请用自己的话编写做法，明确语言标签和 SPDX 许可。原文档会保留，此操作创建新的替代内容。",
+  "recipe_original": "这些做法是我原创的文字。",
+  "recipe_remove_field": "移除字段"
 }

@@ -8,6 +8,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { RecipeEditorEntry } from './recipe-editor-entry';
 import {
   initialTerms,
   type CreateFailure,
@@ -192,6 +193,7 @@ export function CreateSubjectForm({
               </Button>
             </div>
           )}
+          <RecipeEditorEntry locale={locale} />
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
           {definitions.data?.ok && types.length > 0 && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>

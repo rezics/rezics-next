@@ -2369,5 +2369,15 @@
   "content_edition_revision": "Document revision",
   "content_edition_id": "Edition",
   "content_edition_metadata_version": "Edition metadata version",
-  "content_edition_digest": "Document SHA-256"
+  "content_edition_digest": "Document SHA-256",
+  "recipe_title": "Create recipe",
+  "recipe_edit": "Correct recipe",
+  "recipe_empty": "The released recipe fields are unavailable. Try again later.",
+  "recipe_created": "Recipe created. Its initial facts are selected in the current reading.",
+  "recipe_ingredients_help": "Ingredient text, material links and dietary claims are separate. Select existing subjects for links and cite your claims.",
+  "recipe_correct": "Propose a correction",
+  "recipe_replace_method": "Write new instructions",
+  "recipe_method_help": "Write your own instructions, with an explicit language tag and SPDX licence. Existing documents stay intact; this creates a new replacement.",
+  "recipe_original": "These instructions are my original writing.",
+  "recipe_remove_field": "Remove field"
 }

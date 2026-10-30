@@ -2,7 +2,13 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickLanguage, pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkStatementInput, type Violation } from '@rezics/definitions/validate';
-import { checkDocument, hasDocumentContent, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import {
+  checkDocument,
+  fromPlainText,
+  hasDocumentContent,
+  serializeDocument,
+  type DocumentSnapshot,
+} from '@rezics/document';
 import {
   candidateContext,
   candidateFailure,
@@ -251,4 +257,11 @@ export async function readAuthoredReview(
         )
       : null,
   };
+}
+
+export type AuthoredField = { document: DocumentSnapshot; language: string; licence: string };
+export const newAuthoredField = (): AuthoredField => ({ document: fromPlainText(''), language: '', licence: '' });
+/** An explicit new body; never decode a stored document reference as plain text. */
+export function authoredFieldValue(field: AuthoredField): StatementInput['value'] {
+  return { type: 'value', content: structuredClone(field) };
 }

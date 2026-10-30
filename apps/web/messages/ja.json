@@ -2313,5 +2313,15 @@
   "library_collection_move_destination": "移動先のコレクション",
   "library_collection_choose_destination": "コレクションを選択",
   "library_collection_move_pending": "保存すると、{count} 件のメンバーが「{title}」に移動します。",
-  "library_collection_move_save_first": "メンバーの編集を保存またはキャンセルしてから移動を選択してください。"
+  "library_collection_move_save_first": "メンバーの編集を保存またはキャンセルしてから移動を選択してください。",
+  "recipe_title": "レシピを作成",
+  "recipe_edit": "レシピを修正",
+  "recipe_empty": "公開済みのレシピ項目を取得できません。後でもう一度お試しください。",
+  "recipe_created": "レシピを作成しました。初期の情報は現在の表示に採用されています。",
+  "recipe_ingredients_help": "材料の文章、材料へのリンク、食事制限の主張は別の情報です。リンク先には既存の項目を選び、出典を示してください。",
+  "recipe_correct": "修正を提案",
+  "recipe_replace_method": "新しい作り方を書く",
+  "recipe_method_help": "自分の言葉で作り方を書き、言語タグと SPDX ライセンスを指定してください。既存の文書を保持し、新しい置き換え文書を作成します。",
+  "recipe_original": "この作り方は私が書いたオリジナルの文章です。",
+  "recipe_remove_field": "項目を削除"
 }

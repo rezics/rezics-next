@@ -2313,5 +2313,15 @@
   "library_collection_move_destination": "Colección de destino",
   "library_collection_choose_destination": "Elegir una colección",
   "library_collection_move_pending": "Al guardar, se moverán {count} miembros a {title}.",
-  "library_collection_move_save_first": "Guarda o cancela los cambios de miembros antes de elegir un traslado."
+  "library_collection_move_save_first": "Guarda o cancela los cambios de miembros antes de elegir un traslado.",
+  "recipe_title": "Crear receta",
+  "recipe_edit": "Corregir receta",
+  "recipe_empty": "Los campos publicados de la receta no están disponibles. Inténtalo más tarde.",
+  "recipe_created": "Receta creada. Los datos iniciales están seleccionados en la lectura actual.",
+  "recipe_ingredients_help": "El texto de ingredientes, los enlaces a materiales y las afirmaciones dietéticas son distintos. Elige temas existentes para los enlaces y cita tus fuentes.",
+  "recipe_correct": "Proponer corrección",
+  "recipe_replace_method": "Escribir nuevas instrucciones",
+  "recipe_method_help": "Escribe tus propias instrucciones e indica el idioma y la licencia SPDX. Los documentos existentes se conservan; se crea un reemplazo nuevo.",
+  "recipe_original": "Estas instrucciones son mi texto original.",
+  "recipe_remove_field": "Quitar campo"
 }

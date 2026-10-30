@@ -36,6 +36,31 @@ An uncertain submit freezes the exact draft and idempotency key for retry; concu
 A key conflict requires explicit review before a new request. A confirmed creation with an unavailable reader
 keeps its exact ID and offers an ordinary read retry without creating again. This private, uncached form is noindex.
 
+## Create and correct a recipe
+
+`/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial
+terms and explicitly entered facts. The recipe's ordinary subject page links to
+`/{locale}/subjects/{id}/{slug}/recipe` for later field proposals. Both routes use the existing shell and session
+BFF; the correction route resolves the canonical subject address first.
+
+Only effective fields present in the active native release appear. Ingredient monolingual text is separate from
+the released material relation `wdt:P186` and dietary Concept claims. Linked targets come from the existing subject
+picker and are admitted against the released targets; typing an ingredient or diet name never creates a claim.
+Cooking time and yield use the released quantity schemas and explicit unit choices. Definition labels follow the
+interface locale; term and ingredient languages remain explicit data values.
+
+Instructions use the shared rich text editor and native inline authored document input, with an explicit language,
+SPDX licence and confirmation that the writing is original. Correcting an existing method starts an explicit new
+replacement document. The original document reference is preserved; no rich body is silently flattened or fetched
+from an external recipe site. Citations use existing native references and never confer prose or image rights.
+
+Creation sends initial statements through native subject creation, whose facts are initially selected in Global.
+The confirmed UUID alone supplies the ordinary canonical reader; an unavailable reader can be retried without
+creating again. Later per-field submissions create candidates awaiting review and leave the current reading
+unchanged. Each field retains its own draft and request key after uncertain responses. Comparison, acceptance and
+selection reuse the existing candidate review controls and native decision heads. Current denial, concealed data,
+invalid input, conflict and unavailability remain distinct from an empty recipe profile.
+
 ## Correct names and descriptions
 
 The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug}/terms`. This private companion

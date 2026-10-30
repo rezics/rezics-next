@@ -26,6 +26,7 @@ import {
 } from './statement-editor';
 
 type Current = Extract<EditorRead, { ok: true }>;
+type ScalarRead = Pick<Current, 'release'> & { public: Pick<Current['public'], 'related'> };
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 
 export { ScalarControl };
@@ -46,7 +47,7 @@ export function EditorFailure({ reason, locale }: { reason: string; locale: stri
 }
 
 /** A read-only part still participates in the submitted statement. It is never filtered away. */
-export function PartValue({ part, read, locale }: { part: SnakInput; read: Current; locale: string }) {
+export function PartValue({ part, read, locale }: { part: SnakInput; read: ScalarRead; locale: string }) {
   const definition = read.release.properties[part.property.id];
   if (!definition) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
   const content = part.value.type === 'value' && isRecord(part.value.content) ? part.value.content : undefined;
@@ -73,7 +74,7 @@ function ScalarControl({
 }: {
   part: SnakInput;
   definition: PropertyDefinition | undefined;
-  read: Current;
+  read: ScalarRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
 }) {

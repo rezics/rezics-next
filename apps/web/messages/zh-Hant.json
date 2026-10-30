@@ -2313,5 +2313,15 @@
   "library_collection_move_destination": "移至收藏集",
   "library_collection_choose_destination": "選擇收藏集",
   "library_collection_move_pending": "儲存後，{count} 位成員將移至「{title}」。",
-  "library_collection_move_save_first": "請先儲存或取消成員編輯，再選擇移動。"
+  "library_collection_move_save_first": "請先儲存或取消成員編輯，再選擇移動。",
+  "recipe_title": "建立食譜",
+  "recipe_edit": "修正食譜",
+  "recipe_empty": "已發布的食譜欄位暫時無法使用，請稍後再試。",
+  "recipe_created": "食譜已建立，初始事實已選入目前閱讀。",
+  "recipe_ingredients_help": "食材文字、材料連結和飲食聲明各自獨立。連結請選擇既有條目，並為聲明提供來源。",
+  "recipe_correct": "提出修正",
+  "recipe_replace_method": "撰寫新作法",
+  "recipe_method_help": "請以自己的話撰寫作法，明確填寫語言標籤與 SPDX 授權。原文件會保留，此操作建立新的替代內容。",
+  "recipe_original": "這些作法是我原創的文字。",
+  "recipe_remove_field": "移除欄位"
 }
