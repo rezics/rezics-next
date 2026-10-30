@@ -16,7 +16,9 @@ key; edits and action changes create a new intent. Native denial, conflict and u
 the draft and never confirm success. Native conflict explains that the report or target changed; native denial
 explains the current permission failure without exposing private details. Both require an explicit current-state
 refresh and review before a new decision, which receives a new command key. A lost response alone offers an exact
-command retry to confirm its outcome. Unknown failures remain errors and offer a fresh read rather than a blind replay.
+command retry to confirm its outcome. Its draft and decision controls stay locked until that outcome is known;
+editing cannot turn an uncertain submission into a second command. Unknown failures remain errors and offer a fresh
+read rather than a blind replay.
 
 A confirmed command stays visible until navigation. Takedown confirmation is distinct from a projected report
 outcome: the page does not claim that asynchronous report resolution has finished. It hides the current and revision

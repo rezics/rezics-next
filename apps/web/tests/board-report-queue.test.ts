@@ -242,6 +242,8 @@ test('native denied outcomes differ from uncertain transport retry with the exac
   };
   expect(await review.submit(intent, action)).toEqual({ ok: false, state: 'uncertain' });
   review.changed();
+  await review.submit({ ...intent, reason: 'A different decision must wait.' }, action);
+  expect(requests).toHaveLength(1);
   expect(await review.retry(action)).toEqual({ ok: true });
   expect(requests).toHaveLength(2);
   expect(requests[1]).toEqual(requests[0]);

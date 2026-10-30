@@ -34,7 +34,7 @@ export function createReportReviewAction() {
   return {
     changed: identity.changed,
     async submit(intent: Intent, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
-      if (pending || (result && (result.ok || result.state !== 'uncertain'))) return result;
+      if (pending || result) return result;
       return send({ ...intent, idempotencyKey: identity.keyFor(intent) }, action);
     },
     async retry(action: ReportQueueAction): Promise<ReportReviewResult | undefined> {

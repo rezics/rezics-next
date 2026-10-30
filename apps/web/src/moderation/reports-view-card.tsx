@@ -72,14 +72,7 @@ export function ReportReviewCard({
           : m.moderation_queue_open();
 
   async function act(action: 'dismiss' | 'take-down') {
-    if (
-      pending ||
-      confirmed ||
-      report.outcome ||
-      (failure && failure !== 'uncertain') ||
-      (takenDown && action === 'take-down')
-    )
-      return;
+    if (pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down')) return;
     setMessage('');
     let confirmation: Confirmation;
     try {
@@ -147,7 +140,7 @@ export function ReportReviewCard({
     }
   }
 
-  const blocked = pending || (!!failure && failure !== 'uncertain');
+  const blocked = pending || !!failure;
   const failureMessage =
     failure === 'conflict'
       ? m.moderation_queue_conflict()
@@ -258,7 +251,7 @@ export function ReportReviewCard({
                       maxLength={1024}
                       rows={3}
                       value={reason}
-                      disabled={pending}
+                      disabled={pending || failure === 'uncertain'}
                       aria-describedby={`${id}-hint`}
                       onChange={(event) => {
                         setReason(event.target.value);

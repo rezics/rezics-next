@@ -125,7 +125,8 @@ export const UncertainRetry: Story = {
     const submit = view.getByRole('button', { name: m.moderation_take_down() });
     await userEvent.click(submit);
     await view.findByRole('alert');
-    await userEvent.click(submit);
+    await expect(submit).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_retry_action() }));
     await expect(args.onAction).toHaveBeenCalledTimes(2);
   },
 };

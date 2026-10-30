@@ -75,23 +75,37 @@ export const PendingSubmission: Story = {
 };
 
 export const UncertainRetry: Story = {
+  args: {
+    onAction: fn<ReportQueueAction>()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({ ok: false, state: 'conflict' })
+      .mockResolvedValueOnce({ ok: false, state: 'conflict' })
+      .mockRejectedValue(new TypeError('Failed to fetch')),
+    onRefresh: fn(async () => {}),
+  },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_uncertain());
     const takeDown = view.getByRole('button', { name: m.moderation_take_down() });
-    await userEvent.click(takeDown);
+    await expect(takeDown).toBeDisabled();
+    await expect(view.getByRole('textbox')).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_retry_action() }));
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(2));
     const calls = mocked(args.onAction).mock.calls;
     await expect(calls[1]![0]).toEqual(calls[0]![0]);
     await expect(calls[0]![0]).toMatchObject({ action: 'take-down', reason });
+    await expect(view.getByRole('alert')).toHaveTextContent(m.moderation_queue_conflict());
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_refresh() }));
     await userEvent.type(view.getByRole('textbox'), ' Additional context.');
     await userEvent.click(takeDown);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(3));
     await expect(calls[2]![0].idempotencyKey).not.toBe(calls[0]![0].idempotencyKey);
+    await expect(view.getByRole('alert')).toHaveTextContent(m.moderation_queue_conflict());
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_refresh() }));
     const dismiss = view.getByRole('button', { name: m.moderation_dismiss() });
     await userEvent.click(dismiss);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(4));
-    await userEvent.click(dismiss);
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_retry_action() }));
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(5));
     await expect(calls[4]![0]).toEqual(calls[3]![0]);
     await expect(calls[3]![0]).toMatchObject({ action: 'dismiss', reportId: postReport.id });
@@ -208,6 +222,7 @@ export const NativeDenied = {
 } satisfies Story;
 
 export const ReasonValidation: Story = {
+  args: { onAction: nativeRefusal(422, 'idempotency_conflict'), onRefresh: fn(async () => {}) },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
@@ -227,6 +242,8 @@ export const ReasonValidation: Story = {
     await userEvent.click(takeDown);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(1));
     await expect(mocked(args.onAction).mock.calls[0]![0]).toMatchObject({ reason: 'R'.repeat(1024) });
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_queue_conflict());
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_refresh() }));
     await userEvent.clear(input);
     await userEvent.type(input, `  ${reason}  `);
     await userEvent.click(takeDown);
