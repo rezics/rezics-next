@@ -28,6 +28,16 @@ if (process.argv.includes('resume')) {
 }
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
+const adoptedWaitingCli = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const root = process.cwd();
+writeFileSync(join(root, '.temp/goal/resume-args.json'), JSON.stringify(process.argv));
+writeFileSync(join(root, '.temp/goal/resume-started'), 'yes');
+console.log(JSON.stringify({type:'thread.started',thread_id:'wake-session'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
 
 async function waitFor(path: string): Promise<void> {
   for (let n = 0; n < 300; n++) {
@@ -134,7 +144,7 @@ test('a waiting session uses the registered local command on wake even when its 
 });
 
 test('an adopted waiting attempt without a resumable session gets the current local protocol', async () => {
-  const h = harness(waitingCli);
+  const h = harness(adoptedWaitingCli);
   try {
     writeFileSync(
       h.briefFile,

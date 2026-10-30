@@ -92,8 +92,8 @@ export function workerCheckProtocol(
 ): string {
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
-    typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance.placement ?? 'default');
-  const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance.command;
+    typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
+  const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
   const common = [
     'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit.',
     'Goal owns check continuation for detached checks: if one is still running, finish this turn with the waiting exit object and let the controller resume you with the result records. Do not keep the model or a tool waiting for the check.',

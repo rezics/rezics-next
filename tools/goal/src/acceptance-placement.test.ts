@@ -149,11 +149,11 @@ test('registered local placement survives dispatch, retry, held reshape, and tas
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'the phone navigation and every shell menu use the responsive bottom sheet'",
     );
 
-    h.store.updateAttempt({ taskId: task.id, attempt: second.attempt.attempt }, (attempt) => {
-      attempt.state = 'stopped';
-    });
     h.store.updateTask({ taskId: task.id, attempt: second.attempt.attempt }, (current) => {
       current.state = 'stopped';
+    });
+    h.store.updateAttempt({ taskId: task.id, attempt: second.attempt.attempt }, (attempt) => {
+      attempt.state = 'stopped';
     });
     const heldBrief = join(h.settings.stateDirectory, 'placement-held.md');
     writeFileSync(heldBrief, briefText(['bun', 'run', '--cwd', 'apps/web', 'typecheck'], { after: [dependency.id] }));
@@ -259,6 +259,7 @@ test('an unresolved old check prevents local policy adoption without cancelling 
       return { exited: Promise.resolve({ code: 0, signal: null }), attempt };
     });
     const task = tasks.dispatch(h.briefFile);
+    const releaseMarker = join(h.settings.stateDirectory, 'release-old-check');
     const checkStart = spawnSync(
       process.execPath,
       [
@@ -267,11 +268,11 @@ test('an unresolved old check prevents local policy adoption without cancelling 
         '--',
         process.execPath,
         '-e',
-        'setTimeout(() => {}, 20000)',
+        'const fs = require("node:fs"); const timer = setInterval(() => { if (fs.existsSync(process.env.REZICS_TEST_RELEASE_MARKER)) clearInterval(timer); }, 10)',
       ],
       {
         cwd: task.worktree,
-        env: localCheckEnvironment(task.worktree),
+        env: { ...localCheckEnvironment(task.worktree), REZICS_TEST_RELEASE_MARKER: releaseMarker },
         encoding: 'utf8',
         timeout: 30_000,
         maxBuffer: 2 * 1024 * 1024,
@@ -311,6 +312,7 @@ test('an unresolved old check prevents local policy adoption without cancelling 
     expect(record.runnerHost).toBe(hostname());
     expect(() => process.kill(record.runnerPid!, 0)).not.toThrow();
 
+    writeFileSync(releaseMarker, 'release');
     const wait = spawnSync(process.execPath, [join(task.worktree, 'scripts/worker-check.ts'), '--wait', checkId!], {
       cwd: task.worktree,
       env: localCheckEnvironment(task.worktree),

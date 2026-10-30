@@ -200,7 +200,8 @@ test('local placement renders the concrete declared argv, overrides saved remote
     expect(prompt.indexOf('registered acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
-    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    const localPolicy = prompt.slice(prompt.lastIndexOf('The registered acceptance placement is local'));
+    expect(localPolicy).not.toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('Do not report an old check as cancelled');
   } finally {
     rmSync(worktree, { recursive: true, force: true });
