@@ -11,7 +11,21 @@ export declare function searchRoutes<App>(app: App, { pool, search, access, cloc
     access?: Access | AccessFactory;
     clock?: KernelClock;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
-    typebox: {};
+    typebox: {
+        PublicFigure: import("typebox").TObject<{
+            questionId: import("typebox").TString;
+            populationId: import("typebox").TString;
+            scale: import("typebox").TObject<{
+                min: import("typebox").TInteger;
+                max: import("typebox").TInteger;
+                displayStep: import("typebox").TInteger;
+            }>;
+            count: import("typebox").TInteger;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+            mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+            score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        }>;
+    };
     error: [{
         error: Error;
         response: {};
@@ -117,6 +131,19 @@ export declare function searchRoutes<App>(app: App, { pool, search, access, cloc
                                     kind: "code";
                                     value: string;
                                 })[]>;
+                                figure: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
                             }[];
                             next: string | null;
                             as_of: string;
@@ -455,7 +482,21 @@ export declare function searchRoutes<App>(app: App, { pool, search, access, cloc
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ query, authorize, admission, job }: {
+}, {
+    PublicFigure: import("typebox").TObject<{
+        questionId: import("typebox").TString;
+        populationId: import("typebox").TString;
+        scale: import("typebox").TObject<{
+            min: import("typebox").TInteger;
+            max: import("typebox").TInteger;
+            displayStep: import("typebox").TInteger;
+        }>;
+        count: import("typebox").TInteger;
+        state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+        mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+    }>;
+}, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ query, authorize, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -787,7 +828,21 @@ export declare function searchRoutes<App>(app: App, { pool, search, access, cloc
                 bearerAuth?: never;
             })[];
         };
-    }, {}, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {
+        PublicFigure: import("typebox").TObject<{
+            questionId: import("typebox").TString;
+            populationId: import("typebox").TString;
+            scale: import("typebox").TObject<{
+                min: import("typebox").TInteger;
+                max: import("typebox").TInteger;
+                displayStep: import("typebox").TInteger;
+            }>;
+            count: import("typebox").TInteger;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"insufficient_data">, import("typebox").TLiteral<"updating">]>;
+            mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+            score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
+        }>;
+    }, "/v1/subjects/$suggest">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../../http/admission.ts").Admission;
             readonly job: {

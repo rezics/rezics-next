@@ -16,6 +16,7 @@ import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { createSearchService } from '../service.ts';
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../../clock.ts';
+import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
 
@@ -46,6 +47,7 @@ const searchHit = t.Object(
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
     facts: t.Optional(t.Record(t.String(), t.Array(fact))),
+    figure: t.Ref('PublicFigure'),
   },
   object,
 );
@@ -125,6 +127,7 @@ export function searchRoutes<App>(
     };
   }
   const routed = (app as ReturnType<typeof createApp>)
+    .model('PublicFigure', PublicFigureSchema)
     .post(
       customMethod('/v1/subjects', 'search'),
       {

@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
@@ -9,6 +12,16 @@ import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
+
+const missingFigure: PublicFigureView = {
+  questionId: STANDARD_QUESTION_ID,
+  populationId: GLOBAL_CONTEXT.id,
+  scale: { min: 0, max: 20, displayStep: 1 },
+  count: 0,
+  state: 'insufficient_data',
+  mean: null,
+  score: null,
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -151,18 +164,21 @@ test('search hits carry their descriptions only on request', async () => {
   const answer = await service.search('anonymous', { filter: people, sort: 'name', descriptions: true });
   expect(answer.subjects).toEqual([
     {
+      figure: missingFigure,
       id: id(1),
       type: 'schema:Book',
       labels: { en: 'The Dispossessed', ja: '所有せざる人々' },
       descriptions: { en: utopiaCut, ja: 'アナレスとウラスの物語。' },
     },
     {
+      figure: missingFigure,
       id: id(2),
       type: 'schema:Book',
       labels: { en: 'The Dispossessed' },
       descriptions: { en: 'A study edition with notes.' },
     },
     {
+      figure: missingFigure,
       id: id(3),
       type: 'schema:Person',
       labels: { en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' },
@@ -173,9 +189,14 @@ test('search hits carry their descriptions only on request', async () => {
 
   const plain = await service.search('anonymous', { filter: people, sort: 'name' });
   expect(plain.subjects).toEqual([
-    { id: id(1), type: 'schema:Book', labels: { en: 'The Dispossessed', ja: '所有せざる人々' } },
-    { id: id(2), type: 'schema:Book', labels: { en: 'The Dispossessed' } },
-    { id: id(3), type: 'schema:Person', labels: { en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' } },
+    { figure: missingFigure, id: id(1), type: 'schema:Book', labels: { en: 'The Dispossessed', ja: '所有せざる人々' } },
+    { figure: missingFigure, id: id(2), type: 'schema:Book', labels: { en: 'The Dispossessed' } },
+    {
+      figure: missingFigure,
+      id: id(3),
+      type: 'schema:Person',
+      labels: { en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' },
+    },
   ]);
   expect((await service.search('anonymous', { filter: people, sort: 'name', descriptions: false })).subjects).toEqual(
     plain.subjects,
@@ -206,6 +227,7 @@ test('a language chain chooses one label and one description per hit', async () 
     const language = languages[0] === 'en' ? 'en' : 'zh-Hant';
     expect(answer.subjects).toEqual([
       {
+        figure: missingFigure,
         id: id(40),
         type: 'schema:Article',
         labels: { [language]: language === 'en' ? 'English label' : '繁體標籤' },
@@ -295,7 +317,7 @@ test('languages and descriptions are validated', async () => {
 test('a subject without descriptions carries an empty map, and descriptions need no active release', async () => {
   const unlisted = await service.search('anonymous', { text: 'Unlisted', descriptions: true });
   expect(unlisted.subjects).toEqual([
-    { id: id(30), type: 'schema:Unlisted', labels: { en: 'Unlisted thing' }, descriptions: {} },
+    { figure: missingFigure, id: id(30), type: 'schema:Unlisted', labels: { en: 'Unlisted thing' }, descriptions: {} },
   ]);
 
   const bare = createSearchService({ pool, client, prefix, source, cursors, release: async () => null });

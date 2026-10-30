@@ -4,6 +4,7 @@ import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { HttpResponse, Persona, SearchDriver } from './search-driver';
 import type { Labels, StatementInput, Subject } from './semantic-driver';
+import { STANDARD_QUESTION_ID } from '../services/kernel/src/rating/votes.ts';
 
 setDefaultTimeout(60_000);
 let driver: SearchDriver;
@@ -78,6 +79,26 @@ interface Hit {
     cover: null;
   };
 }
+interface SearchHit extends Hit {
+  figure: {
+    questionId: string;
+    populationId: string;
+    scale: { min: number; max: number; displayStep: number };
+    count: number;
+    state: 'insufficient_data';
+    mean: null;
+    score: null;
+  };
+}
+const missingPublicFigure: SearchHit['figure'] = {
+  questionId: STANDARD_QUESTION_ID,
+  populationId: '00000000-0000-8000-8000-000000000000',
+  scale: { min: 0, max: 20, displayStep: 1 },
+  count: 0,
+  state: 'insufficient_data',
+  mean: null,
+  score: null,
+};
 function fixtureSummary(subject: Pick<Hit, 'id' | 'type' | 'labels'>): Hit['summary'] {
   if (typeof subject.labels.en !== 'string') throw new Error(`Search fixture ${subject.id} lacks an English label`);
   if (subject.type !== 'schema:Book' && subject.type !== 'schema:Person')
@@ -95,11 +116,11 @@ function fixtureSummary(subject: Pick<Hit, 'id' | 'type' | 'labels'>): Hit['summ
   };
 }
 interface Page {
-  subjects: Hit[];
+  subjects: SearchHit[];
   next: string | null;
   as_of: string;
 }
-function hits(response: HttpResponse, limit: number) {
+function hits(response: HttpResponse, limit: number, includeFigure = false) {
   const received = Date.now();
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');
@@ -108,12 +129,13 @@ function hits(response: HttpResponse, limit: number) {
   expect(subjects.length).toBeLessThanOrEqual(limit);
   expect(new Set(subjects.map((hit) => hit.id)).size).toBe(subjects.length);
   for (const hit of subjects) {
-    expect(hit).toEqual({
+    const expected = {
       id: expect.any(String),
       type: expect.any(String),
       labels: expect.any(Object),
       summary: fixtureSummary(hit),
-    });
+    };
+    expect(hit).toEqual(includeFigure ? { ...expected, figure: missingPublicFigure } : expected);
     for (const label of Object.values(hit.labels)) expect(typeof label).toBe('string');
   }
   expect(response.body.as_of).toEqual(
@@ -124,7 +146,7 @@ function hits(response: HttpResponse, limit: number) {
   return subjects;
 }
 function page(response: HttpResponse, limit = 20): Page {
-  hits(response, limit);
+  hits(response, limit, true);
   expect(response.body).not.toHaveProperty('total');
   expect(response.body.next === null || typeof response.body.next === 'string').toBe(true);
   return response.body as unknown as Page;
@@ -136,6 +158,7 @@ const hit = (subject: Subject): Hit => ({
   labels: subject.labels,
   summary: fixtureSummary(subject),
 });
+const searchHit = (subject: Subject): SearchHit => ({ ...hit(subject), figure: missingPublicFigure });
 async function create(
   label: string | Labels,
   options: {
@@ -177,7 +200,7 @@ async function indexed(subjects: Subject[], body: Record<string, unknown> = { te
 }
 async function found(subject: Subject, text: string) {
   const result = page(await search({ text: `${marker} ${text}` }));
-  expect(result.subjects).toContainEqual(hit(subject));
+  expect(result.subjects).toContainEqual(searchHit(subject));
 }
 async function absent(subject: Subject, text: string) {
   expect(ids(page(await search({ text: `${marker} ${text}` })))).not.toContain(subject.id);
@@ -234,7 +257,7 @@ test('Search is public for editor and anonymous while suspended credentials fail
   expect(anonymous).not.toHaveProperty('total');
   expect(editor).not.toHaveProperty('total');
   expect(editor.subjects).toEqual(anonymous.subjects);
-  expect(editor.subjects).toContainEqual(hit(book));
+  expect(editor.subjects).toContainEqual(searchHit(book));
   expect(page(await search({ text: marker, sort: 'relevance' })).subjects).toEqual(anonymous.subjects);
   await eventually(
     async () => hits(await suggest(marker), 8),
@@ -257,7 +280,7 @@ test('New subjects become searchable and suggestible within fifteen seconds with
     },
     (result) => ids(result.result).includes(book.id) && result.suggestions.some((item) => item.id === book.id),
   );
-  expect(visible.result.subjects).toContainEqual(hit(book));
+  expect(visible.result.subjects).toContainEqual(searchHit(book));
   expect(visible.suggestions).toContainEqual(hit(book));
   expect(Date.parse(visible.result.as_of)).toBeGreaterThanOrEqual(started);
   expect(Date.parse(visible.suggestion.body.as_of as string)).toBeGreaterThanOrEqual(started);
@@ -442,7 +465,7 @@ test('Text admission rejects malformed syntax and budgets while all operators pr
     unsupported(await search({ text }), '/text');
   }
   const valid = page(await search({ text: `${marker} ("Alpha Beta" | Delta) -Delta` }));
-  expect(valid.subjects).toEqual([hit(book)]);
+  expect(valid.subjects).toEqual([searchHit(book)]);
   expect(ids(valid)).not.toContain(excluded.id);
   for (const escape of ['\\\\', '\\"', '\\|', '\\(', '\\)', '\\-']) {
     page(await search({ text: `${marker} | "literal${escape}value"` }));
@@ -475,7 +498,7 @@ test('Filter admission rejects excessive budgets unknown facets and malformed se
   expect(
     (await indexed([book], { text: marker, filter: { or: [typeFilter(), typeFilter('schema:Person')] }, limit: 100 }))
       .subjects,
-  ).toContainEqual(hit(book));
+  ).toContainEqual(searchHit(book));
 });
 
 test('Unavailable index returns retryable problems on both routes while subject reads keep working', async () => {
@@ -494,7 +517,7 @@ test('Unavailable index returns retryable problems on both routes while subject 
   } finally {
     await driver.searchNode('up');
   }
-  expect((await indexed([book])).subjects).toContainEqual(hit(book));
+  expect((await indexed([book])).subjects).toContainEqual(searchHit(book));
   await eventually(
     async () => hits(await suggest(marker), 8),
     (result) => result.some((item) => item.id === book.id),

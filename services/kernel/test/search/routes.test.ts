@@ -1,5 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
+import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -7,6 +9,16 @@ import { AuthenticationError, type Access, type AccountActor, type Resource } fr
 import type { SearchService } from '../../src/search/http/routes.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+
+const missingFigure: PublicFigureView = {
+  questionId: STANDARD_QUESTION_ID,
+  populationId: GLOBAL_CONTEXT,
+  scale: { min: 0, max: 20, displayStep: 1 },
+  count: 0,
+  state: 'insufficient_data',
+  mean: null,
+  score: null,
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -46,7 +58,7 @@ const service: SearchService = {
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return { subjects: [result], next: null, as_of: asOf };
+    return { subjects: [{ ...result, figure: missingFigure }], next: null, as_of: asOf };
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);
@@ -101,10 +113,12 @@ test('search and suggest pass the caller, the body and the query to the service,
   const anonymous = await call(kernel, 'POST', '/v1/subjects:search', { body });
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.body).toEqual({
-    subjects: [{ ...result, summary: null }],
+    subjects: [{ ...result, figure: missingFigure, summary: null }],
     next: null,
     as_of: asOf,
   });
+  for (const field of ['total', 'indexed_estimate', 'count', 'relation'])
+    expect(anonymous.body).not.toHaveProperty(field);
   expect(
     (await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: { cursor: 'abc' } })).response.status,
   ).toBe(200);
@@ -239,15 +253,16 @@ test('facets forward principals and reject denied credentials and unknown fields
   calls.length = 0;
   checks.length = 0;
   const body = { facets: [{ property: 'schema:author', size: 1 }] };
+  const serviceResult = result;
   for (const token of [undefined, 'reader']) {
-    const response = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
-    expect(response.response.status).toBe(200);
-    expect(response.body).not.toHaveProperty('total');
-    expect(response.body.facets).toEqual([
-      { property: 'schema:author', values: [{ value: result.id, labels: { en: 'Kokoro' } }] },
-    ]);
-    expect(response.body.facets[0]).not.toHaveProperty('relation');
-    expect(response.body.facets[0].values[0]).not.toHaveProperty('count');
+    const result = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
+    expect(result.response.status).toBe(200);
+    expect(result.body).toEqual({
+      facets: [{ property: 'schema:author', values: [{ value: serviceResult.id, labels: serviceResult.labels }] }],
+      as_of: asOf,
+    });
+    for (const value of [result.body, result.body.facets[0], result.body.facets[0].values[0]])
+      for (const field of ['count', 'relation', 'total', 'indexed_estimate']) expect(value).not.toHaveProperty(field);
   }
   expect(calls).toEqual([
     ['facets', 'anonymous', body],

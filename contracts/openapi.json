@@ -161109,6 +161109,9 @@
                             },
                             "type": "object"
                           },
+                          "figure": {
+                            "$ref": "#/components/schemas/PublicFigure"
+                          },
                           "id": {
                             "format": "uuid",
                             "type": "string"
@@ -161310,7 +161313,8 @@
                           "id",
                           "type",
                           "labels",
-                          "summary"
+                          "summary",
+                          "figure"
                         ],
                         "type": "object"
                       },

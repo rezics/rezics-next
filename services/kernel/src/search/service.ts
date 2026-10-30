@@ -29,6 +29,7 @@ import { createFreshness } from './freshness.ts';
 import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { publicHitFigures } from './public-figures.ts';
 import {
   countFacets,
   installTemplates,
@@ -487,6 +488,7 @@ export function createSearchService({
         );
         results.forEach((hit, index) => (hit.facts = facts[index]!));
       }
+      const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
       // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
       const as_of = await asOf(generation!);
       if (rating) {
@@ -500,7 +502,7 @@ export function createSearchService({
       }
       const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
       const response = {
-        subjects: results,
+        subjects: publicResults,
         next: exhausted
           ? null
           : rating

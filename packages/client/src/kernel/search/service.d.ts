@@ -3,7 +3,6 @@ import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest, type FacetValue } from './facets.ts';
-import { type SearchHit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
@@ -35,7 +34,7 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     facetSample?: number;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
-        subjects: SearchHit[];
+        subjects: import("./public-figures.ts").PublicSearchHit[];
         next: string | null;
         as_of: string;
     }>;

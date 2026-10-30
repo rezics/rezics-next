@@ -1,6 +1,9 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
+import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
@@ -11,6 +14,16 @@ import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createFakeSource } from './support/fake-source.ts';
+
+const missingFigure: PublicFigureView = {
+  questionId: STANDARD_QUESTION_ID,
+  populationId: GLOBAL_CONTEXT.id,
+  scale: { min: 0, max: 20, displayStep: 1 },
+  count: 0,
+  state: 'insufficient_data',
+  mean: null,
+  score: null,
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -145,6 +158,7 @@ test('results come from the current subject state with as_of and no total', asyn
     id: kanata.id,
     type: 'schema:Book',
     labels: { en: 'Kokoro no Kanata', ja: 'ココロのカナタ' },
+    figure: missingFigure,
   });
   expect(response).not.toHaveProperty('total');
   expect(response.next).toBeNull();
