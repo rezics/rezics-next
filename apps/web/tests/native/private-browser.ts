@@ -73,7 +73,7 @@ export async function launchPrivateBrowser(allowedOrigins: readonly string[]): P
     }
   };
 
-  const bridge = createServer((socket) => {
+  const bridge = createServer({ allowHalfOpen: true }, (socket) => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
     const chunks: Buffer[] = [];
