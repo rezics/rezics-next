@@ -1,8 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  capture,
+  checkGrowth,
+  costOf,
+  openGrowthDatabase,
+  seed,
+  type Population,
+  type Row,
+} from '../support/growth.ts';
 import { testKernel } from '../support/test-kernel.ts';
 
 const db = await openGrowthDatabase();
@@ -20,7 +30,7 @@ const document = fromPlainText(text);
 const body = Buffer.from(serializeDocument(document));
 const bodyHash = createHash('sha256').update(body).digest();
 const title =
-  'board pages under new active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow';
+  'board pages under newest, oldest, active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow';
 // seed() spreads the threads across all sixteen routes in their anchor partition. Access also
 // reads the board route and the fixed Global Context, so populate every one of those routes.
 const accessRoutes = [
@@ -56,7 +66,7 @@ test(
   title,
   async () => {
     // HTTP calls use the production "newest" spelling for the contract's "new" sort.
-    for (const sort of ['newest', 'active', 'hot'] as const) {
+    for (const sort of ['newest', 'oldest', 'active', 'hot'] as const) {
       await db.admin.query(
         `TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision,
           access.resource_grant, access.resource_role_grant, access.resource_denial CASCADE`,
@@ -191,35 +201,39 @@ test(
             rankRefreshedAt: string | null;
           };
           expect(response.status).toBe(200);
-          expect(page.threads.map(({ id }) => id)).toEqual(visible.slice(0, pageSize));
+          expect(page.threads.map(({ id }) => id)).toEqual(
+            sort === 'oldest' ? visible.slice(-pageSize).reverse() : visible.slice(0, pageSize),
+          );
           for (const thread of page.threads) {
             expect(thread.boardId).toBe(boardId);
             expect(thread.visibility).toBe('published');
             expect(thread.firstPost.body).toEqual(document);
           }
           expect(page.next).toEqual(expect.any(String));
-          if (sort === 'newest') expect(page.rankRefreshedAt).toBeNull();
+          if (sort === 'newest' || sort === 'oldest') expect(page.rankRefreshedAt).toBeNull();
           else expect(Number.isFinite(Date.parse(page.rankRefreshedAt!))).toBe(true);
           return page;
         },
       });
       expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+      const statementCounts = report.samples.map(({ cost }) => cost.statements);
+      expect(statementCounts.every((count) => count <= 43)).toBe(true);
+      expect(new Set(statementCounts).size).toBe(1);
+      const assertedRelations = [
+        ...new Set(report.samples.flatMap(({ cost }) => Object.keys(cost.relations).filter((name) => !name.startsWith('index:')))),
+      ];
+      for (const { scale, cost } of report.samples) {
+        for (const relation of assertedRelations) {
+          expect(cost.relations[relation]?.sequentialScans, `${sort} scale ${scale} ${relation}`).toEqual(
+            expect.any(Number),
+          );
+        }
+      }
+      assertGrowthAccessPaths(`Board page ${sort}`, report.samples, assertedRelations);
       for (const { scale, cost } of report.samples) {
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.blocks).toBeGreaterThan(0);
         expect(cost.statements).toBeGreaterThan(0);
-        for (const [name, relation] of Object.entries(cost.relations)) {
-          const measurement = JSON.stringify({
-            sort,
-            scale,
-            pageRows: cost.rows,
-            pageBlocks: cost.blocks,
-            pageStatements: cost.statements,
-            relation: name,
-            ...relation,
-          });
-          expect(relation.sequentialScans, measurement).toBe(0);
-        }
         const candidates = cost.relations['content.board_thread']!;
         const measurement = JSON.stringify({ sort, scale, ...candidates });
         // A small board can use a bitmap heap scan and sort; larger boards seek the ordered index.
@@ -238,6 +252,310 @@ test(
         expect(candidateBlocks, measurement).toBeLessThanOrEqual(candidateBlockBound);
       }
     }
+
+    await db.admin.query(
+      `TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision,
+        access.resource_grant, access.resource_role_grant, access.resource_denial CASCADE`,
+    );
+    const boardId = newId(boardRoute);
+    await db.admin.query(
+      `INSERT INTO content.board
+       (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+       VALUES ($1, $2, $3, 'Large board', 'published', 1, $4)`,
+      [boardRoute, boardId, newId(boardRoute), randomUUID()],
+    );
+    const visible: string[] = [];
+    const rowsByOrdinal = new Map<number, Record<string, readonly Row[]>>();
+    const largePage: Population = {
+      name: `board-sorts-limit-100-${randomUUID()}`,
+      hotPartition: partitionOf(threadRoute),
+      hotShare: 1,
+      rows: ({ ordinal, route: seededRoute }) => {
+        const cached = rowsByOrdinal.get(ordinal);
+        if (cached) return cached;
+        const route = ordinal >= baseline.from ? threadRoute : seededRoute;
+        const inWindow = ordinal < candidateLimit;
+        const targetBoard = inWindow ? boardId : newId(boardRoute);
+        const threadId = newId(route);
+        const postId = newId(route);
+        const revisionId = newId(route);
+        const transactionId = randomUUID();
+        const at = new Date(Date.UTC(2099, 0, 1) - ordinal * 1000).toISOString();
+        const hidden = ordinal < candidateLimit && ordinal < 99;
+        const visibility = hidden ? (ordinal % 2 === 0 ? 'protected' : 'taken_down') : 'published';
+        if (ordinal >= 99 && ordinal < candidateLimit) visible.push(threadId);
+        const rows: Record<string, readonly Row[]> = {
+          'content.board': inWindow
+            ? []
+            : [
+                {
+                  route: boardRoute,
+                  board_id: targetBoard,
+                  subject_id: newId(boardRoute),
+                  title: 'Other board',
+                  visibility: 'published',
+                  security_revision: 1,
+                  recorded_transaction_id: transactionId,
+                },
+              ],
+          'content.thread': [
+            {
+              route,
+              thread_id: threadId,
+              author_account_id: authorId,
+              board_id: targetBoard,
+              title: 'Growth thread',
+              visibility,
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              first_post_id: postId,
+              created_at: at,
+            },
+          ],
+          'content.post': [
+            {
+              route,
+              thread_id: threadId,
+              post_id: postId,
+              author_account_id: authorId,
+              head_revision_id: revisionId,
+              visibility: 'published',
+              security_revision: 1,
+              recorded_transaction_id: transactionId,
+              created_at: at,
+            },
+          ],
+          'content.revision': [
+            {
+              route,
+              thread_id: threadId,
+              post_id: postId,
+              revision_id: revisionId,
+              body,
+              body_sha256: bodyHash,
+              search_text: text,
+              licence: 'MIT',
+              subject_ids: [],
+              board_id: targetBoard,
+              availability: 'available',
+              recorded_transaction_id: transactionId,
+              recorded_at: at,
+              media_ids: [],
+            },
+          ],
+          'content.board_thread': [
+            {
+              route: boardRoute,
+              board_id: targetBoard,
+              thread_id: threadId,
+              created_at: at,
+              last_activity_at: at,
+              active_rank: Math.max(0, 8192 - ordinal),
+              hot_rank: Math.max(0, 8192 - ordinal),
+              rank_refreshed_at: at,
+              source_epoch: 1,
+              source_position: ordinal + 1,
+              source_revision_id: revisionId,
+            },
+          ],
+        };
+        rowsByOrdinal.set(ordinal, rows);
+        return rows;
+      },
+    };
+    await seed(db, largePage, baseline);
+    await seed(db, accessPopulation, baseline);
+    const queryReport = await checkGrowth(db, {
+      name: 'Board page s=100 with text query and 101 visible survivors',
+      scales,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      repetitions: 1,
+      grow: async (growthDb, scale, previous) => {
+        await seed(growthDb, largePage, { from: previous, to: scale });
+        await seed(growthDb, accessPopulation, { from: previous, to: scale });
+      },
+      operation: async () => {
+        const response = await app.handle(
+          new Request(`http://kernel.test/v1/boards/${boardId}/threads?sort=newest&limit=100&query=fixed`),
+        );
+        const page = (await response.json()) as { threads: { id: string; firstPost: { body: unknown } }[]; next: string | null };
+        expect(response.status).toBe(200);
+        expect(page.threads.map(({ id }) => id)).toEqual(visible.slice(0, 100));
+        expect(page.threads).toHaveLength(100);
+        expect(page.threads.every((thread) => JSON.stringify(thread.firstPost.body) === JSON.stringify(document))).toBe(true);
+        expect(page.next).toEqual(expect.any(String));
+        return page;
+      },
+    });
+    const queryCounts = queryReport.samples.map(({ cost }) => cost.statements);
+    expect(queryCounts.every((count) => count <= 43)).toBe(true);
+    expect(new Set(queryCounts).size).toBe(1);
+    const queryRelations = [
+      ...new Set(
+        queryReport.samples.flatMap(({ cost }) => Object.keys(cost.relations).filter((name) => !name.startsWith('index:'))),
+      ),
+    ];
+    for (const { scale, cost } of queryReport.samples) {
+      for (const relation of queryRelations) {
+        expect(cost.relations[relation]?.sequentialScans, `query scale ${scale} ${relation}`).toEqual(
+          expect.any(Number),
+        );
+      }
+      expect(cost.relations['content.board_thread']?.rows).toBeLessThanOrEqual(2 * candidateLimit);
+    }
+    assertGrowthAccessPaths('Board page s=100 with text query', queryReport.samples, queryRelations);
+
+    await db.admin.query(
+      `TRUNCATE content.board, content.board_thread, content.thread, content.post, content.revision,
+        community.space, community.space_revision, community.realm, community.realm_revision,
+        community.realm_ban, access.account, access.resource_grant, access.resource_role_grant,
+        access.resource_denial CASCADE`,
+    );
+    const signing = await generateKeyPair('ES256', { extractable: true });
+    const issuer = 'https://board-sorts.auth.test';
+    const audience = 'https://board-sorts.api.test';
+    const kid = 'board-sorts';
+    const jwk = { ...(await exportJWK(signing.publicKey)), kid, alg: 'ES256' };
+    const realmApp = testKernel({
+      pool: db.pool,
+      auth: {
+        issuer,
+        audience,
+        jwksUrl: `${issuer}/jwks`,
+        fetch: async () => Response.json({ keys: [jwk] }),
+      },
+    });
+    const grantedReader = newId(0x3456);
+    const bannedReader = newId(0x3456);
+    const author = newId(threadRoute);
+    const realmId = newId(boardRoute);
+    const boardId = newId(boardRoute);
+    const threadId = newId(threadRoute);
+    const postId = newId(threadRoute);
+    const revisionId = newId(threadRoute);
+    const at = '2026-10-01T00:00:00.000Z';
+    const transactionId = randomUUID();
+    const spaceId = newId(boardRoute);
+    const spaceRevisionId = newId(boardRoute);
+    const realmRevisionId = newId(boardRoute);
+    await db.admin.query(
+      `INSERT INTO access.account(route, account_id, kind, state, membership_inverse_complete, transaction_id)
+       VALUES ($1, $2, 'actor', 'active', true, $2), ($1, $3, 'actor', 'active', true, $3)`,
+      [0x3456, grantedReader, bannedReader],
+    );
+    const realmRoute = [boardRoute, spaceId, spaceRevisionId, at, author, realmId, newId(boardRoute), realmRevisionId] as const;
+    await db.admin.query(
+      `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
+       VALUES ($1, $2, 'active', $3, $4, $5)`,
+      realmRoute.slice(0, 5),
+    );
+    await db.admin.query(
+      `INSERT INTO community.space_revision(route, space_id, revision_id, title, summary, created_at, author)
+       VALUES ($1, $2, $3, 'Protected host', '', $4, $5)`,
+      realmRoute.slice(0, 5),
+    );
+    await db.admin.query(
+      `INSERT INTO community.realm(route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
+       VALUES ($1, $6, $2, 'active', 'protected', $7, $8, $4, $5)`,
+      realmRoute,
+    );
+    await db.admin.query(
+      `INSERT INTO community.realm_revision(route, realm_id, revision_id, predecessor, title, summary, visibility, context_id, created_at, author)
+       VALUES ($1, $6, $8, NULL, 'Protected realm', '', 'protected', $7, $4, $5)`,
+      realmRoute,
+    );
+    const contentRoute = [
+      boardRoute,
+      boardId,
+      realmId,
+      newId(boardRoute),
+      transactionId,
+      threadRoute,
+      threadId,
+      author,
+      postId,
+      at,
+      revisionId,
+      body,
+      bodyHash,
+      text,
+    ] as const;
+    await db.admin.query(
+      `INSERT INTO content.board(route, board_id, realm_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+       VALUES ($1, $2, $3, $4, 'Protected board', 'protected', 1, $5)`,
+      contentRoute.slice(0, 5),
+    );
+    await db.admin.query(
+      `INSERT INTO content.thread(route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id, first_post_id, availability, created_at)
+       VALUES ($6, $7, $8, $2, 'Granted thread', 'published', 1, $5, $9, 'available', $10)`,
+      contentRoute,
+    );
+    await db.admin.query(
+      `INSERT INTO content.post(route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id, created_at, availability)
+       VALUES ($6, $7, $9, $8, $11, 'published', 1, $5, $10, 'available')`,
+      contentRoute,
+    );
+    await db.admin.query(
+      `INSERT INTO content.revision(route, thread_id, post_id, revision_id, body, body_sha256, search_text, licence, subject_ids, board_id, availability, recorded_transaction_id, recorded_at, media_ids)
+       VALUES ($6, $7, $9, $11, $12, $13, $14, 'MIT', '{}', $2, 'available', $5, $10, '{}')`,
+      contentRoute,
+    );
+    await db.admin.query(
+      `INSERT INTO content.board_thread(route, board_id, thread_id, created_at, last_activity_at, source_epoch, source_position, source_revision_id)
+       VALUES ($1, $2, $7, $10, $10, 1, 1, $11)`,
+      contentRoute,
+    );
+    for (const reader of [grantedReader, bannedReader]) {
+      for (const [resourceId, action] of [
+        [boardId, 'board:read'],
+        [realmId, 'realm:read'],
+        [threadId, 'thread:read'],
+        [postId, 'post:read'],
+      ] as const) {
+        await db.admin.query(
+          `INSERT INTO access.resource_grant(route, resource_id, subject_id, subject_role, action, valid, transaction_id)
+           VALUES ($1, $2, $3, '', $4, '(,)', $5)`,
+          [Number.parseInt(resourceId.slice(24, 28), 16), resourceId, reader, action, randomUUID()],
+        );
+      }
+    }
+    await db.admin.query(
+      `INSERT INTO community.realm_ban(route, realm_id, account_id, valid, reason, actor, transaction_id)
+       VALUES ($1, $2, $3, tstzrange(clock_timestamp(), NULL, '[)'), 'Growth fixture ban', $4, $4)`,
+      [boardRoute, realmId, bannedReader, grantedReader],
+    );
+    const tokenFor = async (subject: string) =>
+      new SignJWT({
+        client_id: 'web',
+        scope: 'board:read realm:read thread:read post:read',
+        authn_epoch: 1,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd'],
+      })
+        .setProtectedHeader({ alg: 'ES256', kid, typ: 'at+jwt' })
+        .setIssuer(issuer)
+        .setAudience(audience)
+        .setSubject(subject)
+        .setIssuedAt()
+        .setExpirationTime('3m')
+        .sign(signing.privateKey);
+    const grantedToken = await tokenFor(grantedReader);
+    const bannedToken = await tokenFor(bannedReader);
+    const path = `http://kernel.test/v1/boards/${boardId}/threads?sort=newest&limit=1`;
+    const bannedResponse = await realmApp.handle(
+      new Request(path, { headers: { authorization: `Bearer ${bannedToken}` } }),
+    );
+    expect(bannedResponse.status).toBe(404);
+    const measured = await capture(db, async () =>
+      realmApp.handle(new Request(path, { headers: { authorization: `Bearer ${grantedToken}` } })),
+    );
+    expect(measured.value.status).toBe(200);
+    const grantedPage = (await measured.value.json()) as {
+      threads: { id: string; firstPost: { body: unknown } }[];
+    };
+    expect(grantedPage.threads.map(({ id }) => id)).toEqual([threadId]);
+    expect(grantedPage.threads[0]!.firstPost.body).toEqual(document);
+    expect(costOf(measured.capture).statements).toBeLessThanOrEqual(38);
   },
   600_000,
 );

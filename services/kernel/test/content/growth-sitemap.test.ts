@@ -6,7 +6,14 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId } from '../../src/route/route.ts';
 import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
-import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type Population,
+  type Row,
+} from '../support/growth.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
@@ -247,17 +254,21 @@ for (const feed of ['boards', 'threads'] as const) {
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
-    for (const sample of report.samples) {
-      for (const relation of [
-        'content.board',
-        'content.board_thread',
-        'content.thread',
-        'content.post',
-        'content.revision',
-      ]) {
-        expect(sample.cost.relations[relation]?.sequentialScans, relation).toBe(0);
+    const statementCounts = report.samples.map(({ cost }) => cost.statements);
+    expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
+    const relations = ['content.board', 'content.board_thread', 'content.thread', 'content.post', 'content.revision'];
+    for (const { scale, cost } of report.samples) {
+      for (const relation of relations) {
+        expect(cost.relations[relation]?.sequentialScans, `${feed} scale ${scale} ${relation}`).toEqual(
+          expect.any(Number),
+        );
       }
     }
+    assertGrowthAccessPaths(
+      `Sitemap ${feed} page, listed items`,
+      report.samples,
+      relations,
+    );
   }, 180_000);
 
   test(`${feed} sitemap page stays within its bound as protected Realm content grows`, async () => {
@@ -279,12 +290,22 @@ for (const feed of ['boards', 'threads'] as const) {
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+    const statementCounts = report.samples.map(({ cost }) => cost.statements);
+    expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
     if (feed === 'boards') {
-      for (const sample of report.samples) {
-        for (const relation of ['content.board', 'community.realm', 'community.realm_revision']) {
-          expect(sample.cost.relations[relation]?.sequentialScans, relation).toBe(0);
+      const relations = [
+        'content.board',
+        'community.realm',
+        'community.realm_revision',
+      ];
+      for (const { scale, cost } of report.samples) {
+        for (const relation of relations) {
+          expect(cost.relations[relation]?.sequentialScans, `${feed} scale ${scale} ${relation}`).toEqual(
+            expect.any(Number),
+          );
         }
       }
+      assertGrowthAccessPaths(`Sitemap ${feed} page, protected Realm content`, report.samples, relations);
     }
   }, 180_000);
 }

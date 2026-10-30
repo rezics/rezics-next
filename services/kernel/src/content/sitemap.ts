@@ -1,9 +1,15 @@
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
-import { readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import type { ContentBoardDependencies } from './boards.ts';
 import { isErasedPlaceholder, type ReadContext } from './model.ts';
-import { discloseThreads, type ThreadView } from './reads.ts';
+import {
+  discloseThreads,
+  prepareBoardPageDecisions,
+  readBoardPageCandidateSnapshot,
+  withBoardDisclosure,
+  type ThreadView,
+} from './reads.ts';
 import newestThreads from './sitemap-board-newest.sql';
 import pageBoards from './sitemap-board-page.sql';
 import pageThreads from './sitemap-thread-page.sql';
@@ -107,6 +113,7 @@ async function listSitemap(
     throw new RangeError(`Page limit must be 1 to ${SITEMAP_MAX_LIMIT}`);
   let position = await decodePosition(dependencies, feed, input.cursor);
   const reader: ReadContext = { actor: { kind: 'anonymous' }, deadline };
+  const decisions = await prepareBoardPageDecisions(dependencies, reader);
   const items: (SitemapBoard | SitemapThread)[] = [];
   let budget = limit * CANDIDATES_PER_ITEM;
   let finished = false;
@@ -126,11 +133,6 @@ async function listSitemap(
       position = { boardId: rows[0]!.board_id, scanning: true, thread: null };
     }
     const boardId: string = position.boardId;
-    const board = await readRealmBoard(dependencies, boardId, reader);
-    if (!board.value) {
-      position = { boardId, scanning: false, thread: null };
-      continue;
-    }
     while (budget > 0 && items.length < limit && position.scanning) {
       const want = feed === 'boards' ? 1 : Math.min(budget, limit - items.length, MAX_DISCLOSURE);
       const after: Position['thread'] = position.thread;
@@ -141,15 +143,33 @@ async function listSitemap(
         thread_id: after?.id ?? (feed === 'boards' ? MAX_ID : ZERO_ID),
         limit: want,
       };
-      const rows: readonly (typeof pageThreads)['~reylo']['element'][] = await withConnection(
-        dependencies.pool,
-        (client) => (feed === 'boards' ? newestThreads.run(client, parameters) : pageThreads.run(client, parameters)),
-      );
-      budget -= rows.length;
-      const disclosed = await discloseThreads(
+      const scanned = await readBoardPageCandidateSnapshot(
         dependencies,
-        rows.map((row) => row.thread_id),
+        boardId,
         reader,
+        decisions,
+        async (client) => {
+          const statement = feed === 'boards' ? newestThreads : pageThreads;
+          const result = await client.query<(typeof pageThreads)['~reylo']['element']>(
+            statement.sql,
+            statement.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
+          return result.rows;
+        },
+      );
+      if (!scanned) {
+        position = { boardId, scanning: false, thread: null };
+        continue;
+      }
+      const rows = scanned.candidate;
+      budget -= rows.length;
+      const disclosed = await withBoardDisclosure(boardId, scanned.board, () =>
+        discloseThreads(
+          dependencies,
+          rows.map((row) => row.thread_id),
+          reader,
+        ),
+        decisions,
       );
       for (const [index, row] of rows.entries()) {
         position = { boardId, scanning: true, thread: { createdAt: row.created_at!, id: row.thread_id } };
