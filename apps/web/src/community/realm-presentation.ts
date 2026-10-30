@@ -123,7 +123,7 @@ export function createRealmAppearance(
     return read.kind === 'ready' && read.snapshot.realmId === realmId && read.snapshot.state === 'active';
   }
   let state: RealmAppearanceState = {
-    read: admitted(initial) ? initial : initial.kind === 'ready' ? { kind: 'hidden' } : initial,
+    read: initial.kind === 'ready' ? (admitted(initial) ? initial : { kind: 'hidden' }) : initial,
     draft: admitted(initial) ? initial.snapshot : null,
     attempt: null,
     phase: 'idle',

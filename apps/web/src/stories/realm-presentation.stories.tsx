@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { RealmAppearanceSettings } from '../community/realm-presentation-settings';
-import type { RealmAppearanceCommand } from '../community/realm-presentation';
+import type { RealmAppearanceAdapter, RealmAppearanceCommand } from '../community/realm-presentation';
 import { available, configured, fixtureAdapter, imageId, revisionId } from './patterns/realm-presentation/fixtures';
 import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
@@ -84,7 +84,7 @@ export const Conflict: Story = {
 };
 function RetryExample() {
   let first: RealmAppearanceCommand | null = null;
-  const adapter = {
+  const adapter: RealmAppearanceAdapter = {
     ...fixtureAdapter(),
     change: async (command: RealmAppearanceCommand) => {
       if (!first) {
