@@ -1,3 +1,9 @@
+import purgeOwnerIndexState from './erasure-owned-owner-index-state.sql';
+import purgeOwnerMemberSupport from './erasure-owned-owner-member-support.sql';
+import purgeOwnerMemberIndex from './erasure-owned-owner-member-index.sql';
+import purgeOwnerIndexPin from './erasure-owned-owner-index-pin.sql';
+import purgeOwnerIndexBuiltinReference from './erasure-owned-owner-index-builtin-reference.sql';
+import purgeOwnerIndexControl from './erasure-owned-owner-index-control.sql';
 import purgeEntryDeleted from './erasure-owned-entry-deleted.sql';
 import purgeLabelAssignment from './erasure-owned-label-assignment.sql';
 import purgePersonalLabel from './erasure-owned-personal-label.sql';
@@ -20,6 +26,13 @@ import purgeBulkTarget from './erasure-owned-bulk-target.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries = {
+  owner_index_state: purgeOwnerIndexState,
+  owner_member_support: purgeOwnerMemberSupport,
+  owner_member_index: purgeOwnerMemberIndex,
+  owner_index_pin: purgeOwnerIndexPin,
+  owner_index_builtin_reference: purgeOwnerIndexBuiltinReference,
+  owner_index_control: purgeOwnerIndexControl,
+
   entry_deleted: purgeEntryDeleted,
   label_assignment: purgeLabelAssignment,
   personal_label: purgePersonalLabel,

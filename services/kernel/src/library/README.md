@@ -785,6 +785,24 @@ custody. Full label HTTP/generated-client adoption belongs to the catalogue/assi
 
 #### Retention inventory
 
+The owner directory adds private structural records, erased after native family hooks stop and before
+`fact_source_head`: `owner_index_state` at `(route, account_id, pin, collection_id)`,
+`owner_member_support` at `(route, account_id, subject_id, family, pin)`, `owner_member_index` at
+`(route, account_id, subject_id)`, `owner_index_pin` at `(route, account_id, pin)`,
+`owner_index_builtin_reference` at `(route, collection_id)` (owner-prefix cleanup), and
+`owner_index_control` at `(route, account_id)`. The existing A5 owned graph deletes these in that order,
+at most 100 exact keys per page. State labels are immutable released presentation metadata; supports retain
+structural original/pin scopes without session/copy/assignment IDs, revisions, notes, timestamps or fact bodies.
+
+`library.ownerIndex` and `library.ownerIndexSweepSegment` use the existing maintenance queue. Operational
+successor intents contain only fenced account IDs and native phase/key frontiers; sweep locators contain
+partition and account keysets. Their DBOS input/output/history is Accounts shared-history custody, not an
+additional Library intent table. Current account and partition fences precede every application. No discovery
+or detail GET creates progress. Source coverage does not acknowledge identity publication, whole-query
+privacy, complete Library erasure, or shared-history erasure. The fixed ALL-Library epoch participant still
+must incorporate these exact structural namespaces and concurrent first applies before canonical readiness.
+
+
 The account-owned native rows below live on the owner's route unless stated otherwise. Account deletion has no
 account-wide Library cascade. The registered default participant purges bounded local fact and owned-graph pages
 from these applied tables, but it remains pending when an exact producer locator, remote disposition or custody

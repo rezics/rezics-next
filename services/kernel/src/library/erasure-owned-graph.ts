@@ -38,6 +38,12 @@ export const OWNED_PHASES = [
   'shelf_type_root',
   'shelf_type_value',
   'owner_write_counter',
+  'owner_index_state',
+  'owner_member_support',
+  'owner_member_index',
+  'owner_index_pin',
+  'owner_index_builtin_reference',
+  'owner_index_control',
   'fact_source_head',
 ] as const;
 const childQueries = {
