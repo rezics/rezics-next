@@ -14,7 +14,7 @@ const queryClient = (client: Client): Client => ({ query: client.query.bind(clie
 export const moneyEconomicsHash = (value: string): string => createHash('sha256').update(value).digest('hex');
 
 /** Exact native financial-owner inventory. No receipt, body, URL, token or fee-description mirror.
- * The financial participant (currently unavailable in this base) owns the fence and retention decision;
+ * The financial participant owns the fence and the pending financial retention decision;
  * these bounded buyer-home queries supply its minimization and probe surface, not an acknowledgement.
  */
 export const moneyObservationOwnership = Object.freeze({

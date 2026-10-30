@@ -606,10 +606,12 @@ by a current lookup. Existing unknown/incompatible statement grouping blocks new
 known money. Missing interpretation remains repair debt with retained source transactions.
 
 `moneyObservationOwnership` declares the existing financial `commerce` participant as owner, with bounded indexed
-buyer-home page/probe and minimization queries. Fields are only route/buyer/order and provider object/context/version
+buyer-home page/probe and minimization queries. Its native ownership proof includes observations even if no parent
+financial root remains. Fields are only route/buyer/order and provider object/context/version
 keys, unit/amount evidence, economics hash and native command times/ID; there are no URLs, tokens, provider bodies or
-fee-description copies. No new retention exception is granted. The financial participant and its schedule remain
-unavailable in this base as described below; this surface does not acknowledge erasure or claim full custody delivery.
+fee-description copies. No new retention exception is granted. Observations share the participant's pending
+financial field/expiry schedule; its current entitlement cleanup does not remove financial observations or
+acknowledge erasure. These bounded minimization queries require the owner's resolved retention decision and fence.
 Each snapshot supplies at most 256 balance objects plus integration and actual presentment. Reads use named
 route/order/object/context index seeks with one recorded known interpretation per key; buyer cleanup touches at most
 100 indexed rows per page.
