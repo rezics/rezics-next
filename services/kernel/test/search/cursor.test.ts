@@ -349,3 +349,31 @@ test('encoded cursors respect native name bounds and the shared token limit incl
     }
   }
 });
+
+test('hit cursors retain inclusive lifetime and future-skew boundaries and bind language, query and viewer', async () => {
+  const request = { sort: 'id', limit: 1, languages: ['en'] };
+  const scope = { ...binding, request };
+  const hit = { generation: 1, after: [id] };
+  const issued = 1_000_000;
+  const encoded = await encodeSearchCursor(ring, scope, hit, issued);
+  for (const elapsed of [15 * 60_000 - 1, 15 * 60_000, -60_000 + 1, -60_000])
+    expect(await decodeSearchCursor(ring, scope, encoded, issued + elapsed)).toEqual({ ok: true, ...hit });
+  expect(await decodeSearchCursor(ring, scope, encoded, issued + 15 * 60_000 + 1)).toEqual({
+    ok: false,
+    reason: 'expired',
+  });
+  expect(await decodeSearchCursor(ring, scope, encoded, issued - 60_000 - 1)).toEqual(invalid);
+  for (const changed of [
+    { ...scope, principal: `account:${id}` },
+    { ...scope, request: { ...request, text: 'other' } },
+    { ...scope, request: { ...request, languages: ['ja'] } },
+  ])
+    expect(await decodeSearchCursor(ring, changed, encoded, issued)).toEqual(invalid);
+  for (const bad of [
+    '',
+    'malformed',
+    `${encoded[0] === 'A' ? 'B' : 'A'}${encoded.slice(1)}`,
+    'x'.repeat(LIST_CURSOR_BOUNDS.search.maxTokenLength + 1),
+  ])
+    expect(await decodeSearchCursor(ring, scope, bad, issued)).toEqual(invalid);
+});

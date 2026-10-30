@@ -15,6 +15,7 @@ import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { createSearchService } from '../service.ts';
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
+import { systemClock, type KernelClock } from '../../clock.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
 
@@ -86,7 +87,12 @@ const resource = { route: 0, id: GLOBAL_CONTEXT };
 
 export function searchRoutes<App>(
   app: App,
-  { pool, search, access }: { pool: Pool; search?: SearchService; access?: Access | AccessFactory },
+  {
+    pool,
+    search,
+    access,
+    clock = systemClock,
+  }: { pool: Pool; search?: SearchService; access?: Access | AccessFactory; clock?: KernelClock },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -168,7 +174,11 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           return fill(
-            await search.search(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body),
+            await search.search(
+              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+              body,
+              clock().getTime(),
+            ),
             authorize,
             body.languages,
           );
@@ -221,7 +231,11 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          return search.facets(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body);
+          return search.facets(
+            actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+            body,
+            clock().getTime(),
+          );
         });
       },
     )

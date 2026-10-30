@@ -7,6 +7,7 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import type { Pool } from 'pg';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
@@ -159,6 +160,7 @@ export function createSearchService({
   source,
   ratings,
   cursors,
+  clock = systemClock,
   facetSample = 10_000,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release = async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null,
@@ -169,6 +171,7 @@ export function createSearchService({
   source: SubjectSource;
   ratings?: PublicRatingSource;
   cursors: KeyRing;
+  clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
   facetSample?: number;
 }) {
@@ -329,7 +332,7 @@ export function createSearchService({
   }
 
   return {
-    async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
+    async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = clock().getTime()) {
       const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
       // One lookup serves filter admission and the requested properties.
       const current = filter || hitOptions.properties ? await release() : undefined;
@@ -520,7 +523,7 @@ export function createSearchService({
     async facets(
       principal: 'anonymous' | `account:${string}`,
       request: FacetRequest & { languages?: string[] },
-      now = Date.now(),
+      now = clock().getTime(),
     ) {
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });

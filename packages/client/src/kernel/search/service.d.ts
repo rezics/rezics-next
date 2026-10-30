@@ -1,5 +1,6 @@
 import { type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
+import { type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest, type FacetValue } from './facets.ts';
 import { type SearchHit } from './hits.ts';
@@ -22,13 +23,14 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
-export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, facetSample, release, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     ratings?: PublicRatingSource;
     cursors: KeyRing;
+    clock?: KernelClock;
     release?: () => Promise<FilterRelease | null>;
     facetSample?: number;
 }): {

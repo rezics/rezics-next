@@ -238,6 +238,14 @@ and epoch, operation/sort-template version, phase and last consumed native tuple
 first, then restart with HTTP 409 on a valid cursor whose current rating context has changed. Do not change the
 authenticated request hash to the current epoch. All search positions use fresh random salt,
 15-minute expiry including anonymous viewers and a 60-second future-time allowance. Profile cross-decode fails.
+The service factory accepts the kernel's optional domain clock, defaulting to the actual system clock. Search
+and facets sample it once at their request boundary; an explicit numeric `now` keeps its existing meaning and
+bypasses that default. HTTP search (including rating order) and facets pass the resolved kernel clock to the
+service. Cursor lifetime comparisons remain inclusive at 15 minutes and 60 seconds of future skew. Facets
+currently return values without continuation tokens. Source timestamps and `as_of` remain native observations;
+authorization evidence and wall-time request deadlines keep their existing clocks and guards. Sampling the clock
+adds no SQL, engine request or Source read.
+
 There is no HMAC-readable position or legacy plaintext fallback. The Search adapter still needs the encrypted
 profile migration and outcome proof; this contract does not claim that runtime work is complete.
 

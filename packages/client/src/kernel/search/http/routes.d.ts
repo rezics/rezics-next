@@ -3,11 +3,13 @@ import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
+import { type KernelClock } from '../../clock.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
-export declare function searchRoutes<App>(app: App, { pool, search, access }: {
+export declare function searchRoutes<App>(app: App, { pool, search, access, clock }: {
     pool: Pool;
     search?: SearchService;
     access?: Access | AccessFactory;
+    clock?: KernelClock;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
