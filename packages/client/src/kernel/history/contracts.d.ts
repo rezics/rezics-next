@@ -157,6 +157,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.commerce.offer.delisted.v1': EventClassification;
     'com.rezics.commerce.offer.revised.v1': EventClassification;
     'com.rezics.commerce.order.created.v1': EventClassification;
+    'com.rezics.commerce.order.repair_requested.v1': EventClassification;
     'com.rezics.commerce.order.updated.v1': EventClassification;
     'com.rezics.commerce.payout_statement.paid.v1': EventClassification;
     'com.rezics.commerce.payout_statement.updated.v1': EventClassification;

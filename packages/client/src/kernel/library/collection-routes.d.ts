@@ -4,12 +4,14 @@ import type { KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
 type Dependencies = {
     pool: Pool;
     access: () => Access;
     tokens: KeyRing;
     clock: KernelClock;
     routeKey: Uint8Array;
+    workClient?: () => Promise<WorkClient>;
 };
 export declare const collectionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
@@ -4677,6 +4679,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     cursor?: string;
                     limit?: string | number;
                     curatorAccountId: string | null;
+                    preview?: string | number;
                 };
                 headers: unknown;
                 response: {
@@ -4728,6 +4731,46 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             orderEpoch: number;
                             createdAt: string;
                             updatedAt: string;
+                            previewMembers?: {
+                                subjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                };
+                            }[];
+                            previewStatus?: "pending" | "ready";
                         } | {
                             curator?: {
                                 id: string;
@@ -4755,6 +4798,46 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             presentationKindSource: "empty";
                             cover: null;
                             coverSource: "none";
+                            previewMembers?: {
+                                subjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                };
+                            }[];
+                            previewStatus?: "pending" | "ready";
                         } | {
                             curator?: {
                                 id: string;
@@ -4797,6 +4880,46 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             coverSource: "member" | "none" | "owner" | "pending";
                             coverMediaId?: string | null;
                             revision: number;
+                            previewMembers?: {
+                                subjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                };
+                            }[];
+                            previewStatus?: "pending" | "ready";
                             membershipKind: "dynamic";
                         })[];
                         next: string | null;
@@ -5969,6 +6092,234 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
     v1: {
         collections: {
             ":collectionId": {
+                $restore: {
+                    post: {
+                        body: {
+                            deletionId: string;
+                            revision: number;
+                        };
+                        params: {
+                            collectionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                collection: {
+                                    id: string;
+                                    membershipKind: "curated";
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    memberCount: number;
+                                    orderEpoch: number;
+                                    createdAt: string;
+                                    updatedAt: string;
+                                } | {
+                                    id: string;
+                                    curatorAccountId: string;
+                                    membershipKind: "dynamic";
+                                    builtinKind: "everything" | "state";
+                                    builtin: {
+                                        kind: "everything";
+                                    } | {
+                                        kind: "state";
+                                        profileId: string;
+                                        stateSetId: string;
+                                        stateId: string;
+                                    };
+                                    builtinLabels?: Record<string, string>;
+                                    title: string | null;
+                                    description: string | null;
+                                    visibility: "private";
+                                    revision: number;
+                                    presentationKind: null;
+                                    presentationKindSource: "empty";
+                                    cover: null;
+                                    coverSource: "none";
+                                } | {
+                                    id: string;
+                                    curatorAccountId: string | null;
+                                    title: string;
+                                    description: string | null;
+                                    visibility: "private" | "public" | "unlisted";
+                                    presentationKind: string | null;
+                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    cover?: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                    coverSource: "member" | "none" | "owner" | "pending";
+                                    coverMediaId?: string | null;
+                                    revision: number;
+                                    membershipKind: "dynamic";
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        collections: {
+            ":collectionId": {
                 members: {
                     get: {
                         body: unknown;
@@ -6028,6 +6379,21 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     } | null;
                                     kind: "dynamic";
                                     subjectId: string;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
                                 } | {
                                     subject?: {
                                         id: string;
@@ -6090,6 +6456,9 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     })[]>;
                                 })[];
                                 next: string | null;
+                            };
+                            202: {
+                                preparing: true;
                             };
                             400: {
                                 type: unknown;

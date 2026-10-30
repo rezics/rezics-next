@@ -27,6 +27,8 @@ export const libraryWorkModule: WorkModule = {
     await registerEntryIncarnationCutover(context);
     const { registerLibraryProfileMigrationWork } = await import('./profile-migration-runtime.ts');
     registerLibraryProfileMigrationWork(context);
+    const { registerMembersPreparationWork } = await import('./members-preparation-work.ts');
+    await registerMembersPreparationWork(context);
     const { registerOwnerIndexWork } = await import('./owner-index-work.ts');
     await registerOwnerIndexWork(context);
   },

@@ -1,5 +1,6 @@
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
+import { ProblemError } from '../http/problem.ts';
 import type { KernelClock } from '../clock.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -8,7 +9,7 @@ import type { WorkClient } from '../work/client.ts';
 /** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
 export type PreparationDefinition = Readonly<{
   filter: FilterDocument;
-  sort: 'id';
+  sort: 'id' | 'ordinal';
   release: Readonly<{ digest: string; value: FilterRelease }>;
 }>;
 export type PreparationLocator = Readonly<{
@@ -56,13 +57,13 @@ export function createMembersPreparation(_config: {
 }): MembersPreparation {
   return {
     async reserve() {
-      throw new Error('Unimplemented: Library members preparation reserve');
+      throw new ProblemError('dependency_unavailable');
     },
     async touch() {
-      throw new Error('Unimplemented: Library members preparation touch');
+      throw new ProblemError('dependency_unavailable');
     },
     async admitStep() {
-      throw new Error('Unimplemented: Library members preparation admitStep');
+      throw new ProblemError('dependency_unavailable');
     },
   };
 }

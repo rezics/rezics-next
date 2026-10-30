@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
+import type { DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
 import type { Access } from '../request/access.ts';
 import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
-import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-import type { PrivacyReductionStart, PublicFilterDependencyKey, PrivacyReductionObservation, PrivacyReductionObservationRequest, PublicFilterCost, PublicFilterProjectionMeaning, PublicFilterSource } from './public-filter-source-contract.ts';
+import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicSuggestionCaptureInput, PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+import type { PrivacyReductionStart, PublicFilterDependencyKey, PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator, PrivacyReductionObservation, PrivacyReductionObservationRequest, PublicFilterCost, PublicFilterProjectionMeaning, PublicFilterSource } from './public-filter-source-contract.ts';
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
 export type JoinedPopulationRequest = Readonly<{
     kind: 'queried';
@@ -27,6 +28,7 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
     readPrivacyReductionHeads(request: JoinedPopulationRequest, context: PublicFilterConsumerContext): Promise<PrivacyReductionObservation>;
 }
 export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+export type PublicSourceCaptureInput = PublicFilterConsumerCaptureInput | DiscoveryConsumerCaptureInput | PublicSuggestionCaptureInput;
 export type NativePublicSource = Readonly<{
     id: string;
     partition: number;
@@ -37,7 +39,7 @@ export type PublicFilterSourceDefinition = Readonly<{
     source: NativePublicSource;
     readDefinition: string;
     meaning: PublicFilterProjectionMeaning;
-    capture: PublicFilterConsumerCaptureInput;
+    capture: PublicSourceCaptureInput;
     dependencyKeys: readonly PublicFilterDependencyKey[];
 }>;
 export type PublicFilterBindingFailure = Readonly<{
@@ -49,7 +51,7 @@ export type PublicFilterSourceBinding = Readonly<{
     resolve(request: Readonly<{
         source: PublicFilterSource;
         meaning: PublicFilterProjectionMeaning;
-        capture: PublicFilterConsumerCaptureInput;
+        capture: PublicSourceCaptureInput;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'resolved';
         definition: PublicFilterSourceDefinition;
@@ -74,6 +76,93 @@ export type PublicFilterSourceBinding = Readonly<{
         cost: PublicFilterCost;
     }> | PublicFilterBindingFailure>;
 }>;
+export type PublicSourceBootstrap = Readonly<{
+    id: string;
+    definition: PublicFilterSourceDefinition;
+    consumer: PublicFilterConsumer;
+    snapshot: 'pit' | 'prepared';
+    covered: PrivacyReductionStart;
+}>;
+export type PublicSourceBootstrapResult = Readonly<{
+    status: 'begun';
+    bootstrap: PublicSourceBootstrap;
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+export type PublicSourceBootstrapRecovery = Readonly<{
+    status: 'begun';
+    bootstrap: PublicSourceBootstrap;
+    queried: null;
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'adopted';
+    bootstrap: PublicSourceBootstrap;
+    queried: PublicFilterQueriedObservation;
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'pending';
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+declare const nativeSourceRepairReceipt: unique symbol;
+export type NativeSourceRepairReceipt = Readonly<{
+    [nativeSourceRepairReceipt]: true;
+}>;
+export type PublicSourceRepair = Readonly<{
+    kind: 'local' | 'foreign';
+    locator: PublicFilterRepairLocator;
+    source: PublicFilterProjectionObservation;
+    projection: PublicFilterProjectionPage;
+    receipt: NativeSourceRepairReceipt;
+}>;
+export type PublicSourceRepairPage = Readonly<{
+    status: 'progress';
+    repairs: readonly PublicSourceRepair[];
+    frontier: string;
+    cost: PublicFilterCost;
+}> | Readonly<{
+    status: 'complete';
+    repairs: readonly PublicSourceRepair[];
+    frontier: null;
+    cost: PublicFilterCost;
+}> | PublicFilterBindingFailure;
+export type PublicFilterSourceBootstrapBinding = PublicFilterSourceBinding & Readonly<{
+    begin(request: Readonly<{
+        source: PublicFilterSource;
+        meaning: PublicFilterProjectionMeaning;
+        capture: PublicSourceCaptureInput;
+        consumer: PublicFilterConsumer;
+        snapshot: 'pit' | 'prepared';
+    }>, context: PublicFilterConsumerContext): Promise<PublicSourceBootstrapResult>;
+    adopt(request: Readonly<{
+        bootstrap: string;
+        queried: PublicFilterQueriedObservation;
+    }>, context: PublicFilterConsumerContext): Promise<Readonly<{
+        status: 'adopted';
+        bootstrap: PublicSourceBootstrap;
+        queried: PublicFilterQueriedObservation;
+        cost: PublicFilterCost;
+    }> | PublicFilterBindingFailure>;
+    abort(request: Readonly<{
+        bootstrap: string;
+    }>, context: PublicFilterConsumerContext): Promise<Readonly<{
+        status: 'aborted' | 'pending';
+        cost: PublicFilterCost;
+    }> | PublicFilterBindingFailure>;
+    recover(request: Readonly<{
+        bootstrap: string;
+    }>, context: PublicFilterConsumerContext): Promise<PublicSourceBootstrapRecovery>;
+    repairPage(request: Readonly<{
+        bootstrap: string;
+        queried: PublicFilterQueriedObservation;
+        execution: string;
+        frontier: string | null;
+        inputLimit: number;
+    }>, context: PublicFilterConsumerContext): Promise<PublicSourceRepairPage>;
+    settle(request: Readonly<{
+        bootstrap: string;
+        queried: PublicFilterQueriedObservation;
+        execution: string;
+    }>, context: PublicFilterConsumerContext): ReturnType<PublicFilterSourceBinding['join']>;
+}>;
 /** PROVISIONAL agreed producer adapter. The owning native implementation replaces this module on landing.
  * No local registry, caller object, or structural Source can establish native binding here. */
-export declare function createPublicFilterSourceBinding(_pool: Pool, _routing: Uint8Array, _access: Access): PublicFilterSourceBinding;
+export declare function createPublicFilterSourceBinding(_pool: Pool, _routing: Uint8Array, _access: Access): PublicFilterSourceBootstrapBinding;

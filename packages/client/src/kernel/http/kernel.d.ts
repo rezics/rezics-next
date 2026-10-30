@@ -1,3 +1,4 @@
+import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
 import { viewerActionsRoutes, type ViewerActionResources } from '../access/viewer-actions.ts';
@@ -47,7 +48,9 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     /** Trusted domain time only; authentication and request budgets retain real time. */
     clock?: () => Date;
     commerce?: CommerceDependencies;
-    content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
+    content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & {
+        readConsent?: CurrentConsentReader;
+    };
     search?: SearchService;
     /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
     shelves?: ShelfNativeReadBindings;

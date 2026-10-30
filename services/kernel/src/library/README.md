@@ -1700,6 +1700,37 @@ separately required through the common Collection reader and its frozen native s
 
 ### Owner-selected Collection presentation
 
+Collection lists opt into an ordered preview with `view=FULL&preview=3` and a limit of at most 20.
+The default list remains 20 and the ordinary maximum remains 100. Only opted-in entries add
+`previewMembers: {subjectId, subject}[]` and `previewStatus: 'ready' | 'pending'`. Occurrence notes and
+personal facts are excluded. Repeated occurrences remain editable, but a canonical subject occupies one slot.
+
+`collection-preview.ts` uses one same-home native parent/member prefix statement. Each selected curated
+parent receives an equal share of the global 100 raw-key budget, with indexed ordinal seeks. Retained/deleted occurrences consume that same allowance and never
+contribute members. Exact-budget prefixes remain pending without an additional raw lookahead. One current
+Semantic summary batch accepts at most 100 original IDs and independently checks original and terminal
+disclosure and revisions. Collection authorization, revision and source generation are checked before the
+prefix and after projection. The native writer generation also fences the batch after projection,
+including member retention/purge changes that need not advance the metadata revision. A changed observation returns typed unavailable. Ready means three actual
+visible canonical members were found or the addressed native prefix was exhausted; pending returns no partial
+members. Dynamic sources and unfinished sparse prefixes remain pending. A three-member preview proves no
+dominant Type, whole-Source readiness or complete absence of cover images.
+
+Anonymous previews use the existing current public read eligibility and the actual anonymous Actor. The
+direct preview executes no writes, operational transaction or retained preparation, and never substitutes a
+curator. Metadata-only list/detail requests do not invoke the preview producer. For authenticated same-owner curated sources, `collection-preview-work.ts` binds the common
+`MembersPreparation.reserve` boundary with internal ordinal order. One unresolved parent receives at most
+one reservation per list, rotating through the current page in each reader instance. Other-account and
+logical/dynamic sources receive no retained authority. The unfiltered definition uses the shared FilterDocument
+Type tautology at the current immutable release; unknown evidence remains unknown under NOT.
+
+The exact producer declarations include `id | ordinal`. This checkout carries explicitly unavailable producer
+adapters for reservation and default `library.membersPreparation` work. They perform no storage mutation,
+produce no ready result and acknowledge no custody. The authoritative reservation/storage/cleanup worker must
+replace those adapters through integration. `MembersPreparation` declares no retained ordered-result reader
+on this base; prepared result consumption and finite native sparse-source completion remain deferred with the
+actual ordered/scoped source binding. Successful direct previews never establish those wider capabilities.
+
 The existing Collection POST/PATCH accept optional `presentationKind` and `coverMediaId`; PATCH keeps its numeric
 revision CAS. Omission preserves a choice, null clears it. `collection-presentation.ts` validates a new exact TypeId
 against the active definitions release, without changing members or accepted personal profile pins. Stored choices

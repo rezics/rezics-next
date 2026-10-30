@@ -207,6 +207,21 @@ export declare const PROBLEMS: {
         readonly title: 'Library Entry Restore Expired';
         readonly retryable: false;
     };
+    readonly collection_restore_occupied: {
+        readonly status: 409;
+        readonly title: 'Collection Restore Occupied';
+        readonly retryable: false;
+    };
+    readonly collection_restore_stale: {
+        readonly status: 409;
+        readonly title: 'Stale Collection Restore';
+        readonly retryable: false;
+    };
+    readonly collection_restore_expired: {
+        readonly status: 409;
+        readonly title: 'Collection Restore Expired';
+        readonly retryable: false;
+    };
     readonly library_label_capacity: {
         readonly status: 409;
         readonly title: 'Library Label Capacity Reached';

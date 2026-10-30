@@ -12,7 +12,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { FactSchema } from '../search/http/routes.ts';
-import { CoverSummarySchema } from '../semantic/http/summaries.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
@@ -92,6 +92,12 @@ export const collectionReadSchema = t.Union([
 ]);
 const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
+const previewFields = {
+  previewMembers: t.Optional(
+    t.Array(t.Object({ subjectId: id, subject: SubjectSummarySchema }, closed), { maxItems: 3 }),
+  ),
+  previewStatus: t.Optional(t.Union([t.Literal('ready'), t.Literal('pending')])),
+};
 const {
   memberCount: _count,
   orderEpoch: _order,
@@ -112,6 +118,11 @@ const embeddedCollectionSchema = t.Union([
   embedded(collectionSchema, curatorFields),
   embedded(savedDynamicCollectionSchema, curatorFields),
   embedded(dynamicCollectionSchema, curatorFields),
+]);
+const previewCollectionSchema = t.Union([
+  embedded(collectionSchema, { ...curatorFields, ...previewFields }),
+  embedded(savedDynamicCollectionSchema, { ...curatorFields, ...previewFields }),
+  embedded(dynamicCollectionSchema, { ...curatorFields, ...previewFields }),
 ]);
 const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
 const createMetadata = {
@@ -377,19 +388,29 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     .get(
       '/v1/collections',
       {
-        query: t.Object({ curatorAccountId: t.Union([id, t.Null()]), ...pageQuery }, closed),
+        query: t.Object(
+          {
+            curatorAccountId: t.Union([id, t.Null()]),
+            ...pageQuery,
+            preview: t.Optional(t.Numeric({ minimum: 3, maximum: 3, multipleOf: 1 })),
+          },
+          closed,
+        ),
         response: {
-          200: t.Object({ collections: t.Array(embeddedCollectionSchema), next: nullableString }, closed),
+          200: t.Object({ collections: t.Array(previewCollectionSchema), next: nullableString }, closed),
           ...failures,
         },
         detail: detail('collection.list', 'collection:read', true),
       },
       async ({ query, actor, admission, job }) =>
         admission.run('normal', job, async () => {
-          const page = await read().listCollections(actor, basicQuery(query));
+          const { preview, ...options } = query;
+          if (preview !== undefined && (query.view !== 'FULL' || (query.limit ?? 20) > 20))
+            throw new ProblemError('invalid_request');
+          const page = await read().listCollections(actor, basicQuery(options),
+            preview === undefined ? undefined : { deadline: job.deadline });
           return fullView(viewDependencies(), actor, query.view, {
-            ...page,
-            collections: page.collections.map(collectionReadView),
+            ...page, collections: page.collections.map(collectionReadView),
           });
         }),
     )

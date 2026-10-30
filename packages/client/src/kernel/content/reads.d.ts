@@ -1,4 +1,8 @@
 import type { Pool } from 'pg';
+import type { AuthoritativeTime } from '../command/command.ts';
+import type { AccessContext } from '../request/access.ts';
+import type { ContentEditionSource } from './edition-model.ts';
+import { type DurableOperationAnchor, type InitiatorRestorer } from '../access/durable-initiator.ts';
 import { type Partition } from '../partition/partition.ts';
 import { type Access, type AccessClient, type Actor, type ReadDecisions, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -142,3 +146,15 @@ export declare function readExactPublishedRules(dependencies: Pick<ContentReadDe
 /** Current bounded board response composition. The native internal reader stays
  * independent, so exact post/rules reads cannot recurse into presentation. */
 export declare function readBoards(dependencies: ContentReadDependencies, boardIds: readonly string[], context: ReadContext): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]>;
+/** Edition publication enrolls just the selected source post. Ancestors keep their
+ * ordinary read formula; this port cannot authorize an ordinary post route. */
+export declare function prepareEditionSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, source: ContentEditionSource, context: ReadContext, time: AuthoritativeTime, accessContext: AccessContext, ordinarySource: boolean): Promise<Readonly<{
+    check(client: AccessClient): Promise<boolean>;
+    final(): Promise<boolean>;
+}> | null>;
+/** Native publisher checks restore separately for every action and exact resource.
+ * This never creates a workflow ReadContext or supplies a buyer identity. */
+export declare function prepareEditionPublisherSource(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, source: ContentEditionSource, operation: DurableOperationAnchor, restorer: InitiatorRestorer, time: AuthoritativeTime, accessContext: AccessContext): Promise<Readonly<{
+    check(client: AccessClient): Promise<boolean>;
+    final(): Promise<boolean>;
+}> | null>;

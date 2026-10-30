@@ -14,12 +14,10 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { WorkClient } from '../work/client.ts';
 import {
   collectionPresentation,
   readablePresentationCover,
   type CollectionPresentation,
-  type PresentationDependencies,
 } from './collection-presentation.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
@@ -33,6 +31,8 @@ import listingCounts from './listing-counts.sql';
 import { requireCollectionRuleExecution } from './collection-rules.ts';
 import type { CollectionMemberQuery } from './owner-filter.ts';
 import { readOwnerFilterPage } from './owner-filter-plan.ts';
+import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
+import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
 
 type CuratorPageOptions = { curatorAccountId: string | null; cursor?: string | null; limit?: number };
 
@@ -40,7 +40,7 @@ type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
-export type CollectionView = CollectionPresentation & {
+export type CollectionView = CollectionPresentation & Partial<CollectionPreview> & {
   // Older internal callers may construct the curated presentation without wire-only fields.
   membershipKind?: 'curated';
   orderEpoch?: number;
@@ -257,12 +257,8 @@ function readEligibility(route: number, id: string, sink: Sink) {
   });
 }
 
-export function createCollectionReads(
-  dependencies: PresentationDependencies & {
-    tokens: KeyRing;
-    workClient?: () => Promise<WorkClient>;
-  },
-) {
+export function createCollectionReads(dependencies: PreviewPreparationDependencies & { tokens: KeyRing }) {
+  const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
   const builtins = createBuiltinRuntime({ pool });
@@ -383,8 +379,9 @@ export function createCollectionReads(
     return { epoch: decoded.epoch, after: decoded.after };
   }
 
-  function listCollections(viewer: Actor, options: CuratorPageOptions) {
-    return listCuratorPage(viewer, options, false);
+  function listCollections(viewer: Actor, options: CuratorPageOptions, preview?: { deadline: number }) {
+    if (preview && (options.limit ?? DEFAULT_PAGE_SIZE) > 20) throw new ProblemError('invalid_request');
+    return listCuratorPage(viewer, options, false, preview);
   }
 
   /** The account's public face uses the public index even when the curator is the viewer. */
@@ -396,6 +393,7 @@ export function createCollectionReads(
     viewer: Actor,
     options: CuratorPageOptions,
     publicOnly: boolean,
+    preview?: { deadline: number },
   ): Promise<{ collections: CollectionResourceView[]; next: string | null }> {
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
     const curatorAccountId = options.curatorAccountId;
@@ -462,6 +460,16 @@ export function createCollectionReads(
     });
     const collections: CollectionResourceView[] = [...shownLogical];
     for (const row of result.collections) collections.push(await present(viewer, row));
+    if (preview) {
+      const previews = await readCollectionPreviews(dependencies, viewer, result.collections, preview.deadline, async (parent) => {
+        const current = await loadCollection(viewer, parent.id, preview.deadline);
+        if (!current) throw notFound();
+        if (current.revision !== parent.revision || current.sourceGeneration !== parent.sourceGeneration ||
+            current.membershipKind !== parent.membershipKind) throw new ProblemError('dependency_unavailable');
+      }, (previews) => retainPreview(viewer, result.collections, previews, preview.deadline));
+      for (const collection of collections) Object.assign(collection,
+        previews.get(collection.id) ?? { previewMembers: [], previewStatus: 'pending' });
+    }
     return { ...result, collections };
   }
 

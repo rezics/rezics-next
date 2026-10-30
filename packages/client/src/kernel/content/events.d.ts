@@ -1,6 +1,5 @@
 import { Type, type Static } from 'typebox';
 export declare const REACTION_KINDS: readonly ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
-/** Closed content event catalogue. Envelope identity and ordering belong to the kernel. */
 export declare const CONTENT_EVENTS: {
     readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
         realmId: Type.TString;
@@ -121,6 +120,18 @@ export declare const CONTENT_EVENTS: {
         securityRevision: Type.TString;
         takenDownAt: Type.TOptional<Type.TString>;
         takedownId: Type.TOptional<Type.TString>;
+    }>;
+    readonly 'com.rezics.content.edition.created.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.edition.published.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
+    }>;
+    readonly 'com.rezics.content.edition.unpublished.v1': Type.TObject<{
+        editionId: Type.TString;
+        editionRevision: Type.TString;
     }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
         placeId: Type.TString;

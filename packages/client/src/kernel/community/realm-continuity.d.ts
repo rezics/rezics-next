@@ -8,6 +8,18 @@ export type RealmContinuity = Readonly<{
     claimEligibleAt: string | null;
     governanceReadOnly: boolean;
 }>;
+declare const lockedOwnership: unique symbol;
+export type LockedRealmOwnershipSource = Readonly<{
+    readonly [lockedOwnership]: true;
+    realmId: string;
+    ownershipState: 'owned' | 'orphaned';
+    orphanedAt: string | null;
+    claimEligibleAt: string | null;
+}>;
+/** Native source data, including removed Realms for mechanical erasure cleanup. */
+export declare function lockRealmOwnershipSource(tx: CommandTransaction, realmId: string): Promise<LockedRealmOwnershipSource | null>;
+/** Accounts' actually applied native erasure result is the sole decision authority. */
+export declare function applyRealmOwnershipSuccession(tx: CommandTransaction, source: LockedRealmOwnershipSource, erasedAccountId: string): Promise<RealmContinuity>;
 export declare class RealmReadOnlyError extends ProblemError {
     constructor();
 }
@@ -40,14 +52,4 @@ export declare function requestRealmClaim(deps: RealmDependencies, actor: Actor,
     claimEligibleAt: string;
     requestedAt: string;
 }>>>;
-declare const lockedOwnership: unique symbol;
-export type LockedRealmOwnershipSource = Readonly<{
-    readonly [lockedOwnership]: true;
-    realmId: string;
-    ownershipState: 'owned' | 'orphaned';
-    orphanedAt: string | null;
-    claimEligibleAt: string | null;
-}>;
-export declare function lockRealmOwnershipSource(_tx: CommandTransaction, _realmId: string): Promise<LockedRealmOwnershipSource | null>;
-export declare function applyRealmOwnershipSuccession(_tx: CommandTransaction, _source: LockedRealmOwnershipSource, _erasedAccountId: string): Promise<RealmContinuity>;
 export {};

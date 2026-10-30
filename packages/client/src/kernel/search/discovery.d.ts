@@ -230,4 +230,56 @@ export type DiscoveryIndexDefinition = {
         properties: Record<string, Record<string, unknown>>;
     };
 };
+/** Canonical mixed root: provisional DiscoveryCondition values are never admitted engine input. */
+import type { FilterDocument } from '@rezics/filter';
+import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
+type DiscoveryFilterLeaf = Exclude<FilterDocument, {
+    and: unknown;
+} | {
+    or: unknown;
+} | {
+    not: unknown;
+}>;
+export type DiscoveryFilterDocument = Readonly<{
+    and: readonly DiscoveryFilterDocument[];
+}> | Readonly<{
+    or: readonly DiscoveryFilterDocument[];
+}> | Readonly<{
+    not: DiscoveryFilterDocument;
+}> | DiscoveryFilterLeaf | Readonly<{
+    kind: Readonly<{
+        in: readonly string[];
+    }>;
+}>;
+export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> & Readonly<{
+    representation: 'discovery-v1';
+    filterDocument: DiscoveryFilterDocument | undefined;
+    comparator: 'mixed-public-v1';
+}>;
+export type DiscoveryEngineHit = Readonly<{
+    key: DiscoveryKey;
+    index: string;
+    sourcePosition: string;
+    revision: string;
+    matched: readonly string[];
+    sort: readonly (string | number | null)[];
+}>;
+export type DiscoveryEngineResult = Readonly<{
+    generation?: number;
+    hits: readonly DiscoveryEngineHit[];
+}>;
+export type DiscoveryConsumerQuery = (Omit<Extract<PublicFilterConsumerQuery, {
+    status: 'queried';
+}>, 'result'> & Readonly<{
+    result: DiscoveryEngineResult;
+}>) | Exclude<PublicFilterConsumerQuery, {
+    status: 'queried';
+}>;
+import type { PublicFilterProjectionMeaning, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
+type EngineClause = Record<string, unknown>;
+/** Full mixed grammar admission; compile each configured domain before combining native ranking. */
+export declare function compileDiscoveryConsumerCapture(input: DiscoveryConsumerCaptureInput, meaning: PublicFilterProjectionMeaning, registry: DiscoveryRegistry | undefined): Readonly<{
+    query: EngineClause;
+    dependencyKeys: readonly PublicFilterDependencyKey[];
+}>;
 export {};
