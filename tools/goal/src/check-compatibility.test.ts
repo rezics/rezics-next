@@ -101,7 +101,9 @@ test('main consumer exercises actual dev worker-check forms, validates records a
 
     const recordChecks = reportCheck(report, 'workerCheck.record.finished');
     expect(recordChecks).toHaveLength(2);
-    expect(recordChecks.map((check) => (check.evidence?.record as { exitCode: number }).exitCode).sort()).toEqual([0, 7]);
+    expect(recordChecks.map((check) => (check.evidence?.record as { exitCode: number }).exitCode).sort()).toEqual([
+      0, 7,
+    ]);
     expect(reportCheck(report, 'workerCheck.start')[0]!.evidence?.idIsUuid).toBe(true);
     expect(reportCheck(report, 'workerCheck.foreground')[0]!.evidence?.exitCode).toBe(0);
 
@@ -156,11 +158,17 @@ test('incompatible worker result fields and missing remote options identify the 
     expect(report.contractVersion).toBe(CHECK_COMPATIBILITY_CONTRACT.version);
     const runnerHost = reportCheck(report, 'workerCheck.record.runnerHost');
     if (!runnerHost.some((check) => check.status === 'incompatible'))
-      throw new Error(`Expected workerCheck.record.runnerHost to be incompatible; received ${JSON.stringify(report.checks)}.`);
+      throw new Error(
+        `Expected workerCheck.record.runnerHost to be incompatible; received ${JSON.stringify(report.checks)}.`,
+      );
     const missingReturns = reportCheck(report, 'remoteCheck.options.--returns');
     if (!missingReturns.some((check) => check.status === 'incompatible'))
-      throw new Error(`Expected remoteCheck.options.--returns to be incompatible; received ${JSON.stringify(missingReturns)}.`);
-    expect(reportCheck(report, 'remoteCheck.options.--memory-gib').some((check) => check.status === 'compatible')).toBe(true);
+      throw new Error(
+        `Expected remoteCheck.options.--returns to be incompatible; received ${JSON.stringify(missingReturns)}.`,
+      );
+    expect(reportCheck(report, 'remoteCheck.options.--memory-gib').some((check) => check.status === 'compatible')).toBe(
+      true,
+    );
     expect(report.incompatibilities.every((issue) => issue.field.length > 0 && issue.command.length > 0)).toBe(true);
   } finally {
     rmSync(directory, { recursive: true, force: true });
