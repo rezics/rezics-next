@@ -100,7 +100,7 @@ test('bounded owner discovery requests the agreed opt-in preview without a membe
   expect(url.searchParams.get('curatorAccountId')).toBe('owner');
   expect(url.searchParams.get('view')).toBe('FULL');
   expect(url.searchParams.get('preview')).toBe('3');
-  expect(url.searchParams.get('limit')).toBe('100');
+  expect(url.searchParams.get('limit')).toBe('20');
   expect(requests[0]!.headers.get('authorization')).toBe('Bearer viewer');
 });
 
