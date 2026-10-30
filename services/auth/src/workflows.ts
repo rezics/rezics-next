@@ -257,9 +257,27 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const id = randomBytes(24).toString('base64url');
     const accountId = access.registrationTarget(request);
     const sealed = credential ? sealCredential(id, accountId, handle, credential) : null;
+    const operation = binding as AccountOperation | undefined;
+    const context =
+      operation && 'authorization' in operation
+        ? await required(access.authorizeOperation)(operation.authorization!, operation)
+        : undefined;
+    const creator = context === undefined ? null : (access.actorAccountId?.(context) ?? null);
+    const operator = operation?.kind === 'automated' ? operation.operatorAccountId : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
-      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
-      [id, request, handle, accountId, digest, sealed?.ciphertext ?? null, sealed?.digest ?? null, creation],
+      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
+      [
+        id,
+        request,
+        handle,
+        accountId,
+        digest,
+        sealed?.ciphertext ?? null,
+        sealed?.digest ?? null,
+        creation,
+        creator,
+        operator,
+      ],
     );
     const row = required(result.rows[0]);
     if (
@@ -479,7 +497,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const release = step('release-expired-handle', async (claim: Reservation) => {
       await access.releaseExpiredRegistrationHandle({ ...claim, key: commandKey('release-expired') });
     });
-    const erase = step(
+    const acceptErasure = step(
       'erase-auth-owner',
       async (accountId: string, request?: AccountOperation, operationKey?: string) => {
         if (operationKey) {
@@ -488,9 +506,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           if (!entry) denied();
           await required(access.authorizeContinuation)(row.reference, entry);
         } else if (request) await approved(request);
-        return auth.internal.eraseAccount(accountId);
+        return auth.internal.startAccountErasure(accountId);
       },
     );
+    const recoverErasure = step('native-erasure-obligation', (accountId: string) =>
+      auth.internal.startAccountErasure(accountId),
+    );
+    const erasurePage = step('native-erasure-page', (id: string) => auth.internal.nativeErasurePage(id));
+    const erase = async (accountId: string, request?: AccountOperation, operationKey?: string) => {
+      // Old histories stored void at erase-auth-owner. Recover the same native
+      // obligation rather than replaying the former user cascade.
+      const id = (await acceptErasure(accountId, request, operationKey)) ?? (await recoverErasure(accountId));
+      for (;;) {
+        const page = await erasurePage(id);
+        if (page.state === 'consent') return;
+        if (page.state === 'pending') await DBOS.sleep(60_000);
+      }
+    };
     const expired = step('registration-terminal', async (id: string) => {
       await database.query(
         'UPDATE auth_registration_stage SET expired_at=$2,ciphertext=NULL WHERE registration_id=$1 AND completed_at IS NULL',
@@ -1165,13 +1197,25 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ]);
     const row = (
       await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-        [id, digest, input],
+        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+        [
+          id,
+          digest,
+          input,
+          'accountId' in input ? input.accountId : null,
+          context ? (access.actorAccountId?.(context) ?? null) : null,
+          'operatorAccountId' in input ? input.operatorAccountId : null,
+          'clientId' in input ? input.clientId : null,
+        ],
       )
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
     const result = await answerOperation(input, async () =>
       (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult(),
+    );
+    await database.query(
+      'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+      [id],
     );
     // The approval above was resolved once, before any effect. An operation that
     // removes the actor's own standing answers with the workflow's outcome: the
@@ -1519,18 +1563,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         firstParty: input.firstParty,
         scopes: [...input.scopes],
       };
-      await approved(operation);
+      const context = await approved(operation);
       const id = workflowId(`client-reduction:${key}`);
       const digest = hash(operation);
       const row = (
         await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-          [id, digest, operation],
+          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+          [id, digest, operation, null, access.actorAccountId?.(context) ?? null, null, input.clientId],
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();
       await DBOS.startWorkflow(clientReduction, { workflowID: id })({ ...operation, cursorVersion: 2 });
-      return waitClientReduction(id);
+      const result = await waitClientReduction(id);
+      await database.query(
+        'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+        [id],
+      );
+      return result;
     },
     authorizeOperatorOpening,
     async openOperatorSession(input: {

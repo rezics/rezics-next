@@ -15,9 +15,11 @@ import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
-import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
+import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
+import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { chargeAccountAttempt } from './rate-limit.ts';
 import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
@@ -749,7 +751,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const key = createHmac('sha256', options.secret)
       .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
       .digest('hex');
-    const consumed = await database.query<{ allowed: boolean }>(attemptStatement, [key, 60, 1]);
+    const consumed = await chargeAccountAttempt(database, accountId, key, 60, 1);
     if (!consumed.rows[0]?.allowed) return;
     // requestPasswordReset resolves after a failed send; Better Auth only logs it.
     const outcome = { failed: false };
@@ -1084,30 +1086,28 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           digest,
         });
       },
+      async startAccountErasure(accountId) {
+        const account = trustedAccess.readErasureAccount
+          ? await trustedAccess.readErasureAccount(accountId)
+          : await trustedAccess.readAccount(accountId);
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        return startNativeErasure(database, accountId, account.authnEpoch);
+      },
+      nativeErasurePage: (id) => nativeErasurePage(database, id),
+      redriveNativeErasure: () => redriveNativeErasure(database),
       async eraseAccount(accountId) {
         const account = trustedAccess.readErasureAccount
           ? await trustedAccess.readErasureAccount(accountId)
           : await trustedAccess.readAccount(accountId);
-        if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
-        const connection = await database.connect();
-        let begun = false;
-        try {
-          await connection.query('BEGIN');
-          begun = true;
-          await connection.query('DELETE FROM "user" WHERE id=$1', [accountId]);
-          await connection.query(
-            `INSERT INTO auth_consent_erasure (account_id,due_at)
-             VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
-             ON CONFLICT (account_id) DO NOTHING`,
-            [accountId],
-          );
-          await connection.query('COMMIT');
-          begun = false;
-        } catch (error) {
-          if (begun) await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        const id = await startNativeErasure(database, accountId, account.authnEpoch);
+        // Direct native callers share the exact obligation with host recovery.
+        // Every page commits/releases before continuing; no owner/client list is retained.
+        for (;;) {
+          const page = await nativeErasurePage(database, id);
+          if (page.state !== 'more') return;
         }
       },
       async stageCredentialEffect(input) {
@@ -1125,7 +1125,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(400);
         }
         await owner(input.subjectAccountId);
-        const stage = await credentials.stage({ ...input, credential, human });
+        const stage = await credentials.stage({
+          ...input,
+          credential,
+          human,
+          sourceSessionId: proofSources.get(human)?.id,
+        });
         if (stage.purpose === 'add-passkey' || stage.purpose === 'remove-passkey') throw new Denied(400);
         return {
           effectRef: stage.effectReference,
@@ -1143,7 +1148,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (input.credential?.kind !== 'passkey' || input.credential.remove !== true) throw new Denied(400);
         const { credential } = await credentials.normalize(input.credential);
         await owner(input.subjectAccountId);
-        const stage = await credentials.stage({ ...input, credential, human });
+        const stage = await credentials.stage({
+          ...input,
+          credential,
+          human,
+          sourceSessionId: proofSources.get(human)?.id,
+        });
         if (stage.purpose !== 'remove-passkey') throw new Denied();
         return {
           effectRef: stage.effectReference,
@@ -1939,6 +1949,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 subjectAccountId: human.account_id,
                 credential: ceremony.credential,
                 human,
+                sourceSessionId: proofSources.get(human)?.id,
               });
               stage = await credentials.read(binding.effectReference);
             }

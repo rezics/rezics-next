@@ -1,3 +1,4 @@
+import { nativeProtocolClient } from './erasure-attribution.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { compactVerify, createLocalJWKSet, decodeProtectedHeader, errors, jwtVerify } from 'jose';
@@ -348,7 +349,7 @@ export function websiteRoutes(input: {
               get(target, key) {
                 if (key === 'create')
                   return async (data: Parameters<typeof adapter.create>[0]) => {
-                    const result = await adapter.create(data);
+                    const result = await nativeProtocolClient.run(WEBSITE_CLIENT_ID, () => adapter.create(data));
                     if (data.model === 'oauthClientAssertion') await assertionAdmission.getStore()?.();
                     return result;
                   };

@@ -127,7 +127,7 @@ export function clientAuthority(
       locked = true;
       const admitted = await connection.query(
         `SELECT c.client_id FROM auth_client c JOIN auth_client_coverage v USING (client_id)
-         WHERE c.client_id=$1 AND v.ready AND NOT EXISTS
+         WHERE c.client_id=$1 AND v.ready AND NOT c.erasure_fenced AND NOT EXISTS
          (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=c.client_id)`,
         [clientId],
       );

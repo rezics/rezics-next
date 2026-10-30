@@ -245,6 +245,7 @@ export function credentialEffects(database: Pool, secret: string) {
     subjectAccountId: string;
     credential: CredentialEffect | PasskeyEffect;
     human: SessionProof;
+    sourceSessionId?: string;
   }) {
     text(input.key);
     text(input.subjectAccountId);
@@ -293,8 +294,9 @@ export function credentialEffects(database: Pool, secret: string) {
       cipher.setAAD(aad(binding));
       const encrypted = Buffer.concat([cipher.update(JSON.stringify(credential)), cipher.final()]);
       await connection.query(
-        `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch,operation_key,effect_reference,effect_digest,stage_version,credential_row_id,credential_row_version,acting_human_id,client_id,scopes,stage_ciphertext)
-        VALUES ($1,$2,$3,0,$4,$5,$6,1,$7,$8,$9,$10,$11,$12)`,
+        `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch,operation_key,effect_reference,effect_digest,stage_version,credential_row_id,credential_row_version,acting_human_id,client_id,scopes,stage_ciphertext,erasure_operator_id)
+        VALUES ($1,$2,$3,0,$4,$5,$6,1,$7,$8,$9,$10,$11,$12,
+          (SELECT operator_account_id FROM auth_session_opening WHERE session_id=$13))`,
         [
           randomUUID(),
           input.subjectAccountId,
@@ -308,6 +310,7 @@ export function credentialEffects(database: Pool, secret: string) {
           binding.clientId,
           binding.scopes,
           Buffer.concat([nonce, cipher.getAuthTag(), encrypted]),
+          input.sourceSessionId ?? null,
         ],
       );
       await connection.query('COMMIT');

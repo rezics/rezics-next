@@ -1461,205 +1461,73 @@ command prefix. The permanent native approval-binding receipt refuses changed
 business input or principal assignment. DBOS history retention therefore does
 not discard the effect authority or allow a second effect for that logical key.
 
-## Retention inventory
+## Native erasure and custody
 
-This inventory covers current account-linked personal data in the [Auth schema](db/schema.sql) and durable
-payloads owned by Auth. It complements [Access's deletion policy and inventory](../kernel/src/access/README.md#account-deletion-policy).
-An expiry denies authority; it is not evidence of physical erasure. “No deadline” means no enforced erasure deadline
-was found. Purposes below explain operational use without granting indefinite retention or specifying a legal basis.
-User-linked cascade deadlines mean the transaction deleting the native `user`, after Access's terminal barrier;
-there is no separate guaranteed wall-clock deadline from barrier to Auth cleanup. Non-cascading dependencies are
-listed as gaps. Bounded sweep cadence is not a guarantee of when a backlog is empty.
+The existing deletion operation accepts a durable `auth_erasure` obligation after
+its trusted deleted/fenced account read. The original account and epoch floor,
+applicability, phase and independent raw-key cursor live in the Auth database,
+outside DBOS. The recovered `erase-auth-owner` step joins the same obligation.
+Default maintenance redrives one unfinished native page without a session or a
+fresh approval. No production Auth module imports the kernel.
 
-The dispositions below describe current behavior separately for each role. They do not implement the
-[Access and Auth participant contract](../../docs/deletion.md#access-and-auth-participants), authorize retention
-exceptions or close a gap. Each implementation capability must prove its disposition with its named native test.
-Schema citations cover fields, cascades and missing deletion triggers; a cascade declaration alone is not erasure
-completion. Encrypted staging, password hashes and account-linked public keys remain personal data to erase.
+Every native page requires the deployed ordinal v2 completion marker. A page
+selects at most 48 keys, returns at most 1 KiB per key, and checkpoints with its
+mutations. An owned client is selected and fenced under its existing lock;
+subsequent pages hold only that client lock. Access tokens, attributed protocol
+rows, refresh tokens/families, sessions, operating openings, recovery proofs and
+establishments, effect receipts, provisioning receipts, credentials, assertions,
+registration stages, coverage, reduction progress and client resources drain
+before their parents. Native DELETE guards independently refuse user/client
+cascades through remaining children. Authorized surviving password credentials
+and unrelated clients are retained.
 
-### Identity, credentials and sessions
+Producer-side typed columns associate reset/WebAuthn/OAuth verification, refresh
+families, website client assertions, operating sessions/tokens and native stages.
+These are written in the artifact's native transaction. Native account and client
+fences reject late issuance, recovery and reduction writes; minimal client replay
+fences survive metadata deletion. Verified-account recovery counters keep exact
+native HMAC-key associations, including retired secret generations. Anonymous
+transport counters are never assigned by IP address.
 
-- `public.user`, identity/credential subject: [`eraseAccount`](src/service.ts) deletes only after Access reports
-  deleted and fenced, with no guaranteed barrier-to-cleanup deadline. [The user deletion trigger](db/schema.sql)
-  requires bounded-session upgrade; this is not yet a paged drain of all children.
-- `public.account`, password holder: [the schema](db/schema.sql) cascades user deletion; [credential effects](src/credential-effects.ts)
-  can remove the selected credential. Password hash and owner/provider ids remain until deletion; the password-owner
-  constraint prevents using the provider-token columns for separate providers.
-- `public.session`, subject: [the schema](db/schema.sql) cascades user deletion; [session limits](src/session-limits.sql)
-  and [maintenance](src/maintenance.ts) provide revocation/64-session eviction and minute expiry batches of at most
-  1000, without a backlog deadline. Tokens, IP/UA, scopes, epoch and auth-method data are stored until removal.
-- `public.session`, client owner: [the schema](db/schema.sql) has a non-cascading client FK, which can block owned-client
-  deletion; no client-owner erasure drain exists.
-- `public.session`, operating human/operator: [opening evidence](db/schema.sql) relates sessions to these roles but
-  has no session FK; no operating-role session purge exists for a surviving subject.
-- `public.passkey`, holder: [the schema](db/schema.sql) cascades user deletion; [credential effects](src/credential-effects.ts)
-  support exact removal of key, name/device/transports, counter and usage metadata.
-- `public.auth_public_key`, holder: [the schema](db/schema.sql) cascades user deletion and
-  [credential effects](src/credential-effects.ts) support exact key/JWK removal.
-- `public.auth_key_assertion`, holder: [the schema](db/schema.sql) cascades user deletion; expiry denies JTI replay
-  but does not physically purge it. [The writer](src/key-credentials.ts) records assertion and expiry evidence.
+User deletion writes the original `clock_timestamp() + 310 seconds` consent
+cutoff once. Website access/ID token lifetime is 300 seconds; the native signing
+and verifier limits accept no additional leeway. The extra ten seconds therefore
+covers the composed maximum. Retries retain the original cutoff. Each due page
+selects one account and one client, takes that client's lock, removes its consent,
+and checkpoints on the same transaction. Only actual residue absence removes the
+marker and persists completion, including the final page. Live-user stale markers
+are discarded without changing live consent. Sleep holds no connection.
 
-### Clients, protocol and consent
+Native request rows have typed subject/human/operator/client locators. A native
+workflow result records its terminal marker; unfinished release consumers retain
+their rows. Recovery establishment witnesses remain while a surviving subject's
+native verifier can still use them. Their expiry is not a shared-copy handoff.
 
-- `public.auth_client`, client owner: [the schema](db/schema.sql) declares owner-user cascade, blocked by non-cascading
-  session/coverage/reduction/progress children. Client secrets/JWK, contacts, names/URLs, reference/software metadata
-  have no independent erasure deadline. Deletion ends other users' grants to those owned clients.
-- `public.auth_client`, account bound as contact/admin/reference: [the schema](db/schema.sql) permits personal metadata
-  on a surviving client's registration, without a typed account association or secondary-role minimizer. This
-  describes possible stored fields, not evidence of populated legacy rows.
-- `public.oauthAccessToken`, subject: [the schema](db/schema.sql) cascades user/client/refresh deletion;
-  [protocol maintenance](src/protocol-maintenance.ts) prunes expired tokens in batches of at most 1000 per kind.
-  Tokens, scopes/resources, claims and auth context otherwise remain; no erasure completion signal.
-- `public.oauthAccessToken`, client owner: [the schema](db/schema.sql) provides the client cascade, without a bounded
-  owned-client drain of other users' tokens.
-- `public.oauthAccessToken`, session operator: [the schema](db/schema.sql) has a session-id index but no session cascade;
-  no operating-role erasure drain exists.
-- `public.oauthRefreshToken`, subject: [the schema](db/schema.sql) cascades user/client deletion and access-token
-  children; [protocol maintenance](src/protocol-maintenance.ts) prunes expiry, at most 1000 per invocation.
-- `public.oauthRefreshToken`, client owner: [the schema](db/schema.sql) declares client cascade, without paged erasure
-  of grants, family references and rotation replay responses before the parent.
-- `public.oauthRefreshToken`, session operator: [the schema](db/schema.sql) has no session cascade; related refresh
-  payloads have no operating-role erasure phase.
-- `public.oauthRefreshFamily`, token holder: [the schema](db/schema.sql) has no user relation/cascade;
-  [protocol maintenance](src/protocol-maintenance.ts) prunes expiry only, not an account-specific sweep.
-- `public.oauthRefreshFamily`, client owner: [the schema](db/schema.sql) stores client id without a client FK/cascade;
-  [protocol maintenance](src/protocol-maintenance.ts) removes expired families, at most 1000 per kind per tick.
-- `public.oauthClientAssertion`, client credential holder: [the schema](db/schema.sql) stores an opaque replay id and
-  expiry without native account/client attribution; [protocol maintenance](src/protocol-maintenance.ts) prunes expiry.
-- `public.oauthClientAssertion`, client owner: [the same schema](db/schema.sql) has no client cascade or exact owner
-  locator; expiry pruning is the only scheduled disposition, without an account-erasure guarantee.
-- `public.oauthClientResource`, client owner: [the schema](db/schema.sql) cascades binding/metadata deletion from client
-  or resource. No account-specific drain/minimization exists for personal binding metadata.
-- `public.oauthClientResource`, account identified in metadata: [the schema](db/schema.sql) has no typed account binding
-  or field minimizer for a surviving client's resource policy.
-- `public.oauthResource`, account referenced in name/claims/metadata: [the schema](db/schema.sql) permits these fields
-  without an account-erasure rule. [Website configuration](src/website.ts) uses a non-personal fixed API audience;
-  this does not establish absence of personal metadata in every resource row.
-- `public.auth_recent_oidc_session`, subject/session holder: [the website writer](src/website.ts) records account/session
-  ids with ten-minute expiry; [the schema](db/schema.sql) has no user cascade. [Protocol maintenance](src/protocol-maintenance.ts)
-  prunes at most 1000 expired rows per composed tick, without a backlog deadline.
-- `public.auth_consent`, subject: [the schema](db/schema.sql) has no user FK. [`eraseAccount`](src/service.ts) schedules
-  a 310-second marker in the user-deletion transaction; [minute maintenance](src/maintenance.ts) calls
-  [`eraseDueConsents`](src/consent-erasure.ts). It selects a bounded account batch but loads every client's consent
-  for each account, locks clients and deletes exact rows in one transaction. This inner loop is unbounded; no
-  participant acknowledgement follows. Remaining consent is inert under Access's deletion fence.
-- `public.auth_consent`, client owner: [the schema](db/schema.sql) cascades client deletion, including other users'
-  grants; [consent reduction](src/account-workflows.ts) updates scopes but does not prove an erasure drain.
-- `public.auth_consent_erasure`, erased subject: [the schema](db/schema.sql) stores account id/due time;
-  [`eraseAccount`](src/service.ts) uses `ON CONFLICT DO NOTHING`, preserving the first due time. [The purge](src/consent-erasure.ts)
-  removes the marker after consent absence, or discards a stale marker if the user is live. It persists no separate
-  all-role outcome/completion evidence and sends no acknowledgement.
-- `public.auth_client_coverage`, client owner: [the schema](db/schema.sql) has a non-cascading client FK;
-  [coverage work](src/account-workflows.ts) leaves readiness, due time and progress after completion.
-- `public.auth_client_coverage`, account cursor: [the writer](src/account-workflows.ts) retains only an independent
-  `after_ordinal` boundary after the deployment cutover; native user deletion removes its identity binding.
-- `public.auth_client_reduction`, client owner: [reduction work](src/account-workflows.ts) removes the active lock on
-  normal completion; [the schema](db/schema.sql) has a non-cascading client FK and no erasure-specific cleanup.
-- `public.auth_client_reduction_progress`, client owner: [the schema](db/schema.sql) retains operation/scopes/completion
-  with a non-cascading client FK; completed progress has no account-erasure purge.
-- `public.auth_client_reduction_progress`, account cursor: [reduction work](src/account-workflows.ts) persists only
-  independent `after_ordinal`, `page_after`, `page_end` and `terminal_ordinal` boundaries after the deployment cutover;
-  native consent deletion removes the identity binding.
+### Remaining producer and composition gaps
 
-### Recovery, operating evidence and staging
+This composition has **no terminal Auth erasure acknowledgement**. Its final state
+remains pending, including after native work and the original consent cutoff:
 
-- `public.auth_recovery`, holder: [the schema](db/schema.sql) cascades user deletion; [failed delivery](src/recovery-delivery.ts)
-  deletes the just-created binding. [Consumption](src/service.ts) retains proof hash, issuance epoch, expiry and
-  consumed operation/verification evidence; no physical expiry sweep or deadline.
-- `public.auth_barrier_proof`, subject: [the schema](db/schema.sql) cascades user deletion;
-  [proof verification/sweep](src/barrier-proofs.ts) bounds lifetime to five minutes/source expiry and offers a bounded
-  expiry primitive, without a registered schedule or deadline.
-- `public.auth_barrier_proof`, client owner: [evidence writing](src/service.ts) retains consent/session/client evidence
-  in immutable JSON; [the schema](db/schema.sql) supplies no client-owner purge or typed all-role locator.
-- `public.auth_barrier_proof`, session operator/acting human: [the schema](db/schema.sql) retains immutable evidence
-  until subject cascade or explicit expiry deletion, with no reverse-role cleanup for a surviving subject.
-- `public.auth_recovery_establishment`, credential subject: [the schema](db/schema.sql) cascades proof deletion, but
-  its effect-receipt FK does not cascade and can block that parent's removal. No independent erasure deadline.
-- `public.auth_session_opening`, subject: [the schema](db/schema.sql) cascades user deletion; opening/session/receipt
-  identity and time otherwise remain, without a session FK or deadline after session removal.
-- `public.auth_session_opening`, acting human: [the schema](db/schema.sql) retains provenance when this human is erased
-  and the subject survives; no human cascade or erasure phase exists.
-- `public.auth_session_opening`, operator: [the schema](db/schema.sql) has the same missing reverse-role disposition;
-  the operator is not assumed to equal the acting human.
-- `public.auth_provisioning_receipt`, registrant: [the schema](db/schema.sql) retains account/registration/reservation,
-  idempotency and digest/epoch/deadline evidence; null-owner/credential legacy shapes have no erasure trigger.
-- `public.auth_provisioning_receipt`, owner: [the schema](db/schema.sql) cascades populated owner FKs only; older null
-  ownership does not supply coverage or an independent erasure deadline.
-- `public.auth_provisioning_receipt`, credential holder: [the schema](db/schema.sql) cascades populated credential FKs;
-  null-credential receipts remain without an erasure rule.
-- `public.auth_registration_stage`, registrant ciphertext: [registration workflows](src/workflows.ts) null encrypted
-  email/password on completion/expiry. A stalled workflow can retain ciphertext; the credential digest remains.
-- `public.auth_registration_stage`, subject binding/metadata: [the schema](db/schema.sql) retains handle/account,
-  request key/digests, reservation/proof references, times and creation binding, without user cascade or deadline.
-- `public.auth_registration_stage`, creator/operator/acting human: [the stage writer](src/workflows.ts) stores
-  `creation_binding` JSON without typed secondary-role locators or erasure cleanup on surviving registrations.
-- `public.auth_effect_receipt`, subject/credential holder: [credential effects](src/credential-effects.ts) retain
-  encrypted staging even after commit; [the schema](db/schema.sql) has no user cascade/purge and guards stage
-  immutability. No post-commit secret-retention purpose is adopted.
-- `public.auth_effect_receipt`, acting human: [the schema](db/schema.sql) retains human/client/scopes on another
-  subject's effect, with no acting-human erasure disposition.
-- `public.auth_effect_receipt`, operator/delegate: [the schema](db/schema.sql) retains opening references and receipt
-  payload without reverse-role cleanup after the opening/effect settles.
-- `public.auth_effect_receipt`, client owner: [the schema](db/schema.sql) has no client cascade for stage/provenance;
-  erasing this evidence must not erase a surviving subject's current credential.
+- Auth's DBOS command/workflow input, step, result, event, notification and queue
+  producers have no actual atomic shared-history copy recorder/minimizer or
+  supported native handoff verifier. Native request locators and completed
+  retention sweeps do not supply that custody. No shared global ACK is awaited.
+- There is no trusted fixed-Auth erasure acknowledgement port in
+  `TrustedAccessPorts`/`createAuthHost`. No noop or synthetic receipt fills it.
+- Historical opaque protocol rows and historical role fields lack a deployment
+  coverage proof. Null attribution remains unknown; it cannot establish genuine
+  all-role emptiness. The ordinal v2 proof covers cursors, not this missing proof.
+- Client contacts, arbitrary resource/client metadata and legacy request or
+  encrypted creation bindings do not have complete typed person attribution.
+  Ownership is never inferred by searching JSON, handles, email or network address.
+  Request member/delegate/previous-operator roles still need producer attribution.
+- A stalled registration on a surviving subject can still require its native
+  release consumer's stage witness. That lifecycle must supply a terminal proof
+  before the witness can be removed; history deletion is not such a proof.
+- External delivery-provider diagnostics/logs and backup restore deletion replay
+  are not composed native custody sinks.
 
-### Workflows, counters and opaque verification
-
-- `public.auth_workflow_request`, subject/actor/operator/organization/member/delegate: [workflow binding](src/workflows.ts)
-  retains request JSON/digests; [the retention trigger](src/retention.ts) deletes it with terminal DBOS status history.
-  Running/stuck bindings remain, with no all-role erasure phase or backlog deadline.
-- Auth DBOS workflow/status/input/result/step/event/message copies, every business-input/result role:
-  [retention](src/retention.ts) and [maintenance](src/maintenance.ts) apply `AUTH_WORKFLOW_RETENTION_DAYS` (default 30,
-  range 7–365), every ten minutes, at most 60 batches of 1000. Running history remains; no account-specific scrub.
-- `public.auth_attempt_counter`, recovery subject: [recovery cooldown](src/service.ts) uses an account HMAC and may
-  delete it on failed delivery; [the 48-hour pruner](src/rate-limit.ts) is not registered in maintenance. Hashing
-  does not erase the identity or guarantee attribution across secret generations.
-- `public.auth_attempt_counter`, transport identity linked during an authenticated request: [the limiter](src/rate-limit.ts)
-  stores issuer/transport HMACs in [an UNLOGGED table](db/schema.sql), without a verified account-to-bucket relation
-  or account-erasure sweep. A shared anonymous IP bucket cannot be assigned uniquely to an account.
-- `public.verification`, recovery subject: [native maintenance](src/verification-maintenance.sql) prunes expired rows
-  each minute, at most 1000; [failed recovery delivery](src/recovery-delivery.ts) deletes the exact value.
-  [The schema](db/schema.sql) has no user FK or account-specific sweep of reset bindings.
-- `public.verification`, WebAuthn subject: [the schema](db/schema.sql) stores opaque ceremony/challenge values without
-  account cascade or durable ownership locator; [expiry maintenance](src/verification-maintenance.sql) is batch-limited.
-- `public.verification`, OAuth code/session holder: [the schema](db/schema.sql) permits protocol/query/session/claim
-  payloads without an indexed account relation; consume/expiry deletion does not prove all-role erasure.
-- `public.verification`, client owner: [the schema](db/schema.sql) has no client relation/cascade for opaque values;
-  no client-owner sweep exists, and expiry has no backlog completion deadline.
-
-Required metadata beyond the existing consent marker is absent from [the current schema](db/schema.sql): native
-erasure progress, initial all-role applicability/outcome and coverage/due/completion state (erased subject);
-`auth_verification_account` (recovery,
-WebAuthn, OAuth/session subject and client-owner roles); `oauth_family_account` (token holder);
-`oauth_assertion_client` (client owner/credential holder); `auth_client_account` and `oauth_resource_account`
-(typed contact/admin/reference and metadata subjects); `auth_attempt_account` plus recovery secret-generation
-locators (verified subject only); typed barrier/opening/effect/registration/request role relations (subject,
-creator, actor, acting human, operator, member and delegate); atomic shared-copy locators (all roles); and independent
-coverage/reduction traversal ordinals with removable id bindings (account cursor). These are required stores or
-relations, not implemented cleanup. Temporary bindings must disappear after consumption; only minimal native
-outcome/completion survives outside DBOS. Unknown attribution on legacy opaque payloads remains a coverage finding,
-never permission to infer ownership from arbitrary JSON, email/name or a shared IP.
-
-`auth_signing_generation`, `auth_signing_key`, `auth_signing_key_archive`, native `jwks` and `schema_migrations`
-contain service signing material or migration versions rather than account identities ([schema](db/schema.sql)).
-They are outside this personal-data inventory and are not deleted or rotated per account.
-
-### Known retention gaps
-
-- No guaranteed elapsed deadline connects Access's deletion barrier to Auth user/cascade completion, including after continuation expiry.
-- Owned-client cascades can be blocked by non-cascading `session.clientId`, `auth_client_coverage`, `auth_client_reduction` and `auth_client_reduction_progress` FKs; their disposition is unfinished.
-- `auth_consent` has no user cascade. The existing 310-second marker and minute purge do not bound the inner client loop, persist all-role completion or acknowledge Auth; verification of the last issuance fence against token lifetime/verifier leeway and bounded delayed-consent pages remain required. There is no backlog completion deadline; surviving consent is inert, never continuing authority ([deletion](src/service.ts), [purge](src/consent-erasure.ts), [maintenance](src/maintenance.ts)).
-- Client coverage/progress retain independent ordinal boundaries after the deployment cutover; completed reduction locks are the only deleted group member. Client-owned state still needs its client erasure drain.
-- `auth_key_assertion` and consumed/expired `auth_recovery` rows survive until user deletion without an expiry purge; the duration of retained security evidence is unspecified.
-- Barrier-proof expiry has a bounded sweep primitive but no registered schedule or purge deadline; dependent recovery establishment evidence follows that incomplete cleanup path.
-- Session-opening provenance has no erasure trigger for a deleted acting human/operator while the subject survives, or deadline after session removal.
-- Legacy-shaped provisioning receipts with null owner/credential FKs have no erasure trigger or deadline; these are schema possibilities, not proof such rows exist.
-- Registration metadata, handles, digests and creation bindings remain indefinitely; stalled workflows can retain encrypted credentials past their intended registration lifetime.
-- Effect receipts and encrypted credential stages have no user cascade, scrub or retention deadline; no post-commit purpose is stated for retaining the encrypted secret payload.
-- Terminal workflow retention does not erase running/stuck work, scrub by deleted account or bound backlog delay; request JSON shares those limits.
-- Attempt counters have a 48-hour prune primitive but no registered schedule; hashing does not supply erasure.
-- Protocol/session/verification maintenance is batch-limited, protocol maintenance requires composition, and none has a backlog completion deadline. Verification payloads and recent logout/family/assertion rows lack a direct account-erasure trigger.
-- OAuth resource claims/metadata have no personal-data minimization or account-erasure rule if identifying values are stored there.
-- External logs and telemetry (including delivery-provider diagnostics) have no documented account-data inventory, erasure trigger or deadline here; sanitizing workflow errors does not establish global log retention.
-- Backups/replicas have no documented expiry, purge or restore deletion replay. A restored backup could bring back a deleted identity, credentials or surviving consent; protection is not demonstrated.
-- No alert was found when a committed deletion continuation expires before Auth cleanup finishes; Access governance renewal exists but requires intervention.
+The native marker deliberately has no `erased`, `none` or acknowledged outcome.
+A missing native user cannot change persisted applicability to `none`. These gaps
+are implementation/integration findings, not a new specification or a claim that
+elapsed credential lifetime completes erasure.

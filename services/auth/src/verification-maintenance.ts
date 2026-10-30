@@ -1,3 +1,4 @@
+import { nativeProtocolClient, verificationAttribution } from './erasure-attribution.ts';
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import type { DBAdapter } from 'better-auth/adapters';
 import type { Pool } from 'pg';
@@ -41,6 +42,40 @@ export const nativeVerificationPlugin = {
 
     function adapterFor(db: NativeDatabase, inTransaction = false): DBAdapter {
       const adapter = kyselyAdapter(db, { type: 'postgres', transaction: !inTransaction })(context.options);
+      const create = adapter.create;
+      adapter.create = async (query) => {
+        const model = query.model;
+        if (!['verification', 'oauthClientAssertion', 'oauthRefreshFamily'].includes(model)) return create(query);
+        // The artifact and its typed ownership fields commit together even when
+        // Better Auth calls create outside an explicit adapter transaction.
+        if (!inTransaction)
+          return db.transaction().execute((transaction) => adapterFor(transaction, true).create(query));
+        const result = await create(query);
+        const id = (result as { id: string }).id;
+        if (model === 'verification') {
+          const attribution = verificationAttribution(query.data);
+          if (attribution) await db.updateTable('verification').set(attribution).where('id', '=', id).execute();
+        } else if (model === 'oauthClientAssertion') {
+          const client = nativeProtocolClient.getStore();
+          if (!client) throw new Error('Auth assertion producer attribution missing');
+          await db
+            .updateTable('oauthClientAssertion')
+            .set({ erasure_client_id: client })
+            .where('id', '=', id)
+            .execute();
+        } else {
+          const verification = await db
+            .selectFrom('verification')
+            .select(['erasure_account_id', 'erasure_human_id', 'erasure_operator_id'])
+            .where('identifier', '=', id)
+            .orderBy('createdAt', 'desc')
+            .orderBy('id', 'desc')
+            .limit(1)
+            .executeTakeFirst();
+          if (verification) await db.updateTable('oauthRefreshFamily').set(verification).where('id', '=', id).execute();
+        }
+        return result;
+      };
       const findMany = adapter.findMany;
       adapter.findMany = async <T>(query: Parameters<DBAdapter['findMany']>[0]): Promise<T[]> => {
         const condition = query.where?.[0];

@@ -79,3 +79,31 @@ export async function pruneAuthAttempts(database: Pool, batch = 1000): Promise<n
   );
   return result.rowCount ?? 0;
 }
+
+/** The verified recovery account, never its network address, owns this exact
+ * counter association. Both writes and the erasure fence share one transaction;
+ * the key remains attributable after an Auth secret generation retires. */
+export async function chargeAccountAttempt(
+  database: Pool,
+  accountId: string,
+  key: string,
+  window: number,
+  maximum: number,
+) {
+  const connection = await database.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query('INSERT INTO auth_attempt_account(account_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [
+      accountId,
+      key,
+    ]);
+    const result = await connection.query<{ allowed: boolean }>(attemptStatement, [key, window, maximum]);
+    await connection.query('COMMIT');
+    return result;
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
