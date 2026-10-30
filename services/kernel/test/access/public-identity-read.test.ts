@@ -261,7 +261,13 @@ test('the public batch returns visible identities in first-request order and hid
 
 test('the public identity names no private field for any kind and hides the operator of a deleted account', async () => {
   const { body } = await request(
-    identities([identity.first, identity.organization, identity.automation, identity.deleted, identity.deletedOrganization]),
+    identities([
+      identity.first,
+      identity.organization,
+      identity.automation,
+      identity.deleted,
+      identity.deletedOrganization,
+    ]),
   );
   for (const account of body.accounts)
     expect(Object.keys(account).sort()).toEqual(
@@ -292,7 +298,7 @@ test('the public identity names no private field for any kind and hides the oper
 });
 
 test('deleted actor and organization point and batch reads stop at the account row', async () => {
-  const expected = [
+  const expected: PublicIdentity[] = [
     { id: identity.deletedOrganization, kind: 'organization', state: 'deleted' },
     { id: identity.deleted, kind: 'actor', state: 'deleted' },
   ];
@@ -304,7 +310,13 @@ test('deleted actor and organization point and batch reads stop at the account r
       expect(query).toHaveBeenCalledTimes(1);
     }
     query.mockClear();
-    expect(await readPublicIdentities(pool, [route, route], expected.map(({ id }) => id))).toEqual(expected);
+    expect(
+      await readPublicIdentities(
+        pool,
+        [route, route],
+        expected.map(({ id }) => id),
+      ),
+    ).toEqual(expected);
     expect(query).toHaveBeenCalledTimes(1);
   } finally {
     query.mockRestore();

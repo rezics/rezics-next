@@ -60,11 +60,7 @@ test('public identity batches retain request order and disclosure across partiti
       {
         id: deleted,
         kind: 'actor',
-        handle: null,
-        displayName: null,
         state: 'deleted',
-        automated: false,
-        operatorId: null,
       },
       {
         id: active,
