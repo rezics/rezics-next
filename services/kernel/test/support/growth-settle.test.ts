@@ -263,7 +263,8 @@ test('settle retains measured transaction identity in the actual mapped database
     const pool = database.openPool({ max: 1 });
     pool.options.connectionString = url.toString();
     await admin.query(`CREATE SCHEMA ${schema}`);
-    await admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY, value integer NOT NULL)`);
+    await admin.query(`CREATE TABLE ${table} (id integer PRIMARY KEY, value integer NOT NULL)
+      WITH (autovacuum_enabled=false)`);
     await admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);
     client = await pool.connect();
     const connection = client;
