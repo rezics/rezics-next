@@ -348,6 +348,7 @@ for (const history of [0, 8, 96])
         expect(selected).toEqual(ids);
         expect(selected.length).toBeLessThanOrEqual(256);
         reads.push([...selected]);
+        if (observation instanceof Error) throw observation;
         return observation as SubjectSnapshot;
       },
       async count() {
@@ -368,16 +369,21 @@ for (const history of [0, 8, 96])
       }) as OpenSearch['bulk'],
     };
     const relay = createSubjectIndexer({
-      pool, search: engine, source, index, consumer,
-      listing: { async read(home, selected) {
-        expect(home).toBe(partition);
-        expect(selected).toEqual([subject.id]);
-        listings++;
-        return new Map([[subject.id, 3]]);
-      } },
+      pool,
+      search: engine,
+      source,
+      index,
+      consumer,
+      listing: {
+        async read(home, selected) {
+          expect(home).toBe(partition);
+          expect(selected).toEqual([subject.id]);
+          listings++;
+          return new Map([[subject.id, 3]]);
+        },
+      },
     });
-    for (let n = 0; n < history; n++)
-      await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
+    for (let n = 0; n < history; n++) await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
     // A normal relay drains all unrelated history using its unchanged 64-envelope limit.
     let drained = 0;
     for (;;) {
@@ -392,9 +398,14 @@ for (const history of [0, 8, 96])
     expect(reads).toHaveLength(0);
     expect([requests, writes.length, listings, sourceCounts]).toEqual([0, 0, 0, 0]);
     const before = (await checkpoint(consumer, partition))!;
-    const relevant = await append(partition, ids.map((id) => ({
-      type: 'com.rezics.subject.created.v1', subject: id, data: { id },
-    })));
+    const relevant = await append(
+      partition,
+      ids.map((id) => ({
+        type: 'com.rezics.subject.created.v1',
+        subject: id,
+        data: { id },
+      })),
+    );
     // The later captured envelope is part of the obligation even without a subject invalidation.
     const obligation = await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
     expect(obligation).toBeGreaterThan(relevant);
@@ -408,6 +419,7 @@ for (const history of [0, 8, 96])
     const faults: [string, unknown][] = [
       ['missing observation', undefined],
       ['null observation', null],
+      ['unavailable observation', new Error('Injected source observation unavailable')],
       ['wrong home empty', { ...current, partition: partition + 1, subjects: [] }],
       ['missing home', { position: obligation, subjects: [] }],
       ['string home', { ...current, partition: String(partition) }],
@@ -418,28 +430,63 @@ for (const history of [0, 8, 96])
       ['duplicate requested record', { ...current, subjects: [subject, subject] }],
       ['extra same-home record', { ...current, subjects: [subject, boundarySubject(newId(partition * 16))] }],
       ['foreign record', { ...current, subjects: [boundarySubject(newId((partition + 1) * 16))] }],
+      [
+        'foreign home and record',
+        { ...current, partition: partition + 1, subjects: [boundarySubject(newId((partition + 1) * 16))] },
+      ],
       ['missing record key', { ...current, subjects: [{ ...subject, id: undefined }] }],
       ['invalid record key', { ...current, subjects: [{ ...subject, id: 'invalid' }] }],
       ['relevant but predating captured tail', { ...current, position: relevant }],
+      ['empty but predating captured tail', { ...current, position: relevant, subjects: [] }],
+      ['empty without position evidence', { partition, subjects: [] }],
+      ['valid prefix with invalid record', { ...current, subjects: [subject, { ...missing, visibility: undefined }] }],
     ];
-    for (const position of [undefined, null, String(obligation), Number(obligation), NaN, -1n, 0n, BigInt(Number.MAX_SAFE_INTEGER) + 1n])
+    for (const position of [
+      undefined,
+      null,
+      String(obligation),
+      Number(obligation),
+      NaN,
+      -1n,
+      0n,
+      BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+    ])
       faults.push(['invalid position', { ...current, position }]);
     for (const change of [
       { type: undefined },
-      { visibility: undefined }, { visibility: 'uncertain' },
-      { redirect: undefined }, { redirect: '' }, { redirect: 'invalid' },
-      { securityRevision: undefined }, { securityRevision: '0' }, { securityRevision: -1 },
-      { securityRevision: NaN }, { securityRevision: 0.5 }, { securityRevision: Number.MAX_SAFE_INTEGER + 1 },
-      { labels: undefined }, { labels: [{ language: 'en', value: null }] },
-      { aliases: null }, { descriptions: {} }, { statements: undefined },
+      { visibility: undefined },
+      { visibility: 'uncertain' },
+      { redirect: undefined },
+      { redirect: '' },
+      { redirect: 'invalid' },
+      { securityRevision: undefined },
+      { securityRevision: '0' },
+      { securityRevision: -1 },
+      { securityRevision: NaN },
+      { securityRevision: 0.5 },
+      { securityRevision: Number.MAX_SAFE_INTEGER + 1 },
+      { labels: undefined },
+      { labels: [{ language: 'en', value: null }] },
+      { aliases: null },
+      { descriptions: {} },
+      { statements: undefined },
       { statements: [{ property: 'schema:date', value: 'x', facet: { kind: 'time', year: NaN } }] },
-      { statements: [{ property: 'schema:amount', value: 'x', facet: { kind: 'quantity', amount: Infinity, unit: 'x' } }] },
+      {
+        statements: [
+          { property: 'schema:amount', value: 'x', facet: { kind: 'quantity', amount: Infinity, unit: 'x' } },
+        ],
+      },
       { statements: [{ property: 'schema:x', value: 'x', qualifiers: [null] }] },
       { statements: [{ property: 'schema:x', value: 'x', facet: { kind: 'unknown' } }] },
-      { relationFacetOverflow: [null] }, { publicRating: {} },
-    ]) faults.push(['invalid record state', { ...current, subjects: [{ ...subject, ...change }] }]);
+      { relationFacetOverflow: [null] },
+      { publicRating: {} },
+    ])
+      faults.push(['invalid record state', { ...current, subjects: [{ ...subject, ...change }] }]);
     // Hidden/redirected records also require valid metadata; uncertainty is never a delete instruction.
-    faults.push(['invalid hidden state', { ...current, subjects: [{ ...subject, visibility: 'hidden', securityRevision: -1 }] }]);
+    faults.push([
+      'invalid hidden state',
+      { ...current, subjects: [{ ...subject, visibility: 'hidden', securityRevision: -1 }] },
+    ]);
     for (const [name, invalid] of faults) {
       observation = invalid;
       const count = reads.length;
@@ -447,9 +494,10 @@ for (const history of [0, 8, 96])
       expect(reads.length, name).toBe(count + 1);
       expect([requests, writes.length, listings, sourceCounts], name).toEqual([0, 0, 0, 0]);
       expect(await checkpoint(consumer, partition), name).toBe(before);
-      expect((await visible(index)).sort((a, b) => a._id.localeCompare(b._id)), name).toEqual(
-        [...original].sort((a, b) => a._id.localeCompare(b._id)),
-      );
+      expect(
+        (await visible(index)).sort((a, b) => a._id.localeCompare(b._id)),
+        name,
+      ).toEqual([...original].sort((a, b) => a._id.localeCompare(b._id)));
     }
     // Same consumer, real engine: a missing requested key is legitimate absence only in a valid observation.
     observation = current;
@@ -457,7 +505,8 @@ for (const history of [0, 8, 96])
     expect(await checkpoint(consumer, partition)).toBe(String(obligation));
     expect([writes.length, listings, sourceCounts]).toEqual([1, 1, 0]);
     expect(actions(writes[0]!.lines).map(({ op, metadata }) => [op, metadata._id, metadata.version])).toEqual([
-      ['index', subject.id, Number(obligation)], ['delete', missing.id, Number(obligation)],
+      ['index', subject.id, Number(obligation)],
+      ['delete', missing.id, Number(obligation)],
     ]);
     expect(writes[0]!.result.items.map((item) => Object.values(item)[0]!.status)).toEqual([200, 200]);
     const hits = await visible(index);
@@ -478,7 +527,10 @@ test('later invalid source custody leaves visible prefix unacknowledged and same
   consumers.push({ consumer, partition });
   const subjects = Array.from({ length: 257 }, () => boundarySubject(newId(partition * 16)));
   const ids = subjects.map((subject) => subject.id);
-  const end = await append(partition, ids.map((id) => ({ type: 'com.rezics.subject.created.v1', subject: id, data: { id } })));
+  const end = await append(
+    partition,
+    ids.map((id) => ({ type: 'com.rezics.subject.created.v1', subject: id, data: { id } })),
+  );
   const reads: { ids: string[]; snapshot: SubjectSnapshot }[] = [];
   let recovering = false;
   let advanced: bigint | undefined;
@@ -489,7 +541,10 @@ test('later invalid source custody leaves visible prefix unacknowledged and same
     async read(home, selected) {
       expect(home).toBe(partition);
       expect(selected.length).toBeLessThanOrEqual(256);
-      const { rows } = await admin.query<{ position: string }>('SELECT position::text FROM core.partition WHERE partition_no=$1', [partition]);
+      const { rows } = await admin.query<{ position: string }>(
+        'SELECT position::text FROM core.partition WHERE partition_no=$1',
+        [partition],
+      );
       const snapshot = {
         partition: !recovering && reads.length === 1 ? partition + 1 : home,
         position: BigInt(rows[0]!.position),
@@ -500,7 +555,9 @@ test('later invalid source custody leaves visible prefix unacknowledged and same
         advanced = await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
       return snapshot;
     },
-    async count() { throw new Error('Custody validation must not count or enumerate'); },
+    async count() {
+      throw new Error('Custody validation must not count or enumerate');
+    },
   };
   const engine: OpenSearch = {
     request: (async (...args: Parameters<OpenSearch['request']>) => {
@@ -518,13 +575,20 @@ test('later invalid source custody leaves visible prefix unacknowledged and same
       return result;
     }) as OpenSearch['bulk'],
   };
-  const relay = createSubjectIndexer({ pool, source, search: engine, index, consumer,
-    listing: { async read(home, selected) {
-      expect(home).toBe(partition);
-      expect(selected.length).toBeLessThanOrEqual(256);
-      listings++;
-      return new Map();
-    } },
+  const relay = createSubjectIndexer({
+    pool,
+    source,
+    search: engine,
+    index,
+    consumer,
+    listing: {
+      async read(home, selected) {
+        expect(home).toBe(partition);
+        expect(selected.length).toBeLessThanOrEqual(256);
+        listings++;
+        return new Map();
+      },
+    },
   });
   await expect(relay.run(partition)).rejects.toBeInstanceOf(Error);
   expect(reads.map((read) => read.ids.length)).toEqual([256, 1]);
