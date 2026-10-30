@@ -27,6 +27,14 @@ function invalid(pointer: string, code: FieldErrorCode): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code }] });
 }
 
+/** Shared result-slot admission for the legacy and opt-in discovery representations. */
+export function validateSearchLimit(value: unknown): number {
+  const limit = value === undefined ? 20 : value;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100)
+    invalid('/limit', 'out_of_range');
+  return limit;
+}
+
 /** Checks the opt-in hit fields; reports the first failing element only. */
 export function validateHitOptions(request: {
   descriptions?: unknown;

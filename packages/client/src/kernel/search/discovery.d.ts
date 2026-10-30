@@ -1,3 +1,8 @@
+import type { DiscoveryFilterDocument } from '@rezics/filter';
+import type { SearchPlan } from './query.ts';
+import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
+export type { DiscoveryFilterDocument } from '@rezics/filter';
+export { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import type { Release } from '@rezics/definitions';
 import type { AvatarSummary } from '../content/avatar.ts';
 import type { SubjectSummary, SummaryReaderDependencies } from '../semantic/summaries.ts';
@@ -7,6 +12,8 @@ import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
 /** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
 export declare const DISCOVERY_DOCUMENT_FORMAT = 1;
+/** Successor requires a complete native rebuild; format 1 retains its original reader. */
+export declare const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
 export declare const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export declare const MAX_ACCOUNT_DISCOVERY_BATCH = 100;
 export type DiscoveryKey = {
@@ -120,7 +127,7 @@ export type DiscoveryPage = {
     next: string | null;
     as_of: string;
 };
-/** Declaration of the opt-in wire; the current HTTP service does not activate this representation. */
+/** Opt-in wire; omitted representation retains the Subject response. */
 export type DiscoveryRequest = SearchRequest & {
     representation: 'discovery-v1';
     kindCursor?: string;
@@ -189,7 +196,8 @@ export type DiscoverySnapshot = {
     snapshot: AccountSnapshot;
 };
 type DocumentIdentity = {
-    document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
+    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+    identity?: string;
     id: string;
     kind: string;
     route: number;
@@ -206,6 +214,9 @@ export type IndexedDiscoveryDocument = (DocumentIdentity & SubjectDocument & {
     handle: string | null;
     display_name: string | null;
     revision: string;
+    names?: string[];
+    descriptions?: string[];
+    name_sort?: string | null;
 });
 export type DiscoveryIndexAction = {
     op: 'index';
@@ -222,7 +233,8 @@ export type DiscoveryIndexDefinition = {
     settings: Record<string, unknown>;
     mappings: {
         _meta: {
-            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
+            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+            identity?: string;
             name_sort_format: number;
             document_identity: string;
         };
@@ -230,27 +242,7 @@ export type DiscoveryIndexDefinition = {
         properties: Record<string, Record<string, unknown>>;
     };
 };
-/** Canonical mixed root: provisional DiscoveryCondition values are never admitted engine input. */
-import type { FilterDocument } from '@rezics/filter';
-import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
-type DiscoveryFilterLeaf = Exclude<FilterDocument, {
-    and: unknown;
-} | {
-    or: unknown;
-} | {
-    not: unknown;
-}>;
-export type DiscoveryFilterDocument = Readonly<{
-    and: readonly DiscoveryFilterDocument[];
-}> | Readonly<{
-    or: readonly DiscoveryFilterDocument[];
-}> | Readonly<{
-    not: DiscoveryFilterDocument;
-}> | DiscoveryFilterLeaf | Readonly<{
-    kind: Readonly<{
-        in: readonly string[];
-    }>;
-}>;
+/** Closed mixed admission on the same native consumer, never a Subject AST cast. */
 export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> & Readonly<{
     representation: 'discovery-v1';
     filterDocument: DiscoveryFilterDocument | undefined;
@@ -275,11 +267,4 @@ export type DiscoveryConsumerQuery = (Omit<Extract<PublicFilterConsumerQuery, {
 }>) | Exclude<PublicFilterConsumerQuery, {
     status: 'queried';
 }>;
-import type { PublicFilterProjectionMeaning, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
-type EngineClause = Record<string, unknown>;
-/** Full mixed grammar admission; compile each configured domain before combining native ranking. */
-export declare function compileDiscoveryConsumerCapture(input: DiscoveryConsumerCaptureInput, meaning: PublicFilterProjectionMeaning, registry: DiscoveryRegistry | undefined): Readonly<{
-    query: EngineClause;
-    dependencyKeys: readonly PublicFilterDependencyKey[];
-}>;
-export {};
+export type DiscoverySort = Extract<SearchPlan['sort'], 'id' | 'name' | 'relevance'>;

@@ -1,13 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { subjectSource } from '../semantic/search-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
-import { documentActions, type IndexAction } from './document.ts';
+import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
 import type { DiscoveryKey, DiscoveryRegistry, DiscoveryIndexAction, IndexedDiscoveryDocument } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
-import type { SubjectDocument } from './document.ts';
 import {
   nativeDiscoveryRegistry,
   createDiscoveryProjection,
@@ -555,7 +554,7 @@ async function reconcileDiscoveryPage(
       keys.map(({ id }) => id),
       census.position,
     );
-    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys);
+    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, 'mixed-public-v1');
   } else {
     const snapshot = await entry.source.read(
       partition,
@@ -572,22 +571,9 @@ async function reconcileDiscoveryPage(
       partition,
       snapshot.subjects.map(({ id }) => id),
     );
-    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
-    const semantic = expected.filter(
-      (
-        action,
-      ): action is Extract<DiscoveryIndexAction, { op: 'index' }> & {
-        document: SubjectDocument & IndexedDiscoveryDocument;
-      } => action.op === 'index' && action.document.owner === 'semantic',
-    );
-    const prepared = await prepareBoundedSortKeys(
-      search,
-      discoveryIndexName(target.prefix, target.generation),
-      semantic,
-    );
-    const byId = new Map(prepared.map((action) => [action.id, action]));
-    expected = expected.map((action) => byId.get(action.id) ?? action);
+    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, 'mixed-public-v1');
   }
+  expected = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), expected);
   let mismatch = false;
   for (let offset = 0; offset < hits.length; offset++) {
     const hit = hits[offset],

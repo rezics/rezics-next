@@ -25,6 +25,22 @@ export type FilterDocument =
   | { readonly saved: string }
   | OwnerLeaf;
 
+/** Opt-in discovery grammar. Catalogue/saved consumers retain FilterDocument. */
+export type DiscoveryFilterDocument =
+  | { readonly and: readonly DiscoveryFilterDocument[] }
+  | { readonly or: readonly DiscoveryFilterDocument[] }
+  | { readonly not: DiscoveryFilterDocument }
+  | { readonly kind: { readonly in: readonly string[] } }
+  | Exclude<FilterDocument, { readonly and: unknown } | { readonly or: unknown } | { readonly not: unknown }>;
+
+function catalogueOnly(filter: DiscoveryFilterDocument): FilterDocument {
+  if ('kind' in filter) throw new FilterError('invalid_request', '/kind', 'unknown_field');
+  if ('and' in filter) return { and: filter.and.map(catalogueOnly) };
+  if ('or' in filter) return { or: filter.or.map(catalogueOnly) };
+  if ('not' in filter) return { not: catalogueOnly(filter.not) };
+  return filter;
+}
+
 export type FilterRelease = {
   types: Record<string, { bases?: readonly string[]; facets?: readonly string[] }>;
   properties: Record<
@@ -282,9 +298,17 @@ function parseOwner(input: unknown, pointer: string): OwnerLeaf {
 }
 
 export function parseFilter(input: unknown): FilterDocument {
+  return catalogueOnly(parseDocument(input, false));
+}
+
+export function parseDiscoveryFilter(input: unknown): DiscoveryFilterDocument {
+  return parseDocument(input, true);
+}
+
+function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocument {
   let leaves = 0;
 
-  function node(input: unknown, pointer: string, depth: number, underNot: boolean): FilterDocument {
+  function node(input: unknown, pointer: string, depth: number, underNot: boolean): DiscoveryFilterDocument {
     const fields = record(input, pointer);
     const keys = Object.getOwnPropertyNames(fields);
     if (keys.length !== 1) fail(pointer, 'unsupported');
@@ -299,7 +323,7 @@ export function parseFilter(input: unknown): FilterDocument {
           fieldPointer,
           key === 'or' ? FILTER_LIMITS.or : undefined,
         );
-        const children: FilterDocument[] = [];
+        const children: DiscoveryFilterDocument[] = [];
         for (let index = 0; index < items.length; index++) {
           const childPointer = appendPointer(fieldPointer, index);
           children.push(node(ownValue(items, index, childPointer), childPointer, depth + 1, false));
@@ -310,6 +334,15 @@ export function parseFilter(input: unknown): FilterDocument {
         if (underNot) fail(pointer, 'unsupported', 'unsupported_query');
         if (depth >= FILTER_LIMITS.depth) fail(pointer, 'out_of_range', 'unsupported_query');
         return { not: node(ownValue(fields, key, fieldPointer), fieldPointer, depth + 1, true) };
+      case 'kind': {
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        const selection = record(ownValue(fields, key, fieldPointer), fieldPointer);
+        for (const field of Object.getOwnPropertyNames(selection))
+          if (field !== 'in') fail(appendPointer(fieldPointer, field), 'unknown_field');
+        const inPointer = appendPointer(fieldPointer, 'in');
+        return { kind: { in: values(requiredValue(selection, 'in', inPointer), inPointer, false) } };
+      }
       case 'type': {
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { type: { in: parseFacet(ownValue(fields, key, fieldPointer), fieldPointer, false).in } };
@@ -387,6 +420,21 @@ export function positiveFilter(filter: FilterDocument): boolean {
   return true;
 }
 
+/** Discovery visitors are explicit so saved/dynamic catalogue consumers keep their closed grammar. */
+export function* walkDiscoveryFilter(filter: DiscoveryFilterDocument): IterableIterator<DiscoveryFilterDocument> {
+  yield filter;
+  if ('and' in filter || 'or' in filter) {
+    for (const child of 'and' in filter ? filter.and : filter.or) yield* walkDiscoveryFilter(child);
+  } else if ('not' in filter) yield* walkDiscoveryFilter(filter.not);
+}
+
+export function positiveDiscoveryFilter(filter: DiscoveryFilterDocument): boolean {
+  if ('not' in filter) return false;
+  if ('and' in filter) return filter.and.some(positiveDiscoveryFilter);
+  if ('or' in filter) return filter.or.every(positiveDiscoveryFilter);
+  return true;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -445,7 +493,7 @@ export function createFilterConstruction(release: FilterRelease) {
   const construction = buildConstruction(snapshot);
   return {
     admitFilter: (filter: FilterDocument, options?: FilterAdmissionOptions) =>
-      admitConstructed(filter, snapshot, options, construction),
+      catalogueOnly(admitConstructed(filter, snapshot, options, construction)),
     validateFilter: (input: unknown, options?: FilterAdmissionOptions) =>
       validateConstructed(input, snapshot, options, construction),
     facetProperties: (types: readonly string[]) => displayFacets(construction, types),
@@ -575,11 +623,11 @@ function mappedPointer(actual: string, source: string | undefined): string {
 }
 
 function admitConstructed(
-  filter: FilterDocument,
+  filter: DiscoveryFilterDocument,
   release: FilterRelease,
-  options: FilterAdmissionOptions = {},
+  options: FilterAdmissionOptions & { kinds?: ReadonlySet<string> } = {},
   construction: Construction,
-): FilterDocument {
+): DiscoveryFilterDocument {
   const expansions = new Map<string, FilterDocument | null>();
   const allowSaved = options.saved !== false;
   const filters = dataField(release, 'filters');
@@ -779,12 +827,12 @@ function admitConstructed(
   }
 
   function visit(
-    node: FilterDocument,
+    node: DiscoveryFilterDocument,
     pointer: string,
     depth: number,
     underNot: boolean,
     source: string | undefined,
-  ): FilterDocument {
+  ): DiscoveryFilterDocument {
     if ('and' in node || 'or' in node) {
       const isAnd = 'and' in node;
       const operator = isAnd ? 'and' : 'or';
@@ -814,6 +862,17 @@ function admitConstructed(
     expandedLeaves += 1;
     if ('statement' in node) expandedLeaves += node.statement.qualifiers?.length ?? 0;
     if (expandedLeaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+
+    if ('kind' in node) {
+      const inPointer = appendPointer(appendPointer(pointer, 'kind'), 'in');
+      if (!options.kinds) reject(appendPointer(pointer, 'kind'), source, 'unsupported', 'unsupported_query');
+      if (node.kind.in.length === 0 || node.kind.in.length > FILTER_LIMITS.in)
+        reject(inPointer, source, 'out_of_range', 'unsupported_query');
+      for (const [index, kind] of node.kind.in.entries())
+        if (!options.kinds.has(kind))
+          reject(appendPointer(inPointer, index), source, 'unsupported', 'unsupported_query');
+      return { kind: { in: [...node.kind.in] } };
+    }
 
     if ('type' in node) {
       if (node.type.in.length === 0 || node.type.in.length > FILTER_LIMITS.in)
@@ -929,7 +988,30 @@ export function admitFilter(
   release: FilterRelease,
   options?: FilterAdmissionOptions,
 ): FilterDocument {
-  return admitConstructed(filter, release, options, constructionFor(release));
+  return catalogueOnly(admitConstructed(filter, release, options, constructionFor(release)));
+}
+
+/** Expands only catalogue saved filters and charges the complete mixed tree before deduplication. */
+export function admitDiscoveryFilter(
+  filter: DiscoveryFilterDocument,
+  release: FilterRelease,
+  kinds: ReadonlySet<string>,
+): DiscoveryFilterDocument {
+  return admitConstructed(filter, release, { kinds }, constructionFor(release));
+}
+
+export function validateDiscoveryFilter(
+  input: unknown,
+  release: FilterRelease,
+  kinds: ReadonlySet<string>,
+): FilterValidationError[] {
+  try {
+    admitDiscoveryFilter(parseDiscoveryFilter(input), release, kinds);
+    return [];
+  } catch (error) {
+    if (error instanceof FilterError) return error.errors.map((field) => ({ problem: error.problem, ...field }));
+    return [{ problem: 'invalid_request', pointer: '', code: 'invalid_type' }];
+  }
 }
 
 export function validateFilter(

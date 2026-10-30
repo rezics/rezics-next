@@ -26,6 +26,7 @@ import type {
   PublicFilterConsumerContext,
   PublicFilterConsumerJob,
   PublicFilterConsumerOperations,
+  PublicDiscoveryConsumerOperations,
   PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
   PublicSuggestionCaptureInput,
@@ -170,7 +171,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     physicalTarget: string,
     meaning: Pick<NonNullable<Awaited<ReturnType<typeof activeRelease>>>, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
-  ): Promise<PublicFilterConsumerOperations> {
+  ): Promise<PublicDiscoveryConsumerOperations> {
     checkDeadline(context);
     if (!meaning.release.types['schema:Thing']) notReady();
     const operations = await createPublicFilterConsumerOperations({

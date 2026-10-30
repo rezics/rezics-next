@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
-import { discoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
+import { mixedDiscoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);

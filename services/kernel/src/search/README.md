@@ -114,6 +114,59 @@ owner state before allowing fresh contributions; old contributions never return.
 - Verification: focused projection/reduction/consumer cases and actual-shell preparing/unavailable stories.
   Qualified native publication and visual review remain integration work, not evidence supplied by these stories.
 
+## Mixed-kind foundation
+
+[discovery.ts](discovery.ts) is the shared type home for `AccountDiscoverySource`, `AccountSnapshot`,
+`IndexedAccount`, the owner-discriminated registry/document/summary unions, `KindCountEvidence`, and the opt-in
+`DiscoveryRequest`/`DiscoveryPage` (`representation: 'discovery-v1'`). It reuses native Subject, avatar, reader
+deadline/authorization and token types. The [Accounts source contract](../access/account-discovery-contract.md)
+continues to own eligibility, current-T exact claims and the native census. Source reads/pages are bounded to
+100 Account keys; `count` is generation census only and cannot supply query kind-count evidence.
+
+`createDiscoveryRegistry` in [discovery-registry.ts](discovery-registry.ts) registers the pinned release's actual
+catalogue type IDs and the reserved `account` kind. Each entry carries its owner source, current summary hydrator,
+localized labels/icon, summary discriminator and supported domains. Account supports text/kind; Subject domains
+retain their meanings. `evaluateDiscoveryCondition` consumes an expanded, admitted planner tree with domain-tagged
+leaves and preserves `not_applicable`/`not_proven` through NOT. It is predicate evaluation, never permission:
+resource authorization and current whole-query/native eligibility remain mandatory outside this pure boundary.
+
+The shared filter package exposes separate `parseDiscoveryFilter`, `admitDiscoveryFilter`, validation and
+visitor functions. Only this opt-in grammar accepts the closed `kind.in` leaf. Saved catalogue filters still
+expand through the catalogue parser, so they cannot introduce Account predicates. All expanded leaves retain
+the existing global limits. [discovery-filter.ts](discovery-filter.ts) compiles both truth polarities into one
+registry-bounded native predicate and specializes them for the current catalogue matcher. An Account has neither
+truth polarity for a catalogue-only leaf; negation cannot turn that unsupported domain into membership.
+
+The native [consumer factory](public-filter-consumer.ts) now consumes the same closed mixed compiler and strict
+result decoder. Its full operations view adds `captureDiscovery`/`queryDiscovery` on the existing consumer; legacy
+Subject callers retain their original operations view. Mixed capture requires the fixed registry, a complete native
+generation with exactly its configured kinds, the immutable mixed mapping/comparator and the current physical UUID.
+The actual [Source binding](../semantic/public-filter-source-binding.ts) remains a provisional typed-unavailable
+adapter. Current returned-row checks and Account witnesses cannot substitute for its immutable whole-query
+observation, including excluded rows, order and counts. Missing owner composition returns readiness.
+
+[discovery-documents.ts](discovery-documents.ts) constructs bounded actions from an already authorized source
+snapshot, without additional source enumeration or profile reads. Account projection copies only native ID,
+account kind, current claim-approved handle, displayName and revision plus internal identity/position fields.
+A null handle retains displayName. Revisions and snapshot positions remain exact bigint internally and canonical
+decimal strings in documents. `discoveryBulkBody` serializes the exact native signed-bigint external version as
+raw NDJSON; do not send that string through the legacy `OpenSearch.bulk` JSON-value serializer.
+
+The inert [discovery.json](../../db/search/indices/discovery.json) defines one strict native family with the existing
+`cjk_bigram_v2` analyzer. Mapping `_meta.discovery_document_format = 1` pairs with `_source.document_format = 1`
+and native `_id = discovery-v1:<encodeURIComponent(kind)>:<canonical UUID>`. `discoveryDocumentId`,
+`parseDiscoveryDocumentId` and `parseDiscoveryHitIdentity` share that identity contract; the mixed parser rejects
+owner/kind/route/document disagreement and legacy raw UUID receipts. Mixed-public-v1 ties use `id, kind, identity`.
+`validateDiscoveryDocument` enforces per-owner field allowlists that the union mapping alone cannot enforce.
+
+The immutable successor [discovery-mixed-v1.json](../../db/search/indices/discovery-mixed-v1.json) requires complete
+rebuild before activation. Both owner families supply shared names/descriptions/name sorting. The native consumer
+uses one comparable ranking and consumed frontier, complete-response decoding and retained windows; mixed service
+assembly supplies current owner hydration, bounded refill, confidential continuation and final whole-query status.
+The existing search route opts into this response only with `representation: 'discovery-v1'`. Omission preserves
+SubjectSource and the legacy Subject wire. These implementations do not establish default Source readiness or a
+native product pass before actual owner composition and activation.
+
 ## Deletion lifecycle
 
 [Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)
@@ -1117,6 +1170,42 @@ by the runner, its structural close, generation-publication barrier and bounded 
 owner support/receiving dependency. The fixed
 canonical participant still refuses completion at that boundary; this guard is not canonical/prepared coverage,
 privacy-reduction acknowledgement or whole-identity publication.
+
+The discovery consumer components are `discovery-request.ts` (closed mixed admission and count population),
+`discovery-query.ts` (one native query and complete mixed comparator validation), `discovery-current.ts`
+(shared current row reads and nonnull owner summaries), `discovery-hydration.ts` (actual Semantic/Accounts
+reader assembly), `discovery-frontier.ts` (one consumed head and the existing three-round allowance) and the
+discovery codec in `cursor.ts`. They consume the existing `discovery.ts` registry types. They do not authorize
+publication or activate the HTTP representation independently of native whole-query safety.
+`disclosure/discovery.ts` places final native Source validation after the complete projection, consuming
+the canonical consumer execution and its retained start rather than a diagnostic status or per-hit verdict.
+
+The existing POST `/v1/subjects:search` accepts `representation: 'discovery-v1'`, `kindPage` and
+`kindCountLeaf`, returning the closed owner-tagged `DiscoveryPageSchema`; omitted representation retains the
+Subject wire. `createDiscoverySearch` composes admitted capture, the same native consumer's `queryDiscovery`,
+current owner hydration and final `readStatus` plus Source validation for every contributing execution. Its confidential cursor
+retains the actual execution, consumed raw prefix and native repair-job locator, not an engine frontier. Native exhaustion requires the
+required retained window and consumption through `examined`; empty filtered output is never end evidence.
+Three rounds share `min(600, 6s+3)` raw candidates; sparse direct output advances actual repair and returns readiness.
+Kind metadata uses only positive bounded current witnesses on the initial page, otherwise unavailable; source
+census is never a query count. Removing a designated count leaf currently yields unavailable count evidence.
+
+`DiscoveryConsumerCaptureInput`, `DiscoveryEngineHit` and `DiscoveryConsumerQuery` live in `discovery.ts`;
+`public-filter-consumer-contract.ts` adds `captureDiscovery`/`queryDiscovery`, optional refill and required windows
+while preserving two-argument Subject calls. Root AST/text/meaning/principal/source registration stay immutable;
+every derived batch retains its own execution/start/own rows under the root allowance. The native factory fixes
+its registry at construction and must reject incomplete mixed generations, never fall back to Subjects.
+
+The mixed-public-v1 successor is [discovery-mixed-v1.json](../../db/search/indices/discovery-mixed-v1.json),
+`document_format: 2`. Both owners carry the actual tagged `identity`, shared names/descriptions/name_sort and
+native id/kind/identity comparator ties. Accounts use only eligible displayName and active handle, with empty
+descriptions. Both owners use the existing native ICU normalized512/missing-last preparation. Format-1 documents,
+mapping and helpers keep their meaning; mixed execution requires a complete rebuild into format 2 before activation.
+
+Production provider assembly still requires native implementations behind `semantic/public-filter-source.ts` and
+`search/public-filter-consumer.ts`; their current modules are explicitly provisional unavailable adapters. Kernel's optional `discovery` dependency
+accepts the completed consumer adapter; without it the opt-in operation returns `index_not_ready`. No Subject-only
+capture, callback ACK, Account census or returned-row check substitutes for those exact integration boundaries.
 
 The prior identity-home certificate/coverage storage, coordinator and no-write settlement exports are superseded
 scaffolding, not the authority for the adopted indexed/prepared/identity-epoch lifecycle. Existing code and frozen

@@ -497,7 +497,7 @@ import type {
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerOperationsFactory,
-  PublicFilterConsumerOperations,
+  PublicDiscoveryConsumerOperations,
   PublicFilterConsumerQuery,
   PublicFilterConsumerCapture,
   PublicFilterConsumerRefill,
@@ -511,7 +511,8 @@ import { validatePublicSuggestionInput, compilePublicSuggestion } from './public
 import { documentActions, type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery.ts';
-import { parseDiscoveryDocumentId } from './discovery-documents.ts';
+import { compileDiscoveryCapture } from './discovery-filter.ts';
+import { readDiscoveryEngineResult } from './discovery-query.ts';
 
 const emptyConsumerCost = (): CustodyCost => ({
   inputKeys: 0,
@@ -697,6 +698,29 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     return { cost, add, check, sql, unavailable, take, native };
   }
   type Meter = ReturnType<typeof meter>;
+  async function mixedGeneration(m: Meter): Promise<void> {
+    if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
+    const match = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
+    if (!match) throw new ConsumerFailure('dependency_unavailable');
+    const row = (await m.sql<{ kinds: string[]; index_uuid: string | null }>(
+      `SELECT kinds,index_uuid FROM search.discovery_generation
+       WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active','retiring')`,
+      [match[1], match[2]],
+    )).rows[0];
+    if (!row?.index_uuid || !isDeepStrictEqual([...row.kinds].sort(), config.registry.entries.map((entry) => entry.kind).sort()))
+      throw new ConsumerFailure('dependency_unavailable');
+    const mapping = await m.native.request<unknown>('GET', `/${target}/_mapping`);
+    const settings = await m.native.request<unknown>('GET', `/${target}/_settings`);
+    if (mapping.status !== 200 || !record(mapping.body) || Object.keys(mapping.body).length !== 1 ||
+      !record(mapping.body[target]) || !record(mapping.body[target].mappings) ||
+      !record(mapping.body[target].mappings._meta) ||
+      mapping.body[target].mappings._meta.discovery_document_format !== 2 ||
+      mapping.body[target].mappings._meta.comparator !== 'mixed-public-v1' ||
+      settings.status !== 200 || !record(settings.body) || Object.keys(settings.body).length !== 1 ||
+      !record(settings.body[target]) || !record(settings.body[target].settings) ||
+      !record(settings.body[target].settings.index) || settings.body[target].settings.index.uuid !== row.index_uuid)
+      throw new ConsumerFailure('incarnation_changed');
+  }
   async function physical(q: PublicFilterQueriedObservation, m: Meter, context: PublicFilterConsumerContext) {
     if (q.consumer.physicalTarget !== target || q.consumer.meaningDigest !== meaning.digest)
       throw new ConsumerFailure('incarnation_changed');
@@ -865,6 +889,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     };
     if ('representation' in plan) {
       if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
+      await mixedGeneration(m);
       const compiled = compileDiscoveryConsumerCapture(plan, meaning, config.registry);
       const sort =
         plan.sort === 'relevance'
@@ -883,19 +908,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           profile: true,
           track_total_hits: false,
           ...(after === undefined ? {} : { search_after: after }),
-          _source: [
-            'identity',
-            'id',
-            'kind',
-            'owner',
-            'route',
-            'partition',
-            'source_position',
-            'security_revision',
-            'revision',
-          ],
         },
-        { query: { allow_partial_search_results: false } },
+        { query: { allow_partial_search_results: false, search_type: 'dfs_query_then_fetch' } },
       );
       const body = response.body;
       if (record(body) && typeof body.pit_id === 'string') await retain(body.pit_id);
@@ -908,47 +922,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         body.hits.hits.length > size
       )
         throw new ConsumerFailure('dependency_unavailable');
-      const raw: DiscoveryEngineHit[] = body.hits.hits.map((hit: unknown) => {
-        if (
-          !record(hit) ||
-          typeof hit._id !== 'string' ||
-          hit._index !== target ||
-          !record(hit._source) ||
-          !Array.isArray(hit.sort)
-        )
-          throw new ConsumerFailure('dependency_unavailable');
-        const key = parseDiscoveryDocumentId(config.registry!, hit._id);
-        const source = hit._source;
-        const revision = key.owner === 'accounts' ? source.revision : String(source.security_revision);
-        if (
-          source.identity !== hit._id ||
-          source.id !== key.id ||
-          source.kind !== key.kind ||
-          source.owner !== key.owner ||
-          source.route !== key.route ||
-          source.partition !== subjectPartition(key.id) ||
-          typeof source.source_position !== 'string' ||
-          !/^(0|[1-9][0-9]*)$/.test(source.source_position) ||
-          typeof revision !== 'string' ||
-          !/^(0|[1-9][0-9]*)$/.test(revision) ||
-          hit.sort.length !== (plan.sort === 'id' ? 3 : 4) ||
-          (plan.sort === 'relevance' && (typeof hit.sort[0] !== 'number' || !Number.isFinite(hit.sort[0]))) ||
-          (plan.sort === 'name' &&
-            hit.sort[0] !== null &&
-            (typeof hit.sort[0] !== 'string' || hit.sort[0].length > 512)) ||
-          !hit.sort.every(
-            (v) => v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)),
-          ) ||
-          hit.sort.at(-3) !== key.id ||
-          hit.sort.at(-2) !== key.kind ||
-          hit.sort.at(-1) !== hit._id
-        )
-          throw new ConsumerFailure('dependency_unavailable');
-        const matched = hit.matched_queries ?? [];
-        if (!Array.isArray(matched) || !matched.every((v) => typeof v === 'string'))
-          throw new ConsumerFailure('dependency_unavailable');
-        return { key, index: target, sourcePosition: source.source_position, revision, matched, sort: hit.sort };
-      });
+      const raw = readDiscoveryEngineResult(body, config.registry, target, {
+        sort: plan.sort === 'name' ? 'name' : plan.sort === 'relevance' ? 'relevance' : 'id',
+        size, filter: {}, ...(after === undefined ? {} : { after }),
+      }).hits;
       m.cost.engineIteratorSteps += iteratorSteps(body);
       return { queried: current, raw, exhausted: raw.length < size, total: undefined };
     }
@@ -1103,8 +1080,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     // All grammar, private-owner and optional DSL validation precedes the first native call.
     let canonical: PublicCanonicalCaptureInput;
     if ('representation' in plan) {
+      if (plan.text !== undefined) validateText(plan.text);
       compileDiscoveryConsumerCapture(plan, meaning, config.registry);
-      canonical = freeze(structuredClone(plan));
+      canonical = freeze(structuredClone(config.registry ? compileDiscoveryCapture(plan, config.registry, meaning.release) : plan));
     } else if ('purpose' in plan) {
       validatePublicSuggestionInput(plan);
       canonical = freeze(structuredClone(plan));
@@ -1120,6 +1098,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       )
         return m.unavailable('registration_missing');
       if ('representation' in canonical && !config.registry) return m.unavailable('dependency_unavailable');
+      if ('representation' in canonical) await mixedGeneration(m);
       const registered = m.take(
         await custody.register(
           {
@@ -1691,7 +1670,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     work.repairPage!.next++;
     return save(work, encoded, false, m);
   }
-  const operations: PublicFilterConsumerOperations = {
+  const operations: PublicDiscoveryConsumerOperations = {
     capture(request, context) {
       const copied = structuredClone(request);
       return track(() => capturePlan(copied.plan, copied.snapshot, { deadline: context.deadline }));

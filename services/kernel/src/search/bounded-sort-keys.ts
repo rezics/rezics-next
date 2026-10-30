@@ -1,4 +1,4 @@
-import { MAX_NAME_SORT_CHARACTERS, type IndexAction, type SearchDocument } from './document.ts';
+import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 
 const MAX_ANALYZE_CONCURRENCY = 16;
@@ -61,11 +61,13 @@ async function analyzeOne(search: OpenSearch, index: string, input: string): Pro
 }
 
 /** Prepare full native name sort keys before bulk writes, replacing oversized keys with null. */
-export async function prepareBoundedSortKeys<Document extends SearchDocument>(
+export async function prepareBoundedSortKeys<Action extends
+  | { op: 'index'; document: { name_sort?: string | null } }
+  | { op: 'delete' }>(
   search: OpenSearch,
   index: string,
-  actions: readonly IndexAction<Document>[],
-): Promise<IndexAction<Document>[]> {
+  actions: readonly Action[],
+): Promise<Action[]> {
   // Analyze flattens multi-text token lists without input IDs. Singleton calls keep empty outputs aligned.
   const distinctNames = new Set<string>();
   for (const action of actions) {

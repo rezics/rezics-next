@@ -1,4 +1,7 @@
 import { createTrendingSearchesService } from '../trending-searches.ts';
+import { requiresAdvancedDiscoverySearch } from '../discovery-request.ts';
+import type { DiscoverySearch } from '../discovery-service.ts';
+import { DiscoveryPageSchema, discoveryHttpPage, type DiscoveryHttpPage } from '../discovery-http.ts';
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../../semantic/summaries.ts';
@@ -152,6 +155,7 @@ export function searchRoutes<App>(
     pool,
     routeKey,
     search,
+    discovery,
     access,
     gateAccess,
     clock = systemClock,
@@ -159,6 +163,7 @@ export function searchRoutes<App>(
     pool: Pool;
     routeKey: Uint8Array;
     search?: SearchService;
+    discovery?: DiscoverySearch;
     access?: Access | AccessFactory;
     gateAccess?: () => Access;
     clock?: KernelClock;
@@ -289,6 +294,12 @@ export function searchRoutes<App>(
       {
         body: t.Object(
           {
+            representation: t.Optional(t.Literal('discovery-v1')),
+            kindPage: t.Optional(t.Object({
+              limit: t.Integer({ minimum: 1, maximum: 8 }),
+              cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
+            }, object)),
+            kindCountLeaf: t.Optional(t.Integer({ minimum: 0 })),
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             sort: t.Optional(
@@ -310,7 +321,7 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: searchResponse,
+          200: t.Union([searchResponse, DiscoveryPageSchema]),
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
@@ -325,48 +336,57 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ body, authorize, admission, job, actor }) => {
-        if (requiresAdvancedSearch(body))
-          await admitGroup({
-            pool,
-            access:
-              gateAccess ??
-              (() => (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access!)),
-            actor,
-            group: 'search_advanced',
-            clientAction: 'subject:read',
-            deadline: job.deadline,
-            clock,
+      ({ body, authorize, admission, job, actor }) => {
+        async function prepare(): Promise<AccessCheck> {
+          if (body.representation === 'discovery-v1'
+            ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' }) : requiresAdvancedSearch(body))
+            await admitGroup({
+              pool,
+              access: gateAccess ?? (() => (typeof access === 'function'
+                ? access({ actions: actionCatalogue(routed) }) : access!)),
+              actor, group: 'search_advanced', clientAction: 'subject:read', deadline: job.deadline, clock,
+            });
+          return authorize({ ...resource,
+            ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
           });
-        const check = await authorize({
-          ...resource,
-          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
-        });
-        return admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-          if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          const active = await activeRelease(pool);
-          let completed: SearchHttpResponse | undefined;
-          await search.search(
-            actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-            body,
-            clock().getTime(),
-            active,
-            {
-              deadline: job.deadline,
-              async complete(page) {
-                completed = publicBases(
-                  await fill(page, authorize, body.languages, active),
-                  body.languages ?? [],
-                  active,
-                );
+        }
+        async function mixed(): Promise<DiscoveryHttpPage> {
+          const check = await prepare();
+          return admission.run('normal', job, async () => {
+            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+            if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const ownerAccess: Access | undefined = gateAccess?.() ?? (typeof access === 'function'
+              ? access({ actions: actionCatalogue(routed) }) : access);
+            if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            return discoveryHttpPage(await discovery(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+              { ...body, representation: 'discovery-v1' }, { access: ownerAccess, actor, deadline: job.deadline }));
+          });
+        }
+        async function catalogue(): Promise<SearchHttpResponse> {
+          const check = await prepare();
+          return admission.run('normal', job, async () => {
+            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+            if (body.kindPage !== undefined || body.kindCountLeaf !== undefined)
+              throw new ProblemError('invalid_request', { errors: [{ pointer: '/representation', code: 'invalid_format' }] });
+            if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const active = await activeRelease(pool);
+            let completed: SearchHttpResponse | undefined;
+            await search.search(
+              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+              body, clock().getTime(), active,
+              {
+                deadline: job.deadline,
+                async complete(page) {
+                  completed = publicBases(await fill(page, authorize, body.languages, active), body.languages ?? [], active);
+                },
               },
-            },
-          );
-          if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-          await trending.submitted(actor, body);
-          return completed;
-        });
+            );
+            if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            await trending.submitted(actor, body);
+            return completed;
+          });
+        }
+        return body.representation === 'discovery-v1' ? mixed() : catalogue();
       },
     )
     .post(

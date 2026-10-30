@@ -26,7 +26,8 @@ import { checkHits, type FactClause } from './disclosure/check.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
-import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
+import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, validateSearchLimit, type SearchHit } from './hits.ts';
+export { validateSearchLimit } from './hits.ts';
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
@@ -128,14 +129,6 @@ function missingTemplate(error: unknown): boolean {
     missingTemplate(details.caused_by) ||
     (Array.isArray(details.root_cause) && details.root_cause.some(missingTemplate))
   );
-}
-
-/** The standalone result-slot bound, also used before aggregate dispatch. */
-export function validateSearchLimit(value: unknown): number {
-  const limit = value === undefined ? 20 : value;
-  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100)
-    invalid('/limit', 'out_of_range');
-  return limit;
 }
 
 function validate(request: SearchRequest) {

@@ -27,6 +27,8 @@ export type SearchHit = {
     descriptions?: Record<string, string>;
     facts?: Record<string, Fact[]>;
 };
+/** Shared result-slot admission for the legacy and opt-in discovery representations. */
+export declare function validateSearchLimit(value: unknown): number;
 /** Checks the opt-in hit fields; reports the first failing element only. */
 export declare function validateHitOptions(request: {
     descriptions?: unknown;

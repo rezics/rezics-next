@@ -1,3 +1,4 @@
+import type { DiscoverySearch } from '../discovery-service.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
 import type { Access, AccessFactory } from '../../request/access.ts';
@@ -19,10 +20,11 @@ export declare const FactSchema: import("typebox").TUnion<[import("typebox").TOb
     kind: import("typebox").TLiteral<"code">;
     value: import("typebox").TString;
 }>]>;
-export declare function searchRoutes<App>(app: App, { pool, routeKey, search, access, gateAccess, clock, }: {
+export declare function searchRoutes<App>(app: App, { pool, routeKey, search, discovery, access, gateAccess, clock, }: {
     pool: Pool;
     routeKey: Uint8Array;
     search?: SearchService;
+    discovery?: DiscoverySearch;
     access?: Access | AccessFactory;
     gateAccess?: () => Access;
     clock?: KernelClock;
@@ -168,6 +170,12 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
             $search: {
                 post: {
                     body: {
+                        representation?: "discovery-v1";
+                        kindPage?: {
+                            limit: number;
+                            cursor?: string;
+                        };
+                        kindCountLeaf?: number;
                         text?: string;
                         filter?: any;
                         sort?: "collections" | "id" | "name" | "rating" | "relevance";
@@ -183,6 +191,117 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                     headers: unknown;
                     response: {
                         200: {
+                            hits: ({
+                                key: {
+                                    owner: "semantic";
+                                    kind: string;
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "subject";
+                                    value: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
+                                };
+                            } | {
+                                key: {
+                                    owner: "accounts";
+                                    kind: string;
+                                    route: number;
+                                    id: string;
+                                };
+                                summary: {
+                                    kind: "account";
+                                    value: {
+                                        id: string;
+                                        accountKind: "actor" | "organization";
+                                        handle: string | null;
+                                        displayName: string | null;
+                                        automated: boolean;
+                                        operatorId: string | null;
+                                        avatar: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: null;
+                                        } | null;
+                                        verifiedAgent: {
+                                            id: string;
+                                            label: string;
+                                            type: string;
+                                        } | null;
+                                    };
+                                };
+                            })[];
+                            kinds: {
+                                values: {
+                                    id: string;
+                                    labels: Record<string, string>;
+                                    icon: string;
+                                    count?: {
+                                        kind: string;
+                                        value: number;
+                                        exact: true;
+                                    } | {
+                                        kind: string;
+                                        value: number;
+                                        exact: false;
+                                    } | {
+                                        kind: string;
+                                        unavailable: true;
+                                    };
+                                }[];
+                                next: string | null;
+                            };
+                            next: string | null;
+                            as_of: string;
+                        } | {
                             subjects: {
                                 id: string;
                                 type: string;

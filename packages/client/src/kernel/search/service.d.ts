@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest } from './facets.ts';
+export { validateSearchLimit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
@@ -42,8 +43,6 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
-/** The standalone result-slot bound, also used before aggregate dispatch. */
-export declare function validateSearchLimit(value: unknown): number;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
 export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
@@ -81,4 +80,3 @@ export declare function createSearchService({ pool, client, prefix, source, rati
         as_of: string;
     }>;
 };
-export {};

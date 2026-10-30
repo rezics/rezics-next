@@ -19,7 +19,10 @@ The adjacent module exports `PublicFilterQueriedObservation`, `PublicFilterConsu
 `PublicFilterConsumerCaptureInput`, `PublicFilterConsumerRefill`, `PublicFilterConsumerWindow`,
 `PublicFilterConsumerJob`, `PublicFilterConsumerUnavailable`, `PublicFilterConsumerCapture`,
 `PublicFilterConsumerQuery`, `PublicFilterConsumerStatus`, `PublicFilterConsumerRepair`,
-`PublicFilterConsumerOperations` and `PublicFilterConsumerOperationsFactory`.
+`PublicFilterConsumerOperations`, `PublicDiscoveryConsumerOperations` and `PublicFilterConsumerOperationsFactory`.
+
+The factory returns the full mixed operations view on the same native consumer. Legacy Subject consumers may
+retain the original operations view without implementing mixed methods. Both views share retained execution custody.
 
 The production module exports `createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory`.
 Its canonical configuration requires the injected `source` and `binding: PublicFilterSourceBinding`, and optionally

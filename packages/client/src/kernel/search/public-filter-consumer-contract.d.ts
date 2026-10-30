@@ -126,11 +126,11 @@ export type PublicFilterConsumerRepair = Readonly<{
 }> | PublicFilterConsumerUnavailable;
 /** Closed native boundary; there is no ACK setter, caller repair input or Boolean evaluator. */
 export interface PublicFilterConsumerOperations {
-    captureDiscovery(request: Readonly<{
+    captureDiscovery?(request: Readonly<{
         plan: DiscoveryConsumerCaptureInput;
         snapshot: 'pit' | 'prepared';
     }>, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerCapture>;
-    queryDiscovery(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, refill?: PublicFilterConsumerRefill): Promise<DiscoveryConsumerQuery>;
+    queryDiscovery?(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, refill?: PublicFilterConsumerRefill): Promise<DiscoveryConsumerQuery>;
     capture(request: Readonly<{
         plan: PublicCanonicalCaptureInput;
         snapshot: 'pit' | 'prepared';
@@ -146,6 +146,14 @@ export interface PublicFilterConsumerOperations {
     /** Drains this factory's work/resources; does not close supplied pools, Source or OpenSearch. */
     close(): Promise<void>;
 }
+/** Full same-factory view; legacy Subject consumers need only the original operations. */
+export interface PublicDiscoveryConsumerOperations extends PublicFilterConsumerOperations {
+    captureDiscovery(request: Readonly<{
+        plan: DiscoveryConsumerCaptureInput;
+        snapshot: 'pit' | 'prepared';
+    }>, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerCapture>;
+    queryDiscovery(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, refill?: PublicFilterConsumerRefill): Promise<DiscoveryConsumerQuery>;
+}
 /** Injected native consumer. Source and binding remain supplied owner resources. */
 export type PublicFilterConsumerOperationsFactory = (config: Readonly<{
     pool: Pool;
@@ -157,4 +165,4 @@ export type PublicFilterConsumerOperationsFactory = (config: Readonly<{
     context: PublicFilterConsumerContext;
     physicalTarget: string;
     meaning: PublicFilterProjectionMeaning;
-}>) => Promise<PublicFilterConsumerOperations>;
+}>) => Promise<PublicDiscoveryConsumerOperations>;

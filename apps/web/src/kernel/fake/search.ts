@@ -4,7 +4,7 @@ import type { Fixtures, KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { chosenLabels, isRecord, languageList, localizeRecording, originalLanguage } from './languages.ts';
 
-type SearchResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
+type SearchResponse = Extract<NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>, { subjects: unknown }>;
 type SuggestionResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
 
 const storyFixtures = defaultFixtures as unknown as Fixtures;

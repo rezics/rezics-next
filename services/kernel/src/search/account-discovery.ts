@@ -20,10 +20,8 @@ import type {
   DiscoveryIndexAction,
   DiscoveryKey,
   DiscoveryRegistry,
-  IndexedDiscoveryDocument,
 } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
-import type { SubjectDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createDiscoveryRegistry } from './discovery-registry.ts';
 import { discoveryDocumentActions, discoveryDocumentId, parseDiscoveryDocumentId } from './discovery-documents.ts';
@@ -409,7 +407,7 @@ export function createDiscoveryProjection(options: {
               throw new Error('Account claim consumption advanced; resnapshot before projection');
             }
           }
-          actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk);
+          actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, 'mixed-public-v1');
           for (const key of chunk)
             if (!(await locateAccount(pool, target, key))) {
               await eraseDiscoveryAccount(pool, search, registry, key.id);
@@ -430,22 +428,10 @@ export function createDiscoveryProjection(options: {
             ...snapshot,
             subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
           };
-          actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts);
-          const semantic = actions.filter(
-            (
-              action,
-            ): action is Extract<DiscoveryIndexAction, { op: 'index' }> & {
-              document: SubjectDocument & IndexedDiscoveryDocument;
-            } => action.op === 'index' && action.document.owner === 'semantic',
-          );
-          const prepared = await prepareBoundedSortKeys(
-            search,
-            discoveryIndexName(target.prefix, target.generation),
-            semantic,
-          );
-          const byId = new Map(prepared.map((action) => [action.id, action]));
-          actions = actions.map((action) => byId.get(action.id) ?? action);
+          actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts, 'mixed-public-v1');
         }
+        // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
+        actions = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
         await withDiscoveryTarget(pool, search, target, async (client, index) => {
           const pending: DiscoveryIndexAction[] = [];
           for (const action of actions) {

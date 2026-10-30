@@ -32,3 +32,23 @@ export type RetainedSearchContinuation = Readonly<{
 }>;
 export declare function encodeRetainedSearchCursor(ring: KeyRing, binding: SearchCursorBinding, generation: number, continuation: RetainedSearchContinuation, now?: number): Promise<string>;
 export declare function retainedSearchContinuation(after: readonly SearchSortValue[]): RetainedSearchContinuation | null;
+/** A real retained observation locator, not a digest over mutable index state or an authority token. */
+export type DiscoveryCursorState = {
+    release: string;
+    registry: string;
+    queried: PublicFilterQueriedObservation;
+    after: SearchSortValue[];
+    retained?: {
+        execution: string;
+        consumed: number;
+    };
+    repair?: PublicFilterConsumerJob;
+};
+export declare function encodeDiscoveryCursor(ring: KeyRing, binding: SearchCursorBinding, state: DiscoveryCursorState, now?: number): Promise<string>;
+export declare function decodeDiscoveryCursor(ring: KeyRing, binding: SearchCursorBinding, token: string, now?: number): Promise<{
+    ok: true;
+    state: DiscoveryCursorState;
+} | {
+    ok: false;
+    reason: 'expired' | 'invalid';
+}>;

@@ -97,6 +97,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   search?: SearchService;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
   shelves?: ShelfNativeReadBindings;
+
+  discovery?: import('../search/discovery-service.ts').DiscoverySearch;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
   reports?: { anonymousVerifier?: TurnstileVerifier };
   /** Enqueue-only client. Tests close the instance they pass. */

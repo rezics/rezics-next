@@ -1,8 +1,10 @@
+import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { documentActions } from './document.ts';
 import {
   ACCOUNT_DISCOVERY_BATCH_SIZE,
   DISCOVERY_DOCUMENT_FORMAT,
+  MIXED_DISCOVERY_DOCUMENT_FORMAT,
   type DiscoveryIndexAction,
   type DiscoveryIndexDefinition,
   type DiscoveryKey,
@@ -12,11 +14,13 @@ import {
 } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import definition from '../../db/search/indices/discovery.json';
+import mixedDefinition from '../../db/search/indices/discovery-mixed-v1.json';
+import { MISSING_NAME } from './document.ts';
 
 const MAX_NATIVE_VERSION = 9_223_372_036_854_775_807n;
 const ID_PREFIX = 'discovery-v1:';
-const COMMON_FIELDS = ['document_format', 'owner', 'kind', 'id', 'route', 'partition', 'source_position'];
-const ACCOUNT_FIELDS = [...COMMON_FIELDS, 'account_kind', 'handle', 'display_name', 'revision'];
+const COMMON_FIELDS = ['identity', 'document_format', 'owner', 'kind', 'id', 'route', 'partition', 'source_position'];
+const ACCOUNT_FIELDS = [...COMMON_FIELDS, 'account_kind', 'handle', 'display_name', 'revision', 'names', 'descriptions', 'name_sort'];
 const SUBJECT_FIELDS = [
   ...COMMON_FIELDS,
   'type',
@@ -84,6 +88,7 @@ export function discoveryDocumentActions(
   observation: DiscoverySnapshot,
   keys: readonly DiscoveryKey[],
   counts?: ReadonlyMap<string, number>,
+  format: 'legacy' | 'mixed-public-v1' = 'legacy',
 ): DiscoveryIndexAction[] {
   if (observation.owner !== 'semantic' && observation.owner !== 'accounts')
     throw new TypeError('Unknown discovery owner');
@@ -119,7 +124,8 @@ export function discoveryDocumentActions(
   for (const key of requested.values()) {
     const id = discoveryDocumentId(registry, key);
     const identity = {
-      document_format: DISCOVERY_DOCUMENT_FORMAT,
+      document_format: format === 'legacy' ? DISCOVERY_DOCUMENT_FORMAT : MIXED_DISCOVERY_DOCUMENT_FORMAT,
+      ...(format === 'legacy' ? {} : { identity: id }),
       id: key.id,
       kind: key.kind,
       route: key.route,
@@ -140,6 +146,11 @@ export function discoveryDocumentActions(
           handle: value.handle,
           display_name: value.displayName,
           revision: value.revision.toString(),
+          ...(format === 'legacy' ? {} : {
+            names: [...new Set([value.displayName, value.handle].filter((name): name is string => name !== null))],
+            descriptions: [],
+            name_sort: value.displayName ?? value.handle ?? MISSING_NAME,
+          }),
         };
       }
     } else {
@@ -169,7 +180,7 @@ export function discoveryDocumentActions(
 export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: unknown): IndexedDiscoveryDocument {
   if (
     !record(value) ||
-    value.document_format !== DISCOVERY_DOCUMENT_FORMAT ||
+    (value.document_format !== DISCOVERY_DOCUMENT_FORMAT && value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT) ||
     typeof value.id !== 'string' ||
     typeof value.kind !== 'string' ||
     typeof value.route !== 'number' ||
@@ -178,22 +189,36 @@ export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: un
     throw new TypeError('Invalid discovery document identity');
   const key = registry.key(
     value.owner === 'accounts'
-      ? { owner: 'accounts', kind: value.kind as 'account', id: value.id, route: value.route }
+      ? { owner: 'accounts', kind: 'account', id: value.id, route: value.route }
       : { owner: 'semantic', kind: value.kind, id: value.id, route: value.route },
   );
+  if (value.kind !== key.kind) throw new TypeError('Invalid discovery kind');
+  if (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+    value.identity !== discoveryDocumentId(registry, key)) throw new TypeError('Invalid mixed identity');
+  if (value.document_format === DISCOVERY_DOCUMENT_FORMAT && value.identity !== undefined)
+    throw new TypeError('Legacy discovery format has no comparator identity');
   if (value.partition !== partitionOf(key.route) || !decimalVersion(value.source_position))
     throw new TypeError('Invalid discovery document partition or position');
-  const allowed = value.owner === 'accounts' ? ACCOUNT_FIELDS : SUBJECT_FIELDS;
+  const allowed = value.owner === 'accounts'
+    ? value.document_format === DISCOVERY_DOCUMENT_FORMAT
+      ? ACCOUNT_FIELDS.filter((field) => !['names', 'descriptions', 'name_sort'].includes(field))
+      : ACCOUNT_FIELDS
+    : SUBJECT_FIELDS;
   if (Object.keys(value).some((field) => !allowed.includes(field)))
     throw new TypeError('Unsupported discovery document field');
   if (value.owner === 'accounts') {
     if (
       (value.account_kind !== 'actor' && value.account_kind !== 'organization') ||
-      !nullableText(value.handle) ||
+      !nullableText(value.handle) || (value.handle !== null && !HANDLE_LOOKUP_PATTERN.test(value.handle)) ||
       !nullableText(value.display_name) ||
       !decimalVersion(value.revision)
     )
       throw new TypeError('Invalid Account discovery document');
+    if (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+      (!texts(value.names) || !Array.isArray(value.descriptions) || value.descriptions.length !== 0 ||
+        !nullableText(value.name_sort) ||
+        JSON.stringify(value.names) !== JSON.stringify([...new Set([value.display_name, value.handle].filter((name) => name !== null))])))
+      throw new TypeError('Invalid mixed Account public fields');
   } else {
     if (
       value.type !== key.kind ||
@@ -299,4 +324,9 @@ export function discoveryBulkBody(
 /** A fresh, inert definition for one shared native family; no index creation/alias switch is performed. */
 export function discoveryIndexDefinition(): DiscoveryIndexDefinition {
   return structuredClone(definition) as DiscoveryIndexDefinition;
+}
+
+/** Versioned successor; never modifies the immutable format-1 mapping. */
+export function mixedDiscoveryIndexDefinition(): DiscoveryIndexDefinition {
+  return structuredClone(mixedDefinition) as DiscoveryIndexDefinition;
 }
