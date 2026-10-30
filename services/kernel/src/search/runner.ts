@@ -22,7 +22,7 @@ import {
   readSubjectSortFormat,
 } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
-import { createSearchIdentityWriter } from './identity-epoch-participant.ts';
+import { createSearchWriterGuard } from './writer-guard.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 
 export function subjectConsumer(prefix: string, generation: number): string {
@@ -133,7 +133,8 @@ export async function startSearchIndexing(options: {
             listing: options.listing,
             index: subjectIndexName(options.prefix, generation),
             consumer: subjectConsumer(options.prefix, generation),
-            writer: createSearchIdentityWriter({
+            writer: createSearchWriterGuard({
+              consumer: subjectConsumer(options.prefix, generation),
               pool: options.pool,
               search: options.search,
               source: options.source,

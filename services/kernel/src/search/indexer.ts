@@ -10,7 +10,7 @@ import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions, validateIndexObservation } from './document.ts';
-import { SEARCH_IDENTITY_WRITER_CHUNK, type SearchIdentityWriter } from './identity-epoch-participant.ts';
+import { SEARCH_IDENTITY_WRITER_CHUNK, type SearchWriterGuard } from './writer-guard.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
@@ -123,7 +123,7 @@ export function createSubjectIndexer(options: {
   consumer: string;
   aroundApply?: SubjectApplyGuard;
   /** Trusted native runner composition; independent of aroundApply/privacy repair. */
-  writer?: SearchIdentityWriter;
+  writer?: SearchWriterGuard;
 }): Relay {
   return {
     consumer: options.consumer,
