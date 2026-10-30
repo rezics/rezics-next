@@ -204,7 +204,7 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   const n = await setup();
   const acquired = await registry.acquire(n.queried, context());
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
-  const close = registry.closeObservation(n.queried, search, context());
+  const close = registry.closeObservation(n.queried, search, { deadline: Date.now() + 90_000 });
   // close sets a durable admission barrier; existing in-flight work may commit before drain.
   while ((await registry.read({ queried: n.queried }, context())).status === 'found') await Bun.sleep(5);
   expect((await registry.acquire(n.queried, context())).status).toBe('unready');
@@ -218,7 +218,7 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
     (await registry.appendExecution({ use: acquired.use, execution: { ...execution, ownRows: [] } }, context())).status,
   ).toBe('unready');
   await registry.release(acquired.use, context());
-  await close;
+  expect((await close).status).toBe('closed');
   const stored = await pool.query(
     'SELECT execution FROM search.public_filter_execution WHERE partition_no=7 AND observation=$1 AND id=$2',
     [n.queried.snapshot.observation, execution.id],
@@ -232,12 +232,12 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   });
   const concurrentSearch: typeof search = {
     ...search,
-    async request(method, path, body, options) {
+    async request<T>(method: Parameters<typeof search.request>[0], path: string, body?: unknown, options?: Parameters<typeof search.request>[3]) {
       if (path === '/_search') {
         if (++entered === 2) both();
         await reached;
       }
-      return search.request(method, path, body, options);
+      return search.request<T>(method, path, body, options);
     },
   };
   const results = await Promise.all([

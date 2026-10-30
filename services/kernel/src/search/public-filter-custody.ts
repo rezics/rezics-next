@@ -171,6 +171,7 @@ async function engine<T>(
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
   meter.bytes += Buffer.byteLength(encode(response.body));
+  if (path.endsWith('/_search')) meter.engineIteratorSteps += (response.body as { _shards: { total: number } })._shards.total;
   return response.body;
 }
 async function native(
@@ -588,7 +589,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             context,
             'POST',
             '/_search',
-            { size: 0, pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` } },
+            { size: 0, track_total_hits: false, query: { match_none: {} }, pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` } },
           );
           if (response.timed_out || response._shards.failed) throw new Failure('observation_lost');
           const successor: PublicFilterQueriedObservation = {
@@ -641,23 +642,10 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         );
         if (!barrier.rowCount) throw new Failure('observation_lost');
         if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
-        for (;;) {
-          check(context);
-          await sql(
-            pool,
-            meter,
-            'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3',
-            [...values, Date.now()],
-          );
-          const refs = await sql(
-            pool,
-            meter,
-            'SELECT token FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) LIMIT 1',
-            values,
-          );
-          if (!refs.rowCount) break;
-          await Bun.sleep(10);
-        }
+        const refs = await sql(pool, meter, 'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1', values);
+        if (refs.rows[0]) await Bun.sleep(Math.max(0, Math.min(Number(refs.rows[0].expires_at) + 1, context.deadline) - Date.now()));
+        check(context);
+        await sql(pool, meter, 'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3', [...values, Date.now()]);
         for (;;) {
           const owned = await sql(
             pool,

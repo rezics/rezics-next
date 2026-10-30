@@ -316,6 +316,13 @@ CREATE INDEX public_filter_pit_owned ON search.public_filter_pit USING btree (pa
 
 
 --
+-- Name: public_filter_reference_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_reference_expiry ON search.public_filter_reference USING btree (partition_no, observation, expires_at);
+
+
+--
 -- Name: index_incarnation index_incarnation_partition_no_prefix_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 

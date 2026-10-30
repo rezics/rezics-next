@@ -64,5 +64,6 @@ CREATE TABLE search.public_filter_prepared (
   FOREIGN KEY (partition_no, registration) REFERENCES search.public_filter_registration (partition_no, id)
 );
 CREATE INDEX public_filter_pit_owned ON search.public_filter_pit (partition_no, observation, id) WHERE state = 'owned';
+CREATE INDEX public_filter_reference_expiry ON search.public_filter_reference (partition_no, observation, expires_at);
 -- migrate:down
 -- Forward only: retained immutable definitions/executions and retired identities are not reclaimed here.
