@@ -660,6 +660,47 @@ in the same transaction. Append also initializes the `content.authored_field.own
 command's authorization time; it carries `document:erase`.
 Documents are text-only until subject-field media claims exist; image and media nodes are refused.
 
+### Original source history enrollment
+
+`readAuthoredFieldHistorySource(tx, documentId)` in `authored-fields-history.ts` is an internal data port returning
+the actual immutable native `{ kind: 'contribution', subjectId, candidateId, revision, documentId }`. It reads only
+the exact authored row's id, subject, candidate and original revision, validates the current command home, routed
+tuple and positive safe revision, and includes retained erased metadata. It reads no body, author or private profile.
+It grants no permission. Missing metadata returns `null`, which is never historical completeness or no-copies evidence;
+row retention follows Content's existing owner policy, with no historical UUID or body search.
+
+Semantic owns the outer native command containing `appendAuthoredField`. It collects all actual new, old and current
+contribution references from its native source snapshots and the returned append `id`, then calls
+`declareCommandRecordSources(tx, sources)` exactly once before any native history serialization. The helper is optional
+when Semantic already has the actual tuple. Append retains exactly `{ id, digest }`, its direct SQL and owner grants;
+neither append nor nested purge hooks declare sources. A command copying more than 16 distinct sources needs resolution
+by Semantic and Accounts; callers must never truncate references or raise the shared limit silently.
+
+Content's standalone `eraseAuthoredField` owns its own declaration. After current `document:erase` admission and an
+exact native author check, it obtains that document's original metadata and declares the single source before mutation
+or serialization. Permanent command-kind ID 2000 binds `content.authored_field.erase` to the native shared-history sink.
+Its author association is separate from the automatic verified actor/principal/human/delegate associations supplied by
+Access. The actual serializers enroll the generated receipt and outbox locators; the public result and event gain no proof
+property. Replay uses the existing authorized receipt path; an unchanged tombstone rolls back the entire attempt.
+
+Source declarations associate ownership only: they confer no source validity, disclosure or maintenance authority,
+historical completeness or erasure acknowledgement. Old or foreign custody, active work and other resource coverage
+remain partial and unknown. Other Content post, thread, media and lifecycle records are not contribution/Context/Zone
+sources; a referenced Context or invented semantic candidate cannot enroll them.
+
+Cost per operation:
+
+- **Touches:** The helper reads one exact metadata point in the current home. Standalone erase also probes the exact
+  author key, declares one source and one author's receipt/event scope, then performs the existing exact erase and
+  native receipt/outbox writes with their generated locator associations.
+- **Bound:** Fixed keys and statements; at most one metadata row and one source, with indexed O(log R) work as unrelated
+  rows grow. No source/history scan, body read, cross-home query or dependency fanout.
+- **Growth check:** Existing `test/content/authored-fields.test.ts` covers the authored primary-key population;
+  `test/content/authored-fields-history.test.ts` adds focused original-tuple and outer-declaration controls. No new
+  growth campaign or complete custody claim is made.
+
+### Reads and author erasure
+
 `readAuthoredField` is a low-level exact storage read that includes erased tombstones and must never serve as a public
 handler. Disclosure follows the current semantic candidate, as it does for imported documents; a document ID by itself
 does not authorize disclosure.

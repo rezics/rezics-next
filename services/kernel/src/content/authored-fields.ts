@@ -12,13 +12,22 @@ import {
 import { creationDeclares } from '../access/index.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+import { declareCommandRecordSources } from '../history/record-source.ts';
 import { ContentNotFoundError } from './commands.ts';
+import { readAuthoredFieldHistorySource } from './authored-fields-history.ts';
 import { validateContentDocument } from './document.ts';
 import append from './append-authored-field.sql';
 import read from './read-authored-field.sql';
 import initializeAuthoredFieldOwner from '../access/resource-initialization.sql';
 import erase from './erase-authored-field.sql';
+import authorizeErase from './authored-fields-history-author.sql';
 import type { RequestContext } from './model.ts';
+
+// Permanent Content-owned command kind, independent of registration order.
+const eraseCommandKind = 'content.authored_field.erase';
+registerCommandHistoryKind(eraseCommandKind, 2000);
 
 export type AuthoredFieldInput = Readonly<{
   subject: string;
@@ -156,7 +165,7 @@ export async function eraseAuthoredField(
     () => new ContentNotFoundError(),
   );
   const identity = principalCommandIdentity(actor);
-  const commandKind = 'content.authored_field.erase';
+  const commandKind = eraseCommandKind;
   const body = { id };
   try {
     return await runCommand(
@@ -176,6 +185,20 @@ export async function eraseAuthoredField(
         },
       },
       async (tx) => {
+        // Access permission and the native exact author guard remain independent
+        // of source association. Neither metadata nor declaration grants authority.
+        if ((await authorizeErase.run(tx, { route, id, author_id: actor.accountId })).length !== 1)
+          throw new ContentNotFoundError();
+        const source = await readAuthoredFieldHistorySource(tx, id);
+        if (source === null) throw new ContentNotFoundError();
+        declareCommandRecordSources(tx, [source]);
+        const accounts = [
+          { accountRoute: routeOf(actor.accountId)!, accountId: actor.accountId, roles: ACCOUNT_ROLE_BITS.author },
+        ];
+        await declareCommandHistory(tx, commandKind, {
+          response: { artifactType: 'command-receipt/v1', accounts },
+          events: [{ artifactType: 'outbox-event/v1', accounts }],
+        });
         const row = (await erase.run(tx, { route, id, author_id: actor.accountId }))[0];
         if (!row) throw new ContentNotFoundError();
         if (!row.changed) throw new Unchanged();
