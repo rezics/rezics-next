@@ -1,3 +1,4 @@
+import { types } from 'node:util';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
@@ -44,6 +45,7 @@ function row(value: unknown, pointer: string): object {
   if (
     !value ||
     typeof value !== 'object' ||
+    types.isProxy(value) ||
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
@@ -103,7 +105,7 @@ function nativeTimestamp(value: unknown, pointer: string): string {
 }
 function rows(value: unknown, pointer: string, cap: number, optional = false): unknown[] {
   if (value === undefined && optional) return [];
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+  if (types.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
     fail('Expected grouped dump rows', pointer);
   const array = value as unknown[];
   const length = Object.getOwnPropertyDescriptor(array, 'length')!.value as number;

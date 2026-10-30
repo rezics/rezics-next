@@ -1,3 +1,4 @@
+import { types } from 'node:util';
 import {
   checkBatchWrite,
   type BatchCommand,
@@ -70,7 +71,7 @@ function invalid(pointer: string, code = 'invalid_open_library_record'): never {
   throw new ConversionError(code, pointer);
 }
 function object(value: unknown, pointer: string): object {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) invalid(pointer);
+  if (!value || typeof value !== 'object' || types.isProxy(value) || Array.isArray(value)) invalid(pointer);
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) invalid(pointer);
   return value;
@@ -87,7 +88,7 @@ function string(value: unknown, pointer: string, cap = 1500): string {
   return value;
 }
 function array<T>(value: unknown, pointer: string, read: (entry: unknown, path: string) => T): T[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) invalid(pointer);
+  if (types.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) invalid(pointer);
   const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
   if (typeof length !== 'number' || !Number.isSafeInteger(length) || length > fieldCap)
     invalid(pointer, 'source_field_limit_64');

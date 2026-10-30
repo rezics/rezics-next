@@ -65,8 +65,12 @@ subpath. The converter's `converter_revision` option is also trusted
 registration data, not a field read from the source body.
 
 Each result includes a `normalizedRecord` containing only the source fields the
-converter accepts. Unknown and private subtrees are not carried into it. For an
-exact quantity, one unmapped qualifier's actual key may remain with an empty
+converter accepts. Unknown and private subtrees are not carried into it. For each
+visited source object or array, `node:util`'s `types.isProxy` rejects
+Proxies before reflection or property access; own data descriptors then prevent
+source getters from running. Classification costs constant work per visited
+node within the existing field caps; unknown/private subtrees remain unvisited.
+For an exact quantity, one unmapped qualifier's actual key may remain with an empty
 snak list so rejection survives importer serialization and reconversion; its
 unknown body is never read or retained. This is source-key evidence, not a
 serialized exactness or loss flag. Its `digest` is a deterministic SHA-256

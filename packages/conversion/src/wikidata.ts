@@ -1,3 +1,4 @@
+import { types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { PropertyDefinition } from '@rezics/definitions';
@@ -102,6 +103,7 @@ function object(value: unknown, pointer: string): ObjectValue {
   if (
     !value ||
     typeof value !== 'object' ||
+    utilTypes.isProxy(value) ||
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
@@ -115,7 +117,7 @@ function get(value: ObjectValue, key: string, pointer: string): unknown {
   return descriptor.value;
 }
 function list(value: unknown, limit: number, pointer: string): unknown[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > limit)
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > limit)
     fail('Source array exceeds its field limit or is malformed', pointer);
   for (let i = 0; i < value.length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
