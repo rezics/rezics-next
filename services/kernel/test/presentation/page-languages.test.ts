@@ -168,7 +168,7 @@ function nativePlan(reads: Record<string, PageRead>, languages?: readonly string
     incoming: new Request('http://kernel.test/v1/pages:read'),
     reads,
     session: { ring: tokens, scope: 'anonymous' },
-    languages,
+    ...(languages === undefined ? {} : { languages }),
     async dispatch(request) {
       calls++;
       active++;
@@ -257,7 +257,7 @@ test('sixteen native read descriptors retain the concurrency ceiling and share d
   expect(shared.calls()).toBe(1);
   expect(Object.keys(results)).toHaveLength(16);
   expect(results.r0!.status).toBe(200);
-  for (const result of Object.values(results)) expect(result).toBe(results.r0);
+  for (const result of Object.values(results)) expect(result).toBe(results.r0!);
   const overflow = nativePlan(aliases(17));
   await expect(overflow.operation).rejects.toBeInstanceOf(PageReadError);
   expect(overflow.calls()).toBe(0);

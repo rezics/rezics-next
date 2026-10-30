@@ -343,7 +343,7 @@ test('native subject redirect, credentials and aggregate observations retain sta
   expect(access.readChecks).toContainEqual({
     persona: 'reader',
     action: 'subject:read',
-    resource: { route: routeOf(survivor), id: survivor },
+    resource: { route: routeOf(survivor)!, id: survivor },
   });
 });
 
