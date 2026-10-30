@@ -104,7 +104,7 @@ function checkEnvironmentFailed(output: string): boolean {
   return /^kernel check: environment failure: database storage full \(SQLSTATE 53100\)(?: on .*)?$/m.test(clean);
 }
 
-type CandidateGitResult = {
+export type CandidateGitResult = {
   status: number | null;
   signal: NodeJS.Signals | null;
   stdout: string;
@@ -112,8 +112,12 @@ type CandidateGitResult = {
   error?: Error;
 };
 
-function candidateGit(cwd: string, args: string[]): CandidateGitResult {
+export type CandidateGitRunner = (cwd: string, args: readonly string[]) => CandidateGitResult | undefined;
+
+function candidateGit(cwd: string, args: string[], run?: CandidateGitRunner): CandidateGitResult {
   try {
+    const injected = run?.(cwd, args);
+    if (injected) return injected;
     const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 });
     return {
       status: result.status,
@@ -161,14 +165,15 @@ function candidateIntegrityEvidence(
   logPath: string,
   observedHead: string,
   quiet: CandidateGitResult,
+  run?: CandidateGitRunner,
 ): void {
-  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--']);
-  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--']);
-  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--']);
+  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--'], run);
+  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--'], run);
+  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--'], run);
   const headResult =
     observedHead === expected
       ? undefined
-      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--']);
+      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--'], run);
   const staged = nulPaths(stagedResult);
   const unstaged = nulPaths(unstagedResult);
   const tracked = nulPaths(trackedResult);
@@ -190,7 +195,7 @@ function candidateIntegrityEvidence(
       ...(headResult ? [`; committed=${candidateGitDetails(headResult)}`] : []),
     ].join(' '),
   ];
-  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--']);
+  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--'], run);
   report.push(
     `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, 4000) || '(empty)' : candidateGitDetails(stat)}`,
   );
@@ -203,7 +208,7 @@ function candidateIntegrityEvidence(
       expected,
       '--',
       ...tracked,
-    ]);
+    ], run);
     if (patch.status === 0) {
       const redacted = patch.stdout
         .split(/\r?\n/)
@@ -223,16 +228,22 @@ function candidateIntegrityEvidence(
 }
 
 /** A candidate must still be the checked commit and have no tracked working-tree changes after each check. */
-function assertCandidateIntegrity(cwd: string, expected: string, phase: string, logPath: string): void {
-  const head = candidateGit(cwd, ['rev-parse', 'HEAD']);
+function assertCandidateIntegrity(
+  cwd: string,
+  expected: string,
+  phase: string,
+  logPath: string,
+  run?: CandidateGitRunner,
+): void {
+  const head = candidateGit(cwd, ['rev-parse', 'HEAD'], run);
   const observedHead = head.status === 0 ? head.stdout.trim() : '(unavailable)';
-  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--']);
+  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--'], run);
   if (head.status === 0 && observedHead === expected && quiet.status === 0 && !quiet.error && !quiet.signal) {
     appendFileSync(logPath, `Candidate integrity verified phase=${phase} HEAD=${expected}\n`);
     return;
   }
 
-  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet);
+  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet, run);
   if (head.status !== 0 || head.error || head.signal)
     throw new Error(
       `Candidate Git infrastructure failure phase=${phase}: git rev-parse HEAD ${candidateGitDetails(head)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
@@ -943,6 +954,8 @@ export type TrainOptions = {
   sink: GateOutcomeSink;
   derivedFiles?: DerivedFile[];
   runGate?: GateRunner;
+  /** Candidate integrity Git seam, used by the real-worktree failure fixtures. */
+  runCandidateGit?: CandidateGitRunner;
   /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
   runLaunchSmoke?: GateRunner;
   gateIdentity?: string;
@@ -1026,6 +1039,8 @@ export class MergeTrain {
     handOff: () => Promise<void>,
   ): Promise<void> {
     const o = this.options;
+    const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
+      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, lane === 'main' ? 'train-main.lease' : 'train.lease');
     let acquired = false;
@@ -2313,9 +2328,9 @@ export class MergeTrain {
           stage = 'gate';
           appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
           const installs = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(0, 2), trainTree, logPath, runGate);
-          assertCandidateIntegrity(trainTree, candidate, 'control-plane dependency installs', logPath);
+          assertCandidate(trainTree, candidate, 'control-plane dependency installs', logPath);
           const validation = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2), trainTree, logPath, runGate);
-          assertCandidateIntegrity(trainTree, candidate, 'control-plane typecheck and test suite', logPath);
+          assertCandidate(trainTree, candidate, 'control-plane typecheck and test suite', logPath);
           const failedCommand = installs.failedCommand ?? validation.failedCommand;
           let checked = {
             passed: installs.passed && validation.passed,
@@ -2338,7 +2353,7 @@ export class MergeTrain {
                   logPath,
                   runGate,
                 );
-                assertCandidateIntegrity(trainTree, candidate, `control-plane failure rerun ${file}`, logPath);
+                assertCandidate(trainTree, candidate, `control-plane failure rerun ${file}`, logPath);
                 if (!result.passed) branchFailures.push({ file, result });
               }
               if (!branchFailures.length) {
@@ -2404,7 +2419,7 @@ export class MergeTrain {
             result.stage = stage;
             return finish();
           }
-          assertCandidateIntegrity(trainTree, candidate, 'control-plane verification', logPath);
+          assertCandidate(trainTree, candidate, 'control-plane verification', logPath);
           if (launchSmokeRequired(result.changedFiles)) {
             appendFileSync(logPath, '\nLaunch smoke on control-plane candidate\n');
             const smoke = await runIntegrationChecks(
@@ -2413,7 +2428,7 @@ export class MergeTrain {
               logPath,
               o.runLaunchSmoke ?? gateRunner(300_000),
             );
-            assertCandidateIntegrity(trainTree, candidate, 'launch smoke', logPath);
+            assertCandidate(trainTree, candidate, 'launch smoke', logPath);
             // A smoke that only ran out of time waited for shared check capacity, not on a launch defect: the
             // landing proceeds and the log keeps the note (it refused every launch-path landing while slots were full).
             const capacityOnly =
@@ -2448,7 +2463,7 @@ export class MergeTrain {
               : check.command,
           );
           const checked = await runIntegrationChecks(commands, trainTree, logPath);
-          assertCandidateIntegrity(trainTree, candidate, 'dev integration checks', logPath);
+          assertCandidate(trainTree, candidate, 'dev integration checks', logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           const scoped = commands.some((command) => command[0] === 'env');
@@ -2465,7 +2480,7 @@ export class MergeTrain {
               git(trainTree, 'clean', '-fdx');
               appendFileSync(logPath, `\nIntegration check baseline on dev ${base}\n`);
               baseline = await runIntegrationChecks(commands, trainTree, logPath);
-              assertCandidateIntegrity(trainTree, base, 'dev integration check baseline', logPath);
+              assertCandidate(trainTree, base, 'dev integration check baseline', logPath);
               o.queue.saveBaseline(base, key, baseline);
             }
             o.fence.assertCurrent(request);
@@ -2502,7 +2517,7 @@ export class MergeTrain {
               `Shared workspace acceptance for ${task.id}: ${task.brief.acceptance.command.join(' ')}\n`,
             );
             const checked = await runGate(task.brief.acceptance.command, trainTree, logPath);
-            assertCandidateIntegrity(trainTree, candidate, `shared workspace acceptance ${task.id}`, logPath);
+            assertCandidate(trainTree, candidate, `shared workspace acceptance ${task.id}`, logPath);
             o.fence.assertCurrent(request);
             if (target() !== base) break;
             if (!checked.passed) {
@@ -2527,7 +2542,7 @@ export class MergeTrain {
             `\nAcceptance on ${candidate}, ${integratesIntoDev ? 'dev' : 'main'} ${base}: ${request.gate.join(' ')}\n`,
           );
           const gated = await runGate(request.gate, trainTree, logPath);
-          assertCandidateIntegrity(trainTree, candidate, 'acceptance', logPath);
+          assertCandidate(trainTree, candidate, 'acceptance', logPath);
           // A gate on an old target is never authoritative, including a red gate.
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
@@ -2541,7 +2556,7 @@ export class MergeTrain {
               git(trainTree, 'reset', '--hard', base);
               git(trainTree, 'clean', '-fdx');
               baseline = await runGate(request.gate, trainTree, logPath);
-              assertCandidateIntegrity(trainTree, base, 'acceptance baseline', logPath);
+              assertCandidate(trainTree, base, 'acceptance baseline', logPath);
               o.queue.saveBaseline(base, key, baseline);
             }
             o.fence.assertCurrent(request);

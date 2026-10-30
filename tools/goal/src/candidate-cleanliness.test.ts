@@ -1,7 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { MergeTrain } from './merge-train.ts';
+import { MergeTrain, type CandidateGitRunner } from './merge-train.ts';
 import { git } from './merge.ts';
 import { mergeTrainHarness } from './test-support.ts';
 
@@ -14,9 +14,14 @@ function candidate() {
   return { h, task, expected, mainBefore };
 }
 
-async function train(h: ReturnType<typeof mergeTrainHarness>, runGate: (cwd: string) => Promise<void> | void) {
+async function train(
+  h: ReturnType<typeof mergeTrainHarness>,
+  runGate: (cwd: string) => Promise<void> | void,
+  runCandidateGit?: CandidateGitRunner,
+) {
   await new MergeTrain({
     ...h.options,
+    ...(runCandidateGit ? { runCandidateGit } : {}),
     runGate: async (_command, cwd) => {
       await runGate(cwd);
       return { passed: true, output: '', timedOut: false };
@@ -68,7 +73,8 @@ test('a tracked unstaged check mutation is diagnosed with its path and blocks pu
     expect(log).toContain('+[content redacted]');
     expect(git(s.h.main, 'rev-parse', 'main')).toBe(s.mainBefore);
     expect(readFileSync(join(s.task.worktree, 'candidate.txt'), 'utf8')).toBe('candidate bytes\n');
-    expect(readFileSync(join(s.h.main, 'candidate.txt'), 'utf8')).toBe('base\n');
+    expect(readFileSync(join(s.h.main, 'base'), 'utf8')).toBe('base\n');
+    expect(existsSync(join(s.h.main, 'candidate.txt'))).toBe(false);
   } finally {
     s.h.close();
   }
@@ -117,22 +123,12 @@ test('a check that changes candidate HEAD records committed paths and blocks pub
 
 test('a Git execution failure records the exit and error and blocks publication', async () => {
   const s = candidate();
-  const originalPath = process.env.PATH;
   try {
-    const realGit = (originalPath ?? '').split(delimiter).map((directory) => join(directory, 'git')).find(existsSync);
-    if (!realGit) throw new Error('Could not locate the real git executable for the failure fixture');
-    const fakeBin = join(s.h.path, 'fake-bin');
-    mkdirSync(fakeBin, { recursive: true });
-    const fakeGit = join(fakeBin, 'git');
-    const quotedGit = `'${realGit.replaceAll("'", "'\\''")}'`;
-    writeFileSync(
-      fakeGit,
-      `#!/bin/sh\nif [ "$1" = diff ] && [ "$2" = --quiet ] && [ "$3" = HEAD ] && [ "$4" = -- ]; then\n  echo 'injected postcheck failure' >&2\n  exit 29\nfi\nexec ${quotedGit} "$@"\n`,
-    );
-    chmodSync(fakeGit, 0o755);
-    process.env.PATH = `${fakeBin}${delimiter}${originalPath ?? ''}`;
-
-    const outcome = await train(s.h, () => {});
+    const runCandidateGit: CandidateGitRunner = (_cwd, args) =>
+      args.join(' ') === 'diff --quiet HEAD --'
+        ? { status: 29, signal: null, stdout: '', stderr: 'injected postcheck failure' }
+        : undefined;
+    const outcome = await train(s.h, () => {}, runCandidateGit);
     const log = readFileSync(outcome.logPath, 'utf8');
 
     expect(outcome.passed).toBe(false);
@@ -142,8 +138,6 @@ test('a Git execution failure records the exit and error and blocks publication'
     expect(log).toContain('stderr="injected postcheck failure"');
     expect(git(s.h.main, 'rev-parse', 'main')).toBe(s.mainBefore);
   } finally {
-    if (originalPath === undefined) delete process.env.PATH;
-    else process.env.PATH = originalPath;
     s.h.close();
   }
 });
