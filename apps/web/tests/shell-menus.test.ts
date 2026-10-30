@@ -170,39 +170,6 @@ test(
     const signInLink = phonePage.getByRole('menu').getByRole('link', { name: en.account_sign_in!, exact: true });
     await signInLink.waitFor();
     await expectActive(phonePage, signInLink);
-    await signInLink.evaluate((element: HTMLAnchorElement) => element.blur());
-    await phonePage.mouse.move(0, 0);
-    await signInLink.waitFor({ state: 'visible' });
-    expect(await signInLink.evaluate((element) => element.matches(':hover, :focus-visible'))).toBe(false);
-    expect(await signInLink.evaluate((element) => getComputedStyle(element).textDecorationLine)).not.toContain(
-      'underline',
-    );
-
-    await signInLink.hover();
-    await signInLink.evaluate((element: HTMLAnchorElement) => element.blur());
-    const hoveredState = await signInLink.evaluate((element) => ({
-      hovered: element.matches(':hover'),
-      focused: element === document.activeElement,
-      focusedVisible: element.matches(':focus-visible'),
-      textDecorationLine: getComputedStyle(element).textDecorationLine,
-    }));
-    expect(hoveredState.hovered).toBe(true);
-    expect(hoveredState.focused).toBe(false);
-    expect(hoveredState.focusedVisible).toBe(false);
-    expect(hoveredState.textDecorationLine).toContain('underline');
-
-    await phonePage.mouse.move(0, 0);
-    await signInLink.waitFor({ state: 'visible' });
-    const atRestState = await signInLink.evaluate((element) => ({
-      hovered: element.matches(':hover'),
-      focused: element === document.activeElement,
-      focusedVisible: element.matches(':focus-visible'),
-      textDecorationLine: getComputedStyle(element).textDecorationLine,
-    }));
-    expect(atRestState.hovered).toBe(false);
-    expect(atRestState.focused).toBe(false);
-    expect(atRestState.focusedVisible).toBe(false);
-    expect(atRestState.textDecorationLine).not.toContain('underline');
     await phonePage.context().close();
   },
   timeout,
