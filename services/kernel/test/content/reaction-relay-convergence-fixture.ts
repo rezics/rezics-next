@@ -12,10 +12,7 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import {
-  createNativeContentSystemWithWriteRateOverrides,
-  type NativeContentSystem,
-} from './support/native-system.ts';
+import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 const idempotencyKey = () => randomUUID();
