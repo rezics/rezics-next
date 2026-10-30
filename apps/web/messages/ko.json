@@ -1738,5 +1738,14 @@
   "zones_owner_refresh": "새로고침",
   "zones_owner_intro": "사이트를 관리하고 현재 읽기 페이지를 엽니다.",
   "zones_create_saved": "비공개 Zone을 만들었습니다. 저장된 설정으로 이동하세요.",
-  "zones_owner_confirm_title": "{title}을(를) 휴지통으로 이동할까요?"
+  "zones_owner_confirm_title": "{title}을(를) 휴지통으로 이동할까요?",
+  "search_recent": "최근 검색",
+  "search_history": "기록",
+  "search_history_clear": "기록 지우기",
+  "search_history_empty": "최근 검색 기록이 없습니다.",
+  "search_history_unavailable": "사용할 수 없는 범위",
+  "search_history_remove": "{name} 삭제",
+  "search_history_offline": "오프라인입니다. 연결되면 변경 사항을 동기화합니다.",
+  "search_history_conflict": "다른 기기에서 기록이 변경되었습니다. 다시 불러오면 대기 중인 변경 사항을 버립니다.",
+  "search_history_reload": "현재 기록 다시 불러오기"
 }

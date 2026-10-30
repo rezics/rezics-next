@@ -52,6 +52,7 @@ import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
+import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
@@ -423,6 +424,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     workClient,
   });
+  recentSearchRoutes(app as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+  });
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
@@ -545,6 +553,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
 };
 
 type KernelComposition = ZoneComposition &
+  ReturnType<typeof recentSearchRoutes> &
   ReturnType<typeof viewerActionsRoutes> &
   ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof ratingRoutes> &

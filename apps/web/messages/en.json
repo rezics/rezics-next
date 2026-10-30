@@ -1739,5 +1739,14 @@
   "zones_owner_refresh": "Refresh",
   "zones_owner_intro": "Manage your sites and open their current reader.",
   "zones_create_saved": "Your private Zone was created. Continue to its saved configuration.",
-  "zones_owner_confirm_title": "Move {title} to trash?"
+  "zones_owner_confirm_title": "Move {title} to trash?",
+  "search_recent": "Recent",
+  "search_history": "History",
+  "search_history_clear": "Clear history",
+  "search_history_empty": "No recent searches yet.",
+  "search_history_unavailable": "Unavailable scope",
+  "search_history_remove": "Remove {name}",
+  "search_history_offline": "Offline. Changes will sync when connected.",
+  "search_history_conflict": "History changed on another device. Reload to discard pending changes.",
+  "search_history_reload": "Reload current history"
 }

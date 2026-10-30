@@ -1738,5 +1738,14 @@
   "zones_owner_refresh": "重新整理",
   "zones_owner_intro": "管理你的網站，並開啟目前的閱讀頁面。",
   "zones_create_saved": "私人 Zone 已建立。請繼續設定已儲存的內容。",
-  "zones_owner_confirm_title": "將 {title} 移至垃圾桶？"
+  "zones_owner_confirm_title": "將 {title} 移至垃圾桶？",
+  "search_recent": "最近造訪",
+  "search_history": "歷史紀錄",
+  "search_history_clear": "清除歷史紀錄",
+  "search_history_empty": "還沒有搜尋紀錄。",
+  "search_history_unavailable": "此範圍無法使用",
+  "search_history_remove": "移除 {name}",
+  "search_history_offline": "目前離線，連線後將同步變更。",
+  "search_history_conflict": "歷史紀錄已在另一台裝置上變更。重新載入將捨棄待同步的變更。",
+  "search_history_reload": "重新載入歷史紀錄"
 }

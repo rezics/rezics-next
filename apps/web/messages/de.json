@@ -1738,5 +1738,14 @@
   "zones_owner_refresh": "Aktualisieren",
   "zones_owner_intro": "Verwalte deine Websites und öffne ihre aktuelle Leseansicht.",
   "zones_create_saved": "Deine private Zone wurde erstellt. Fahre mit der gespeicherten Konfiguration fort.",
-  "zones_owner_confirm_title": "{title} in den Papierkorb verschieben?"
+  "zones_owner_confirm_title": "{title} in den Papierkorb verschieben?",
+  "search_recent": "Zuletzt gesucht",
+  "search_history": "Verlauf",
+  "search_history_clear": "Verlauf löschen",
+  "search_history_empty": "Noch keine Suchanfragen.",
+  "search_history_unavailable": "Bereich nicht verfügbar",
+  "search_history_remove": "{name} entfernen",
+  "search_history_offline": "Offline. Änderungen werden nach dem Verbinden synchronisiert.",
+  "search_history_conflict": "Der Verlauf wurde auf einem anderen Gerät geändert. Beim Neuladen werden ausstehende Änderungen verworfen.",
+  "search_history_reload": "Aktuellen Verlauf neu laden"
 }

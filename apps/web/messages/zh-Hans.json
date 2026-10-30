@@ -1739,5 +1739,14 @@
   "zones_owner_refresh": "刷新",
   "zones_owner_intro": "管理你的网站，并打开当前的阅读页面。",
   "zones_create_saved": "私有 Zone 已创建。请继续配置已保存的内容。",
-  "zones_owner_confirm_title": "将 {title} 移至回收站？"
+  "zones_owner_confirm_title": "将 {title} 移至回收站？",
+  "search_recent": "最近访问",
+  "search_history": "历史记录",
+  "search_history_clear": "清空历史记录",
+  "search_history_empty": "还没有搜索记录。",
+  "search_history_unavailable": "此范围不可用",
+  "search_history_remove": "移除 {name}",
+  "search_history_offline": "当前离线，连接后将同步更改。",
+  "search_history_conflict": "历史记录已在另一台设备上更改。重新加载将丢弃待同步的更改。",
+  "search_history_reload": "重新加载历史记录"
 }

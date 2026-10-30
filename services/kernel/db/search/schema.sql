@@ -214,6 +214,40 @@ CREATE TABLE search.public_filter_target (
 
 
 --
+-- Name: recent_search; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.recent_search (
+    partition_no integer NOT NULL,
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    id uuid NOT NULL,
+    entry jsonb NOT NULL,
+    entry_key text NOT NULL,
+    last_used timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT recent_search_check CHECK ((partition_no = (route >> 4))),
+    CONSTRAINT recent_search_entry_check CHECK ((octet_length((entry)::text) <= 4096)),
+    CONSTRAINT recent_search_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: recent_search_state; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.recent_search_state (
+    partition_no integer NOT NULL,
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    revision integer DEFAULT 0 NOT NULL,
+    CONSTRAINT recent_search_state_check CHECK ((partition_no = (route >> 4))),
+    CONSTRAINT recent_search_state_revision_check CHECK ((revision >= 0))
+);
+
+
+--
 -- Name: index_home_coverage index_home_coverage_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -302,6 +336,30 @@ ALTER TABLE ONLY search.public_filter_target
 
 
 --
+-- Name: recent_search recent_search_partition_no_route_account_id_entry_key_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.recent_search
+    ADD CONSTRAINT recent_search_partition_no_route_account_id_entry_key_key UNIQUE (partition_no, route, account_id, entry_key);
+
+
+--
+-- Name: recent_search recent_search_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.recent_search
+    ADD CONSTRAINT recent_search_pkey PRIMARY KEY (partition_no, route, account_id, id);
+
+
+--
+-- Name: recent_search_state recent_search_state_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.recent_search_state
+    ADD CONSTRAINT recent_search_state_pkey PRIMARY KEY (partition_no, route, account_id);
+
+
+--
 -- Name: index_home_coverage_retire; Type: INDEX; Schema: search; Owner: -
 --
 
@@ -320,6 +378,20 @@ CREATE INDEX public_filter_pit_owned ON search.public_filter_pit USING btree (pa
 --
 
 CREATE INDEX public_filter_reference_expiry ON search.public_filter_reference USING btree (partition_no, observation, expires_at);
+
+
+--
+-- Name: recent_search_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition_no, expires_at, route, account_id, id);
+
+
+--
+-- Name: recent_search_page; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
 
 
 --
@@ -376,6 +448,14 @@ ALTER TABLE ONLY search.public_filter_reference
 
 ALTER TABLE ONLY search.public_filter_registration
     ADD CONSTRAINT public_filter_registration_partition_no_physical_target_fkey FOREIGN KEY (partition_no, physical_target) REFERENCES search.public_filter_target(partition_no, physical_target);
+
+
+--
+-- Name: recent_search recent_search_partition_no_route_account_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.recent_search
+    ADD CONSTRAINT recent_search_partition_no_route_account_id_fkey FOREIGN KEY (partition_no, route, account_id) REFERENCES search.recent_search_state(partition_no, route, account_id) ON DELETE CASCADE;
 
 
 --

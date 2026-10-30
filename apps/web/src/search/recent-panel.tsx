@@ -14,11 +14,13 @@ const control =
   'flex min-h-11 items-center gap-3 rounded-xl px-2 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring';
 export function RecentPanel({
   history,
+  recent,
   onSelect,
   discovery,
   onQuery,
 }: {
   history?: RecentHistory | undefined;
+  recent?: React.ReactNode;
   onSelect?: ((entry: RecentEntry) => void) | undefined;
   discovery?: SearchDiscovery | undefined;
   onQuery?: ((query: string) => void) | undefined;
@@ -48,6 +50,7 @@ export function RecentPanel({
     ) : null;
   return (
     <div data-search-discovery className="px-2 py-4">
+      {recent ?? (
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2 px-2">
           <h2 className="font-semibold">{all ? m.header_search_history() : m.header_search_recent()}</h2>
@@ -105,6 +108,7 @@ export function RecentPanel({
           <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty()}</p>
         )}
       </section>
+      )}
       {discovery?.trendingQueries?.length ? (
         <section className="space-y-2 pt-5">
           <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches()}</h3>

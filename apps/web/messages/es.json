@@ -1738,5 +1738,14 @@
   "zones_owner_refresh": "Actualizar",
   "zones_owner_intro": "Gestiona tus sitios y abre su página de lectura actual.",
   "zones_create_saved": "Tu Zone privada se ha creado. Continúa a su configuración guardada.",
-  "zones_owner_confirm_title": "¿Mover {title} a la papelera?"
+  "zones_owner_confirm_title": "¿Mover {title} a la papelera?",
+  "search_recent": "Recientes",
+  "search_history": "Historial",
+  "search_history_clear": "Borrar historial",
+  "search_history_empty": "Aún no hay búsquedas recientes.",
+  "search_history_unavailable": "Ámbito no disponible",
+  "search_history_remove": "Eliminar {name}",
+  "search_history_offline": "Sin conexión. Los cambios se sincronizarán al conectarse.",
+  "search_history_conflict": "El historial cambió en otro dispositivo. Recarga para descartar los cambios pendientes.",
+  "search_history_reload": "Recargar historial actual"
 }

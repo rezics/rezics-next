@@ -21,8 +21,8 @@ adoption supplies no runtime or native acceptance evidence.
 ## Deletion lifecycle
 
 [Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)
-includes Search, facets and discovery. Search is a disposable public subject projection, never a second authority
-for personal or private state. [Semantic](../semantic/README.md) owns subject/contribution truth,
+includes Search, facets and discovery. The public subject index is a disposable projection, never a second
+authority for personal or private source state. [Semantic](../semantic/README.md) owns subject/contribution truth,
 [Content](../content/README.md) owns content and moderation, and [Accounts](../access/README.md) owns account erasure.
 Those source owners enforce soft deletion, the 30-day restore window, legal holds and least-data purge, including
 private-data removal and retained public-contribution de-identification. A hold preserves source evidence, not public
@@ -1011,3 +1011,12 @@ versioned Access late-item/acknowledgement protocol, purges every located genera
 Retirement drains relays, deletes the physical index, then reclaims locators/checkpoints; allocation names persist.
 These generation observations grant no query/count authorization. Mixed query owners must bracket all participating
 Account and claim partitions with the native witness and use current owner hydration, including for retained reads.
+
+## Private recent Search
+
+`/v1/recentSearches` provides own-account GET/POST, DELETE by ID and POST `:clear`, with observed revisions and
+native receipts. Signed keyset pages default/cap at 20; current owner reads hydrate scope display without retained
+labels or links for unavailable scopes. PostgreSQL retains at most 100 entries/account for 90 days. Erasure and
+indexed 100-row retention batches install independently of OpenSearch; strings never enter public indexes or events.
+The shared Web input and `/search/history` use the typed BFF and account-separated queues, discard pending changes
+only on explicit conflict reload, never upload anonymous history, omit persisted scope display and clear on logout.

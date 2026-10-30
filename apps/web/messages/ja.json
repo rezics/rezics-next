@@ -1738,5 +1738,14 @@
   "zones_owner_refresh": "更新",
   "zones_owner_intro": "サイトを管理し、現在の閲覧ページを開きます。",
   "zones_create_saved": "非公開 Zone を作成しました。保存済みの設定に進んでください。",
-  "zones_owner_confirm_title": "{title} をゴミ箱に移動しますか？"
+  "zones_owner_confirm_title": "{title} をゴミ箱に移動しますか？",
+  "search_recent": "最近の検索",
+  "search_history": "履歴",
+  "search_history_clear": "履歴を削除",
+  "search_history_empty": "検索履歴はまだありません。",
+  "search_history_unavailable": "利用できない検索範囲",
+  "search_history_remove": "{name}を削除",
+  "search_history_offline": "オフラインです。接続後に変更を同期します。",
+  "search_history_conflict": "別の端末で履歴が変更されました。再読み込みすると未同期の変更を破棄します。",
+  "search_history_reload": "現在の履歴を再読み込み"
 }
