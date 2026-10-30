@@ -4,13 +4,17 @@ WITH input AS NOT MATERIALIZED (
     AS k(route integer, thread_id uuid, post_id uuid, revision_id uuid)
 )
 SELECT i.thread_id::text AS thread_id,
-       to_tsvector('simple'::regconfig, r.search_text)
-         @@ plainto_tsquery('simple'::regconfig, i.query) AS matches
+       matched.matches
 FROM input i
-JOIN content.post p ON p.route = i.route AND p.thread_id = i.thread_id
-  AND p.post_id = i.post_id AND p.head_revision_id = i.revision_id
-JOIN content.revision r ON r.route = i.route AND r.thread_id = i.thread_id
-  AND r.post_id = i.post_id AND r.revision_id = i.revision_id
-WHERE p.availability = 'available' AND r.availability = 'available'
-  AND r.search_text IS NOT NULL
-  AND (i.route, i.revision_id) = ANY(SELECT route, revision_id FROM input);
+CROSS JOIN LATERAL (
+  SELECT to_tsvector('simple'::regconfig, r.search_text)
+           @@ plainto_tsquery('simple'::regconfig, i.query) AS matches
+  FROM content.post p
+  JOIN content.revision r ON r.route = p.route AND r.thread_id = p.thread_id
+    AND r.post_id = p.post_id AND r.revision_id = i.revision_id
+  WHERE p.route = i.route AND p.thread_id = i.thread_id
+    AND p.post_id = i.post_id AND p.head_revision_id = i.revision_id
+    AND p.availability = 'available' AND r.availability = 'available'
+    AND r.search_text IS NOT NULL
+  LIMIT 1
+) matched;
