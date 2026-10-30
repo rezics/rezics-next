@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
-import type { SourceId } from '@rezics/conversion';
+import type { SourceId } from '../../../../packages/conversion/src/index.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, DEFAULT_DUMP_RECORD_BYTES } from '../../../importer/src/dumps-bytes.ts';
