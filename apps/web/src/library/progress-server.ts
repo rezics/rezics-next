@@ -60,7 +60,8 @@ function validateStart(input: unknown): ProgressStartInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   const total = value.total === undefined ? undefined : requiredString(value.total, 32);
-  const versionSubjectId = value.versionSubjectId === undefined ? undefined : requiredString(value.versionSubjectId, 128);
+  const versionSubjectId =
+    value.versionSubjectId === undefined ? undefined : requiredString(value.versionSubjectId, 128);
   return {
     subjectId: requiredString(value.subjectId, 128),
     ...(versionSubjectId === undefined ? {} : { versionSubjectId }),

@@ -19,7 +19,8 @@ mock.module('../src/session/request', () => ({
   viewerCredential: () => 'Bearer progress-owner',
 }));
 
-const { loadProgressSession, startProgress, recordProgress, finishProgress } = await import('../src/library/progress-reads');
+const { loadProgressSession, startProgress, recordProgress, finishProgress } =
+  await import('../src/library/progress-reads');
 const request = new Request('https://web.test/en/library/progress');
 const key = '0192f3a0-6c1e-7b2a-9d4e-000000000899';
 const newId = '0192f3a0-6c1e-7b2a-9d4e-000000000898';
@@ -92,14 +93,19 @@ test('A person reads historic manual progress under its original meaning and exp
     versionSubject: { id: selectedVersionId, type: 'schema:Book', label: 'Explicitly chosen version B' },
   };
   const { client, calls } = transport(() => Response.json({ progressSession: created }, { status: 201 }));
-  const result = await startProgress(client, request, {}, {
-    subjectId: original.subjectId,
-    versionSubjectId: selectedVersionId,
-    mode: 'scalar_amount',
-    unit: 'page',
-    total: '360',
-    idempotencyKey: key,
-  });
+  const result = await startProgress(
+    client,
+    request,
+    {},
+    {
+      subjectId: original.subjectId,
+      versionSubjectId: selectedVersionId,
+      mode: 'scalar_amount',
+      unit: 'page',
+      total: '360',
+      idempotencyKey: key,
+    },
+  );
   expect(result).toEqual({ ok: true, id: newId });
   expect(calls).toHaveLength(1);
   expect(calls[0]!.body).toEqual({
@@ -120,10 +126,14 @@ test('A person reads historic manual progress under its original meaning and exp
 
 test('an optional version reference is neither defaulted nor accepted as opaque free text', async () => {
   const original = manualProgressSessions[0]!;
-  const { client, calls } = transport(() => Response.json({ progressSession: { ...original, id: newId } }, { status: 201 }));
+  const { client, calls } = transport(() =>
+    Response.json({ progressSession: { ...original, id: newId } }, { status: 201 }),
+  );
   const input = { subjectId: original.subjectId, mode: 'scalar_amount', unit: 'page', idempotencyKey: key };
-  expect(await startProgress(client, request, {}, { ...input, versionSubjectId: 'another edition' }))
-    .toEqual({ ok: false, reason: 'invalid' });
+  expect(await startProgress(client, request, {}, { ...input, versionSubjectId: 'another edition' })).toEqual({
+    ok: false,
+    reason: 'invalid',
+  });
   expect(calls).toHaveLength(0);
   expect(await startProgress(client, request, {}, input)).toEqual({ ok: true, id: newId });
   expect(calls[0]!.body).not.toHaveProperty('versionSubjectId');
@@ -157,7 +167,12 @@ test('opaque cursor text is read and recorded byte for byte, without edition tra
   expect(page.session.changes[0]).toMatchObject({ locator, position: '12.250001' });
   const raw = manualProgressSessions.find(({ id }) => id === manualCursorId)!;
   const { client, calls } = transport(() => Response.json({ progressSession: raw }));
-  await recordProgress(client, request, {}, { sessionId: raw.id, revision: 2, idempotencyKey: key, locator, position: '12.250001' });
+  await recordProgress(
+    client,
+    request,
+    {},
+    { sessionId: raw.id, revision: 2, idempotencyKey: key, locator, position: '12.250001' },
+  );
   expect(calls[0]!.body).toEqual({ revision: 2, locator, position: '12.250001' });
 });
 
@@ -172,13 +187,24 @@ test('native record refusal retains history while completion and abandonment hav
       state: action === 'complete' ? 'completed' : 'abandoned',
       completedAt: action === 'complete' ? '2026-10-31T00:00:00.000Z' : null,
     };
-    const { client, calls } = transport((call) => call.url.pathname.endsWith(':record')
-      ? Response.json({ code: 'unsupported_library_profile', effect_status: 'not_applied' }, { status: 422 })
-      : Response.json({ progressSession: terminal }));
-    expect(await recordProgress(client, request, {}, { sessionId: raw.id, revision: 2, idempotencyKey: key, amount: '121' }))
-      .toEqual({ ok: false, reason: 'unsupported_library_profile' });
-    const result = await finishProgress(client, request, {}, { sessionId: raw.id, action, revision: 2, idempotencyKey: key });
-    expect(result).toMatchObject({ ok: true, session: { id: raw.id, revision: 3, state: terminal.state, amount: raw.amount, total: raw.total } });
+    const { client, calls } = transport((call) =>
+      call.url.pathname.endsWith(':record')
+        ? Response.json({ code: 'unsupported_library_profile', effect_status: 'not_applied' }, { status: 422 })
+        : Response.json({ progressSession: terminal }),
+    );
+    expect(
+      await recordProgress(client, request, {}, { sessionId: raw.id, revision: 2, idempotencyKey: key, amount: '121' }),
+    ).toEqual({ ok: false, reason: 'unsupported_library_profile' });
+    const result = await finishProgress(
+      client,
+      request,
+      {},
+      { sessionId: raw.id, action, revision: 2, idempotencyKey: key },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      session: { id: raw.id, revision: 3, state: terminal.state, amount: raw.amount, total: raw.total },
+    });
     expect(calls[1]!.body).toEqual({ revision: 2 });
     expect(calls[1]!.url.pathname).toBe(`/v1/progressSessions/${raw.id}:${action}`);
     expect(page.session).toEqual(before);
@@ -187,20 +213,38 @@ test('native record refusal retains history while completion and abandonment hav
 
 test('a failed start does not roll back an explicitly abandoned session', async () => {
   const raw = manualProgressSessions[0]!;
-  const { client, calls } = transport((call) => call.url.pathname.endsWith(':abandon')
-    ? Response.json({ progressSession: { ...raw, revision: 3, state: 'abandoned' } })
-    : Response.json({ code: 'unsupported_library_profile', effect_status: 'not_applied' }, { status: 422 }));
-  const abandoned = await finishProgress(client, request, {}, { sessionId: raw.id, revision: 2, action: 'abandon', idempotencyKey: key });
-  const started = await startProgress(client, request, {}, {
-    subjectId: raw.subjectId,
-    versionSubjectId: selectedVersionId,
-    mode: 'scalar_amount',
-    unit: 'page',
-    idempotencyKey: crypto.randomUUID(),
+  const { client, calls } = transport((call) =>
+    call.url.pathname.endsWith(':abandon')
+      ? Response.json({ progressSession: { ...raw, revision: 3, state: 'abandoned' } })
+      : Response.json({ code: 'unsupported_library_profile', effect_status: 'not_applied' }, { status: 422 }),
+  );
+  const abandoned = await finishProgress(
+    client,
+    request,
+    {},
+    { sessionId: raw.id, revision: 2, action: 'abandon', idempotencyKey: key },
+  );
+  const started = await startProgress(
+    client,
+    request,
+    {},
+    {
+      subjectId: raw.subjectId,
+      versionSubjectId: selectedVersionId,
+      mode: 'scalar_amount',
+      unit: 'page',
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  expect(abandoned).toMatchObject({
+    ok: true,
+    session: { id: raw.id, state: 'abandoned', amount: raw.amount, total: raw.total },
   });
-  expect(abandoned).toMatchObject({ ok: true, session: { id: raw.id, state: 'abandoned', amount: raw.amount, total: raw.total } });
   expect(started).toEqual({ ok: false, reason: 'unsupported_library_profile' });
-  expect(calls.map(({ url }) => url.pathname)).toEqual([`/v1/progressSessions/${raw.id}:abandon`, '/v1/progressSessions']);
+  expect(calls.map(({ url }) => url.pathname)).toEqual([
+    `/v1/progressSessions/${raw.id}:abandon`,
+    '/v1/progressSessions',
+  ]);
 });
 
 test('a currently withheld summary is never refilled from another session or a published log', async () => {
@@ -212,7 +256,18 @@ test('a currently withheld summary is never refilled from another session or a p
   const logs: PublishedLogPage = {
     signedIn: true,
     next: null,
-    logs: [{ id: newId, sessionState: 'completed', startedAt: visible.startedAt, completedAt: null, note: null, publishedAt: visible.startedAt, account: null, subject: visible.subject }],
+    logs: [
+      {
+        id: newId,
+        sessionState: 'completed',
+        startedAt: visible.startedAt,
+        completedAt: null,
+        note: null,
+        publishedAt: visible.startedAt,
+        account: null,
+        subject: visible.subject,
+      },
+    ],
   };
   const result = progressSubjects(page as ProgressSessionPage, logs);
   if (!result.progress.signedIn) throw new Error('Expected an owner page');
@@ -224,7 +279,19 @@ test('a currently withheld summary is never refilled from another session or a p
 test('all eight locales explain explicit new sessions, unverified structure and unavailable recording', async () => {
   for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
     const messages = await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json();
-    for (const name of ['version', 'version_scope', 'no_version', 'new_session', 'new_session_scope', 'meaning_unknown', 'recording_unavailable', 'structure_unverified', 'retry', 'unavailable', 'refused'])
+    for (const name of [
+      'version',
+      'version_scope',
+      'no_version',
+      'new_session',
+      'new_session_scope',
+      'meaning_unknown',
+      'recording_unavailable',
+      'structure_unverified',
+      'retry',
+      'unavailable',
+      'refused',
+    ])
       expect(messages[`library_progress_${name}`], `${locale}: ${name}`).toBeTruthy();
   }
 });

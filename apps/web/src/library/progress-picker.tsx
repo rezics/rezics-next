@@ -50,13 +50,5 @@ export function ProgressPicker({
   onValueChange: (value: ProgressPickerSubject[]) => void;
   label?: string;
 }) {
-  return (
-    <EntityPicker
-      label={label}
-      search={search}
-      src={coverSrc}
-      value={value}
-      onValueChange={onValueChange}
-    />
-  );
+  return <EntityPicker label={label} search={search} src={coverSrc} value={value} onValueChange={onValueChange} />;
 }

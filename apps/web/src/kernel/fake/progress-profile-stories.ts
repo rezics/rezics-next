@@ -34,7 +34,15 @@ const scalar = {
  */
 export const manualProgressSessions: NativeProgressSession[] = [
   scalar,
-  { ...scalar, id: manualSparseId, mode: 'completed_units', unit: 'chapter', total: null, amount: null, completedUnitCount: 3 },
+  {
+    ...scalar,
+    id: manualSparseId,
+    mode: 'completed_units',
+    unit: 'chapter',
+    total: null,
+    amount: null,
+    completedUnitCount: 3,
+  },
   {
     ...scalar,
     id: manualCursorId,
@@ -80,11 +88,12 @@ export const routes: FakeRoute[] = [
     story: ({ match }) => {
       const session = manualProgressSessions.find(({ id }) => id === match?.[1]);
       if (!session) return;
-      const intent = session.mode === 'completed_units'
-        ? { add: [...manualSparseKeys] }
-        : session.mode === 'cursor_position'
-          ? { locator: session.locator, position: session.position }
-          : { amount: session.amount };
+      const intent =
+        session.mode === 'completed_units'
+          ? { add: [...manualSparseKeys] }
+          : session.mode === 'cursor_position'
+            ? { locator: session.locator, position: session.position }
+            : { amount: session.amount };
       return {
         status: 200,
         changes: [{ id: `${session.id}:2`, revision: 2, createdAt: '2026-10-02T00:00:00.000Z', intent }],

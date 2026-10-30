@@ -189,17 +189,15 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                 <input type="hidden" name="subjectId" value={subject} />
                 <Field>
                   <FieldLabel>{m.library_progress_version()}</FieldLabel>
-                  <ProgressPicker
-                    label={m.library_progress_version()}
-                    value={version}
-                    onValueChange={setVersion}
-                  />
+                  <ProgressPicker label={m.library_progress_version()} value={version} onValueChange={setVersion} />
                   <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
                 </Field>
                 <dl className="space-y-2 rounded-lg border border-border p-4 text-sm">
                   <div>
                     <dt className="text-muted-foreground">{m.library_progress_subject()}</dt>
-                    <dd className="break-words"><SelectedProgressSubject subject={chosen[0]} /></dd>
+                    <dd className="break-words">
+                      <SelectedProgressSubject subject={chosen[0]} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">{m.library_progress_version()}</dt>

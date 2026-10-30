@@ -119,7 +119,11 @@ export const SparseHistory: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_progress_structure_unverified());
     const units = canvas.getByRole('region', { name: m.library_progress_units() });
-    expect(within(units).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['1', '3']);
+    expect(
+      within(units)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['1', '3']);
     expect(within(units).getByRole('link', { name: m.library_progress_more() })).toBeInTheDocument();
   },
   render: () => manualStory(manualSparseId),

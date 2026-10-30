@@ -157,9 +157,7 @@ function SessionEditor({
     if (pending.current || session.state !== 'active' || !offered) return;
     setAlert(null);
     const intent =
-      session.mode === 'cursor_position'
-        ? { locator, position: position.trim() }
-        : { amount: amount.trim() };
+      session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
     pending.current = true;
     try {
       const result = await recordProgressSession({
@@ -441,7 +439,10 @@ function SessionEditor({
         </p>
       ) : null}
       <p className="text-sm text-muted-foreground">
-        {m.library_progress_mode()} / {m.library_progress_unit()}: <code>{session.mode} / {session.unit}</code>
+        {m.library_progress_mode()} / {m.library_progress_unit()}:{' '}
+        <code>
+          {session.mode} / {session.unit}
+        </code>
       </p>
       {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
         <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>

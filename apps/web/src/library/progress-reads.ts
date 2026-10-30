@@ -56,7 +56,10 @@ function presentationFields(
     structure: 'unverified';
     recording: { state: string; inputRules?: ProgressInputRules };
   },
-): Pick<ProgressSessionCore, 'meaning' | 'recordingState' | 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension' | 'inputRules'> {
+): Pick<
+  ProgressSessionCore,
+  'meaning' | 'recordingState' | 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension' | 'inputRules'
+> {
   const meaning =
     presentation.meaning === 'known' || presentation.meaning === 'unknown' ? presentation.meaning : 'unavailable';
   const recordingState =
@@ -70,7 +73,9 @@ function presentationFields(
       ? {}
       : {
           ...(presentation.unitLabel === undefined ? {} : { unitLabel: presentation.unitLabel }),
-          ...(presentation.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: presentation.unitLabelLanguage }),
+          ...(presentation.unitLabelLanguage === undefined
+            ? {}
+            : { unitLabelLanguage: presentation.unitLabelLanguage }),
           ...(presentation.unitCountForms === undefined ? {} : { unitCountForms: presentation.unitCountForms }),
           ...(presentation.dimension === undefined ? {} : { dimension: presentation.dimension }),
         }),
