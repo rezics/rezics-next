@@ -63,11 +63,11 @@ async function nativeAuth(pool: Pool, admin = pool) {
     account.state = 'active';
     return account;
   }
-  async function signin(owner: string) {
+  async function signin(owner: string, clientId = 'point-web') {
     const response = await request('/signin', '', {
       account_id: owner,
       password,
-      client_id: 'point-web',
+      client_id: clientId,
       scope: ['read'],
     });
     expect(response.status).toBe(200);
@@ -84,6 +84,8 @@ async function nativeAuth(pool: Pool, admin = pool) {
   return {
     person,
     signin,
+    registerClient: (clientId: string) =>
+      auth.internal.registerClient({ clientId, firstParty: true, scopes: ['read'] }),
     request,
     revoke: (id: string, cookie: string) => request('/sessions/revoke', cookie, { session_id: id }),
     changeAfterOwnerRead(change: () => Promise<void>) {
@@ -251,8 +253,12 @@ test('native session revoke examines a fixed exact session neighborhood as the s
     // a vacuum's aborted DELETE nor an earlier warmup can consume the target.
     async function prepare(scale: number) {
       const owner = (await f.person()).accountId;
-      const caller = await f.signin(owner);
-      const target = await f.signin(owner);
+      // Keep the selected client/consent neighborhood fixed as well as the
+      // selected owner: earlier physical invocations are unrelated clients.
+      const client = randomUUID();
+      await f.registerClient(client);
+      const caller = await f.signin(owner, client);
+      const target = await f.signin(owner, client);
       const connection = await db.admin.connect();
       try {
         await connection.query('BEGIN');
@@ -262,10 +268,10 @@ test('native session revoke examines a fixed exact session neighborhood as the s
         await connection.query('UPDATE "user" SET sessions_bounded=false WHERE id=$1', [owner]);
         await connection.query(
           `INSERT INTO session (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
-           SELECT $1||'-history-'||i,$1||'-history-'||i,$1,'point-web',
+           SELECT $1||'-history-'||i,$1||'-history-'||i,$1,$3,
              CASE WHEN i<=62 THEN '2099-01-01'::timestamptz ELSE '2000-01-01'::timestamptz END,
              now(),'read',1,1,'pwd' FROM generate_series(1,$2::int+62) i`,
-          [owner, scale * 1000],
+          [owner, scale * 1000, client],
         );
         await connection.query('ALTER TABLE session ENABLE TRIGGER session_capacity');
         await connection.query('COMMIT');
