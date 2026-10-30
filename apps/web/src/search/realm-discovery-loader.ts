@@ -81,15 +81,16 @@ export function reduceRealmDiscovery(
   previous: RealmDiscoveryWindow,
   incoming: RealmDiscoveryState,
 ): RealmDiscoveryWindow {
-  if (incoming.kind === 'loading')
-    return { state: previous.state.kind === 'ready' ? previous.state : incoming, pending: true, retry: false };
-  if (incoming.kind === 'closed') return { state: incoming, pending: false, retry: false };
-  if (incoming.kind === 'unavailable')
+  if (incoming.kind !== 'ready') {
+    if (incoming.kind === 'loading')
+      return { state: previous.state.kind === 'ready' ? previous.state : incoming, pending: true, retry: false };
+    if (incoming.kind === 'closed') return { state: incoming, pending: false, retry: false };
     return {
       state: previous.state.kind === 'ready' ? previous.state : incoming,
       pending: false,
       retry: true,
     };
+  }
   const realms = new Map(
     (previous.state.kind === 'ready' ? previous.state.realms : []).map((realm) => [realm.realmId, realm]),
   );
