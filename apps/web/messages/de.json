@@ -2927,5 +2927,12 @@
   "ctxw_delete": "Kontext löschen",
   "ctxw_delete_help": "Durch das Löschen ist dieser Kontext als redaktionelle Quelle nicht mehr verfügbar. Berechtigte Kontexte können normalerweise innerhalb von 30 Tagen wiederhergestellt werden; aktuelle Serverprüfungen bleiben maßgeblich.",
   "ctxw_no_action": "Für diese Ressource ist derzeit keine Lebenszyklusaktion verfügbar.",
-  "ctxw_cancel": "Abbrechen"
+  "ctxw_cancel": "Abbrechen",
+  "subject_context_navigation": "Lesekontext",
+  "subject_context_selected": "Ansicht in {title}",
+  "subject_context_global": "Globale Ansicht",
+  "subject_context_fallback": "Diese Auswahl hat die aktuelle globale Ansicht zurückgegeben.",
+  "subject_context_return": "Zurück zu {title}",
+  "subject_context_switch_global": "Globale Ansicht öffnen",
+  "subject_context_retry": "Auswahl erneut versuchen"
 }

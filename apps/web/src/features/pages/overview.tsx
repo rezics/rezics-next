@@ -51,6 +51,8 @@ export type Section =
 export type OverviewValue = {
   locale: string;
   context?: SelectedContext;
+  realm?: string | undefined;
+  cacheReader?: string | null | undefined;
   subject: string | null;
   subjectLabel?: string;
   /** The account an agent page is for, and the address of its overview. */
@@ -145,8 +147,9 @@ export function viewHref(value: OverviewValue, view: string, property?: string):
         property === undefined ? '' : `?property=${encodeURIComponent(property)}`,
       )
     : null;
-  if (!href || value.context?.population.kind !== 'realm') return href;
-  return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(value.context.population.id)}`;
+  const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
+  if (!href || !realm) return href;
+  return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(realm)}`;
 }
 
 /** A native continuation belongs to exactly one configured node/property stream. */

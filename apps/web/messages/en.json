@@ -3248,5 +3248,12 @@
   "ctxw_delete": "Delete Context",
   "ctxw_delete_help": "Deletion makes this Context unavailable as an editorial source. A normally eligible Context can be restored within 30 days; current server retention and permission checks still apply.",
   "ctxw_no_action": "No lifecycle action is currently available for this resource.",
-  "ctxw_cancel": "Cancel"
+  "ctxw_cancel": "Cancel",
+  "subject_context_navigation": "Reading context",
+  "subject_context_selected": "Reading in {title}",
+  "subject_context_global": "Reading Global",
+  "subject_context_fallback": "This selection returned the current Global reading.",
+  "subject_context_return": "Return to {title}",
+  "subject_context_switch_global": "Read Global",
+  "subject_context_retry": "Retry this selection"
 }

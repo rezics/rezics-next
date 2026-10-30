@@ -1,3 +1,6 @@
+import { contextSubjectAddress } from '../../features/pages/context-subject';
+import { PendingPage } from '../../shell/pending';
+import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { isView, type View } from '@rezics/composition';
 import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -7,6 +10,8 @@ import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/page
 import { subjectTabs } from '../../features/pages/views';
 import {
   subjectCanonicalQuery,
+  subjectRequestReader,
+  subjectKernelClient,
   subjectPageQuery,
   subjectFrameQuery,
   canonicalRedirect,
@@ -18,7 +23,7 @@ import {
   subjectViewPagesQuery,
 } from '../../features/pages/subject-queries';
 import { useSession } from '../../session/query';
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { defaultReader } from '../../subject/reader';
 import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
@@ -68,15 +73,23 @@ const readView = createServerFn({ method: 'GET', strict: false })
     )
       throw notFound();
     const cursor = validateViewCursor('cursor' in input ? input.cursor : undefined);
-    return { id: input.id, slug: input.slug, view: input.view, locale: input.locale, search: input.search, cursor };
+    return {
+      realm: validatePageRealm('realm' in input ? input.realm : undefined),
+      reader: 'reader' in input && typeof input.reader === 'string' ? input.reader : null,
+      id: input.id,
+      slug: input.slug,
+      view: input.view,
+      locale: input.locale,
+      search: input.search,
+      cursor,
+    };
   })
   .handler(async ({ data }) => {
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
-    const client = kernelClient(data.locale);
-    const canonical = await loadSubject(client, data.id, data.locale as never);
+    if (data.realm)
+      return { href: `/${data.locale}/subjects/${data.id}/${data.slug}`, paths: {} as Record<string, string> };
+    const { loadContextSubject } = await import('../../features/pages/context-subject');
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    const canonical = await loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, data.view), data.search));
@@ -86,6 +99,9 @@ const readView = createServerFn({ method: 'GET', strict: false })
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   staticData: { publicCache: false },
+  staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   errorComponent: SubjectViewError,
   // Validate the cursor in the loader so invalid input answers the not-found document.
   validateSearch: (search: Record<string, unknown>) => ({
@@ -95,10 +111,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor, realm: search.realm, node: search.node }),
   loader: async ({ params, location, context, deps }) => {
+    const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     if (!isView(params.view) || params.view === 'overview') throw notFound();
     const cursor = validateViewCursor(deps.cursor);
-    const canonical = await readView({
+    let canonical = await readView({
       data: {
+        realm: deps.realm,
+        reader,
         id: params.id,
         slug: params.slug,
         view: params.view,
@@ -107,16 +126,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
         cursor,
       },
     });
-    // Reuse the current page read for the head; a retained navigation result is not public proof.
-    await context.queryClient.fetchQuery(
-      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
-    );
-    const loaded = await context.queryClient.ensureQueryData(
-      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
+    // Reuse the current native reading for the head, never a retained navigation result.
+    const loaded = await context.queryClient.fetchQuery(
+      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node, reader),
     );
     if (loaded.kind === 'missing') {
-      const overview = await context.queryClient.ensureQueryData(
-        subjectPageQuery(params.id, getLocale(), 'overview', deps.realm),
+      const overview = await context.queryClient.fetchQuery(
+        subjectPageQuery(params.id, getLocale(), 'overview', deps.realm, reader),
       );
       if (overview.kind !== 'page') throw notFound();
       throw redirect(canonicalRedirect(canonical.href, location.searchStr, location.hash, 302));
@@ -128,13 +144,21 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
           statusCode: 301,
           headers: { 'Cache-Control': 'private, no-store' },
         });
-      const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(loaded.id, getLocale()));
+      const survivor = await context.queryClient.fetchQuery(
+        subjectCanonicalQuery(loaded.id, getLocale(), deps.realm, reader),
+      );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
         href: keepSearch(subjectUrlForView(survivor.value, params.view), location.searchStr, location.hash),
         statusCode: 301,
         headers: { 'Cache-Control': 'private, no-store' },
       });
+    }
+    if (deps.realm) {
+      const address = contextSubjectAddress(loaded.overview, getLocale());
+      if (address.slug !== params.slug)
+        throw redirect(canonicalRedirect(subjectUrlForView(address, params.view), location.searchStr, location.hash));
+      canonical = { href: address.href, paths: subjectViewPaths(address.paths, params.view) };
     }
     const frame = subjectFrame(loaded.overview, getLocale());
     if (!frame) throw notFound();
@@ -143,7 +167,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       (loaded.overview.views !== undefined && !loaded.overview.views.includes(params.view)) ||
       ((params.view === 'reviews' || params.view === 'discussion') && !tabs.some((tab) => tab.view === params.view))
     ) {
-      const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(params.id, getLocale()));
+      const survivor = await context.queryClient.fetchQuery(
+        subjectCanonicalQuery(params.id, getLocale(), deps.realm, reader),
+      );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect(canonicalRedirect(subjectUrlForView(survivor.value), location.searchStr, location.hash, 302));
     }
@@ -155,6 +181,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
         : undefined;
     return {
       ...canonical,
+      reader,
       view: params.view,
       page: loaded.page,
       shareCard: loaded.shareCard,
@@ -187,12 +214,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
 });
 
 function SubjectViewRoute() {
-  const { type, frame, tabs, view, cursor, nextHref, realm, node } = Route.useLoaderData();
-  const { state: session } = useSession();
-  const { id } = Route.useParams();
-  const { data: loaded } = useSuspenseQuery(subjectViewPagesQuery(id, getLocale(), view, cursor, realm, node));
-  const page = loaded.kind === 'page' ? loaded.page : undefined;
-  if (!page) throw notFound();
+  const { type, frame, tabs, view, cursor, nextHref, realm, reader: initialReader, page } = Route.useLoaderData();
+  const browserSession = useSession();
+  const { state: session } = browserSession;
+  const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
+  const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const { data: reader } = useQuery({
     ...subjectReaderQuery(page.subject!, getLocale()),
     enabled: session === 'signed-in',
@@ -200,11 +226,14 @@ function SubjectViewRoute() {
   const reviewSession = session === 'unknown' ? 'unavailable' : session;
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
+  if (!currentReader) return <PendingPage />;
   return (
     <SubjectViewPage
       page={page}
       subjectLabel={frame.title.text}
-      curation={view === 'details' ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined}
+      curation={
+        view === 'details' && !realm ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined
+      }
       locale={locale}
       messages={subjectPageMessages()}
       reader={reader ?? defaultReader}

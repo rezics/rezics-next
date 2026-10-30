@@ -233,6 +233,7 @@ export function CandidateValue({
   locale,
   subject,
   documents,
+  link = PlainLink,
 }: {
   snak: Snak & { id?: string };
   related: Related;
@@ -240,6 +241,7 @@ export function CandidateValue({
   subject?: string;
   /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
   documents?: unknown;
+  link?: PageLink;
 }) {
   const messages = {
     ...subjectMessages,
@@ -289,7 +291,7 @@ export function CandidateValue({
     inlineValue(snak, related, {
       locale,
       messages,
-      link: PlainLink,
+      link,
       reader: defaultReader,
       frame: {},
       labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
@@ -660,6 +662,8 @@ export function PageData({
   continuation,
   listTarget,
   fullList,
+  realm,
+  cacheReader,
   account,
   operator,
   base,
@@ -681,6 +685,8 @@ export function PageData({
   continuation?: PageContinuation | undefined;
   listTarget?: TypeListTarget | undefined;
   fullList?: string | undefined;
+  realm?: string | undefined;
+  cacheReader?: string | null | undefined;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
   operator?: { id: string; handle: string | null; displayName: string | null };
@@ -789,6 +795,7 @@ export function PageData({
       : undefined;
   const overviewValue: overview.OverviewValue = {
     locale,
+    cacheReader,
     subject,
     ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),
     ...(account ? { account } : {}),
@@ -808,6 +815,7 @@ export function PageData({
     sources: resolved.sources,
     sections,
     ...(context ? { context } : {}),
+    ...(realm ? { realm } : {}),
     ...(about ? { about } : {}),
     relations,
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),

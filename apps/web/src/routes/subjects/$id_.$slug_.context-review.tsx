@@ -1,3 +1,9 @@
+import { subjectKernelClient } from '../../features/pages/subject-queries';
+import { validatePageRealm } from '../../features/pages/view-cursor';
+import { ContextNavigation } from '../../features/pages/context-navigation';
+import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
+import { useSession } from '../../session/query';
+import { PendingPage } from '../../shell/pending';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
@@ -12,7 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, subjectUrlForView } from '../../subject/subject-href';
 
 const readContextPage = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { id: string; slug: string; locale: string; search: string }) => {
+  .validator((input: { id: string; slug: string; locale: string; search: string; realm?: string | undefined }) => {
     if (
       !/^[0-9a-f-]{36}$/i.test(input.id) ||
       typeof input.slug !== 'string' ||
@@ -23,20 +29,19 @@ const readContextPage = createServerFn({ method: 'GET', strict: false })
       input.search.length > 2048
     )
       throw notFound();
-    return input;
+    return { ...input, realm: validatePageRealm(input.realm) };
   })
   .handler(async ({ data }) => {
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
-    const client = kernelClient(data.locale);
-    const [canonical, page] = await Promise.all([
-      loadSubject(client, data.id, data.locale as never),
-      loadSubjectPage(client, data.id, 'overview', data.locale),
-    ]);
-    if (canonical.kind === 'missing' || page.kind === 'missing') throw notFound();
-    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)
+    const { loadContextSubject, contextSubjectAddress } = await import('../../features/pages/context-subject');
+    const { client, authorization, reader } = await subjectKernelClient(data.locale, data.realm);
+    const page = await loadSubjectPage(client, data.id, 'overview', data.locale, { realm: data.realm, authorization });
+    if (page.kind === 'missing') throw notFound();
+    const canonical =
+      data.realm && page.kind === 'page'
+        ? { kind: 'subject' as const, value: contextSubjectAddress(page.page, data.locale) }
+        : await loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
+    if (canonical.kind === 'missing') throw notFound();
+    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, 'context-review'), data.search));
     if (page.kind !== 'page') throw notFound();
     const frame = subjectFrame(page.page, data.locale);
@@ -44,6 +49,7 @@ const readContextPage = createServerFn({ method: 'GET', strict: false })
     return {
       page: page.page,
       frame,
+      reader,
     };
   });
 
@@ -71,12 +77,22 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
     }
     if ((slot.target && slot.sameAs) || (slot.key && !slot.target) || (Object.keys(slot).length && !property))
       throw notFound();
-    return { context: search.context, property, slot: Object.keys(slot).length ? slot : undefined };
+    return {
+      realm: validatePageRealm(search.realm),
+      context: search.context,
+      property,
+      slot: Object.keys(slot).length ? slot : undefined,
+    };
   },
 
-  loader: ({ params, location }) =>
+  staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
+  loaderDeps: ({ search }) => ({ realm: search.realm }),
+  loader: ({ params, location, deps }) =>
     readContextPage({
       data: {
+        realm: deps.realm,
         id: params.id,
         slug: params.slug,
         locale: getLocale(),
@@ -87,20 +103,29 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
   component: ContextReviewRoute,
 });
 function ContextReviewRoute() {
-  const { page, frame } = Route.useLoaderData();
-  const { context, property, slot } = Route.useSearch();
+  const { page, frame, reader } = Route.useLoaderData();
+  const { realm, context, property, slot } = Route.useSearch();
+  const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, useSession()));
   const { slug } = Route.useParams();
+  if (!currentReader) return <PendingPage />;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <SubjectFrame
         frame={frame}
         context={context}
+        realm={realm}
         locale={getLocale()}
         link={SubjectLink}
         unlabelled={m.subject_value_unlabelled()}
         tabs={subjectTabs(page)}
         tabLabels={viewTabLabels()}
         view="overview"
+      />
+      <ContextNavigation
+        context={page.context}
+        realm={realm}
+        href={subjectUrlForView({ href: `/${getLocale()}/subjects/${frame.id}/${slug}` })}
+        locale={getLocale()}
       />
       <h1 className="text-2xl font-semibold">{m.context_title()}</h1>
       <ContextCurationSession
@@ -110,7 +135,7 @@ function ContextReviewRoute() {
         property={property}
         slot={slot}
         locale={getLocale()}
-        createHref={editorialCreateHref(getLocale(), frame.id, slug)}
+        {...(!realm ? { createHref: editorialCreateHref(getLocale(), frame.id, slug) } : {})}
       />
     </article>
   );

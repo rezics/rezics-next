@@ -1,8 +1,14 @@
-import type { SessionEnv } from '../../session/client';
 import type { KernelClient } from '@rezics/client';
-import { isView, planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import {
+  PAGE_GLOBAL_CONTEXT,
+  isView,
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+  type View,
+} from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { setResponseHeader } from '@tanstack/react-start/server';
 import { notFound } from '@tanstack/react-router';
 import { pageContext, loadSubjectPage, PageReadError } from './subject';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
@@ -16,6 +22,10 @@ export type RelationGroupRequest = {
   node: string;
   cursor: string;
   realm?: string | undefined;
+  reader?: string | null;
+  /** Expected current representation, never a Context override or a grant. */
+  context?: string;
+  population?: 'global' | 'realm';
 };
 export const relationGroupKey = (input: RelationGroupRequest) =>
   [
@@ -26,6 +36,9 @@ export const relationGroupKey = (input: RelationGroupRequest) =>
     input.realm ?? null,
     input.node,
     input.cursor,
+    input.reader ?? null,
+    input.context ?? null,
+    input.population ?? null,
   ] as const;
 
 /** The native page resolver selects the current template, Context and one continued stream. */
@@ -46,6 +59,11 @@ export async function readRelationGroup(
     throw error;
   }
   if (loaded.kind !== 'page') return { ok: false, status: loaded.kind === 'missing' ? 404 : 409 };
+  if (
+    (input.context !== undefined && input.context !== (loaded.page.context?.id ?? PAGE_GLOBAL_CONTEXT)) ||
+    (input.population !== undefined && input.population !== (loaded.page.context?.population.kind ?? 'global'))
+  )
+    return { ok: false, status: 409 };
   const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
   const key = plan.nodes[input.node];
   const read = key ? plan.reads[key] : undefined;
@@ -67,6 +85,13 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       !isView(value.view)
     )
       throw notFound();
+    if (
+      (value.reader !== undefined &&
+        value.reader !== null &&
+        (typeof value.reader !== 'string' || !value.reader || value.reader.length > 128)) ||
+      (value.population !== undefined && value.population !== 'global' && value.population !== 'realm')
+    )
+      throw notFound();
     const node = validatePageNode(value.node);
     const cursor = validateViewCursor(value.cursor);
     if (!node || !cursor) throw notFound();
@@ -77,17 +102,14 @@ export const loadRelationGroup = createServerFn({ method: 'GET', strict: false }
       node,
       cursor,
       realm: validatePageRealm(value.realm),
+      ...(value.reader !== undefined ? { reader: value.reader as string | null } : {}),
+      ...(value.context !== undefined ? { context: validatePageRealm(value.context)! } : {}),
+      ...(value.population !== undefined ? { population: value.population } : {}),
     };
   })
   .handler(async ({ data }) => {
-    const { kernelClient } = await import('../../kernel/client');
-    let authorization: string | undefined;
-    if (data.realm) {
-      const { env } = await import('cloudflare:workers');
-      const { prepareSession, viewerCredential } = await import('../../session/request');
-      setResponseHeader('cache-control', 'private, no-store');
-      await prepareSession(getRequest(), env as Partial<SessionEnv>);
-      authorization = viewerCredential(getRequest()) ?? undefined;
-    }
-    return readRelationGroup(kernelClient(data.locale), data, authorization);
+    const { subjectKernelClient } = await import('./subject-queries');
+    setResponseHeader('cache-control', 'private, no-store');
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
+    return readRelationGroup(client, data, authorization);
   });

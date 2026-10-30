@@ -1,7 +1,8 @@
+import { ContextNavigation, contextHref } from '../pages/context-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CandidateValue } from '../pages/data';
 import { SourcesSection, type OverviewValue } from '../pages/overview';
-import { PlainLink } from '../pages/shared';
+import { PlainLink, type PageLink } from '../pages/shared';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { defaultReader } from '../../subject/reader';
@@ -10,7 +11,17 @@ import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sourc
 
 type Props = { result: SourcesResult | { kind: 'loading' }; locale: string; onRetry?: () => void; busy?: boolean };
 
-function CitationPart({ part, page, locale }: { part: SourcePart; page: SourcesPageData; locale: string }) {
+function CitationPart({
+  part,
+  page,
+  locale,
+  link,
+}: {
+  part: SourcePart;
+  page: SourcesPageData;
+  locale: string;
+  link: PageLink;
+}) {
   return (
     <div className="min-w-0 break-words text-sm">
       {part.label.text && (
@@ -18,7 +29,7 @@ function CitationPart({ part, page, locale }: { part: SourcePart; page: SourcesP
           {part.label.text}
         </span>
       )}
-      <CandidateValue snak={part.snak} related={page.related} locale={locale} />
+      <CandidateValue snak={part.snak} related={page.related} locale={locale} link={link} />
     </div>
   );
 }
@@ -51,12 +62,14 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
       </article>
     );
   const { page } = result;
+  const ContextLink: PageLink = ({ href, ...props }) => <PlainLink {...props} href={contextHref(href, page.realm)} />;
   const unlabelled = m.subject_value_unlabelled({}, o);
   const value: OverviewValue = {
     locale,
     subject: page.id,
     subjectLabel: page.title.text,
-    link: PlainLink,
+    link: ContextLink,
+    realm: page.realm,
     reader: defaultReader,
     labels: { spoilerShow: '', documentSpoiler: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
     unlabelled,
@@ -77,6 +90,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}
         locale={locale}
+        realm={page.realm}
         unlabelled={unlabelled}
         {...(page.typeLabel.text ? { typeLabel: page.typeLabel.text } : {})}
         tabs={[]}
@@ -87,7 +101,10 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
             <a className="underline underline-offset-4" href={page.href}>
               {m.sources_back({}, o)}
             </a>
-            <a className="underline underline-offset-4" href={`${page.href}/details`}>
+            <a
+              className="underline underline-offset-4"
+              href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}
+            >
               {m.subject_details({}, o)}
             </a>
             <span aria-current="page" className="font-medium">
@@ -95,6 +112,12 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
             </span>
           </nav>
         }
+      />
+      <ContextNavigation
+        context={page.context}
+        realm={page.realm}
+        href={page.sourcesHref.split('?', 1)[0]!}
+        locale={locale}
       />
       <div className="space-y-2">
         <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
@@ -130,11 +153,11 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
                     ) : fact.display === 'media' ? (
                       m.sources_media({}, o)
                     ) : (
-                      <CandidateValue snak={fact.snak} related={page.related} locale={locale} />
+                      <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
                     )}
                   </div>
                   {fact.qualifiers.map((part, i) => (
-                    <CitationPart key={i} part={part} page={page} locale={locale} />
+                    <CitationPart key={i} part={part} page={page} locale={locale} link={ContextLink} />
                   ))}
                   {fact.citations.length ? (
                     <div className="space-y-2">
@@ -143,7 +166,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
                         {fact.citations.map((citation, i) => (
                           <li key={i}>
                             {citation.map((part, j) => (
-                              <CitationPart key={j} part={part} page={page} locale={locale} />
+                              <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
                             ))}
                           </li>
                         ))}

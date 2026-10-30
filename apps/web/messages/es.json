@@ -2927,5 +2927,12 @@
   "ctxw_delete": "Eliminar contexto",
   "ctxw_delete_help": "La eliminación impide usar este contexto como fuente editorial. Normalmente, un contexto apto puede restaurarse en 30 días; siguen siendo necesarias las comprobaciones actuales del servidor.",
   "ctxw_no_action": "No hay ninguna acción de ciclo de vida disponible para este recurso.",
-  "ctxw_cancel": "Cancelar"
+  "ctxw_cancel": "Cancelar",
+  "subject_context_navigation": "Contexto de lectura",
+  "subject_context_selected": "Leyendo en {title}",
+  "subject_context_global": "Lectura global",
+  "subject_context_fallback": "Esta selección devolvió la lectura global actual.",
+  "subject_context_return": "Volver a {title}",
+  "subject_context_switch_global": "Leer la versión global",
+  "subject_context_retry": "Reintentar esta selección"
 }

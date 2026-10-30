@@ -32,9 +32,11 @@ import { subjectHref } from '../../subject/subject-href';
 import { pageText } from './data';
 import { dateText } from './overview';
 import { linkClass, linkColor, bestRank, isRecord, PlainLink, type PageLink, type Stmt } from './shared';
-import { loadSubjectPage, pageContext, SubjectPage, type SubjectPageData } from './subject';
+import { loadSubjectPage, pageContext, PageReadError, SubjectPage, type SubjectPageData } from './subject';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
+import { assertSamePageContext } from './context-subject';
+import { contextHref } from './context-navigation';
 import { ViewHeadingActions } from './view-heading';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
 
@@ -137,6 +139,7 @@ export async function loadViewPages(
     if (!primary) return { kind: 'missing' };
     const primaryRead = plan.reads[primary[1]];
     if (primaryRead?.kind === 'collections') {
+      if (first.page.context?.population.kind === 'realm') throw new PageReadError('dependency_unavailable', 503);
       const response = await client.subjects({ id }).collections.get({
         query: { limit: primaryRead.limit, cursor },
         ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
@@ -149,11 +152,13 @@ export async function loadViewPages(
         continuation: { node: primary[0], cursor },
       });
       if (continued.kind !== 'page') return continued;
+      assertSamePageContext(first.page, continued.page);
       result = continued;
     }
   }
   const overview = await loadSubjectPage(client, id, undefined, locale, options);
   if (overview.kind !== 'page') return overview;
+  assertSamePageContext(result.page, overview.page);
   const currentPlan = planReads(
     platformRegistry,
     result.page.document as CompositionDocument,
@@ -242,10 +247,7 @@ export function SubjectFrame({
             <span
               className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-serif text-lg font-semibold`}
             >
-              <Link
-                href={realm ? `${base}?${new URLSearchParams({ realm })}` : base}
-                {...(frame.title.lang ? { lang: frame.title.lang } : {})}
-              >
+              <Link href={contextHref(base, realm)} {...(frame.title.lang ? { lang: frame.title.lang } : {})}>
                 {title}
               </Link>
             </span>
@@ -261,31 +263,48 @@ export function SubjectFrame({
             </p>
           )}
         </div>
-        <div data-slot="actions">
-          <EditorialEntry id={frame.id} label={title} locale={locale} context={context ?? frame.context} realm={realm}>
-            {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
-            <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
-            <CreateSubjectEntry locale={locale} />
-            {frame.type === 'wd:Q95074' && <CharacterProfileEntry id={frame.id} label={title} locale={locale} />}
-            {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (
-              <CharacterProfileEntry work={frame.id} locale={locale} />
-            )}
-            <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
-            <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
-            {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
-            <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
-            {view === 'contents' && (
-              <WorkPartsEntry
-                id={frame.id}
-                label={title}
-                locale={locale}
-                context={context ?? frame.context}
-                realm={realm}
-              />
-            )}
-            <SubjectChangesLink id={frame.id} title={title} locale={locale} />
-          </EditorialEntry>
-        </div>
+        {!realm && (
+          <div data-slot="actions">
+            <EditorialEntry
+              id={frame.id}
+              label={title}
+              locale={locale}
+              context={context ?? frame.context}
+              realm={realm}
+            >
+              {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
+              <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
+              <CreateSubjectEntry locale={locale} />
+              {frame.type === 'wd:Q95074' && <CharacterProfileEntry id={frame.id} label={title} locale={locale} />}
+              {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (
+                <CharacterProfileEntry work={frame.id} locale={locale} />
+              )}
+              <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
+              <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
+              {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
+              <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+              {view === 'contents' && (
+                <WorkPartsEntry
+                  id={frame.id}
+                  label={title}
+                  locale={locale}
+                  context={context ?? frame.context}
+                  realm={realm}
+                />
+              )}
+              <SubjectChangesLink id={frame.id} title={title} locale={locale} />
+            </EditorialEntry>
+          </div>
+        )}
+        {realm && view === 'contents' && (
+          <WorkPartsEntry
+            id={frame.id}
+            label={title}
+            locale={locale}
+            context={context ?? frame.context}
+            realm={realm}
+          />
+        )}
       </header>
       {navigation ?? (
         <ViewTabs

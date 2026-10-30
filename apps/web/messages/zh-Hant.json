@@ -2927,5 +2927,12 @@
   "ctxw_delete": "刪除語境",
   "ctxw_delete_help": "刪除後，此語境將無法作為編輯來源。一般符合條件的語境可在 30 天內還原，仍須通過伺服器目前的保留與權限檢查。",
   "ctxw_no_action": "此資源目前沒有可用的生命週期操作。",
-  "ctxw_cancel": "取消"
+  "ctxw_cancel": "取消",
+  "subject_context_navigation": "閱讀情境",
+  "subject_context_selected": "正在閱讀「{title}」的內容",
+  "subject_context_global": "正在閱讀 Global",
+  "subject_context_fallback": "目前的選擇傳回了最新的 Global 內容。",
+  "subject_context_return": "返回「{title}」",
+  "subject_context_switch_global": "閱讀 Global",
+  "subject_context_retry": "重試目前的選擇"
 }

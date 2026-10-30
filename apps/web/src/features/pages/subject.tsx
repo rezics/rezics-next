@@ -20,7 +20,7 @@ import {
   type PageContinuation,
 } from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import type { ComponentProps, ReactNode } from 'react';
+import { useMemo, type ComponentProps, type ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
@@ -34,12 +34,13 @@ import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld
 import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
-import { linkClass, linkColor } from './shared';
+import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
 import { SubjectCommunityContext } from './subject-community-view';
 import { subjectUrlForView } from '../../subject/subject-href';
+import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -50,6 +51,10 @@ export type SubjectPageData = {
   /** The account an agent page is for, as the page read named it. */
   account?: { id: string; handle: string };
   context?: SelectedContext | undefined;
+  /** The requested selector survives a native Global fallback without inventing Realm metadata. */
+  requestedRealm?: string | undefined;
+  /** BFF cache identity of this reading; never native read authority. */
+  requestedReader?: string | null | undefined;
   continuation?: PageContinuation | undefined;
   community?: SubjectCommunity;
   profile: string;
@@ -189,12 +194,14 @@ export async function loadSubjectPage(
       }
       // A handleless account supplies no public @ address. Retain the valid catalogue identity.
       const { account: _account, ...catalogue } = result.data;
-      if (catalogue.subject === id) return { kind: 'page', page: { ...catalogue, subject: id } };
+      if (catalogue.subject === id)
+        return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
+    if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
     const { account: _account, ...page } = result.data;
-    return { kind: 'page', page: { ...page, subject: page.subject ?? null } };
+    return { kind: 'page', page: { ...page, subject: page.subject ?? null, requestedRealm: options.realm } };
   }
   throw problemError(result.error?.value, result.status);
 }
@@ -264,7 +271,7 @@ export function subjectPageJsonLd(
     ...(options.typeLabel ? { typeLabel: options.typeLabel } : {}),
     subjectLabel: subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)),
     ...(options.schemaOrgType ? { schemaOrgType: options.schemaOrgType } : {}),
-    ...(options.ratings ? { ratings: options.ratings } : {}),
+    ...(options.ratings && page.context?.population.kind !== 'realm' ? { ratings: options.ratings } : {}),
     url: `${origin}${subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href}`,
   });
   const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
@@ -378,8 +385,16 @@ export function SubjectPage({
   const overview = view === 'overview';
   const read = subjectBody(page);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
+  const realm =
+    page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined);
+  const ContextLink = useMemo(() => {
+    const Link = link ?? PlainLink;
+    return function SelectedLink(props: ComponentProps<PageLink>) {
+      return <Link {...props} href={contextHref(props.href, realm)} />;
+    };
+  }, [link, realm]);
   const renderedActions =
-    read && !page.account ? (
+    read && !page.account && !realm ? (
       <>
         {existingActions}
         <EditorialEntry
@@ -430,7 +445,7 @@ export function SubjectPage({
             locale,
           ).href
         }
-        realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
+        realm={realm}
         labels={tabLabels}
       />
     ) : null;
@@ -475,9 +490,11 @@ export function SubjectPage({
           document={page.document}
           reads={page.reads}
           context={page.context}
+          realm={realm}
+          cacheReader={page.requestedReader}
           continuation={page.continuation}
           messages={messages}
-          {...(link ? { link } : {})}
+          link={ContextLink}
           {...(reader ? { reader } : {})}
           {...(typeLabel ? { typeLabel } : {})}
           {...(ratio ? { ratio } : {})}
@@ -488,7 +505,7 @@ export function SubjectPage({
             {!overview && heading && (
               <header className="min-w-0 space-y-1" data-slot="view-heading">
                 <p className="text-sm break-words">
-                  <a className={`${linkClass} ${linkColor}`} href={heading.href}>
+                  <a className={`${linkClass} ${linkColor}`} href={contextHref(heading.href, realm)}>
                     {heading.title}
                   </a>
                 </p>
@@ -497,8 +514,19 @@ export function SubjectPage({
                 </h1>
               </header>
             )}
-            {page.context?.population.kind === 'realm' && (
-              <p data-slot="page-context">{page.context.population.title}</p>
+            {!page.account && (
+              <ContextNavigation
+                context={page.context}
+                realm={realm}
+                href={subjectUrlForView(
+                  subjectHref(
+                    { id: page.subject ?? '', label: subjectLabel ?? subjectPageTitle(page, locale) },
+                    locale,
+                  ),
+                  view,
+                )}
+                locale={locale}
+              />
             )}
             {!overview && bar}
             {overview && !header && afterHeader}
@@ -516,26 +544,22 @@ export function SubjectPage({
             {overview && read && !page.account && (
               <a
                 className={`${linkClass} ${linkColor}`}
-                href={`${subjectUrlForView(subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale), 'context-review')}?${new URLSearchParams({ context: page.context?.id ?? read.subject.context })}`}
+                href={`${subjectUrlForView(subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale), 'context-review')}?${new URLSearchParams({ context: page.context?.id ?? read.subject.context, ...(realm ? { realm } : {}) })}`}
               >
                 {m.context_title({}, { locale: locale as never })}
               </a>
             )}
-            {overview &&
-              read &&
-              !page.account &&
-              read.subject.context === candidateContext &&
-              page.context?.population.kind !== 'realm' && (
-                <a
-                  className={`${linkClass} ${linkColor}`}
-                  href={subjectUrlForView(
-                    subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale),
-                    'relation-edit',
-                  )}
-                >
-                  {m.relation_title({}, { locale: locale as never })}
-                </a>
-              )}
+            {overview && read && !page.account && read.subject.context === candidateContext && !realm && (
+              <a
+                className={`${linkClass} ${linkColor}`}
+                href={subjectUrlForView(
+                  subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale),
+                  'relation-edit',
+                )}
+              >
+                {m.relation_title({}, { locale: locale as never })}
+              </a>
+            )}
           </div>
         </PageData>
       </PageHost>

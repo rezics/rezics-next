@@ -2927,5 +2927,12 @@
   "ctxw_delete": "Supprimer le contexte",
   "ctxw_delete_help": "La suppression rend ce contexte indisponible comme source éditoriale. Un contexte normalement admissible peut être restauré sous 30 jours ; les contrôles actuels du serveur restent applicables.",
   "ctxw_no_action": "Aucune action de cycle de vie n’est actuellement disponible pour cette ressource.",
-  "ctxw_cancel": "Annuler"
+  "ctxw_cancel": "Annuler",
+  "subject_context_navigation": "Contexte de lecture",
+  "subject_context_selected": "Lecture dans {title}",
+  "subject_context_global": "Lecture globale",
+  "subject_context_fallback": "Cette sélection a renvoyé la lecture globale actuelle.",
+  "subject_context_return": "Retour à {title}",
+  "subject_context_switch_global": "Lire la version globale",
+  "subject_context_retry": "Réessayer cette sélection"
 }

@@ -2927,5 +2927,12 @@
   "ctxw_delete": "컨텍스트 삭제",
   "ctxw_delete_help": "삭제하면 이 컨텍스트를 편집 소스로 이용할 수 없습니다. 일반적으로 자격이 있는 컨텍스트는 30일 안에 복원할 수 있지만 서버의 현재 보존 조건과 권한 검사를 통과해야 합니다.",
   "ctxw_no_action": "현재 이 리소스에 사용할 수 있는 수명 주기 작업이 없습니다.",
-  "ctxw_cancel": "취소"
+  "ctxw_cancel": "취소",
+  "subject_context_navigation": "읽기 맥락",
+  "subject_context_selected": "{title}의 내용을 읽는 중",
+  "subject_context_global": "Global 내용을 읽는 중",
+  "subject_context_fallback": "현재 선택에서 최신 Global 내용이 반환되었습니다.",
+  "subject_context_return": "{title}(으)로 돌아가기",
+  "subject_context_switch_global": "Global 읽기",
+  "subject_context_retry": "현재 선택으로 다시 시도"
 }

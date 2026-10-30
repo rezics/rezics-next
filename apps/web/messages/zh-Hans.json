@@ -2928,5 +2928,12 @@
   "ctxw_delete": "删除语境",
   "ctxw_delete_help": "删除后，此语境将无法作为编辑来源。一般符合条件的语境可在 30 天内还原，仍须通过服务器当前的保留与权限检查。",
   "ctxw_no_action": "此资源目前没有可用的生命周期操作。",
-  "ctxw_cancel": "取消"
+  "ctxw_cancel": "取消",
+  "subject_context_navigation": "阅读情境",
+  "subject_context_selected": "正在阅读“{title}”的内容",
+  "subject_context_global": "正在阅读 Global",
+  "subject_context_fallback": "当前的选择返回了最新的 Global 内容。",
+  "subject_context_return": "返回“{title}”",
+  "subject_context_switch_global": "阅读 Global",
+  "subject_context_retry": "重试当前的选择"
 }

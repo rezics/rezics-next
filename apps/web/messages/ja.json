@@ -2927,5 +2927,12 @@
   "ctxw_delete": "コンテキストを削除",
   "ctxw_delete_help": "削除すると編集元として利用できなくなります。通常、対象コンテキストは 30 日以内に復元できますが、サーバーの現在の保持条件と権限の確認が必要です。",
   "ctxw_no_action": "このリソースで現在利用できるライフサイクル操作はありません。",
-  "ctxw_cancel": "キャンセル"
+  "ctxw_cancel": "キャンセル",
+  "subject_context_navigation": "閲覧コンテキスト",
+  "subject_context_selected": "{title} の内容を閲覧中",
+  "subject_context_global": "Global の内容を閲覧中",
+  "subject_context_fallback": "この選択では、現在の Global の内容が返されました。",
+  "subject_context_return": "{title} に戻る",
+  "subject_context_switch_global": "Global を読む",
+  "subject_context_retry": "この選択で再試行"
 }

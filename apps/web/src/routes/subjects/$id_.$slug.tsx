@@ -1,3 +1,7 @@
+import { contextSubjectAddress } from '../../features/pages/context-subject';
+import { contextHref } from '../../features/pages/context-navigation';
+import { PendingPage } from '../../shell/pending';
+import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +21,8 @@ import {
   subjectOwnRatingQuery,
   subjectOwnReactionQuery,
   subjectCanonicalQuery,
+  subjectRequestReader,
+  subjectKernelClient,
   canonicalRedirect,
   accountHref,
   keepSearch,
@@ -62,6 +68,8 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     )
       throw notFound();
     return {
+      realm: validatePageRealm('realm' in input ? input.realm : undefined),
+      reader: 'reader' in input && typeof input.reader === 'string' ? input.reader : null,
       id: input.id,
       slug: input.slug,
       locale: input.locale,
@@ -72,16 +80,17 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
-      import('../../kernel/client'),
-      import('../../subject/load-subject'),
-    ]);
-    const client = kernelClient(data.locale);
-    const canonical = await loadSubject(client, data.id, data.locale as never);
-    if (canonical.kind === 'missing') throw notFound();
-    const requestedView = canonical.value.slug === data.slug ? undefined : data.view;
-    if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
-      throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, requestedView), data.search));
+    let paths;
+    if (!data.realm) {
+      const { client } = await subjectKernelClient(data.locale);
+      const { loadContextSubject } = await import('../../features/pages/context-subject');
+      const canonical = await loadContextSubject(client, data.id, data.locale);
+      if (canonical.kind === 'missing') throw notFound();
+      const requestedView = canonical.value.slug === data.slug ? undefined : data.view;
+      if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
+        throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, requestedView), data.search));
+      paths = canonical.value.paths;
+    }
 
     const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     const verification = {
@@ -92,12 +101,15 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     };
     return {
       verification,
-      paths: canonical.value.paths,
+      paths,
     };
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug')({
   staticData: { publicCache: false },
+  staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -215,8 +227,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoRevision: search.undoRevision,
   }),
   loader: async ({ params, deps, location, context }) => {
+    const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     const data = await readSubject({
       data: {
+        realm: deps.realm,
+        reader,
         id: params.id,
         slug: params.slug,
         locale: getLocale(),
@@ -227,14 +242,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       },
     });
     const view = 'overview' as const;
-    const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm);
-    // A cached page is not current anonymous proof for a share-card reference.
-    await context.queryClient.fetchQuery(pageQuery);
-    const page = await context.queryClient.ensureQueryData(pageQuery);
+    // Fetch current native proof for both the reading and its permitted share-card projection.
+    const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm, reader);
+    const page = await context.queryClient.fetchQuery(pageQuery);
     if (page.kind === 'redirect') {
       if (page.target === 'account')
         throw redirect(canonicalRedirect(accountHref(getLocale(), page.id, view), location.searchStr, location.hash));
-      const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(page.id, getLocale()));
+      const survivor = await context.queryClient.fetchQuery(
+        subjectCanonicalQuery(page.id, getLocale(), deps.realm, reader),
+      );
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
         href: keepSearch(subjectUrlForView(survivor.value, view), location.searchStr, location.hash),
@@ -243,6 +259,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       });
     }
     if (page.kind !== 'page') throw notFound();
+    const address = deps.realm ? contextSubjectAddress(page.page, getLocale()) : undefined;
+    if (address && address.slug !== params.slug)
+      throw redirect(
+        canonicalRedirect(
+          subjectUrlForView(address, isView(params.slug) ? params.slug : undefined),
+          location.searchStr,
+          location.hash,
+        ),
+      );
     const type = subjectPageType(page.page);
     const [frame, relations, reactions, ratings] = await Promise.all([
       type
@@ -256,6 +281,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       ...data,
       shareCard: page.shareCard,
       realm: deps.realm,
+      paths: address?.paths ?? data.paths,
+      reader,
       page: page.page,
       frame,
       relations,
@@ -268,7 +295,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     loaderData
       ? subjectHead(loaderData.page, {
           ...pageHeadContext(match.pathname),
-          paths: loaderData.paths,
+          ...(loaderData.paths ? { paths: loaderData.paths } : {}),
           shareCard: loaderData.shareCard,
           realm: loaderData.realm,
           ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
@@ -280,17 +307,15 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 });
 
 function SubjectRoute() {
-  const { tabs, verification } = Route.useLoaderData();
+  const { tabs, verification, reader: initialReader, page } = Route.useLoaderData();
   const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
   const { undoKey } = Route.useSearch();
-  const { state: session } = useSession();
+  const browserSession = useSession();
+  const { state: session } = browserSession;
+  const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
   const queryClient = useQueryClient();
   const locale = getLocale();
-  const { id: routeId } = Route.useParams();
-  const view = 'overview' as const;
-  const { data: loaded } = useSuspenseQuery(subjectPageQuery(routeId, locale, view, realm));
-  const page = loaded.kind === 'page' ? loaded.page : undefined;
-  if (!page) throw notFound();
+  const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const id = page.subject!;
   const labelUndo =
     typeof undoLabelId === 'string' &&
@@ -318,8 +343,9 @@ function SubjectRoute() {
   const ratings = publicRatings
     ? { ...publicRatings, own: session === 'signed-in' && ownRating?.kind === 'ready' ? ownRating.units : null }
     : null;
-  const returnTo = useLocation().publicHref.split(/[?#]/, 1)[0]!;
+  const returnTo = contextHref(useLocation().publicHref.split(/[?#]/, 1)[0]!, realm);
   const nonce = useRouter().options.ssr?.nonce;
+  if (!currentReader) return <PendingPage />;
   return (
     <RatingControlContext.Provider
       value={{
@@ -334,7 +360,7 @@ function SubjectRoute() {
       <RatingsContext.Provider value={ratings}>
         <SubjectPage
           page={page}
-          curation={<SubjectCandidateCuration id={id} locale={locale} />}
+          curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
           locale={getLocale()}
           messages={subjectPageMessages()}
           {...(reader ? { reader } : {})}

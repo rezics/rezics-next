@@ -34,6 +34,8 @@ export type SourceField = {
   compareHref?: string;
 };
 export type SourcesPageData = {
+  realm?: string | undefined;
+  context?: import('@rezics/composition').SelectedContext | undefined;
   id: string;
   title: ReturnType<typeof pageText>;
   typeLabel: ReturnType<typeof pageText>;
@@ -66,7 +68,7 @@ function presentable(snak: Snak, related: Related): boolean {
 
 /** Only the CURRENT anonymous subject read is input. Definition labels never confer disclosure. */
 export function explainSubjectSources(
-  read: SubjectRead,
+  read: Pick<SubjectRead, 'subject' | 'related'> & { summary?: SubjectRead['summary'] | undefined },
   locale: string,
   definitions?: SourceDefinitions,
 ): SourcesPageData {
