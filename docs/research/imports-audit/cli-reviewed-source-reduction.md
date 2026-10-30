@@ -141,4 +141,13 @@ supporting local regression now requires that exact invalid-input code for the h
 of the previous generic failure code 1; zero requests, zero open handles and preserved baseline assertions are
 retained. The frozen native outcome is unchanged. This local assertion update follows the current input-error
 contract and does not relax rejection. The earlier passing native receipt above applies to its named revision;
-acceptance of the reconciled implementation is submitted separately.
+acceptance of the reconciled implementation ran separately.
+
+The controller supplied a terminal passing result (exit 0) for the reconciled implementation revision
+`5a9e12cf4ced0cc9073f8f6d1fe005e8be96c8be`, using the same managed native acceptance command above.
+Its raw log anchor is `.temp/goal/checks/worker-check-2026-10-30T10-02-57.609Z-e96fce26.log`.
+This result closes the one frozen child named above after reconciliation; no additional assertion count is
+inferred from the supplied result. Edited-file formatting, the explicit local importer compiler and the
+three pure children passed before submission (234 assertions). No duplicate native check or regression gate
+was started. The frozen test and implementation bytes remain unchanged after that passing check; this final
+update records only its supplied execution result.
