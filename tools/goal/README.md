@@ -287,7 +287,8 @@ attempts through the `worker_attempts_state` expression index. An admitted start
 state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
 running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
 attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
-head start are unchanged.
+head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately, without
+waiting for the periodic worker/memory poll.
 
 #### Cost: running-attempt count
 

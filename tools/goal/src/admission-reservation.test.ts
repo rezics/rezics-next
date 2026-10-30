@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { awaitHostCapacity, capacityAvailable } from './launch.ts';
@@ -137,6 +137,35 @@ test('a failed launch releases its admitted place for a later waiter', async () 
     await awaitHostCapacity(store, directory, false, 'later');
     expect(capacityAvailable(store, directory)).toBe(false);
   } finally {
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a capacity policy replacement wakes a queued start before the periodic poll', async () => {
+  const temporary = join(process.cwd(), '.temp');
+  mkdirSync(temporary, { recursive: true });
+  const directory = mkdtempSync(join(temporary, 'goal-admission-policy-'));
+  const db = openDb(':memory:');
+  const store = new WorkerStore(db);
+  let release: (() => void) | undefined;
+  try {
+    const policy = join(directory, 'capacity.json');
+    writeFileSync(policy, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+    const admission = awaitHostCapacity(store, directory, false, 'policy-waiter');
+    const queue = join(directory, 'capacity-queue');
+    expect(readdirSync(queue).filter((name) => !name.endsWith('.admitted'))).toHaveLength(1);
+    expect(capacityAvailable(store, directory)).toBe(false);
+    const replacement = join(directory, 'capacity.next');
+    writeFileSync(replacement, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    renameSync(replacement, policy);
+    release = await admission;
+    expect(readdirSync(queue).filter((name) => name.endsWith('.admitted'))).toHaveLength(1);
+    expect(capacityAvailable(store, directory)).toBe(false);
+    release();
+    expect(capacityAvailable(store, directory)).toBe(true);
+  } finally {
+    release?.();
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
