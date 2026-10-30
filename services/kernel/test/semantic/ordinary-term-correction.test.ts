@@ -35,7 +35,7 @@ test('term patch omission, null and alias replacement reuse native validation an
   expect(termRevision('"12"')).toBe(12);
 });
 
-test('ordinary multilingual correction uses actual Subject CAS, stable replay and the current reader', async () => {
+test('Ordinary multilingual term correction and safe change explanation connect the catalogue editor back to the real reader', async () => {
   const created = await f.call('POST', '/v1/subjects', 'owner', {
     type: 'schema:Book', labels: { en: 'Book', ja: '本' }, descriptions: { en: 'Description' }, aliases: { en: ['Old'] },
   });
