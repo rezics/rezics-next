@@ -17,7 +17,7 @@ WITH input AS NOT MATERIALIZED (
     AND (target.state='deleted' OR (target.state='active' AND target.visibility<>'public'))
   RETURNING true AS purged
 ), minimized AS (
-  UPDATE library.collection_member member SET note=NULL,purge_after=NULL
+  UPDATE library.collection_member member SET note=NULL,added_at=NULL,deletion_revision=NULL,deleted_at=NULL,purge_after=NULL
   FROM input,target
   WHERE member.route=input.route AND member.collection_id=input.collection_id AND member.member_id=input.member_id
     AND target.state='active' AND target.visibility='public'

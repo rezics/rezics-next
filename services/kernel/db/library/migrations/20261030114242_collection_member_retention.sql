@@ -6,10 +6,13 @@ ALTER TABLE library.collection_member
   ADD COLUMN deleted_at timestamptz,
   ADD COLUMN purge_after timestamptz;
 
+ALTER TABLE library.collection_member ALTER COLUMN added_at DROP NOT NULL;
+
 ALTER TABLE library.collection_member
   ADD CONSTRAINT collection_member_retention_check CHECK (
-    (deletion_id IS NULL AND deletion_revision IS NULL AND deleted_at IS NULL AND purge_after IS NULL)
-    OR (deletion_id IS NOT NULL AND deletion_revision IS NOT NULL AND deleted_at IS NOT NULL AND purge_after IS NOT NULL)
+    (deletion_id IS NULL AND deletion_revision IS NULL AND deleted_at IS NULL AND purge_after IS NULL AND added_at IS NOT NULL)
+    OR (deletion_id IS NOT NULL AND deletion_revision IS NOT NULL AND deleted_at IS NOT NULL AND purge_after IS NOT NULL AND added_at IS NOT NULL)
+    OR (deletion_id IS NOT NULL AND deletion_revision IS NULL AND deleted_at IS NULL AND purge_after IS NULL AND added_at IS NULL AND note IS NULL)
   );
 
 ALTER TABLE library.collection_member DROP CONSTRAINT collection_member_ordinal_key;

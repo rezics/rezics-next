@@ -532,7 +532,7 @@ CREATE TABLE library.collection_member (
     subject_id uuid NOT NULL,
     note text,
     ordinal_key text NOT NULL COLLATE pg_catalog."C",
-    added_at timestamp with time zone NOT NULL,
+    added_at timestamp with time zone,
     transaction_id uuid NOT NULL,
     member_revision bigint DEFAULT 1 NOT NULL,
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
@@ -543,7 +543,7 @@ CREATE TABLE library.collection_member (
     CONSTRAINT collection_member_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_member_check1 CHECK ((route = ((get_byte(uuid_send(member_id), 10) * 256) + get_byte(uuid_send(member_id), 11)))),
     CONSTRAINT collection_member_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
-    CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL)))),
+    CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL) AND (added_at IS NOT NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL) AND (added_at IS NULL) AND (note IS NULL)))),
     CONSTRAINT collection_member_ordinal_key_check CHECK (((char_length(ordinal_key) >= 1) AND (char_length(ordinal_key) <= 48))),
     CONSTRAINT collection_member_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
