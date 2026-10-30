@@ -1,5 +1,6 @@
-SELECT request_id, state, orphaned_at::text, requested_at::text, approved_at::text,
-       orphaned_at = :orphaned::timestamptz AS current_episode
-FROM community.realm_claim_request
-WHERE route = :route::integer AND realm_id = :realm::uuid
-  AND orphaned_at = :orphaned::timestamptz AND account_id = :account::uuid;
+WITH input AS NOT MATERIALIZED (SELECT :orphaned::timestamptz AS orphaned)
+SELECT c.request_id, c.state, c.orphaned_at::text, c.requested_at::text, c.approved_at::text,
+       COALESCE(c.orphaned_at = i.orphaned, false) AS current_episode
+FROM community.realm_claim_request c CROSS JOIN input i
+WHERE c.route = :route::integer AND c.realm_id = :realm::uuid
+  AND c.orphaned_at = i.orphaned AND c.account_id = :account::uuid;
