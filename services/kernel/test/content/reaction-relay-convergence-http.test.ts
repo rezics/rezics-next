@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
+import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import {
   comparePosition,
   createReactionRelayBase,
@@ -199,17 +200,13 @@ async function grantRead(
   person: NativePerson,
   actions: readonly string[],
 ): Promise<void> {
-  await base.command(
-    'POST',
-    '/v1/grants',
-    {
-      resource: target,
-      subject: { kind: 'account', id: person.accountId },
-      actions,
-      valid: '(,)',
-    },
-    { bearer: base.governance.bearer },
-  );
+  for (const action of actions)
+    await base.system.database.pool.query(
+      `INSERT INTO access.resource_grant
+         (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
+       VALUES ($1, $2, 'identity', $3, '', $4, '(,)'::tstzrange, $5)`,
+      [target.route, target.id, person.accountId, action, crypto.randomUUID()],
+    );
 }
 
 async function concealmentControl(
@@ -240,13 +237,10 @@ test.serial(
       `Reaction target concealment ${crypto.randomUUID()}`,
       'draft',
     );
-    const protectedBoardId = await base.createGlobalBoard(
-      `Protected reaction board ${crypto.randomUUID()}`,
-      'protected',
-    );
-    const protectedBoardTarget = await base.createThread(
-      protectedBoardId,
+    const protectedBoardTarget = await base.createRealmTarget(
       `Protected board thread ${crypto.randomUUID()}`,
+      'public',
+      'protected',
     );
     const protectedRealmTarget = await base.createRealmTarget(
       `Protected reaction Realm ${crypto.randomUUID()}`,
@@ -503,6 +497,13 @@ test.serial(
       role: 'content.thread.standing',
       valid: standing.rows[0]!.valid,
     };
+    await seedGovernanceAuthority(
+      base.system.database.pool,
+      guarded.threadRoute,
+      guarded.threadId,
+      base.governance.accountId,
+      ['post:create', 'media:create', 'reaction:set', 'report:create'],
+    );
     await base.command('POST', '/v1/roleGrants:revoke', roleBody, {
       method: 'POST',
       bearer: base.governance.bearer,

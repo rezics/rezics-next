@@ -3,7 +3,6 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { registerContent } from '../../src/content/register.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
@@ -44,9 +43,12 @@ export type ReactionRelayBase = {
   readonly mainTarget: ReactionTarget;
   call(method: string, path: string, options?: CallOptions): Promise<CallResult>;
   command<T = Record<string, any>>(method: string, path: string, body: unknown, options?: CommandOptions): Promise<T>;
-  createGlobalBoard(title: string, visibility?: 'published' | 'protected'): Promise<string>;
   createThread(boardId: string, title: string, visibility?: 'published' | 'draft'): Promise<ReactionTarget>;
-  createRealmTarget(title: string, visibility: 'public' | 'protected'): Promise<CreatedRealmTarget>;
+  createRealmTarget(
+    title: string,
+    visibility: 'public' | 'protected',
+    boardVisibility?: 'published' | 'protected',
+  ): Promise<CreatedRealmTarget>;
   startEffects(): Promise<ReactionWorkRuntime>;
 };
 
@@ -159,18 +161,6 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
       return (result.value ?? {}) as T;
     };
 
-    await command(
-      'POST',
-      '/v1/grants',
-      {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: author.accountId },
-        actions: ['board:create'],
-        valid: '(,)',
-      },
-      { bearer: governance.bearer },
-    );
-
     const scheme = await command<{ subject: { id: string } }>('POST', '/v1/subjects', {
       type: 'skos:ConceptScheme',
       labels: { en: `Reaction relay scheme ${idempotencyKey()}` },
@@ -184,19 +174,6 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
       },
     });
     const conceptId = asString(concept.subject?.id, 'Concept id');
-
-    const createGlobalBoard = async (
-      title: string,
-      visibility: 'published' | 'protected' = 'published',
-    ): Promise<string> => {
-      const created = await command<{ board: { id: string } }>('POST', '/v1/boards', {
-        conceptId,
-        title,
-        purpose: 'discussion',
-        visibility,
-      });
-      return asString(created.board?.id, 'Global board id');
-    };
 
     const createThread = async (
       boardId: string,
@@ -250,6 +227,7 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
     const createRealmTarget = async (
       title: string,
       visibility: 'public' | 'protected',
+      boardVisibility: 'published' | 'protected' = 'published',
     ): Promise<CreatedRealmTarget> => {
       const space = await command<{ space: { spaceId: string } }>('POST', '/v1/spaces', {
         title: `${title} space`,
@@ -273,15 +251,15 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
       const board = await command<{ board: { id: string } }>('POST', `/v1/realms/${realmId}/boards`, {
         conceptId,
         title: `${title} board`,
-        visibility: 'published',
+        visibility: boardVisibility,
       });
       const boardId = asString(board.board?.id, 'Realm board id');
       const target = await createThread(boardId, `${title} thread`);
       return { ...target, realmId };
     };
 
-    const mainBoardId = await createGlobalBoard(`Reaction relay public board ${idempotencyKey()}`);
-    const mainTarget = await createThread(mainBoardId, `Reaction relay public thread ${idempotencyKey()}`);
+    const mainTarget = await createRealmTarget(`Reaction relay public ${idempotencyKey()}`, 'public');
+    const mainBoardId = mainTarget.boardId;
     return {
       system,
       author,
@@ -293,7 +271,6 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
       mainTarget,
       call,
       command,
-      createGlobalBoard,
       createThread,
       createRealmTarget,
       async startEffects() {
