@@ -389,11 +389,12 @@ export function nativeProcessIsSame(identity: NativeProcessIdentity): boolean {
 }
 
 export function nativeProcessGroupIsGone(identity: NativeProcessIdentity): boolean {
-  return (
-    processGroupObservationIsGone(processGroupIdentities(identity)) &&
-    !sameProcess(readProcessIdentity(identity.pid), identity) &&
-    !processGroupExists(identity.pgid)
-  );
+  if (sameProcess(readProcessIdentity(identity.pid), identity)) return false;
+  // A missing group from the kernel's signal-zero probe is independent physical evidence. A ps error alone
+  // remains unknown and cannot certify cleanup; if the group still exists, observation must continue.
+  if (processGroupExists(identity.pgid)) return false;
+  const observation = processGroupIdentities(identity);
+  return observation.status === 'unavailable' || processGroupObservationIsGone(observation);
 }
 
 export function inspectNativeProcessGroup(identity: NativeProcessIdentity): ProcessGroupObservation {
