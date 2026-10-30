@@ -140,6 +140,7 @@ export type CatalogClassification = {
   readonly allowedStatements: number;
   readonly firstCatalogStatement: string | undefined;
 };
+const nativeCatalogOccurrences = new WeakMap<CatalogClassification, ReadonlySet<number>>();
 
 function isFreshnessProbeText(text: string): boolean {
   return [/\bAS\s+fresh_table\b/i, /\bAS\s+fresh_column\b/i, /\bAS\s+fresh_type\b/i].every((alias) => alias.test(text));
@@ -148,55 +149,95 @@ function isFreshnessProbeText(text: string): boolean {
 function classifyCatalogStatements(capture: Capture): CatalogClassification {
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const statementEntries = capture.statements.flatMap((text, index) =>
-    !isControlStatement(text) ? [{ text, backend: capture.statementBackends?.[index] }] : [],
+    !isControlStatement(text) ? [{ index, text, backend: capture.statementBackends?.[index] }] : [],
   );
-  const clientKeys = new Set(statementEntries.map(({ text, backend }) => catalogKey(backendAware, backend, text)));
-  const plansByKey = new Map<string, PlanEntry[]>();
-  for (let index = 0; index < capture.plans.length; index++) {
-    const backend = capture.planBackends?.[index];
-    for (const entry of documentEntries(capture.plans[index])) {
-      if (entry.queryText === undefined) continue;
-      const key = catalogKey(backendAware, backend, entry.queryText);
-      if (!clientKeys.has(key)) continue;
-      const plans = plansByKey.get(key) ?? [];
-      plans.push(entry);
-      plansByKey.set(key, plans);
-    }
-  }
-
   const catalogTexts = new Set<string>();
   const catalogKeys = new Set<string>();
+  const catalogStatementIndexes = new Set<number>();
   const freshnessProbeKeys = new Set<string>();
   const catalogOnlyByText = new Map<string, boolean>();
-  for (const [key, plans] of plansByKey) {
-    const queryText = plans[0]!.queryText!;
-    const catalogOnly = plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
-    if (catalogOnly) {
-      catalogKeys.add(key);
-      if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
+  if (capture.planStatements !== undefined) {
+    const plansByStatement = new Map<number, PlanEntry[]>();
+    const catalogOnlyByKey = new Map<string, boolean>();
+    const textByKey = new Map<string, string>();
+    for (let planIndex = 0; planIndex < capture.plans.length; planIndex++) {
+      const owner = capture.planStatements[planIndex];
+      if (owner === undefined || !Number.isInteger(owner) || owner < 0 || owner >= capture.statements.length) continue;
+      const plans = plansByStatement.get(owner) ?? [];
+      plans.push(...documentEntries(capture.plans[planIndex]));
+      plansByStatement.set(owner, plans);
     }
-    catalogOnlyByText.set(queryText, (catalogOnlyByText.get(queryText) ?? true) && catalogOnly);
+    for (const { index, text, backend } of statementEntries) {
+      const plans = plansByStatement.get(index);
+      const key = catalogKey(backendAware, backend, text);
+      const catalogOnly = plans !== undefined && plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
+      catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
+      catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
+      textByKey.set(key, text);
+      if (catalogOnly) {
+        catalogStatementIndexes.add(index);
+      }
+    }
+    for (const [key, catalogOnly] of catalogOnlyByKey)
+      if (catalogOnly) {
+        catalogKeys.add(key);
+        if (isFreshnessProbeText(textByKey.get(key)!)) freshnessProbeKeys.add(key);
+      }
+    for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+  } else {
+    const clientKeys = new Set(statementEntries.map(({ text, backend }) => catalogKey(backendAware, backend, text)));
+    const plansByKey = new Map<string, PlanEntry[]>();
+    for (let index = 0; index < capture.plans.length; index++) {
+      const backend = capture.planBackends?.[index];
+      for (const entry of documentEntries(capture.plans[index])) {
+        if (entry.queryText === undefined) continue;
+        const key = catalogKey(backendAware, backend, entry.queryText);
+        if (!clientKeys.has(key)) continue;
+        const plans = plansByKey.get(key) ?? [];
+        plans.push(entry);
+        plansByKey.set(key, plans);
+      }
+    }
+    for (const [key, plans] of plansByKey) {
+      const queryText = plans[0]!.queryText!;
+      const catalogOnly = plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan));
+      if (catalogOnly) {
+        catalogKeys.add(key);
+        if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
+      }
+      catalogOnlyByText.set(queryText, (catalogOnlyByText.get(queryText) ?? true) && catalogOnly);
+    }
+    for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+    for (const { index, text, backend } of statementEntries)
+      if (catalogKeys.has(catalogKey(backendAware, backend, text))) catalogStatementIndexes.add(index);
   }
-  for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
 
-  const catalogStatements = statementEntries.filter(({ text, backend }) => {
+  const catalogStatements = statementEntries.filter(({ index, text, backend }) => {
+    if (capture.planStatements !== undefined) return catalogStatementIndexes.has(index) && !isFreshnessProbeText(text);
     const key = catalogKey(backendAware, backend, text);
     return catalogKeys.has(key) && !freshnessProbeKeys.has(key);
   }).length;
-  const freshnessProbes = statementEntries.filter(({ text, backend }) =>
-    freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
+  const freshnessProbes = statementEntries.filter(({ index, text, backend }) =>
+    capture.planStatements !== undefined
+      ? catalogStatementIndexes.has(index) && isFreshnessProbeText(text)
+      : freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
   ).length;
   const nonCatalogTexts = new Set(
     statementEntries
-      .filter(({ text, backend }) => !catalogKeys.has(catalogKey(backendAware, backend, text)))
+      .filter(({ index, text, backend }) =>
+        capture.planStatements !== undefined
+          ? !catalogStatementIndexes.has(index)
+          : !catalogKeys.has(catalogKey(backendAware, backend, text)),
+      )
       .map(({ text }) => text),
   );
-  const firstCatalogStatement = statementEntries.find(
-    ({ text, backend }) =>
-      catalogKeys.has(catalogKey(backendAware, backend, text)) &&
-      !freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
+  const firstCatalogStatement = statementEntries.find(({ index, text, backend }) =>
+    capture.planStatements !== undefined
+      ? catalogStatementIndexes.has(index) && !isFreshnessProbeText(text)
+      : catalogKeys.has(catalogKey(backendAware, backend, text)) &&
+        !freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
   )?.text;
-  return {
+  const classification: CatalogClassification = {
     catalogTexts,
     catalogKeys,
     backendAware,
@@ -205,6 +246,8 @@ function classifyCatalogStatements(capture: Capture): CatalogClassification {
     allowedStatements: nonCatalogTexts.size,
     firstCatalogStatement,
   };
+  nativeCatalogOccurrences.set(classification, catalogStatementIndexes);
+  return classification;
 }
 
 function catalogKey(backendAware: boolean, backend: number | undefined, text: string): string {
@@ -255,9 +298,14 @@ export function withoutCatalogTexts(
           allowedStatements: 0,
           firstCatalogStatement: undefined,
         };
-  const statements = capture.statements.flatMap((statement, index) =>
-    !isCatalogQuery(catalog, statement, capture.statementBackends?.[index]) ? [index] : [],
-  );
+  const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
+  const statements = capture.statements.flatMap((statement, index) => {
+    const excluded =
+      capture.planStatements !== undefined
+        ? nativeCatalogIndexes?.has(index) === true
+        : isCatalogQuery(catalog, statement, capture.statementBackends?.[index]);
+    return excluded ? [] : [index];
+  });
   const remappedStatements = new Map<number, number>();
   statements.forEach((original, index) => remappedStatements.set(original, index));
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
@@ -415,6 +463,7 @@ export function costOf(capture: Capture): Cost {
   let sharedHit = 0;
   let sharedRead = 0;
   const catalog = classifyCatalogStatements(capture);
+  const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
   const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
   let plans = 0;
@@ -422,9 +471,21 @@ export function costOf(capture: Capture): Cost {
   for (let index = 0; index < capture.plans.length; index++) {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
+    const owner = capture.planStatements?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
-      if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) continue;
-      if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
+      if (capture.planStatements !== undefined) {
+        if (
+          owner !== undefined &&
+          Number.isInteger(owner) &&
+          owner >= 0 &&
+          owner < capture.statements.length &&
+          nativeCatalogIndexes?.has(owner) === true
+        )
+          continue;
+      } else {
+        if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) continue;
+        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
+      }
       plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
       const totals = costNode(plan, true, relations, ctes);
@@ -455,9 +516,12 @@ export function costOf(capture: Capture): Cost {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
     for (const entry of documentEntries(document)) {
-      if (capture.backgroundPlanStatements === undefined &&
+      if (
+        capture.backgroundPlanStatements === undefined &&
         backgroundBackendAware &&
-        !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)) continue;
+        !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
+      )
+        continue;
       const key = entry.queryText ?? '<unknown background statement>';
       const planCost = costOf({
         statements: [],
@@ -479,7 +543,10 @@ export function costOf(capture: Capture): Cost {
   const cost = {
     statements: capture.statements.filter(
       (statement, index) =>
-        !isControlStatement(statement) && !isCatalogQuery(catalog, statement, capture.statementBackends?.[index]),
+        !isControlStatement(statement) &&
+        (capture.planStatements !== undefined
+          ? nativeCatalogIndexes?.has(index) !== true
+          : !isCatalogQuery(catalog, statement, capture.statementBackends?.[index])),
     ).length,
     controlStatements: capture.statements.filter(isControlStatement).length,
     catalogStatements: catalog.catalogStatements,

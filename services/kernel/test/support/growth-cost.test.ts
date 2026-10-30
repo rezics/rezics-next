@@ -1,16 +1,20 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
+import { withConnection } from '../../src/database/pool.ts';
+import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import { costOf, isControlStatement, medianCost, type Cost } from './growth-cost.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 const client = new pg.Client({ connectionString: databaseUrl });
+let growthDatabase: GrowthDatabase | undefined;
 
 type PlanNode = { 'Node Type'?: string; Plans?: PlanNode[]; [key: string]: unknown };
 
 beforeAll(async () => {
   await client.connect();
+  growthDatabase = await openGrowthDatabase(databaseUrl);
   await client.query('DROP SCHEMA IF EXISTS growth_cost_test CASCADE');
   await client.query(`
     CREATE SCHEMA growth_cost_test;
@@ -23,6 +27,17 @@ beforeAll(async () => {
       SELECT value, 'payload' FROM generate_series(1, 100) AS value;
     CREATE TABLE growth_cost_test.cte_target (id integer NOT NULL);
     INSERT INTO growth_cost_test.cte_target VALUES (1);
+    CREATE TABLE growth_cost_test.native_nested (id integer NOT NULL);
+    INSERT INTO growth_cost_test.native_nested SELECT generate_series(1, 500);
+    CREATE TABLE growth_cost_test.native_outer (id integer NOT NULL);
+    CREATE FUNCTION growth_cost_test.read_nested() RETURNS trigger LANGUAGE plpgsql AS $$
+      DECLARE matched integer;
+      BEGIN
+        SELECT count(*) INTO matched FROM growth_cost_test.native_nested WHERE id < NEW.id;
+        RETURN NEW;
+      END $$;
+    CREATE TRIGGER read_nested AFTER INSERT ON growth_cost_test.native_outer
+      FOR EACH ROW EXECUTE FUNCTION growth_cost_test.read_nested();
     ANALYZE growth_cost_test.seq_rows;
     ANALYZE growth_cost_test.loop_outer;
     ANALYZE growth_cost_test.loop_inner;
@@ -34,7 +49,7 @@ afterAll(async () => {
   try {
     await client.query('DROP SCHEMA IF EXISTS growth_cost_test CASCADE');
   } finally {
-    await client.end();
+    await Promise.all([growthDatabase?.close(), client.end()]);
   }
 });
 
@@ -61,6 +76,55 @@ function findNode(root: PlanNode, nodeType: string): PlanNode | undefined {
   }
   return undefined;
 }
+
+test('cost keeps native nested relation work from its exact client occurrence', async () => {
+  const database = growthDatabase!;
+  const statement = 'INSERT INTO growth_cost_test.native_outer (id) VALUES (250)';
+  const measured = await capture(database, () =>
+    withConnection(database.pool, (connection) => connection.query(statement)),
+  );
+  const nestedPlanIndex = measured.capture.plans.findIndex((document) => {
+    const entries = Array.isArray(document) ? document : [document];
+    return entries.some(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        'Query Text' in entry &&
+        typeof entry['Query Text'] === 'string' &&
+        entry['Query Text'].includes('growth_cost_test.native_nested'),
+    );
+  });
+
+  expect(measured.capture.statements).toEqual([statement]);
+  expect(measured.capture.planStatements).toEqual(measured.capture.plans.map(() => 0));
+  expect(nestedPlanIndex).toBeGreaterThanOrEqual(0);
+  const nestedDocument = measured.capture.plans[nestedPlanIndex];
+  const nestedEntries = Array.isArray(nestedDocument) ? nestedDocument : [nestedDocument];
+  const nestedEntry = nestedEntries.find(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      'Query Text' in entry &&
+      typeof entry['Query Text'] === 'string' &&
+      entry['Query Text'].includes('growth_cost_test.native_nested'),
+  ) as { Plan?: PlanNode; 'Query Text'?: string } | undefined;
+  const nestedRoot = nestedEntry?.Plan;
+  expect(nestedRoot).toBeDefined();
+  expect(nestedEntry?.['Query Text']).toBeDefined();
+  expect(measured.capture.statements).not.toContain(nestedEntry?.['Query Text']);
+
+  const scan = findNode(nestedRoot!, 'Seq Scan');
+  expect(scan).toBeDefined();
+  const nestedRows =
+    Number(scan?.['Actual Rows'] ?? 0) +
+    Number(scan?.['Rows Removed by Filter'] ?? 0) +
+    Number(scan?.['Rows Removed by Index Recheck'] ?? 0);
+  const cost = costOf(measured.capture);
+  expect(nestedRows).toBe(500);
+  expect(cost.plans).toBe(measured.capture.plans.length);
+  expect(cost.relations['growth_cost_test.native_nested']?.rows).toBe(nestedRows);
+  expect(cost.relations['growth_cost_test.native_nested']?.blocks).toBeGreaterThan(0);
+});
 
 test('a sequential scan counts filtered out rows as examined', async () => {
   const plan = await explain('SELECT value FROM growth_cost_test.seq_rows WHERE value > 95');

@@ -1,4 +1,4 @@
-import pg from 'pg';
+import pg, { type PoolClient } from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   checkGrowth,
@@ -7,6 +7,7 @@ import {
   settle,
   type GrowthDatabase,
 } from './growth.ts';
+import { capture, captureMeasuredRun } from './growth-capture.ts';
 
 const schema = 'growth_settle_test';
 const table = `${schema}.rows`;
@@ -111,6 +112,92 @@ test('settle times out with an infrastructure error that identifies the holding 
     await holder.end();
   }
   expect(GrowthSettleInfrastructureError.name).toBe('GrowthSettleInfrastructureError');
+});
+
+test('settle diagnoses a transaction that remains open on its measured backend', async () => {
+  await db.admin.query(`TRUNCATE ${table}`);
+  await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);
+  await settle(db, { relations: [table], analyze: true });
+  const client: PoolClient = await db.pool.connect();
+  try {
+    const measured = await captureMeasuredRun(() =>
+      capture(
+        db,
+        async () => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await client.query(`SELECT count(*) FROM ${table}`);
+        },
+        { includeBackends: true },
+      ),
+    );
+    const backend = measured.value.capture.statementBackends?.[0];
+    expect(backend).toBeDefined();
+    expect(measured.transactions.get(db)?.get(backend!)).toEqual(expect.any(Number));
+    await db.admin.query(`DELETE FROM ${table} WHERE id=1`);
+
+    await expect(
+      settle(db, {
+        relations: [table],
+        timeoutMs: 5000,
+        operationBackends: measured.backends,
+      }),
+    ).rejects.toMatchObject({
+      name: 'GrowthSettleInfrastructureError',
+      message: expect.stringContaining(`Backend ${backend} from the measured operation keeps a transaction open`),
+    });
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+});
+
+test('settle waits for a later background transaction that reuses a measured backend', async () => {
+  await db.admin.query(`TRUNCATE ${table}`);
+  await db.admin.query(`INSERT INTO ${table} SELECT i,i FROM generate_series(1,1000) i`);
+  await settle(db, { relations: [table], analyze: true });
+  const client: PoolClient = await db.pool.connect();
+  let settling: Promise<number> | undefined;
+  try {
+    const measured = await captureMeasuredRun(() =>
+      capture(
+        db,
+        async () => {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+          await client.query(`SELECT count(*) FROM ${table}`);
+          await client.query('COMMIT');
+        },
+        { includeBackends: true },
+      ),
+    );
+    const backend = measured.value.capture.statementBackends?.[0];
+    expect(backend).toBeDefined();
+    expect(measured.backends.has(backend!)).toBe(true);
+    expect(measured.transactions.get(db)?.has(backend!)).toBe(false);
+
+    // The same checked-out client now opens a new finite transaction after the measured one committed.
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await client.query(`SELECT count(*) FROM ${table}`);
+    await db.admin.query(`DELETE FROM ${table} WHERE id=1`);
+    let completed = false;
+    settling = settle(db, {
+      relations: [table],
+      timeoutMs: 5000,
+      pollMs: 20,
+      operationBackends: measured.backends,
+    }).then((elapsed) => {
+      completed = true;
+      return elapsed;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(completed).toBe(false);
+    await client.query('COMMIT');
+    await settling;
+    expect((await relationState()).visible).toBe((await relationState()).pages);
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+    await settling;
+  }
 });
 
 test('settle disables autovacuum on relations created after the growth database opened', async () => {

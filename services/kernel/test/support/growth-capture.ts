@@ -19,6 +19,8 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 
 type ActiveCapture = {
   readonly mode: 'measured' | 'warmup';
+  readonly database: GrowthDatabase;
+  readonly run: RunCapture | undefined;
   statementRecords: StatementRecord[];
   foregroundStatementCount: number;
   backgroundStatementCount: number;
@@ -31,6 +33,7 @@ type ActiveCapture = {
   backgroundPlanDatabases: string[];
   backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
+  readonly transactions: Map<number, number>;
   pending: Set<Promise<void>>;
   error?: Error;
 };
@@ -43,6 +46,7 @@ type StatementRecord = {
   responseBytes: number;
   errorCode: string | null;
   errorMessage: string | null;
+  requiresNativePlan: boolean;
 };
 type WireStatement = {
   readonly record: StatementRecord | undefined;
@@ -72,14 +76,17 @@ type CaptureState = {
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
   relatedDatabases: Map<string, GrowthDatabase>;
+  activeTransactions: Map<number, number>;
+  nextTransactionToken: number;
 };
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
+type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
 type RunCapture = Map<GrowthDatabase, Set<string>> & {
   readonly databases: Set<GrowthDatabase>;
-  readonly backends: Set<number>;
+  readonly backends: BackendSet;
 };
 const measuredRun = new AsyncLocalStorage<RunCapture>();
 // pg can submit the next queued query before the previous query's promise settles.
@@ -88,6 +95,7 @@ const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>()
 const clientExecutingStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
 const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
+const nativePlanCommands = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE']);
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
   return typeof value === 'object' && value !== null && 'capture' in value && 'background' in value;
@@ -236,8 +244,9 @@ function byteaPayloadLength(value: string | Buffer): number {
   return length;
 }
 
-function instrumentBytes(client: PoolClient): void {
+function instrumentBytes(client: PoolClient, state: CaptureState): void {
   const connection = client.connection;
+  const transaction = { active: false, token: 0 };
   const query = connection.query.bind(connection);
   connection.query = ((text: string) => {
     const wireStatement = nextWireStatement(client);
@@ -291,17 +300,62 @@ function instrumentBytes(client: PoolClient): void {
 
   // pg emits ReadyForQuery after a query's notices and before it dispatches the next queued query. Clear the prior
   // owner first, so the next query's connection.query/execute hook can install its own wire occurrence.
-  connection.prependListener('readyForQuery', () => {
+  connection.prependListener('readyForQuery', (message: { readonly status?: string }) => {
+    const wireStatement = clientExecutingStatement.get(client) ?? clientWireStatement.get(client);
+    const attribution = wireStatement?.attribution;
+    const backend = backendPid(client);
+    if (message.status === 'T' || message.status === 'E') {
+      if (!transaction.active) transaction.token = ++state.nextTransactionToken;
+      transaction.active = true;
+      if (backend !== undefined) {
+        state.activeTransactions.set(backend, transaction.token);
+        if (attribution && !attribution.background) {
+          attribution.capture.transactions.set(backend, transaction.token);
+          let runTransactions = attribution.capture.run?.backends.transactions.get(attribution.capture.database);
+          if (attribution.capture.run && !runTransactions) {
+            runTransactions = new Map();
+            attribution.capture.run.backends.transactions.set(attribution.capture.database, runTransactions);
+          }
+          runTransactions?.set(backend, transaction.token);
+        }
+      }
+    } else if (message.status === 'I') {
+      const completedToken = transaction.active ? transaction.token : undefined;
+      transaction.active = false;
+      if (backend !== undefined && state.activeTransactions.get(backend) === completedToken)
+        state.activeTransactions.delete(backend);
+      if (backend !== undefined && completedToken !== undefined) {
+        if (attribution) {
+          if (attribution.capture.transactions.get(backend) === completedToken)
+            attribution.capture.transactions.delete(backend);
+          const runTransactions = attribution.capture.run?.backends.transactions.get(attribution.capture.database);
+          if (runTransactions?.get(backend) === completedToken) runTransactions.delete(backend);
+        }
+      }
+    }
     clientExecutingStatement.delete(client);
     clientWireStatement.delete(client);
     clientRowDescription.delete(client);
   });
 
+  client.once('end', () => {
+    const backend = backendPid(client);
+    if (backend !== undefined && state.activeTransactions.get(backend) === transaction.token)
+      state.activeTransactions.delete(backend);
+  });
+
   connection.on('message', (message) => {
     const protocolMessage = message as {
       readonly name?: string;
+      readonly text?: string;
       readonly fields?: readonly ({ readonly dataTypeID: number } | string | null | Buffer)[];
     };
+    if (protocolMessage.name === 'commandComplete') {
+      const tag = protocolMessage.text?.split(' ', 1)[0];
+      const record = clientWireStatement.get(client)?.record ?? clientExecutingStatement.get(client)?.record;
+      if (tag && nativePlanCommands.has(tag) && record) record.requiresNativePlan = true;
+      return;
+    }
     if (protocolMessage.name === 'rowDescription') {
       clientRowDescription.set(client, (protocolMessage.fields ?? []) as readonly { readonly dataTypeID: number }[]);
       return;
@@ -385,6 +439,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         responseBytes: 0,
         errorCode: null,
         errorMessage: null,
+        requiresNativePlan: false,
       };
       capture.statementRecords.push(record);
     }
@@ -495,7 +550,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
 }
 
 function instrument(client: PoolClient, state: CaptureState): void {
-  instrumentBytes(client);
+  instrumentBytes(client, state);
 
   client.on('notice', (notice) => {
     const wireStatement = clientExecutingStatement.get(client);
@@ -572,6 +627,8 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
     seeding: undefined,
     setupTasks: new Set(),
     relatedDatabases: new Map(),
+    activeTransactions: new Map(),
+    nextTransactionToken: 0,
   };
   admin.on('connect', (client) => intercept(client, state, false));
   const database: GrowthDatabase = {
@@ -637,6 +694,8 @@ async function captureInternal<T>(
   const mode = explicitWarmup || (parentActive?.mode === 'warmup' && ownsParent) ? 'warmup' : 'measured';
   const active: ActiveCapture = {
     mode,
+    database,
+    run: measuredRun.getStore(),
     statementRecords: [],
     foregroundStatementCount: 0,
     backgroundStatementCount: 0,
@@ -649,6 +708,7 @@ async function captureInternal<T>(
     backgroundPlanDatabases: [],
     backgroundPlanStatements: [],
     backgroundPlanBackends: [],
+    transactions: new Map(),
     pending: new Set(),
   };
   state.active = active;
@@ -676,6 +736,14 @@ async function captureInternal<T>(
     if (operationFailed) throw operationError;
     if (state.setupError) throw state.setupError;
     if (active.error) throw active.error;
+    const foregroundPlanOwners = new Set(active.planStatements);
+    const backgroundPlanOwners = new Set(active.backgroundPlanStatements);
+    for (const record of active.statementRecords) {
+      if (!record.requiresNativePlan || record.errorCode !== null) continue;
+      const owners = record.background ? backgroundPlanOwners : foregroundPlanOwners;
+      if (!owners.has(record.index))
+        throw new Error(`Successful ${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan`);
+    }
     const run = measuredRun.getStore();
     if (run) {
       for (const [plans, databaseNames] of [
@@ -697,6 +765,11 @@ async function captureInternal<T>(
       for (const { backend } of foreground) {
         if (backend !== undefined) run.backends.add(backend);
       }
+    if (run && active.transactions.size > 0) {
+      const runTransactions = run.backends.transactions.get(database) ?? new Map<number, number>();
+      for (const [backend, token] of active.transactions) runTransactions.set(backend, token);
+      run.backends.transactions.set(database, runTransactions);
+    }
     return {
       value,
       capture: {
@@ -781,15 +854,19 @@ export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{
   writes: RunCapture;
   databases: ReadonlySet<GrowthDatabase>;
   backends: ReadonlySet<number>;
+  transactions: ReadonlyMap<GrowthDatabase, ReadonlyMap<number, number>>;
 }> {
   const writes = new Map() as RunCapture;
   Object.defineProperty(writes, 'databases', { value: new Set<GrowthDatabase>() });
-  Object.defineProperty(writes, 'backends', { value: new Set<number>() });
+  const backends = new Set<number>() as BackendSet;
+  Object.defineProperty(backends, 'transactions', { value: new Map<GrowthDatabase, Map<number, number>>() });
+  Object.defineProperty(writes, 'backends', { value: backends });
   return measuredRun.run(writes, async () => ({
     value: await operation(),
     writes,
     databases: writes.databases,
     backends: writes.backends,
+    transactions: writes.backends.transactions,
   }));
 }
 
@@ -885,7 +962,18 @@ async function waitForHorizon(
   while (true) {
     const holders = await horizonHolders(database, horizon);
     if (holders.length === 0) return;
-    const operationHolder = holders.find(({ pid }) => operationBackends.has(pid));
+    const state = states.get(database);
+    const operationTransactions = (
+      operationBackends as ReadonlySet<number> & {
+        readonly transactions?: ReadonlyMap<GrowthDatabase, ReadonlyMap<number, number>>;
+      }
+    ).transactions;
+    const operationHolder = holders.find(({ pid }) => {
+      const transaction = operationTransactions?.get(database)?.get(pid);
+      return (
+        operationBackends.has(pid) && transaction !== undefined && state?.activeTransactions.get(pid) === transaction
+      );
+    });
     if (operationHolder)
       throw new GrowthSettleInfrastructureError(
         `Backend ${operationHolder.pid} from the measured operation keeps a transaction open across repetitions; each repetition must commit. Holding backend: ${JSON.stringify(operationHolder)}`,
@@ -1049,7 +1137,7 @@ export async function settle(
     readonly analyze?: boolean;
     readonly timeoutMs?: number;
     readonly pollMs?: number;
-    /** Backends observed in the preceding measured run, used to diagnose a transaction spanning repetitions. */
+    /** Backends observed in the preceding measured run. */
     readonly operationBackends?: ReadonlySet<number>;
   } = {},
 ): Promise<number> {

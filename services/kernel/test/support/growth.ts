@@ -652,6 +652,19 @@ export function withoutCatalogStatements(name: string, captureResult: Capture): 
 }
 
 /** Resolves with the report, or rejects with GrowthBoundError (message prefixed by the check name). */
+type OperationBackends = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
+
+function operationBackends(
+  backends: Iterable<number> = [],
+  transactions: Iterable<readonly [GrowthDatabase, ReadonlyMap<number, number>]> = [],
+): OperationBackends {
+  const value = new Set(backends) as OperationBackends;
+  const byDatabase = new Map<GrowthDatabase, Map<number, number>>();
+  for (const [database, entries] of transactions) byDatabase.set(database, new Map(entries));
+  Object.defineProperty(value, 'transactions', { value: byDatabase });
+  return value;
+}
+
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
   const growthRule = process.env.GROWTH_RULE;
   if (growthRule !== undefined && growthRule !== 'series')
@@ -723,7 +736,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     const measuredDatabases = new Set<GrowthDatabase>([db]);
     let pendingWrites = new Map<GrowthDatabase, Set<string>>();
     const seenBackends = new Set<number>();
-    let pendingBackends = new Set<number>();
+    let pendingBackends = operationBackends();
     for (let warmup = 0; warmup < warmups; warmup++) {
       const warmed = await captureMeasuredRun(() =>
         captureWarmup(db, async () => {
@@ -739,6 +752,11 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         pendingWrites.set(target, accumulated);
       }
       for (const backend of warmed.backends) pendingBackends.add(backend);
+      for (const [target, transactions] of warmed.transactions) {
+        const collected = pendingBackends.transactions.get(target) ?? new Map<number, number>();
+        for (const [backend, transaction] of transactions) collected.set(backend, transaction);
+        pendingBackends.transactions.set(target, collected);
+      }
       repetition++;
     }
 
@@ -763,7 +781,10 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         }
         for (const [target, relations] of pendingWrites) {
           if (relations.size > 0)
-            settleMs += await recordedSettle(target, { relations: [...relations], operationBackends: pendingBackends });
+            settleMs += await recordedSettle(target, {
+              relations: [...relations],
+              operationBackends: pendingBackends,
+            });
         }
         (seeding as { settleMs: number }).settleMs = settleMs;
         if (check.prepare) await check.prepare(db, scale, repetition);
@@ -771,7 +792,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
         for (const target of captured.databases) measuredDatabases.add(target);
-        pendingBackends = new Set(captured.backends);
+        pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
         const measured = captured.value;
         const runBackends = [

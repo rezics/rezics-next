@@ -323,6 +323,14 @@ test('catalog projection keeps native occurrence links, documents, errors and ba
   expect(projected.responseBytes).toEqual([raw.responseBytes![0]!, raw.responseBytes![2]!, raw.responseBytes![3]!]);
   expect(raw.statements).toHaveLength(4);
   expect(raw.plans).toEqual(beforePlans);
+  const rawCost = costOf(raw);
+  const projectedCost = costOf(projected);
+  expect({ plans: rawCost.plans, rows: rawCost.rows, blocks: rawCost.blocks, relations: rawCost.relations }).toEqual({
+    plans: projectedCost.plans,
+    rows: projectedCost.rows,
+    blocks: projectedCost.blocks,
+    relations: projectedCost.relations,
+  });
 
   const rawOccurrences = statementOccurrences(raw).statements;
   expect(
