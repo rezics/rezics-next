@@ -167,8 +167,26 @@ allow at most 300 seconds, leaving ten seconds of margin. Increase the delay if 
 that margin. Persist the original due time and sleep without a connection. Bounded client pages must durably signal completion before Auth's final trusted acknowledgement port
 can run; missing composition fails closed. The delay is a safety minimum, never an overall completion deadline.
 
-Logs, delivery diagnostics, backups and replicas remain explicit custody findings. A complete `readErasureStatus`
-does not prove backup expiry; [the coordinator](../services/kernel/src/access/erasure.ts) does not model it.
+Logs, delivery diagnostics, backups and replicas follow Auth's adopted
+[external custody and restore contract](../services/auth/src/external-custody-contract.md), which inventories the
+actual producers and names the missing receiving and infrastructure interfaces. No configured writer is distinct
+from sealed zero data, unknown custody and actual retained copies. Missing configuration, callback/row absence and
+elapsed TTL never establish `none`; unresolved provider diagnostics keep erasure pending. No external legal
+retention schedule is inferred.
+
+Restoring older Auth data must preserve Access's original immutable obligation and T, the captured native floor,
+applicability and original 310-second consent due time. The database/deployment owner isolates the restored copy;
+Access supplies current source authority and bounded replay through a sealed boundary; Auth redrives native and
+external cleanup before any restored personal data, issuer or workflow writer opens. The same source fence excludes
+stale sessions and late writes. A restored local completion marker never covers newly reintroduced payload.
+Unavailable source or wrong/unproved copy keeps admission closed. There is no account restore, second deletion
+service or credential crossing. Existing `readErasureAccount` supplies only state/fence/epoch, not this replay feed
+or T; adoption is still required.
+
+A complete `readErasureStatus` does not prove backup expiry or external custody;
+[the coordinator](../services/kernel/src/access/erasure.ts) does not model it. Report active cleanup, named adopted
+retention exceptions and backup expiry separately, while retaining incomplete status for unknown custody. Native
+Auth completion and final trusted acknowledgement remain subject to all other requirements above.
 
 Implement capabilities in this dependency order:
 

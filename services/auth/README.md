@@ -1604,7 +1604,12 @@ remains pending, including after native work and the original consent cutoff:
   those results needs a source-owned committed-result boundary; this composition
   does not invent one or authorize a new effect.
 - External delivery-provider diagnostics/logs and backup restore deletion replay
-  are not composed native custody sinks.
+  are specified by the [external custody and restore contract](src/external-custody-contract.md).
+  Its source inventory, owner allocation, admission, proof and rollout are adopted;
+  the actual receiving adapters, current-T obligation feed and isolated restore
+  admission are not composed native custody sinks. The two future native contract
+  suites fail explicitly at missing producer/infrastructure boundaries; they do
+  not claim provider deletion or restore safety from fixture callbacks.
 
 The native marker deliberately has no `erased`, `none` or acknowledged outcome.
 A missing native user cannot change persisted applicability to `none`. These gaps
