@@ -54,5 +54,9 @@ export type {
   PublicSourceRepairPage,
 } from './public-filter-source-binding.ts';
 export { createSubjectSourceKeyPages } from './subject-source-key-pages.ts';
-export type { SubjectSourceKeyCursor, SubjectSourceKeyPage, SubjectSourceKeyPages } from './subject-source-key-pages.ts';
+export type {
+  SubjectSourceKeyCursor,
+  SubjectSourceKeyPage,
+  SubjectSourceKeyPages,
+} from './subject-source-key-pages.ts';
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';

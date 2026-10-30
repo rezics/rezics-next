@@ -1,6 +1,9 @@
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
-import type { PublicFilterConsumerUnavailable, PublicFilterConsumerContext } from '../search/public-filter-consumer-contract.ts';
+import type {
+  PublicFilterConsumerUnavailable,
+  PublicFilterConsumerContext,
+} from '../search/public-filter-consumer-contract.ts';
 import type { PublicFilterCost } from './public-filter-source-contract.ts';
 import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
