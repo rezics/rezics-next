@@ -3,10 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import Stripe from 'stripe';
 import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
-import {
-  createCheckoutAnchorResolver,
-  type CheckoutAnchorResolver,
-} from '../../../src/commerce/checkout-anchor.ts';
+import { createCheckoutAnchorResolver, type CheckoutAnchorResolver } from '../../../src/commerce/checkout-anchor.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
 import type { Order } from '../../../src/commerce/model.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
