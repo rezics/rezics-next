@@ -71,10 +71,10 @@ test('Ordered Collection consumers alias exact native ordinal tuple and work typ
   const input: ReadRawOrdinalCollectionPrefix = {
     after: null,
     limit: 100,
-    get actor(): CollectionSourceCall['actor'] {
+    get actor(): Extract<CollectionSourceCall, { work?: never }>['actor'] {
       throw new Error('Unimplemented execution must not inspect the actor');
     },
-    get at(): CollectionSourceCall['at'] {
+    get at(): Extract<CollectionSourceCall, { work?: never }>['at'] {
       throw new Error('Unimplemented execution must not inspect native time');
     },
     get source(): CollectionSourceCall['source'] {

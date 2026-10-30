@@ -9,6 +9,7 @@ import {
   type PreparedCollectionSource,
   type WorkAllowance,
   type WorkReceipt,
+  type CollectionSourceContext,
 } from '../library/collection-source.ts';
 import type {
   NativeOrdinalFrontier,
@@ -49,7 +50,8 @@ export function createSearchScopeOrder(
 ) {
   const { pool, options, clock } = config;
   const native = createCollectionSource({ pool, access: options.access, clock });
-  function context() {
+  function context(): CollectionSourceContext {
+    if (options.work) return { work: options.work, deadline: options.deadline };
     if (!options.nativeT) throw new ProblemError('semantic_not_ready');
     return { actor: options.actor, at: options.nativeT, deadline: options.deadline };
   }
@@ -64,6 +66,14 @@ export function createSearchScopeOrder(
       const identity = order.source;
       if (!identity || (order.kind === 'ordinal' && identity.scope !== 'curated'))
         throw new ProblemError('unsupported_query');
+      if (
+        options.work &&
+        (identity.scope !== 'curated' ||
+          identity.collectionId !== options.work.locator.collectionId ||
+          identity.route !== options.work.locator.route ||
+          identity.accountId !== options.work.locator.ownerAccountId)
+      )
+        throw new ProblemError('semantic_not_ready');
       const result = await native.prepare({ ...context(), collectionId: identity.collectionId, allowance });
       if (
         result.source.observation.collectionId !== identity.collectionId ||

@@ -177,16 +177,77 @@ Those source owners enforce soft deletion, the 30-day restore window, legal hold
 private-data removal and retained public-contribution de-identification. A hold preserves source evidence, not public
 disclosure. Search neither starts a second restore clock nor preserves hidden data as evidence.
 
-Search stores distinct record classes:
+Search's account-erasure inventory follows the actual stores and producers:
 
-- OpenSearch subject documents copy public names, descriptions, fact values, security revisions and public Collection
-  counts. They are replaceable projections, not user-owned source records or restoration backups.
-- Each generation has a physical index, alias/mapping metadata and a relay consumer. Its PostgreSQL
-  `core.consumer_checkpoint` rows contain partition progress, not source bodies. Active and rebuilding generations
-  keep their checkpoints; retirement deletes an old generation’s index, then its checkpoints as described below.
-- Versioned stored query templates are platform query configuration installed by `query.ts`, not saved user queries.
-  Released template IDs/source remain immutable; installation does not expire older scripts. There is no template
-  cleanup job or user delete/purge route. This retention differs from generation retirement.
+| Class                        | Actual custody and erasure disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Physical subject copies      | `document.ts` copies labels and aliases into `names`, descriptions, `name_sort`, selected public statement values and nested facts/qualifiers, subject IDs, security revisions, public Collection counts and published rating figures. Account-agent names and public personal facts really enter these documents; no actor column does not imply no personal data. Replace/remove each exact affected document in active, rebuilding and grace generations, including copies no current API returns. Keep eligible public contributions with de-identified attribution (`Deleted account`); erase private, unlisted and already-deleted material and account-personal copies. Source owners decide and minimize truth; Search repairs their exact derived copies. |
+| Pending external writes      | Source snapshots, prepared bulk bodies and requests already dispatched to the engine can outlive T. Resolve the real write/winner and drain or reject ambiguous late effects in every applicable generation before acknowledgement. An old source version can write again after native delete-version pruning; a lost checkpoint CAS cannot undo it.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Platform generation metadata | Physical index identity, aliases, mapping metadata and `core.consumer_checkpoint` partition progress describe platform generations, not an account's payload. Retirement removes an old physical index before its checkpoints. Account cleanup cannot delete a whole index to erase one account or infer completeness from checkpoint completion.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Existing coverage metadata   | `db/search/schema.sql` has `index_prefix_control`, `index_incarnation` and `index_home_coverage`, including bounded population frontiers and attempt/home observations. These are existing platform maintenance metadata, not an account ownership inventory. Their presence supplies no erasure certificate, all-role locator or foreign-write drain; this contract does not revive the retired home-certificate ABI or its CAS-only proof.                                                                                                                                                                                                                                                                                                                       |
+| Stored templates             | Versioned query scripts installed by `query.ts` are platform configuration, not saved personal queries. Released template IDs/source remain immutable and installation does not expire older scripts; no per-account script purge applies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| In-process/request state     | Source snapshots, hit hydration, request/filter plans and outgoing bodies are transient; the service's freshness map caches per-partition progress and definitions cache schema patterns. Search has no account payload cache to enumerate. Current request disclosure must apply T, and worker snapshots/bulk bodies remain pending external-write obligations until settled, rather than becoming a new durable private fact store.                                                                                                                                                                                                                                                                                                                              |
+| Cursors                      | Search/rating continuations are stateless encrypted, principal/request/generation-bound tokens held by the caller. There is no server-side stored cursor payload deletion job. Disclosure and continuation fences still apply at use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Future preparation/retention | No Search-owned saved personal query, prepared result population or retained personal observation store currently exists. Inventory a physically introduced store and its producer-owned locators before release; do not claim deletion of hypothetical stores. Existing progress metadata is covered above.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Shared artifacts             | Receipts, outbox events, editorial provenance and DBOS workflow/step payloads belong to shared-store minimizers under [Deletion item 4](../../../../docs/deletion.md#account-erasure) and their native exact-locator contract. Search producers must enroll exact personal-copy locators atomically; Search cannot attest those shared payloads erased, scan their JSON or replace their owner's minimizer.                                                                                                                                                                                                                                                                                                                                                        |
+
+### Native account participant
+
+Search must register a durable effect through the actual default `searchWorkModule` on
+`com.rezics.access.account-tombstoned.v1`, using validated `data.accountId`, including when no per-account data
+applies. Existing event validation, `effectWorkflowId` identities, retries and one-command/one-partition rules
+remain in force. Mechanical cleanup runs under narrow platform authority bound to the committed obligation;
+it never restores the deleted initiator. Search-disabled configuration alone cannot attest that no historical
+projection or prepared resource exists.
+
+Final cleanup commits **before** calling
+`acknowledgeErasure({ pool }, { accountId, participant: 'search', outcome: 'erased' | 'none' })`.
+That Access function opens its own command transaction in the account's partition. The permanent acknowledgement
+is immutable and independent of effect dispatch, workflow history and checkpoint completion. `erased` means actual
+cleanup; `none` means actual no-data applicability. Known incomplete or unknown cleanup, unfinished Source
+minimization, unresolved custody or an external write keeps Search **pending** and permits neither false outcome.
+This participant is one obligation of the shared coordinator, not proof of the whole launch gate, backup expiry,
+restore, legal-hold or retention-engine implementation.
+
+Every actual account role and provenance copy needs an indexed native locator owned by its producer: author,
+editor, uploader, delegate, operator, member, acting human and any other actual role. The derived
+`accountAgentId` is one actual locator; it proves neither all-role coverage nor verified-terminal and foreign
+completeness. Discover affected subjects/dependencies only from the account's indexed raw keys and exact copy
+locators. No name search, account-wide JSON scan, global subject scan, arbitrary delete-by-query, whole-index
+account purge, central ownership graph or permanent soft tombstone substitutes for those producer relations.
+
+The native all-role affected-subject/dependency locator and minimized-source completion export does not exist yet.
+The Source/queried-observation closure likewise provides no live cleanup or foreign-drain capability. Current
+source suppression is not physical deletion. The independent
+[late-write-pruning acceptance](../../test/search/late-write-pruning.test.ts) retains four physical-resurrection
+reds despite API suppression; this participant contract does not replace that obligation with another fence,
+store or Source design. Runtime implementation waits for these real producer ports and their accepted native
+cases. This adoption makes no Source readiness or acknowledgement claim. `searchWorkModule` currently registers
+only the indexing service, with no tombstone effect.
+
+The [native participant acceptance](../../test/search/erasure-participant.test.ts) freezes default-module
+registration (also with no Search configuration), actual Auth step-up approve/execute through `deletePersona`
+using the same `PersonasOptions` as `createPersonas`, effects draining and real `readErasureStatus`. It uses one
+owned kernel fixture, real credentials, Access, native subjects/Source and the full default worker in a separate
+SDK process. It observes exact fixture-owned document locators across grace/active/rebuilding generations and
+original public APIs, eligible public contribution/provenance minimization, an old native transport request and
+native delete-version pruning, final acknowledgement and immutable replay. Missing producer capabilities remain
+concrete prerequisites; a pending outcome alone is not a passing cleanup case. The broader all-role, verified
+terminal, foreign dependency and private/unlisted minimization matrix remains unclosed until real producers exist;
+no fake callbacks or manufactured locator/Source/ACK ABI fill it.
+
+### Account participant cost
+
+- Touches: native account obligation/event, producer-owned affected-subject and copy locators, each bounded live
+  generation, native Source minimization/current dependencies, real sink visibility/drain and separate account ACK.
+- Bound: keyset pages follow only the account's own indexed raw keys and explicit byte limits, children before
+  parents. Release each database connection before another partition or engine I/O. Existing Source chunks accept
+  at most 256 IDs; generation admission caps the live set at three. Total cleanup grows with actual account copies
+  and external writes, never unrelated subjects. Bulk success, refresh, authentication denial and checkpoint/CAS
+  completion alone do not discharge that work.
+- Growth check: native all-generation/current-disclosure/replay/barrier cases first. Actual three-scale locator,
+  cleanup and shared-store costs remain mandatory after the real producer exists; a timing-only or bounded-output
+  result supplies no cost proof.
 
 Template startup validates every required released version with one native PUT followed by one exact keyed GET.
 Only HTTP 200 with the complete native `{ "acknowledged": true }` receipt admits readback. Readback must be HTTP
@@ -219,8 +280,8 @@ relation-facet lower-bound behavior does not resolve general totals or bucket co
 Source delete, takedown and restore must publish the source changes consumed by `indexer.ts`. The relay re-reads
 current state rather than replaying old bodies: a missing/hidden/redirected subject produces an engine delete, and a
 visible subject produces a replacement document. Source restore advances the source partition position; the new
-snapshot position becomes the external version for reindexing in every live generation, so earlier writes cannot
-win over that newer version. Search does not restore documents independently of source eligibility. Complete
+snapshot position becomes the external version for reindexing in every live generation. Earlier writes lose while
+the engine retains that version; native delete-version pruning still requires the pending-write resolution above. Search does not restore documents independently of source eligibility. Complete
 invalidation and default-worker convergence remain pending proof under the [outcome harness contract](../../test/search/README.md).
 
 Physical cleanup uses existing operations only; there is no separate Search 30-day personal-data purge job:
@@ -236,7 +297,8 @@ Physical cleanup uses existing operations only; there is no separate Search 30-d
   activation timestamps and newer unfinished generations are retained. Rebuild admission caps generations at three;
   it does not impose an expiry on an active or unfinished generation.
 
-These lifecycle rules add no operation and preserve the Cost bounds below.
+This specification adopts the missing participant without implementing cleanup or changing existing operations.
+The participant bound above and existing indexing Cost bounds below remain separate obligations.
 
 ## Indexed membership, current disclosure and convergence
 
@@ -327,8 +389,12 @@ The adapter adds no public Search sort and manufactures no Search Hits from Coll
 arguments. `prepare(filter, {releaseDigest?, order?, allowance?, type?})`, `prefix` and `evaluate` retain their
 existing calls. `sourcePrefix` returns actual canonical Collection candidates; `ordinalPrefix` returns canonical
 subject/order locators with a native ordinal frontier. The exact requested/saved-expanded filter, immutable release,
-projection profile, full native source/sort, authenticated reader, physical name/UUID/generation and full committed
-scoped observation bind each factory-local handle. A clone or a handle from another factory cannot execute.
+projection profile, full native source/sort, authenticated reader and full committed scoped observation bind each
+factory-local handle. Indexed plans also bind the real physical name/UUID/generation. A pure native owner Collection
+plan instead binds `nativeOwner:{source,observation}` and never discovers a public index or invents its generation.
+Mixed plans retain indexed authority and a separate actual public projection capture; every final scope comparison
+revalidates both captures. Native owner evidence delegates to Library's complete-original closure and current
+native points before using the shared Boolean interpreter, and is reread before settlement. A clone or a handle from another factory cannot execute.
 
 `scope-preparation.ts` advances complete public structural capture or Library native custody and the agreed
 `createIdentityScopedObservations(pool)` registration/revalidation protocol. The existing Search WorkModule runs

@@ -3,6 +3,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
+import { admitMembersPreparationWork, type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
 
 export type LeafWork = Readonly<{
   keys: number;
@@ -53,11 +54,13 @@ export type LeafRequest = Readonly<{
 
 export type LeafOptions = Readonly<{
   access: Access;
-  actor: Actor;
   routeKey: Uint8Array;
   deadline: number;
-  nativeT?: AuthoritativeTime;
-}>;
+}> &
+  (
+    | Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }>
+    | Readonly<{ actor?: never; nativeT?: never; work: MembersPreparationWorkContext }>
+  );
 
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 
@@ -94,11 +97,12 @@ function validateRevalidation(request: LeafRequest): void {
  * not ready; they never prepare Access, query SQL, or claim a current fact or coverage.
  */
 export async function readScopeLeafEvidence(
-  _pool: Pool,
+  pool: Pool,
   request: LeafRequest,
-  _options: LeafOptions,
+  options: LeafOptions,
 ): Promise<LeafEvidence> {
   validateBudget(request?.budget);
   validateRevalidation(request);
+  if (options.work) await admitMembersPreparationWork(options.work, { ...options, pool });
   return { state: 'not_ready', usage: emptyUsage };
 }

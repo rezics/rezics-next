@@ -7,6 +7,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
+import { admitMembersPreparationWork, type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
 
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
@@ -38,13 +39,11 @@ export interface WorkReceipt {
   readonly used: WorkDimensions;
 }
 
-export interface CollectionSourceContext {
-  readonly actor: Actor;
-  /** Core-minted opaque T for this native read; never a request Date or a cast string. */
-  readonly at: AuthoritativeTime;
-  /** Existing absolute execution deadline, never renewed by an owner refill. */
-  readonly deadline: number;
-}
+export type CollectionSourceContext = Readonly<{ deadline: number }> &
+  (
+    | Readonly<{ actor: Actor; at: AuthoritativeTime; work?: never }>
+    | Readonly<{ actor?: never; at?: never; work: MembersPreparationWorkContext }>
+  );
 
 /** Exact structural reference assignable from Semantic's IdentityBasis; no second brand or identity authority. */
 export type NativeIdentityBasis = Readonly<{ digest: string }>;
@@ -164,18 +163,18 @@ export type CollectionSubjectMembership = MembershipResultBase &
       }
   );
 
-export interface PrepareCollectionSource extends CollectionSourceContext {
+export type PrepareCollectionSource = CollectionSourceContext & {
   readonly collectionId: string;
   /** Preparation metadata/Access work also consumes admitted dimensions; no candidates before authorization. */
   readonly allowance: WorkAllowance;
-}
+};
 
-export interface CollectionSourceCall extends CollectionSourceContext {
+export type CollectionSourceCall = CollectionSourceContext & {
   readonly source: PreparedCollectionSource;
   readonly allowance: WorkAllowance;
-}
+};
 
-export interface ContainsCollectionSubject extends CollectionSourceCall {
+export type ContainsCollectionSubject = CollectionSourceCall & {
   readonly subjectId: string;
   /** Same group/source basis only. Current source, original and terminal authorization is always repeated. */
   readonly progress?: CollectionAliasProgress;
@@ -185,7 +184,7 @@ export interface ContainsCollectionSubject extends CollectionSourceCall {
    * reread at `at`.
    */
   readonly positiveEvidence?: CollectionSourceEvidence;
-}
+};
 
 export interface CollectionSource {
   prepare(input: PrepareCollectionSource): Promise<{ source: PreparedCollectionSource; work: WorkReceipt }>;
@@ -302,6 +301,7 @@ export function createCollectionSource(dependencies: {
     metadata: NativeCollectionMetadata,
     l: CollectionSourceLedger,
   ) {
+    if (input.work) throw new ProblemError('dependency_unavailable');
     const allowed = await l.run((allowance) =>
       authorizeNativeCollectionMetadata(dependencies.pool, metadata, {
         ...input,
@@ -334,11 +334,21 @@ export function createCollectionSource(dependencies: {
     return saved;
   }
   async function guarded<T>(
-    input: { allowance: WorkAllowance; deadline: number },
+    input: PrepareCollectionSource | CollectionSourceCall,
     body: (l: CollectionSourceLedger) => Promise<T>,
   ) {
+    if (!Number.isFinite(input.deadline) || Date.now() >= input.deadline)
+      throw new ProblemError('dependency_unavailable');
     const l = new CollectionSourceLedger(input.allowance, input.deadline);
     try {
+      if (input.work) {
+        const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
+        if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
+        await admitMembersPreparationWork(input.work, { ...dependencies, deadline: input.deadline });
+        // The native Source currently exposes only Actor reads. Admission alone supplies neither
+        // the episode's immutable definition nor a same-client work reader. Never borrow that reader.
+        throw new ProblemError('dependency_unavailable');
+      }
       return await body(l);
     } catch (error) {
       if (error instanceof Error) Object.defineProperty(error, 'work', { value: l.receipt(), configurable: true });
@@ -350,6 +360,7 @@ export function createCollectionSource(dependencies: {
     saved: Prepared,
     l: CollectionSourceLedger,
   ): Promise<CollectionSubjectMembership> {
+    if (input.work) throw new ProblemError('dependency_unavailable');
     if (routeOf(input.subjectId) === null) throw new ProblemError('not_found');
     const progress = input.progress;
     if (progress && (progress.subjectId !== input.subjectId || progress.basisDigest !== saved.basis.digest))

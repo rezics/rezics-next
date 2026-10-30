@@ -37,12 +37,36 @@ export type OperationalOptions = CommonOptions &
       })
     | { mode: 'work-step'; principal?: never; basis?: never; authorization?: never }
   );
-type Live = { client: PoolClient; workClient: WorkClient; accounts: readonly string[]; deadline: number };
+type Live = {
+  client: PoolClient;
+  pool: Pool;
+  workClient: WorkClient;
+  accounts: readonly string[];
+  deadline: number;
+  partition: number;
+  mode: OperationalOptions['mode'];
+};
 const live = new WeakMap<OperationalTransaction, Live>();
 
 export function hasLiveOperationalTransaction(tx: Pick<PoolClient, 'query'>): tx is OperationalTransaction {
   const state = live.get(tx as OperationalTransaction);
   return state !== undefined && Date.now() < state.deadline;
+}
+
+/** Server-only executor resources. The transaction remains the only usable query client. */
+export function currentOperationalResources(
+  tx: OperationalTransaction,
+): Readonly<Omit<Live, 'client'>> {
+  const state = live.get(tx);
+  if (!state || !hasLiveOperationalTransaction(tx)) throw new TypeError('No live operational transaction');
+  return Object.freeze({
+    pool: state.pool,
+    workClient: state.workClient,
+    accounts: state.accounts,
+    deadline: state.deadline,
+    partition: state.partition,
+    mode: state.mode,
+  });
 }
 
 /** Input is a consumer-owned locator object, including the fenced accounts. */
@@ -149,7 +173,7 @@ export async function runOperationalTransaction<T>(
                 throw authorization.denied();
               if (!(await fence.run(tx, { partition_no: partition }))) throw unavailable('fenced');
               if (Date.now() >= deadline) throw unavailable('deadline');
-              live.set(tx, { client, workClient: options.workClient, accounts, deadline });
+              live.set(tx, { client, pool, workClient: options.workClient, accounts, deadline, partition, mode: options.mode });
               for (const id of accounts) await fenceOperationalAccount(tx, id);
               const value = await body(tx);
               await authorization?.finalize?.(tx, attempt, evidence);

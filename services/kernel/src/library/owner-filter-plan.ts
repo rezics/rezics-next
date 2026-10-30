@@ -62,7 +62,7 @@ export type OwnerFilterCandidateClosure = Readonly<{
 }>;
 
 export type OwnerFilterReadBinding = Readonly<{
-  input: PrepareCollectionSource;
+  input: Extract<PrepareCollectionSource, { actor: Actor }>;
   scope: IdentityScopeObservation;
 }>;
 
@@ -71,7 +71,7 @@ export type OwnerFilterReadBinding = Readonly<{
  * minting a read T. It must be replaced by the actual Source composition, not a Date, new budget or synthetic scope.
  */
 export async function bindOwnerFilterRead(
-  _dependencies: Dependencies,
+  _dependencies: Omit<Dependencies, 'tokens'>,
   _actor: Actor,
   _collectionId: string,
   _admission: CollectionMemberAdmission,

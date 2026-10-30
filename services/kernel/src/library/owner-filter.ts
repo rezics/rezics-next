@@ -533,6 +533,8 @@ export async function prepareCollectionMemberFilter(
   options: CollectionMemberQuery,
   input: PrepareCollectionSource,
 ) {
+  // Request admission requires the current reader; background completion cannot supply an Actor.
+  if (input.work) throw new ProblemError('dependency_unavailable');
   const admission = await admitCollectionMemberQuery(deps, input.actor, options, input.deadline);
   const prepared = await createCollectionSource(deps).prepare(input);
   return { admission, ...prepared };

@@ -1,11 +1,15 @@
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { withConnection } from '../database/pool.ts';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { ProblemError } from '../http/problem.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import { readScopeLeafEvidence, type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
-import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
+import { currentOwnerClauseKey, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from './current-leaf.ts';
 import type { FactClause } from './disclosure/check.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
@@ -154,21 +158,73 @@ export async function evaluateScopeSubjects(
     reservation: ScopeEvaluationReservation;
     work: ScopeWork;
     resume?: ScopeLeafResume | null;
+    owner?: Readonly<{
+      admission: Parameters<typeof readOwnerFilterCandidate>[1];
+      binding: Parameters<typeof readOwnerFilterCandidateClosure>[0];
+      source: Parameters<typeof readOwnerFilterCandidateClosure>[1];
+    }> | undefined;
   }>,
 ) {
-  const { pool, options, plan, subjects, work, reservation, basis } = input;
+  const { plan, subjects, work, reservation, basis } = input;
   const values: RelationFacetMatch[] = [];
   const evidence = new Set<string>();
   let progress: ScopeEvaluationProgress | null = null;
   let resume: ScopeLeafResume | null = null;
   for (const subject of subjects) {
-    const results: RelationFacetMatch[] = [];
-    for (const [leafOrdinal, native] of plan.leaves.entries()) {
-      // Library owns current owner evidence. No scalar private-field copy or Boolean hook here.
-      if (native.kind === 'owner') {
-        results.push('not_proven');
+    if (plan.leaves.some((leaf) => leaf.kind === 'owner')) {
+      // The Library producer owns complete original/terminal support and same-owner
+      // native point evidence. Its matcher invokes the same shared Boolean plan.
+      // Never treat a missing closure as empty private evidence, even beneath OR.
+      const owner = input.owner;
+      if (!owner || input.options.work ||
+          owner.binding.input.actor !== input.options.actor ||
+          !isDeepStrictEqual(owner.admission.plan?.leaves, plan.leaves)) {
+        values.push('not_proven');
         continue;
       }
+      const { pool, options } = input;
+      const native = new NativeCollectionWork(work.remaining(), options.deadline);
+      try {
+        const read = async () => {
+          const closure = await readOwnerFilterCandidateClosure(owner.binding, owner.source, subject, native);
+          if (closure.status !== 'complete') return 'not_proven' as const;
+          if (closure.closure.subjectId !== subject) throw new TypeError('Foreign native owner closure');
+          // Library resolves catalogue evidence as well. An unavailable public branch
+          // must never be bypassed by an otherwise true native owner OR branch.
+          if (plan.leaves.some((leaf) => leaf.kind === 'catalogue' &&
+              closure.closure.catalogue.get(currentOwnerClauseKey(leaf))?.state !== 'current'))
+            return 'not_proven' as const;
+          const control = native.reserve({ ...zeroScopeWork(), nativePoints: 1, statements: 3, bytes: 256 });
+          control.dispatch();
+          try {
+            return await withConnection(pool, async (connection) => {
+              const client = deadlineClient(connection, options.deadline);
+              await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+              try {
+                const value = await readOwnerFilterCandidate(client, owner.admission, closure.closure, native);
+                await client.query('COMMIT');
+                return value;
+              } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+              }
+            });
+          } finally {
+            control.settle();
+          }
+        };
+        const first = await read();
+        // A scalar result is never retained permission. Repeat native evidence before
+        // the enclosing source/Scope70 guards settle the output or progress commit.
+        values.push(first === 'not_proven' || (await read()) !== first ? 'not_proven' : first);
+      } finally {
+        work.native(native.receipt());
+      }
+      continue;
+    }
+    const results: RelationFacetMatch[] = [];
+    for (const [leafOrdinal, native] of plan.leaves.entries()) {
+      if (native.kind === 'owner') throw new TypeError('Owner leaf requires native Library evidence');
       const clause = native.clause;
       const budget = work.leafBudget();
       if (!budget) {
@@ -189,9 +245,9 @@ export async function evaluateScopeSubjects(
             }
           : null;
       const result = await readScopeLeafEvidence(
-        pool,
+        input.pool,
         { subject, leaf: clause, after, revalidate: null, budget },
-        options,
+        input.options,
       );
       work.leaf(result.usage);
       if (result.state !== 'current') {
@@ -223,9 +279,9 @@ export async function evaluateScopeSubjects(
             break;
           }
           const final = await readScopeLeafEvidence(
-            pool,
+            input.pool,
             { subject, leaf: clause, after: null, revalidate: witness, budget: finalBudget },
-            options,
+            input.options,
           );
           work.leaf(final.usage);
           if (final.state !== 'current' || final.basis !== result.basis) {

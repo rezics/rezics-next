@@ -2,13 +2,15 @@
 
 This is the Search start and closure inventory required by the adopted
 [API acceptance gaps workflow](../research/api-acceptance-gaps.md#workflow-change-the-manager-can-adopt).
-It adds no product authority, endpoint, fixture implementation or frozen assertion. [Search](search.md),
+The original inventory added no product authority, endpoint, fixture implementation or frozen assertion. The
+[native account-erasure adoption](#native-account-erasure-participant) below adds its three named native cases.
+[Search](search.md),
 [first-public scope](../scope.md) and [Filtered lists](../filtered-lists.md) retain their authority.
 Source inspection baseline: `a42079db4768720dc6075884b5486bbfef42289c`.
-This owner-document adoption runs only the formatter acceptance; it supplies no native pass or promotion.
+The earlier owner-document adoption ran only formatter acceptance; it supplied no native pass or promotion.
 The prior native acceptance ran once and failed inherited default-module startup and the Pages deadline; those
 failures remain required capability evidence. The prior root typecheck recorded exit 0. No native, full or root
-check is rerun for this adoption; the full main/root gate remains unproven. Native closure still requires every
+check was rerun for that earlier adoption; the full main/root gate remains unproven. Native closure still requires every
 original case and actual new persona/sign-in receipts, with no skips.
 
 ## Evidence rules and common boundaries
@@ -18,7 +20,8 @@ Each capability records five separate stages: **specification validated red**, *
 is not a measured red result. A formatter, missing-driver verifier, helper, registration, source inspection or old
 focused green supplies no native pass. Promotion requires main evidence covering the named revision and every
 applicable cell. REQUIRED NOT YET FROZEN/BOUND means an obligation remains open, not a successful rejection.
-Commands below identify existing evidence entry points for later owner checks; this document does not run them.
+Commands in the original inventory identify evidence entry points for later owner checks. The native
+account-erasure section separately records its actual focused check and root typecheck results.
 Exact original titles and declared counts are in [the suite ledger](#original-suite-ledger).
 
 Every six-cell table covers public/private/unlisted source visibility and anonymous, editor, owner (Alice), other
@@ -584,3 +587,77 @@ Native command: `bun run --cwd services/kernel check test/presentation/outcomes.
   registered capability at owner integration/promotion, deduplicated by revision, with exact scenario counts and no
   skips/todos. Record specification-red, registration, exposure, named-revision native pass and main promotion
   independently; none of these followups is already complete by this document's formatter acceptance.
+
+## native-account-erasure-participant
+
+[Search's Deletion lifecycle](../../services/kernel/src/search/README.md#deletion-lifecycle) adopts the exact
+inventory and participant boundary under [Deletion items 1–8](../deletion.md#account-erasure) and
+[Access Erasure consumers](../../services/kernel/src/access/README.md#erasure-consumers). The integrated coordinator
+is not owner cleanup. This specification implements no participant, purge, acknowledgement, locator/Source/ACK
+ABI or private fact store.
+
+**Frozen native titles** (SHA-256 `e4dd21c428131480703cb5c2e4f0562f4a84c05580c37c82916b9af15ec43a17`), all in
+[erasure-participant.test.ts](../../services/kernel/test/search/erasure-participant.test.ts):
+
+- `default Search registers the native account-tombstoned participant even without per-account data`
+- `Search cannot acknowledge erasure before all affected live-generation copies and delayed writes are resolved`
+- `native Search erasure follows fresh Auth confirmation and records its immutable acknowledgement only after actual cleanup`
+
+**Binding:** canonical `nativeFixture` → `testKernel`/`createPersonas`; the same actual `PersonasOptions` →
+`deletePersona` (fresh human sign-in, Auth `/account-operations/approve` and `/account-operations/execute`). Actual
+`drainEffects(pool, partition, { deadlineMs? })` observes the effects checkpoint; real `readErasureStatus` separately
+observes Search's acknowledgement. The child calls `startWorker` with every imported default module in order,
+observing the real Search `addEffects` registration and forwarding original starters/effects. No-config registration
+is an executable missing-effect assertion. One runner-owned kernel database supplies real Access/accounts/grants,
+production subject/source edits, exact native engine copies and public APIs. Grace generation 1, active generation
+2 and rebuilding generation 3 are physically populated by the default worker. Personal-name canaries, selected
+public facts, an actual private candidate, withdrawn copies, retained contribution/provenance, delayed native bulk
+dispatch/response, native pruning and immutable real-effect replay retain their future assertions.
+
+**Command:** `bun run --cwd services/kernel check test/search/erasure-participant.test.ts`; root
+`bun run typecheck` covers shared specification imports. No full kernel/web/gate acceptance is claimed.
+
+| Stage                                   | Evidence                                                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| specification validated red             | Not measured. All three frozen cases ran but failed in shared definition bootstrap before executing their participant assertions.                      |
+| native driver registered                | Source-bound to the canonical helper and actual default composition; runtime registration is unmeasured. No synthetic tombstone, event or erasure row. |
+| implementation exposed                  | Source inspection finds no default Search tombstone effect; only the indexing service exists.                                                          |
+| user-case native pass at named revision | None. Neither effects checkpoint nor pending status proves cleanup.                                                                                    |
+| promoted                                | No main launch-gate closure evidence.                                                                                                                  |
+
+**Check evidence:** committed test/runtime inputs at `f243d801136965df4d9d35f11e2e8dea9b7ca972`; the frozen
+test hash above is unchanged. Both required commands ran once through `bun scripts/worker-check.ts --`, and both
+wrappers finished. No extra full kernel/web/gate check or diagnostic rerun was started.
+
+- Focused native command: exit 1, three failures with `error: Invalid definition release` at
+  `semantic/definitions.ts:29`, called by `bootstrapRelease` in the shared fixture initialization at
+  `erasure-participant.test.ts:37`. No participant registration, fresh deletion, cleanup or acknowledgement
+  assertion was reached. This is a shared bootstrap refusal, not the intended missing-participant red.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T03-08-51.201Z-0f086cdf.log`.
+- Root typecheck: exit 0 across every workspace, including Kernel, Auth and Web. The prior mapper/generation
+  failures did not recur in this run.
+  Log: `.temp/goal/checks/worker-check-2026-10-29T03-10-59.169Z-b65f81f0.log`.
+
+**Shared prerequisite requiring research:** the runner elides the bootstrap violation object. The existing
+[definition validation research](../research/definition-validation-cpu-deep.md#new-controlled-phase-evidence)
+independently records the bundled release refusal at
+`/properties/wdt:P1114/value/properties/unit/pattern` with `unsafe_pattern`: the generated wildcard quantity-unit
+pattern enters the checker's forbidden fuzz fallback. The current validator blob
+`a25838bee6bd178da18c07fa34122b52e2bedded` and checker blob
+`654caa91ae2d7fb3aad5bbbe869d12f78d431a66` match that report. This finding predates this acceptance; the native
+command above does not independently expose its exact violation pointer.
+
+Research needed: how can the existing immutable wildcard quantity-unit schema receive a valid proof under the
+unchanged structural-only safety policy, preserving published schema bytes and hostile-pattern refusals? That
+generator/checker repair is not supplied by the existing research. The frozen acceptance and fail-closed validator
+remain unchanged. Participant assertions still need measured red evidence.
+
+**Concrete open prerequisites:** no native all-role affected-subject/dependency locator or minimized-source
+completion export; `accountAgentId` alone is incomplete, including verified terminals and foreign provenance.
+Source/queried-observation closure supplies neither live cleanup nor foreign-drain capability. All-role,
+private/unlisted and foreign dependency cases still need the real producer binding; no new ABI or test callback
+is adopted here. The independent late-write-pruning suite's four physical-resurrection reds remain open despite
+current API suppression. Delayed effects must really settle before Search acknowledges; disabled configuration
+cannot prove no history. Actual three-scale locator, cleanup and shared-store costs follow those native ports.
+This is participant acceptance, not the seeded coordinator proof or the whole launch gate; backup expiry,
+restore, legal-hold and retention engines remain outside this adoption.

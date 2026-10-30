@@ -306,7 +306,7 @@ class KindSourceWork {
  * actor and deadline bind prefix, original+terminal membership and Type projection. EOF is canonical Source EOF,
  * never raw EOF, a page limit, preview completion or count zero. No group is skipped when native proof is pending.
  */
-export type CollectionKindSourceStep = CollectionSourceContext & {
+export type CollectionKindSourceStep = Extract<CollectionSourceContext, { work?: never }> & {
   source: PreparedCollectionSource;
   collection: CollectionSource;
   allowance: WorkAllowance;
