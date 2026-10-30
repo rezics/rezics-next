@@ -55,6 +55,12 @@ observations. No private JWK or bearer is included. Until that managed command c
 receipt for this caller and no native success claim. The importer-local companion is a protocol-double proof
 of the two acquisition policies and is explicitly separate from native acceptance.
 
+Local preflight passed on `afcdc8c956`: both importer-local CLI cases, 46 assertions and zero failures;
+the direct importer compiler checked 147 files without type errors. Formatting passed for all six changed
+files. Subsequent caller observations also compare the completed baseline to the original persisted staged
+rows, rather than reconstructing a digest or revision from replacement input. These local results do not
+claim a native pass, a root typecheck or all-workspace regression coverage.
+
 ## Bounds, sources and limits
 
 The caller uses existing input, page, projection, candidate, public envelope and retry caps. Reads use exact

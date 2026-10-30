@@ -63,14 +63,14 @@ The ordinary case checked the licensed mean/count, zero native votes, unchanged
 reopen, invalid replacement, original receipts and absence of unlicensed markers.
 
 That historical run's remaining portable case reached ordinary publication after measured staging
-and paging, then stops in the ownership transaction with
+and paging, then stopped in the ownership transaction with
 `SQLiteError: cannot commit transaction - SQL statements in progress`.
-The local measured-publication unit again reproduces this without native
-services: three units pass, one fails, with 21 assertions. Edited-file formatting
-and the importer compiler pass. Native acceptance is incomplete. The remaining
-child stops at the first supported cardinality, two titles; its four/eight-title
-and above-cap iterations are not reached. The independent 32/128/512 population
-case passes.
+The local measured-publication unit again reproduced this without native
+services: three units passed, one failed, with 21 assertions. Edited-file formatting
+and the importer compiler passed. Native acceptance was incomplete in that retry. The remaining
+child stopped at the first supported cardinality, two titles; its four/eight-title
+and above-cap iterations were not reached. The independent 32/128/512 population
+case passed.
 
 The cause is isolated to the frozen SQLite evidence producer's temporary prepared
 plan statement. `sqliteEvidence.prove` calls `db.prepare(...).all(...)` without
@@ -95,7 +95,7 @@ The same witness succeeds when `plan.finalize()` is called immediately after
 evidence producer remain unchanged; this slice does not substitute a different
 SQL/EQP validator or close statements behind the validator's back.
 
-The exact fourteen child cases and their latest outcomes are:
+The exact fourteen child cases and their historical retry outcomes were:
 
 | Case                                                                                                             | Outcome                                      |
 | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
