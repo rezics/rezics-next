@@ -175,7 +175,8 @@ export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Pr
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
-  authenticate(token: string, context: AccessContext): Promise<AccountActor>;
+  /** Authentication has no authorization-time input; preserve its native request contract. */
+  authenticate(token: string, context: { pool: Pool; deadline: number }): Promise<AccountActor>;
   prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
   preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
