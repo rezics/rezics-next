@@ -1,5 +1,6 @@
 import { ProblemError } from './problem.ts';
 import { RELEASE_LIMITS } from '@rezics/definitions';
+import { parseStrictJson } from './strict-json.ts';
 
 export const DEFAULT_BODY_LIMIT = 1_048_576;
 export const MAX_BODY_LIMIT = RELEASE_LIMITS.bytes + 65_536;
@@ -92,7 +93,7 @@ export async function parseBoundedBody(request: Request, limit: number, mode: Bo
   const bytes = await readBoundedBody(request, limit);
   if (mode === 'raw') return bytes;
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    return parseStrictJson(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
     throw new ProblemError('invalid_request');
   }

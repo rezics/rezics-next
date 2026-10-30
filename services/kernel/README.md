@@ -504,6 +504,12 @@ refused for numeric or boolean fields, as are numbers for string fields, with `4
 JSON pointer. The app composition compiles each route's body check once and runs it before Elysia's coercing
 validation. Query and path parameters retain type coercion because their values arrive as strings.
 
+The shared bounded JSON wire parser rejects repeated decoded member names within any one object, including
+escaped equivalents and objects nested in arrays, with `400 invalid_request` before schema checks or route effects.
+Names compare exactly as native JSON strings, without case folding or Unicode normalization; separate object
+scopes may reuse names. Native JSON syntax and fatal UTF-8 decoding remain authoritative. Raw bodies retain
+their exact bytes; absent bodies remain absent and a present empty JSON body is invalid.
+
 A request's deadline is fixed at arrival from `requestDeadlineMs`. Code reached by a route takes its deadline from the
 route's `job.deadline` or `deadlineFor(budgetMs)`, never from `Date.now() + N` or the kernel clock, which is business
 time and tests move. Durable work gets `Date.now() + budgetMs` from the same `deadlineFor`. A deadline crossing the
@@ -640,7 +646,7 @@ only for lists that have not yet moved.
 
 | Operation    | Touches                  | Bound                                                                           | Growth check                   |
 | ------------ | ------------------------ | ------------------------------------------------------------------------------- | ------------------------------ |
-| HTTP ingress | One request's wire bytes | O(limit) time and memory per request; reserved total at most the ingress budget | `test/http/body-limit.test.ts` |
+| HTTP ingress | One request's capped wire bytes, decoded JSON text and object member-name scopes | O(limit) time and memory per request; iterative duplicate guard without a depth cap; reserved total at most the ingress budget | `test/http/body-limit.test.ts`, `test/http/strict-json.test.ts` |
 
 ## HTTP ingress body bounds
 
