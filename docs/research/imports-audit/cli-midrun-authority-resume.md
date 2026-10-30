@@ -2,7 +2,7 @@
 
 The frozen [native outcome](../../../services/kernel/test/imports/cli-midrun-authority-resume.test.ts)
 is bound by its [caller](../../../services/kernel/test/imports/cli-midrun-authority-resume-fixture.ts).
-The missing-caller red is historical evidence; binding alone does not establish a native pass or promotion.
+The missing-caller red is historical evidence. The first connected native run passed; its receipt and limits are recorded below. Promotion remains separate.
 
 One `openApiRuntime({batchRecords:8,maxFields:64,maxRecordBytes:65536})` owns the application, Auth, Access and
 registered worker. The caller consumes the actual `identitySupport`, `openApiObserver` and runtime `mediaBoundary`
@@ -50,8 +50,8 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 The native log and `.temp/goal/cli-midrun-authority-resume/native-evidence.json` retain raw exchanges, pending rows,
 receipts, source digests, converter/bundle revisions, selected public objects and registered worker child names/counts.
-The managed check receipt identifies the tested commit. Native execution is pending until that receipt exists;
-no binding, compiler or local protocol-double result is credited as native acceptance. No production importer
+The managed check receipt identifies the tested commit. No binding, compiler or local protocol-double result is
+credited as native acceptance. No production importer
 change is inferred merely from the previously missing caller. The importer-local companion only proves exit 4,
 non-retry, baseline retention, exact durable replay and later successor admission against a local protocol double.
 
@@ -70,3 +70,33 @@ and formatting of the five edited files. A discretionary direct-file compiler in
 could not load Reylo SQL types outside the managed analysis setup (`Cannot find module './account-agent-effect-read.sql'`).
 It is not a native assertion failure or a passing native typecheck; the managed command owns that analysis. No
 production defect has been reached by the local proof. There are no changes outside the declared paths.
+
+## Native receipt
+
+The managed command above tested code revision `7599ec7013d8a85f3efc9b78ba27212c9a8b00d4` and exited 0.
+The unchanged frozen outcome passed: one test, 4,330 assertions, one provider child (`bangumi`) with seventeen
+records. Raw evidence is line 78 of `.temp/goal/checks/worker-check-2026-10-30T08-55-40.742Z-2f0a4b66.log`;
+lines 81–84 record the test result and line 97 the exit status. The locally extracted raw object is
+`.temp/goal/cli-midrun-authority-resume/native-passed-evidence.json`.
+
+The run observed sixteen held requests and sixteen native 403 responses, sixteen exact pending envelopes,
+and 54 unchanged original receipt rows. Revoked replay returned 403 without success disclosure. Recovery consumed
+zero successor bytes; its final effect ordinal was 424 and the distinct successor began at 575. Native originals,
+source bindings, media and the independent accepted/adopted selection survived, with no duplicate candidate effects.
+The registered worker executed four children: two `content.importFromUrl` and two `content.image` jobs across the
+changed and successor generations. Both worker registrations were observed, with no live Internet requests.
+
+All source rows retained native revision `unversioned` and converter `bangumi@3`. The observed definition bundle
+was `sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`.
+For record `930001`, initial/refreshed/successor source digests were respectively
+`d6253eaf184569018c5c96f7444f167666f7403360ee37c5b3e81b0b310b25e0`,
+`8c85104fdb78e2c6000fc5e876378710574855ae0afaa13963c7675a87eefd5c` and
+`60c613790a6c599dcdcc6e7c04d90b8c5f680574139d5ddc5aced4e5587d659d`.
+The raw object retains all seventeen rows and exact input-byte SHA-256 values for every acquired generation.
+
+The first native run also printed TS2769 at fixture line 487: the equality assertion's expected rows were typed
+as possibly undefined while the actual baseline rows were nullable. The fixture now requires each sealed staged
+row to exist before comparing it with the completed baseline. This preserves the outcome assertion and corrects
+its typing; it introduces no production change. A corrected managed receipt is pending. No native outcome
+assertion or production defect was reached. This receipt proves the connected journey, not root regression,
+all-provider coverage, main promotion or a new growth measurement.

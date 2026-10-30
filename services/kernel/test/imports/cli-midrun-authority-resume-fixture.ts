@@ -484,7 +484,7 @@ export async function runJourney() {
     expect(afterResume.active).toBeNull();
     expect(afterResume.claims).toEqual(before.claims);
     expect(afterResume.completed.source.count).toBe(17);
-    expect(afterResume.completed.rows).toEqual(afterDenial.records.map((record) => record.staged?.row));
+    expect(afterResume.completed.rows).toEqual(afterDenial.records.map((record) => record.staged!.row));
     expect(afterResume.completed.rows.every((row) => row?.converter_revision === converter_revision)).toBe(true);
     expect(afterResume.completed.rows.every((row) => row?.recordRevision === 'unversioned')).toBe(true);
     for (let i = 0; i < 17; i++)
