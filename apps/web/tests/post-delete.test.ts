@@ -455,10 +455,16 @@ async function waitForKernelQuiescence() {
   }
 }
 
-async function deleteFromMenu(page: Page, postId: string, locale: keyof typeof uiLabels = 'en') {
+async function deleteFromMenu(
+  page: Page,
+  postId: string,
+  locale: keyof typeof uiLabels = 'en',
+  beforeConfirm?: () => Promise<void>,
+) {
   const slot = page.locator(`#post-${postId}`);
   await slot.getByRole('button', { name: uiLabels[locale].moreActions }).click();
   await page.getByText(uiLabels[locale].delete, { exact: true }).click();
+  await beforeConfirm?.();
   await page.getByRole('button', { name: uiLabels[locale].confirmDelete, exact: true }).click();
   await slot.locator('[data-slot="tombstone"]').waitFor({ state: 'visible' });
   return slot;
@@ -484,10 +490,11 @@ test(
     try {
       expect(access).toBeTruthy();
       const before = await slot.boundingBox();
-      await waitForKernelQuiescence();
-      writes.length = 0;
-      kernelRequests.length = 0;
-      await deleteFromMenu(page, replyId);
+      await deleteFromMenu(page, replyId, 'en', async () => {
+        await waitForKernelQuiescence();
+        writes.length = 0;
+        kernelRequests.length = 0;
+      });
       await eventually(
         () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'More actions'),
         'focus returned to the post actions trigger',
