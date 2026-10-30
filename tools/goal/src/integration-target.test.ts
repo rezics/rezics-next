@@ -44,12 +44,30 @@ async function train(
       },
     },
     runGate,
+    runLaunchSmoke: async (_command, cwd) => {
+      const candidate = git(cwd, 'rev-parse', 'HEAD');
+      const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+      return {
+        passed: true,
+        output: `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=landing:passed lifecycle-regressions=landing:passed\n`,
+        timedOut: false,
+      };
+    },
     ...hooks,
   }).run();
   await h.job.drain();
 }
 
 function addCommit(h: ReturnType<typeof integrationHarness>, branch: string, files: Record<string, string>): string {
+  if (branch === 'main') {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(h.root, file)), { recursive: true });
+      writeFileSync(join(h.root, file), content);
+    }
+    git(h.root, 'add', '--', ...Object.keys(files));
+    git(h.root, 'commit', '-m', `Advance ${branch}`);
+    return git(h.root, 'rev-parse', 'HEAD');
+  }
   const base = h.head(branch);
   const tree = join(h.settings.worktreeRoot, `branch-update-${crypto.randomUUID()}`);
   mkdirSync(h.settings.worktreeRoot, { recursive: true });
@@ -187,7 +205,7 @@ test('a task from another goal continues to integrate into dev even when it chan
   }
 });
 
-test('a downstream merge conflict aborts without moving its target and notifies both managers', async () => {
+test('a downstream merge conflict preserves every release ref and notifies both managers', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -200,16 +218,19 @@ test('a downstream merge conflict aborts without moving its target and notifies 
 
     await train(h);
 
-    expect(h.head('main')).not.toBe(base);
+    expect(h.head('main')).toBe(base);
     expect(h.head('stabilize')).toBe(stabilize);
     expect(h.head('dev')).toBe(base);
-    expect(h.outcomes[0]?.passed).toBe(true);
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.outcomes[0]?.conflictedFiles).toEqual(['tools/goal/src/conflict.ts']);
+    expect(h.outcomes[0]?.firstFailure?.assertion).toContain('cause=');
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     for (const manager of ['control-manager', h.settings.integration.supermanager]) {
       const notices = inbox.read(manager).map((entry) => entry.event.summary);
       expect(notices).toHaveLength(1);
       expect(notices[0]).toContain('conflicts with stabilize');
       expect(notices[0]).toContain('tools/goal/src/conflict.ts');
+      expect(notices[0]).toContain('Cause:');
     }
   } finally {
     h.dispose();
@@ -281,7 +302,7 @@ test('a main advance during control-plane checks is preserved by compare-and-swa
     const stabilize = h.head('stabilize');
     const dev = h.head('dev');
     expect(raced).toBe(true);
-    expect(checkRuns).toBe(8); // Four control-plane checks, run again after the compare-and-swap retry.
+    expect(checkRuns).toBe(12); // Six release gates, rerun after main moved during validation.
     expect(git(h.root, 'merge-base', '--is-ancestor', racedHead, main)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', main, stabilize)).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', stabilize, dev)).toBe('');
@@ -291,7 +312,7 @@ test('a main advance during control-plane checks is preserved by compare-and-swa
   }
 });
 
-test('a control-plane test file that fails in the suite under load and passes alone does not keep the task off main', async () => {
+test('a failing control-plane suite cannot pass by rerunning the failure alone', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -310,15 +331,16 @@ test('a control-plane test file that fails in the suite under load and passes al
       return { passed: true, output: '', timedOut: false };
     });
 
-    expect(runs).toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src/flaky.test.ts']);
-    expect(git(h.root, 'show', 'main:tools/goal/src/hotfix.ts')).toBe('tools/goal/src/hotfix.ts');
-    expect(h.store.task(task.id).state).toBe('merged');
+    expect(runs).not.toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src/flaky.test.ts']);
+    expect(git(h.root, 'rev-parse', 'main')).toBe(h.head('dev'));
+    expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.store.task(task.id).state).not.toBe('merged');
   } finally {
     h.dispose();
   }
 });
 
-test('a control-plane test file that fails alone too keeps the task off main', async () => {
+test('a full-suite timeout keeps the control-plane task off every release ref', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -326,18 +348,17 @@ test('a control-plane test file that fails alone too keeps the task off main', a
     const task = dispatch(h, 'tools/goal/src/hotfix.ts');
     await h.start(task);
 
+    const dev = h.head('dev');
     await train(h, async (command) =>
-      command[1] === 'test'
-        ? {
-            passed: false,
-            output: 'tools/goal/src/broken.test.ts:\n(fail) a real failure [1.00ms]\n 1 fail',
-            timedOut: false,
-          }
+      JSON.stringify(command) === JSON.stringify(['bun', 'test', '--timeout', '30000', 'tools/goal/src'])
+        ? { passed: false, output: 'suite timed out waiting for capacity', timedOut: true }
         : { passed: true, output: '', timedOut: false },
     );
 
     expect(h.head('main')).toBe(main);
+    expect(h.head('dev')).toBe(dev);
     expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.outcomes[0]?.timedOut).toBe(true);
     expect(h.store.task(task.id).state).not.toBe('merged');
   } finally {
     h.dispose();

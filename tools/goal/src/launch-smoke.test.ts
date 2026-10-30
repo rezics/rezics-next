@@ -403,6 +403,10 @@ test('launch smoke accepts one explicit evidence report path and rejects ambiguo
   expect(() => parseSmokeArguments(['--report', 'one.json', '--report', 'two.json'])).toThrow(
     '--report can be supplied only once',
   );
+  expect(parseSmokeArguments(['--expected-dev-script-tree', 'a'.repeat(40)]).expectedDevScriptTree).toBe('a'.repeat(40));
+  expect(() => parseSmokeArguments(['--expected-dev-script-tree'])).toThrow(
+    '--expected-dev-script-tree requires a commit',
+  );
   expect(resolveSmokeReportPath(root, '.temp/goal/lifecycle-smoke/manual.json')).toBe(
     join(root, '.temp/goal/lifecycle-smoke/manual.json'),
   );
@@ -424,20 +428,18 @@ test('launch smoke refuses report paths that traverse a symlink out of the workt
   }
 });
 
-test('launch smoke path list covers the launch path, schema, agents, and prompt in launch.ts', () => {
-  const launchPaths = [
+test('every control-plane path category requires the full lifecycle suite', () => {
+  const controlPlanePaths = [
     'tools/goal/src/launch.ts',
-    'tools/goal/src/settle.ts',
-    'tools/goal/src/job.ts',
-    'tools/goal/src/records.ts',
-    'tools/goal/src/worker-slice.ts',
-    'tools/goal/src/agent-adapter.ts',
-    'tools/goal/src/codex-agent.ts',
-    'tools/goal/src/agents/codex.ts',
-    'tools/goal/worker-result.schema.json',
+    'tools/goal/src/landing.ts',
+    'tools/goal/scripts/launch-smoke.ts',
+    'tools/goal/contracts/check-scripts.json',
+    'tools/goal/defaults.json',
+    'tools/goal/package.json',
+    'tools/goal/README.md',
   ];
-  expect(launchPaths.every((path) => launchSmokeRequired([path]))).toBe(true);
-  expect(launchSmokeRequired(['tools/goal/src/landing.ts'])).toBe(false);
+  expect(controlPlanePaths.every((path) => launchSmokeRequired([path]))).toBe(true);
+  expect(launchSmokeRequired(['tools/goalx/src/launch.ts'])).toBe(false);
 });
 
 import { openDb } from './db.ts';
@@ -536,11 +538,20 @@ test('a control-plane launch-path landing runs the smoke on the checked candidat
         },
         runLaunchSmoke: async (command, cwd) => {
           order.push('smoke');
-          expect(command).toEqual(['bun', 'tools/goal/scripts/launch-smoke.ts']);
+          const candidate = git(cwd, 'rev-parse', 'HEAD');
+          const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+          expect(command).toEqual([
+            'bun',
+            'tools/goal/scripts/launch-smoke.ts',
+            '--expected-dev-script-tree',
+            devScriptTree,
+          ]);
           expect(readFileSync(join(cwd, 'tools/goal/src/launch.ts'), 'utf8')).toBe('candidate\n');
           return {
             passed,
-            output: passed ? 'success: passed' : 'wake: failed: injected resume failure',
+            output: passed
+              ? `success: passed\nrelease evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=launch:passed lifecycle-regressions=retry:passed\n`
+              : 'wake: failed: injected resume failure',
             timedOut: false,
           };
         },
@@ -556,19 +567,25 @@ test('a control-plane launch-path landing runs the smoke on the checked candidat
   }
 });
 
-test('a control-plane landing outside the worker launch path does not run the smoke', async () => {
+test('a control-plane landing outside the worker launch path still runs the full suite', async () => {
   const s = landingFixture('tools/goal/src/unrelated.ts');
   let smokeRuns = 0;
   try {
     await new MergeTrain({
       ...s.options,
       runGate: async () => ({ passed: true, output: '', timedOut: false }),
-      runLaunchSmoke: async () => {
+      runLaunchSmoke: async (_command, cwd) => {
         smokeRuns++;
-        return { passed: true, output: '', timedOut: false };
+        const candidate = git(cwd, 'rev-parse', 'HEAD');
+        const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+        return {
+          passed: true,
+          output: `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=landing:passed lifecycle-regressions=landing:passed\n`,
+          timedOut: false,
+        };
       },
     }).run();
-    expect(smokeRuns).toBe(0);
+    expect(smokeRuns).toBe(1);
     expect(s.outcomes[0]?.passed).toBe(true);
     expect(existsSync(join(s.main, 'tools/goal/src/unrelated.ts'))).toBe(true);
   } finally {
