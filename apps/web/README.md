@@ -1195,7 +1195,8 @@ acceptance file is `tests/realm-claim-review.test.ts`; acceptance, native and vi
 No external reference-project source was required.
 
 The added transport cases cover the default current-session GET, exact cursor/Realm scope, sparse continuation,
-native failures and malformed disclosure. Local verification uses only `bun run --cwd apps/web typecheck`.
+native failures and malformed disclosure. Local `bun run --cwd apps/web typecheck` passed with no type errors;
+acceptance, native and visual execution remain deferred to integration.
 Web's review sources remain `src/stories/realm-claim-review.stories.tsx` and
 `src/stories/patterns/realm-claim-review/realm-claim-review.stories.tsx`, using the IDs above at normal 390/1280 widths
 in light/dark. This transport change adds no renderer or story export and claims no visual approval.
