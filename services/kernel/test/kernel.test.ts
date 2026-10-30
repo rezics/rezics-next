@@ -101,6 +101,7 @@ const typed = [
   'GET /v1/me/managedAccounts',
   'GET /v1/accounts/:accountId/management',
   'GET /v1/accounts/:accountId/profile',
+  'GET /v1/accounts/:accountId/erasureStatus',
   'PATCH /v1/accounts/:accountId',
   'GET /v1/accounts/:accountId/speakers',
   'GET /v1/accounts/:accountId/preferences',

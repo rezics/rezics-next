@@ -11,6 +11,7 @@
     "account:set_rate_tier",
     "account:verify_agent",
     "account:renew_cleanup",
+    "account:read_erasure",
     "client:manage",
     "organization:create",
     "subject:create",

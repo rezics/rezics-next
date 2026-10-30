@@ -28,6 +28,7 @@ import { collectionViewerActionResource } from '../library/collection-reads.ts';
 import { realmViewerActionResource } from '../community/realm.ts';
 import { spaceViewerActionResource } from '../community/space.ts';
 import { accessRoutes } from '../access/routes.ts';
+import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
 import { createRealmParticipationCheck, type RealmParticipationCheck } from '../community/participation.ts';
@@ -416,6 +417,11 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     access: (config) => resolveAccess({ ...config, realmRoleReader }),
   });
+  erasureStatusRoutes(app, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
+  });
   payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
@@ -715,6 +721,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof sourceRecordRoutes> &
   ReturnType<typeof profileRoutes> &
   ReturnType<typeof accessRoutes> &
+  ReturnType<typeof erasureStatusRoutes> &
   ReturnType<typeof mediaRoutes> &
   ReturnType<typeof contentRoutes> &
   ReturnType<typeof noticeRoutes> &
