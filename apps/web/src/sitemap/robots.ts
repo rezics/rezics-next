@@ -1,9 +1,43 @@
 import { validatePublicOrigin } from '../shell/origin.ts';
 
-// Route prefixes below a locale that crawlers must not fetch (docs/seo.md Indexing): account, settings, library,
-// order pages and editors. `*` stands for one dynamic segment. Every file under src/routes is either listed here or
-// meant to be crawled; the sitemap test checks both directions.
-const notCrawledRoutes = ['/settings', '/library', '/orders', '/collections/new', '/boards/*/new', '/curate'] as const;
+// Private workspaces and editor paths below a locale (docs/seo.md Indexing). Robots wildcards match any sequence,
+// so shared reader families get only editor suffix rules. Public readers and noindex listings remain crawlable;
+// native admission, current disclosure and page noindex remain authoritative regardless of these discovery rules.
+const notCrawledRoutes = [
+  '/accounts',
+  '/organizations',
+  '/review/account-verifications',
+  '/access',
+  '/settings',
+  '/library',
+  '/orders',
+  '/entitlements',
+  '/creator',
+  '/my/zones',
+  '/inbox',
+  '/moderation',
+  '/imports/review',
+  '/collections/new',
+  '/boards/*/new',
+  '/boards/*/moderation',
+  '/curate',
+  '/catalogue/new',
+  '/catalogue/publication',
+  '/catalogue/recipe',
+  '/contexts',
+  '/editions/new',
+  '/realms/new',
+  // An unbounded /edit prefix would also suppress the public /editions subject view.
+  '/subjects/*/*/edit$',
+  '/subjects/*/*/edit?',
+  '/subjects/*/*/edit/',
+  '/subjects/*/*/relation-edit',
+  '/subjects/*/*/authored',
+  '/subjects/*/*/recipe',
+  '/subjects/*/*/terms',
+  '/subjects/*/*/statement-consent',
+  '/subjects/*/*/context-review',
+] as const;
 
 // Paths outside the locale prefix: authentication pages, the API and server functions, and the checkout start.
 const notCrawledPaths = ['/auth/', '/api/', '/_serverFn/', '/checkout', '/orders/'] as const;
