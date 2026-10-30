@@ -1,6 +1,7 @@
 import type { FakeRoute } from '../fake-modules';
 import demoFixtures from '../fixtures.json';
 import type { Fixtures } from '../fake';
+import subjectRecording from '../recorded/subject.json';
 
 /** A contract-shaped failure fixture: the activated release has no library profile for schema:Person. */
 export const unprofiledSubjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000803';
@@ -15,6 +16,19 @@ const labels: Record<string, string> = {
   fr: 'Personne',
   es: 'Persona',
 };
+const subject: Fixtures['subjects'][number] = {
+  id: unprofiledSubjectId,
+  type: unprofiledType,
+  revision: 1,
+  release: subjectRecording.subject.release,
+  context: subjectRecording.subject.context,
+  resolution: {},
+  relationCounts: {},
+  labels,
+  descriptions: {},
+  aliases: {},
+  statements: {},
+};
 
 export const routes: FakeRoute[] = [
   {
@@ -27,9 +41,7 @@ export const routes: FakeRoute[] = [
       const response = await pageRead(
         {
           ...demoFixtures,
-          subjects: [
-            { ...demoFixtures.subjects[0], id: unprofiledSubjectId, type: unprofiledType, labels, statements: {} },
-          ],
+          subjects: [subject],
         } as unknown as Fixtures,
         request,
       );
@@ -60,7 +72,9 @@ export const routes: FakeRoute[] = [
       const locale = request.headers.get('accept-language')?.split(',')[0]?.trim() ?? 'en';
       return {
         status: 200,
-        subject: { id: unprofiledSubjectId, type: unprofiledType },
+        subject,
+        account: null,
+        related: {},
         summary: {
           id: unprofiledSubjectId,
           type: unprofiledType,

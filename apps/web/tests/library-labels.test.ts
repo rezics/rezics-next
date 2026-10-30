@@ -334,3 +334,45 @@ test('native label forms pass the shared CSRF boundary only with one bounded tok
     expect(await csrfTokenFromRequest(native)).toBeNull();
   }
 });
+
+test('the unprofiled label story loads the same complete subject and localized title through both subject reads', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { unprofiledSubjectId } = await import('../src/kernel/fake/library-unprofiled-subject');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage, subjectBody, subjectPageTitle } = await import('../src/features/pages/subject');
+  const { libraryProfile } = await import('../src/library/profiles');
+  const definitions = await import('../src/kernel/recorded/definitions-release.json');
+  const client = createKernelClient('https://kernel.example.test', { fetch: createStoryRecordedKernelFetch() });
+  expect(
+    libraryProfile(definitions.release as unknown as import('../src/subject/definitions').Release, 'schema:Person'),
+  ).toBeUndefined();
+
+  for (const [locale, title] of [
+    ['en', 'Person'],
+    ['zh-Hant', '人物'],
+    ['zh-Hans', '人物'],
+    ['ja', '人物'],
+    ['ko', '사람'],
+    ['de', 'Person'],
+    ['fr', 'Personne'],
+    ['es', 'Persona'],
+  ] as const) {
+    const canonical = await loadSubject(client, unprofiledSubjectId, locale);
+    expect(canonical.kind).toBe('subject');
+    if (canonical.kind !== 'subject') throw new Error('Unprofiled subject is missing');
+    expect(canonical.value.label).toBe(title);
+    expect(canonical.value.subject).toMatchObject({
+      type: 'schema:Person',
+      statements: {},
+      descriptions: {},
+      aliases: {},
+    });
+    expect(canonical.value.read.related).toEqual({});
+
+    const loaded = await loadSubjectPage(client, unprofiledSubjectId, undefined, locale);
+    expect(loaded.kind).toBe('page');
+    if (loaded.kind !== 'page') throw new Error('Unprofiled page is missing');
+    expect(subjectBody(loaded.page)?.subject).toEqual(canonical.value.subject);
+    expect(subjectPageTitle(loaded.page, locale)).toBe(title);
+  }
+});
