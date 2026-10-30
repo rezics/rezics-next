@@ -38,12 +38,10 @@ export async function readContextCuration(
       client.subjects({ id }).get({ query: { context }, headers }),
       client.subjects({ id }).get(session ? { headers: { 'rezics-session-token': session } } : undefined),
       property
-        ? client
-            .subjects({ id })
-            .candidates.get({
-              query: { property, context, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
-              headers,
-            })
+        ? client.subjects({ id }).candidates.get({
+            query: { property, context, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
+            headers,
+          })
         : undefined,
       release,
     ]);
