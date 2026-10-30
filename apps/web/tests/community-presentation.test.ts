@@ -595,10 +595,15 @@ test('management host ownership read admits the configured native owner without 
   expect(page.realm?.continuity).toEqual(continuity);
   requests.length = 0;
   expect(
-    await readRealmClaim(client, new Request(url, { headers: { authorization: owner } }), {}, {
-      realmId: available.realmId,
-      credentialMode: 'session',
-    }),
+    await readRealmClaim(
+      client,
+      new Request(url, { headers: { authorization: owner } }),
+      {},
+      {
+        realmId: available.realmId,
+        credentialMode: 'session',
+      },
+    ),
   ).toEqual({ kind: 'ready', snapshot: continuity, admission: 'allowed' });
   expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
     `GET /v1/realms/${available.realmId}`,
