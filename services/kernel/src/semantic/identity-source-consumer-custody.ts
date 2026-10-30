@@ -2,6 +2,31 @@ import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
 import type { IdentityJobRef, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
+import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
+import {
+  currentCommand,
+  currentCommandResources,
+  noEffect,
+  registerCommandCallback,
+  runCommand,
+} from '../command/command.ts';
+import { readPartition } from '../partition/partition.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
+import { bindSemanticProducerRoles, recordSemanticSourceCommit } from './erasure-producer.ts';
+import { identityBindingData, lookupIdentityBinding, readAccountIdentityUndo } from './identity-epoch-binding.ts';
+import {
+  identityEpochStore,
+  identityJobPartition,
+  identityReceiptKey,
+  IdentityEpochStoreError,
+  serializeIdentityValue,
+} from './identity-epoch-store.ts';
+import { SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
+import claim from './identity-source-consumer-custody-claim.sql';
+import job from './identity-source-consumer-custody-job.sql';
+import insert from './identity-source-consumer-custody-insert.sql';
+import select from './identity-source-consumer-custody-select.sql';
 
 export type IdentitySourceConsumerReference = Readonly<{
   receipt: Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
@@ -17,20 +42,292 @@ export type IdentitySourceConsumerCustody = Readonly<{
   [identitySourceConsumerCustody]: true;
 }>;
 
-/** Provisional declaration: unavailable until durable native terminal custody is established. */
-export async function readIdentitySourceConsumerCustody(
-  _pool: Pool,
-  _reference: IdentitySourceConsumerReference,
-  _context: Readonly<{ deadline: number }>,
-): Promise<IdentitySourceConsumerCustody | null> {
-  return null;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const digest = /^[0-9a-f]{64}$/;
+const json = serializeIdentityValue;
+const locator = Symbol('identity-source-consumer-custody-locator');
+type LocalProof = IdentitySourceConsumerCustody & Readonly<{ [locator]: IdentityNativeReceipt }>;
+
+function valid(reference: IdentitySourceConsumerReference): boolean {
+  const { receipt, source, barrier } = reference;
+  const accountRoute = routeOf(receipt.account);
+  return (
+    (receipt.kind === 'account-agent.verify' || receipt.kind === 'account-agent.unverify') &&
+    uuid.test(receipt.account) &&
+    uuid.test(receipt.receipt) &&
+    accountRoute !== null &&
+    source.partition === partitionOf(accountRoute) &&
+    uuid.test(source.transactionId) &&
+    Number.isSafeInteger(source.epoch) &&
+    source.epoch > 0 &&
+    typeof source.position === 'bigint' &&
+    source.position > 0n &&
+    digest.test(reference.sourceDigest) &&
+    uuid.test(reference.job.jobId) &&
+    routeOf(reference.job.jobId) !== null &&
+    typeof reference.job.epoch === 'bigint' &&
+    reference.job.epoch > 0n &&
+    uuid.test(barrier.accountId) &&
+    routeOf(barrier.accountId) === barrier.accountRoute &&
+    Number.isSafeInteger(barrier.version) &&
+    barrier.version > 0 &&
+    barrier.version <= 2147483647 &&
+    Number.isFinite(Date.parse(barrier.at)) &&
+    ['subject', 'requester', 'decider'].includes(reference.erasedRole) &&
+    (reference.erasedRole !== 'subject' || barrier.accountId === receipt.account)
+  );
 }
 
-/** A declaration alone never permits source minimization. */
-export async function verifyIdentitySourceConsumerCustody(
-  _tx: CommandTransaction,
-  _reference: IdentitySourceConsumerReference,
-  _proof: IdentitySourceConsumerCustody,
+function sameSource(reference: IdentitySourceConsumerReference, source: AccountIdentitySource): boolean {
+  const role = { subject: 'subject', requester: 'actor', decider: 'editor' }[reference.erasedRole];
+  return (
+    json(source.input.receipt) === json(reference.receipt) &&
+    source.partition === reference.source.partition &&
+    source.epoch === reference.source.epoch &&
+    source.position === reference.source.position &&
+    source.transactionId === reference.source.transactionId &&
+    source.digest === reference.sourceDigest &&
+    source.roles.some((entry) => entry.account_id === reference.barrier.accountId && entry.role === role)
+  );
+}
+
+/** Resolve only already accepted native inputs. Verification uses the undo-only Accounts port
+ * after T; reversal resolves ITS OWN accepted claim, never intent.undoJob. Each command releases
+ * its home before the next probe. No admission is performed to repair a missing hint.
+ */
+async function original(pool: Pool, reference: IdentitySourceConsumerReference, deadline: number) {
+  let source: AccountIdentitySource;
+  if (reference.receipt.kind === 'account-agent.verify') {
+    const undo = await readAccountIdentityUndo(pool, reference.receipt);
+    if (undo.job.jobId !== reference.job.jobId || undo.job.epoch !== reference.job.epoch) return null;
+    source = undo.source;
+  } else {
+    source = (
+      await runCommand(pool, { partition: reference.source.partition, deadline }, async (tx) =>
+        noEffect(await readAccountIdentitySource(tx, reference.receipt)),
+      )
+    ).value;
+    if (!sameSource(reference, source)) return null;
+    const binding = await lookupIdentityBinding(pool, { deadline }, source.input);
+    if (!binding) return null;
+    const data = identityBindingData(binding);
+    if (
+      data.state !== 'accepted' ||
+      data.key !== identityReceiptKey(reference.receipt) ||
+      data.digest !== reference.sourceDigest ||
+      data.job.jobId !== reference.job.jobId ||
+      data.job.epoch !== reference.job.epoch ||
+      data.home !== identityJobPartition(reference.job)
+    )
+      return null;
+  }
+  return sameSource(reference, source) ? source : null;
+}
+
+async function acceptedClaim(tx: CommandTransaction, reference: IdentitySourceConsumerReference) {
+  if (currentCommand(tx).partition !== reference.source.partition) return null;
+  const row = (
+    await tx.query<{
+      generation: string;
+      scope_digest: string;
+      binding_transaction_id: string;
+      job_home: number;
+      sources: unknown;
+      receipt: unknown;
+      intent: unknown;
+    }>(claim.sql, [
+      reference.source.partition,
+      identityReceiptKey(reference.receipt),
+      reference.sourceDigest,
+      reference.job.jobId,
+      reference.job.epoch.toString(),
+    ])
+  ).rows[0];
+  return row && row.job_home === identityJobPartition(reference.job) && json(row.receipt) === json(reference.receipt)
+    ? row
+    : null;
+}
+
+/** Publication is only a prerequisite. Reconcile ALL three fixed native receipts through
+ * their real producer; a saved complete flag or coordinator return cannot replace this step.
+ */
+async function published(
+  pool: Pool,
+  reference: IdentitySourceConsumerReference,
+  scope: string,
+  source: AccountIdentitySource,
+  deadline: number,
 ): Promise<boolean> {
+  const home = identityJobPartition(reference.job);
+  const read = () =>
+    runCommand(pool, { partition: home, deadline }, async (tx) => {
+      const saved = await identityEpochStore.readJob(tx, reference.job);
+      const native = (
+        await tx.query<{ scope_digest: string }>(job.sql, [home, reference.job.jobId, reference.job.epoch.toString()])
+      ).rows[0];
+      return noEffect(
+        saved &&
+          native?.scope_digest === scope &&
+          json(saved.receipt) === json(reference.receipt) &&
+          json(saved.intent) === json(source.input.intent)
+          ? saved
+          : null,
+      );
+    });
+  const saved = (await read()).value;
+  if (!saved || saved.state !== 'published') return false;
+  for (const [step, progress] of [
+    ['mapping', saved.mapping],
+    ['search-canonical-index', saved.participants['search-canonical-index']],
+    ['library-private-follow-counts', saved.participants['library-private-follow-counts']],
+  ] as const) {
+    if (
+      !progress ||
+      progress.state !== 'complete' ||
+      progress.job.jobId !== reference.job.jobId ||
+      progress.job.epoch !== reference.job.epoch ||
+      progress.receipt.step !== step ||
+      progress.receipt.job.jobId !== reference.job.jobId ||
+      progress.receipt.job.epoch !== reference.job.epoch
+    )
+      return false;
+    const reconciled = await identityEpochStore.reconcileStepReceipt(pool, progress.receipt);
+    if (reconciled.state !== 'complete' || json(reconciled) !== json(progress)) return false;
+  }
+  return (await read()).value?.state === 'published';
+}
+
+/** Stages an exact native source-home retention receipt, not terminal discharge. The missing
+ * exhaustive receiving/undo consumer producer is described in the owner contract. Pending
+ * custody retains the original bytes and every surviving verification's intent/undo support.
+ */
+export async function readIdentitySourceConsumerCustody(
+  pool: Pool,
+  reference: IdentitySourceConsumerReference,
+  context: Readonly<{ deadline: number }>,
+): Promise<IdentitySourceConsumerCustody | null> {
+  if (!valid(reference) || !Number.isFinite(context.deadline) || context.deadline <= Date.now()) return null;
+  return withRequestDeadline(context.deadline, async () => {
+    try {
+      const source = await original(pool, reference, context.deadline);
+      if (!source) return null;
+      const binding = (
+        await runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) =>
+          noEffect(await acceptedClaim(tx, reference)),
+        )
+      ).value;
+      if (!binding || json(binding.intent) !== json(source.input.intent)) return null;
+      if (!(await published(pool, reference, binding.scope_digest, source, context.deadline))) return null;
+
+      // Every foreign Source/receiver/control checkout has been released. Re-resolve the native
+      // claim, source and current owner in this single original-home command. Retention alone
+      // grants no cleanup, and does not assert that released foreign observations stay current.
+      await runCommand(pool, { partition: reference.source.partition, deadline: context.deadline }, async (tx) => {
+        const current = await acceptedClaim(tx, reference);
+        if (
+          !current ||
+          current.generation !== binding.generation ||
+          current.binding_transaction_id !== binding.binding_transaction_id ||
+          current.scope_digest !== binding.scope_digest ||
+          json(current.sources) !== json(binding.sources)
+        )
+          return noEffect(null);
+        const live = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+        const owner = await readPartition(tx, reference.source.partition);
+        if (!sameSource(reference, live) || !owner || owner.writeState !== 'active') return noEffect(null);
+        const values = referenceValues(reference);
+        const existing = (await tx.query<{ transaction_id: string }>(select.sql, values)).rows[0];
+        if (existing) return noEffect(null);
+        bindSemanticProducerRoles(tx, live.roles);
+        registerCommandCallback(tx, async (transactionId) => {
+          await recordSemanticSourceCommit(tx, transactionId);
+          await tx.query(insert.sql, [
+            ...values,
+            current.generation,
+            current.binding_transaction_id,
+            current.scope_digest,
+            owner.epoch,
+            transactionId,
+          ]);
+        });
+        return {
+          value: null,
+          events: [
+            {
+              type: SEMANTIC_ERASURE_PROGRESS,
+              subject: reference.barrier.accountId,
+              data: { accountId: reference.barrier.accountId },
+            },
+          ],
+        };
+      });
+      // Point receiving records, supplied records[], scoped observation finish(), and participant
+      // ACKs cannot prove the exhaustive original admission/replay/undo dependency cut. No proof
+      // is minted until a real producer serializes that cut against all later consumers.
+      return null;
+    } catch (error) {
+      if (
+        error instanceof IdentityEpochStoreError &&
+        ['identity_epoch_unavailable', 'identity_effect_stale', 'identity_step_receipt_invalid'].includes(error.code)
+      )
+        return null;
+      throw error;
+    }
+  });
+}
+
+function referenceValues(reference: IdentitySourceConsumerReference): unknown[] {
+  const { source, receipt, job, barrier } = reference;
+  return [
+    source.partition,
+    identityReceiptKey(receipt),
+    reference.sourceDigest,
+    source.epoch,
+    source.position.toString(),
+    source.transactionId,
+    job.jobId,
+    job.epoch.toString(),
+    barrier.accountId,
+    barrier.accountRoute,
+    barrier.version,
+    barrier.at,
+    reference.erasedRole,
+  ];
+}
+
+/** Same live source-home command only. A brand/locator is never authority: recheck the native
+ * committed row and current owner/claim under local locks. Retained observations are explicitly
+ * insufficient, including after T or independent History-copy closure. No foreign I/O occurs.
+ */
+export async function verifyIdentitySourceConsumerCustody(
+  tx: CommandTransaction,
+  reference: IdentitySourceConsumerReference,
+  proof: IdentitySourceConsumerCustody,
+): Promise<boolean> {
+  if (
+    !valid(reference) ||
+    currentCommand(tx).partition !== reference.source.partition ||
+    currentCommand(tx).basis !== null ||
+    currentCommandResources(tx).deadline <= Date.now()
+  )
+    return false;
+  const native = (proof as LocalProof | null)?.[locator];
+  if (!native || native.partition !== reference.source.partition) return false;
+  const row = (
+    await tx.query<{ transaction_id: string; owner_epoch: number; position: string }>(
+      select.sql,
+      referenceValues(reference),
+    )
+  ).rows[0];
+  if (
+    !row ||
+    row.transaction_id !== native.transactionId ||
+    row.owner_epoch !== native.epoch ||
+    BigInt(row.position) !== native.position ||
+    !(await acceptedClaim(tx, reference))
+  )
+    return false;
+  // The only currently supported native state is retained. Do not reinterpret a local receipt
+  // as terminal transfer or source discharge until the exhaustive consumer fence is delivered.
   return false;
 }

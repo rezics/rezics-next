@@ -123,6 +123,9 @@ export async function readSemanticSourceDisposition(
   store: string,
   key: string,
 ): Promise<'removed' | 'retained-nonpersonal' | null> {
+  // Native pending identity custody retains account/role locators. Its own existence or a
+  // generic minimizer receipt must never be interpreted as terminal source closure.
+  if (store === 'identity_epoch_source_consumer_custody') return null;
   const { partition } = currentCommand(tx);
   const version = await sourceVersion(tx, store, key);
   const row = (

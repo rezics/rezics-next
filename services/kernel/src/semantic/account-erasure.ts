@@ -523,6 +523,9 @@ async function minimize(
 ): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
   const { store, record_key: key } = locator;
   if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
+  // This source has accepted only a retention obligation, not an exhaustive native terminal
+  // discharge/undo transfer. Keep both its personal locators and the account family pending.
+  if (store === 'identity_epoch_source_consumer_custody') return { defer: true, rawKeys: 1, bytes: 0 };
   const table =
     store === 'zone' ? 'zones.zone' : store === 'write_basis' ? 'semantic.erasure_provenance' : `semantic.${store}`;
   const keyColumn = store === 'write_basis' ? 'record_key' : 'erasure_key';
