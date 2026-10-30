@@ -1,5 +1,11 @@
 import type { Pool } from 'pg';
-import { currentCommand, hasLiveCommandTransaction, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  hasLiveCommandTransaction,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { enrollContextRoleProvenance } from '../semantic/context-role-provenance.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import type { Resource } from '../request/access.ts';
@@ -26,7 +32,9 @@ export type ContextRoleDelivery =
   | Readonly<{ state: 'missing' | 'delivered' | 'not-applicable' }>
   | Readonly<{
       state: 'pending';
-      reason: 'semantic-context-historical-party-receiver-unavailable' | 'semantic-context-historical-party-enrollment-pending';
+      reason:
+        | 'semantic-context-historical-party-receiver-unavailable'
+        | 'semantic-context-historical-party-enrollment-pending';
       source: ContextRoleOccurrence;
     }>;
 
@@ -69,24 +77,29 @@ async function deliverNativeOccurrence(
 ): Promise<Readonly<{ delivery: ContextRoleDelivery; changed: boolean }>> {
   partitionOf(input.route);
   assertOccurrence(input.occurrence);
-  const source = (await tx.query<ContextRoleProvenance>(
-    `SELECT occurrence::text,resource_id::text AS "resourceId",resource_type AS "resourceType",
+  const source = (
+    await tx.query<ContextRoleProvenance>(
+      `SELECT occurrence::text,resource_id::text AS "resourceId",resource_type AS "resourceType",
        original_creator::text AS "originalCreator",account_id::text AS "accountId",grant_role AS "grantRole",
        valid::text,side,grant_transaction::text AS "grantTransaction",source_transaction::text AS "sourceTransaction",
        context_key::text AS "contextKey",delivery
      FROM access.lock_resource_role_provenance($1,$2)`,
-    [input.route, input.occurrence],
-  )).rows[0];
+      [input.route, input.occurrence],
+    )
+  ).rows[0];
   if (!source) return { delivery: { state: 'missing' }, changed: false };
   if (source.delivery !== 'pending') return { delivery: { state: source.delivery }, changed: false };
   const pending = (reason: Extract<ContextRoleDelivery, { state: 'pending' }>['reason']) => ({
-    delivery: { state: 'pending' as const, reason, source: input }, changed: false,
+    delivery: { state: 'pending' as const, reason, source: input },
+    changed: false,
   });
   if (source.resourceType === 'semantic.context') {
-    const available = (await tx.query<{ available: boolean }>(
-      `SELECT to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)')
+    const available = (
+      await tx.query<{ available: boolean }>(
+        `SELECT to_regprocedure('semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)')
          IS NOT NULL AS available`,
-    )).rows[0]!.available;
+      )
+    ).rows[0]!.available;
     if (!available) return pending('semantic-context-historical-party-receiver-unavailable');
     const result = await enrollContextRoleProvenance(tx, { route: input.route, occurrence: source });
     if (result.state === 'pending') return pending('semantic-context-historical-party-enrollment-pending');
@@ -125,7 +138,8 @@ export async function advancePendingContextRoleProvenance(
   const firstRoute = input.partition * 16;
   if (partitionOf(firstRoute) !== input.partition) throw new RangeError('Invalid native Context home');
   if (input.after) {
-    if (partitionOf(input.after.route) !== input.partition) throw new TypeError('Context cursor belongs to another home');
+    if (partitionOf(input.after.route) !== input.partition)
+      throw new TypeError('Context cursor belongs to another home');
     assertOccurrence(input.after.occurrence);
   }
   const selected = await runOperationalTransaction(

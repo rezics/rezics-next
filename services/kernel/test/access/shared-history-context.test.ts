@@ -47,10 +47,12 @@ const deliver = (source: ContextRoleOccurrence) =>
 
 test('Actual native Context OLD NEW creator occurrence delivery enrolls genuine Source historical party before delivered state and leaves missing receiver pending with bounded restart and no artifact authority invention', async () => {
   const { resource, key, body } = await create();
-  const contextKey = (await f.admin.query<{ key: string }>(
-    'SELECT erasure_key::text AS key FROM semantic.context WHERE route=$1 AND context_id=$2',
-    [resource.route, resource.id],
-  )).rows[0]!.key;
+  const contextKey = (
+    await f.admin.query<{ key: string }>(
+      'SELECT erasure_key::text AS key FROM semantic.context WHERE route=$1 AND context_id=$2',
+      [resource.route, resource.id],
+    )
+  ).rows[0]!.key;
   const created = await rows(resource);
   expect(created.map((row) => row.side).sort()).toEqual(['creator', 'new']);
   const creator = created.find((row) => row.side === 'creator')!;
@@ -80,9 +82,13 @@ test('Actual native Context OLD NEW creator occurrence delivery enrolls genuine 
     role: 'semantic.context.owner',
     valid: original.valid,
   };
-  f.status(await f.call('POST', '/v1/roleGrants', 'owner', {
-    ...role, subject: { kind: 'account', id: f.accounts.editor },
-  }), 201);
+  f.status(
+    await f.call('POST', '/v1/roleGrants', 'owner', {
+      ...role,
+      subject: { kind: 'account', id: f.accounts.editor },
+    }),
+    201,
+  );
   f.status(await f.call('POST', '/v1/roleGrants:revoke', 'owner', role), 200);
   const formerRows = await rows(resource);
   const former = formerRows.find((row) => row.side === 'former')!;
@@ -101,30 +107,56 @@ test('Actual native Context OLD NEW creator occurrence delivery enrolls genuine 
   const editorRows = await rows(resource, f.accounts.editor);
   expect(editorRows.some((row) => row.side === 'new')).toBe(true);
   expect(editorRows.every((row) => row.delivery === 'delivered' && row.contextKey === contextKey)).toBe(true);
-  const enrollment = () => f.admin.query(
-    `SELECT occurrence::text,context_key::text AS "contextKey",side,
+  const enrollment = () =>
+    f.admin.query(
+      `SELECT occurrence::text,context_key::text AS "contextKey",side,
        grant_transaction::text AS "grantTransaction",source_transaction::text AS "sourceTransaction"
      FROM semantic.context_role_enrollment WHERE route=$1 AND context_key=$2 ORDER BY occurrence`,
-    [resource.route, contextKey],
-  );
+      [resource.route, contextKey],
+    );
   const enrolled = (await enrollment()).rows;
-  expect(enrolled).toEqual([...formerRows, ...editorRows]
-    .sort((a, b) => BigInt(a.occurrence) < BigInt(b.occurrence) ? -1 : 1)
-    .map(({ occurrence, contextKey, side, grantTransaction, sourceTransaction }) =>
-      ({ occurrence, contextKey, side, grantTransaction, sourceTransaction })));
-  const locators = () => f.admin.query(
-    `SELECT account_id::text,role,record_key::text,source_transaction_id::text
+  expect(enrolled).toEqual(
+    [...formerRows, ...editorRows]
+      .sort((a, b) => (BigInt(a.occurrence) < BigInt(b.occurrence) ? -1 : 1))
+      .map(({ occurrence, contextKey, side, grantTransaction, sourceTransaction }) => ({
+        occurrence,
+        contextKey,
+        side,
+        grantTransaction,
+        sourceTransaction,
+      })),
+  );
+  const locators = () =>
+    f.admin.query(
+      `SELECT account_id::text,role,record_key::text,source_transaction_id::text
      FROM semantic.erasure_locator WHERE partition_no=$1 AND store='context' AND record_key=$2
      ORDER BY account_id,role`,
-    [partitionOf(resource.route), contextKey],
-  );
+      [partitionOf(resource.route), contextKey],
+    );
   const historicalParties = (await locators()).rows;
   expect(historicalParties).toHaveLength(3);
-  expect(historicalParties).toEqual(expect.arrayContaining([
-    { account_id: f.accounts.owner, role: 'author', record_key: contextKey, source_transaction_id: former.sourceTransaction },
-    { account_id: f.accounts.owner, role: 'owner', record_key: contextKey, source_transaction_id: former.sourceTransaction },
-    { account_id: f.accounts.editor, role: 'owner', record_key: contextKey, source_transaction_id: editorRows[0]!.sourceTransaction },
-  ]));
+  expect(historicalParties).toEqual(
+    expect.arrayContaining([
+      {
+        account_id: f.accounts.owner,
+        role: 'author',
+        record_key: contextKey,
+        source_transaction_id: former.sourceTransaction,
+      },
+      {
+        account_id: f.accounts.owner,
+        role: 'owner',
+        record_key: contextKey,
+        source_transaction_id: former.sourceTransaction,
+      },
+      {
+        account_id: f.accounts.editor,
+        role: 'owner',
+        record_key: contextKey,
+        source_transaction_id: editorRows[0]!.sourceTransaction,
+      },
+    ]),
+  );
   // Historical metadata cannot authorize a fresh creator command after transfer.
   f.status(await f.call('DELETE', `/v1/contexts/${resource.id}`, 'owner'), 403);
 
@@ -142,10 +174,22 @@ test('Actual native Context OLD NEW creator occurrence delivery enrolls genuine 
   expect(await rows(resource, f.accounts.editor)).toEqual(editorRows);
   expect((await enrollment()).rows).toEqual(enrolled);
   expect((await locators()).rows).toEqual(historicalParties);
-  expect(Object.keys(former).sort()).toEqual([
-    'occurrence', 'resourceId', 'resourceType', 'originalCreator', 'accountId', 'grantRole', 'valid',
-    'side', 'grantTransaction', 'sourceTransaction', 'contextKey', 'delivery',
-  ].sort());
+  expect(Object.keys(former).sort()).toEqual(
+    [
+      'occurrence',
+      'resourceId',
+      'resourceType',
+      'originalCreator',
+      'accountId',
+      'grantRole',
+      'valid',
+      'side',
+      'grantTransaction',
+      'sourceTransaction',
+      'contextKey',
+      'delivery',
+    ].sort(),
+  );
 }, 30000);
 
 // Actual initialization and grant rows drive the original capture triggers; no Context
@@ -155,31 +199,45 @@ async function unresolvedContextRoles(route: number, count: number) {
   let sourceTransaction = '';
   await f.admin.query(
     `INSERT INTO access.resource_initialization(route,resource_id,resource_type,creator_id,initialized_at)
-     VALUES($1,$2,'semantic.context',$3,now())`, [route, resource.id, f.accounts.owner],
+     VALUES($1,$2,'semantic.context',$3,now())`,
+    [route, resource.id, f.accounts.owner],
   );
-  await runCommand(f.pool, {
-    partition: partitionOf(route),
-    basis: { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-access', requestedBy: null },
-  }, async (tx, command) => {
-    const events: CommandEvent[] = [];
-    sourceTransaction = command.transactionId;
-    await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [sourceTransaction]);
-    for (let n = 0; n < count; n++) {
-      await tx.query(
-        `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+  await runCommand(
+    f.pool,
+    {
+      partition: partitionOf(route),
+      basis: { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-access', requestedBy: null },
+    },
+    async (tx, command) => {
+      const events: CommandEvent[] = [];
+      sourceTransaction = command.transactionId;
+      await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [sourceTransaction]);
+      for (let n = 0; n < count; n++) {
+        await tx.query(
+          `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
          VALUES($1,$2,$3,$4,'(,)',$5)`,
-        [route, resource.id, f.accounts.owner, `unconverted.role${n}`, command.transactionId],
-      );
-      events.push({ type: 'com.rezics.access.role-grant.create.v1', data: {
-        resource, subject: { kind: 'account', id: f.accounts.owner }, role: `unconverted.role${n}`, valid: '(,)',
-      } });
-    }
-    return { value: null, events };
-  });
-  const before = (await f.admin.query<{ route: number; occurrence: string }>(
-    `SELECT route,occurrence::text FROM access.resource_role_provenance
-     WHERE route=$1 AND resource_id=$2 ORDER BY occurrence`, [route, resource.id],
-  )).rows;
+          [route, resource.id, f.accounts.owner, `unconverted.role${n}`, command.transactionId],
+        );
+        events.push({
+          type: 'com.rezics.access.role-grant.create.v1',
+          data: {
+            resource,
+            subject: { kind: 'account', id: f.accounts.owner },
+            role: `unconverted.role${n}`,
+            valid: '(,)',
+          },
+        });
+      }
+      return { value: null, events };
+    },
+  );
+  const before = (
+    await f.admin.query<{ route: number; occurrence: string }>(
+      `SELECT route,occurrence::text FROM access.resource_role_provenance
+     WHERE route=$1 AND resource_id=$2 ORDER BY occurrence`,
+      [route, resource.id],
+    )
+  ).rows;
   return { resource, sourceTransaction, before };
 }
 
@@ -193,8 +251,10 @@ test('native pending partial index redrive examines eight exact inputs, wraps af
   const holder = await f.admin.connect();
   try {
     await holder.query('BEGIN');
-    await holder.query('SELECT 1 FROM access.resource_role_provenance WHERE route=$1 AND occurrence=$2 FOR UPDATE',
-      [route, before[0]!.occurrence]);
+    await holder.query('SELECT 1 FROM access.resource_role_provenance WHERE route=$1 AND occurrence=$2 FOR UPDATE', [
+      route,
+      before[0]!.occurrence,
+    ]);
     const first = await drive(partitionOf(route));
     expect(first).toEqual({ attempted: 8, pending: 8, after: before[8]! });
     expect(await drive(partitionOf(route), first.after!)).toEqual({ attempted: 1, pending: 1, after: null });
@@ -208,7 +268,9 @@ test('native pending partial index redrive examines eight exact inputs, wraps af
   expect(await drive(partitionOf(route), restarted.after!)).toEqual({ attempted: 2, pending: 2, after: null });
   const firstPage = await rows(resource);
   const lastPage = await readContextRoleProvenance(f.admin, {
-    resource, accountId: f.accounts.owner, after: firstPage.at(-1)!.occurrence,
+    resource,
+    accountId: f.accounts.owner,
+    after: firstPage.at(-1)!.occurrence,
   });
   expect(firstPage).toHaveLength(8);
   expect(lastPage).toHaveLength(2);
@@ -228,20 +290,27 @@ test('source identity is immutable, unavailable delivery cannot be forged, and n
   expect(before[0]!.contextKey).toBeNull();
   const source = { route: resource.route, occurrence: before[0]!.occurrence };
   expect((await deliver(source)).value).toEqual({
-    state: 'pending', reason: 'semantic-context-historical-party-enrollment-pending', source,
+    state: 'pending',
+    reason: 'semantic-context-historical-party-enrollment-pending',
+    source,
   });
-  for (const assignment of ["source_transaction=gen_random_uuid()", "delivery='delivered'", 'context_key=123'])
-    await expect(f.admin.query(
-      `UPDATE access.resource_role_provenance SET ${assignment} WHERE route=$1 AND occurrence=$2`,
-      [source.route, source.occurrence],
-    )).rejects.toThrow();
-  await expect(runCommand(f.pool, { partition: partitionOf(source.route) }, async (tx) => {
-    await deliverContextRoleProvenance(tx, source);
-    throw new Error('native transaction failed');
-  })).rejects.toThrow('native transaction failed');
+  for (const assignment of ['source_transaction=gen_random_uuid()', "delivery='delivered'", 'context_key=123'])
+    await expect(
+      f.admin.query(`UPDATE access.resource_role_provenance SET ${assignment} WHERE route=$1 AND occurrence=$2`, [
+        source.route,
+        source.occurrence,
+      ]),
+    ).rejects.toThrow();
+  await expect(
+    runCommand(f.pool, { partition: partitionOf(source.route) }, async (tx) => {
+      await deliverContextRoleProvenance(tx, source);
+      throw new Error('native transaction failed');
+    }),
+  ).rejects.toThrow('native transaction failed');
   expect(await rows(resource)).toEqual(before);
   await expect(deliverContextRoleProvenance(f.admin, source)).rejects.toThrow('live same-home');
   for (const occurrence of ['00', '01', '-1', '1e2', '9223372036854775808'])
-    await expect(readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.owner, after: occurrence }))
-      .rejects.toThrow('Invalid role occurrence');
+    await expect(
+      readContextRoleProvenance(f.admin, { resource, accountId: f.accounts.owner, after: occurrence }),
+    ).rejects.toThrow('Invalid role occurrence');
 }, 30000);
