@@ -605,7 +605,12 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
                 pool,
                 meter,
                 "UPDATE search.public_filter_observation SET state='closing' WHERE (partition_no,observation)=($1,$2) AND queried=$3 AND revision=$4 AND state='open'",
-                [partition(input.snapshot.observation), input.snapshot.observation, encode(input), old.rows[0].revision],
+                [
+                  partition(input.snapshot.observation),
+                  input.snapshot.observation,
+                  encode(input),
+                  old.rows[0].revision,
+                ],
               );
             throw error;
           });
