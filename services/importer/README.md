@@ -111,9 +111,9 @@ Default `vndb` calls omit `sourceAlias` and retain their existing bytes. A confi
 exact registration alias on both positive PUT and clear POST, while provider `vndb` and native record `v123`
 remain unchanged. Facts/claim/read-fence identity follows that alias. The single subject/provider score slot
 is unchanged: removal matches its current subject/provider/record/alias association; absent or mismatched
-bindings leave another association intact. Canonical `vndb` fencing does not govern a custom alias. It uses the existing bounded write coordinator,
-keyed POST retry budget and run-derived identity; reopening a sealed run reuses the original bytes/key
-before reading replacement source records. The native archive admission gate still validates a supplied
+bindings leave another association intact. Canonical `vndb` fencing does not govern a custom alias.
+Clear uses the existing bounded write coordinator, keyed POST retry budget and run-derived identity;
+reopening a sealed run reuses the original bytes/key before reading replacement source records. The native archive admission gate still validates a supplied
 archive first; it cannot replace the sealed projection or its clear command. An uncertain or denied clear
 preserves the previous complete baseline.
 Both missing fields mean UNKNOWN and send no statistic request; a partial pair remains invalid. A positive

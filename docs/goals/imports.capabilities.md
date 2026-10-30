@@ -883,3 +883,10 @@ fixtures. The reference-project index was read; no external reference implementa
 installed protocol. Outside the declared paths, `services/importer/tests/cli-source-reappearance.test.ts`
 adds only the required clear protocol capability to its existing coordinator double; its old assertions and
 semantic receipt observations are preserved. This local double does not supply native evidence.
+
+At `1a7a0f7787`, alias consumer verification was limited to workspace typing:
+`bun run --cwd services/importer typecheck` exited 0 (`No type errors in 163 files`), and
+`env -u KERNEL_CHECK_REMOTE bun run --cwd services/kernel typecheck` exited 0 after
+`$ bun scripts/construct.ts` (`remote-check: command 138.994 s on c`). The latter command's wrapper
+selected host `c` despite the unset variable. Neither native acceptance file nor tests were executed;
+the supplemental alias cases remain later integration proof.
