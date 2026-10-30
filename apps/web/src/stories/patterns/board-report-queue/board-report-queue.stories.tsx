@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { createKernelClient } from '@rezics/client';
-import type { ReportActionInput } from '../../../moderation/actions';
 import { sendModerationReportAction } from '../../../moderation/actions';
 import { m } from '../../../paraglide/messages.js';
 import { BoardReportQueue, type ReportQueueAction, type ReportQueueProps } from './board-report-queue';
