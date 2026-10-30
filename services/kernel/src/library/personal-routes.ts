@@ -118,13 +118,24 @@ const failures = {
   422: problemSchema('idempotency_conflict'),
   503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
 };
-const shelfFailures = { ...failures, 400: problemSchema('invalid_request', 'invalid_cursor', 'invalid_argument') };
+const shelfFailures = {
+  ...failures,
+  400: problemSchema('invalid_request', 'invalid_cursor', 'invalid_argument'),
+  503: problemSchema(
+    'dependency_unavailable',
+    'overloaded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'deadline_exceeded',
+  ),
+};
 function detail(operationId: string, action: string, write = false) {
   return {
     operationId,
     'x-action': action,
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
+    ...(action === 'library_entry:list' ? { 'x-authority-anchor': 'own-account' } : {}),
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
 }

@@ -2,6 +2,21 @@
 
 Library is the kernel module for a person's shelves and reading state, and for the public projection of public Collection membership.
 
+`shelf-contract.ts` re-exports the callable `createShelfReads` and `admitShelfRead`. The default kernel installs
+`createDefaultShelfReads`: six fixed native date orders, one selected-page active-session batch, exact owner-private
+root/trie type lookup, maintained counter-key summary and byte-budgeted dictionary facets, using the existing opaque
+cursor codec. Reads check current owner Access and account/authentication state; list additionally admits
+`progress_session:list` and the current `reading_progress` gate. Cursor bindings include the normalized predicate,
+effective size, current partition epoch, maintenance epoch and active generation. FULL uses the existing subject batch.
+
+Native activation remains pending the maintenance producer's actual `ShelfMaintenanceOps.initialize` and same-RR
+gate/readiness/current-generation adapter (`ShelfReadGenerationReader`). The consumer aliases the published maintenance
+types rather than inventing its gate table. The installed `shelf_count` table has no generation column: the native
+summary/facet readers accept only a proven complete active nil generation; serving rebuilt generations needs the
+counter producer's generation-keyed storage binding. Missing/incomplete evidence returns typed retryable
+`dependency_unavailable`, including for an apparently empty owner. It never becomes ready zero counts. No native
+readiness, source-currentness, full shelf outcome or growth proof is claimed by these callable readers or source typing.
+
 ## Scope and implementation boundary
 
 [Library and Collections](../../../../docs/library-and-collections.md) owns the capability. This README adopts its

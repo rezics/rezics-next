@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../../src/http/app.ts';
-import { createKernelAccessResolver } from '../../src/http/kernel.ts';
+import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { personalLibraryRoutes } from '../../src/library/personal-routes.ts';
@@ -14,6 +14,7 @@ import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { testTokens } from '../support/test-kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 let db: GrowthDatabase;
 let app: ReturnType<typeof personalLibraryRoutes>;
@@ -329,4 +330,35 @@ test('shelf port transport keeps old entries and rejects closed queries and unau
     expect(document.paths[path]?.get?.['x-action']).toBe('library_entry:list');
   }
   expect(document.paths['/v1/libraryEntries']?.get?.operationId).toBe('library_entry.list');
+});
+
+test('default kernel composes native shelf reads and reports pending maintenance after owner and current gate admission', async () => {
+  const native = createKernel({
+    pool: db.pool,
+    tokens: testTokens(),
+    clock,
+    access: admittedAccess,
+    routeKey: new Uint8Array(32),
+    receiptKeys: testReceiptKeys(),
+  });
+  const request = (path: string, persona = 'owner') =>
+    native.handle(
+      new Request(`http://kernel.test${path}`, {
+        headers: { authorization: `Bearer ${bearer.get(persona)!}` },
+      }),
+    );
+  for (const path of ['/v1/libraryEntries?orderBy=createdAt', '/v1/libraryShelfSummary', '/v1/libraryShelfTypes']) {
+    const response = await json(await request(path), 503, 'dependency_unavailable');
+    expect(response.detail).toContain('native RR gate/current-generation reader');
+  }
+  await json(await request('/v1/libraryEntries?orderBy=createdAt', 'libraryOnly'), 403, 'forbidden');
+  // A same-route account selector is rejected at the closed HTTP query boundary.
+  await json(await request(`/v1/libraryShelfSummary?accountId=${accounts.other}`), 400, 'invalid_request');
+  await progress(false);
+  try {
+    await json(await request('/v1/libraryEntries?orderBy=createdAt'), 403, 'platform_closed');
+    await json(await request('/v1/libraryShelfSummary', 'libraryOnly'), 503, 'dependency_unavailable');
+  } finally {
+    await progress(true);
+  }
 });

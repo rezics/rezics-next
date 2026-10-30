@@ -10,8 +10,8 @@ import type { ShelfMaintenanceCheckpoint, ShelfMaintenanceOps } from './shelf-ma
 
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
- * `shelf-contract.md`. Nothing here is behaviour: every exported function that is not a pure rule throws until its
- * owning task replaces it. Entry and progress storage layouts stay unchanged; the shelf types are additive.
+ * `shelf-contract.md`. Read services and admission are concrete re-exports; uninstalled write/projection factories
+ * below remain specification ports. Entry and progress storage layouts stay unchanged; shelf types are additive.
  */
 
 type Client = Pick<PoolClient, 'query'>;
@@ -293,7 +293,7 @@ export type ShelfReadDependencies = {
   pageReader: ShelfPageReader;
   summaryReader: ShelfSummaryReader;
   facetReader: ShelfFacetReader;
-  typeKeys: ShelfTypeKeys;
+  typeKeys: Pick<ShelfTypeKeys, 'lookup'>;
   cursors: ShelfCursorCodec;
   /** Native maintenance initialization, in an ordinary currently authorized owner command. */
   maintenance?: Pick<ShelfMaintenanceOps, 'initialize'>;
@@ -315,13 +315,7 @@ export type ShelfReadGenerationReader = (
  * Domain-level read service. `listShelf` requires `library_entry:list` and `progress_session:list`; the other two
  * require `library_entry:list` only. It admits the owner as `listEntries` does and reads at repeatable read.
  */
-export function createShelfReads(_dependencies: ShelfReadDependencies): ShelfReads {
-  return {
-    listShelf: () => notImplemented('listShelf'),
-    summary: () => notImplemented('summary'),
-    listTypes: () => notImplemented('listTypes'),
-  };
-}
+export { createShelfReads } from './shelf-reads.ts';
 
 // --- Storage and writes (stubs) -------------------------------------------------------------------------------
 
@@ -477,13 +471,7 @@ export const SHELF_PROGRESS_GATE = 'reading_progress';
  * is the route's own and is not repeated here.
  */
 export type ShelfAdmissionDependencies = Pick<ShelfReadDependencies, 'pool' | 'access' | 'clock'>;
-export function admitShelfRead(
-  _dependencies: ShelfAdmissionDependencies,
-  _actor: Actor,
-  _deadline: number,
-): Promise<void> {
-  return notImplemented('admitShelfRead');
-}
+export { admitShelfRead } from './shelf-admission.ts';
 
 export type ShelfListQuery = {
   state?: EntryState;

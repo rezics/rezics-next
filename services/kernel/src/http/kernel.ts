@@ -47,6 +47,7 @@ import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
+import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -79,6 +80,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   commerce?: CommerceDependencies;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   search?: SearchService;
+  /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
+  shelves?: ShelfNativeReadBindings;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
   reports?: { anonymousVerifier?: TurnstileVerifier };
   /** Enqueue-only client. Tests close the instance they pass. */
@@ -446,6 +449,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+    shelves: () =>
+      createDefaultShelfReads({
+        pool: dependencies.pool,
+        tokens,
+        clock,
+        access: resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+        ...dependencies.shelves,
+      }),
   });
   const labels = personalLabelRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
