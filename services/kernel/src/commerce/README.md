@@ -24,12 +24,42 @@ Payment ownership is independent of private [Library holdings and reading histor
 must not silently create a holding or publish reading activity, and Library Undo cannot reverse payment truth.
 This journey does not require a broad marketplace.
 
-Current [routes](routes.ts) expose known-ID offer/order reads, order creation and entitlement read/list.
-They have no subject-to-active-offer listing or buyer order-history list. The web has
+Current [routes](routes.ts) expose known-ID offer/order reads, buyer order history, order creation and entitlement read/list.
+They have no subject-to-active-offer listing. The web has
 [known-ID offer](../../../../apps/web/src/checkout/offer-page.tsx) and
 [order-status pages](../../../../apps/web/src/checkout/order-page.tsx), but these do not supply the subject benefit
 entry, later purchase/entitlement navigation or actual benefit-consumption authorization. The
 [subject page](../../../../apps/web/src/features/pages/subject.tsx) has no purchase path, and an entitlement row alone does not prove access to its benefit. Those are remaining journey gaps.
+
+### Private buyer order history
+
+`GET /v1/orders` (`order.list`) reuses `order:read` and `gate:purchases`. It requires a verified,
+active account and that scope before private SQL. It has no account selector or management mode;
+`buyer_account_id` always equals the authenticated account, even for accounts sharing a route.
+The existing known-order `404` concealment and command receipt behavior are unchanged.
+
+The response is `{ orders, next }`, default 20 and maximum 100. Orders use descending immutable routable
+order UUIDs, with a strict exclusive keyset, so equal creation timestamps are deterministic and later
+inserts do not shift subsequent pages. `next` is the existing signed, expiring cursor bound to `order.list`,
+the viewer account and partition epoch. The only query controls are limit and cursor; page size can change
+between pages. Bad, foreign-viewer and foreign-operation cursors fail closed; changed epochs return `stale_cursor`.
+
+Each row contains captured title, offer ID/revision, target subject ID, currency, unit amount, tax code,
+fulfilled tax amount (nullable before fulfilment), settlement, creation time and recorded Checkout navigation.
+`entitlementId` links to the existing private entitlement read, including its current active/revoked status;
+the order ID links to the exact order page after Checkout return. Refunding keeps the paid order and captured
+terms while revoking its entitlement. History reads no current offer, price, subject summary or provider Session,
+and does not revive a delisted offer. A history row does not authorize benefit consumption.
+The generated `@rezics/client` caller is `client.orders.get({ query: { limit, cursor } })`.
+Web can bind that export to its purchase navigation; this API does not add another checkout page.
+
+Physical access: one read-only repeatable-read snapshot reads the partition epoch and a routed buyer-leading
+B-tree keyset `(route, buyer_account_id, order_id)`, taking at most `limit + 1` order rows. Each selected row
+has at most one same-route entitlement probe on its unique order key; a materialized bounded page precedes
+those probes. There is no account count, offset, history walk, global order/Session lookup or held client
+across foreign reads/provider I/O. For page size k, R/S are bounded independently of buyer history and depth;
+B is `O((k + 1) * L(N))`, plus sorting at most k+1 rows. Native purchase-history and growth tests cover the
+real client, Auth/Access credentials, signed payment/refund events, ownership, cursor and index bounds.
 
 ### External maintainer setup
 

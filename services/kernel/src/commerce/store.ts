@@ -14,6 +14,7 @@ import offerState from './store-offer-state.sql';
 import offerPrice from './store-offer-price.sql';
 import orderInsert from './store-order-insert.sql';
 import orderRead from './store-order-read.sql';
+import orderAccountPage from './order-account-page.sql';
 import orderSessionRead from './store-order-session-read.sql';
 import orderSession from './store-order-session.sql';
 import orderSettlement from './store-order-settlement.sql';
@@ -151,6 +152,29 @@ export async function insertOrder(
       }),
     ),
   );
+}
+/** One buyer-local keyset; the caller owns the repeatable-read snapshot and epoch check. */
+export async function listBuyerOrders(
+  client: Client,
+  route: number,
+  buyerAccountId: string,
+  page: { after: string | null; limit: number },
+) {
+  if (!Number.isInteger(page.limit) || page.limit < 1 || page.limit > 101)
+    throw new RangeError('Buyer order page must contain 1 to 101 rows');
+  const rows = await orderAccountPage.run(queryClient(client), {
+    route,
+    buyer_account_id: buyerAccountId,
+    after: page.after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    limit: page.limit,
+  });
+  return rows.map((row) => ({
+    ...row,
+    unitAmountMinor: Number(row.unitAmountMinor),
+    amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
+    createdAt: iso(row.createdAt),
+    checkoutExpiresAt: row.checkoutExpiresAt === null ? null : iso(row.checkoutExpiresAt),
+  }));
 }
 export async function readOrder(client: Client, route: number, id: string): Promise<Order | null> {
   const row = await orderRead.run(queryClient(client), { route, id });

@@ -1,0 +1,201 @@
+import { expect } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { createGrantCommands } from '../../../src/access/grant-commands.ts';
+import { createCommerceCommands } from '../../../src/commerce/commands.ts';
+import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
+import { createStripePort } from '../../../src/commerce/stripe.ts';
+import { newId, routeOf } from '../../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
+import { cookies, password, nativeFixture } from '../../access/native-account-bindings-fixture.ts';
+import { openGrowthDatabase } from '../../support/growth.ts';
+import { createPersonas, type Persona } from '../../support/personas.ts';
+import { registerTestClient, testKernel, testTokens } from '../../support/test-kernel.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
+import { startFakeStripe } from './fake-stripe.ts';
+import { until } from './work-fixture.ts';
+
+/** All identities, grants and purchases use native commands; Stripe is the official loopback adapter. */
+export async function purchaseHistoryFixture() {
+  const db = await openGrowthDatabase();
+  db.pool.options.max = 1;
+  const auth = await nativeFixture(db.pool);
+  const fake = startFakeStripe();
+  const stripe = createStripePort({
+    apiKey: 'sk_test_history',
+    managedPayments: false,
+    host: '127.0.0.1',
+    port: fake.port,
+    protocol: 'http',
+    maxNetworkRetries: 0,
+    clock: () => new Date(),
+  });
+  const workClient = await createWorkClient(db.url);
+  const service = auth.host.service;
+  const app = testKernel({
+    pool: db.pool,
+    writeRate: createWriteRateLimiter({
+      secret: 'purchase-history-native-rate-secret-32-bytes',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
+    auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+    commerce: {
+      stripe,
+      successUrl: 'https://web.test/orders/{ORDER_ID}',
+      cancelUrl: 'https://web.test/orders/{ORDER_ID}',
+      webhookSecrets: [fake.webhookSecret],
+      work: createCommerceWork(workClient),
+    },
+  });
+  const people = await createPersonas(app, { version: 1, pool: db.pool, auth });
+  await registerTestClient(service, {
+    clientId: 'history',
+    firstParty: true,
+    scopes: ['order:create', 'order:read', 'entitlement:read', 'entitlement:list', 'account:delete'],
+  });
+  // Choose a registration key before registration; placement still comes from the native lifecycle.
+  let peerKey = '';
+  for (let n = 0; n < 2_000_000; n++) {
+    const candidate = `history_peer_${people.alice.accountId.replaceAll('-', '')}_${n}`;
+    if (routeOf(auth.COMMANDS.internalLifecycle.registrationTarget(candidate)) === routeOf(people.alice.accountId)) {
+      peerKey = candidate;
+      break;
+    }
+  }
+  if (!peerKey) throw new Error('No same-route registration key found');
+  const registered = await auth.person(peerKey);
+  const signedIn = await auth.request('/signin', {
+    account_id: registered.accountId,
+    password,
+    client_id: 'history',
+    scope: ['order:create', 'order:read', 'entitlement:read', 'entitlement:list', 'account:delete'],
+  });
+  expect(signedIn.status).toBe(200);
+  const issued = await auth.request('/token', {}, cookies(signedIn));
+  expect(issued.status).toBe(200);
+  const peer = { accountId: registered.accountId, bearer: (await issued.json()).access_token as string };
+  expect(routeOf(peer.accountId)).toBe(routeOf(people.alice.accountId));
+  async function request(
+    path: string,
+    as: { bearer: string | null } = people.alice,
+    body?: unknown,
+    key = Bun.randomUUIDv7(),
+  ) {
+    return app.handle(
+      new Request(`http://kernel.test${path}`, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          ...(as.bearer === null ? {} : { authorization: `Bearer ${as.bearer}` }),
+          ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  }
+  for (const group of ['purchases', 'selling'])
+    expect((await request(`/v1/platform/exposure/${group}:open`, people.staff, {})).status).toBe(200);
+  const access = app.testAccess;
+  const context = () => ({ pool: db.pool, deadline: Date.now() + 30_000 });
+  const actor = (person: Persona) => access.authenticate(person.bearer, context());
+  const commands = createCommerceCommands({ pool: db.pool, access });
+  await createGrantCommands({ pool: db.pool, access, managementAction: 'access:grant' }).create(
+    { ...context(), actor: await actor(people.staff) },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: people.staff.accountId },
+      actions: ['offer:create'],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
+  );
+  const offer = (
+    await commands.createOffer(
+      await actor(people.staff),
+      {
+        targetSubjectId: newId(0x5500),
+        title: 'Captured purchase',
+        currency: 'usd',
+        unitAmountMinor: 1200,
+        taxCode: 'txcd_10302000',
+      },
+      Bun.randomUUIDv7(),
+    )
+  ).value;
+  const worker = Bun.spawn([process.execPath, `${import.meta.dir}/purchase-history-runtime.ts`], {
+    env: { ...process.env, ...workerTestEnv({ DATABASE_URL: db.url, WORK_STRIPE_PORT: String(fake.port) }) },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  let output = '',
+    errors = '';
+  void (async () => {
+    for await (const bytes of worker.stdout as ReadableStream<Uint8Array>) output += new TextDecoder().decode(bytes);
+  })();
+  void (async () => {
+    for await (const bytes of worker.stderr as ReadableStream<Uint8Array>) errors += new TextDecoder().decode(bytes);
+  })();
+  await until(
+    async () => {
+      if (worker.exitCode !== null) throw new Error(`History worker exited: ${errors}`);
+      return output;
+    },
+    (value) => value.includes('ready'),
+  );
+  const client = (as: { bearer: string | null } = people.alice) =>
+    createKernelClient('http://kernel.test', {
+      headers: as.bearer === null ? {} : { authorization: `Bearer ${as.bearer}` },
+      fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+    });
+  async function checkout(as: Persona = people.alice, key = Bun.randomUUIDv7()) {
+    const response = await request('/v1/orders', as, { offerId: offer.id }, key);
+    expect(response.status).toBe(201);
+    const order = (await response.json()).order;
+    const stored = await commands.readOrderForAccount(as.accountId, order.id);
+    expect(stored?.checkoutSessionId).toBeString();
+    return stored!;
+  }
+  async function event(type: string, objectId: string) {
+    const signed = await fake.event(type, objectId);
+    const response = await app.handle(
+      new Request('http://kernel.test/v1/webhooks/stripe', {
+        method: 'POST',
+        headers: signed.headers,
+        body: signed.bytes,
+      }),
+    );
+    expect([200, 202]).toContain(response.status);
+    const id = `stripe:${JSON.parse(signed.bytes).id}`;
+    await until(
+      () => workClient.getWorkflow(id),
+      (row) => row?.status === 'SUCCESS' || row?.status === 'ERROR',
+    );
+    await workClient.retrieveWorkflow(id).getResult();
+  }
+  return {
+    db,
+    auth,
+    fake,
+    stripe,
+    app,
+    people,
+    peer,
+    actor,
+    commands,
+    offer,
+    request,
+    client,
+    checkout,
+    event,
+    keys: testTokens(),
+    async close() {
+      worker.kill('SIGKILL');
+      await worker.exited;
+      fake.stop();
+      await workClient.close();
+      await auth.close();
+      await db.close();
+    },
+  };
+}
+export type HistoryFixture = Awaited<ReturnType<typeof purchaseHistoryFixture>>;

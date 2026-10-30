@@ -43,6 +43,7 @@ const typed = [
   'PATCH /v1/offers/:offerId',
   'POST /v1/offers/:offerId/$delist',
   'POST /v1/orders',
+  'GET /v1/orders',
   'GET /v1/orders/:orderId',
   'GET /v1/entitlements',
   'GET /v1/entitlements/:entitlementId',

@@ -417,6 +417,13 @@ CREATE INDEX payout_statement_creator_page ON commerce.payout_statement USING bt
 
 
 --
+-- Name: purchase_order_buyer_page; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX purchase_order_buyer_page ON commerce.purchase_order USING btree (route, buyer_account_id, order_id);
+
+
+--
 -- Name: purchase_order_checkout_session; Type: INDEX; Schema: commerce; Owner: -
 --
 

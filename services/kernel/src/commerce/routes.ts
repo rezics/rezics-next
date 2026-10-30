@@ -90,6 +90,20 @@ const orderReadSchema = t.Object(
   },
   object,
 );
+// History contains captured purchase terms; live catalogue/subject reads are unnecessary.
+const orderHistorySchema = t.Object(
+  {
+    ...orderSchema.properties,
+    title: t.String(),
+    targetSubjectId: id,
+    offerRevision: t.Integer(),
+    currency: t.String(),
+    unitAmountMinor: t.Integer(),
+    taxCode: t.String(),
+    amountTaxMinor: t.Union([t.Integer(), t.Null()]),
+  },
+  object,
+);
 const entitlementSchema = t.Object(
   {
     id,
@@ -409,6 +423,76 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         set.status = 201;
         set.headers.location = `/v1/orders/${order.id}`;
         return { order: await orderView(pool, order) };
+      },
+    )
+    .get(
+      '/v1/orders',
+      {
+        query: t.Object(
+          {
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+          },
+          object,
+        ),
+        response: {
+          200: t.Object({ orders: t.Array(orderHistorySchema), next: nullableId }, object),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          409: problemSchema('stale_cursor'),
+          503: unavailable,
+        },
+        detail: detail('order.list', 'order:read', 'gate:purchases'),
+      },
+      async ({ query, actor, admission, job }) => {
+        const account = requireAccount(actor);
+        if (!scoped(actor, 'order:read')) throw new ProblemError('forbidden');
+        const route = routeOf(account.accountId)!;
+        // No account selector: both the SQL equality and cursor scope use the verified viewer.
+        // Page size can change between requests, as on the entitlement list.
+        const binding = { operation: 'order.list', parameters: { accountId: account.accountId } };
+        let after: string | null = null,
+          epoch: number | null = null;
+        if (query.cursor !== undefined) {
+          const cursor = decodeCursor(tokens, binding, query.cursor);
+          if (
+            !cursor.ok ||
+            cursor.after.length !== 1 ||
+            typeof cursor.after[0] !== 'string' ||
+            routeOf(cursor.after[0]) !== route
+          )
+            throw new ProblemError('invalid_cursor');
+          after = cursor.after[0];
+          epoch = cursor.epoch;
+        }
+        const size = query.limit ?? 20;
+        return admission.run('normal', job, () =>
+          withConnection(pool, async (client) => {
+            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+            try {
+              const partition = await readPartition(client, partitionOf(route));
+              if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+              const rows = await store.listBuyerOrders(client, route, account.accountId, {
+                after,
+                limit: size + 1,
+              });
+              await client.query('COMMIT');
+              const orders = rows.slice(0, size);
+              const last = orders.at(-1);
+              return {
+                orders,
+                next:
+                  rows.length > size && last && partition
+                    ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })
+                    : null,
+              };
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            }
+          }),
+        );
       },
     )
     .get(
