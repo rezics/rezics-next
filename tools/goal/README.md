@@ -677,6 +677,11 @@ threads. Recovery reopens each Codex viewer on the current endpoint with `codex 
 Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
 window and turn-accounting hooks.
 
+The host listens before it resumes persisted managers, and recovers managers independently so one provider request
+cannot prevent another manager from using the socket. Commands from a recorded manager session store a deduplicated
+decision against its active turn in local SQLite; turn accounting uses that durable record without a manager socket
+round trip.
+
 ### Development verification
 
 Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
