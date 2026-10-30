@@ -248,9 +248,12 @@ The actual published release lookup precedes owner checkout. A step shares one 1
 entry/session/copy phases, uses exact revision/NULL-pin CAS, and commits pins, the source-head frontier and
 successor work atomically. Entry keys materialize before NULL filtering. Sessions use their pending index;
 live copies use the new retained-excluding pending index. The final source-head lock serializes monotonic
-ready with live writers. Three indexed pending probes distinguish a first current writer from historical
+ready with live writers. Four indexed pending probes distinguish a first current writer from historical
 population without needing a migration job or counting facts. NULL-pin DTO reads use the temporary fixed
-contract only before ready; this supplies no unsupported current writes.
+contract only before ready; this supplies no unsupported current writes. Retained NULL-pin entry/copy evidence
+keeps a non-migrating owner on compatibility reads. After explicit start, exact native Undo uses the captured
+legacy digest for an originally NULL-pin fact, preventing a restored NULL from entering behind cutover. Existing
+accepted non-NULL restoration pins remain unchanged.
 
 The new source-head control fields are removed by its existing last-phase terminal cleanup. No receipt-history
 scan, new participant, public payload or erasure acknowledgement is added. Native integration/growth evidence

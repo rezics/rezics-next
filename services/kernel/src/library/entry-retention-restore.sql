@@ -13,7 +13,14 @@ WITH input AS NOT MATERIALIZED (
      type_source_epoch, type_source_position, incarnation_id, library_profile_pin, owner_write_seq)
   SELECT route, account_id, subject_id, requested_subject_id, state, deleted_revision + 1, created_at, updated_at,
          :transaction_id::uuid, activity_at, finished_at, type_id, type_source_id, type_source_partition,
-         type_source_epoch, type_source_position, incarnation_id, library_profile_pin, owner_write_seq
+         type_source_epoch, type_source_position, incarnation_id,
+         COALESCE(library_profile_pin, (
+           SELECT jsonb_build_object('provenance', 'legacy', 'releaseDigest', head.profile_migration_digest,
+             'acceptingType', NULL, 'profileId', 'legacy-fixed-v1')
+           FROM library.fact_source_head AS head
+           WHERE head.route = retained.route AND head.account_id = retained.account_id
+             AND head.profile_migration_digest IS NOT NULL
+         )), owner_write_seq
   FROM retained
   ON CONFLICT (route, account_id, subject_id) DO NOTHING
   RETURNING *

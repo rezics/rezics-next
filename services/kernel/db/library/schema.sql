@@ -2563,8 +2563,10 @@ BEGIN
     EXISTS (SELECT 1 FROM library.progress_session
       WHERE route = NEW.route AND account_id = NEW.account_id AND library_profile_pin IS NULL LIMIT 1) OR
     EXISTS (SELECT 1 FROM library.copy
-      WHERE route = NEW.route AND account_id = NEW.account_id AND deletion_id IS NULL
-        AND library_profile_pin IS NULL LIMIT 1)
+      WHERE route = NEW.route AND account_id = NEW.account_id
+        AND library_profile_pin IS NULL LIMIT 1) OR
+    EXISTS (SELECT 1 FROM library.entry_deleted
+      WHERE route = NEW.route AND account_id = NEW.account_id AND library_profile_pin IS NULL LIMIT 1)
   ) THEN
     UPDATE library.fact_source_head SET profile_migration_phase = 'ready'
       WHERE route = NEW.route AND account_id = NEW.account_id;
@@ -2604,3 +2606,6 @@ CREATE TRIGGER copy_profile_migration_writer BEFORE INSERT OR UPDATE ON library.
 
 CREATE INDEX copy_live_profile_pending ON library.copy (route, account_id, copy_id)
   WHERE library_profile_pin IS NULL AND deletion_id IS NULL;
+
+CREATE INDEX entry_deleted_profile_pending ON library.entry_deleted (route, account_id, deletion_id)
+  WHERE library_profile_pin IS NULL;

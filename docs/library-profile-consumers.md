@@ -301,11 +301,14 @@ SDK replay of an obsolete frontier has no source effects. Existing terminal clea
 with `fact_source_head` last; this adds no participant or erasure acknowledgement.
 
 The existing native account fence precedes all work. Live writer triggers serialize on that same owner
-source head before changing facts. A first current writer can mark a non-migrating owner ready using three
+source head before changing facts. A first current writer can mark a non-migrating owner ready using four
 indexed pending-existence probes, never an account count. Existing current pins remain readable without
 a job. During a job no new NULL-pin fact may enter, and ready refuses every live NULL-pin write. Retained
-copies stay outside this live migration; restoring a legacy NULL-pin retained fact cannot bypass this
-writer fence. Existing non-NULL accepted restoration pins are unchanged.
+copies and retained entries stay outside this live worker. Their NULL pins participate only in bounded first-writer
+pending probes, so existing non-migrating Undo does not need a job. After explicit start, exact native Undo
+attaches the captured legacy pin when restoring an originally NULL-pin fact; it cannot admit a live NULL behind
+cutover. Copy kind becomes `legacy-unspecified` only for that historical restoration. Existing non-NULL accepted
+restoration pins are unchanged.
 
 `assertPreProfileLibraryRead` gates the temporary fixed-contract entry/session/copy adapters on the native
 owner phase. Ordinary reads create no progress and inspect no current type/profile to interpret legacy

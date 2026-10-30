@@ -3,6 +3,7 @@ import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
+import { createCopyCommands } from '../../src/library/copies.ts';
 import * as facts from '../../src/library/entry-store.ts';
 import * as progress from '../../src/library/progress-store.ts';
 import {
@@ -21,7 +22,7 @@ import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '
 async function historical(f: NativeProfileFixture, subjectId: string) {
   const owner = await f.identity([
     'subject:read', 'library_entry:update', 'library_entry:read',
-    'progress_session:read', 'copy:read', 'account:delete',
+    'progress_session:read', 'copy:read', 'copy:update', 'copy:delete', 'account:delete',
   ]);
   await f.grantLibraryGate(owner.actor.accountId);
   const accountId = owner.actor.accountId;
@@ -79,6 +80,8 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     const subjectId = await f.createSubject('game');
     const a = await historical(f, subjectId);
     const b = await historical(f, subjectId);
+    const copies = createCopyCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+    const retained = await copies.deleteCopy(b.owner.actor, b.copyIds[0]!, 1, entryKey());
     const before = await snapshot(f, a.accountId);
     // Ordinary reads neither create a job nor require current profile inference.
     expect((await f.commands.readEntry(a.owner.actor, subjectId)).state).toBe('planned');
@@ -148,6 +151,13 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     expect((await snapshot(f, a.accountId)).receipts).toEqual(after.receipts);
     await worker.stop();
     worker = undefined;
+    const restored = await copies.restoreCopy(b.owner.actor, b.copyIds[0]!, {
+      deletionId: retained.transactionId, revision: 2,
+    }, entryKey());
+    expect(restored.value).toMatchObject({ id: b.copyIds[0], kind: 'legacy-unspecified',
+      note: b.copyIds[0], revision: 3, createdAt: retained.value.createdAt });
+    const restoredPin = await facts.readCopyFact(f.pool, b.route, b.copyIds[0]!);
+    expect(restoredPin?.pin).toMatchObject({ provenance: 'legacy', releaseDigest: f.originalDigest });
     await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
       { actor: b.owner.actor, deadline: deadlineFor(30_000) }, { accountId: b.accountId, key: entryKey() },
     );
