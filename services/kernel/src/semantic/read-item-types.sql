@@ -1,10 +1,13 @@
-WITH input AS NOT MATERIALIZED (
+WITH requested AS MATERIALIZED (
+  SELECT *
+  FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS keys(route, id)
+), input AS NOT MATERIALIZED (
   SELECT :partition_no::integer AS partition_no
 )
 SELECT s.subject_id::text AS id, s.type,
        agent_subject.account_id::text AS agent_account_id,
        COALESCE(agent_subject.verified, false) AS agent_verified
-FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS requested(route, id)
+FROM requested
 JOIN input ON requested.route >= input.partition_no * 16
           AND requested.route < (input.partition_no + 1) * 16
 JOIN semantic.subject AS s
