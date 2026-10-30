@@ -273,3 +273,237 @@ test('fresh denial conceals retained previews and defeats older command response
   );
   expect((await borrowed.source(identity)).kind).toBe('refused');
 });
+
+async function persistedDraft() {
+  const native = await fixture();
+  const original = new EditionPublicationController(native.api);
+  await original.select(identity);
+  original.chooseSubject(subject);
+  await original.create();
+  await original.retry();
+  expect(original.snapshot().edition?.state).toBe('draft');
+  return native;
+}
+
+test('Resume a genuine native authored edition draft without recreating immutable source', async () => {
+  const native = await persistedDraft();
+  const before = native.calls.length;
+  const resumed = new EditionPublicationController(native.api);
+  await resumed.resume(editionId);
+  expect(native.calls.slice(before).map((call) => call.path)).toEqual([
+    `/v1/contentEditions/${editionId}`,
+    '/v1/viewerActions',
+  ]);
+  expect(resumed.snapshot().edition).toMatchObject({
+    editionId,
+    editionRevision: '1',
+    state: 'draft',
+    creatorAccountId: creator,
+    revisionId: identity.revisionId,
+    targetSubjectId: subject,
+    sha256: native.revision.sha256,
+    licence: native.revision.licence,
+  });
+  expect(resumed.snapshot().source).toBeNull();
+  expect(resumed.snapshot().identity).toBeNull();
+  expect(resumed.snapshot().intent).toBeNull();
+  const loaded = native.calls.length;
+  await resumed.select({ postId: id(999), revisionId: id(998) });
+  resumed.chooseSubject(id(997));
+  await resumed.create();
+  expect(resumed.snapshot().targetSubjectId).toBe(subject);
+  expect(native.calls).toHaveLength(loaded);
+  await resumed.publish();
+  const intent = resumed.snapshot().intent;
+  expect(intent).toMatchObject({ kind: 'publish', source: null, editionId, editionRevision: '1' });
+  expect(resumed.snapshot().failure?.kind).toBe('uncertain');
+  await resumed.refresh();
+  resumed.acceptReview();
+  expect(resumed.snapshot().intent).toBe(intent); // A current read preserves the lost request's key and CAS.
+  await resumed.retry();
+  expect(resumed.snapshot().edition?.state).toBe('published');
+  expect(resumed.snapshot().edition?.editionId).toBe(editionId);
+  const publishes = native.calls.slice(before).filter((call) => call.path.endsWith(':publish'));
+  expect(publishes).toHaveLength(2);
+  expect(publishes[0]!.headers.get('idempotency-key')).toBe(publishes[1]!.headers.get('idempotency-key'));
+  expect(publishes.map((call) => call.headers.get('if-match'))).toEqual(['"1"', '"1"']);
+  expect(publishes.map((call) => call.body)).toEqual([{}, {}]);
+  expect(native.calls.slice(before).some((call) => /\/posts\/|\/contentEditions$|\/revision$/.test(call.path))).toBe(
+    false,
+  );
+});
+
+test('resumed stale versions need explicit current review; a published reload never writes', async () => {
+  const native = await persistedDraft();
+  let keys = 0;
+  const resumed = new EditionPublicationController(native.api, () => `resume-${++keys}`);
+  await resumed.resume(editionId);
+  native.advanceDraft();
+  await resumed.publish();
+  const stale = resumed.snapshot().intent;
+  expect(resumed.snapshot().failure).toMatchObject({ kind: 'conflict', status: 412 });
+  const before = native.calls.length;
+  await resumed.publish();
+  expect(native.calls).toHaveLength(before);
+  await resumed.refresh();
+  expect(resumed.snapshot().review?.edition?.editionRevision).toBe('2');
+  expect(resumed.snapshot().intent).toBe(stale);
+  expect(resumed.snapshot().targetSubjectId).toBe(subject);
+  resumed.acceptReview();
+  expect(resumed.snapshot().edition?.editionRevision).toBe('2');
+  await resumed.publish();
+  expect(resumed.snapshot().intent?.key).not.toBe(stale?.key);
+  await resumed.retry();
+  const reloaded = new EditionPublicationController(native.api);
+  const commands = native.calls.filter((call) => call.path.endsWith(':publish')).length;
+  await reloaded.resume(editionId);
+  expect(reloaded.snapshot().edition).toMatchObject({ editionId, state: 'published', editionRevision: '3' });
+  await reloaded.create();
+  await reloaded.publish();
+  expect(native.calls.filter((call) => call.path.endsWith(':publish'))).toHaveLength(commands);
+});
+
+/** Exact closed native metadata responses; no document source, post/head lookup or local authority. */
+function resumeBoundary() {
+  const edition: EditionMetadata = {
+    editionId,
+    editionRevision: '7',
+    state: 'draft',
+    creatorAccountId: creator,
+    revisionId: identity.revisionId,
+    targetSubjectId: subject,
+    sha256: 'a'.repeat(64),
+    licence: 'CC-BY-SA-4.0',
+  };
+  let status = 200;
+  let admission: 'allowed' | 'denied' | 'missing' = 'allowed';
+  let commandStatus = 403;
+  let loseRead = false;
+  const calls: string[] = [];
+  const transport = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      calls.push(`${request.method} ${path}`);
+      expect(request.headers.get('authorization')).toBe('Bearer current-creator');
+      expect(request.cache).toBe('no-store');
+      expect(request.redirect).toBe('manual');
+      if (path === `/v1/contentEditions/${editionId}`) {
+        if (loseRead) throw new Error('metadata transport unavailable');
+        return Response.json(status === 200 ? edition : { code: 'not_found' }, { status });
+      }
+      if (path === '/v1/viewerActions')
+        return Response.json({
+          resources:
+            admission === 'missing'
+              ? []
+              : [
+                  {
+                    type: 'content.edition',
+                    id: editionId,
+                    viewerActions:
+                      admission === 'allowed'
+                        ? [{ action: 'edition:sell', operations: ['content_edition.publish'] }]
+                        : [],
+                  },
+                ],
+        });
+      if (path === `/v1/contentEditions/${editionId}:publish`)
+        return Response.json({ code: 'forbidden' }, { status: commandStatus });
+      throw new Error(`Unexpected resume request: ${request.method} ${path}`);
+    },
+    { preconnect() {} },
+  );
+  return {
+    api: createNativeEditionCreateApi('https://kernel.example', 'Bearer current-creator', creator, transport),
+    edition,
+    calls,
+    setStatus: (value: number) => {
+      status = value;
+    },
+    setAdmission: (value: typeof admission) => {
+      admission = value;
+    },
+    setCommandStatus: (value: number) => {
+      commandStatus = value;
+    },
+    loseRead: () => {
+      loseRead = true;
+    },
+  };
+}
+
+test('resume distinguishes unavailable, missing and terminal state without replacing the edition', async () => {
+  const { editionCreateSearch } = await import('../src/content-editions/edition-create');
+  expect(editionCreateSearch({ ...identity, editionId })).toEqual({
+    editionId,
+    postId: undefined,
+    revisionId: undefined,
+  });
+  expect(editionCreateSearch({ ...identity, editionId: '' }).editionId).toBe('');
+  const native = resumeBoundary();
+  for (const status of [404, 410, 401, 403, 503]) {
+    native.setStatus(status);
+    const controller = new EditionPublicationController(native.api);
+    await controller.resume(editionId);
+    expect(controller.snapshot().failure?.kind).toBe(
+      status === 404 || status === 410 ? 'missing' : status === 503 ? 'unavailable' : 'refused',
+    );
+    expect(controller.snapshot().knownEditionId).toBe(editionId);
+    await controller.select(identity);
+    await controller.create();
+  }
+  native.setStatus(200);
+  native.setAdmission('missing');
+  expect(await native.api.resume(editionId)).toMatchObject({ kind: 'unavailable', reason: 'admission-pending' });
+  native.setAdmission('denied');
+  expect(await native.api.resume(editionId)).toMatchObject({ kind: 'refused', status: 403 });
+  native.setAdmission('allowed');
+  native.edition.state = 'withdrawn';
+  const withdrawn = new EditionPublicationController(native.api);
+  await withdrawn.resume(editionId);
+  expect(withdrawn.snapshot().edition?.state).toBe('withdrawn');
+  await withdrawn.publish();
+  expect(native.calls.every((call) => call.startsWith('GET ') || call === 'POST /v1/viewerActions')).toBe(true);
+  expect((await unavailableEditionCreateApi.resume(editionId)).kind).toBe('unavailable');
+  native.loseRead();
+  expect((await native.api.resume(editionId)).kind).toBe('unavailable');
+});
+
+test('resumed publish repeats current admission and native source checks; denial defeats late success', async () => {
+  const native = resumeBoundary();
+  const controller = new EditionPublicationController(native.api);
+  await controller.resume(editionId);
+  native.setAdmission('denied');
+  await controller.publish();
+  expect(controller.snapshot().failure?.kind).toBe('refused');
+  expect(native.calls.some((call) => call.endsWith(':publish'))).toBe(false);
+  native.setAdmission('allowed');
+  await controller.refresh();
+  controller.acceptReview();
+  await controller.publish(); // Native command refuses a revoked source even though metadata/sell reads were admitted.
+  expect(controller.snapshot().failure?.kind).toBe('refused');
+  expect(native.calls.filter((call) => call.endsWith(':publish'))).toHaveLength(1);
+
+  let complete!: (result: EditionCommandRead) => void;
+  const late = new EditionPublicationController({
+    ...native.api,
+    command: () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  });
+  await late.resume(editionId);
+  const pending = late.publish();
+  const intent = late.snapshot().intent;
+  native.setStatus(404);
+  await late.refresh();
+  complete({ kind: 'confirmed', edition: { ...native.edition, state: 'published', editionRevision: '8' } });
+  await pending;
+  expect(late.snapshot().failure?.kind).toBe('missing');
+  expect(late.snapshot().edition?.state).toBe('draft');
+  expect(late.snapshot().intent).toBe(intent);
+  const before = native.calls.length;
+  await late.retry();
+  expect(native.calls).toHaveLength(before);
+});

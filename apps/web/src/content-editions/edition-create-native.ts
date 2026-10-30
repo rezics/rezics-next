@@ -5,6 +5,7 @@ import { editionDocumentDigest } from './edition-model';
 import {
   editionContentId,
   editionMatchesSource,
+  editionBindingMatches,
   type EditionCreateApi,
   type EditionCreateFailure,
   type EditionCreateSource,
@@ -24,6 +25,7 @@ export function parseEditionCommand(value: unknown) {
 const pending: EditionCreateFailure = { kind: 'unavailable', status: 503, reason: 'native-pending' };
 export const unavailableEditionCreateApi: EditionCreateApi = {
   source: async () => pending,
+  resume: async () => pending,
   command: async () => pending,
   review: async () => pending,
 };
@@ -136,9 +138,13 @@ export function createNativeEditionCreateApi(
     const response = await transport(new URL(`/v1/contentEditions/${encodeURIComponent(id)}`, origin), {
       headers: { authorization },
     });
+    if (response.status === 404 || response.status === 410) return { kind: 'missing', status: response.status };
     if (response.status !== 200) return failure(response.status);
     const value = parseEditionMetadata(await response.json());
-    return value && value.editionId === id && /^[1-9][0-9]{0,18}$/.test(value.editionRevision)
+    return value &&
+      value.editionId === id &&
+      [value.revisionId, value.targetSubjectId, value.creatorAccountId].every((id) => editionContentId.test(id)) &&
+      /^[1-9][0-9]{0,18}$/.test(value.editionRevision)
       ? value
       : { kind: 'unavailable', status: 502, reason: 'binding' };
   }
@@ -159,7 +165,9 @@ export function createNativeEditionCreateApi(
       ? null
       : { kind: 'refused', status: 403 };
   }
-  async function currentSource(intent: EditionPublicationIntent): Promise<EditionCreateSource | EditionCreateFailure> {
+  async function currentSource(
+    intent: EditionPublicationIntent & { source: EditionSourceIdentity },
+  ): Promise<EditionCreateSource | EditionCreateFailure> {
     const selected = await source(intent.source);
     if (selected.kind !== 'source') return selected;
     if (!selected.source.subjectIds.includes(intent.targetSubjectId))
@@ -173,13 +181,41 @@ export function createNativeEditionCreateApi(
       return subject.status >= 400 ? failure(subject.status) : { kind: 'refused', status: 404, reason: 'source' };
     return selected.source;
   }
+  // Metadata is the only resumable creator surface: native deliberately withholds post IDs and draft bytes.
+  async function resume(editionId: string) {
+    try {
+      if (!editionContentId.test(editionId)) return { kind: 'missing' as const, status: 400 };
+      const edition = await metadata(editionId);
+      if ('kind' in edition) return edition;
+      // This identity comparison selects the creator UI; the native reads/actions and command own authority.
+      if (edition.creatorAccountId !== viewerId) return { kind: 'refused' as const, status: 403 };
+      if (edition.state === 'draft') {
+        const denied = await publishAdmission(editionId);
+        if (denied) return denied;
+      }
+      return { kind: 'edition' as const, edition };
+    } catch {
+      return { kind: 'unavailable' as const, status: 503, reason: 'dependency' as const };
+    }
+  }
   return {
     source,
+    resume,
     async command(intent) {
       let sent = false;
       try {
-        const selected = await currentSource(intent);
-        if ('kind' in selected) return selected;
+        let selected: EditionCreateSource | EditionMetadata;
+        if (intent.source) {
+          const result = await currentSource({ ...intent, source: intent.source });
+          if ('kind' in result) return result;
+          selected = result;
+        } else {
+          const current = await metadata(intent.editionId);
+          if ('kind' in current) return current;
+          if (current.creatorAccountId !== viewerId || current.targetSubjectId !== intent.targetSubjectId)
+            return { kind: 'refused', status: 403 };
+          selected = current;
+        }
         if (intent.kind === 'publish') {
           const denied = await publishAdmission(intent.editionId);
           if (denied) return denied;
@@ -218,9 +254,13 @@ export function createNativeEditionCreateApi(
             ...current,
             kind: 'uncertain',
             editionId: command.editionId,
-            concealSource: current.kind === 'refused',
+            concealSource: current.kind === 'refused' || current.kind === 'missing',
           };
-        if (!editionMatchesSource(current, selected, intent.targetSubjectId))
+        if (
+          'postId' in selected
+            ? !editionMatchesSource(current, selected, intent.targetSubjectId)
+            : !editionBindingMatches(current, selected)
+        )
           return { kind: 'uncertain', status: 502, reason: 'binding', editionId: command.editionId };
         if (
           current.editionRevision !== command.editionRevision ||
@@ -234,6 +274,11 @@ export function createNativeEditionCreateApi(
     },
     async review(identity, editionId) {
       try {
+        if (!identity) {
+          if (!editionId) return { kind: 'unavailable', status: 502, reason: 'binding' };
+          const current = await resume(editionId);
+          return current.kind === 'edition' ? { kind: 'review', source: null, edition: current.edition } : current;
+        }
         const selected = await source(identity);
         if (selected.kind !== 'source') return selected;
         const edition = editionId ? await metadata(editionId) : null;

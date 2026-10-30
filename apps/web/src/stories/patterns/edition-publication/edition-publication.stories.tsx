@@ -66,3 +66,47 @@ export const Uncertain: Story = {
     await expect(canvas.queryByRole('link', { name: m.edition_publication_open() })).toBeNull();
   },
 };
+
+export const ResumedDraft: Story = {
+  args: { state: 'resumed-draft' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.edition_publication_resume_heading() });
+    await canvas.findByRole('heading', { name: m.edition_publication_draft_heading() });
+    await expect(canvas.queryByText(fixedText)).toBeNull();
+    await expect(canvas.queryByRole('combobox')).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.edition_publication_create() })).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.edition_publication_create_offer() })).toBeNull();
+    await userEvent.click(canvas.getByRole('checkbox'));
+    await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_publish() }));
+    await canvas.findByRole('heading', { name: m.edition_publication_published_heading() });
+    await expect(canvas.getByRole('link', { name: m.edition_publication_create_offer() })).toHaveAttribute(
+      'href',
+      localizeHref(`/creator/offers/new?editionId=${encodeURIComponent(editionId)}`),
+    );
+  },
+};
+export const ReloadedPublished: Story = { ...Published, args: { state: 'reloaded-published' } };
+export const ResumedConflict: Story = {
+  args: { state: 'resumed-conflict' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.edition_publication_conflict());
+    await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_refresh() }));
+    await canvas.findAllByText(m.edition_publication_edition_version({ revision: '2' }));
+    await expect(canvas.getByRole('button', { name: m.edition_publication_publish() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_accept_review() }));
+    await canvas.findByRole('heading', { name: m.edition_publication_draft_heading() });
+    await expect(canvas.getByRole('checkbox')).not.toBeChecked();
+  },
+};
+export const UncertainPublish: Story = {
+  args: { state: 'uncertain-publish' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.edition_publication_uncertain());
+    await expect(canvas.queryByRole('link', { name: m.edition_publication_create_offer() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_retry() }));
+    await canvas.findByRole('heading', { name: m.edition_publication_published_heading() });
+  },
+};

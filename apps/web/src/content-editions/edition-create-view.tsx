@@ -7,22 +7,32 @@ import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { useSession } from '../session/query';
 import { exactRevisionHref } from '../threads/exact-revision-href';
-import { commandEditionPublication, readEditionCreateSource, reviewEditionPublication } from './edition-create-actions';
+import {
+  commandEditionPublication,
+  readEditionCreateSource,
+  readEditionResume,
+  reviewEditionPublication,
+} from './edition-create-actions';
 import {
   EditionPublicationController,
   editionMatchesSource,
   editionSourceFromLink,
   type EditionCreateApi,
   type EditionSourceIdentity,
+  type EditionResumeRead,
 } from './edition-create';
 
 /** Route composition keeps token refresh independent of the mounted publication intent. */
 export function EditionPublicationPanel({
   initialSource,
+  initialEditionId,
+  initialResume,
   api: override,
   controller: suppliedController,
 }: {
   initialSource?: EditionSourceIdentity | undefined;
+  initialEditionId?: string | undefined;
+  initialResume?: EditionResumeRead | undefined;
   api?: EditionCreateApi | undefined;
   controller?: EditionPublicationController | undefined;
 }) {
@@ -33,6 +43,7 @@ export function EditionPublicationPanel({
     () =>
       override ?? {
         source: (data) => readEditionCreateSource({ data }),
+        resume: (editionId) => readEditionResume({ data: { editionId } }),
         command: (data) =>
           csrf.current
             ? commandEditionPublication({ data, headers: { 'X-CSRF-Token': csrf.current } })
@@ -53,23 +64,34 @@ export function EditionPublicationPanel({
         {session.state === 'signed-out' ? (
           <a
             className="inline-flex min-h-11 items-center underline"
-            href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/editions/new${initialSource ? `?${new URLSearchParams(initialSource)}` : ''}`)}`}
+            href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/editions/new${initialEditionId !== undefined ? `?${new URLSearchParams({ editionId: initialEditionId })}` : initialSource ? `?${new URLSearchParams(initialSource)}` : ''}`)}`}
           >
             {m.content_edition_sign_in()}
           </a>
         ) : null}
       </article>
     );
-  return <EditionPublication controller={controller} initialSource={initialSource} />;
+  return (
+    <EditionPublication
+      controller={controller}
+      initialSource={initialSource}
+      initialEditionId={initialEditionId}
+      initialResume={initialResume}
+    />
+  );
 }
 
 /** A fixed-edition creator has no shadcn equivalent. Shared document rendering owns canonical bytes. */
 export function EditionPublication({
   controller,
   initialSource,
+  initialEditionId,
+  initialResume,
 }: {
   controller: EditionPublicationController;
   initialSource?: EditionSourceIdentity | undefined;
+  initialEditionId?: string | undefined;
+  initialResume?: EditionResumeRead | undefined;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [sourceLink, setSourceLink] = useState('');
@@ -82,20 +104,33 @@ export function EditionPublication({
   const initialPostId = initialSource?.postId;
   const initialRevisionId = initialSource?.revisionId;
   useEffect(() => {
+    if (initialEditionId !== undefined) {
+      void controller.resume(initialEditionId, initialResume);
+      return;
+    }
     if (!controller.snapshot().identity && initialPostId && initialRevisionId)
       void controller.select({ postId: initialPostId, revisionId: initialRevisionId });
-  }, [controller, initialPostId, initialRevisionId]);
+  }, [controller, initialPostId, initialRevisionId, initialEditionId, initialResume]);
   useEffect(() => {
     setConfirmed(false);
-  }, [state.review, state.edition?.editionRevision, state.targetSubjectId]);
-  const { source, edition, failure } = state;
+  }, [state.review, state.failure, state.busy, state.edition?.editionRevision, state.targetSubjectId]);
+  const { source, failure } = state;
+  const concealed =
+    state.busy ||
+    failure?.concealSource ||
+    failure?.kind === 'refused' ||
+    failure?.kind === 'unavailable' ||
+    failure?.kind === 'missing';
+  const edition = concealed ? null : (state.review?.edition ?? state.edition);
   const published =
     edition?.state === 'published' &&
-    source !== null &&
+    (state.resumeEditionId !== null || source !== null) &&
     !state.busy &&
     !state.uncertain &&
     !failure &&
-    editionMatchesSource(edition, source, state.targetSubjectId);
+    (source
+      ? editionMatchesSource(edition, source, state.targetSubjectId)
+      : edition.editionId === state.resumeEditionId);
   return (
     <article
       className="mx-auto w-full max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"
@@ -106,7 +141,7 @@ export function EditionPublication({
         <PageHeading>{m.edition_publication_heading()}</PageHeading>
         <p className="max-w-prose text-sm text-muted-foreground">{m.edition_publication_intro()}</p>
       </header>
-      {!edition && !state.intent ? (
+      {!edition && !state.intent && state.resumeEditionId === null && initialEditionId === undefined ? (
         <section className="space-y-4" aria-label={m.edition_publication_source_heading()}>
           <h2 className="text-lg font-semibold">{m.edition_publication_source_heading()}</h2>
           <p className="text-sm text-muted-foreground">{m.edition_publication_selection_help()}</p>
@@ -154,20 +189,59 @@ export function EditionPublication({
                 ? m.edition_publication_conflict()
                 : failure.kind === 'refused'
                   ? m.edition_publication_refused()
-                  : m.edition_publication_unavailable()}
+                  : failure.kind === 'missing'
+                    ? m.edition_publication_missing()
+                    : m.edition_publication_unavailable()}
           </p>
           <div className="flex flex-wrap gap-3">
-            {state.uncertain && state.intent && source ? (
+            {state.uncertain &&
+            state.intent &&
+            failure.kind === 'uncertain' &&
+            !failure.concealSource &&
+            (source || state.resumeEditionId !== null) ? (
               <Button disabled={state.busy} onClick={() => void controller.retry()}>
                 {m.edition_publication_retry()}
               </Button>
             ) : null}
-            {state.identity ? (
+            {(state.identity || state.resumeEditionId !== null) && failure.status !== 400 ? (
               <Button variant="outline" disabled={state.busy} onClick={() => void controller.refresh()}>
                 {m.edition_publication_refresh()}
               </Button>
             ) : null}
           </div>
+        </section>
+      ) : null}
+      {edition && state.resumeEditionId !== null ? (
+        <section className="space-y-4 border-b border-border pb-5" aria-label={m.edition_publication_resume_heading()}>
+          <h2 className="text-lg font-semibold">{m.edition_publication_resume_heading()}</h2>
+          <p className="max-w-prose text-sm text-muted-foreground">{m.edition_publication_resume_help()}</p>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="font-medium">{m.exact_revision_id()}</dt>
+              <dd>{edition.revisionId}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">{m.edition_publication_subject()}</dt>
+              <dd>{edition.targetSubjectId}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">{m.edition_publication_licence()}</dt>
+              <dd>{edition.licence}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">SHA-256</dt>
+              <dd className="font-mono text-xs">{edition.sha256}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+      {edition?.state === 'withdrawn' ? (
+        <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
+          <h2 className="text-lg font-semibold">{m.edition_publication_withdrawn_heading()}</h2>
+          <p role="status" className="text-sm">
+            {m.edition_publication_withdrawn_help()}
+          </p>
+          <p className="font-mono text-xs">{edition.editionId}</p>
         </section>
       ) : null}
       {source ? (
@@ -226,7 +300,7 @@ export function EditionPublication({
           </div>
         </section>
       ) : null}
-      {state.review && (!state.uncertain || state.review.edition?.editionId === state.knownEditionId) && source ? (
+      {state.review && !state.uncertain && (source || edition) ? (
         <section
           className="space-y-4 rounded-xl border border-border p-4 sm:p-5"
           aria-label={m.edition_publication_review_heading()}
@@ -244,12 +318,12 @@ export function EditionPublication({
           </Button>
         </section>
       ) : null}
-      {source && !failure && !edition ? (
+      {source && !failure && !edition && state.resumeEditionId === null ? (
         <Button disabled={state.busy || !state.targetSubjectId} onClick={() => void controller.create()}>
           {m.edition_publication_create()}
         </Button>
       ) : null}
-      {source && edition?.state === 'draft' ? (
+      {edition?.state === 'draft' ? (
         <section
           className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
           aria-label={m.edition_publication_draft_heading()}
@@ -269,8 +343,8 @@ export function EditionPublication({
             />
             <span>
               {m.edition_publication_confirm({
-                revision: source.revisionId,
-                licence: source.licence,
+                revision: edition.revisionId,
+                licence: edition.licence,
                 subject: state.targetSubjectId,
               })}
             </span>

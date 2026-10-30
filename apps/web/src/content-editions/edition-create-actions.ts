@@ -13,7 +13,7 @@ const key = v.pipe(v.string(), v.uuid());
 const createIntent = v.strictObject({ kind: v.literal('create'), source: identity, targetSubjectId: id, key });
 const publishIntent = v.strictObject({
   kind: v.literal('publish'),
-  source: identity,
+  source: v.nullable(identity),
   targetSubjectId: id,
   editionId: id,
   editionRevision: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,18}$/)),
@@ -29,7 +29,12 @@ async function api(): Promise<EditionCreateApi> {
   const viewerId = sessionSubject(request);
   if (!authorization || !viewerId) {
     const refused = { kind: 'refused', status: 401 } as const;
-    return { source: async () => refused, command: async () => refused, review: async () => refused };
+    return {
+      source: async () => refused,
+      resume: async () => refused,
+      command: async () => refused,
+      review: async () => refused,
+    };
   }
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   return origin ? createNativeEditionCreateApi(origin, authorization, viewerId) : unavailableEditionCreateApi;
@@ -38,6 +43,10 @@ async function api(): Promise<EditionCreateApi> {
 export const readEditionCreateSource = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(identity, input))
   .handler(async ({ data }) => (await api()).source(data));
+
+export const readEditionResume = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(v.strictObject({ editionId: id }), input))
+  .handler(async ({ data }) => (await api()).resume(data.editionId));
 
 export const readEditionCreateEntry = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(identity, input))
@@ -51,5 +60,7 @@ export const commandEditionPublication = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => (await api()).command(data));
 
 export const reviewEditionPublication = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => v.parse(v.strictObject({ source: identity, editionId: v.nullable(id) }), input))
+  .validator((input: unknown) =>
+    v.parse(v.strictObject({ source: v.nullable(identity), editionId: v.nullable(id) }), input),
+  )
   .handler(async ({ data }) => (await api()).review(data.source, data.editionId));

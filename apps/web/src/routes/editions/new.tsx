@@ -1,9 +1,11 @@
-import { createFileRoute, useSearch } from '@tanstack/react-router';
+import { createFileRoute, useLoaderData, useSearch } from '@tanstack/react-router';
 import {
   editionContentId,
+  editionCreateSearch,
   type EditionCreateApi,
   type EditionPublicationController,
 } from '../../content-editions/edition-create';
+import { readEditionResume } from '../../content-editions/edition-create-actions';
 import { EditionPublicationPanel } from '../../content-editions/edition-create-view';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
@@ -11,11 +13,17 @@ import { requireSignedIn } from '../../session/guard';
 export const Route = createFileRoute('/editions/new')({
   beforeLoad: requireSignedIn,
   staticData: { sessionReread: true },
-  validateSearch: (search: Record<string, unknown>) => ({
-    postId: typeof search.postId === 'string' && editionContentId.test(search.postId) ? search.postId : undefined,
-    revisionId:
-      typeof search.revisionId === 'string' && editionContentId.test(search.revisionId) ? search.revisionId : undefined,
-  }),
+  validateSearch: editionCreateSearch,
+  loaderDeps: ({ search }) => ({ editionId: search.editionId }),
+  loader: ({ deps }) =>
+    deps.editionId === undefined
+      ? undefined
+      : editionContentId.test(deps.editionId)
+        ? readEditionResume({ data: { editionId: deps.editionId } })
+        : { kind: 'missing' as const, status: 400 },
+  staleTime: 0,
+  gcTime: 0,
+  shouldReload: true,
   head: () => ({ meta: [{ title: m.edition_publication_heading() }, { name: 'robots', content: 'noindex, follow' }] }),
   component: EditionCreateRoute,
 });
@@ -27,9 +35,13 @@ export function EditionCreateRoute({
   api?: EditionCreateApi;
   controller?: EditionPublicationController;
 }) {
-  const { postId, revisionId } = useSearch({ from: '/editions/new' });
+  const { editionId, postId, revisionId } = useSearch({ from: '/editions/new' });
+  const resumed = useLoaderData({ from: '/editions/new' });
   return (
     <EditionPublicationPanel
+      key={editionId ?? `${postId}:${revisionId}`}
+      initialEditionId={editionId}
+      initialResume={resumed}
       api={api}
       controller={controller}
       initialSource={postId && revisionId ? { postId, revisionId } : undefined}

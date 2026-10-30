@@ -2197,16 +2197,31 @@ authority; the UI constructs no fallback Context or permission formula. Document
 images without producer derivative summaries remain explicitly unavailable. No borrowed cover or original media URL
 is attached to an edition.
 
+Returning creators open `/editions/new?editionId=<native ID>`. This parameter takes precedence over source
+selection, even if malformed; missing, hidden or removed editions never fall through to creation. The signed-in
+route loader reads fresh private metadata, with no router stale/cache retention. The same controller adopts the
+exact existing edition ID and numeric version. Visiting or reloading this route sends no create or publish command.
+Draft, published and terminal withdrawn states have separate paths. Only a currently confirmed published edition
+shows the reader and Commerce offer links.
+
+Resume deliberately uses the producer's exact `ContentEditionView`: it exposes the immutable revision ID, original
+subject, SHA-256, creator and licence, but no post ID or draft body. The saved-edition section displays those fixed
+values without a source selector, document copy, latest-post lookup or invented source object. It does not call the
+buyer revision delivery endpoint to obtain draft bytes. Current native metadata and sell admission are required;
+missing action registration is typed unavailability. Identity matching selects the creator surface and grants no
+permission. The publish command remains the authority for ordinary current `post:revise`, `edition:sell`, original
+authorship, subject, source and ancestry checks. The consumer adds no backend or buyer-delivery change.
+
 Creation and publication have separate stable intent keys. Uncertain responses retain the original request, source
 preview and selection; explicit retry replays the same operation, payload, key and CAS. A draft has no published reader
 link and is not sellable. A definite conflict requires a fresh current source/edition read and explicit review before a
 new intent can use a new edition version. Refresh conceals previous source bytes immediately; an older pending command
 cannot replace the fresh read. Source denial retains the pointer, subject and unresolved intent, while concealing the
-preview. An unknown create result cannot be discarded by a refresh. Once a real command supplies an edition ID, an
-explicit bound current read can resolve its state. Only the confirmed published section links to the assigned
+preview. An unknown create result cannot be discarded by a refresh. An uncertain mounted request keeps its original key and version even after a current read; only explicit retry
+settles it. A full route reload reads native state and never automatically replays a command. Only the confirmed published section links to the assigned
 `/creator/offers/new?editionId=<published ID>` route, localized with `localizeHref` and carrying the encoded current
 native edition ID. Both links remain hidden during pending or uncertain work and require the edition to match the
-current source and selected subject. Its separate `/editions/{id}` link opens the reader. Navigation creates no offer,
+current immutable source binding. Resume binds directly to the returned native edition metadata. Its separate `/editions/{id}` link opens the reader. Navigation creates no offer,
 payment or buyer fact and grants no role. The offer editor retains fresh native sale metadata and rights checks under
 [Content's fixed-edition authority](../../services/kernel/src/content/README.md#fixed-authored-paid-editions), plus
 capture, current consent and financial policy under the [Commerce contract](../../services/kernel/src/commerce/README.md#what-is-bought).
@@ -2230,14 +2245,25 @@ The reusable EditionPublication Pattern and actual creator-route Pages expose th
 - `patterns-content-editionpublication--refused`
 - `patterns-content-editionpublication--conflict`
 - `patterns-content-editionpublication--uncertain`
+- `patterns-content-editionpublication--resumed-draft`
+- `patterns-content-editionpublication--reloaded-published`
+- `patterns-content-editionpublication--resumed-conflict`
+- `patterns-content-editionpublication--uncertain-publish`
 - `pages-content-editionpublication--selection`
 - `pages-content-editionpublication--draft`
 - `pages-content-editionpublication--published`
 - `pages-content-editionpublication--refused`
 - `pages-content-editionpublication--conflict`
 - `pages-content-editionpublication--uncertain`
+- `pages-content-editionpublication--resumed-draft`
+- `pages-content-editionpublication--reloaded-published`
+- `pages-content-editionpublication--resumed-conflict`
+- `pages-content-editionpublication--uncertain-publish`
 
-Selection and Uncertain retain their focused interaction cases. Published checks readiness of the localized offer
+Selection and Uncertain retain their focused interaction cases. ResumedDraft reads a saved wire resource into a new
+controller and confirms publication of that same ID without source reconstruction. ReloadedPublished reads current
+publication without writes; ResumedConflict requires explicit version review; UncertainPublish retries the original
+key and quoted version. Published checks readiness of the localized offer
 link for the confirmed native edition and the separate reader link. These stories exercise the real controller and
 wire adapter with constructed closed producer responses. Pages mount `EditionCreateRoute` in the existing AppShell
 with one main. Use
@@ -2245,7 +2271,7 @@ existing phone390/desktop1280, light/dark and locale globals; Web owns visual re
 base-locale fallback pending localization review. `tests/edition-publication.test.ts` records the assigned boundary
 journey and privacy/late-response case for integration; acceptance, native, browser and visual execution are deferred by
 the current minimal verification policy. No external reference-project source was needed for this document surface.
-Local `bun run --cwd apps/web typecheck` passes, including generation of the creator route in the ignored route tree.
+The scoped local verification command is `bun run --cwd apps/web typecheck`; acceptance and visual review run after integration.
 
 Cost: entry and source selection
 
@@ -2253,6 +2279,15 @@ Cost: entry and source selection
 - Bound: three native requests per entry/read, one document of at most the native 2 MiB limit and at most 128 original
   subject IDs. No history walk, head substitution, refill, per-subject HTTP or additional document renderer.
 - Growth check: native Content's existing source/ancestor bounds remain producer-owned; interface typing is no proof.
+
+Cost: draft resume and resumed publication
+
+- Touches: one exact metadata GET and, for drafts, one current native action batch for the same edition. Published
+  and withdrawn reads use one GET. The metadata loader never enumerates posts, history, subjects or draft bytes.
+- Bound: two requests per draft load/review; one per other state read. Each resumed publish/retry reads metadata,
+  reads sell admission, sends at most one publish command, then confirms metadata: at most four native requests.
+  The native command owns current source revise, author, original subject and ancestor checks and their existing bounds.
+- Growth check: these consumer boundary fixtures establish no native cost or disclosure proof.
 
 Cost: create, publish, review and uncertain retry
 

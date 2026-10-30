@@ -9,7 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { fromPlainText } from '@rezics/document';
-import { EditionPublicationController } from '../../../content-editions/edition-create';
+import { editionCreateSearch, EditionPublicationController } from '../../../content-editions/edition-create';
 import { createNativeEditionCreateApi } from '../../../content-editions/edition-create-native';
 import { editionDocumentDigest } from '../../../content-editions/edition-model';
 import { EditionPublication } from '../../../content-editions/edition-create-view';
@@ -28,7 +28,17 @@ export const creatorId = '0192f3a0-6c1e-7b2a-9d4e-000000000090';
 export const identity = { postId, revisionId };
 export const fixedText =
   'The quiet ending leaves room for the reader to pause. This authored revision is the fixed source of the edition.';
-export type PublicationExampleState = 'selection' | 'draft' | 'published' | 'refused' | 'conflict' | 'uncertain';
+export type PublicationExampleState =
+  | 'selection'
+  | 'draft'
+  | 'published'
+  | 'refused'
+  | 'conflict'
+  | 'uncertain'
+  | 'resumed-draft'
+  | 'reloaded-published'
+  | 'resumed-conflict'
+  | 'uncertain-publish';
 
 /** Constructed producer DTOs exercise the real typed wire adapter, never native proof or product defaults. */
 export async function publicationFixture(state: PublicationExampleState) {
@@ -56,7 +66,9 @@ export async function publicationFixture(state: PublicationExampleState) {
   };
   let edition: EditionMetadata | null = null;
   let lost = state === 'uncertain';
-  let conflict = state === 'conflict';
+  let conflict = state === 'conflict' || state === 'resumed-conflict';
+  let lostPublish = state === 'uncertain-publish';
+  const publishReceipts = new Map<string, { editionId: string; editionRevision: string }>();
   const calls: { path: string; method: string; headers: Headers; body: string | null }[] = [];
   const fetcher = Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -108,6 +120,8 @@ export async function publicationFixture(state: PublicationExampleState) {
       }
       if (path === `/v1/contentEditions/${editionId}:publish` && edition) {
         if (state === 'refused') return Response.json({ code: 'forbidden' }, { status: 403 });
+        const key = request.headers.get('idempotency-key')!;
+        if (publishReceipts.has(key)) return Response.json(publishReceipts.get(key));
         if (conflict) {
           conflict = false;
           edition = { ...edition, editionRevision: '2' };
@@ -115,7 +129,12 @@ export async function publicationFixture(state: PublicationExampleState) {
         if (request.headers.get('if-match') !== `"${edition.editionRevision}"`)
           return Response.json({ code: 'precondition_failed' }, { status: 412 });
         edition = { ...edition, state: 'published', editionRevision: String(Number(edition.editionRevision) + 1) };
-        return Response.json({ editionId, editionRevision: edition.editionRevision });
+        publishReceipts.set(key, { editionId, editionRevision: edition.editionRevision });
+        if (lostPublish) {
+          lostPublish = false;
+          throw new Error('Constructed lost publication response');
+        }
+        return Response.json(publishReceipts.get(key));
       }
       if (path === `/v1/contentEditions/${editionId}` && edition) return Response.json(edition);
       throw new Error(`Unexpected publication fixture request: ${request.method} ${path}`);
@@ -123,18 +142,27 @@ export async function publicationFixture(state: PublicationExampleState) {
     { preconnect() {} },
   );
   const api = createNativeEditionCreateApi('https://kernel.example', 'Bearer story-creator', creatorId, fetcher);
-  const controller = new EditionPublicationController(api);
+  let controller = new EditionPublicationController(api);
   await controller.select(identity);
   if (state !== 'selection') {
     controller.chooseSubject(subjectId);
     await controller.create();
-    if (state === 'published' || state === 'refused' || state === 'conflict') await controller.publish();
+    if (state === 'published' || state === 'refused' || state === 'conflict' || state === 'reloaded-published')
+      await controller.publish();
   }
-  return { api, controller, calls };
+  const resumed = ['resumed-draft', 'reloaded-published', 'resumed-conflict', 'uncertain-publish'].includes(state);
+  if (resumed) {
+    // The returning controller reads the existing wire resource; it never creates a source or injects draft state.
+    controller = new EditionPublicationController(api);
+    await controller.resume(editionId);
+    if (state === 'resumed-conflict' || state === 'uncertain-publish') await controller.publish();
+  }
+  return { api, controller, calls, resumed };
 }
 
 function PublicationRouteExample({ fixture }: { fixture: Awaited<ReturnType<typeof publicationFixture>> }) {
-  const url = localizeUrl(new URL(`/editions/new?${new URLSearchParams(identity)}`, 'https://site.example'));
+  const search = fixture.resumed ? { editionId } : identity;
+  const url = localizeUrl(new URL(`/editions/new?${new URLSearchParams(search)}`, 'https://site.example'));
   const entry = url.pathname + url.search;
   setStoryRequestContext({ visitor: 'Signed In', url: entry });
   const { router, queryClient } = useMemo(() => {
@@ -149,7 +177,8 @@ function PublicationRouteExample({ fixture }: { fixture: Awaited<ReturnType<type
     const edition = createRoute({
       getParentRoute: () => root,
       path: '/editions/new',
-      validateSearch: () => identity,
+      validateSearch: editionCreateSearch,
+      loader: () => undefined,
       component: () => <EditionCreateRoute api={fixture.api} controller={fixture.controller} />,
     });
     const router = createRouter({

@@ -16,3 +16,7 @@ export const Published: Story = { ...pattern.Published };
 export const Refused: Story = { ...pattern.Refused };
 export const Conflict: Story = { ...pattern.Conflict };
 export const Uncertain: Story = { ...pattern.Uncertain };
+export const ResumedDraft: Story = { ...pattern.ResumedDraft };
+export const ReloadedPublished: Story = { ...pattern.ReloadedPublished };
+export const ResumedConflict: Story = { ...pattern.ResumedConflict };
+export const UncertainPublish: Story = { ...pattern.UncertainPublish };
