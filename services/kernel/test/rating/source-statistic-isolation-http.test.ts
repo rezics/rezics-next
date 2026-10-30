@@ -431,26 +431,9 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   ]);
   expect((await sourceStatistics(subjectId, fixture.actors.author))[0]).toEqual(refreshedEnvelope);
 
-  // Standalone write/refresh/denial is covered by source-statistics.test.ts; this waits for
-  // the real prior-epoch republish so later atomicity snapshots cannot race native work.
-  await until(
-    async () => {
-      const result = await fixture.database.admin.query<{ published: number; jobs: number }>(
-        `SELECT
-           (SELECT count(*)::integer FROM rating.public_figure
-            WHERE question_id = $1 AND population_id = $2 AND subject_id = ANY($3::uuid[])
-              AND count = 5 AND pending_position IS NULL AND pending_prior_generation IS NULL
-              AND published_prior_generation = (SELECT generation FROM rating.population_prior_epoch
-                                                WHERE question_id = $1 AND population_id = $2)) AS published,
-           (SELECT count(*)::integer FROM rating.population_prior_republish
-            WHERE question_id = $1 AND population_id = $2) AS jobs`,
-        [STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id, [subjectId, ...priorSubjects]],
-      );
-      return result.rows[0]!;
-    },
-    (value) => value.published === 11 && value.jobs === 0,
-    'Native prior-epoch republish for all joined figures',
-  );
+  // The target projection above proves the joined score uses the native prior. Full
+  // sibling republish paging is covered by prior-epoch.test.ts; it is unrelated here.
+  // Standalone write/refresh/denial is covered by source-statistics.test.ts.
 });
 
 test('invalid strict source-statistic JSON and provenance domains reject without native or command mutations', async () => {
