@@ -151,7 +151,10 @@ export function subjectOf(subject: RawSubject | null | undefined): LibrarySubjec
 
 async function readCollection(client: KernelClient, id: string): Promise<RawCollection> {
   const result = await client.collections({ collectionId: id }).get({ query: libraryFullQuery() });
-  return readLibraryResult(result).collection;
+  const { collection } = readLibraryResult(result);
+  // Dynamic membership uses collection-load's dedicated reader and has no curated count or timestamp.
+  if (!('memberCount' in collection)) throw new Error('Dynamic collection requires dynamic membership reads');
+  return collection;
 }
 
 async function readMembers(client: KernelClient, id: string, cursor?: string): Promise<RawMemberPage> {

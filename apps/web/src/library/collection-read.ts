@@ -28,7 +28,7 @@ export async function loadCollectionDestination(
   );
   if (
     collection.curatorAccountId !== viewer ||
-    ('membershipKind' in collection && collection.membershipKind !== 'curated') ||
+    ('membershipKind' in collection && collection.membershipKind === 'dynamic') ||
     !Number.isSafeInteger(collection.revision) ||
     collection.revision < 1
   )
