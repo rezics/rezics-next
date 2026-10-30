@@ -1,4 +1,4 @@
-import { ContentEditionUnavailableError, decodeCapturedContentEdition } from './benefit.ts';
+import { ContentEditionUnavailableError, contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
@@ -52,7 +52,7 @@ const contentEditionSchema = t.Union([
       action: t.Literal('edition:read'),
     }, object),
     creatorAccountId: id, targetSubjectId: id,
-    source: t.Object({ threadId: id, postId: id, licence: t.String({ minLength: 1, maxLength: 256 }) }, object),
+    source: t.Object({ licence: t.String({ minLength: 1, maxLength: 256 }) }, object),
     saleTermsReference: t.String({ minLength: 1, maxLength: 256 }),
     delivery: t.Literal('fixed-content-edition'), acquisition: t.Literal('one-time-account-bound'), quantity: t.Literal(1),
   }, object),
@@ -163,11 +163,11 @@ function detail(operationId: string, action: string, exposure: 'gate:purchases' 
 }
 function offerView(offer: Offer, summary: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
-  return { id, targetSubjectId, title, currency, unitAmountMinor, state, summary, contentEdition: offer.contentEdition ?? null };
+  return { id, targetSubjectId, title, currency, unitAmountMinor, state, summary, contentEdition: contentEditionTermsView(offer.contentEdition) };
 }
 function offerReadView(offer: Offer, subject: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
-  return { id, targetSubjectId, subject, title, currency, unitAmountMinor, state, contentEdition: offer.contentEdition ?? null };
+  return { id, targetSubjectId, subject, title, currency, unitAmountMinor, state, contentEdition: contentEditionTermsView(offer.contentEdition) };
 }
 function entitlementView(entitlement: Entitlement, summary: SubjectSummary | null) {
   const { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason } = entitlement;
@@ -180,7 +180,7 @@ function entitlementView(entitlement: Entitlement, summary: SubjectSummary | nul
     revokedAt,
     revokeReason,
     active: revokedAt === null,
-    contentEdition: entitlement.contentEdition ?? null,
+    contentEdition: contentEditionTermsView(entitlement.contentEdition),
     summary,
   };
 }
@@ -194,7 +194,7 @@ async function orderView(pool: Pool, order: Order) {
     checkoutUrl,
     checkoutExpiresAt,
     entitlementId: entitlement?.id ?? null,
-    contentEdition: order.contentEdition ?? null,
+    contentEdition: contentEditionTermsView(order.contentEdition),
     createdAt,
   };
 }
@@ -524,7 +524,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               const orders = rows.slice(0, size);
               const last = orders.at(-1);
               return {
-                orders,
+                orders: orders.map((order) => ({ ...order, contentEdition: contentEditionTermsView(order.contentEdition) })),
                 next:
                   rows.length > size && last && partition
                     ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })

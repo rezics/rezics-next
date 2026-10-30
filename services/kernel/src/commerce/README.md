@@ -100,7 +100,9 @@ type CapturedContentEdition = Readonly<{
 }>;
 ```
 
-`contentEdition` is this object or explicit null on offer/order/entitlement HTTP reads. Creator/title/subject,
+`contentEdition` on offer/order/entitlement HTTP reads is this object with `source` projected to `{licence}`
+(or explicit null). Source thread/post IDs stay internal; Content alone discloses source metadata with current
+native authority. The public terms DTO never contains a revision body. Creator/title/subject,
 offer revision, accepted currency/price/tax/royalty terms remain captured by the existing order fields. Capture is
 stored atomically in creator-home offer and buyer-home order/entitlement rows, never an authoritative cross-home
 join. The JSON is bounded to 4096 UTF-8 bytes; licence/terms reference are at most 256 characters each; revision

@@ -82,3 +82,12 @@ export function encodeCapturedContentEdition(value: CapturedContentEdition | nul
   decodeCapturedContentEdition(serialized);
   return serialized;
 }
+
+/** Sale/history terms expose no source thread/post identity or revision body.
+ * Content alone discloses its source metadata under current native authority.
+ */
+export function contentEditionTermsView(value: CapturedContentEdition | null | undefined) {
+  if (value == null) return null;
+  const { source, ...terms } = value;
+  return { ...terms, source: { licence: source.licence } };
+}
