@@ -5057,6 +5057,21 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     subjectId: string;
                                     note: string | null;
                                     addedAt: string;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
                                 }[];
                                 next: string | null;
                             };

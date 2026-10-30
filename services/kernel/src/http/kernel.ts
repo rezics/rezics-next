@@ -423,6 +423,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(labels), realmRoleReader }),
   });
+  // Collection FULL facts use this server route key and the admitted route job deadline.
   const collections = collectionRoutes(labels as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,

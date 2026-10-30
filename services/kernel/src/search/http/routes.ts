@@ -30,7 +30,7 @@ const result = t.Object(
   },
   object,
 );
-const fact = t.Union([
+export const FactSchema = t.Union([
   t.Object(
     { kind: t.Literal('item'), id: t.String({ format: 'uuid' }), labels: t.Record(t.String(), t.String()) },
     object,
@@ -46,7 +46,7 @@ const searchHit = t.Object(
     labels: t.Record(t.String(), t.String()),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     descriptions: t.Optional(t.Record(t.String(), t.String())),
-    facts: t.Optional(t.Record(t.String(), t.Array(fact))),
+    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema))),
     figure: t.Ref('PublicFigure'),
   },
   object,

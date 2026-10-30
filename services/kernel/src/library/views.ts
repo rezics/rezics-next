@@ -1,4 +1,6 @@
 import { t } from 'elysia';
+import { deadlineClient } from '../access/authenticate.ts';
+import { attachCollectionListFacts } from './collection-list-facts.ts';
 import type { Pool } from 'pg';
 import type { TObject, TProperties } from 'typebox';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
@@ -244,121 +246,124 @@ export async function fullMembers(
   actor: Actor,
   collectionId: string,
   options: { cursor?: string; limit?: number },
+  deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
 ) {
-  const route = routeOf(collectionId);
-  if (route === null) throw new ProblemError('not_found');
-  const sink: { seen: boolean; row: Awaited<ReturnType<typeof collectionRead.run>> } = { seen: false, row: null };
-  const identity = { route, id: collectionId };
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'collection:read',
-    {
-      ...identity,
-      eligibility: createResourcePublicEligibility({
-        resource: identity,
-        action: 'collection:read',
-        async prepare() {
-          return { ready: true };
-        },
-        async verify({ client }) {
-          sink.row = await collectionRead.run(client, identity);
-          sink.seen = true;
-          return sink.row !== null && sink.row.state === 'active' && sink.row.visibility !== 'private';
-        },
-      }),
-    },
-    { pool: deps.pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-  );
+  const parsedRoute = routeOf(collectionId);
+  if (parsedRoute === null) throw new ProblemError('not_found');
+  const route = parsedRoute;
   const binding = { operation: 'library.collection.members', parameters: { collectionId } };
   const limit = options.limit ?? 20;
-  const page = await withConnection(deps.pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const viewer =
-        actor.kind === 'account' && routeOf(actor.accountId) !== null
-          ? await readAccount(client, routeOf(actor.accountId)!, actor.accountId)
-          : null;
-      const allowed = await check(client);
-      if (!sink.seen) sink.row = await collectionRead.run(client, identity);
-      const collection = sink.row;
-      if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
-      // The same exact curator-T fence as BASIC members, before any child read.
-      if (collection.visibility !== 'public') {
-        const curator =
-          collection.curatorAccountId === null ? null : await readAccount(client, route, collection.curatorAccountId);
-        if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
-      }
-      // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
-      if (
-        collection.visibility === 'private' &&
-        !(
-          allowed &&
-          actor.kind === 'account' &&
-          viewer &&
-          viewer.route === routeOf(actor.accountId) &&
-          viewer.accountId === actor.accountId &&
-          viewer.kind === 'actor' &&
-          viewer.state === 'active' &&
-          !viewer.fenced &&
-          Number.isSafeInteger(actor.authnEpoch) &&
-          actor.authnEpoch > 0 &&
-          BigInt(actor.authnEpoch) >= viewer.minimumAuthnEpoch &&
-          actor.scopes.includes('collection:read')
-        )
-      )
-        throw new ProblemError('not_found');
-      let after: { ordinalKey: string; memberId: string } | null = null;
-      if (options.cursor !== undefined) {
-        const cursor = decodeCursor(deps.tokens, binding, options.cursor);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
+  async function readPage() {
+    const sink: { seen: boolean; row: Awaited<ReturnType<typeof collectionRead.run>> } = { seen: false, row: null };
+    const identity = { route, id: collectionId };
+    const check = await accessCheck(
+      deps.access,
+      actor,
+      'collection:read',
+      {
+        ...identity,
+        eligibility: createResourcePublicEligibility({
+          resource: identity,
+          action: 'collection:read',
+          async prepare() {
+            return { ready: true };
+          },
+          async verify({ client }) {
+            sink.row = await collectionRead.run(client, identity);
+            sink.seen = true;
+            return sink.row !== null && sink.row.state === 'active' && sink.row.visibility !== 'private';
+          },
+        }),
+      },
+      { pool: deps.pool, deadline },
+    );
+    return withConnection(deps.pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const viewer =
+          actor.kind === 'account' && routeOf(actor.accountId) !== null
+            ? await readAccount(client, routeOf(actor.accountId)!, actor.accountId)
+            : null;
+        const allowed = await check(client);
+        if (!sink.seen) sink.row = await collectionRead.run(client, identity);
+        const collection = sink.row;
+        if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
+        // The same exact curator-T fence as BASIC members, before any child read.
+        if (collection.visibility !== 'public') {
+          const curator =
+            collection.curatorAccountId === null ? null : await readAccount(client, route, collection.curatorAccountId);
+          if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
+        }
+        // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
         if (
-          !cursor.ok ||
-          cursor.after.length !== 2 ||
-          typeof cursor.after[0] !== 'string' ||
-          !isOrdinalKey(cursor.after[0]) ||
-          typeof cursor.after[1] !== 'string' ||
-          routeOf(cursor.after[1]) !== route
+          collection.visibility === 'private' &&
+          !(
+            allowed &&
+            actor.kind === 'account' &&
+            viewer &&
+            viewer.route === routeOf(actor.accountId) &&
+            viewer.accountId === actor.accountId &&
+            viewer.kind === 'actor' &&
+            viewer.state === 'active' &&
+            !viewer.fenced &&
+            Number.isSafeInteger(actor.authnEpoch) &&
+            actor.authnEpoch > 0 &&
+            BigInt(actor.authnEpoch) >= viewer.minimumAuthnEpoch &&
+            actor.scopes.includes('collection:read')
+          )
         )
-          throw new ProblemError('invalid_cursor');
-        if (cursor.epoch !== collection.orderEpoch + 1) throw new ProblemError('stale_cursor');
-        after = { ordinalKey: cursor.after[0], memberId: cursor.after[1] };
+          throw new ProblemError('not_found');
+        let after: { ordinalKey: string; memberId: string } | null = null;
+        if (options.cursor !== undefined) {
+          const cursor = decodeCursor(deps.tokens, binding, options.cursor);
+          if (
+            !cursor.ok ||
+            cursor.after.length !== 2 ||
+            typeof cursor.after[0] !== 'string' ||
+            !isOrdinalKey(cursor.after[0]) ||
+            typeof cursor.after[1] !== 'string' ||
+            routeOf(cursor.after[1]) !== route
+          )
+            throw new ProblemError('invalid_cursor');
+          if (cursor.epoch !== collection.orderEpoch + 1) throw new ProblemError('stale_cursor');
+          after = { ordinalKey: cursor.after[0], memberId: cursor.after[1] };
+        }
+        const rows = await memberPage.run(client, {
+          route,
+          collection_id: collectionId,
+          after_ordinal_key: after?.ordinalKey ?? null,
+          after_member_id: after?.memberId ?? null,
+          limit: limit + 1,
+        });
+        await client.query('COMMIT');
+        return { rows, epoch: collection.orderEpoch + 1, fence: collection };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
       }
-      const rows = await memberPage.run(client, {
-        route,
-        collection_id: collectionId,
-        after_ordinal_key: after?.ordinalKey ?? null,
-        after_member_id: after?.memberId ?? null,
-        limit: limit + 1,
-      });
-      await client.query('COMMIT');
-      return { rows, epoch: collection.orderEpoch + 1 };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+    });
+  }
+  const page = await readPage();
   const considered = page.rows.slice(0, limit);
-  const reader = new ViewReader(deps, actor);
-  await bounded([...new Set(considered.map((row) => row.subjectId))], async (id) => {
-    reader.subjects.set(id, await reader.subject(id));
-  });
+  const members = await attachCollectionListFacts(
+    { ...deps, actor, deadline },
+    considered.map((row) => {
+      if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
+      return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: new Date(row.addedAt).toISOString() };
+    }),
+    {
+      async revalidate() {
+        // Reauthorize after the released Semantic homes; never publish a page from a changed source.
+        const current = await readPage();
+        if (JSON.stringify(current) !== JSON.stringify(page)) throw new ProblemError('semantic_not_ready');
+      },
+    },
+  );
   const last = considered.at(-1);
   return {
-    members: considered.flatMap((row) => {
-      if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
-      const subject = reader.subjects.get(row.subjectId);
-      return subject
-        ? [
-            {
-              id: row.id,
-              subjectId: row.subjectId,
-              note: row.note,
-              addedAt: new Date(row.addedAt).toISOString(),
-              subject,
-            },
-          ]
-        : [];
-    }),
+    members,
     next:
       page.rows.length > limit && last
         ? encodeCursor(deps.tokens, binding, { epoch: page.epoch, after: [last.ordinalKey, last.id] })

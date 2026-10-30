@@ -11,6 +11,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { FactSchema } from '../search/http/routes.ts';
 import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
@@ -97,6 +98,7 @@ const failures = {
   409: problemSchema('conflict', 'collection_full', 'stale_cursor'),
   422: problemSchema('idempotency_conflict'),
   503: problemSchema(
+    'semantic_not_ready',
     'dependency_unavailable',
     'overloaded',
     'partition_unavailable',
@@ -384,17 +386,30 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: collectionParams,
         query: t.Object(pageQuery, closed),
         response: {
-          200: t.Object({ members: t.Array(embedded(memberSchema, subjectFields)), next: nullableString }, closed),
+          200: t.Object(
+            {
+              members: t.Array(
+                embedded(memberSchema, {
+                  ...subjectFields,
+                  facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
+                }),
+              ),
+              next: nullableString,
+            },
+            closed,
+          ),
           ...failures,
         },
         detail: detail('collection_member.list', 'collection:read', true),
       },
-      async ({ params, query, actor, admission, job }) =>
-        admission.run('normal', job, () =>
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
           query.view === 'FULL'
-            ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query))
+            ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
             : read().listMembers(actor, params.collectionId, basicQuery(query)),
-        ),
+        );
+      },
     )
     .post(
       '/v1/collections/:collectionId/members',

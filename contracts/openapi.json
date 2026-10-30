@@ -2591,6 +2591,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -2648,6 +2649,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -2658,6 +2660,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -2668,6 +2671,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -2690,7 +2694,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -23145,6 +23149,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -23202,6 +23207,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -23212,6 +23218,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -23222,6 +23229,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -23244,7 +23252,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -24115,6 +24123,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -24172,6 +24181,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -24182,6 +24192,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -24192,6 +24203,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -24214,7 +24226,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -24837,6 +24849,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -24894,6 +24907,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -24904,6 +24918,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -24914,6 +24929,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -24936,7 +24952,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -25802,6 +25818,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -25859,6 +25876,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -25869,6 +25887,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -25879,6 +25898,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -25901,7 +25921,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -26784,6 +26804,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -26841,6 +26862,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -26851,6 +26873,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -26861,6 +26884,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -26883,7 +26907,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -26969,6 +26993,102 @@
                         "properties": {
                           "addedAt": {
                             "type": "string"
+                          },
+                          "facts": {
+                            "maxProperties": 4,
+                            "patternProperties": {
+                              "^.*$": {
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "format": "uuid",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "item",
+                                          "type": "string"
+                                        },
+                                        "labels": {
+                                          "patternProperties": {
+                                            "^.*$": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id",
+                                        "labels"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "time",
+                                          "type": "string"
+                                        },
+                                        "year": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "year"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "amount": {
+                                          "type": "number"
+                                        },
+                                        "kind": {
+                                          "const": "quantity",
+                                          "type": "string"
+                                        },
+                                        "unit": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "amount",
+                                        "unit"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "code",
+                                          "type": "string"
+                                        },
+                                        "value": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ]
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              }
+                            },
+                            "type": "object"
                           },
                           "id": {
                             "type": "string"
@@ -27773,6 +27893,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -27830,6 +27951,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -27840,6 +27962,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -27850,6 +27973,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -27872,7 +27996,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -28542,6 +28666,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -28599,6 +28724,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -28609,6 +28735,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -28619,6 +28746,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -28641,7 +28769,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -29263,6 +29391,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -29320,6 +29449,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -29330,6 +29460,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -29340,6 +29471,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -29362,7 +29494,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -30034,6 +30166,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -30091,6 +30224,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -30101,6 +30235,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -30111,6 +30246,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -30133,7 +30269,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -30807,6 +30943,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -30864,6 +31001,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -30874,6 +31012,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -30884,6 +31023,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -30906,7 +31046,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -31591,6 +31731,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -31648,6 +31789,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -31658,6 +31800,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -31668,6 +31811,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -31690,7 +31834,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -138361,6 +138505,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -138418,6 +138563,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -138428,6 +138574,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -138438,6 +138585,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -138460,7 +138608,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [
@@ -156004,6 +156152,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "dependency_unavailable",
                         "overloaded",
                         "partition_unavailable",
@@ -156061,6 +156210,7 @@
                         true,
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -156071,6 +156221,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Dependency Unavailable",
                         "Service Overloaded",
                         "Partition Unavailable",
@@ -156081,6 +156232,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/partition_unavailable",
@@ -156103,7 +156255,7 @@
                 }
               }
             },
-            "description": "Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
+            "description": "Semantic not ready; Dependency unavailable; Overloaded; Partition unavailable; Transaction retry exhausted; Deadline exceeded"
           }
         },
         "security": [

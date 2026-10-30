@@ -5,6 +5,21 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
+export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
+    kind: import("typebox").TLiteral<"item">;
+    id: import("typebox").TString;
+    labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+}>, import("typebox").TObject<{
+    kind: import("typebox").TLiteral<"time">;
+    year: import("typebox").TInteger;
+}>, import("typebox").TObject<{
+    kind: import("typebox").TLiteral<"quantity">;
+    amount: import("typebox").TNumber;
+    unit: import("typebox").TString;
+}>, import("typebox").TObject<{
+    kind: import("typebox").TLiteral<"code">;
+    value: import("typebox").TString;
+}>]>;
 export declare function searchRoutes<App>(app: App, { pool, routeKey, search, access, clock, }: {
     pool: Pool;
     routeKey: Uint8Array;

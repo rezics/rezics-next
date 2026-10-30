@@ -1422,10 +1422,11 @@ A proved zero-count curated source returns `empty`/`none`; a nonempty or dynamic
 observation returns null/`pending`. Losing configured-cover readability follows the same rule. The complete automatic
 dominant-Type and ordered member-cover producer must connect here using the existing
 `collection-source-native.ts` `observe`/`page`/`probe` source generation and current-disclosure observations, including
-`collection-source-native-header.sql`; it must not sample the first page. The separate bounded FULL fact producer
-connects at `views.ts`'s `fullMembers`, reusing the same presentation fields and Semantic's admitted fact batch. This
-change does not implement those producers, first-three previews or fact projections. Logical dynamic readers must
-consume these row fields and this response seam without another metadata table or writes on GET.
+`collection-source-native-header.sql`; it must not sample the first page. The bounded FULL fact integration at
+`views.ts`'s `fullMembers` consumes Semantic's admitted batch through `attachCollectionListFacts`, as described below.
+Complete automatic kind and ordered member-cover derivation, and first-three previews, remain separate producers.
+Logical dynamic readers must consume these row fields and this response seam without another metadata table or writes
+on GET.
 
 Retention inventory under the existing Library A5 and Accounts shared-history ownership:
 
@@ -1546,3 +1547,31 @@ existing raw-100 helper pages. Destination respacing alone reads/writes at most 
 Retained history is never searched. `collection-batch-growth.test.ts` adds API rollback/privacy/lifecycle coverage
 and native 64/512/4096 live/retained/unrelated growth at fixed batches 1 and 100, including fixed full destinations; captures use the existing inclusive
 Access, receipt, custody, outbox and listing accounting with unchanged bounds and raw plans/bytes.
+
+## FULL Collection member facts
+
+`http/kernel.ts` supplies the trusted route key to `collectionRoutes`; the members route passes its admitted
+request deadline to `fullMembers`. BASIC keeps its existing wire shape. FULL adds optional `facts` beside `subject`
+using the existing Search Fact schema and the actual member Type, independently of a Collection presentation override.
+Both views use private, no-store responses. Requested Semantic readiness failure is the standard 503 problem.
+
+`collection-list-facts.ts` exports `attachCollectionListFacts(deps, rawMembers, { languages?, revalidate })` for the
+common members caller and the future independent preview caller. It accepts at most 100 raw original member rows,
+including duplicate occurrences. A preview caller must pass its entire globally bounded prefix once, with all homes
+released, and supply a final native source/membership reauthorization and fence comparison. It must not add another
+row-fact producer. There is no preview caller in this checkout yet.
+
+The helper consumes exactly one actual Semantic `readListPresentationFacts` batch. That owner decides current Type
+configuration, native public values, original/terminal/related-item disclosure, release and source-tuple fences.
+Shared `readSubjectSummaries` preserves summary language and cover handling under its independent legacy 256-ID bound;
+no subject details or browser per-row requests supply facts. Commerce rechecks its native Collection/page after foreign
+reads, then checks current original-to-terminal identity/epoch equality against both the returned native facts and
+summary. Changed identity or source fails closed. Denied/missing entries expose neither a subject nor sibling facts;
+only a complete visible no-facts result becomes `{}`. Neither permission nor source authority is cached.
+
+Cost: one <=100 raw-original fact batch plus the bounded shared summary batch, exact identity reads and repeated native
+Collection/keyset page. Each member returns <=4 configured properties with <=3 actual values each. Raw IDs, source work,
+rows, statements, blocks and bytes remain independent inclusive bounds; no native allowance changes or hydration waiver.
+`collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
+raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
+64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
