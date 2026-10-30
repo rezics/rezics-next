@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { converter_revision } from '../../../../packages/conversion/src/open-library.ts';
 import { runImportCli, type ImportCliResult } from '../../../importer/src/cli.ts';
@@ -353,7 +353,9 @@ export async function runConcurrentCliOwnersJourney() {
       const rows = (await candidates(id, relation)).filter((c) => c.retracted === null);
       expect(rows).toHaveLength(1);
       expect(rows[0]!.source.source).toBe(source);
-      return rows[0]!.statement.value.content;
+      const value = rows[0]!.statement.value;
+      if (value.type !== 'value') throw new Error('Native relation is still unresolved');
+      return value.content;
     }
     async function snapshot(source: string) {
       const local = inspect(source);
@@ -518,7 +520,8 @@ export async function runConcurrentCliOwnersJourney() {
       'concurrent CLI native evidence',
       JSON.stringify({
         converterRevision: converter_revision,
-        bundleDigest: digest(JSON.stringify(bundledRelease)),
+        bundleDigest: bundledDigest,
+        bundleCatalogue: bundledRelease.catalogue,
         sourceFixtureDigests: {
           work: digest(
             await readFile(join(import.meta.dir, '../../../../specs/fixtures/imports/open-library/work.json')),

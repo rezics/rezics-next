@@ -41,9 +41,12 @@ was a binding gap, not evidence of a production ownership defect.
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/concurrent-cli-owners.test.ts
 ```
 
-Cost: supplied bytes plus bounded exact-source record/reference/journal work under the existing importer,
-transport and native API bounds. This adds no source/catalogue/history scan or growth harness. Native PG
-growth evidence is missing for this new caller; existing bounds and canonical PG/derived units are unchanged.
+## Operate concurrent source aliases
+
+- Touches: supplied bytes and exact-source record/reference/journal anchors, native Auth/public requests and bounded native receipts and subjects.
+- Bound: existing importer, transport and native API bounds; O(supplied bytes + (S+D)(1+q) log R), with existing bounded q and retained page size. No source/catalogue/history scan or growth harness.
+- Growth check: native PG growth evidence is missing for this new caller; existing bounds and canonical PG/derived units are unchanged.
+
 Source references inspected: existing CLI, Importer, ImportSession, RunStore and RecordBindings; the
 Open Library converter and pinned work/edition JSON; existing named-feed/disappearance native callers;
 identity fixture, API runtime/observer and their registered media boundary. No external reference code is ported.
