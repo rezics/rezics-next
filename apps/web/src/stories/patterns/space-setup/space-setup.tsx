@@ -193,7 +193,10 @@ function Choice({
   );
 }
 
-/** One command at a time; draft values live independently of refreshed authoritative heads. */
+/**
+ * Composes shadcn controls into a setup journey, which has no shadcn equivalent.
+ * One command at a time; draft values live independently of refreshed authoritative heads.
+ */
 export function SpaceSetupForm({
   initial,
   transport,
