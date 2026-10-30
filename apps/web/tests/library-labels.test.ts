@@ -368,6 +368,7 @@ test('the unprofiled label story loads the same complete subject and localized t
       aliases: {},
     });
     expect(canonical.value.read.related).toEqual({});
+    expect(canonical.value.subject.sourceRecords).toEqual([]);
 
     const loaded = await loadSubjectPage(client, unprofiledSubjectId, undefined, locale);
     expect(loaded.kind).toBe('page');

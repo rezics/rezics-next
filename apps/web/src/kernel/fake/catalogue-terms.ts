@@ -44,6 +44,7 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
     resolution: {},
     relationCounts: {},
     statements: {},
+    sourceRecords: [],
   };
   const receipts = new Map<string, { subject: string; revision: number }>();
   const calls: {

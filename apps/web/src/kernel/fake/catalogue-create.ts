@@ -107,6 +107,7 @@ export function catalogueCreateFixture(scenario: CreateScenario = 'ready', local
       resolution: {},
       relationCounts: {},
       statements: {},
+      sourceRecords: [],
     };
   }
   const request = () =>

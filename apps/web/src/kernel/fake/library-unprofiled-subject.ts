@@ -28,6 +28,7 @@ const subject: Fixtures['subjects'][number] = {
   descriptions: {},
   aliases: {},
   statements: {},
+  sourceRecords: [],
 };
 
 export const routes: FakeRoute[] = [
