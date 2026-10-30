@@ -29,7 +29,12 @@ export async function createNativePointFixture() {
     // The shared native runtime's ordinary registration port issues a fourth independent account.
     const reader = await accountDeletionRuntime(base.system).person();
     async function grant(id: string, actions: string[], accountId = moderator.actor.accountId) {
-      const body = { resource: { route: routeOf(id)!, id }, subject: { kind: 'account', id: accountId }, actions, valid: '(,)' };
+      const body = {
+        resource: { route: routeOf(id)!, id },
+        subject: { kind: 'account', id: accountId },
+        actions,
+        valid: '(,)',
+      };
       await base.command('POST', '/v1/grants', body, { bearer: base.governance.bearer });
       return body;
     }
@@ -45,27 +50,49 @@ export async function createNativePointFixture() {
       }
       const sentinel = `${label} private evidence ${randomUUID()}`;
       const reply = await base.command<{ post: { id: string } }>('POST', `/v1/threads/${target.threadId}/posts`, {
-        body: fromPlainText(`${label} independently retained reply`), licence: 'MIT', parentId: target.postId,
+        body: fromPlainText(`${label} independently retained reply`),
+        licence: 'MIT',
+        parentId: target.postId,
       });
       const first = await base.call('GET', `/v1/posts/${target.postId}`);
       if (first.response.status !== 200) throw new Error(`Opening post read failed: ${first.text}`);
       const revised = await base.command<{ post: { revisionId: string } }>(
-        'POST', `/v1/posts/${target.postId}/revisions`, { body: fromPlainText(sentinel), licence: 'MIT', subjectIds: [base.conceptId] }, { expectedStatus: 200 },
+        'POST',
+        `/v1/posts/${target.postId}/revisions`,
+        { body: fromPlainText(sentinel), licence: 'MIT', subjectIds: [base.conceptId] },
+        { expectedStatus: 200 },
       );
-      return { ...target, replyId: reply.post.id, revisions: [first.value!.post.revisionId, revised.post.revisionId], sentinel };
+      return {
+        ...target,
+        replyId: reply.post.id,
+        revisions: [first.value!.post.revisionId, revised.post.revisionId],
+        sentinel,
+      };
     }
     return {
-      ...base, moderator, reader, grant, fresh,
+      ...base,
+      moderator,
+      reader,
+      grant,
+      fresh,
       async startWork(pool = base.system.database.pool) {
         if (runtime) throw new Error('Point worker already started');
         runtime = await startPointWork(pool, base.system.database.pool.options.connectionString!, base.system.routeKey);
         return runtime;
       },
       async stopWork() {
-        try { await runtime?.close(); } finally { runtime = undefined; }
+        try {
+          await runtime?.close();
+        } finally {
+          runtime = undefined;
+        }
       },
       async close() {
-        try { await runtime?.close(); } finally { await base.system.close(); }
+        try {
+          await runtime?.close();
+        } finally {
+          await base.system.close();
+        }
       },
     };
   } catch (error) {
@@ -81,18 +108,32 @@ async function startPointWork(pool: Pool, databaseUrl: string, routeKey: Uint8Ar
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   try {
     await DBOS.shutdown({ deregister: true });
-    work = await composeWork([{
-      name: registerContent.name,
-      register(context) {
-        return registerContent.register({ ...context, addEffects(effects) {
-          registered.push(...effects);
-          context.addEffects(effects);
-        } });
+    work = await composeWork(
+      [
+        {
+          name: registerContent.name,
+          register(context) {
+            return registerContent.register({
+              ...context,
+              addEffects(effects) {
+                registered.push(...effects);
+                context.addEffects(effects);
+              },
+            });
+          },
+        },
+      ],
+      {
+        databaseUrl,
+        pool,
+        client,
+        executorId: `native-point-${randomUUID()}`,
+        env: workerTestEnv({
+          KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+          CONTENT_TEST_COLLECTION_PARTITIONS: '0',
+        }),
       },
-    }], {
-      databaseUrl, pool, client, executorId: `native-point-${randomUUID()}`,
-      env: workerTestEnv({ KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'), CONTENT_TEST_COLLECTION_PARTITIONS: '0' }),
-    });
+    );
     await work.launch();
     return {
       async produce(envelope: Envelope, names: readonly string[]) {
@@ -102,17 +143,27 @@ async function startPointWork(pool: Pool, databaseUrl: string, routeKey: Uint8Ar
         await work!.effects.enqueue([envelope]);
         for (const [index, event] of envelope.events.entries()) {
           for (const effect of registered.filter((effect) => effect.types.includes(event.type)))
-            await client.retrieveWorkflow(effectWorkflowId(envelope, index, effect.name)).getResult({ pollingIntervalMs: 10 });
+            await client
+              .retrieveWorkflow(effectWorkflowId(envelope, index, effect.name))
+              .getResult({ pollingIntervalMs: 10 });
           if (event.type === 'com.rezics.content.post.erased.v1' && names.includes('content_post_erased'))
             await client.retrieveWorkflow(`content.erasePost:${event.id}`).getResult({ pollingIntervalMs: 10 });
         }
       },
       async close() {
-        try { await work?.shutdown(); } finally { await client.close(); }
+        try {
+          await work?.shutdown();
+        } finally {
+          await client.close();
+        }
       },
     };
   } catch (error) {
-    try { await work?.shutdown(); } finally { await client.close(); }
+    try {
+      await work?.shutdown();
+    } finally {
+      await client.close();
+    }
     throw error;
   }
 }
@@ -120,50 +171,78 @@ async function startPointWork(pool: Pool, databaseUrl: string, routeKey: Uint8Ar
 /** A native source capture, installed before the command, reads only that partition's next envelope. */
 export async function capturePointEvent(pool: Pool, id: string) {
   const partition = partitionOf(routeOf(id)!);
-  const head = (await pool.query<{ epoch: number; position: string }>(
-    'SELECT epoch,position::text AS position FROM core.partition WHERE partition_no=$1', [partition],
-  )).rows[0]!;
+  const head = (
+    await pool.query<{ epoch: number; position: string }>(
+      'SELECT epoch,position::text AS position FROM core.partition WHERE partition_no=$1',
+      [partition],
+    )
+  ).rows[0]!;
   const consumer = `point_capture_${randomUUID().replaceAll('-', '')}`;
-  await pool.query('INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)',
-    [partition, consumer, head.epoch, head.position]);
+  await pool.query('INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)', [
+    partition,
+    consumer,
+    head.epoch,
+    head.position,
+  ]);
   return async () => {
     const envelopes: Envelope[] = [];
-    const result = await readBatch(pool, { consumer, partition, envelopes: 1, apply: async (batch) => { envelopes.push(...batch); } });
-    if (result.status !== 'read' || envelopes.length !== 1) throw new Error('Point command did not commit one native envelope');
+    const result = await readBatch(pool, {
+      consumer,
+      partition,
+      envelopes: 1,
+      apply: async (batch) => {
+        envelopes.push(...batch);
+      },
+    });
+    if (result.status !== 'read' || envelopes.length !== 1)
+      throw new Error('Point command did not commit one native envelope');
     return envelopes[0]!;
   };
 }
 
 export async function partitionHeads(pool: Pool) {
-  return (await pool.query<{ partition_no: number; epoch: number; position: string }>(
-    'SELECT partition_no,epoch,position::text AS position FROM core.partition ORDER BY partition_no',
-  )).rows;
+  return (
+    await pool.query<{ partition_no: number; epoch: number; position: string }>(
+      'SELECT partition_no,epoch,position::text AS position FROM core.partition ORDER BY partition_no',
+    )
+  ).rows;
 }
 
 export async function storedTarget(pool: Pool, kind: PointKind, id: string) {
-  return (await pool.query(`SELECT * FROM content.${kind} WHERE route=$1 AND ${kind}_id=$2`, [routeOf(id), id])).rows[0];
+  return (await pool.query(`SELECT * FROM content.${kind} WHERE route=$1 AND ${kind}_id=$2`, [routeOf(id), id]))
+    .rows[0];
 }
 
 /** Full retained canonical fields, including references, licence and history; never a substring comparison. */
 export async function retainedRevisions(pool: Pool, postId: string) {
-  return (await pool.query(
-    `SELECT *
-       FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY revision_id`, [routeOf(postId), postId],
-  )).rows;
+  return (
+    await pool.query(
+      `SELECT *
+       FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY revision_id`,
+      [routeOf(postId), postId],
+    )
+  ).rows;
 }
 
 export async function commandEvidence(pool: Pool, principalId: string, key: string, id: string) {
-  const receipts = (await pool.query(
-    `SELECT partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,
+  const receipts = (
+    await pool.query(
+      `SELECT partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,
             epoch,position::text AS position,transaction_id,response FROM core.receipt
       WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND idempotency_key=$3`,
-    [partitionOf(routeOf(id)!), principalId, key],
-  )).rows;
-  const events = receipts.length === 0 ? [] : (await pool.query(
-    `SELECT partition_no,epoch,position::text AS position,event_seq,event_count,id,type,subject,data
+      [partitionOf(routeOf(id)!), principalId, key],
+    )
+  ).rows;
+  const events =
+    receipts.length === 0
+      ? []
+      : (
+          await pool.query(
+            `SELECT partition_no,epoch,position::text AS position,event_seq,event_count,id,type,subject,data
        FROM core.outbox WHERE partition_no=$1 AND position=$2 ORDER BY event_seq`,
-    [receipts[0]!.partition_no, receipts[0]!.position],
-  )).rows;
+            [receipts[0]!.partition_no, receipts[0]!.position],
+          )
+        ).rows;
   return { receipts, events };
 }
 
