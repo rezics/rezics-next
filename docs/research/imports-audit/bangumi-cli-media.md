@@ -1,6 +1,6 @@
 # Bangumi account-key summary and cover journey
 
-The native caller is `services/kernel/test/imports/bangumi-cli-media-fixture.ts`, consumed by the unchanged
+The native caller is `services/kernel/test/imports/bangumi-cli-media-fixture.ts`, consumed by the owning frozen
 `Bangumi licensed summary and cover CLI lifecycle` acceptance. It calls production `runImportCli` for the pinned
 subject 424242, using `bangumi@3` and the native unversioned entry revision. One `openApiRuntime` owns Auth,
 Access, the application and the registered media worker. The operator key is staged, approved and applied through
@@ -26,18 +26,17 @@ The fixture returns `cover` and `refreshedCover` directly from the existing `med
 `original` field is the actual privately stored source object, and `sourceBytes` is the actual supplied first PNG.
 It does not substitute a variant for that object or substitute dump text for the source image.
 
-Source inspection identifies a conflict in the frozen assertion
-`expect(r.cover.original).not.toEqual(r.sourceBytes)`: the content owner contract explicitly retains the original
-unchanged for reprocessing and never serves it publicly. See
+The content owner contract retains the original unchanged for reprocessing and never serves it publicly. See
 [`Variants and metadata`](../../../services/kernel/src/content/README.md#variants-and-metadata),
 [`processImportedMedia`](../../../services/kernel/src/content/media-import-job.ts) (the exact fetched bytes are
 written to `m/{mediaId}/original`) and
 [`processImage`](../../../services/kernel/src/content/image-job.ts) (separate deterministic variant writes).
 The existing `cover-recovery-pixels.test.ts` and `media-distinct-input.test.ts` assert source/original equality.
-The new caller preserves those contracts and independently verifies reencoding on the public variant bytes.
-Native verification must identify the first reached failure; source inspection is not a passing native receipt.
+The caller preserves those contracts and independently verifies reencoding on the public variant bytes. The
+owning frozen oracle now requires original/source equality and separately checks that each actual AVIF/WebP
+variant differs from the supplied PNG. Original retention and public byte safety are separate observations.
 
-## Native observation
+## Historical native observation
 
 The managed acceptance at code revision `7866d4137d` completed the fixture and then failed the frozen original-byte
 inequality at `bangumi-cli-media.test.ts:15`, with 566 assertions executed. It is not a native acceptance pass.
@@ -62,11 +61,17 @@ The converter stayed `bangumi@3`, the record revision stayed `unversioned`, and 
 
 The first native setup attempt exposed a fixture document-reference mistake, corrected to consume the actual
 `document` reference. The next attempt reached a genuine subject-read disclosure defect: the independently built
-cover summary survived a source takedown. The minimal repair outside the declared paths is
+cover summary survived a source takedown. The adopted point-read repair is
 `services/kernel/src/semantic/subject.ts`: one exact media probe and an independently anchored exact source-fence
 read suppress that selected cover's metadata. The final journey observed no disclosed cover after the fence,
 denied both old and refreshed variant downloads, preserved independent metadata and bootstrap bytes/receipts,
 and independently fenced the licensed summary. It does not extend the other discovery readers.
+
+The earlier byte-inequality result remains a failure against its original oracle. The corrected owning oracle
+requires a fresh focused native execution; neither the historical completed fixture nor this documentation
+relabels that result as a pass. The point-read repair checks the source fence only when an imported reference
+exists. A null imported reference adds no suppression policy for other supported media kinds; the common
+projection and its existing readers retain their contracts.
 
 ## Bounds and evidence
 

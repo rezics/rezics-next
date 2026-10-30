@@ -564,7 +564,7 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 This connected outcome adds no PG growth series; missing growth evidence is recorded as missing. Existing
 source, journal, media and transport limits and counted growth evidence retain their original scope.
 
-### Native file acquisition admission
+## Native file acquisition admission
 
 The [file journey](../kernel/test/imports/cli-file-admission.test.ts) runs ordinary
 `--dump <path>` acquisition for all four sources through real account-key Auth,

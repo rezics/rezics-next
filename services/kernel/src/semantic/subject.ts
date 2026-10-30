@@ -599,8 +599,7 @@ export async function readSubject(
   // its selected media's exact source home before disclosing the cover metadata.
   if (summary?.cover && routeKey) {
     const media = await checkMediaObject({ query: pool.query.bind(pool) }, summary.cover.media, 'cover');
-    if (!media) summary.cover = null;
-    else {
+    if (media) {
       const { source, external_id, field_group } = media.source;
       const tuple = { route: tupleRoute(routeKey, source, external_id), source, external_id, field_group };
       const [fence] = await readAnchoredFences(pool, partitionOf(tuple.route), [tuple]);

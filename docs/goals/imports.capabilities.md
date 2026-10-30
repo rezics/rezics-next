@@ -11,17 +11,19 @@ Source inspection baseline for this refresh: `e0f1d2f61f833531cfdc5ff7652f3a6a2e
 Recorded executions below retain their own revisions and bytes; they were not rerun for this inventory. Where a
 newer admitted source or report supersedes that baseline, its receipt is named explicitly; registration and source
 inspection never substitute for execution.
-No product suites were run for this inventory. The manifest's acceptance is
-`node_modules/.bin/oxfmt --check docs/goals/imports.capabilities.md`; it proves formatting/delivery only.
+The inventory reuses named execution receipts; the Bangumi summary/cover continuation has its own focused
+native acceptance below. Manifest prose alone requires
+`node_modules/.bin/oxfmt --check docs/goals/imports.capabilities.md`; it proves formatting/delivery only and
+does not request another native suite or promote a capability.
 Missing acceptance below stays owned work, not a claim that a required capability is unsupported forever.
 
 ## Evidence stages
 
-| Capability                       | Specification validated red                                                                                         | Native driver registered                                                     | Implementation exposed                                                                                                                                                      | User-case pass at named revision                                                                                                                                                                                                                                                                                                | Promoted                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity and media wrappers registered; VNDB statistics remains unbound | Ordinary batch, fence, subject/candidate and media routes visible; full metadata ordering, lifecycle and composed refresh remain open                                       | Bangumi launch scope: 5 unchanged cases pass, 424 assertions; Open Library fields: 1 case passes, 541 assertions; VNDB optional-Latin: 6 unchanged cases pass, 484 assertions on pinned `a0cc096ce`; one frozen CLI lifecycle journey passes 302 assertions at its named revision. These slices do not close all-source refresh | Missing: imports promotion evidence |
-| Import-to-discovery              | 13 independent native cases delivered; native reds recorded; remaining matrix not yet frozen                        | Actual discovery suite/helper registered; command and bytes below            | Four provider Context-selected reads are exposed in code; helper setup is available, but sourceRecords runtime producer and production Search lifecycle/binding are missing | Historical environment-qualified run: 6 pass / 7 fail. Newest tmpfs run: 0 pass / 13 fail before importer assertions at Collection exposure setup 403                                                                                                                                                                           | Missing: imports promotion evidence |
-| Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                   | Native composition registered; see execution evidence below                  | Actual receipt/media/SQLite and subject/page/download assertions; distinct supplied image inputs now covered; consumer matrix remains open                                  | Recovery: 3 cases pass, 326 assertions. Distinct inputs: 134 pixel assertions and all 14 boundary cases pass at recorded revision                                                                                                                                                                                               | Missing: imports promotion evidence |
+| Capability                       | Specification validated red                                                                                         | Native driver registered                                                                     | Implementation exposed                                                                                                                                                      | User-case pass at named revision                                                                                                                                                                                                                                                                                                | Promoted                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Ordinary provider import/refresh | Existing executable suites; API fixture README records historical missing-driver red evidence, not revalidated here | API, identity, media and four-source CLI callers registered; exact commands and limits below | Ordinary batch, fence, subject/candidate and media routes visible; full metadata ordering, lifecycle and composed refresh remain open                                       | Bangumi launch scope: 5 unchanged cases pass, 424 assertions; Open Library fields: 1 case passes, 541 assertions; VNDB optional-Latin: 6 unchanged cases pass, 484 assertions on pinned `a0cc096ce`; one frozen CLI lifecycle journey passes 302 assertions at its named revision. These slices do not close all-source refresh | Missing: imports promotion evidence |
+| Import-to-discovery              | 13 independent native cases delivered; native reds recorded; remaining matrix not yet frozen                        | Actual discovery suite/helper registered; command and bytes below                            | Four provider Context-selected reads are exposed in code; helper setup is available, but sourceRecords runtime producer and production Search lifecycle/binding are missing | Historical environment-qualified run: 6 pass / 7 fail. Newest tmpfs run: 0 pass / 13 fail before importer assertions at Collection exposure setup 403                                                                                                                                                                           | Missing: imports promotion evidence |
+| Cover-native-recovery            | Three native crash/replacement/fence scenarios frozen; local regressions retained                                   | Native composition registered; see execution evidence below                                  | Actual receipt/media/SQLite and subject/page/download assertions; distinct supplied image inputs now covered; consumer matrix remains open                                  | Recovery: 3 cases pass, 326 assertions. Distinct inputs: 134 pixel assertions and all 14 boundary cases pass at recorded revision                                                                                                                                                                                               | Missing: imports promotion evidence |
 
 “Specification validated red” requires recorded failing execution; distinguish missing binding from native product red.
 File presence alone does not earn it.
@@ -179,15 +181,21 @@ Source: [imports-identity.test.ts](../../specs/imports-identity.test.ts). Exact 
 - `fixtures isolate application Auth namespaces tokens and grants and close idempotently`
 - `partial opening failures clean every namespace host and pool before returning the original failure`
 
-### VNDB nonzero statistics: reuse existing unbound acceptance
+### VNDB nonzero statistics: bound existing acceptance
 
 [imports-vndb-statistics.test.ts](../../specs/imports-vndb-statistics.test.ts) already has six scenarios below;
 [driver contract](../../specs/imports-vndb-statistics-driver.ts) loads `IMPORT_VNDB_STATISTICS_DRIVER`.
-No native factory/wrapper was found: binding and executable native acceptance command are **missing, imports owner**,
-not six tests to duplicate. The suite builds ustar COPY entries from the pinned headers/rows, changes v123 to
+The existing [native wrapper](../../services/kernel/test/imports/vndb-statistics-outcomes.test.ts) binds the actual
+[vndb-statistics-driver.ts](../../services/kernel/test/imports/vndb-statistics-driver.ts); no duplicate suite is needed.
+The suite builds ustar COPY entries from the pinned headers/rows, changes v123 to
 `c_average: 735`, `c_votecount: 20`, expects mean 7.35 on 1–10, as-of 2026-10-25, and retains revision 7.
 It requires seven-scope native Auth/Access, real bulk-returned identity, statistic PUT and anonymous current GET;
-no native votes or Bayesian c_rating. Registration code emits this statistic, but inspection is not a native pass.
+no native votes or Bayesian c_rating. The recorded two-file command is
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-statistics-outcomes.test.ts test/imports/vndb-cli-native.test.ts`.
+The [native verification report](../research/imports-audit/vndb-statistics-native-verification.md#landing-retry-verification)
+records all six child cases (91 assertions), the wrapper (five assertions) and the archive CLI (249 assertions)
+passing at `a0589d4aefeec1605047e872db25b8b9dd9e0321`, with a separate base-owned Stripe compiler diagnostic.
+This is scoped native execution, not a clean kernel compiler, table-materialization or composed-growth pass.
 
 - `pinned COPY reaches seven-scope Auth, real Access, public bulk identity and statistic PUT/current GET`
 - `reimport and reopen are no-ops; changed native average updates once without native votes`
@@ -448,10 +456,10 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   observed-record repair. Pure optional-Latin, language, bootstrap and citation regressions passed; the combined
   pure command was 9 pass/1 fail because the unchanged outcome wrapper's child lacked `IMPORT_VNDB_DRIVER` before
   conversion. Do not describe the whole VNDB/source suite as green. Root typecheck passed once; a later
-  generation-only Lix timeout produced no compiler diagnostics and no source-regression inference. VNDB statistics
-  remains unbound: its existing [native scenarios](../../specs/imports-vndb-statistics.test.ts) have no executable
-  native driver, and the [metadata projection reshape](../research/imports-audit/vndb-statistics-contract.md)
-  remains open.
+  generation-only Lix timeout produced no compiler diagnostics and no source-regression inference. The later
+  bound VNDB statistic/ordinary archive CLI result is recorded above; it does not close the separate
+  [metadata projection reshape](../research/imports-audit/vndb-statistics-contract.md), general source-record
+  ordering or fourteen-case materialization acceptance.
 - **Measurement and qualifier status:** the owner adopted a generic admitted whole-holder declaration carrying
   holder, language and version; only supplied text requires a text digest. A source-declared total for a whole
   work, serial or publisher may qualify without full-text ingestion when that declaration meets those terms.
@@ -492,6 +500,75 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   late-item and frontier rule applies if a participant has such locators. The Imports participant must still
   recheck all roles at admission and prove durable delivery plus immutable ACK; registration proves neither and
   does not discharge another owner's cleanup.
+
+### Bound ordinary operator and safety callers
+
+These are actual integrated native callers, not promised fixtures. The scalar-feed section above records the
+three exact Bangumi/Open Library/Wikidata titles and their current-producer receipt. Together with the VNDB
+archive CLI below they bind ordinary operator entry points for all four sources. A recorded pass applies only
+to its named revision and scenario; an integrated caller without a terminal receipt remains unverified here.
+Only the Bangumi focused command is this continuation's acceptance. The other commands are inventory entries,
+not additional check requests.
+
+- `ordinary VNDB archive CLI publishes and reopens through real account-key Auth, bulk and statistic HTTP`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-cli-native.test.ts`.
+  The two-file statistic receipt above includes this case's 249 assertions and late denied replay; it is
+  independent of the materialization wrapper's remaining portable failure.
+- `ordinary VNDB CLI publishes the same durable grouped revision and licensed statistic then safely reopens`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-materialization-native.test.ts`.
+  The [materialization report](../research/imports-audit/vndb-materialization-native.md) records this case passing
+  at `ac9ab58f40`, while its sibling fourteen-case child passes thirteen and fails one at SQLite commit. The
+  combined file remains exit 1; its CLI pass does not close the portable file or composed growth.
+- `Bangumi licensed summary and cover CLI lifecycle`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/bangumi-cli-media.test.ts`.
+  The [summary/cover report](../research/imports-audit/bangumi-cli-media.md) retains the earlier terminal byte-oracle
+  failure. The corrected owning frozen oracle preserves private originals and checks reencoded AVIF/WebP variants;
+  its fresh managed result is recorded separately. This caller includes ordinary media reservation/status,
+  distinct refreshed pixels, independent editor adoption and exact cover/summary fences.
+- `Open Library work edition and cover operator lifecycle`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/openlibrary-cli-edition-media.test.ts`.
+  The [edition/cover report](../research/imports-audit/openlibrary-cli-edition-media.md) records one native case,
+  432 assertions and exit 0 at `281b5ce279`; this includes learned own-work identity and cover-fence disclosure.
+- `Wikidata rich cited proposal CLI refresh`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/wikidata-rich-cli.test.ts`.
+  The [rich proposal report](../research/imports-audit/wikidata-rich-cli.md) binds supported cited proposals,
+  withheld qualification, stable identity, independent selection and late facts fencing. It records no terminal
+  native pass; rich registration does not inherit the scalar-feed receipt.
+- `Ordinary operator exact ACK interruption and restart recovery`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
+  The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,
+  1,098 assertions and exit 0 at `213272bfca7cecd19ea7f036379a937fe4ef2eeb`, with two provider children,
+  `bangumi` and `openlibrary`. Exact bootstrap/proposal/retraction ACK loss is not inferred for every source.
+- `Native file dump acquisition admission and baseline protection`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-file-admission.test.ts`.
+  The [file admission report](../research/imports-audit/cli-file-admission.md) binds all four real file readers,
+  before-effect sealing, invalid replacement safety and valid successors. It records no terminal native pass.
+- `Concurrent ordinary CLI source ownership and isolation`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/concurrent-cli-owners.test.ts`.
+  The [concurrency report](../research/imports-audit/concurrent-cli-owners.md) records one native case,
+  820 assertions and exit 0 at `6e92b5a01e9ed406c089e8dbb2e0fbb067636bc5`; it proves held acquisition,
+  same-alias refusal, independent alias publication, cancellation/reopen and exact alias fence isolation.
+- `Real public rate refusal and bounded operator resume`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-native-backpressure.test.ts`.
+  The [backpressure report](../research/imports-audit/cli-native-backpressure.md) records one native child,
+  3,777 assertions and exit 0 at `84a092c6a0cb3650b7b3bb93ab438e33e0309a10`. Actual 429/Retry-After and
+  durable resume do not substitute for the existing exact retry-ceiling or composed-growth acceptance.
+- `Operator key rotation and current authority during durable resume`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-key-rotation.test.ts`.
+  The [key-rotation report](../research/imports-audit/cli-key-rotation.md) binds native key replacement, old-key
+  denial, current scoped authority and immutable replay. It records no terminal native pass.
+- `one operator imports two configured feeds with the same native work keys while ordinary CLI references fences replay and durable ownership remain confined to the selected alias`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/named-feed-cli-native.test.ts`.
+  This existing native alias caller is registered; no execution receipt is supplied by this inventory.
+- `an operator sees a native mass-disappearance stop with no effects then explicitly reviews the existing threshold and completes only the admitted source removals while communal subjects and immutable receipts survive`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/disappearance-cli-native.test.ts`.
+  This existing native review/resume caller is registered; scalar-feed mass-stop receipts do not prove its
+  explicit reviewed continuation, and no terminal receipt is supplied here.
+
+The held shared-capture composed-growth acceptance, general SourceRecord metadata ACK ordering and all six
+applicable discovery/list consumers retain their separate duties below. None of these focused callers creates a
+new PostgreSQL growth series, licenses cover bytes through summary rights, proves reviewed vocabulary/words, or
+closes the full Imports capability. Existing deferred and closed-surface justifications remain unchanged.
 
 ### Cover-native-recovery
 
@@ -638,9 +715,10 @@ Public output never reads Alice's private completion history; permitted private 
 The current discovery execution is run 13's setup 403: 0 pass/13 fail before importer assertions. Preserve the
 older environment-qualified six-pass/seven-red result as history. Bangumi launch-scope, Open Library field, VNDB
 optional-Latin, the scoped native CLI lifecycle, and native cover-recovery slices pass only within their stated
-boundaries. Distinct media pixels pass separately, while crash-plus-pixels, VNDB statistics, positive source attribution,
+boundaries. The bound four-source operator and safety callers above add only their exact recorded outcomes.
+Distinct media pixels pass separately, while crash-plus-pixels, broader VNDB materialization, positive source attribution,
 producer measurements, all six surface cells, privacy obligations, full Imports capability and promotion remain
 open. The six-cell matrix above retains catalogue, curated, Everything without state, own state, mounted Zone and
 configured TypeList duties, including persona and disclosure controls; setup and registration do not close them.
-No product suite, root typecheck, whole-kernel check or root gate is part of this documentation acceptance. Its
-sole check is the scoped formatter named above.
+No additional product suite, root typecheck, whole-kernel check or root gate follows from this manifest prose.
+Its documentation check is the scoped formatter named above; the named Bangumi implementation acceptance is separate.
