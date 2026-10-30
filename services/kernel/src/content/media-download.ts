@@ -138,9 +138,12 @@ async function authorizeDownload(
   try {
     const initial = await snapshot(r, (client) => point(client, mediaId, slot));
     if (
-      !initial || !usable(initial) || routeOf(initial.container_id) !== r ||
+      !initial ||
+      !usable(initial) ||
+      routeOf(initial.container_id) !== r ||
       (expected !== undefined && signature(initial) !== signature(expected))
-    ) return null;
+    )
+      return null;
     const original = variant === 'original';
     if (initial.purpose === 'realm-icon' || initial.purpose === 'realm-banner') {
       if (original || initial.state !== 'available') return null;

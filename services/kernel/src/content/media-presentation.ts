@@ -28,13 +28,21 @@ const positive = (value: unknown): value is number => Number.isSafeInteger(value
 
 function presentation(row: Row): DocumentImagePresentation | null {
   if (
-    row.state !== 'available' || row.erased || row.collection_pending || row.taken_down ||
-    !row.sha256 || !digest.test(row.sha256) || !positive(row.width) || !positive(row.height) ||
+    row.state !== 'available' ||
+    row.erased ||
+    row.collection_pending ||
+    row.taken_down ||
+    !row.sha256 ||
+    !digest.test(row.sha256) ||
+    !positive(row.width) ||
+    !positive(row.height) ||
     (row.variant_format !== 'avif' && row.variant_format !== 'webp') ||
-    !positive(row.variant_width) || !positive(row.variant_height) ||
+    !positive(row.variant_width) ||
+    !positive(row.variant_height) ||
     row.variant_media_type !== `image/${row.variant_format}` ||
     (row.credit !== null && !credit.Check(row.credit))
-  ) return null;
+  )
+    return null;
   return {
     id: row.media_id,
     containerId: row.container_id,
@@ -42,12 +50,11 @@ function presentation(row: Row): DocumentImagePresentation | null {
     width: row.width,
     height: row.height,
     variants: [{ format: row.variant_format, width: row.variant_width, height: row.variant_height }],
-    placeholder: row.thumbhash && row.average_color && /^#[0-9a-f]{6}$/.test(row.average_color)
-      ? { thumbhash: row.thumbhash, color: row.average_color }
-      : null,
-    focalPoint: row.focal_x !== null && row.focal_y !== null
-      ? { x: row.focal_x, y: row.focal_y }
-      : null,
+    placeholder:
+      row.thumbhash && row.average_color && /^#[0-9a-f]{6}$/.test(row.average_color)
+        ? { thumbhash: row.thumbhash, color: row.average_color }
+        : null,
+    focalPoint: row.focal_x !== null && row.focal_y !== null ? { x: row.focal_x, y: row.focal_y } : null,
     credit: row.credit,
   };
 }
@@ -63,7 +70,9 @@ export async function readDocumentMediaPresentations(
   context: DownloadContext,
 ): Promise<DocumentMediaPage> {
   if (
-    ids.length < 1 || ids.length > 32 || new Set(ids).size !== ids.length ||
+    ids.length < 1 ||
+    ids.length > 32 ||
+    new Set(ids).size !== ids.length ||
     ids.some((id) => id.length !== 36 || routeOf(id) === null)
   )
     throw new RangeError('Expected one to thirty-two unique routed media IDs');
@@ -84,7 +93,12 @@ export async function readDocumentMediaPresentations(
     const before = rows.find((row) => presentation(row) !== null);
     if (!before) continue;
     const current = await authorizeMediaDerivative(
-      deps, id, actor, `${before.variant_format as 'avif' | 'webp'}-${before.variant_width!}`, context, before,
+      deps,
+      id,
+      actor,
+      `${before.variant_format as 'avif' | 'webp'}-${before.variant_width!}`,
+      context,
+      before,
     );
     if (current) {
       const image = presentation(current);
