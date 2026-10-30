@@ -138,6 +138,38 @@ test('FULL HTTP keeps current parents and empty headings while real source conce
   await f.activate(f.originalDigest);
 }, 120000);
 
+test('FULL empty shelves enforce both gates before private reads and HTTP prefix accepts scalar-length literal names', async () => {
+  const owner = await f.identity(scopes);
+  const empty = await label(owner.bearer, 'Gate empty heading');
+  const longName = '😀'.repeat(100);
+  const long = await label(owner.bearer, longName);
+  const literal = await label(owner.bearer, 'Literal%_\\tail');
+  for (const [q, expected] of [
+    [longName, long.id],
+    [' Literal%_\\ ', literal.id],
+  ]) {
+    const page = await json(owner.bearer, 'GET', '/v1/libraryLabels?q=' + encodeURIComponent(q!), 200);
+    expect(page.labels.map((row: { id: string }) => row.id)).toEqual([expected]);
+  }
+  const path = `/v1/libraryLabelAssignments?labelId=${empty.id}&view=FULL`;
+  await json('steward', 'POST', '/v1/platform/exposure/reading_progress:close', 200);
+  const closed = await capture(db, () => json(owner.bearer, 'GET', path, 403));
+  expect(closed.value.code).toBe('platform_closed');
+  expect(privateScans(closed.capture)).toEqual([]);
+  await json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?labelId=${empty.id}`, 200);
+  await json('steward', 'POST', '/v1/platform/exposure/reading_progress:open', 200);
+  await f.setLibraryOpen(false);
+  const libraryClosed = await capture(db, () => json(owner.bearer, 'GET', path, 403));
+  expect(libraryClosed.value.code).toBe('platform_closed');
+  expect(privateScans(libraryClosed.capture)).toEqual([]);
+  await f.setLibraryOpen(true);
+  expect(await json(owner.bearer, 'GET', path, 200)).toEqual({
+    assignments: [],
+    next: null,
+    label: { ...empty, name: 'Gate empty heading' },
+  });
+}, 120000);
+
 test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries session lifecycles and same-subject retained assignments', async () => {
   const owner = await f.identity(scopes),
     route = routeOf(owner.actor.accountId)!;
