@@ -182,7 +182,10 @@ export function clientAuthority(
     const connection = await pool.connect();
     try {
       await connection.query('BEGIN');
-      await requireErasureCursorVersion(connection, AUTH_CURSOR_VERSION, clientId);
+      await connection.query(
+        "SELECT set_config('auth.cursor_worker','2',true),pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`auth-client:${clientId}`],
+      );
       const value = await action(connection);
       await connection.query('COMMIT');
       return value;
