@@ -442,7 +442,7 @@ test(
     const bannedReader = newId(0x3456);
     const author = newId(threadRoute);
     const realmId = newId(boardRoute);
-    const boardId = newId(boardRoute);
+    const protectedBoardId = newId(boardRoute);
     const threadId = newId(threadRoute);
     const postId = newId(threadRoute);
     const revisionId = newId(threadRoute);
@@ -465,7 +465,7 @@ test(
       realmId,
       newId(boardRoute),
       realmRevisionId,
-    ] as const;
+    ];
     await db.admin.query(
       `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
        VALUES ($1, $2, 'active', $3, $4, $5)`,
@@ -488,7 +488,7 @@ test(
     );
     const contentRoute = [
       boardRoute,
-      boardId,
+      protectedBoardId,
       realmId,
       newId(boardRoute),
       transactionId,
@@ -501,7 +501,7 @@ test(
       body,
       bodyHash,
       text,
-    ] as const;
+    ];
     await db.admin.query(
       `INSERT INTO content.board(route, board_id, realm_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
        VALUES ($1, $2, $3, $4, 'Protected board', 'protected', 1, $5)`,
@@ -529,7 +529,7 @@ test(
     );
     for (const reader of [grantedReader, bannedReader]) {
       for (const [resourceId, action] of [
-        [boardId, 'board:read'],
+        [protectedBoardId, 'board:read'],
         [realmId, 'realm:read'],
         [threadId, 'thread:read'],
         [postId, 'post:read'],
@@ -563,7 +563,7 @@ test(
         .sign(signing.privateKey);
     const grantedToken = await tokenFor(grantedReader);
     const bannedToken = await tokenFor(bannedReader);
-    const path = `http://kernel.test/v1/boards/${boardId}/threads?sort=newest&limit=1`;
+    const path = `http://kernel.test/v1/boards/${protectedBoardId}/threads?sort=newest&limit=1`;
     const bannedResponse = await realmApp.handle(
       new Request(path, { headers: { authorization: `Bearer ${bannedToken}` } }),
     );
