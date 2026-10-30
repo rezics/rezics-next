@@ -300,8 +300,13 @@ test('native row read refusal withholds presentation without resolving or replac
         expect(editor.snapshot()).toMatchObject({ readRefusal: reason, phase: 'uncertain', desired: 'unlisted' });
         expect(editor.snapshot().attempt).toBe(attempt);
       }
-      const current = { ...original, title: 'Fresh native title', visibility: 'public' as const, revision: 10 };
-      response = () => Response.json({ collection: current });
+      const current: OwnedCollection = {
+        id: original.id,
+        title: 'Fresh native title',
+        visibility: 'public',
+        revision: 10,
+      };
+      response = () => Response.json({ collection: { ...original, ...current } });
       await editor.reload();
       expect(editor.snapshot()).toMatchObject({
         current,
