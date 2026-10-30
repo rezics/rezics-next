@@ -12,8 +12,17 @@ type NativeResource = {
 export type NativeProcessIdentity = {
   pid: number;
   pgid: number;
+  sid: number;
   startTime: string;
 };
+
+export type ProcessGroupObservation =
+  | { status: 'observed'; identities: NativeProcessIdentity[] }
+  | { status: 'unavailable'; detail: string };
+
+export function processGroupObservationIsGone(observation: ProcessGroupObservation): boolean {
+  return observation.status === 'observed' && observation.identities.length === 0;
+}
 
 export type NativeProcessOwnership = {
   readonly identity: NativeProcessIdentity;
@@ -121,7 +130,10 @@ export class NativeTestLifecycle {
     const refresh = (): NativeProcessIdentity[] => {
       const knownMemberAlive = [...members.values()].some(same);
       if (!same(identity) && !knownMemberAlive) return [];
-      const current = processGroupIdentities(identity.pgid);
+      const observation = processGroupIdentities(identity);
+      if (observation.status === 'unavailable') return [...members.values()].filter(same);
+      const current = observation.identities;
+      if (!current.length && same(identity)) return [...members.values()].filter(same);
       for (const member of current) members.set(member.pid, member);
       return current;
     };
@@ -152,21 +164,20 @@ export class NativeTestLifecycle {
     };
     const waitForExit = async (timeoutMs: number): Promise<boolean> => {
       const deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        try {
-          process.kill(-identity.pgid, 0);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
-          if ((error as NodeJS.ErrnoException).code !== 'EPERM') throw error;
-        }
+      while (true) {
+        if (!processGroupExists(identity.pgid)) return true;
+        refresh();
+        if (Date.now() >= deadline) return false;
         await Bun.sleep(25);
       }
-      return refresh().length === 0;
     };
     const close = async (): Promise<void> => {
       signal('SIGTERM');
-      if (!(await waitForExit(this.cleanupGraceMs)))
-        throw new Error(`Owned ${label} process group did not close within ${this.cleanupGraceMs}ms`);
+      if (!(await waitForExit(this.cleanupGraceMs))) {
+        const observation = processGroupIdentities(identity);
+        const details = observation.status === 'unavailable' ? `; observation unavailable: ${observation.detail}` : '';
+        throw new Error(`Owned ${label} process group did not close within ${this.cleanupGraceMs}ms${details}`);
+      }
     };
     const force = async (): Promise<void> => {
       const current = refresh();
@@ -195,8 +206,11 @@ export class NativeTestLifecycle {
       );
       void descendantsStopped;
       signal('SIGKILL');
-      if (!(await waitForExit(this.forceGraceMs)))
-        throw new Error(`Owned ${label} process group survived SIGKILL for ${this.forceGraceMs}ms`);
+      if (!(await waitForExit(this.forceGraceMs))) {
+        const observation = processGroupIdentities(identity);
+        const details = observation.status === 'unavailable' ? `; observation unavailable: ${observation.detail}` : '';
+        throw new Error(`Owned ${label} process group survived SIGKILL for ${this.forceGraceMs}ms${details}`);
+      }
     };
     const release = this.register({ label, close, force });
     return {
@@ -375,7 +389,11 @@ export function nativeProcessIsSame(identity: NativeProcessIdentity): boolean {
 }
 
 export function nativeProcessGroupIsGone(identity: NativeProcessIdentity): boolean {
-  return processGroupIdentities(identity.pgid).length === 0;
+  return (
+    processGroupObservationIsGone(processGroupIdentities(identity)) &&
+    !sameProcess(readProcessIdentity(identity.pid), identity) &&
+    !processGroupExists(identity.pgid)
+  );
 }
 
 function readProcessIdentity(pid: number | undefined): NativeProcessIdentity | undefined {
@@ -387,28 +405,42 @@ function readProcessIdentity(pid: number | undefined): NativeProcessIdentity | u
       .trim()
       .split(/\s+/u);
     const pgid = Number(fields[2]);
+    const sid = Number(fields[3]);
     const startTime = fields[19];
-    if (!Number.isInteger(pgid) || !startTime) return;
-    return { pid, pgid, startTime };
+    if (!Number.isInteger(pgid) || !Number.isInteger(sid) || !startTime) return;
+    return { pid, pgid, sid, startTime };
   } catch {
     return;
   }
 }
 
-function processGroupIdentities(pgid: number): NativeProcessIdentity[] {
-  const result = spawnSync('ps', ['-o', 'pid=', '-g', String(pgid)], {
+function processGroupIdentities(identity: NativeProcessIdentity): ProcessGroupObservation {
+  const result = spawnSync('ps', ['-o', 'pid=,pgid=', '-g', String(identity.sid)], {
     encoding: 'utf8',
     timeout: 1_000,
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  if (result.error || result.status !== 0) return [];
-  return result.stdout
-    .trim()
-    .split(/\s+/u)
-    .map(Number)
-    .filter((pid) => Number.isSafeInteger(pid) && pid > 0)
-    .map((pid) => readProcessIdentity(pid))
-    .filter((identity): identity is NativeProcessIdentity => identity?.pgid === pgid);
+  if (result.error)
+    return { status: 'unavailable', detail: `${result.error.name}${result.error.code ? `:${result.error.code}` : ''}` };
+  if (result.status !== 0) return { status: 'unavailable', detail: `ps exited with status ${result.status}` };
+
+  const identities: NativeProcessIdentity[] = [];
+  for (const line of result.stdout.split('\n').filter((value) => value.trim())) {
+    const [pidText, pgidText, ...extra] = line.trim().split(/\s+/u);
+    const pid = Number(pidText);
+    const pgid = Number(pgidText);
+    if (extra.length || !Number.isSafeInteger(pid) || pid < 1 || !Number.isSafeInteger(pgid) || pgid < 1)
+      return { status: 'unavailable', detail: 'ps returned an invalid PID/PGID row' };
+    if (pgid !== identity.pgid) continue;
+    const observed = readProcessIdentity(pid);
+    if (observed?.pgid === identity.pgid && observed.sid === identity.sid) identities.push(observed);
+  }
+  if (
+    sameProcess(readProcessIdentity(identity.pid), identity) &&
+    !identities.some((member) => member.pid === identity.pid)
+  )
+    return { status: 'unavailable', detail: 'ps omitted the verified process group leader' };
+  return { status: 'observed', identities };
 }
 
 function sameProcess(current: NativeProcessIdentity | undefined, expected: NativeProcessIdentity): boolean {
@@ -416,6 +448,18 @@ function sameProcess(current: NativeProcessIdentity | undefined, expected: Nativ
     current &&
     current.pid === expected.pid &&
     current.pgid === expected.pgid &&
+    current.sid === expected.sid &&
     current.startTime === expected.startTime,
   );
+}
+
+function processGroupExists(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    if ((error as NodeJS.ErrnoException).code === 'EPERM') return true;
+    throw error;
+  }
 }

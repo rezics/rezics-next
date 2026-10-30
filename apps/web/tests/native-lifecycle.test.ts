@@ -8,6 +8,7 @@ import {
   nativeProcessGroupIsGone,
   nativeProcessIsSame,
   nativeTest,
+  processGroupObservationIsGone,
   settledWithin,
   type NativeProcessIdentity,
 } from './native/lifecycle.ts';
@@ -73,6 +74,9 @@ nativeTest(
     const startedAt = performance.now();
     const lifecycle = currentNativeLifecycle();
     if (!lifecycle) throw new Error('Native lifecycle acceptance is missing its supervisor scope');
+    expect(
+      processGroupObservationIsGone({ status: 'unavailable', detail: 'ps could not observe the owned session' }),
+    ).toBe(false);
     const hostNetworkNamespace = readlinkSync('/proc/self/ns/net');
     let siblingState = 0;
     const sibling = Bun.serve({
@@ -122,6 +126,11 @@ nativeTest(
     expect(timedOut.pageVisited).toBe(true);
     expect(timedOut.browserNetworkNamespace).toBeDefined();
     expect(timedOut.browserNetworkNamespace).not.toBe(hostNetworkNamespace);
+    expect(timedOut.browser?.sid).toBe(timedOut.browser?.pgid);
+    expect(timedOut.devServer?.sid).toBe(timedOut.devServer?.pgid);
+    expect(timedOut.resistantLeader?.sid).toBe(timedOut.resistantLeader?.pgid);
+    expect(timedOut.resistantDescendant?.sid).toBe(timedOut.resistantLeader?.sid);
+    expect(partial.child?.sid).toBe(partial.child?.pgid);
     expect(timedOutCleanup.browserNetworkNamespace).toBe(timedOut.browserNetworkNamespace);
     expect(timedOutCleanup.receivedTimeout).toBe(true);
     expect(partialCleanup.expectedFailure).toBe(true);
