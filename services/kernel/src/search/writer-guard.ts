@@ -150,16 +150,18 @@ export function createSearchWriterGuard(options: {
     if (after !== null && subjectPartition(after) !== value.partition) throw new TypeError('Invalid copy frontier');
   }
   async function gate(tx: CommandTransaction, receipt: IdentityNativeReceipt, incarnation: string, writeAlias: string) {
-    const rows = await tx.query(gateSql.sql, [
-      receipt.partition,
-      options.index,
-      options.consumer,
-      incarnation,
-      receipt.epoch,
-      writeAlias,
-    ]);
-    if (rows.rowCount !== 1) throw unavailable('Search consumer, incarnation or home requires native handoff custody');
-    return rows.rows[0]!;
+    const parameters = [receipt.partition, options.index, options.consumer, incarnation, receipt.epoch, writeAlias];
+    const existing = await tx.query(gateSql.sql, parameters);
+    if (existing.rowCount === 1) return existing.rows[0]!;
+    const inserted = await tx.query(
+      `INSERT INTO search.identity_writer_gate (partition_no,physical_target,consumer,incarnation,owner_epoch,write_alias)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (partition_no,physical_target) DO NOTHING
+       RETURNING enrollment_generation,fence_generation,closed_token`,
+      parameters,
+    );
+    if (inserted.rowCount !== 1)
+      throw unavailable('Search consumer, incarnation or home requires native handoff custody');
+    return inserted.rows[0]!;
   }
   async function retained(tx: CommandTransaction, value: SearchWriterBarrierLocator) {
     const owner = await readPartition(tx, value.partition);
