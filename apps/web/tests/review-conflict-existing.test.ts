@@ -94,8 +94,8 @@ test('the fake review create returns a conflict with an optional existingThreadI
     });
   const present = await (await create()).json();
   const absent = await (await create(new Headers({ 'x-fake-omit-existing-thread-id': 'true' }))).json();
-  expect(present).toMatchObject({ code: 'review_exists', existingThreadId: id(9) });
-  expect(absent).toMatchObject({ code: 'review_exists' });
+  expect(present).toMatchObject({ code: 'conflict', existingThreadId: id(9) });
+  expect(absent).toMatchObject({ code: 'conflict' });
   expect(absent).not.toHaveProperty('existingThreadId');
 });
 

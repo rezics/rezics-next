@@ -7,9 +7,10 @@ async function conflict(request: Request) {
   if (body.kind !== 'review') return;
   return {
     status: 409,
+    headers: { 'content-type': 'application/problem+json' },
     type: 'https://rezics.com/problems/conflict',
     title: 'Conflict',
-    code: 'review_exists',
+    code: 'conflict',
     retryable: false,
     effect_status: 'not_applied',
     request_id: 'fake-review-conflict',
