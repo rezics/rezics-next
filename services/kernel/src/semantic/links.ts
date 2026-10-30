@@ -289,7 +289,9 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   // A command checks each target under the same partition fence as its upserts.
   for (let offset = 0; offset < changes.length; offset += 100) {
     const page = changes.slice(offset, offset + 100);
-    const roles = await Promise.all(page.map(change => semanticCopyRoles(pool,change.sourceSubjectId,change.statementId)));
+    const roles = await Promise.all(
+      page.map((change) => semanticCopyRoles(pool, change.sourceSubjectId, change.statementId)),
+    );
     const partition = partitionOf(page[0]!.route);
     const command = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
       const forwarded: StoredChange[] = [];
@@ -391,7 +393,9 @@ async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[])
           dateTargets.map(async (target) => [target, (await readHolderKeys(pool, target)).date] as const),
         ),
       );
-      const roles = await Promise.all(page.map(change => semanticCopyRoles(pool,change.subjectId,change.statementId)));
+      const roles = await Promise.all(
+        page.map((change) => semanticCopyRoles(pool, change.subjectId, change.statementId)),
+      );
       await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
         await upsertOutboundLinks.run(tx, {
           route,
