@@ -26,6 +26,7 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'access.agent-verification.released': 4,
   'access.agent-verification.revoked': 5,
   'access.agent-verification.deleted': 6,
+  'access.agent-identity.recover': 7,
 });
 export type CommandHistoryKind = string;
 const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KINDS));

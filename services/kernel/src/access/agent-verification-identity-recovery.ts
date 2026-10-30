@@ -11,6 +11,13 @@ import {
   publishedAccountIdentityUndo,
   readOriginalAgentIdentityDecision,
 } from './agent-verification-identity.ts';
+import {
+  readOriginalAccountAgentIdentity,
+  verifyOriginalAccountAgentIdentity,
+  type OriginalAccountAgentIdentity,
+} from '../semantic/account-agent-identity-recovery.ts';
+import { declareAgentIdentitySource, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
+import insertOriginal from './agent-verification-identity-recovery-source.sql';
 import originalReversal from './agent-verification-identity-recovery-read.sql';
 import insertRecovery from './agent-verification-identity-recovery-insert.sql';
 
@@ -140,7 +147,7 @@ async function reversal(tx: CommandTransaction, receipt: Receipt): Promise<Rever
 }
 
 /** Resolve only the exact Global decision and pending receipt. Personal JSON/history is never searched. */
-async function verification(pool: Pool, receipt: Receipt): Promise<never> {
+async function verificationDecision(pool: Pool, receipt: Receipt) {
   const { withReadTransaction } = await import('../semantic/read.ts');
   const request = await withReadTransaction(
     pool,
@@ -158,52 +165,59 @@ async function verification(pool: Pool, receipt: Receipt): Promise<never> {
       `missing original Global decision for ${keyOf(receipt)}; Accounts decision required`,
     );
   const decision = await readOriginalAgentIdentityDecision(pool, request.request_id, receipt.receipt);
-  await runCommand(pool, { partition: partitionOf(routeOf(receipt.account)!) }, async (tx) => {
-    const account = await accountHome(tx, receipt);
-    const pending = (
-      await tx.query<{ request_digest: Buffer; response: unknown }>(
-        `SELECT r.request_digest,r.response FROM core.receipt r
+  if (decision.account_id !== receipt.account || decision.transaction_id !== receipt.receipt)
+    throw accountIdentityUnavailable(`mismatched original Global decision ${keyOf(receipt)}`);
+  return decision;
+}
+type Decision = Awaited<ReturnType<typeof verificationDecision>>;
+type PendingRow = Pick<
+  ReversalRow,
+  'principal_id' | 'command_kind' | 'idempotency_key' | 'request_digest' | 'epoch' | 'position' | 'transaction_id'
+> & { response: unknown };
+async function pending(tx: CommandTransaction, receipt: Receipt, decision: Decision): Promise<PendingRow> {
+  const account = await accountHome(tx, receipt);
+  const pending = (
+    await tx.query<PendingRow>(
+      `SELECT r.principal_id,r.command_kind,r.idempotency_key,r.request_digest,r.response,
+           r.epoch,r.position::text,r.transaction_id FROM core.receipt r
          JOIN core.partition p ON p.partition_no=r.partition_no AND p.write_state='active'
            AND p.epoch=r.epoch AND p.position>=r.position
          WHERE r.partition_no=$1 AND r.principal_kind='account' AND r.principal_id=$2
            AND r.command_kind='access.agent-verification.pending' AND r.idempotency_key=ANY($3::text[])
            AND r.payload_state='present' AND r.position>0 FOR SHARE OF r`,
-        [
-          currentCommand(tx).partition,
+      [
+        currentCommand(tx).partition,
+        decision.requested_by,
+        nativeReceiptKeyCandidates(
+          tx,
+          'access.agent-verification.pending',
           decision.requested_by,
-          nativeReceiptKeyCandidates(
-            tx,
-            'access.agent-verification.pending',
-            decision.requested_by,
-            `${request.request_id}:pending`,
-          ),
-        ],
-      )
-    ).rows;
-    const expected = createHash('sha256')
-      .update(
-        JSON.stringify([
-          request.request_id,
-          receipt.account,
-          decision.account_kind,
-          decision.catalogue_subject_id,
-          receipt.receipt,
-        ]),
-      )
-      .digest();
-    if (
-      account.kind !== decision.account_kind ||
-      pending.length !== 1 ||
-      !pending[0]!.request_digest.equals(expected) ||
-      normalized(pending[0]!.response) !== normalized({ requestId: request.request_id, accountId: receipt.account })
+          `${decision.request_id}:pending`,
+        ),
+      ],
     )
-      throw accountIdentityUnavailable(
-        `missing complete original native pending receipt ${keyOf(receipt)}; Accounts pending source required`,
-      );
-    return noEffect(null);
-  });
-  // That original native response retained no accepted release or consumer intent. Do not fill either from now.
-  throw accountIdentityUnavailable(`${ORIGINAL_IDENTITY_SOURCE_REQUIRED}; ${keyOf(receipt)}`);
+  ).rows;
+  const expected = createHash('sha256')
+    .update(
+      JSON.stringify([
+        decision.request_id,
+        receipt.account,
+        decision.account_kind,
+        decision.catalogue_subject_id,
+        receipt.receipt,
+      ]),
+    )
+    .digest();
+  if (
+    account.kind !== decision.account_kind ||
+    pending.length !== 1 ||
+    !pending[0]!.request_digest.equals(expected) ||
+    normalized(pending[0]!.response) !== normalized({ requestId: decision.request_id, accountId: receipt.account })
+  )
+    throw accountIdentityUnavailable(
+      `missing complete original native pending receipt ${keyOf(receipt)}; Accounts pending source required`,
+    );
+  return pending[0]!;
 }
 
 /** Only the existing missing-source branch calls this. No admission capability or caller source JSON is accepted. */
@@ -222,7 +236,16 @@ export async function recoverMissingAccountIdentitySource(
     return false;
   const partition = partitionOf(routeOf(receipt.account)!);
   // The failed read has released its checkout. All cross-home proofs are collected before reacquiring it.
-  if (receipt.kind === 'account-agent.verify') await verification(pool, receipt);
+  const decision = receipt.kind === 'account-agent.verify' ? await verificationDecision(pool, receipt) : null;
+  const source = await readOriginalAccountAgentIdentity(pool, {
+    account: receipt.account,
+    direction: receipt.kind,
+    receipt: receipt.receipt,
+  });
+  if (decision || source) {
+    await recoverOriginalSource(pool, receipt, source, decision);
+    return true;
+  }
   const original = (await runCommand(pool, { partition }, async (tx) => noEffect(await reversal(tx, receipt)))).value;
   let undo: Awaited<ReturnType<typeof publishedAccountIdentityUndo>>;
   try {
@@ -314,6 +337,14 @@ export async function recoverMissingAccountIdentitySource(
         ),
       ]);
       if (saved.rowCount !== 1) throw accountIdentityUnavailable(`lost original reversal custody ${keyOf(receipt)}`);
+      await declareRecovery(
+        tx,
+        receipt,
+        intentDigest,
+        original.principal_id,
+        original.response.kind === 'revoked' ? original.principal_id : null,
+        undo.source.roles,
+      );
       // Native account wakeup, with no duplicate reversing event or fresh reversal decision.
       return {
         value: null,
@@ -328,4 +359,235 @@ export async function recoverMissingAccountIdentitySource(
     },
   );
   return true;
+}
+
+// Only the two validated recovery branches can issue a declaration for serializers.
+// Its native component is the NEW recovery writer; the original command and Source
+// admission components remain separate data on agent_identity_recovery.
+const recoveredDeclarations = new WeakMap<
+  CommandTransaction,
+  ReturnType<typeof import('./agent-verification-identity.ts').originalAccountIdentitySource>
+>();
+export function originalRecoveredAccountIdentitySource(tx: CommandTransaction) {
+  currentCommand(tx);
+  return recoveredDeclarations.get(tx);
+}
+async function declareRecovery(
+  tx: CommandTransaction,
+  receipt: Receipt,
+  digest: string,
+  requester: string,
+  decider: string | null,
+  priorRoles: readonly { account_id: string; role: string }[] = [],
+) {
+  const command = currentCommand(tx);
+  const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
+  const { unionHistoryScope } = await import('../history/record.ts');
+  const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
+  const key: AgentIdentitySourceKey = Object.freeze({
+    route: routeOf(receipt.account)!,
+    accountId: receipt.account,
+    direction: receipt.kind,
+    receiptId: receipt.receipt,
+  });
+  const accounts = unionHistoryScope('command-receipt/v1', [
+    ref(receipt.account, roles.subject),
+    ref(requester, roles.actor | roles.principal),
+    ...(decider ? [ref(decider, roles.reviewer)] : []),
+    ...priorRoles.map(({ account_id, role }) => {
+      const mask =
+        role === 'subject'
+          ? roles.subject
+          : role === 'actor'
+            ? roles.actor | roles.principal
+            : role === 'editor'
+              ? roles.reviewer
+              : null;
+      if (mask === null) throw new TypeError('Unknown original Accounts recovery role');
+      return ref(account_id, mask);
+    }),
+  ]).accounts;
+  const component = (
+    await tx.query<{ epoch: number; position: string }>(
+      `SELECT epoch,position::text FROM core.partition WHERE partition_no=$1 AND write_state='active'`,
+      [command.partition],
+    )
+  ).rows[0]!;
+  recoveredDeclarations.set(
+    tx,
+    Object.freeze({
+      key,
+      digest,
+      partition: command.partition,
+      epoch: component.epoch,
+      position: BigInt(component.position) + 1n,
+      transactionId: command.transactionId,
+      accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
+    }),
+  );
+  await declareAgentIdentitySource(tx, key, digest);
+}
+
+async function recoverOriginalSource(
+  pool: Pool,
+  receipt: Receipt,
+  source: OriginalAccountAgentIdentity | null,
+  decision: Decision | null,
+): Promise<void> {
+  const selection = { account: receipt.account, direction: receipt.kind, receipt: receipt.receipt };
+  const partition = partitionOf(routeOf(receipt.account)!);
+  // This checkout independently stages the original Accounts command. All Source
+  // foreign reads have already finished, including the prior fixed-three publication.
+  const staged = (
+    await runCommand(pool, { partition }, async (tx) =>
+      noEffect({
+        pending: decision ? await pending(tx, receipt, decision) : null,
+        reversal: decision ? null : await reversal(tx, receipt),
+      }),
+    )
+  ).value;
+  const original = staged.pending ?? staged.reversal!;
+  if (!source) throw accountIdentityUnavailable(`${ORIGINAL_IDENTITY_SOURCE_REQUIRED}; ${keyOf(receipt)}`);
+  const intent = source.input.intent;
+  const prior = source.priorVerification;
+  const value = staged.reversal?.response;
+  const catalogue = decision?.catalogue_subject_id ?? value?.catalogueSubjectId;
+  if (
+    normalized(source.input.receipt) !== normalized(receipt) ||
+    source.digest !== digest([intent, receipt]).toString('hex') ||
+    (decision
+      ? intent.kind !== 'merge' || intent.survivor !== catalogue || prior !== null
+      : !value ||
+        intent.kind !== 'unmerge' ||
+        !prior ||
+        prior.input.intent.kind !== 'merge' ||
+        prior.input.intent.survivor !== catalogue ||
+        prior.input.intent.redirected !== accountAgentId(receipt.account) ||
+        prior.verificationReceipt !== value.verificationReceiptId ||
+        intent.verificationReceipt !== prior.verificationReceipt ||
+        intent.release !== prior.input.intent.release ||
+        normalized(intent.undoJob) !== normalized(prior.job))
+  )
+    throw accountIdentityUnavailable(`original Account and Source evidence differ ${keyOf(receipt)}`);
+  // Bind the recovery receipt to every persisted reference, including both native
+  // domains. A replay can never swap an accepted Source claim or its current job.
+  const requestDigest = digest([
+    keyOf(receipt),
+    original.transaction_id,
+    original.epoch,
+    original.position,
+    source.digest,
+    prior?.digest ?? null,
+    source.native.transactionId,
+    source.native.epoch,
+    source.native.position,
+    source.claim.generation,
+    source.job.jobId,
+    source.job.epoch,
+    source.claim.scope,
+    decision?.transaction_id ?? null,
+    decision?.epoch ?? null,
+    decision?.position ?? null,
+  ]);
+  await runCommand(
+    pool,
+    {
+      partition,
+      receipt: {
+        actorAccountId: original.principal_id,
+        kind: 'access.agent-identity.recover',
+        key: keyOf(receipt),
+        digest: requestDigest,
+      },
+    },
+    async (tx) => {
+      const changed = decision
+        ? normalized(await pending(tx, receipt, decision)) !== normalized(staged.pending)
+        : nativeReversal(await reversal(tx, receipt)) !== nativeReversal(staged.reversal!);
+      if (changed) throw accountIdentityUnavailable(`original Account custody changed ${keyOf(receipt)}`);
+      // Supply the actual opaque object returned by Source, never its serialized data.
+      if (!(await verifyOriginalAccountAgentIdentity(tx, selection, source)))
+        throw accountIdentityUnavailable(
+          `Source verifyOriginalAccountAgentIdentity lost original custody ${keyOf(receipt)}`,
+        );
+      const existing = (
+        await tx.query<{ intent_digest: string; original_source: unknown }>(
+          `SELECT i.intent_digest,a.original_source FROM access.agent_identity_intent i
+       LEFT JOIN access.agent_identity_recovery a USING(route,account_id,direction,receipt_id)
+       WHERE i.route=$1 AND i.account_id=$2 AND i.direction=$3 AND i.receipt_id=$4 FOR SHARE OF i`,
+          [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
+        )
+      ).rows[0];
+      if (existing) {
+        if (existing.intent_digest !== source.digest || normalized(existing.original_source) !== normalized(source))
+          throw accountIdentityUnavailable(`conflicting original source ${keyOf(receipt)}`);
+        return noEffect(null);
+      }
+      const account = await accountHome(tx, receipt);
+      const saved = await tx.query(insertOriginal.sql, [
+        partition,
+        serialize({
+          route: routeOf(receipt.account),
+          account_id: receipt.account,
+          direction: receipt.kind,
+          receipt_id: receipt.receipt,
+          agent_id: accountAgentId(receipt.account),
+          account_kind: account.kind,
+          catalogue_id: catalogue,
+          request_id: decision?.request_id ?? null,
+          requested_by: original.principal_id,
+          decided_by: decision?.decided_by ?? (value?.kind === 'revoked' ? original.principal_id : null),
+          decision_epoch: decision?.epoch ?? null,
+          decision_position: decision?.position ?? null,
+          decision_transaction_id: decision?.transaction_id ?? null,
+          pending_receipt_id: original.transaction_id,
+          verification_receipt_id: prior?.verificationReceipt ?? null,
+          disposition: value?.kind ?? null,
+          reason: value?.reason ?? null,
+          release: intent.release,
+          intent,
+          intent_digest: source.digest,
+          source_epoch: original.epoch,
+          source_position: original.position,
+          source_transaction_id: original.transaction_id,
+          undo_job_id: prior?.job.jobId ?? null,
+          undo_job_epoch: prior?.job.epoch ?? null,
+          delivery_key: keyOf(receipt),
+          workflow_id: decision
+            ? `accounts.agent-verification:${decision.request_id}:${receipt.receipt}`
+            : `accounts.agent-verification-reversal:${receipt.account}:${receipt.receipt}`,
+          native_command_kind: original.command_kind,
+          native_receipt_key: original.idempotency_key,
+          verification_intent_digest: prior?.digest ?? null,
+          original_source: source,
+          recovery_transaction_id: currentCommand(tx).transactionId,
+          recovery_receipt_key: encodeReceiptKey(
+            receiptKeysFor(tx),
+            'access.agent-identity.recover',
+            { kind: 'account', id: original.principal_id },
+            keyOf(receipt),
+          ),
+          recovery_digest: requestDigest.toString('hex'),
+        }),
+      ]);
+      if (saved.rowCount !== 1) throw accountIdentityUnavailable(`lost original source custody ${keyOf(receipt)}`);
+      await declareRecovery(
+        tx,
+        receipt,
+        source.digest,
+        original.principal_id,
+        decision?.decided_by ?? (value?.kind === 'revoked' ? original.principal_id : null),
+      );
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.access.account-updated.v1',
+            subject: receipt.account,
+            data: { accountId: receipt.account },
+          },
+        ],
+      };
+    },
+  );
 }

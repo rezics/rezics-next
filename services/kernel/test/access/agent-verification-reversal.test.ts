@@ -1325,3 +1325,112 @@ test('original reversal SDK custody binds the existing exact source and rejects 
     await client.close();
   }
 });
+
+test('accepted original reversal Source recovers without the old Accounts verification source and keeps its current job distinct from prior undo', async () => {
+  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
+  const { readOriginalAccountAgentIdentity } = await import('../../src/semantic/account-agent-identity-recovery.ts');
+  const { account, subject, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  expect(released.response.status).toBe(200);
+  const reversal = released.body.reversal as AgentVerificationReversal;
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: reversal.receiptId };
+  const before = await loadAccountIdentitySource(pool, receipt);
+  const job = await store.prepareAdmission(pool, {}, before.input);
+  for (let page = 0; page < 512; page++) {
+    const progress = await stepIdentityEpochAdmission(pool, job);
+    if (progress.state === 'pending') break;
+    expect(progress.state).toBe('preparing');
+    if (page === 511) throw new Error('Original Source admission did not finish');
+  }
+  const original = (await readOriginalAccountAgentIdentity(pool, {
+    account: account.id,
+    direction: receipt.kind,
+    receipt: receipt.receipt,
+  }))!;
+  expect(original).not.toBeNull();
+  expect(original.job).toEqual(job);
+  expect(original.priorVerification!.verificationReceipt).toBe(reversal.verificationReceiptId);
+  expect(original.input.intent.kind).toBe('unmerge');
+  if (original.input.intent.kind !== 'unmerge') throw new Error('Expected original reversal');
+  expect(original.input.intent.undoJob).toEqual(original.priorVerification!.job);
+  expect(job.jobId).not.toBe(original.priorVerification!.job.jobId);
+  const restore = await pool.connect();
+  try {
+    await restore.query('BEGIN');
+    await restore.query("SET LOCAL session_replication_role='replica'");
+    await restore.query('DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await restore.query('COMMIT');
+  } finally {
+    restore.release();
+  }
+  const recovered = await loadAccountIdentitySource(pool, receipt);
+  expect(recovered.input).toEqual(before.input);
+  expect(recovered.transactionId).toBe(before.transactionId);
+  expect(recovered.position).toBe(before.position);
+  const association = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_recovery
+    WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    )
+  ).rows[0]!;
+  expect(association.verification_intent_digest).toBe(original.priorVerification!.digest);
+  expect(association.original_source.native.transactionId).toBe(original.native.transactionId);
+  expect(association.original_source.job.jobId).toBe(job.jobId);
+  expect(association.original_source.priorVerification.job.jobId).toBe(original.priorVerification!.job.jobId);
+  expect(association.recovery_transaction_id).not.toBe(original.native.transactionId);
+  expect(association.recovery_transaction_id).not.toBe(before.transactionId);
+  await expect(probeAccountIdentityPublication(pool, receipt)).rejects.toThrow();
+  expect(await pointer(subject)).toHaveLength(1);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBe(reversal.receiptId);
+  expect(await deliverAccountIdentity(pool, receipt)).toEqual(job);
+  await finish(reversal);
+  expect(await pointer(subject)).toEqual([]);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBeNull();
+  expect((await loadAccountIdentitySource(pool, receipt)).digest).toBe(before.digest);
+  // Model another old-image loss, then permanently minimize the actual original
+  // payload. Published Source data cannot recreate a purged Account receipt.
+  const lost = await pool.connect();
+  try {
+    await lost.query('BEGIN');
+    await lost.query("SET LOCAL session_replication_role='replica'");
+    await lost.query('DELETE FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await lost.query('DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await lost.query('COMMIT');
+  } finally {
+    lost.release();
+  }
+  await pool.query(
+    `UPDATE core.receipt SET payload_state='minimized',response='null'::jsonb
+    WHERE partition_no=$1 AND transaction_id=$2`,
+    [accountRoute >>> 4, before.transactionId],
+  );
+  expect(
+    await readOriginalAccountAgentIdentity(pool, {
+      account: account.id,
+      direction: receipt.kind,
+      receipt: receipt.receipt,
+    }),
+  ).not.toBeNull();
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow(
+    'original native reversal receipt/write_basis',
+  );
+  expect(
+    (
+      await pool.query('SELECT 1 FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+});

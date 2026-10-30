@@ -633,23 +633,43 @@ Each home is released before the next is acquired, and the account/source owner 
 The original intent keeps its original transaction, epoch, position, receipt key, digest and workflow identity.
 `agent_identity_recovery` separately records the actual new recovery transaction and component. Its deferred native
 constraint verifies both receipts, their exact source association and the retained prior source; metadata alone
-cannot admit identity work. Existing immutable keys win over concurrent recovery. Uncached success steps in the
-same original workflow redrive delivery before their publication probe, including a journalled merge/unmerge.
+cannot admit identity work. Existing immutable keys require compatible replay of the same evidence. Uncached
+success steps in the same original workflow redrive delivery before their publication probe, including a journalled
+merge/unmerge.
 
-Original verification pending receipts retain only request/account IDs, not the accepted release or native consumer
-intent. Recovery validates the exact Global decision/write basis and pending receipt, then stays retryable with this
-missing Source declaration: `semantic/account-agent-identity-recovery.ts`, export
-`readOriginalAccountAgentIdentity(pool, {account, direction, receipt})`, supplying released native original accepted
-release, intent digest and consumer custody, including the original published undo locator for legacy reversal.
-This is a required producer declaration, not an implemented callback port. Verification without that source and
-legacy reversal without its original verification source remain pending; the independent retained reversal path
-continues through the existing coordinator. Purged native payloads, absent write bases and moved source epochs
-report the exact Accounts owner source requirement. Neither a receipt, past transaction nor release is fabricated.
+Original verification pending receipts retain only request/account IDs. The missing-source hook now consumes
+`semantic/account-agent-identity-recovery.ts#readOriginalAccountAgentIdentity` before reacquiring Account home.
+It passes the actual returned object to `verifyOriginalAccountAgentIdentity` in that same live platform command,
+alongside independent original Account locks. Verification still requires the original Global request/decision,
+requester, decider, kind, catalogue and decision write basis, plus the exact native pending response and digest.
+The pending command is a platform command; its Global decision, rather than a fabricated Account write basis,
+supplies the original reviewer evidence. Reversal retains its exact original response, principal, native key,
+digest and write-basis checks. The accepted Source input supplies only the immutable release/intent and native
+accepted job/claim custody. Legacy reversal uses its genuine `priorVerification` merge input, native provenance,
+published job and verification receipt, even when the old Accounts verification source table is unavailable.
+It never treats `intent.undoJob` as the current reversal job.
+
+`agent_identity_recovery.original_source` retains that Source claim and prior verification separately from the
+original Account command fields and the new recovery component. Deferred constraints recheck exact local accepted,
+nonimported claim/native rows and both Account receipts; the recovery digest binds all three native domains and
+the original decision component. The released producer read validates foreign jobs and fixed participants before
+the Account checkout; no foreign checkout is held during the writer. Recovery neither admits a new job nor changes
+the original source key, release, digest, native Account component or deterministic workflow ID. Existing native
+reversal recovery remains available without requiring unavailable old Source records when retained native Accounts
+verification/undo custody already suffices.
+
+Missing/imported accepted Source claims, incomplete original job/source provenance or unpublished prior undo
+remain pending at the exact Source read/verify port. Absent Global decisions/write bases, purged native pending or
+reversal payloads, invalid principal/key/digest and moved epochs remain pending at their Accounts owner boundary.
+Source publication alone supplies data, never permission or Account completion. The existing workflow still waits
+for mapping, Search and ALL Library publication before page, finish and result steps.
 
 The existing erasure inventory includes the source and recovery account, requester and decider with role-first
 indexes and typed primary keys. Receiving Semantic claims/jobs bind these same subject/actor/editor roles from
-the recovered source. Recovery metadata retains its receiving obligation alongside the original source; its guard
-does not permit early removal. Consumer-aware source minimization and shared
+the recovered source. The recovery writer declares its actual receipt and outbox through the existing original
+source declaration/serializer ports, with the account, requester, decider and retained undo roles. The Source native
+transaction is a reference, never a History artifact. Recovery metadata retains its receiving obligation alongside
+the original source; its guard does not permit early removal. Consumer-aware source minimization and shared
 receipt/outbox/DBOS transfer remain unfinished: the new inventory is no erasure ACK, and original proof cannot be
 purged while delivery still needs it. Native workflow, cutover, erasure and physical growth acceptance remains due.
 

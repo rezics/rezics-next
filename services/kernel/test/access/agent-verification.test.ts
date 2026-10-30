@@ -626,3 +626,199 @@ test('original in-flight verification requires its retained pending receipt and 
   );
   await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow('Accounts pending source required');
 });
+
+test('Original native accepted Source input recovery consumes actual read and same-home verifier while independently validating original Account decision pending or reversal receipt and preserving distinct original versus recovery native provenance', async () => {
+  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
+  const { readOriginalAccountAgentIdentity, verifyOriginalAccountAgentIdentity } =
+    await import('../../src/semantic/account-agent-identity-recovery.ts');
+  const { noEffect } = await import('../../src/command/command.ts');
+  const { writeAgentVerificationPage } = await import('../../src/access/agent-verification.ts');
+  const { deliverAccountIdentity, probeAccountIdentityPublication } =
+    await import('../../src/access/agent-verification-identity.ts');
+  const account = await seedAccount(`accepted_${randomUUID().slice(0, 8)}`);
+  const subject = await catalogueSubject('schema:Person', 'Accepted original verification');
+  await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName });
+  const applied = await request(account, subject, await bearer(account));
+  const requestId = applied.body.verificationRequest.id as string;
+  expect((await post(`/v1/verification-requests/${requestId}:approve`, await bearer(staff), {})).response.status).toBe(
+    200,
+  );
+  const decision = (await readAgentVerificationWorkflowRequest(pool, requestId))!;
+  const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
+  const receipt = { kind: 'account-agent.verify' as const, account: account.id, receipt: workflow.receiptId };
+  await recordPendingAgentVerification(pool, workflow, clock);
+  const before = await loadAccountIdentitySource(pool, receipt);
+  const job = await store.prepareAdmission(pool, {}, before.input);
+  for (let page = 0; page < 512; page++) {
+    const progress = await stepIdentityEpochAdmission(pool, job);
+    if (progress.state === 'pending') break;
+    expect(progress.state).toBe('preparing');
+    if (page === 511) throw new Error('Original Source admission did not finish');
+  }
+  const selection = { account: account.id, direction: receipt.kind, receipt: receipt.receipt };
+  const original = (await readOriginalAccountAgentIdentity(pool, selection))!;
+  expect(original.input).toEqual(before.input);
+  expect(original.job).toEqual(job);
+  expect(original.native.transactionId).not.toBe(before.transactionId);
+  await runCommand(pool, { partition: accountRoute >>> 4 }, async (tx) => {
+    expect(await verifyOriginalAccountAgentIdentity(tx, selection, { ...original })).toBe(false);
+    expect(await verifyOriginalAccountAgentIdentity(tx, selection, original)).toBe(true);
+    return noEffect(null);
+  });
+  await runCommand(pool, { partition: (accountRoute >>> 4) + 1 }, async (tx) => {
+    expect(await verifyOriginalAccountAgentIdentity(tx, selection, original)).toBe(false);
+    return noEffect(null);
+  });
+  // Model a restored old Accounts image that lost only its newer source table.
+  // All original commands, Source admission, job and native components are real.
+  const restore = await pool.connect();
+  try {
+    await restore.query('BEGIN');
+    await restore.query("SET LOCAL session_replication_role='replica'");
+    await restore.query(
+      `DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2
+      AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    );
+    await restore.query('COMMIT');
+  } finally {
+    restore.release();
+  }
+  const recovered = await loadAccountIdentitySource(pool, receipt);
+  expect(recovered.input).toEqual(before.input);
+  expect(recovered.digest).toBe(before.digest);
+  expect(recovered.transactionId).toBe(before.transactionId);
+  expect(recovered.epoch).toBe(before.epoch);
+  expect(recovered.position).toBe(before.position);
+  const association = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_recovery
+    WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    )
+  ).rows[0]!;
+  expect(association.original_source.native.transactionId).toBe(original.native.transactionId);
+  expect(association.original_source.job).toEqual({ jobId: job.jobId, epoch: job.epoch.toString() });
+  expect(association.source_transaction_id).toBe(before.transactionId);
+  expect(association.recovery_transaction_id).not.toBe(before.transactionId);
+  expect(association.recovery_transaction_id).not.toBe(original.native.transactionId);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBe(receipt.receipt);
+  await expect(probeAccountIdentityPublication(pool, receipt)).rejects.toThrow();
+  expect(await deliverAccountIdentity(pool, receipt)).toEqual(job);
+  await writeAgentVerificationPage(pool, workflow);
+  await completeAgentVerification(pool, workflow, clock);
+  await finishAgentVerification(pool, workflow, clock);
+  expect((await loadAccountIdentitySource(pool, receipt)).input).toEqual(before.input);
+  const copies = (
+    await pool.query(
+      `SELECT artifact_type,source_transaction_id FROM core.agent_identity_history_copy
+    WHERE partition_no=$1 AND source_account_id=$2 AND source_receipt_id=$3 AND source_transaction_id=$4`,
+      [accountRoute >>> 4, account.id, receipt.receipt, association.recovery_transaction_id],
+    )
+  ).rows;
+  expect(copies.map((copy) => copy.artifact_type).sort()).toEqual(['command-receipt/v1', 'outbox-event/v1']);
+  await expect(
+    pool.query(
+      `UPDATE access.agent_identity_recovery SET original_source='{}'::jsonb
+    WHERE route=$1 AND account_id=$2`,
+      [accountRoute, account.id],
+    ),
+  ).rejects.toThrow('Immutable account identity source');
+  // Model another old-image loss, then permanently minimize the actual original
+  // payload. Published Source data cannot recreate a purged Account receipt.
+  const lost = await pool.connect();
+  try {
+    await lost.query('BEGIN');
+    await lost.query("SET LOCAL session_replication_role='replica'");
+    await lost.query('DELETE FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await lost.query('DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await lost.query('COMMIT');
+  } finally {
+    lost.release();
+  }
+  await pool.query(
+    `UPDATE core.receipt SET payload_state='minimized',response='null'::jsonb
+    WHERE partition_no=$1 AND transaction_id=$2`,
+    [accountRoute >>> 4, before.transactionId],
+  );
+  expect(
+    await readOriginalAccountAgentIdentity(pool, {
+      account: account.id,
+      direction: receipt.kind,
+      receipt: receipt.receipt,
+    }),
+  ).not.toBeNull();
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow('Accounts pending source required');
+  expect(
+    (
+      await pool.query('SELECT 1 FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+});
+
+test('accepted original Source cannot recover verification without the independent original Global decision write basis', async () => {
+  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
+  const { readOriginalAccountAgentIdentity } = await import('../../src/semantic/account-agent-identity-recovery.ts');
+  const account = await seedAccount(`no_basis_${randomUUID().slice(0, 8)}`);
+  const subject = await catalogueSubject('schema:Person', 'Original decision custody');
+  await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName });
+  const applied = await request(account, subject, await bearer(account));
+  const requestId = applied.body.verificationRequest.id as string;
+  expect((await post(`/v1/verification-requests/${requestId}:approve`, await bearer(staff), {})).response.status).toBe(
+    200,
+  );
+  const decision = (await readAgentVerificationWorkflowRequest(pool, requestId))!;
+  const receipt = { kind: 'account-agent.verify' as const, account: account.id, receipt: decision.decisionReceiptId! };
+  await recordPendingAgentVerification(pool, { ...decision, receiptId: receipt.receipt }, clock);
+  const source = await loadAccountIdentitySource(pool, receipt);
+  const job = await store.prepareAdmission(pool, {}, source.input);
+  for (let page = 0; page < 512; page++) {
+    const progress = await stepIdentityEpochAdmission(pool, job);
+    if (progress.state === 'pending') break;
+    expect(progress.state).toBe('preparing');
+    if (page === 511) throw new Error('Original Source admission did not finish');
+  }
+  expect(
+    await readOriginalAccountAgentIdentity(pool, {
+      account: account.id,
+      direction: receipt.kind,
+      receipt: receipt.receipt,
+    }),
+  ).not.toBeNull();
+  const restore = await pool.connect();
+  try {
+    await restore.query('BEGIN');
+    await restore.query("SET LOCAL session_replication_role='replica'");
+    await restore.query('DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2', [
+      accountRoute,
+      account.id,
+    ]);
+    await restore.query('DELETE FROM editorial.write_basis WHERE partition_no=0 AND transaction_id=$1', [
+      receipt.receipt,
+    ]);
+    await restore.query('COMMIT');
+  } finally {
+    restore.release();
+  }
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow('missing original Global decision');
+  expect(
+    (
+      await pool.query('SELECT 1 FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBe(receipt.receipt);
+});

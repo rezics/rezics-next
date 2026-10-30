@@ -25,7 +25,10 @@ import type {
 import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
-import { recoverMissingAccountIdentitySource } from './agent-verification-identity-recovery.ts';
+import {
+  recoverMissingAccountIdentitySource,
+  originalRecoveredAccountIdentitySource,
+} from './agent-verification-identity-recovery.ts';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type Source = {
@@ -89,7 +92,7 @@ export function originalAccountIdentitySource(
   digest: string,
 ): OriginalIdentity {
   const command = currentCommand(tx);
-  const original = originalIdentities.get(tx);
+  const original = originalIdentities.get(tx) ?? originalRecoveredAccountIdentitySource(tx);
   if (
     !original ||
     original.transactionId !== command.transactionId ||
