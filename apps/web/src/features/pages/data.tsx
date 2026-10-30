@@ -819,7 +819,11 @@ export function SubjectSourcesLink() {
   const value = useContext(overview.OverviewContext);
   if (!subject) return null;
   const href = subjectHref({ id: subject, label: value?.subjectLabel ?? '' }, locale).href;
-  return <p className="text-sm"><Link href={`${href}/sources`}>{m.sources_open_detail({}, { locale: locale as never })}</Link></p>;
+  return (
+    <p className="text-sm">
+      <Link href={`${href}/sources`}>{m.sources_open_detail({}, { locale: locale as never })}</Link>
+    </p>
+  );
 }
 
 function useNodeRead(id: unknown) {

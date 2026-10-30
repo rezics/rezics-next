@@ -240,14 +240,14 @@ export function SubjectFrame({
         </div>
       </header>
       {navigation ?? (
-      <ViewTabs
-        tabs={withCurrent(tabs, view)}
-        active={view}
-        locale={locale}
-        base={tabBase ?? base}
-        labels={tabLabels}
-        realm={realm}
-      />
+        <ViewTabs
+          tabs={withCurrent(tabs, view)}
+          active={view}
+          locale={locale}
+          base={tabBase ?? base}
+          labels={tabLabels}
+          realm={realm}
+        />
       )}
     </div>
   );

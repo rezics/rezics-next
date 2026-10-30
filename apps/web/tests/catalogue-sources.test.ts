@@ -3,7 +3,11 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { SubjectSourcesPage } from '../src/features/catalogue/subject-sources-page';
-import { explainSubjectSources, readSubjectSources, type SourcesResult } from '../src/features/catalogue/subject-sources';
+import {
+  explainSubjectSources,
+  readSubjectSources,
+  type SourcesResult,
+} from '../src/features/catalogue/subject-sources';
 import { catalogueSourcesFixture, citationUrl, sourceDefinitions } from '../src/kernel/fake/catalogue-sources';
 
 const render = (result: SourcesResult) => renderToString(createElement(SubjectSourcesPage, { result, locale: 'en' }));
@@ -22,7 +26,9 @@ test('Explain the currently selected subject facts and their sources through the
   expect(html).toContain('CC0-1.0');
   expect(html).toContain(`href="${result.page.href}/details?candidateField=schema%3AdatePublished#candidate-review"`);
   expect(html).toContain(`href="${result.page.href}"`);
-  expect(fixture.calls).toEqual([{ path: `/v1/subjects/${fixture.id}`, authorization: null, session: 'sources-session' }]);
+  expect(fixture.calls).toEqual([
+    { path: `/v1/subjects/${fixture.id}`, authorization: null, session: 'sources-session' },
+  ]);
   expect(fixture.calls.some(({ path }) => /candidates|revisions|source-records/.test(path))).toBe(false);
   for (const kind of ['denied', 'invalid', 'conflict', 'unavailable'] as const) {
     const refused = catalogueSourcesFixture(kind);
@@ -32,9 +38,16 @@ test('Explain the currently selected subject facts and their sources through the
     expect(render(failed)).not.toContain(citationUrl);
     refused.recover();
     expect((await readSubjectSources(refused.client, refused.id, 'en', sourceDefinitions)).kind).toBe('ready');
-    expect(refused.calls[1]).toMatchObject({ path: `/v1/subjects/${fixture.id}`, session: 'current-sources-session', authorization: null });
+    expect(refused.calls[1]).toMatchObject({
+      path: `/v1/subjects/${fixture.id}`,
+      session: 'current-sources-session',
+      authorization: null,
+    });
   }
-  const missing = createKernelClient('http://sources.test', { fetch: (async () => new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })) as typeof fetch });
+  const missing = createKernelClient('http://sources.test', {
+    fetch: (async () =>
+      new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } })) as typeof fetch,
+  });
   expect(await readSubjectSources(missing, fixture.id, 'en')).toEqual({ kind: 'missing' });
 });
 
@@ -61,13 +74,70 @@ test('only selected disclosed values and their reference parts are explained; hi
   const statements = fixture.read.subject.statements;
   const current = statements['schema:isbn']![0]!;
   current.rank = 'preferred';
-  statements['schema:isbn']!.push({ ...current, rank: 'normal', value: { type: 'value', content: 'superseded-private-value' }, references: [{ hash: 'debug', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://hidden.example/old' } }] }] });
-  statements['schema:author'] = [{ ...current, property: { id: 'schema:author', data_type: 'wikibase-item' }, value: { type: 'value', content: 'concealed-target' }, references: [{ hash: 'debug', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://hidden.example/target' } }] }] }];
-  statements['schema:abstract'] = [{ ...current, property: { id: 'schema:abstract', data_type: 'document' }, value: { type: 'value', content: { language: 'en', document: 'document-debug-id', digest: 'private-digest' } } }];
-  statements['schema:keywords'] = [{ ...current, value: { type: 'value', content: 'spoiler-secret' }, qualifiers: [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '2', unit: '1' } } }] }];
+  statements['schema:isbn']!.push({
+    ...current,
+    rank: 'normal',
+    value: { type: 'value', content: 'superseded-private-value' },
+    references: [
+      {
+        hash: 'debug',
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: 'https://hidden.example/old' },
+          },
+        ],
+      },
+    ],
+  });
+  statements['schema:author'] = [
+    {
+      ...current,
+      property: { id: 'schema:author', data_type: 'wikibase-item' },
+      value: { type: 'value', content: 'concealed-target' },
+      references: [
+        {
+          hash: 'debug',
+          parts: [
+            {
+              property: { id: 'schema:url', data_type: 'url' },
+              value: { type: 'value', content: 'https://hidden.example/target' },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  statements['schema:abstract'] = [
+    {
+      ...current,
+      property: { id: 'schema:abstract', data_type: 'document' },
+      value: { type: 'value', content: { language: 'en', document: 'document-debug-id', digest: 'private-digest' } },
+    },
+  ];
+  statements['schema:keywords'] = [
+    {
+      ...current,
+      value: { type: 'value', content: 'spoiler-secret' },
+      qualifiers: [
+        {
+          property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+          value: { type: 'value', content: { amount: '2', unit: '1' } },
+        },
+      ],
+    },
+  ];
   const result = explainSubjectSources(fixture.read, 'en', sourceDefinitions);
   const serialized = JSON.stringify(result);
-  for (const secret of ['superseded-private-value', 'hidden.example', 'concealed-target', 'document-debug-id', 'private-digest', 'spoiler-secret']) expect(serialized).not.toContain(secret);
+  for (const secret of [
+    'superseded-private-value',
+    'hidden.example',
+    'concealed-target',
+    'document-debug-id',
+    'private-digest',
+    'spoiler-secret',
+  ])
+    expect(serialized).not.toContain(secret);
   const html = render({ kind: 'ready', page: result });
   expect(html).toContain('Authored text');
   expect(html).toContain('9780156012195');

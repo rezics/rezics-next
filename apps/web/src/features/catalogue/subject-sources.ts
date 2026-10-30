@@ -1,6 +1,16 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickLanguage } from '@rezics/composition';
-import { bestRank, fieldLabel, isRecord, pageText, spoilerLevel, webUrl, type Snak, type Sources, type Stmt } from '../pages/shared';
+import {
+  bestRank,
+  fieldLabel,
+  isRecord,
+  pageText,
+  spoilerLevel,
+  webUrl,
+  type Snak,
+  type Sources,
+  type Stmt,
+} from '../pages/shared';
 import { candidateSourceRecords } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { defaultReader } from '../../subject/reader';
@@ -45,70 +55,138 @@ function presentable(snak: Snak, related: Related): boolean {
   if (!literalTypes.has(snak.property.data_type)) return false;
   const content = snak.value.content;
   if (snak.property.data_type === 'wikibase-item')
-    return typeof content === 'string' && Object.hasOwn(related, content) && !!Object.keys(related[content]?.labels ?? {}).length;
+    return (
+      typeof content === 'string' &&
+      Object.hasOwn(related, content) &&
+      !!Object.keys(related[content]?.labels ?? {}).length
+    );
   if (snak.property.data_type === 'url') return typeof content === 'string' && webUrl(content);
   return typeof content === 'string' || isRecord(content);
 }
 
 /** Only the CURRENT anonymous subject read is input. Definition labels never confer disclosure. */
-export function explainSubjectSources(read: SubjectRead, locale: string, definitions?: SourceDefinitions): SourcesPageData {
+export function explainSubjectSources(
+  read: SubjectRead,
+  locale: string,
+  definitions?: SourceDefinitions,
+): SourcesPageData {
   const { subject } = read;
   const original = originalLanguage(subject);
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
   const related = read.related as Related;
-  const labelFor = (id: string) => fieldLabel(pageText(
-    (Object.hasOwn(related, id) ? related[id]?.labels : undefined) ?? definitions?.properties[id]?.labels,
-    locale,
-  ), locale);
-  const parts = (snaks: Snak[]): SourcePart[] => snaks.flatMap((snak) =>
-    presentable(snak, related) ? [{ label: labelFor(snak.property.id), snak: { property: snak.property, value: snak.value } }] : [],
-  );
+  const labelFor = (id: string) =>
+    fieldLabel(
+      pageText(
+        (Object.hasOwn(related, id) ? related[id]?.labels : undefined) ?? definitions?.properties[id]?.labels,
+        locale,
+      ),
+      locale,
+    );
+  const parts = (snaks: Snak[]): SourcePart[] =>
+    snaks.flatMap((snak) =>
+      presentable(snak, related)
+        ? [{ label: labelFor(snak.property.id), snak: { property: snak.property, value: snak.value } }]
+        : [],
+    );
   const fields: SourceField[] = [];
   for (const [property, statements] of Object.entries(subject.statements)) {
-    let selected = bestRank(statements as Stmt[]).filter((statement) => spoilerLevel(statement) <= defaultReader.spoilerLevel);
+    let selected = bestRank(statements as Stmt[]).filter(
+      (statement) => spoilerLevel(statement) <= defaultReader.spoilerLevel,
+    );
     const languages = selected.flatMap(({ property, value }) =>
-      property.data_type === 'document' && value.type === 'value' && isRecord(value.content) && typeof value.content.language === 'string'
-        ? [value.content.language] : [],
+      property.data_type === 'document' &&
+      value.type === 'value' &&
+      isRecord(value.content) &&
+      typeof value.content.language === 'string'
+        ? [value.content.language]
+        : [],
     );
     const language = pickLanguage(languages, locale, original);
-    selected = selected.filter(({ property, value }) => property.data_type !== 'document' || !isRecord(value.content) || value.content.language === language);
+    selected = selected.filter(
+      ({ property, value }) =>
+        property.data_type !== 'document' || !isRecord(value.content) || value.content.language === language,
+    );
     const facts = selected.flatMap((statement): SourceFact[] => {
       const locator = statement.property.data_type === 'document' || statement.property.data_type === 'media';
       if (!locator && !presentable(statement, related)) return [];
-      return [{
-        // Locators and digests do not cross the presentation boundary.
-        snak: { property: statement.property, value: locator ? { type: 'somevalue' } : statement.value },
-        qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
-        citations: statement.references.map(({ parts: citation }) => parts(citation)).filter((citation) => citation.length > 0),
-      }];
+      return [
+        {
+          // Locators and digests do not cross the presentation boundary.
+          snak: { property: statement.property, value: locator ? { type: 'somevalue' } : statement.value },
+          qualifiers: parts(statement.qualifiers.filter((snak) => snak.property.id !== 'rezics:spoilerLevel')),
+          citations: statement.references
+            .map(({ parts: citation }) => parts(citation))
+            .filter((citation) => citation.length > 0),
+        },
+      ];
     });
     if (!facts.length) continue;
     const relation = definitions?.properties[property]?.relation;
     // Reuse the existing descriptive-slot candidate picker. Edge slots need a separate target address.
     const comparable = definitions?.properties[property] && (!relation || relation.group === 'classification');
-    fields.push({ property, label: labelFor(property), facts, ...(comparable ? {
-      compareHref: `${subjectViewHref(identity, locale, 'details')}?candidateField=${encodeURIComponent(property)}#candidate-review`,
-    } : {}) });
+    fields.push({
+      property,
+      label: labelFor(property),
+      facts,
+      ...(comparable
+        ? {
+            compareHref: `${subjectViewHref(identity, locale, 'details')}?candidateField=${encodeURIComponent(property)}#candidate-review`,
+          }
+        : {}),
+    });
   }
   return {
-    id: subject.id, title,
+    id: subject.id,
+    title,
     typeLabel: pageText(definitions?.types[subject.type]?.labels, locale),
     href: subjectHref(identity, locale).href,
     sourcesHref: subjectViewHref(identity, locale, 'sources'),
-    fields, related,
-    sources: { credit: read.summary?.cover?.credit ?? null, records: candidateSourceRecords(subject).filter((record) => record.name.trim() && webUrl(record.url)).map((record) => ({
-      ...record, ...(record.licence ? { licence: { id: record.licence.id, ...(record.licence.url && webUrl(record.licence.url) ? { url: record.licence.url } : {}) } } : {}),
-    })), urls: [], identifiers: [] },
+    fields,
+    related,
+    sources: {
+      credit: read.summary?.cover?.credit ?? null,
+      records: candidateSourceRecords(subject)
+        .filter((record) => record.name.trim() && webUrl(record.url))
+        .map((record) => ({
+          ...record,
+          ...(record.licence
+            ? {
+                licence: {
+                  id: record.licence.id,
+                  ...(record.licence.url && webUrl(record.licence.url) ? { url: record.licence.url } : {}),
+                },
+              }
+            : {}),
+        })),
+      urls: [],
+      identifiers: [],
+    },
   };
 }
 
 function failure(status: number): SourcesFailure {
-  return { kind: status === 404 ? 'missing' : status === 401 || status === 403 ? 'denied' : status === 400 || status === 422 ? 'invalid' : status === 409 ? 'conflict' : 'unavailable' };
+  return {
+    kind:
+      status === 404
+        ? 'missing'
+        : status === 401 || status === 403
+          ? 'denied'
+          : status === 400 || status === 422
+            ? 'invalid'
+            : status === 409
+              ? 'conflict'
+              : 'unavailable',
+  };
 }
 
 /** The generated client retains Kernel session tokens. No bearer, candidate overlay or history is requested. */
-export async function readSubjectSources(client: KernelClient, id: string, locale: string, definitions?: SourceDefinitions | Promise<SourceDefinitions | undefined>): Promise<SourcesResult> {
+export async function readSubjectSources(
+  client: KernelClient,
+  id: string,
+  locale: string,
+  definitions?: SourceDefinitions | Promise<SourceDefinitions | undefined>,
+): Promise<SourcesResult> {
   if (!uuid.test(id)) return { kind: 'missing' };
   try {
     let current = await client.subjects({ id }).get({ fetch: { redirect: 'manual' } });

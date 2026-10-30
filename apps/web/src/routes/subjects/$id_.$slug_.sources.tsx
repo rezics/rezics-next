@@ -32,7 +32,16 @@ function SourcesRoute() {
   const result = Route.useLoaderData();
   const router = useRouter();
   const busy = useRouterState({ select: (state) => state.isLoading });
-  return <SubjectSourcesPage result={result} locale={getLocale()} busy={busy} onRetry={() => { void router.invalidate(); }} />;
+  return (
+    <SubjectSourcesPage
+      result={result}
+      locale={getLocale()}
+      busy={busy}
+      onRetry={() => {
+        void router.invalidate();
+      }}
+    />
+  );
 }
 
 function SourcesError({ reset }: { reset: () => void }) {
