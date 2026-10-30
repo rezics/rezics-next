@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountKind } from './account-data.ts';
-import { classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
+import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
@@ -47,8 +48,19 @@ function keys(ids: readonly string[], partition?: number) {
 function claimRoute(handle: string): number {
   return createHash('sha256').update(handle, 'utf8').digest().readUInt16BE(0);
 }
+async function requireHomes(client: Pick<PoolClient, 'query'>, routes: readonly number[]) {
+  const homes = [...new Set(routes.map(partitionOf))];
+  const owners = new Map((await readPartitions(client, homes)).map((owner) => [owner.partitionNo, owner]));
+  for (const home of homes) {
+    const owner = owners.get(home);
+    if (!owner) throw new CommandUnavailableError('contention', home);
+    if (owner.writeState !== 'active')
+      throw new CommandUnavailableError(owner.writeState === 'moved' ? 'moved' : 'fenced', home, owner.movedTo);
+  }
+}
 async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType<typeof keys>) {
   if (!requested.length) return [];
+  await requireHomes(client, requested.map(({ route }) => route));
   return (
     await client.query<AccountRow>(
       `SELECT ${columns} FROM access.account
@@ -61,6 +73,9 @@ async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType
 async function claims(client: Pick<PoolClient, 'query'>, rows: readonly AccountRow[]) {
   const handles = [...new Set(rows.flatMap(({ handle }) => (handle === null ? [] : [handle])))];
   if (!handles.length) return new Map<string, ClaimRow>();
+  // An unavailable exact-claim home cannot turn a named Account into an
+  // apparently handleless identity. Account and claim reads share this DB snapshot.
+  await requireHomes(client, handles.map(claimRoute));
   const found = await client.query<ClaimRow>(
     `SELECT route, normalized_handle AS handle, account_id::text AS id,
        discovery_revision::text AS revision FROM access.handle_claim
