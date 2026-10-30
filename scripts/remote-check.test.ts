@@ -287,7 +287,7 @@ const readMultiMarkers = () => readdirSync(dir)
   .sort((left, right) => left.beganAt - right.beganAt || left.sequence - right.sequence);
 const readLandingMarkers = () => readdirSync(dir)
   .filter((name) => name.startsWith(landingMarkerPrefix))
-  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; sequence: number })
+  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; estimateMs: number | null; memoryBytes: number; sequence: number })
   .sort((left, right) => Number(left.sequence) - Number(right.sequence));
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
@@ -335,6 +335,9 @@ if (script.includes('/proc/loadavg')) {
   const landingMarkers = readLandingMarkers();
   const landingWaitingSlots = landingMarkers[0]?.slots ?? 0;
   const landingWaitingId = landingMarkers[0]?.id ?? '-';
+  const landingWaitingStarted = landingMarkers[0]?.arrivalOrder ?? '-';
+  const landingWaitingEstimate = landingMarkers[0]?.estimateMs ?? -1;
+  const landingWaitingMemory = landingMarkers[0]?.memoryBytes ?? Math.round(2.5 * 2 ** 30);
   const probeScriptFile = dir + '/' + hostKey + '.probe-script-recorded';
   const probeEvent = {
     kind: 'probe',
@@ -355,6 +358,9 @@ if (script.includes('/proc/loadavg')) {
     multiWaitingId,
     landingWaitingSlots,
     landingWaitingId,
+    landingWaitingStarted,
+    landingWaitingEstimate,
+    landingWaitingMemory,
     landingMarkers,
     landingMarkerFiles: readdirSync(dir).filter((name) => name.startsWith(landingMarkerPrefix)),
   };
@@ -377,6 +383,9 @@ if (script.includes('/proc/loadavg')) {
   console.log('MULTI_SLOT_WAITING_ID ' + multiWaitingId);
   console.log('LANDING_WAITING_SLOTS ' + landingWaitingSlots);
   console.log('LANDING_WAITING_ID ' + landingWaitingId);
+  console.log('LANDING_WAITING_STARTED ' + landingWaitingStarted);
+  console.log('LANDING_WAITING_ESTIMATE_MS ' + landingWaitingEstimate);
+  console.log('LANDING_WAITING_MEMORY_BYTES ' + landingWaitingMemory);
 } else if (script.includes('REMOTE_CHECK_GATE_MARKER')) {
   const lock = dir + '/' + hostKey + '.gate-marker';
   if (existsSync(lock)) process.exit(75);
@@ -421,13 +430,16 @@ if (script.includes('/proc/loadavg')) {
   const id = script.match(/# REMOTE_CHECK_LANDING_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
   const slots = Number(script.split('\\n').find((line) => line.startsWith('# REMOTE_CHECK_LANDING_COUNT '))?.split(' ').at(-1) ?? 0);
   const arrivalOrder = script.split('\\n').find((line) => line.startsWith('# REMOTE_CHECK_LANDING_ARRIVAL '))?.split(' ').at(-1) ?? '0';
+  const estimateValue = script.match(/# REMOTE_CHECK_LANDING_ESTIMATE_MS (none|\\d+)/)?.[1] ?? 'none';
+  const estimateMs = estimateValue === 'none' ? null : Number(estimateValue);
+  const memoryBytes = Number(script.match(/# REMOTE_CHECK_LANDING_MEMORY_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
   const marker = dir + '/' + landingMarkerPrefix + id;
   if (existsSync(marker)) process.exit(75);
   const sequence = count('landing-marker-sequence');
   const beganAt = Number(readFileSync(dir + '/clock', 'utf8'));
-  writeFileSync(marker, JSON.stringify({ id, slots, beganAt, arrivalOrder, sequence }));
+  writeFileSync(marker, JSON.stringify({ id, slots, beganAt, arrivalOrder, estimateMs, memoryBytes, sequence }));
   writeFileSync(landingMarkerIndex, '1');
-  log({ kind: 'landing-marker', id, slots, arrivalOrder, fakeStartedAt: beganAt, sequence });
+  log({ kind: 'landing-marker', id, slots, arrivalOrder, estimateMs, memoryBytes, fakeStartedAt: beganAt, sequence });
   console.log('LANDING_MARKER');
   const release = (reason = 'stdin-end') => {
     rmSync(marker, { force: true });
@@ -465,13 +477,17 @@ if (script.includes('/proc/loadavg')) {
     script.match(/# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT (\\d+)/)?.[1] ?? ordinaryCapacity,
   );
   const isGate = script.includes('# REMOTE_CHECK_GATE_REQUEST 1');
-  const priority = script.match(/# REMOTE_CHECK_PRIORITY (landing|ordinary)/)?.[1] ?? 'ordinary';
+  const priority = script.match(/# REMOTE_CHECK_PRIORITY (landing|critical|ordinary)/)?.[1] ?? 'ordinary';
   const waiterIdValue = script.match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1];
   const waiterId = waiterIdValue && waiterIdValue !== '-' ? waiterIdValue : undefined;
   const landingIdValue = script.match(/# REMOTE_CHECK_LANDING_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1];
   const landingId = landingIdValue && landingIdValue !== '-' ? landingIdValue : undefined;
   if (waiterId && existsSync(dir + '/' + hostKey + '.hold-multi-grant')) {
     log({ kind: 'slot', granted: false, reason: 'held-multi-grant', requested, call, slotClass, script });
+    process.exit(75);
+  }
+  if (priority !== 'ordinary' && config.holdLandingGrant) {
+    log({ kind: 'slot', granted: false, reason: 'held-priority-grant', requested, call, slotClass, script });
     process.exit(75);
   }
   const gateWaiting = existsSync(dir + '/' + hostKey + '.gate-marker');
@@ -483,8 +499,20 @@ if (script.includes('/proc/loadavg')) {
   if (gateWaiting) {
     actualAdmissionLimit = isGate ? ordinaryCapacity : ordinaryCapacity - Math.max(0, ordinaryCapacity - 1);
   } else if (!isGate && oldestLanding) {
-    if (priority === 'landing' && landingId === oldestLanding.id) actualAdmissionLimit = ordinaryCapacity;
-    else actualAdmissionLimit = 0;
+    const occupiedSlots = Array.from({ length: ordinaryCapacity }, (_, index) => index)
+      .filter((index) => existsSync(dir + '/' + hostKey + '.slot.' + index));
+    const reserved = occupiedSlots.reduce((sum, index) => sum + Number(readFileSync(dir + '/' + hostKey + '.slot.' + index + '.memory', 'utf8') || 0), 0)
+      + (existsSync(dir + '/' + hostKey + '.slot.express') ? Number(readFileSync(dir + '/' + hostKey + '.slot.express.memory', 'utf8') || 0) : 0);
+    const opportunityMs = Math.min(
+      Math.max(1, Number(process.env.REMOTE_CHECK_POLL_MS ?? 5000)),
+      Math.max(1, Math.min(oldestLanding.estimateMs ?? 3 * 60 * 60 * 1000, 3 * 60 * 60 * 1000)),
+    );
+    const expired = Date.now() - Number(oldestLanding.arrivalOrder) >= opportunityMs;
+    const headFits = ordinaryCapacity - occupiedSlots.length >= oldestLanding.slots
+      && reserved + oldestLanding.memoryBytes <= (config.memoryMax ?? (16 * 2 ** 30));
+    if (priority !== 'ordinary' && landingId === oldestLanding.id) actualAdmissionLimit = ordinaryCapacity;
+    else if (!expired && headFits) actualAdmissionLimit = Math.max(0, ordinaryCapacity - oldestLanding.slots);
+    else actualAdmissionLimit = ordinaryCapacity;
   } else if (!isGate && multiMarkers.length > 0) {
     const oldest = multiMarkers[0]!;
     if (waiterId === oldest.id) actualAdmissionLimit = ordinaryCapacity;
@@ -532,7 +560,7 @@ if (script.includes('/proc/loadavg')) {
     if (expressOccupied) occupiedCount += 1;
     else selected.push('express');
   }
-  if (waitBehindOlderMulti || (priority === 'landing' && (gateWaiting || (oldestLanding && landingId !== oldestLanding.id))) || occupiedCount + selected.length > slotLimit || selected.length < requested) {
+  if (waitBehindOlderMulti || (priority !== 'ordinary' && gateWaiting) || occupiedCount + selected.length > slotLimit || selected.length < requested) {
     rmSync(taking, { recursive: true, force: true });
     log({ kind: 'slot', granted: false, reason: 'capacity', requested, slotClass, script, occupied: occupiedCount, slotLimit, call });
     process.exit(75);
@@ -686,6 +714,7 @@ type HostConfig = {
   ordinaryBusy?: number;
   busyMemoryGiB?: number;
   expressBusy?: boolean;
+  holdLandingGrant?: boolean;
   down?: boolean;
   exit?: number;
   transportFailures?: number;
@@ -868,6 +897,52 @@ function slotScriptFor(rootPath: string, slots: number, shortRun = false, gate =
   ).replaceAll('/srv/rezics-check', rootPath);
 }
 
+function nativeSlotScript(
+  rootPath: string,
+  options: {
+    slots?: number;
+    count?: number;
+    slotLimit?: number;
+    ordinaryCapacity?: number;
+    ordinaryAdmissionLimit?: number;
+    memoryMaxGiB?: number;
+    memoryReservationBytes?: number;
+    shortRun?: boolean;
+    estimateMs?: number;
+    gate?: boolean;
+    priority?: 'landing' | 'critical';
+    multiWaiterId?: string;
+    landingWaiterId?: string;
+    pollMs?: number;
+  } = {},
+): string {
+  const slots = options.slots ?? 4;
+  const ordinaryCapacity = options.ordinaryCapacity ?? slots - 1;
+  return slotScript(
+    {
+      name: 'test',
+      address: 'test',
+      identity: 'test',
+      memoryMaxGiB: options.memoryMaxGiB ?? 16,
+      cpuQuotaPercent: 800,
+      slots,
+      processorsPerSlot: 2,
+    },
+    options.count ?? 1,
+    options.slotLimit ?? slots,
+    ordinaryCapacity,
+    options.ordinaryAdmissionLimit ?? ordinaryCapacity,
+    options.shortRun ?? false,
+    options.estimateMs,
+    options.gate ?? false,
+    options.priority,
+    options.multiWaiterId,
+    options.memoryReservationBytes ?? CHECK_SLOT_MEMORY_BYTES,
+    options.landingWaiterId,
+    options.pollMs ?? 5000,
+  ).replaceAll('/srv/rezics-check', rootPath);
+}
+
 function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<string, string> {
   const bin = join(testRoot, 'bin');
   mkdirSync(bin, { recursive: true });
@@ -882,11 +957,15 @@ function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<strin
 }
 
 async function waitForSlotToken(holder: ReturnType<typeof Bun.spawn>, count: number): Promise<void> {
+  await waitForOutput(holder, `SLOTS ${count}\n`);
+}
+
+async function waitForOutput(holder: ReturnType<typeof Bun.spawn>, token: string): Promise<void> {
   const reader = holder.stdout.getReader();
   let output = '';
-  while (!new RegExp(`SLOTS ${count}\\n`).test(output)) {
+  while (!output.includes(token)) {
     const part = await reader.read();
-    if (part.done) throw new Error(`slot script exited before granting: ${output}`);
+    if (part.done) throw new Error(`script exited before writing ${token}: ${output}`);
     output += new TextDecoder().decode(part.value);
   }
   reader.releaseLock();
@@ -4293,4 +4372,313 @@ test('critical priority: critical direct runs carry their class through admissio
   const refused = await remote({ ...invalid.env, REMOTE_CHECK_PRIORITY: 'urgent' }, workspace());
   expect(refused.code).toBe(1);
   expect(refused.stderr).toContain('REMOTE_CHECK_PRIORITY must be landing or critical');
+});
+
+test('admission backfill: ordinary execution starts in capacity the priority head cannot use this poll, with ranking and actual slot locks agreeing', async () => {
+  const { env, events } = scenario({
+    b: { available: 20e9, slots: 4, ordinaryBusySlots: [0, 1], holdLandingGrant: true },
+  });
+  env.REMOTE_CHECK_POLL_MS = '20';
+  const directory = workspace();
+  const landing = startRemote(
+    { ...env, REMOTE_CHECK_PRIORITY: 'landing' },
+    directory,
+    ['sh', '-c', 'echo stalled-two-slot-head'],
+    ['--slots', '2', '--estimate-ms', '60000'],
+  );
+  let ordinary: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'landing-marker'));
+    ordinary = startRemote(env, directory, ['sh', '-c', 'echo backfill-one-slot'], ['--estimate-ms', '120001']);
+    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo backfill-one-slot')));
+
+    const grant = events().find(
+      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+    )!;
+    const generatedLimit = Number(String(grant.script).match(/# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT (\d+)/)?.[1]);
+    expect(generatedLimit).toBe(3);
+    expect(grant.actualAdmissionLimit).toBe(generatedLimit);
+    expect(grant.slot).toBe(2);
+    expect(events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')).toBe(true);
+    expect(await ordinary.child.exited).toBe(0);
+  } finally {
+    for (const run of [ordinary, landing]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('admission backfill: a fitting priority head gets the first opportunity without indefinite exclusion by a stalled head', async () => {
+  const { env, events } = scenario({ b: { available: 20e9, slots: 2, holdLandingGrant: true } });
+  env.REMOTE_CHECK_POLL_MS = '1000';
+  const directory = workspace();
+  const landing = startRemote(
+    { ...env, REMOTE_CHECK_PRIORITY: 'landing' },
+    directory,
+    ['sh', '-c', 'echo stalled-one-slot-head'],
+    ['--estimate-ms', '600'],
+  );
+  let ordinary: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'landing-marker'));
+    const firstAttempt = events().find((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')!;
+    ordinary = startRemote(env, directory, ['sh', '-c', 'echo after-priority-opportunity'], ['--estimate-ms', '120001']);
+    await Bun.sleep(100);
+    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity'))).toBe(false);
+    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity')));
+
+    const landingMarker = events().find((event) => event.kind === 'landing-marker')!;
+    const ordinaryGrant = events().find(
+      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+    )!;
+    expect(firstAttempt).toBeDefined();
+    expect(Number(firstAttempt.call)).toBeLessThan(Number(ordinaryGrant.call));
+    expect(landingMarker.estimateMs).toBe(600);
+    expect(ordinaryGrant.actualAdmissionLimit).toBe(1);
+    expect(events().some((event) => event.kind === 'landing-marker-release')).toBe(false);
+    expect(await ordinary.child.exited).toBe(0);
+  } finally {
+    for (const run of [ordinary, landing]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('admission backfill: every host is freshly probed each poll and a previously overloaded host becomes eligible', async () => {
+  const { env, events } = scenario({
+    a: { available: 20e9, load: 13, sliceProcessors: 8, grantOnly: 0 },
+    b: { available: 20e9, grantOnly: 0 },
+  });
+  env.REMOTE_CHECK_POLL_MS = '20';
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '20';
+  const waitFile = join(env.FAKE_DIR!, 'admission-backfill-wait-ms');
+  env.GOAL_CHECK_WAIT_FILE = waitFile;
+  const directory = workspace();
+  const pending = startRemote(env, directory, ['sh', '-c', 'echo recovered-host']);
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 13));
+    const configFile = join(env.FAKE_DIR!, 'config.json');
+    const config = JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, HostConfig>;
+    config['ops@a.test']!.load = 0;
+    writeFileSync(configFile, JSON.stringify(config));
+    await waitFor(
+      () =>
+        events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 0).length >= 3 &&
+        events().filter((event) => event.kind === 'probe' && event.address === 'ops@b.test').length >= 3,
+    );
+    config['ops@a.test']!.grantOnly = 1;
+    writeFileSync(configFile, JSON.stringify(config));
+    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo recovered-host')));
+    const [, , stderr] = await Promise.all([pending.child.exited, pending.stdout, pending.stderr]);
+    expect(pending.child.exitCode).toBe(0);
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
+    const waits = stderr.split('\n').filter((line) => line.includes('remote-check: every check slot is busy; waiting'));
+    expect(waits.length).toBeGreaterThanOrEqual(2);
+    expect(waits.at(-1)).not.toContain('skipped a: load 13');
+  } finally {
+    try {
+      pending.child.kill('SIGTERM');
+    } catch {}
+    await pending.child.exited;
+    await Promise.all([pending.stdout, pending.stderr]);
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('admission backfill: abandoned marker holders are ignored without releasing a replacement live holder', async () => {
+  const testRoot = mkdtempSync(join(root, 'marker-replacement-'));
+  const hostRoot = join(testRoot, 'host');
+  const marker = join(hostRoot, 'slots', 'landing-wait-stale.lock');
+  const bin = join(testRoot, 'bin');
+  mkdirSync(join(hostRoot, 'slots'), { recursive: true });
+  mkdirSync(bin);
+  writeFileSync(marker, '');
+  const ready = join(testRoot, 'replacement-window');
+  const resume = join(testRoot, 'resume-cleanup');
+  writeFileSync(
+    join(bin, 'flock'),
+    `#!/bin/sh
+if [ "$1" = -n ] && [ "$2" = 7 ]; then
+  /usr/bin/flock "$@"
+  code=$?
+  if [ "$code" -eq 0 ] && [ ! -e "${resume}" ]; then
+    : > "${ready}"
+    while [ ! -e "${resume}" ]; do sleep 0.005; done
+  fi
+  exit "$code"
+fi
+exec /usr/bin/flock "$@"
+`,
+  );
+  chmodSync(join(bin, 'flock'), 0o755);
+  const environment = slotScriptEnvironment(testRoot);
+  environment.PATH = `${bin}:${environment.PATH}`;
+  environment.MARKER = marker;
+  const script = nativeSlotScript(hostRoot);
+  const take = Bun.spawn(['bash', '-c', script], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  take.stdin.write('replacement-race\n');
+  await take.stdin.flush();
+  let replacement: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    await waitFor(() => existsSync(ready));
+    rmSync(marker);
+    replacement = Bun.spawn(
+      ['bash', '-c', 'exec 8>>"$MARKER"; flock -n 8; printf "1 0 -1 2684354560 1\\n" >&8; echo REPLACEMENT; cat >/dev/null'],
+      { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+    );
+    await waitForOutput(replacement, 'REPLACEMENT\n');
+    writeFileSync(resume, '1');
+    await waitForSlotToken(take, 1);
+    expect(existsSync(marker)).toBe(true);
+    expect(spawnSync('/usr/bin/flock', ['-n', marker, '-c', 'true']).status).not.toBe(0);
+  } finally {
+    writeFileSync(resume, '1');
+    try {
+      await take.stdin.end();
+    } catch {}
+    await take.exited;
+    if (replacement) {
+      try {
+        await replacement.stdin.end();
+      } catch {}
+      await replacement.exited;
+    }
+  }
+  expect(existsSync(marker)).toBe(true);
+  expect(spawnSync('/usr/bin/flock', ['-n', marker, '-c', 'true']).status).toBe(0);
+});
+
+test('admission backfill: capacity, memory, gate and express reservations remain enforced under concurrent takes', async () => {
+  const testRoot = mkdtempSync(join(root, 'admission-concurrency-'));
+  const hostRoot = join(testRoot, 'host');
+  const environment = slotScriptEnvironment(testRoot);
+  const sentinel = join(hostRoot, 'slots', 'unrelated-held-marker.lock');
+  mkdirSync(join(hostRoot, 'slots'), { recursive: true });
+  const sentinelHolder = spawn('flock', ['-n', sentinel, 'sh', '-c', 'sleep 30']);
+  await Bun.sleep(25);
+
+  const concurrent = [0, 1].map(() =>
+    Bun.spawn(['bash', '-c', nativeSlotScript(hostRoot, { count: 2 })], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: environment,
+    }),
+  );
+  for (const holder of concurrent) {
+    holder.stdin.write(`concurrent-${concurrent.indexOf(holder)}\n`);
+    await holder.stdin.flush();
+  }
+  let winner: (typeof concurrent)[number] | undefined;
+  try {
+    await waitFor(() => concurrent.some((holder) => holder.exitCode === 75) && concurrent.some((holder) => holder.exitCode === null));
+    winner = concurrent.find((holder) => holder.exitCode === null)!;
+    await waitForSlotToken(winner, 2);
+    const held = [0, 1, 2].filter(
+      (slot) => spawnSync('/usr/bin/flock', ['-n', join(hostRoot, 'slots', `${slot}.lock`), '-c', 'true']).status !== 0,
+    );
+    expect(held).toHaveLength(2);
+    expect(existsSync(sentinel)).toBe(true);
+    expect(spawnSync('/usr/bin/flock', ['-n', sentinel, '-c', 'true']).status).not.toBe(0);
+  } finally {
+    for (const holder of concurrent) {
+      try {
+        await holder.stdin.end();
+      } catch {}
+      await holder.exited;
+    }
+  }
+  expect(spawnSync('/usr/bin/flock', ['-n', sentinel, '-c', 'true']).status).not.toBe(0);
+
+  const memoryRoot = join(testRoot, 'memory-host');
+  const memoryHolder = Bun.spawn(
+    ['bash', '-c', nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 6 * 2 ** 30 })],
+    { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
+  );
+  memoryHolder.stdin.write('memory-holder\n');
+  await memoryHolder.stdin.flush();
+  try {
+    await waitForSlotToken(memoryHolder, 1);
+    const memoryContender = spawnSync(
+      'bash',
+      ['-c', nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 4 * 2 ** 30 })],
+      { input: 'memory-contender\n', encoding: 'utf8', env: environment, timeout: 5000 },
+    );
+    expect(memoryContender.status).toBe(75);
+  } finally {
+    await memoryHolder.stdin.end();
+    expect(await memoryHolder.exited).toBe(0);
+  }
+
+  const gateRoot = join(testRoot, 'gate-host');
+  const gateMarker = join(gateRoot, 'slots', 'gate-wait.lock');
+  mkdirSync(join(gateRoot, 'slots'), { recursive: true });
+  const gateHolder = Bun.spawn(['bash', '-c', 'exec 8>>"$GATE_MARKER"; flock -n 8; echo GATE; cat >/dev/null'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...environment, GATE_MARKER: gateMarker },
+  });
+  try {
+    await waitForOutput(gateHolder, 'GATE\n');
+    const ordinary = Bun.spawn(['bash', '-c', nativeSlotScript(gateRoot)], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: environment,
+    });
+    ordinary.stdin.write('gate-remainder\n');
+    await ordinary.stdin.flush();
+    await waitForSlotToken(ordinary, 1);
+    expect(spawnSync('/usr/bin/flock', ['-n', join(gateRoot, 'slots', '1.lock'), '-c', 'true']).status).toBe(0);
+    await ordinary.stdin.end();
+    expect(await ordinary.exited).toBe(0);
+  } finally {
+    await gateHolder.stdin.end();
+    expect(await gateHolder.exited).toBe(0);
+  }
+
+  const expressRoot = join(testRoot, 'express-host');
+  mkdirSync(join(expressRoot, 'slots'), { recursive: true });
+  const blockers: ReturnType<typeof spawn>[] = [];
+  for (let slot = 0; slot < 3; slot += 1) {
+    const blocker = spawn('flock', ['-n', join(expressRoot, 'slots', `${slot}.lock`), 'sh', '-c', 'sleep 30']);
+    blockers.push(blocker);
+    await Bun.sleep(20);
+  }
+  const express = Bun.spawn(['bash', '-c', nativeSlotScript(expressRoot, { shortRun: true, estimateMs: 40 })], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  express.stdin.write('express-run\n');
+  await express.stdin.flush();
+  try {
+    await waitForSlotToken(express, 1);
+    expect(spawnSync('/usr/bin/flock', ['-n', join(expressRoot, 'slots', 'express.lock'), '-c', 'true']).status).not.toBe(0);
+    expect(spawnSync('/usr/bin/flock', ['-n', join(expressRoot, 'slots', '0.lock'), '-c', 'true']).status).not.toBe(0);
+  } finally {
+    await express.stdin.end();
+    expect(await express.exited).toBe(0);
+    for (const blocker of blockers) blocker.kill();
+    sentinelHolder.kill();
+  }
 });
