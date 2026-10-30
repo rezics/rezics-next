@@ -108,7 +108,7 @@ export function CandidateReview({
             }
           : next,
       );
-      setRequiresReload(false);
+      if (!cursor) setRequiresReload(false);
       if (field)
         setDrafts((previous) => ({
           ...previous,
@@ -313,7 +313,7 @@ export function CandidateReview({
                       <Button
                         variant="outline"
                         className="min-h-11"
-                        disabled={locked}
+                  disabled={locked || requiresReload}
                         onClick={() => void load(property, current.page!.next!)}
                       >
                         {m.candidate_more({}, options)}
