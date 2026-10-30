@@ -71,8 +71,7 @@ export class NativeCollectionWork {
       this.held[axis] += remaining[axis];
     }
     const settle = (receipt: WorkReceipt) => {
-      if (receipt.reservationId !== this.allowance.reservationId)
-        throw new TypeError('Foreign source work receipt');
+      if (receipt.reservationId !== this.allowance.reservationId) throw new TypeError('Foreign source work receipt');
       for (const axis of axes)
         if (!Number.isSafeInteger(receipt.used[axis]) || receipt.used[axis] < 0 || receipt.used[axis] > remaining[axis])
           throw new TypeError('Composed source exceeded its reservation');

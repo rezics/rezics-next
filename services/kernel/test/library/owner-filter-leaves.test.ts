@@ -109,13 +109,25 @@ test('label presence needs no profile while retained session and holding use the
   expect(matchOwnerFilterSupport({ presence: true }, copy, releases)).toBe(true);
   expect(matchOwnerFilterSupport({ holding: { profileId: pin.profileId } }, copy, releases)).toBe(true);
   expect(
-    matchOwnerFilterSupport({ holding: { profileId: pin.profileId, kind: kind.id, status: status.id } }, copy, releases),
+    matchOwnerFilterSupport(
+      { holding: { profileId: pin.profileId, kind: kind.id, status: status.id } },
+      copy,
+      releases,
+    ),
   ).toBe(true);
   expect(
-    matchOwnerFilterSupport({ holding: { profileId: pin.profileId, kind: 'another-kind', status: status.id } }, copy, releases),
+    matchOwnerFilterSupport(
+      { holding: { profileId: pin.profileId, kind: 'another-kind', status: status.id } },
+      copy,
+      releases,
+    ),
   ).toBe(false);
   expect(
-    matchOwnerFilterSupport({ holding: { profileId: pin.profileId, kind: kind.id, status: 'another-status' } }, copy, releases),
+    matchOwnerFilterSupport(
+      { holding: { profileId: pin.profileId, kind: kind.id, status: 'another-status' } },
+      copy,
+      releases,
+    ),
   ).toBe(false);
   expect(matchOwnerFilterSupport({ holding: { profileId: pin.profileId } }, copy, new Map())).toBe('not_proven');
 });
@@ -140,17 +152,24 @@ test('native evidence feeds every owner/catalogue leaf to the shared Boolean com
   const plan = compileCurrentOwnerFilter(filter);
   expect(plan.leaves).toHaveLength(6);
   const values = new Map(
-    plan.leaves.map((leaf) => [currentOwnerClauseKey(leaf), leaf.kind === 'catalogue' || 'presence' in leaf.leaf.owner]),
+    plan.leaves.map((leaf) => [
+      currentOwnerClauseKey(leaf),
+      leaf.kind === 'catalogue' || 'presence' in leaf.leaf.owner,
+    ]),
   );
   const label = plan.leaves.find((leaf) => leaf.kind === 'owner' && 'label' in leaf.leaf.owner)!;
   values.set(currentOwnerClauseKey(label), true);
   expect(evaluateOwnerFilterLeaves(plan, values)).toBe(true);
-  const stateKey = currentOwnerClauseKey(plan.leaves.find((leaf) => leaf.kind === 'owner' && 'state' in leaf.leaf.owner)!);
+  const stateKey = currentOwnerClauseKey(
+    plan.leaves.find((leaf) => leaf.kind === 'owner' && 'state' in leaf.leaf.owner)!,
+  );
   const unknown = new Map<string, boolean | 'not_proven'>(values);
   unknown.set(stateKey, 'not_proven');
   expect(evaluateOwnerFilterLeaves(plan, unknown)).toBe('not_proven');
   // Even a branch whose sibling is already true must have a current admitted result.
-  values.delete(currentOwnerClauseKey(plan.leaves.find((leaf) => leaf.kind === 'owner' && 'holding' in leaf.leaf.owner)!));
+  values.delete(
+    currentOwnerClauseKey(plan.leaves.find((leaf) => leaf.kind === 'owner' && 'holding' in leaf.leaf.owner)!),
+  );
   expect(() => evaluateOwnerFilterLeaves(plan, values)).toThrow('Incomplete owner-filter observations');
 });
 
@@ -166,10 +185,12 @@ test('catalogue partial/basis-changed evidence cannot become negative evidence u
     usage: { keys: 0, points: 0, witnesses: 0, rows: 0, bytes: 0, emptySeeks: 0 },
   };
   expect(matchOwnerFilterCatalogue(leaf, evidence)).toBe('not_proven');
-  expect(matchOwnerFilterCatalogue(leaf, { ...evidence, coverage: { kind: 'selection', basis: 'stale' } })).toBe('not_proven');
-  expect(
-    matchOwnerFilterCatalogue(leaf, { ...evidence, coverage: { kind: 'selection', basis: evidence.basis } }),
-  ).toBe(false);
+  expect(matchOwnerFilterCatalogue(leaf, { ...evidence, coverage: { kind: 'selection', basis: 'stale' } })).toBe(
+    'not_proven',
+  );
+  expect(matchOwnerFilterCatalogue(leaf, { ...evidence, coverage: { kind: 'selection', basis: evidence.basis } })).toBe(
+    false,
+  );
   expect(matchOwnerFilterCatalogue(leaf, { ...evidence, type: 'ex:Book' })).toBe(true);
   expect(matchOwnerFilterCatalogue(leaf, { state: 'basis_changed', usage: evidence.usage })).toBe('not_proven');
 });

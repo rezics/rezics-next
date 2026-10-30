@@ -257,10 +257,12 @@ function readEligibility(route: number, id: string, sink: Sink) {
   });
 }
 
-export function createCollectionReads(dependencies: PresentationDependencies & {
-  tokens: KeyRing;
-  workClient?: () => Promise<WorkClient>;
-}) {
+export function createCollectionReads(
+  dependencies: PresentationDependencies & {
+    tokens: KeyRing;
+    workClient?: () => Promise<WorkClient>;
+  },
+) {
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
   const builtins = createBuiltinRuntime({ pool });
@@ -480,9 +482,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       ...(options.limit === undefined ? {} : { limit: options.limit }),
     };
-    return logical
-      ? builtins.members(viewer, collectionId, page)
-      : listMembers(viewer, collectionId, page, deadline);
+    return logical ? builtins.members(viewer, collectionId, page) : listMembers(viewer, collectionId, page, deadline);
   }
 
   async function listMembers(

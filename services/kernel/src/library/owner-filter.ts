@@ -151,8 +151,7 @@ async function nativePoint<T>(
   } catch (error) {
     // Dispatched work remains charged when PostgreSQL cannot produce a row/EOF observation.
     reservation.settle();
-    if (error instanceof Error)
-      Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }
   reservation.settle({
@@ -207,13 +206,17 @@ function leafProvider(accountId: string, filter: FilterDocument, deadline: numbe
           nativeId(locator.sessionId);
           if (routeOf(locator.sessionId) !== route) return false;
           const input = { ...key, session_id: locator.sessionId };
-          return (await nativePoint(work, sessionPresence, input, 128, () => sessionPresence.run(client, input))) !== null;
+          return (
+            (await nativePoint(work, sessionPresence, input, 128, () => sessionPresence.run(client, input))) !== null
+          );
         }
         case 'holding': {
           nativeId(locator.copyId);
           if (routeOf(locator.copyId) !== route) return false;
           const input = { ...key, copy_id: locator.copyId };
-          return (await nativePoint(work, holdingPresence, input, 128, () => holdingPresence.run(client, input))) !== null;
+          return (
+            (await nativePoint(work, holdingPresence, input, 128, () => holdingPresence.run(client, input))) !== null
+          );
         }
       }
     },
@@ -227,7 +230,9 @@ function leafProvider(accountId: string, filter: FilterDocument, deadline: numbe
         case 'entry': {
           const size = await nativePoint(work, entrySize, key, 128, () => entrySize.run(client, key));
           if (size === null) return null;
-          const row = await nativePoint(work, entryPoint, key, pinProjectionBytes(size), () => entryPoint.run(client, key));
+          const row = await nativePoint(work, entryPoint, key, pinProjectionBytes(size), () =>
+            entryPoint.run(client, key),
+          );
           if (!row) return null;
           const sequence = row.ownerWriteSeq === null ? null : BigInt(row.ownerWriteSeq);
           if (sequence !== null && sequence <= 0n) throw new Error('Invalid native owner write sequence');
@@ -253,7 +258,9 @@ function leafProvider(accountId: string, filter: FilterDocument, deadline: numbe
           const input = { ...key, session_id: locator.sessionId };
           const size = await nativePoint(work, sessionSize, input, 128, () => sessionSize.run(client, input));
           if (size === null) return null;
-          const row = await nativePoint(work, sessionPoint, input, pinProjectionBytes(size), () => sessionPoint.run(client, input));
+          const row = await nativePoint(work, sessionPoint, input, pinProjectionBytes(size), () =>
+            sessionPoint.run(client, input),
+          );
           if (!row) return null;
           if (row.lifecycle !== 'active' && row.lifecycle !== 'completed' && row.lifecycle !== 'abandoned')
             throw new Error('Invalid native session lifecycle');
@@ -275,7 +282,9 @@ function leafProvider(accountId: string, filter: FilterDocument, deadline: numbe
           const input = { ...key, copy_id: locator.copyId };
           const size = await nativePoint(work, holdingSize, input, 128, () => holdingSize.run(client, input));
           if (size === null) return null;
-          const row = await nativePoint(work, holdingPoint, input, pinProjectionBytes(size), () => holdingPoint.run(client, input));
+          const row = await nativePoint(work, holdingPoint, input, pinProjectionBytes(size), () =>
+            holdingPoint.run(client, input),
+          );
           return row
             ? {
                 kind: 'holding',
@@ -321,7 +330,9 @@ export function matchOwnerFilterSupport(
   }
   if (fact.kind === 'session') {
     if (!progressUnit(profile, fact.mode, fact.unit)) return 'not_proven';
-    return 'session' in leaf && leaf.session.profileId === fact.pin?.profileId && leaf.session.lifecycle === fact.lifecycle;
+    return (
+      'session' in leaf && leaf.session.profileId === fact.pin?.profileId && leaf.session.lifecycle === fact.lifecycle
+    );
   }
   if (fact.copyKind === null || !hasCopyStatus(profile, fact.copyKind, fact.status)) return 'not_proven';
   return (
@@ -378,7 +389,10 @@ export function matchOwnerFilterCatalogue(
   const matches =
     leaf.clause.facet === 'type'
       ? evidence.type !== null && holdsCurrentType(evidence.type, leaf.clause)
-      : holdsCurrentStatements(evidence.facts.map((fact) => fact.statement), leaf.clause);
+      : holdsCurrentStatements(
+          evidence.facts.map((fact) => fact.statement),
+          leaf.clause,
+        );
   if (matches) return true;
   return evidence.coverage?.basis === evidence.basis && evidence.progress === null ? false : 'not_proven';
 }

@@ -39,8 +39,14 @@ import {
   type OwnerFilterNativeFact,
 } from './owner-filter.ts';
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey?: Uint8Array; clock?: KernelClock;
-  workClient?: () => Promise<WorkClient> };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  routeKey?: Uint8Array;
+  clock?: KernelClock;
+  workClient?: () => Promise<WorkClient>;
+};
 type Unavailable = Readonly<{ status: 'unavailable' }>;
 
 /** Private structural inputs to the Library matcher, never permission or an HTTP-supplied alias list.
@@ -86,8 +92,14 @@ export async function readOwnerFilterCandidateClosure(
 }
 
 const zero: WorkDimensions = {
-  candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, emptySeeks: 0,
-  nativePoints: 0, witnessKeys: 0, statements: 0, bytes: 0,
+  candidateKeys: 0,
+  nativeRows: 0,
+  identityMetadataRows: 0,
+  emptySeeks: 0,
+  nativePoints: 0,
+  witnessKeys: 0,
+  statements: 0,
+  bytes: 0,
 };
 const unavailable = () => new ProblemError('dependency_unavailable');
 
@@ -101,7 +113,8 @@ async function prepareSparsePage(
   // reserve owns the fenced operational transaction, exact definition bytes, durable intent and enqueue.
   // The caller never enqueues again, touches LRU on a duplicate, or claims a pending result is ready.
   const result = await createMembersPreparation({ pool: deps.pool, access: deps.access, workClient }).reserve(
-    binding.input.actor, binding.input.collectionId,
+    binding.input.actor,
+    binding.input.collectionId,
     [{ filter: admission.filter, sort: 'id', release: { digest: admission.releaseDigest, value: admission.release } }],
     { deadline: binding.input.deadline },
   );
@@ -143,10 +156,12 @@ export async function readOwnerFilterCandidate(
       const needed = plan.leaves.some((leaf) => {
         if (leaf.kind !== 'owner') return false;
         const owner = leaf.leaf.owner;
-        return ('state' in owner && locator.kind === 'entry') ||
+        return (
+          ('state' in owner && locator.kind === 'entry') ||
           ('label' in owner && locator.kind === 'label' && locator.labelId === owner.label.id) ||
           ('session' in owner && locator.kind === 'session') ||
-          ('holding' in owner && locator.kind === 'holding');
+          ('holding' in owner && locator.kind === 'holding')
+        );
       });
       // Presence uses independent fixed-width native liveness points, without hydrating a profile pin.
       if (!needed) continue;
@@ -178,9 +193,13 @@ export async function readOwnerFilterCandidate(
 }
 
 function compatible(before: CollectionSourceObservation, after: CollectionSourceObservation): boolean {
-  return before.collectionId === after.collectionId && before.route === after.route &&
-    before.incarnation === after.incarnation && before.basis.digest === after.basis.digest &&
-    JSON.stringify(before.authority) === JSON.stringify(after.authority);
+  return (
+    before.collectionId === after.collectionId &&
+    before.route === after.route &&
+    before.incarnation === after.incarnation &&
+    before.basis.digest === after.basis.digest &&
+    JSON.stringify(before.authority) === JSON.stringify(after.authority)
+  );
 }
 
 /** Scoped currentness is revalidated for the whole source, including excluded and ordering originals.
@@ -189,16 +208,30 @@ function compatible(before: CollectionSourceObservation, after: CollectionSource
 async function revalidateScope(deps: Dependencies, binding: OwnerFilterReadBinding, work: NativeCollectionWork) {
   const result = await work.compose(async (allowance) => {
     const result = await createIdentityScopedObservations(deps.pool).revalidate({
-      key: binding.scope.key, expected: binding.scope, deadline: binding.input.deadline,
+      key: binding.scope.key,
+      expected: binding.scope,
+      deadline: binding.input.deadline,
     });
-    return { result, work: { reservationId: allowance.reservationId, used: {
-      ...zero, nativeRows: result.work.rows, nativePoints: result.work.points,
-      statements: result.work.statements, bytes: result.work.bytes,
-    } } };
+    return {
+      result,
+      work: {
+        reservationId: allowance.reservationId,
+        used: {
+          ...zero,
+          nativeRows: result.work.rows,
+          nativePoints: result.work.points,
+          statements: result.work.statements,
+          bytes: result.work.bytes,
+        },
+      },
+    };
   });
-  if (result.result.status !== 'current' ||
+  if (
+    result.result.status !== 'current' ||
     result.result.observation.captureId !== binding.scope.captureId ||
-    result.result.observation.committedRevision !== binding.scope.committedRevision) throw unavailable();
+    result.result.observation.committedRevision !== binding.scope.committedRevision
+  )
+    throw unavailable();
 }
 
 /** Full-page caller over the one Source and Search interpreter. An incomplete window is never a 200 page. */
@@ -216,18 +249,28 @@ export async function readBoundOwnerFilterPage(
   const work = new NativeCollectionWork(input.allowance, input.deadline);
   const prepared = await work.compose((allowance) => source.prepare({ ...input, allowance }));
   const current = prepared.source;
-  if (binding.scope.key.source.kind !== 'library' ||
+  if (
+    binding.scope.key.source.kind !== 'library' ||
     binding.scope.key.source.identity.collectionId !== input.collectionId ||
-    binding.scope.key.source.identity.incarnation !== current.observation.incarnation) throw unavailable();
+    binding.scope.key.source.identity.incarnation !== current.observation.incarnation
+  )
+    throw unavailable();
   // Public output supplies explicitly completed membership; viewer owner facts cannot personalize its graph.
-  if (admission.owner && (current.observation.authority.kind === 'activated_output' ||
-    current.observation.authority.kind === 'frozen_output')) throw new ProblemError('unsupported_query');
+  if (
+    admission.owner &&
+    (current.observation.authority.kind === 'activated_output' ||
+      current.observation.authority.kind === 'frozen_output')
+  )
+    throw new ProblemError('unsupported_query');
   await revalidateScope(deps, binding, work);
   const cursorBinding: ListCursorBinding = {
     route: 'GET /v1/collections/{collectionId}/members',
     viewer: input.actor.kind === 'account' ? input.actor.accountId : null,
     query: {
-      collectionId: input.collectionId, query: admission.queryDigest, limit, sort: 'id',
+      collectionId: input.collectionId,
+      query: admission.queryDigest,
+      limit,
+      sort: 'id',
     },
   };
   let after: string | null = null;
@@ -238,8 +281,13 @@ export async function readBoundOwnerFilterPage(
     const [basis, capture, revision, last] = cursor.after;
     if (cursor.after.length !== 4 || typeof last !== 'string' || routeOf(last) === null)
       throw new ProblemError('invalid_cursor');
-    if (cursor.epoch !== current.observation.stamp.epoch || basis !== current.observation.basis.digest || capture !== binding.scope.captureId ||
-      revision !== binding.scope.committedRevision.toString()) throw new ProblemError('stale_cursor');
+    if (
+      cursor.epoch !== current.observation.stamp.epoch ||
+      basis !== current.observation.basis.digest ||
+      capture !== binding.scope.captureId ||
+      revision !== binding.scope.committedRevision.toString()
+    )
+      throw new ProblemError('stale_cursor');
     after = last;
   }
   const members: { kind: 'dynamic'; subjectId: string }[] = [];
@@ -247,19 +295,36 @@ export async function readBoundOwnerFilterPage(
   // The existing direct plan has at most three refill rounds. The transferred allowance is never renewed.
   for (let round = 0; round < 3 && members.length < limit && !exhausted; round++) {
     const quota = Math.min(100, 2 * (limit - members.length) + 1);
-    const prefix = await work.compose((allowance) => source.prefix({
-      ...input, source: current, allowance: { ...allowance, remaining: {
-        ...allowance.remaining, candidateKeys: Math.min(allowance.remaining.candidateKeys, quota),
-      } }, afterSubjectId: after,
-    }));
+    const prefix = await work.compose((allowance) =>
+      source.prefix({
+        ...input,
+        source: current,
+        allowance: {
+          ...allowance,
+          remaining: {
+            ...allowance.remaining,
+            candidateKeys: Math.min(allowance.remaining.candidateKeys, quota),
+          },
+        },
+        afterSubjectId: after,
+      }),
+    );
     if (!compatible(current.observation, prefix.observation)) throw new ProblemError('stale_cursor');
     if (prefix.candidates.length > Math.min(100, 2 * (limit - members.length) + 1)) throw unavailable();
     for (const candidate of prefix.candidates) {
-      if (routeOf(candidate.subjectId) === null || (after !== null && candidate.subjectId <= after)) throw unavailable();
-      const membership = await work.compose((allowance) => source.containsSubject({
-        ...input, source: current, allowance, subjectId: candidate.subjectId, positiveEvidence: candidate.evidence,
-      }));
-      if (!compatible(current.observation, membership.observation) || membership.result === 'not_proven') throw unavailable();
+      if (routeOf(candidate.subjectId) === null || (after !== null && candidate.subjectId <= after))
+        throw unavailable();
+      const membership = await work.compose((allowance) =>
+        source.containsSubject({
+          ...input,
+          source: current,
+          allowance,
+          subjectId: candidate.subjectId,
+          positiveEvidence: candidate.evidence,
+        }),
+      );
+      if (!compatible(current.observation, membership.observation) || membership.result === 'not_proven')
+        throw unavailable();
       after = candidate.subjectId;
       if (!membership.result) continue;
       const closure = await readOwnerFilterCandidateClosure(binding, current, candidate.subjectId, work);
@@ -281,7 +346,9 @@ export async function readBoundOwnerFilterPage(
             throw error;
           }
         });
-      } finally { transaction.settle(); }
+      } finally {
+        transaction.settle();
+      }
       if (match === 'not_proven') throw unavailable();
       if (match) members.push({ kind: 'dynamic', subjectId: candidate.subjectId });
       if (members.length === limit) break;
@@ -300,17 +367,40 @@ export async function readBoundOwnerFilterPage(
   let disclosed = members;
   if (options.view === 'FULL') {
     if (!deps.routeKey) throw unavailable();
-    disclosed = await attachCollectionListFacts({
-      pool: deps.pool, access: deps.access, actor: input.actor, routeKey: deps.routeKey, deadline: input.deadline,
-    }, members, { revalidate });
+    disclosed = await attachCollectionListFacts(
+      {
+        pool: deps.pool,
+        access: deps.access,
+        actor: input.actor,
+        routeKey: deps.routeKey,
+        deadline: input.deadline,
+      },
+      members,
+      { revalidate },
+    );
     // A changed/denied summary may require repair; it must never turn a useful page into a short 200 window.
     if (disclosed.length !== members.length) throw unavailable();
   }
   requireAccessDeadline(input.deadline);
-  return { members: disclosed, next: exhausted ? null : await encodeListCursor(deps.tokens, cursorBinding, {
-    epoch: current.observation.stamp.epoch, after: [current.observation.basis.digest, binding.scope.captureId,
-      binding.scope.committedRevision.toString(), after!],
-  }, (deps.clock ?? systemClock)()) };
+  return {
+    members: disclosed,
+    next: exhausted
+      ? null
+      : await encodeListCursor(
+          deps.tokens,
+          cursorBinding,
+          {
+            epoch: current.observation.stamp.epoch,
+            after: [
+              current.observation.basis.digest,
+              binding.scope.captureId,
+              binding.scope.committedRevision.toString(),
+              after!,
+            ],
+          },
+          (deps.clock ?? systemClock)(),
+        ),
+  };
 }
 
 export async function readOwnerFilterPage(
@@ -323,7 +413,11 @@ export async function readOwnerFilterPage(
   const admission = await admitCollectionMemberQuery(deps, actor, options, deadline);
   const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline);
   if (bound.status !== 'bound') throw unavailable();
-  if (bound.binding.input.actor !== actor || bound.binding.input.collectionId !== collectionId ||
-    bound.binding.input.deadline > deadline) throw new TypeError('Foreign native owner read binding');
+  if (
+    bound.binding.input.actor !== actor ||
+    bound.binding.input.collectionId !== collectionId ||
+    bound.binding.input.deadline > deadline
+  )
+    throw new TypeError('Foreign native owner read binding');
   return readBoundOwnerFilterPage(deps, admission, options, bound.binding);
 }

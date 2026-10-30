@@ -24,8 +24,14 @@ import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array;
-  workClient?: () => Promise<WorkClient> };
+type Dependencies = {
+  pool: Pool;
+  access: () => Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  routeKey: Uint8Array;
+  workClient?: () => Promise<WorkClient>;
+};
 const closed = { additionalProperties: false } as const;
 // Domain commands and reads distinguish malformed resource IDs from malformed JSON.
 const id = t.String();
@@ -557,9 +563,17 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                     ...subjectFields,
                     facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
                   }),
-                  t.Object({ kind: t.Literal('dynamic'), subjectId: id, ...subjectFields,
-                    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
-                  }, closed),
+                  t.Object(
+                    {
+                      kind: t.Literal('dynamic'),
+                      subjectId: id,
+                      ...subjectFields,
+                      facts: t.Optional(
+                        t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+                      ),
+                    },
+                    closed,
+                  ),
                 ]),
               ),
               next: nullableString,

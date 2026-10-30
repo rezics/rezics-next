@@ -1,5 +1,9 @@
 import type { CommandTransaction } from '../command/command.ts';
-import type { NativeSourceCapture, NativeSourceFrontier, NativeSourceIdentity } from '../library/native-source-custody.ts';
+import type {
+  NativeSourceCapture,
+  NativeSourceFrontier,
+  NativeSourceIdentity,
+} from '../library/native-source-custody.ts';
 import type { WorkAllowance } from '../library/collection-source.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';
@@ -14,11 +18,23 @@ export type IdentityScopeKey = Readonly<{ source: IdentityScopeSource; scopeId: 
 export type IdentityScopeWork = Readonly<{ rows: number; points: number; statements: number; bytes: number }>;
 export type IdentityScopeFailure = Readonly<{
   status: 'unavailable' | 'stale';
-  reason: 'source_unready' | 'capture_incomplete' | 'owner_moved' | 'pending_claim' | 'summary_missing' | 'custody_missing' | 'deadline';
+  reason:
+    | 'source_unready'
+    | 'capture_incomplete'
+    | 'owner_moved'
+    | 'pending_claim'
+    | 'summary_missing'
+    | 'custody_missing'
+    | 'deadline';
   work: IdentityScopeWork;
 }>;
 export type IdentityScopeCapture =
-  | Readonly<{ kind: 'library'; capture: NativeSourceCapture; frontier: NativeSourceFrontier; allowance: WorkAllowance }>
+  | Readonly<{
+      kind: 'library';
+      capture: NativeSourceCapture;
+      frontier: NativeSourceFrontier;
+      allowance: WorkAllowance;
+    }>
   | Readonly<{ kind: 'public'; capture: PublicIdentitySourceCapture }>;
 export type IdentityScopeRegistration = Readonly<{
   key: IdentityScopeKey;
@@ -31,9 +47,14 @@ export type IdentityScopeObservation = Readonly<{
   captureId: string;
   committedRevision: bigint;
 }>;
-export type IdentityScopeRegistrationResult = IdentityScopeFailure | Readonly<{
-  status: 'registered'; observation: IdentityScopeObservation; work: IdentityScopeWork;
-}> | Readonly<{ status: 'pending'; work: IdentityScopeWork }>;
+export type IdentityScopeRegistrationResult =
+  | IdentityScopeFailure
+  | Readonly<{
+      status: 'registered';
+      observation: IdentityScopeObservation;
+      work: IdentityScopeWork;
+    }>
+  | Readonly<{ status: 'pending'; work: IdentityScopeWork }>;
 export type IdentityScopeArmInput = Readonly<{
   key: IdentityScopeKey;
   job: IdentityJobRef;
@@ -41,9 +62,14 @@ export type IdentityScopeArmInput = Readonly<{
   receiving: IdentityReceivingSelection;
   deadline: number;
 }>;
-export type IdentityScopeArmResult = IdentityScopeFailure | Readonly<{
-  status: 'armed' | 'pending'; scope: IdentityScopeKey; job: IdentityJobRef; work: IdentityScopeWork;
-}>;
+export type IdentityScopeArmResult =
+  | IdentityScopeFailure
+  | Readonly<{
+      status: 'armed' | 'pending';
+      scope: IdentityScopeKey;
+      job: IdentityJobRef;
+      work: IdentityScopeWork;
+    }>;
 export type IdentityScopeFinishInput = Readonly<{
   key: IdentityScopeKey;
   job: IdentityJobRef;
@@ -52,23 +78,40 @@ export type IdentityScopeFinishInput = Readonly<{
   records: readonly IdentityReceivingRecord[];
   deadline: number;
 }>;
-export type IdentityScopeFinishResult = IdentityScopeFailure | Readonly<{
-  status: 'finished' | 'pending'; scope: IdentityScopeKey; committedRevision: bigint; work: IdentityScopeWork;
-}>;
+export type IdentityScopeFinishResult =
+  | IdentityScopeFailure
+  | Readonly<{
+      status: 'finished' | 'pending';
+      scope: IdentityScopeKey;
+      committedRevision: bigint;
+      work: IdentityScopeWork;
+    }>;
 export type IdentityScopeRevalidateInput = Readonly<{
-  key: IdentityScopeKey; expected: IdentityScopeObservation; deadline: number;
+  key: IdentityScopeKey;
+  expected: IdentityScopeObservation;
+  deadline: number;
   /** Optional source-local command; never opens a foreign connection while this is held. */
   tx?: CommandTransaction;
 }>;
-export type IdentityScopeRevalidateResult = IdentityScopeFailure | Readonly<{
-  status: 'current'; observation: IdentityScopeObservation; work: IdentityScopeWork;
-}>;
+export type IdentityScopeRevalidateResult =
+  | IdentityScopeFailure
+  | Readonly<{
+      status: 'current';
+      observation: IdentityScopeObservation;
+      work: IdentityScopeWork;
+    }>;
 export type IdentityScopeRepairInput = Readonly<{ key: IdentityScopeKey; limit: number; deadline: number }>;
-export type IdentityScopeRepairResult = IdentityScopeFailure | Readonly<{
-  status: 'repaired' | 'pending'; observation: IdentityScopeObservation | null; work: IdentityScopeWork;
-}>;
+export type IdentityScopeRepairResult =
+  | IdentityScopeFailure
+  | Readonly<{
+      status: 'repaired' | 'pending';
+      observation: IdentityScopeObservation | null;
+      work: IdentityScopeWork;
+    }>;
 export type IdentityScopeRetireInput = Readonly<{
-  key: IdentityScopeKey; receiving: readonly IdentityReceivingRecord[]; deadline: number;
+  key: IdentityScopeKey;
+  receiving: readonly IdentityReceivingRecord[];
+  deadline: number;
 }>;
 export type IdentityScopeRetireResult = IdentityScopeFailure | Readonly<{ status: 'retired'; work: IdentityScopeWork }>;
 export interface IdentityScopedObservations {
