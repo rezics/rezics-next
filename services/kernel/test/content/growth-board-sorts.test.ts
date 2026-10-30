@@ -3,6 +3,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   assertGrowthAccessPaths,
   capture,
@@ -456,16 +457,7 @@ test(
        VALUES ($1, $2, 'actor', 'active', true, $2), ($1, $3, 'actor', 'active', true, $3)`,
       [0x3456, grantedReader, bannedReader],
     );
-    const realmRoute = [
-      boardRoute,
-      spaceId,
-      spaceRevisionId,
-      at,
-      author,
-      realmId,
-      newId(boardRoute),
-      realmRevisionId,
-    ];
+    const realmRoute = [boardRoute, spaceId, spaceRevisionId, at, author, realmId, GLOBAL_CONTEXT, realmRevisionId];
     await db.admin.query(
       `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
        VALUES ($1, $2, 'active', $3, $4, $5)`,
