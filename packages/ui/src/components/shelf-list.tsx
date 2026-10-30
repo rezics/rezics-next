@@ -111,7 +111,7 @@ export function ShelfListRow({
         className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
         style={{ aspectRatio: ratio.replace(':', ' / ') }}
       >
-        <Cover {...cover} size="fill" ratio={ratio} decorative caption={false} />
+        <Cover {...cover} size="fill" ratio={ratio} decorative />
       </div>
       <div className="min-w-0 flex-1">
         <ListRowLink

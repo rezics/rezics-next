@@ -2,13 +2,8 @@ import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@ta
 import { useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { isView } from '@rezics/composition';
-import {
-  SubjectPage,
-  pageRelationProperties,
-  subjectPageJsonLd,
-  subjectPageTitle,
-  subjectPageType,
-} from '../../features/pages/subject';
+import { SubjectPage, pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
+import { subjectHead } from '../../features/pages/subject-head';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectTabs } from '../../features/pages/views';
 import { SubjectHeaderActions } from '../../features/pages/subject-reactions-view';
@@ -35,6 +30,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../../session/client';
+import { pageHeadContext } from '../../shell/head-context';
 
 // Page documents type their props as unknown. The kernel already returned JSON.
 const readSubject = createServerFn({ method: 'GET', strict: false })
@@ -223,21 +219,25 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     if (page.kind !== 'page') throw notFound();
     const type = subjectPageType(page.page);
     const [frame, relations, reactions, ratings] = await Promise.all([
-      type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {},
+      type
+        ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
+        : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
       context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(page.page), getLocale())),
       context.queryClient.ensureQueryData(subjectReactionsQuery(params.id, getLocale())),
       context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale())),
     ]);
     return { ...data, page: page.page, frame, relations, reactions, ratings, tabs: subjectTabs(page.page) };
   },
-  head: ({ loaderData }) => {
-    const locale = getLocale();
-    const jsonLd = loaderData ? subjectPageJsonLd(loaderData.page, locale) : undefined;
-    return {
-      meta: [{ title: loaderData ? subjectPageTitle(loaderData.page, locale) : m.not_found_heading() }],
-      ...(jsonLd ? { scripts: [{ type: 'application/ld+json', children: jsonLd }] } : {}),
-    };
-  },
+  head: ({ loaderData, match }) =>
+    loaderData
+      ? subjectHead(loaderData.page, {
+          ...pageHeadContext(match.pathname),
+          paths: loaderData.paths,
+          ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
+          ...(loaderData.frame.schemaOrgType ? { schemaOrgType: loaderData.frame.schemaOrgType } : {}),
+          ...(loaderData.ratings ? { ratings: loaderData.ratings } : {}),
+        })
+      : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectRoute,
 });
 

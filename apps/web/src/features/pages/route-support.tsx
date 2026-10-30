@@ -42,6 +42,7 @@ export function subjectPageMessages(): PageMessages {
     details: m.subject_details(),
     documentSpoiler: m.thread_reveal_spoiler(),
     source: m.subject_source(),
+    licence: m.subject_source_licence(),
     spoilerShow: m.subject_spoiler_show(),
   };
 }

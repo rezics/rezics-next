@@ -344,24 +344,20 @@ test('a decorative repeat has empty alt text, the page cover loads eagerly with 
   expect(attr(tag(named, 'div'), 'aria-label')).toBe('The Wind-Up Bird Chronicle');
 });
 
-test('at lg and larger the cover’s credit is reachable from the cover', async () => {
-  for (const size of ['xs', 'sm', 'md'] as const) {
-    expect(render({ subject: book, cover: summary(), size })).not.toContain('Cover credit');
-    expect(render({ subject: book, cover: summary(), size, caption: true })).not.toContain('Shinchosha');
+test('Cover never renders a credit caption or credit control at any size', async () => {
+  for (const size of ['xs', 'sm', 'md', 'lg', 'xl', 'fill'] as const) {
+    const html = render({
+      subject: book,
+      cover: summary(),
+      size,
+      action: { label: 'Open cover', onActivate: () => undefined },
+    });
+    expect(html).not.toContain('Shinchosha');
+    expect(html).not.toContain('Open Library');
+    expect(html).not.toContain('Cover credit');
+    expect(html).not.toContain('<figcaption');
   }
-  for (const size of ['lg', 'xl', 'fill'] as const) {
-    expect(render({ subject: book, cover: summary(), size })).toContain('Cover credit');
-    const captioned = render({ subject: book, cover: summary(), size, caption: true });
-    const caption = captioned.slice(captioned.indexOf('<figcaption'), captioned.indexOf('</figcaption>'));
-    expect(caption).toContain('Shinchosha');
-    expect(caption).toContain('Open Library');
-    expect(caption).toContain('href="https://openlibrary.org/"');
-    expect(caption).toContain('All rights reserved');
-  }
-  // A cover without a credit shows no credit control.
-  expect(render({ subject: book, cover: summary({ credit: null }), size: 'lg' })).not.toContain('Cover credit');
-  // The credit opens from its control in the browser.
-  await expectStories(['Credit At Large Sizes']);
+  await expectStories(['Credit Viewer']);
 }, 300_000);
 
 test('a mixed row uses the ratio of most of its items, 5:7 when tied', () => {

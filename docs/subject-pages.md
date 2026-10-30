@@ -109,7 +109,8 @@ other view. Sections a type does not support are left out; the rest keep this or
 7. **Ratings.** The score distribution, count and population, the reader's Realm scores, and a link to Reviews.
 8. **Reviews and discussion.** The most helpful reviews and the most active threads.
 9. **Lists.** Public collections and reading orders that include the subject.
-10. **Sources.** Covers' credits, the sources of the facts shown, external identifiers, and a link to Details.
+10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
+    external identifiers, and a link to Details.
 
 Every preview shows at most twelve items (fewer for reviews, threads and lists) and links to its full view when
 there are more. A subject with only a
@@ -119,8 +120,9 @@ Discussion.
 ## Covers on pages
 
 The cover area always renders, at the frame ratio of the subject's type, on every surface that shows a subject,
-with the designed placeholder when there is no image. The subject page shows its cover's credit as a caption at
-`lg` size and in Sources. See [Cover](../packages/ui/README.md#cover).
+with the designed placeholder when there is no image. On a subject page, the cover opens a viewer with the original
+image and its credit; credits and notices are collected in Sources at the end of the page, never as a caption. See
+[Cover](../packages/ui/README.md#cover).
 
 ## Relations, characters and credits on pages
 

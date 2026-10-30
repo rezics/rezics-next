@@ -7,7 +7,7 @@ import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
-import type { Related, Subject } from '../../subject/types';
+import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
@@ -76,7 +76,9 @@ export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account'>) 
 }
 
 /** The subject read planned for this page, when that read succeeded. */
-function subjectBody(page: SubjectPageData): { subject: Subject; related: Related } | undefined {
+export function subjectBody(
+  page: SubjectPageData,
+): { subject: Subject; related: Related; summary?: Summary | null } | undefined {
   const planned = Object.entries(
     planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
   ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
@@ -88,7 +90,13 @@ function subjectBody(page: SubjectPageData): { subject: Subject; related: Relate
     !isRecord(result.body.related)
   )
     return;
-  return { subject: result.body.subject as Subject, related: result.body.related as Related };
+  return {
+    subject: result.body.subject as Subject,
+    related: result.body.related as Related,
+    ...(Object.hasOwn(result.body, 'summary')
+      ? { summary: (result.body.summary as Summary | null | undefined) ?? null }
+      : {}),
+  };
 }
 
 /** One `pages.read` of the overview, or of the named view. A merged subject names its survivor; an unknown one is missing. */
@@ -139,10 +147,12 @@ export function pageRelationProperties(page: SubjectPageData): string[] {
 /** The subject's label, chosen with the same fallback the page heading uses. */
 export function subjectPageTitle(page: SubjectPageData, locale: string): string {
   const read = subjectBody(page);
-  return read
-    ? pageText(read.subject.labels, locale, originalLanguage(read.subject)).text ||
-        m.subject_value_unlabelled({}, { locale: locale as never })
-    : '';
+  return read ? subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)) : '';
+}
+
+/** The same localized display label used by a rendered subject page, from its labels and original language. */
+export function subjectDisplayLabel(labels: Record<string, string>, locale: string, original?: string): string {
+  return pageText(labels, locale, original).text || m.subject_value_unlabelled({}, { locale: locale as never });
 }
 
 /** The subject's type CURIE, when its read succeeded. */
@@ -150,7 +160,16 @@ export function subjectPageType(page: SubjectPageData): string | undefined {
   return subjectBody(page)?.subject.type;
 }
 
-export function subjectPageJsonLd(page: SubjectPageData, locale: string): string | undefined {
+export function subjectPageJsonLd(
+  page: SubjectPageData,
+  locale: string,
+  options: {
+    origin?: string;
+    typeLabel?: string;
+    schemaOrgType?: string;
+    ratings?: { figures: { population: string; count: number; mean?: number; remaining?: number }[] };
+  } = {},
+): string | undefined {
   const read = subjectBody(page);
   return read
     ? serializeJsonLd(
@@ -158,7 +177,12 @@ export function subjectPageJsonLd(page: SubjectPageData, locale: string): string
           subject: read.subject,
           related: read.related,
           locale,
-          url: `https://rezics.com${
+          ...(options.origin ? { origin: options.origin } : {}),
+          ...(options.typeLabel ? { typeLabel: options.typeLabel } : {}),
+          subjectLabel: subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)),
+          ...(options.schemaOrgType ? { schemaOrgType: options.schemaOrgType } : {}),
+          ...(options.ratings ? { ratings: options.ratings } : {}),
+          url: `${(options.origin ?? 'https://rezics.com').replace(/\/+$/, '')}${
             subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href
           }`,
         }),

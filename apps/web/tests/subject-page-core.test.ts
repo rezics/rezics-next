@@ -218,7 +218,7 @@ test("the subject header shows the cover at the type's ratio, the title in the r
   expect(french).not.toMatch(/>fr</);
 });
 
-test("the cover's credit appears once in the viewer and once in Sources at the end of the overview", () => {
+test("the cover's credit is absent from captions and remains in Sources at the end of the overview", () => {
   const referenced = statement('schema:isbn', 'external-id', value('978-0156012195'), {
     references: [{ parts: [snak('schema:url', 'url', value('https://example.com/isbn'))], hash: 'a' }],
   });
@@ -228,13 +228,8 @@ test("the cover's credit appears once in the viewer and once in Sources at the e
       summary: summary(['schema:Book', 'schema:CreativeWork']),
     }),
   );
-  const caption = /<figcaption[^>]*>([\s\S]*?)<\/figcaption>/.exec(html);
-  expect(caption).not.toBeNull();
-  expect(text(caption![1]!)).toContain('© Reynal & Hitchcock');
-  expect(caption![1]).toContain('href="https://openlibrary.org/"');
-  // The caption belongs to the large cover; the thumbnail has none.
-  expect(html.match(/<figcaption/g)).toHaveLength(1);
-  expect(text(html).match(/© Reynal & Hitchcock/g)).toHaveLength(2);
+  expect(html).not.toContain('<figcaption');
+  expect(html).toContain('Open cover: The Little Prince');
 
   // Sources close the overview, after every fact row, and list the credit, the fact's source and the identifier.
   const sources = html.lastIndexOf('Sources');
@@ -248,10 +243,11 @@ test("the cover's credit appears once in the viewer and once in Sources at the e
   // A source is listed once, not under its fact as well.
   expect(html.match(/href="https:\/\/example\.com\/isbn"/g)).toHaveLength(1);
 
-  // Without a cover credit or sources, there is nothing to list but the way to Details.
+  // Without a cover credit or sources, the Sources section has nothing to render.
   const plain = render(pageOf({ subject: subject([]), summary: null }));
   expect(plain).not.toContain('<figcaption');
-  expect(plain).toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/details"`);
+  expect(plain).not.toContain('data-slot="subject-sources"');
+  expect(plain).not.toContain(`href="/en/subjects/${subjectId}/${slug('The Little Prince')}/details"`);
 });
 
 test('a media value renders through Cover and a document value through the document renderer, never as an id or an empty row', () => {

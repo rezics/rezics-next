@@ -21,6 +21,8 @@ import { validateViewCursor } from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
+import { subjectHead } from '../../features/pages/subject-head';
+import { pageHeadContext } from '../../shell/head-context';
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -141,16 +143,19 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       nextHref,
     };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      ...(loaderData?.cursor !== undefined ? [{ name: 'robots', content: 'noindex, follow' }] : []),
-      {
-        title: loaderData
-          ? [loaderData.title, viewLabel[loaderData.view]()].filter(Boolean).join(' · ')
-          : m.not_found_heading(),
-      },
-    ],
-  }),
+  head: ({ loaderData, match }) =>
+    loaderData
+      ? subjectHead(loaderData.page, {
+          ...pageHeadContext(match.pathname),
+          paths: loaderData.paths,
+          ...(loaderData.type.label ? { typeLabel: loaderData.type.label } : {}),
+          ...(loaderData.type.schemaOrgType ? { schemaOrgType: loaderData.type.schemaOrgType } : {}),
+          view: loaderData.view,
+          viewLabel: viewLabel[loaderData.view](),
+          ...(loaderData.cursor === undefined ? {} : { cursor: loaderData.cursor }),
+          includeJsonLd: false,
+        })
+      : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectViewRoute,
 });
 

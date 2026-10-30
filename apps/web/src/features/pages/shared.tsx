@@ -24,6 +24,7 @@ export type Stmt = Snak & {
 };
 export type Sources = {
   credit: NonNullable<Summary['cover']>['credit'] | null;
+  records: unknown[];
   urls: string[];
   identifiers: { label: ReturnType<typeof pageText>; value: string }[];
 };

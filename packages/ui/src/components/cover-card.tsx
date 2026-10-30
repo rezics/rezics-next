@@ -130,7 +130,6 @@ export function CoverCard({
         {...(ratio ? { ratio } : {})}
         decorative
         frameClassName="bg-transparent ring-0"
-        caption={false}
         className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
       />
       {selectable ? (

@@ -22,6 +22,8 @@ import {
 import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
 import { validateViewCursor } from '../../features/pages/view-cursor';
+import { subjectHead } from '../../features/pages/subject-head';
+import { pageHeadContext } from '../../shell/head-context';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const curiePattern = /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_.-]+$/;
@@ -118,10 +120,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     const [typeData, relations] = await Promise.all([
       type
         ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
-        : Promise.resolve({ label: undefined, ratio: undefined }),
+        : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
       context.queryClient.ensureQueryData(subjectRelationsQuery([...properties], getLocale())),
     ]);
     return {
+      page: overview.page,
       title: frame.title.text,
       frame,
       tabs: subjectTabs(overview.page),
@@ -132,12 +135,19 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       cursor,
     };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      ...(loaderData?.cursor !== undefined ? [{ name: 'robots', content: 'noindex, follow' }] : []),
-      { title: [loaderData?.title, m.subject_relations()].filter(Boolean).join(' · ') },
-    ],
-  }),
+  head: ({ loaderData, match }) =>
+    loaderData
+      ? subjectHead(loaderData.page, {
+          ...pageHeadContext(match.pathname),
+          paths: loaderData.paths,
+          ...(loaderData.type.label ? { typeLabel: loaderData.type.label } : {}),
+          ...(loaderData.type.schemaOrgType ? { schemaOrgType: loaderData.type.schemaOrgType } : {}),
+          view: 'relations',
+          viewLabel: m.subject_relations(),
+          ...(loaderData.cursor === undefined ? {} : { cursor: loaderData.cursor }),
+          includeJsonLd: false,
+        })
+      : { meta: [{ title: m.not_found_heading() }] },
   component: RelationsRoute,
 });
 

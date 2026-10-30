@@ -14,6 +14,7 @@ export type Release = FilterRelease & {
       labels?: Record<string, string>;
       bases?: readonly string[];
       facets?: readonly string[];
+      schemaOrgType?: string;
       coverRatio?: string;
       library?: LibraryProfileReference;
     }
@@ -162,7 +163,10 @@ export async function typeNames(types: Iterable<string>, locale: string): Promis
  * The type's name in the reader's language and the cover frame its definition declares, taken from the nearest type
  * of its own bases that declares one. A type the release does not know has neither.
  */
-export async function typeFrame(type: string, locale: string): Promise<{ label?: string; ratio?: CoverRatio }> {
+export async function typeFrame(
+  type: string,
+  locale: string,
+): Promise<{ label?: string; ratio?: CoverRatio; schemaOrgType?: string }> {
   let release: Release;
   try {
     release = await readRelease();
@@ -172,12 +176,15 @@ export async function typeFrame(type: string, locale: string): Promise<{ label?:
   const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
   if (!definition) return {};
   const label = definition.labels ? pickText(definition.labels, locale).text : '';
+  const metadata = definition.schemaOrgType?.startsWith('https://schema.org/')
+    ? { schemaOrgType: definition.schemaOrgType }
+    : {};
   for (const name of [type, ...(definition.bases ?? [])]) {
     const ratio = Object.hasOwn(release.types, name) ? release.types[name]?.coverRatio : undefined;
     const parsed = ratio === undefined ? undefined : parseCoverRatio(ratio);
-    if (parsed !== undefined) return { ...(label ? { label } : {}), ratio: parsed };
+    if (parsed !== undefined) return { ...(label ? { label } : {}), ...metadata, ratio: parsed };
   }
-  return label ? { label } : {};
+  return { ...(label ? { label } : {}), ...metadata };
 }
 
 /** Names each subject's type in the reader's language, in place; a type with no name keeps none and is not shown. */

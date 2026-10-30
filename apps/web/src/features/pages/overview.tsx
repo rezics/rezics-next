@@ -3,8 +3,9 @@ import { RatingsSection } from './subject-ratings-view';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -59,6 +60,7 @@ export type OverviewValue = {
   details: string;
   cover: string;
   coverVia: string;
+  licence: string;
   source: string;
   sources: string;
   sections: Map<string, Section>;
@@ -616,6 +618,7 @@ export function CollectionList(props: Record<string, unknown>) {
 }
 
 export function Cover(props: Record<string, unknown>) {
+  const [viewerOpen, setViewerOpen] = useState(false);
   const state = useOverview(props.id);
   if (!state) return null;
   const { value, section } = state;
@@ -624,19 +627,32 @@ export function Cover(props: Record<string, unknown>) {
   if (!read) return <Failed slot="subject-cover" id={String(props.id)} title={value.cover} locale={value.locale} />;
   const original = originalLanguage(read.subject);
   const title = pageText(read.subject.labels, value.locale, original).text || value.unlabelled;
+  const image = coverOf(read.summary);
+  const subject = coverSubject(read.subject.id, title, read.summary, read.subject.type);
+  const openLabel = m.subject_cover_open({ title }, { locale: value.locale as never });
+  const closeLabel = m.subject_cover_close({}, { locale: value.locale as never });
   return (
     <div data-slot="subject-cover" className="w-60 max-w-full">
       <CoverFrame
-        subject={coverSubject(read.subject.id, title, read.summary, read.subject.type)}
-        cover={coverOf(read.summary)}
+        subject={subject}
+        cover={image}
         size="lg"
         src={coverSrc}
         suitability={value.reader.suitability}
         labels={value.labels.cover}
-        priority
-        caption
+        action={{ label: openLabel, onActivate: () => setViewerOpen(true) }}
         {...((value.frameRatio ?? value.ratio) ? { ratio: (value.frameRatio ?? value.ratio)! } : {})}
       />
+      {image && image.variants.length > 0 ? (
+        <CoverViewer
+          subject={subject}
+          cover={image}
+          src={coverSrc}
+          labels={{ title, via: value.coverVia, close: closeLabel }}
+          open={viewerOpen}
+          onOpenChange={setViewerOpen}
+        />
+      ) : null}
     </div>
   );
 }
@@ -792,6 +808,28 @@ export function ReviewList(props: Record<string, unknown>) {
 }
 
 /** Cover credit, fact sources and external identifiers, then a link to Details. */
+function sourceRecordRow(value: unknown): {
+  name: string;
+  url: string;
+  licence?: { id: string; url?: string };
+  attribution?: string;
+} | null {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.url !== 'string') return null;
+  const licence =
+    isRecord(value.licence) && typeof value.licence.id === 'string'
+      ? {
+          id: value.licence.id,
+          ...(typeof value.licence.url === 'string' ? { url: value.licence.url } : {}),
+        }
+      : undefined;
+  return {
+    name: value.name,
+    url: value.url,
+    ...(licence ? { licence } : {}),
+    ...(typeof value.attribution === 'string' && value.attribution ? { attribution: value.attribution } : {}),
+  };
+}
+
 export function SourcesSection({
   value,
   sources,
@@ -803,6 +841,8 @@ export function SourcesSection({
 }) {
   const Link = value.link;
   const credit = sources.credit;
+  const records = sources.records.map(sourceRecordRow).filter((record) => record !== null);
+  if (!credit && records.length === 0 && sources.urls.length === 0 && sources.identifiers.length === 0) return null;
   const details = viewHref(value, 'details');
   return (
     <section
@@ -838,6 +878,28 @@ export function SourcesSection({
             />
           </li>
         )}
+        {records.map((record) => (
+          <li key={record.url}>
+            <span className="me-2 font-medium text-muted-foreground">{value.source}</span>
+            <a className={`${linkClass} ${linkColor}`} href={record.url}>
+              {record.name}
+            </a>
+            {record.licence && (
+              <>
+                {' · '}
+                {value.licence}:{' '}
+                {record.licence.url ? (
+                  <a className={`${linkClass} ${linkColor}`} href={record.licence.url}>
+                    {record.licence.id}
+                  </a>
+                ) : (
+                  record.licence.id
+                )}
+              </>
+            )}
+            {record.attribution ? ` · ${record.attribution}` : null}
+          </li>
+        ))}
         {sources.urls.map((url) => (
           <li key={url}>
             <span className="me-2 font-medium text-muted-foreground">{value.source}</span>

@@ -1,11 +1,8 @@
-import { CopyrightIcon, EyeIcon, ImageIcon } from 'lucide-react';
+import { EyeIcon, ImageIcon } from 'lucide-react';
 import { useCallback, useState, type CSSProperties } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
-import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { cn } from '../utils.ts';
-import { MetaLine } from './meta-line.tsx';
-import { initials } from './avatar-initials.tsx';
 import {
   coverFallback,
   coverFit,
@@ -28,6 +25,19 @@ import {
 
 export { coverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
+
+/** The responsive preload source for the same format and size that the page cover's image uses. */
+export function coverImagePreload(
+  cover: CoverSummary,
+  src: (media: string, format: CoverFormat, width: number) => string,
+  size: CoverSize = 'lg',
+) {
+  const format = cover.variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif';
+  return {
+    imagesrcset: coverSrcSet(cover.media, cover.variants, format, src),
+    imagesizes: coverSizes(size),
+  };
+}
 
 export const coverLabels = {
   withheld: 'Sensitive cover',
@@ -58,8 +68,8 @@ export interface CoverProps {
   priority?: boolean;
   /** The viewer's setting for covers withheld for suitability. */
   suitability?: 'blur' | 'show';
-  /** Show the credit as a caption below the cover (the subject page, at lg and larger). */
-  caption?: boolean;
+  /** Make a usable image open its viewer; withheld, missing and failed images stay non-interactive. */
+  action?: { label: string; onActivate: () => void };
   labels?: Partial<CoverLabels>;
   className?: string;
 }
@@ -71,7 +81,7 @@ type Status = { media: string; value: 'loaded' | 'failed' };
  * subject's type, or the typographic placeholder when there is no image, it fails to load or it was taken down.
  * shadcn has no cover or poster component; this one adds what a subject needs on top of its `AspectRatio` and
  * `Button`: the ThumbHash and colour painted while the image loads, the fit rule, the deterministic placeholder,
- * the suitability blur and the credit.
+ * the suitability blur.
  */
 export function Cover({
   subject,
@@ -83,7 +93,7 @@ export function Cover({
   decorative = false,
   priority = false,
   suitability = 'blur',
-  caption = false,
+  action,
   labels,
   className,
 }: CoverProps) {
@@ -110,8 +120,6 @@ export function Cover({
   );
 
   const colors = placeholderColors(subject);
-  const large = size === 'lg' || size === 'xl' || size === 'fill';
-  const credit = image?.credit && (state === 'loading' || state === 'loaded') ? image.credit : null;
   const dimensions = intrinsicSize(size, frameRatio);
   const width: CSSProperties = size === 'fill' ? { width: '100%' } : { width: coverWidths[size] };
 
@@ -204,21 +212,20 @@ export function Cover({
             )}
           </>
         )}
-        {large && credit && !caption ? <CreditControl credit={credit} text={text} fill={size === 'fill'} /> : null}
+        {action && image && state !== 'withheld' && state !== 'placeholder' ? (
+          <button
+            className="absolute inset-0 z-[2] cursor-zoom-in rounded-[inherit] focus-visible:ring-4 focus-visible:ring-primary"
+            type="button"
+            aria-label={action.label}
+            onClick={action.onActivate}
+          />
+        ) : null}
         {state === 'withheld' ? <RevealButton text={text} onReveal={() => setRevealed(image!.media)} /> : null}
       </AspectRatio>
     </div>
   );
 
-  if (!caption || !large || !credit) return frame;
-  return (
-    <figure className="m-0 w-fit max-w-full" style={size === 'fill' ? { width: '100%' } : undefined}>
-      {frame}
-      <figcaption className="mt-1.5 text-xs text-muted-foreground">
-        <CreditText credit={credit} text={text} />
-      </figcaption>
-    </figure>
-  );
+  return frame;
 }
 
 function Thumbhash({ hash, blurred }: { hash: string; blurred: boolean }) {
@@ -330,50 +337,5 @@ function RevealButton({ text, onReveal }: { text: CoverLabels; onReveal: () => v
         <span className="@max-[119px]:hidden">{text.reveal}</span>
       </Button>
     </div>
-  );
-}
-
-type Credit = NonNullable<CoverSummary['credit']>;
-
-function CreditText({ credit, text }: { credit: Credit; text: CoverLabels }) {
-  return (
-    <MetaLine
-      items={[
-        <span>© {credit.rightsHolder}</span>,
-        credit.via ? (
-          <>
-            {text.via}{' '}
-            <a className="text-primary underline underline-offset-2" href={credit.via.url} rel="noreferrer noopener">
-              {credit.via.name}
-            </a>
-          </>
-        ) : null,
-        credit.license,
-      ]}
-    />
-  );
-}
-
-/** The credit of a large cover, one control away: the rights holder, the source it came through and the licence. */
-function CreditControl({ credit, text, fill }: { credit: Credit; text: CoverLabels; fill: boolean }) {
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon-xs"
-            aria-label={text.credit}
-            className={cn('absolute right-2 bottom-2 z-10 shadow-sm', fill && 'hidden @min-[240px]:inline-flex')}
-          />
-        }
-      >
-        <CopyrightIcon aria-hidden />
-      </PopoverTrigger>
-      <PopoverContent className="w-auto max-w-64 gap-1 text-xs" align="end" side="top">
-        <CreditText credit={credit} text={text} />
-      </PopoverContent>
-    </Popover>
   );
 }

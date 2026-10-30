@@ -6,7 +6,7 @@ import {
   shownProperties,
   type CompositionDocument,
 } from '@rezics/composition';
-import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { SectionHeading } from '../../library/section-heading';
@@ -23,6 +23,7 @@ import type { PageDocument } from './render';
 import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
+import { SubjectPageCover } from './subject-page-cover';
 import {
   bestRank,
   ExternalValue,
@@ -65,6 +66,7 @@ type SubjectMessages = {
   coverVia: string;
   details: string;
   documentSpoiler: string;
+  licence: string;
   source: string;
   spoilerShow: string;
 };
@@ -78,6 +80,7 @@ const subjectMessages: SubjectMessages = {
   coverVia: 'via',
   details: 'Details',
   documentSpoiler: 'Reveal spoiler',
+  licence: 'Licence',
   source: 'Source',
   spoilerShow: 'Show or hide spoilers',
 };
@@ -270,15 +273,19 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
     ...(creators[0] ? { byline: creators[0].name } : {}),
   };
   const cover = (size: 'sm' | 'lg') => (
-    <Cover
+    <SubjectPageCover
       subject={coverFor}
       cover={coverOf(summary)}
       size={size}
       src={coverSrc}
       suitability={options.reader.suitability}
       labels={options.labels.cover}
+      title={title}
+      via={options.messages.coverVia}
+      openLabel={m.subject_cover_open({ title }, { locale: options.locale as never })}
+      closeLabel={m.subject_cover_close({}, { locale: options.locale as never })}
       {...(options.frame.ratio ? { ratio: options.frame.ratio } : {})}
-      {...(size === 'lg' ? { priority: true, caption: true } : { decorative: true })}
+      {...(size === 'lg' ? { priority: true } : { decorative: true })}
     />
   );
   const facts = [options.frame.typeLabel, date].filter((fact): fact is string => !!fact);
@@ -363,6 +370,10 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     read.subject.type,
   );
   const urls = new Set<string>();
+  const records = (() => {
+    const value: unknown = Reflect.get(read.subject, 'sourceRecords');
+    return Array.isArray(value) ? value : [];
+  })();
   const identifiers: Sources['identifiers'] = [];
   const named: Record<string, Creator[]> = {};
   const dates: Record<string, string> = {};
@@ -542,7 +553,8 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     more: [...groups].filter(([property]) => !shown.has(property)).map(([, group]) => group),
     sources: {
       credit: read.summary?.cover?.credit ?? null,
-      urls: [...urls],
+      records,
+      urls: [...urls].filter((url) => !records.some((record) => isRecord(record) && record.url === url)),
       identifiers,
     },
   };
@@ -701,6 +713,7 @@ export function PageData({
     cover: resolved.cover,
     coverVia: resolved.coverVia,
     source: resolved.source,
+    licence: resolved.licence,
     sources: resolved.sources,
     sections,
     ...(about ? { about } : {}),

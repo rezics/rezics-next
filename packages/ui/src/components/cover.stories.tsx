@@ -1,9 +1,11 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useState } from 'react';
 import { ListRow } from './list-row.tsx';
 import { cn } from '../utils.ts';
-import { dismissed, settled, withSurface } from '../stories/support.tsx';
+import { withSurface } from '../stories/support.tsx';
 import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject, type CoverSummary } from './cover.tsx';
+import { CoverViewer } from './cover-viewer.tsx';
 
 // Every image is an inline SVG, so stories never depend on the network. The media id is a name in `shapes`.
 const shapes = new Map<string, { width: number; height: number; hue: number }>();
@@ -88,7 +90,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The image area of any subject, which always renders. The frame takes its ratio from the subject’s type and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. Covers at `lg` and larger carry their credit.',
+          'The image area of any subject, which always renders. The frame takes its ratio from the subject’s type and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. A subject page opens its cover viewer from a usable image.',
       },
     },
   },
@@ -435,40 +437,111 @@ export const WithheldShown: Story = {
   },
 };
 
-/** From `lg` the credit is one control away from the cover; a caption prints it for the subject page. */
-export const CreditAtLargeSizes: Story = {
+function ViewerExample({
+  id,
+  cover,
+  openInitially = false,
+}: {
+  id: string;
+  cover: CoverSummary;
+  openInitially?: boolean;
+}) {
+  const [open, setOpen] = useState(openInitially);
+  const subject = { ...book, id };
+  return (
+    <div data-case={id} className="flex items-start gap-4">
+      <Cover
+        subject={subject}
+        cover={cover}
+        size="lg"
+        src={artSrc}
+        action={{ label: `Open cover: ${subject.title}`, onActivate: () => setOpen(true) }}
+      />
+      <CoverViewer
+        subject={subject}
+        cover={cover}
+        src={artSrc}
+        labels={{ title: subject.title, via: 'via', close: 'Close cover' }}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </div>
+  );
+}
+
+const linkedCredit = summary(1200, 1800, {
+  credit: {
+    rightsHolder: 'Shinchosha',
+    via: { name: 'Open Library', url: 'https://openlibrary.org/' },
+  },
+});
+const licensedCredit = summary(1200, 1800, {
+  credit: { rightsHolder: 'Rezics Art Commons', license: 'CC0-1.0' },
+});
+const longCredit = summary(1200, 1800, {
+  credit: {
+    rightsHolder: 'The Society of Illustrators, Restorers, Translators, and Independent Archive Contributors',
+    via: { name: 'Open Library', url: 'https://openlibrary.org/' },
+    license: 'CC-BY-4.0',
+  },
+});
+
+/** Open the original cover to see its rights holder, source link and licence. */
+export const CreditViewer: Story = {
+  name: 'Credit Viewer',
   render: () => (
     <div className="flex flex-wrap items-start gap-8">
-      <div data-case="md">
-        <Cover subject={book} cover={summary(1200, 1800)} size="md" src={artSrc} />
-      </div>
-      <div data-case="lg">
-        <Cover subject={book} cover={summary(1200, 1800)} size="lg" src={artSrc} />
-      </div>
-      <div data-case="caption">
-        <Cover subject={book} cover={summary(1200, 1800)} size="xl" src={artSrc} caption priority />
-      </div>
+      <ViewerExample id="linked" cover={linkedCredit} />
+      <ViewerExample id="licensed" cover={licensedCredit} />
+      <ViewerExample id="long-rights-holder" cover={longCredit} />
     </div>
   ),
   play: async ({ canvasElement }) => {
-    const within_ = (id: string) => within(canvasElement.querySelector<HTMLElement>(`[data-case="${id}"]`)!);
-    expect(within_('md').queryByRole('button', { name: 'Cover credit' })).toBeNull();
-    const caption = within_('caption').getByText(/Shinchosha/);
-    expect(caption.closest('figcaption')).not.toBeNull();
-    expect(within_('caption').getByRole('link', { name: 'Open Library' })).toHaveAttribute(
-      'href',
-      'https://openlibrary.org/',
-    );
-    await userEvent.click(within_('lg').getByRole('button', { name: 'Cover credit' }));
-    const popup = await screen.findByRole('dialog');
-    await settled(popup);
-    expect(within(popup).getByText(/Shinchosha/)).toBeVisible();
-    expect(within(popup).getByRole('link', { name: 'Open Library' })).toHaveAttribute(
+    const open = async (id: string) => {
+      await userEvent.click(
+        within(canvasElement.querySelector<HTMLElement>(`[data-case="${id}"]`)!).getByRole('button', {
+          name: `Open cover: ${book.title}`,
+        }),
+      );
+      return within(document.body).findByRole('dialog', { name: book.title });
+    };
+    const linked = await open('linked');
+    await expect(linked.getByText(/© Shinchosha/)).toBeVisible();
+    await expect(linked.getByRole('link', { name: 'Open Library' })).toHaveAttribute(
       'href',
       'https://openlibrary.org/',
     );
     await userEvent.keyboard('{Escape}');
-    await dismissed('dialog');
+    const licensed = await open('licensed');
+    await expect(licensed.getByText(/CC0-1.0/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    const long = await open('long-rights-holder');
+    await expect(long.getByText(/Society of Illustrators/)).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  },
+};
+
+/** The same credit states with a viewer already open on a phone-sized frame. */
+export const CreditViewerOpen: Story = {
+  name: 'Credit Viewer Open',
+  render: () => <ViewerExample id="open" cover={longCredit} openInitially />,
+  play: async () => {
+    const dialog = await within(document.body).findByRole('dialog', { name: book.title });
+    await expect(dialog).toBeVisible();
+  },
+};
+
+/** A dark surface keeps the cover and its open credit viewer readable. */
+export const CreditViewerDark: Story = {
+  name: 'Credit Viewer Dark',
+  render: () => (
+    <div className="dark min-h-svh bg-background p-6 text-foreground">
+      <ViewerExample id="dark" cover={longCredit} openInitially />
+    </div>
+  ),
+  play: async () => {
+    const dialog = await within(document.body).findByRole('dialog', { name: book.title });
+    await expect(dialog).toBeVisible();
   },
 };
 

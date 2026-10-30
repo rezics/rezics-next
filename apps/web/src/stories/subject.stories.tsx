@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
@@ -15,6 +16,8 @@ import { selectEntryUndoOutcome } from '../kernel/fake/library-entry-undo';
 import { IMPORTED_VN_SUBJECT_ID } from '../kernel/fake/ratings';
 import { storySubjects } from '../kernel/story-subjects';
 import { subjectHref } from '../subject/subject-href';
+import { Cover, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
+import { CoverViewer } from '@rezics/ui/cover-viewer';
 
 function countUnavailablePage(): SubjectPageData {
   const page = structuredClone(subjectPageRecording) as unknown as SubjectPageData;
@@ -93,6 +96,117 @@ export const OverviewReactionsChinesePhone: Story = {
   parameters: { viewport: phone390 },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
+};
+
+/** The signed-out subject page with its cover viewer open, for review of the original image and credit. */
+export const CoverViewerOpen: Story = {
+  name: 'Cover Viewer Open',
+  render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const heading = await canvas.findByRole('heading', { level: 1 });
+    const title = heading.textContent?.trim() ?? '';
+    const trigger = canvas.getByRole('button', { name: m.subject_cover_open({ title }) });
+    await userEvent.click(trigger);
+    const dialog = await within(document.body).findByRole('dialog', { name: title });
+    await expect(dialog).toBeVisible();
+  },
+};
+
+const viewerSubject: CoverSubject = { id: 'story-cover', title: 'The Little Prince', types: ['schema:Book'] };
+const viewerCover: CoverSummary = {
+  media: 'story-cover',
+  width: 1200,
+  height: 1800,
+  placeholder: { thumbhash: '', color: '#526879' },
+  variants: [
+    { format: 'webp', width: 320 },
+    { format: 'webp', width: 640 },
+  ],
+  focalPoint: null,
+  credit: {
+    rightsHolder: 'Story cover artist',
+    via: { name: 'Story archive', url: 'https://archive.example.test/covers' },
+    license: 'CC-BY-4.0',
+  },
+};
+const viewerImage = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="960"><rect width="640" height="960" fill="#526879"/><circle cx="430" cy="270" r="120" fill="#f4d58d"/><path d="M0 740 Q320 620 640 760 V960 H0Z" fill="#223843"/></svg>')}`;
+const viewerSource = () => viewerImage;
+const failedViewerSource = () => 'data:image/png;base64,AAAA';
+
+function CoverViewerInteractionStory() {
+  const [open, setOpen] = useState(false);
+  const withheld = { ...viewerCover, media: 'withheld-story-cover', withheld: 'suitability' as const };
+  return (
+    <div className="flex flex-wrap items-start gap-6 p-6">
+      <div data-testid="missing-cover">
+        <Cover
+          subject={{ ...viewerSubject, id: 'missing-cover', title: 'Missing cover' }}
+          cover={null}
+          size="lg"
+          src={viewerSource}
+          action={{ label: 'Open missing', onActivate: () => setOpen(true) }}
+        />
+      </div>
+      <div data-testid="cjk-missing-cover">
+        <Cover
+          subject={{ ...viewerSubject, id: 'cjk-missing-cover', title: '星を追う図書館：迷子の夜' }}
+          cover={null}
+          size="lg"
+          src={viewerSource}
+          action={{ label: 'Open missing CJK cover', onActivate: () => setOpen(true) }}
+        />
+      </div>
+      <div data-testid="failed-cover">
+        <Cover
+          subject={{ ...viewerSubject, id: 'failed-cover', title: 'Failed cover' }}
+          cover={{ ...viewerCover, media: 'failed-story-cover' }}
+          size="lg"
+          src={failedViewerSource}
+          action={{ label: 'Open failed', onActivate: () => setOpen(true) }}
+        />
+      </div>
+      <div data-testid="withheld-cover">
+        <Cover
+          subject={viewerSubject}
+          cover={withheld}
+          size="lg"
+          src={viewerSource}
+          action={{ label: 'Open withheld', onActivate: () => setOpen(true) }}
+        />
+      </div>
+      <CoverViewer
+        subject={viewerSubject}
+        cover={withheld}
+        src={viewerSource}
+        labels={{ title: viewerSubject.title, via: 'via', close: 'Close cover' }}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </div>
+  );
+}
+
+export const CoverViewerInteraction: Story = {
+  name: 'Cover Viewer Interaction',
+  render: () => <CoverViewerInteractionStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const missing = canvas.getByTestId('missing-cover');
+    const cjkMissing = canvas.getByTestId('cjk-missing-cover');
+    const failed = canvas.getByTestId('failed-cover');
+    const withheld = canvas.getByTestId('withheld-cover');
+    await waitFor(() =>
+      expect(failed.querySelector('[data-slot="cover"]')).toHaveAttribute('data-state', 'placeholder'),
+    );
+    await expect(within(missing).queryByRole('button', { name: 'Open missing' })).toBeNull();
+    await expect(within(cjkMissing).queryByRole('button', { name: 'Open missing CJK cover' })).toBeNull();
+    await expect(within(failed).queryByRole('button', { name: 'Open failed' })).toBeNull();
+    await expect(within(withheld).queryByRole('button', { name: 'Open withheld' })).toBeNull();
+    await expect(within(withheld).getByRole('button', { name: 'Show cover' })).toBeVisible();
+    await expect(within(document.body).queryByRole('dialog')).toBeNull();
+  },
 };
 
 async function heroReady(context: { canvasElement: HTMLElement }, reveal: boolean) {

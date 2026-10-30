@@ -153,13 +153,7 @@ export function ShelfTable({
                       className="w-10 overflow-hidden rounded"
                       style={{ aspectRatio: coverRatio(row.cover.subject.types).replace(':', ' / ') }}
                     >
-                      <Cover
-                        {...row.cover}
-                        size="fill"
-                        ratio={coverRatio(row.cover.subject.types)}
-                        decorative
-                        caption={false}
-                      />
+                      <Cover {...row.cover} size="fill" ratio={coverRatio(row.cover.subject.types)} decorative />
                     </div>
                   ) : id === 'title' ? (
                     <a
