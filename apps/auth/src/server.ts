@@ -32,6 +32,27 @@ export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
+    // Start's existing page functions keep issuer cookies on this host. In
+    // particular, private reads use POST so the browser supplies a real Origin.
+    if (url.pathname.startsWith('/_serverFn/')) {
+      if (
+        !['GET', 'POST'].includes(request.method) ||
+        request.headers.get('sec-fetch-site') === 'cross-site' ||
+        (request.method === 'POST' &&
+          request.headers.get('origin') !== url.origin &&
+          !(
+            import.meta.env.DEV &&
+            __AUTH_ORIGIN__ &&
+            request.headers.get('origin') === new URL(__AUTH_ORIGIN__).origin
+          ))
+      )
+        return new Response(null, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
+      const response = await paraglideMiddleware(request, () => fetchHandler(request));
+      const headers = new Headers(response.headers);
+      headers.set('Cache-Control', 'private, no-store');
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+
     if (pagePaths.has(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
       return paraglideMiddleware(request, () => fetchHandler(request));
     }

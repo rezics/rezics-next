@@ -6,6 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
+import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
+import { SecurityInventory, type InventorySource } from '../security-inventory-view';
 import { readPrivacyContact } from '../privacy-contact';
 import {
   accountOperationSessionMatches,
@@ -21,7 +23,9 @@ import {
   operationKeyFor,
   runAccountOperation,
   type AccountOperation,
+  type AccountSessionResult,
 } from '../account-operations';
+import { accountOperationProfile } from '../account-operation-step-up';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
@@ -37,11 +41,25 @@ export const Route = createFileRoute('/account/delete')({
 
 function DeleteAccountPage() {
   const privacyContact = Route.useLoaderData();
+  return <DeleteAccountContent privacyContact={privacyContact} />;
+}
+
+export function DeleteAccountContent({
+  privacyContact,
+  initial,
+  inventorySource,
+}: {
+  privacyContact: string | null;
+  initial?: AccountSessionResult;
+  inventorySource?: InventorySource;
+}) {
   const [privacyBefore, privacyAfter] = privacyContact
     ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
     : [];
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [returned, setReturned] = useState(false);
   const [loadMessage, setLoadMessage] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const confirmationPhrase = m.auth_account_delete_confirmation_phrase();
@@ -57,7 +75,7 @@ function DeleteAccountPage() {
 
   useEffect(() => {
     let active = true;
-    void loadAccountSession().then((result) => {
+    void (initial ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
         const pendingState = pendingAccountOperationStepUpState();
@@ -74,6 +92,13 @@ function DeleteAccountPage() {
           return;
         }
         setAccountId(result.accountId);
+        setReturned(Boolean(pendingOperation));
+        const expected = accountOperationProfile('delete');
+        setNeedsProfile(
+          result.clientId !== expected.client_id ||
+            result.scopes?.length !== 1 ||
+            result.scopes[0] !== expected.scope[0],
+        );
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         setLoadState('signed-out');
@@ -85,7 +110,7 @@ function DeleteAccountPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initial]);
 
   useLayoutEffect(() => {
     if (confirmationError) confirmationInput.current?.focus();
@@ -105,7 +130,7 @@ function DeleteAccountPage() {
     setMessage('');
     setShowRetry(false);
     const operation: AccountOperation = { kind: 'delete', accountId };
-    const operationKey = operationKeyFor(operation);
+    const operationKey = operationKeyFor(operation, accountId);
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
     if (
@@ -117,9 +142,10 @@ function DeleteAccountPage() {
       setPending(false);
       return;
     }
-    const result = await runAccountOperation(operationKey, operation);
+    let result = await runAccountOperation(operationKey, operation);
+    if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
-      forgetOperationKey(operation);
+      forgetOperationKey(operation, accountId);
       clearPendingAccountOperationStepUp();
       setDeleted(true);
       submitting.current = false;
@@ -138,8 +164,17 @@ function DeleteAccountPage() {
     }
     submitting.current = false;
     setPending(false);
+    setConfirmation('');
     if (result.reason === 'denied') {
       setMessage(m.auth_account_delete_denied());
+    } else if (result.reason === 'platform-closed') {
+      setMessage(m.auth_organization_not_open());
+    } else if (result.reason === 'unknown') {
+      setMessage(m.auth_account_operation_unknown());
+      setShowRetry(true);
+    } else if (result.reason === 'unavailable') {
+      setMessage(m.auth_account_operation_unavailable());
+      setShowRetry(true);
     } else {
       setMessage(m.auth_account_operation_failure());
       setShowRetry(true);
@@ -168,14 +203,23 @@ function DeleteAccountPage() {
       </AuthPage>
     );
 
-  if (loadState === 'loading') return <AuthPage heading={m.auth_account_delete_heading()} />;
+  if (loadState === 'loading')
+    return (
+      <AuthPage heading={m.auth_account_delete_heading()}>
+        <p role="status">{m.auth_inventory_loading()}</p>
+      </AuthPage>
+    );
 
   if (deleted)
     return (
       <AuthPage heading={m.auth_account_delete_heading()}>
-        <div className="auth-login-alert auth-account-operation-success" role="status">
-          {m.auth_account_delete_success()}
-        </div>
+        <Alert role="status" className="mt-8">
+          <AlertDescription>
+            <p>{m.auth_account_delete_success()}</p>
+            <p>{m.auth_account_delete_cleanup_pending()}</p>
+            <p>{m.auth_account_delete_finality()}</p>
+          </AlertDescription>
+        </Alert>
       </AuthPage>
     );
 
@@ -183,6 +227,7 @@ function DeleteAccountPage() {
     <AuthPage heading={m.auth_account_delete_heading()}>
       <div className="auth-account-operation-copy">
         <p>{m.auth_account_delete_description()}</p>
+        <p>{m.auth_account_delete_cleanup_explanation()}</p>
         <section aria-labelledby="account-delete-erased" className="grid gap-2">
           <h2 id="account-delete-erased" className="font-semibold">
             {m.auth_account_delete_erased_heading()}
@@ -222,7 +267,15 @@ function DeleteAccountPage() {
           <li>{m.auth_account_delete_no_pending_transfer()}</li>
         </ul>
       </div>
+      <div className="mt-8">
+        <SecurityInventory preflight {...(inventorySource ? { source: inventorySource } : {})} />
+      </div>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
+        {returned ? (
+          <Alert role="status">
+            <AlertDescription>{m.auth_account_operation_reconfirm()}</AlertDescription>
+          </Alert>
+        ) : null}
         <p>{m.auth_account_delete_finality()}</p>
         <Field id="account-delete-confirmation" data-invalid={confirmationError}>
           <FieldLabel htmlFor="account-delete-input">
@@ -253,7 +306,12 @@ function DeleteAccountPage() {
           <ErrorAlert tabIndex={-1} ref={alert}>
             <p>{message}</p>
             {showRetry ? (
-              <Button type="button" variant="outline" disabled={pending} onClick={() => void deleteAccount()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || !confirmed}
+                onClick={() => void deleteAccount()}
+              >
                 {m.auth_account_delete_retry()}
               </Button>
             ) : null}

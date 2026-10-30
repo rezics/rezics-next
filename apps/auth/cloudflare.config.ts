@@ -1,4 +1,13 @@
-const pageRoutes = ['/login', '/signup', '/consent', '/recovery', '/security', '/step-up'];
+const pageRoutes = [
+  '/login',
+  '/signup',
+  '/consent',
+  '/recovery',
+  '/security',
+  '/step-up',
+  '/account/delete',
+  '/organizations/new',
+];
 
 export default {
   worker: {
@@ -17,6 +26,7 @@ export default {
     },
     triggers: [
       ...pageRoutes.map((path) => ({ type: 'fetch' as const, pattern: 'auth.rezics.com' + path })),
+      { type: 'fetch' as const, pattern: 'auth.rezics.com/_serverFn/*' },
       { type: 'fetch' as const, pattern: 'auth.rezics.com/auth-assets/*' },
     ],
   },

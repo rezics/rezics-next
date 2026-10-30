@@ -34,7 +34,12 @@ const config: StorybookConfig = {
     options: { builder: { viteConfigPath: null } },
   },
   features: { viewportStoryGlobals: true } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
-  stories: ['../src/stories/**/*.stories.tsx', '../src/stories/**/*.mdx', '../src/shell/**/*.stories.tsx'],
+  stories: [
+    '../src/stories/**/*.stories.tsx',
+    '../src/stories/**/*.mdx',
+    '../src/shell/**/*.stories.tsx',
+    '../../auth/src/stories/**/*.stories.tsx',
+  ],
   storySorts: [
     {
       order: [
@@ -83,6 +88,15 @@ const config: StorybookConfig = {
     };
     config.plugins ??= [];
     config.plugins.push(paraglideVitePlugin({ project: './project.inlang' }), tailwindcss());
+    config.plugins.push(
+      paraglideVitePlugin({
+        project: '../auth/project.inlang',
+        outdir: '../auth/src/paraglide',
+        emitTsDeclarations: true,
+        strategy: ['cookie', 'custom-accept-language', 'baseLocale'],
+        cookieName: 'rezics_locale',
+      }),
+    );
     config.optimizeDeps ??= {};
     // These packages install dependencies in their own node_modules, so a bare id does not resolve from web.
     const throughWorkspace = (id: string): string =>

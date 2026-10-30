@@ -1,5 +1,6 @@
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
+import { loadPasskeyInventory } from './security-inventory';
 
 export type SecuritySession = {
   id: string;
@@ -69,7 +70,7 @@ async function authGet<Body>(
 
 // One read of the person's own passkeys; entries that do not have the documented shape are dropped.
 async function loadPasskeys(): Promise<PasskeysLoad> {
-  const listed = await authGet<{ passkeys?: unknown }>('/passkeys');
+  const listed = await loadPasskeyInventory();
   if (!listed.ok) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
   if (!Array.isArray(listed.body.passkeys)) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
   const passkeys = listed.body.passkeys.flatMap((entry: unknown): SecurityPasskey[] => {

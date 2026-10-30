@@ -32,6 +32,10 @@ function requestForStory(): Request {
 export function createServerFn() {
   let validate: ((input: unknown) => unknown) | undefined;
   const chain = {
+    inputValidator(next: (input: unknown) => unknown) {
+      validate = next;
+      return chain;
+    },
     validator(next: (input: unknown) => unknown) {
       validate = next;
       return chain;

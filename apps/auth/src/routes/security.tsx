@@ -12,6 +12,7 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
+import { SecurityInventory, type InventorySource } from '../security-inventory-view';
 import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
 import {
   changePassword,
@@ -22,6 +23,7 @@ import {
   type PasskeysLoad,
   type SecurityPasskey,
   type SecuritySession,
+  type SecurityLoadResult,
 } from '../security';
 
 export const Route = createFileRoute('/security')({
@@ -33,7 +35,10 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
 const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
 
-function SecurityPage() {
+export function SecurityPage({
+  initial,
+  inventorySource,
+}: { initial?: SecurityLoadResult; inventorySource?: InventorySource } = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
@@ -59,7 +64,7 @@ function SecurityPage() {
 
   useEffect(() => {
     let active = true;
-    void loadSecurity(passkeysSupported()).then((result) => {
+    void (initial ? Promise.resolve(initial) : loadSecurity(passkeysSupported())).then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
         setAccountId(result.accountId);
@@ -77,7 +82,7 @@ function SecurityPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initial]);
 
   useLayoutEffect(() => {
     if (passwordFieldError) passwordInput.current?.focus();
@@ -192,7 +197,9 @@ function SecurityPage() {
   return (
     <AuthPage heading={m.auth_security_heading()}>
       <div className="auth-security-page">
-        {loadState === 'loading' ? null : (
+        {loadState === 'loading' ? (
+          <p role="status">{m.auth_inventory_loading()}</p>
+        ) : (
           <>
             <section aria-labelledby="security-password-heading">
               <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
@@ -335,6 +342,7 @@ function SecurityPage() {
                 </div>
               ) : null}
               {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
+              {!orderedSessions.length ? <p>{m.auth_security_sessions_empty()}</p> : null}
               <ItemGroup aria-label={m.auth_security_sessions_heading()}>
                 {orderedSessions.map((session) => {
                   const parsedDevice = securityDevice(session.user_agent);
@@ -394,6 +402,8 @@ function SecurityPage() {
                 })}
               </ItemGroup>
             </section>
+
+            <SecurityInventory {...(inventorySource ? { source: inventorySource } : {})} />
 
             <section aria-labelledby="security-organizations-heading">
               <h2 id="security-organizations-heading">{m.auth_organization_security_heading()}</h2>

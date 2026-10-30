@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
+import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import {
   accountOperationSessionMatches,
   accountOperationStepUpUrl,
@@ -13,6 +14,7 @@ import {
   pendingAccountOperationMatches,
   pendingAccountOperationStepUpState,
   storePendingAccountOperationStepUp,
+  accountOperationProfile,
 } from '../account-operation-step-up';
 import {
   forgetOperationKey,
@@ -21,6 +23,7 @@ import {
   readPendingOrganizationHandle,
   runAccountOperation,
   storePendingOrganizationHandle,
+  type AccountSessionResult,
 } from '../account-operations';
 import { normalizeSignupHandle } from '../signup';
 
@@ -34,9 +37,12 @@ export const Route = createFileRoute('/organizations/new')({
   component: NewOrganizationPage,
 });
 
-function NewOrganizationPage() {
+export function NewOrganizationPage({ initial }: { initial?: AccountSessionResult } = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [returned, setReturned] = useState(false);
+  const [unknown, setUnknown] = useState(false);
   const [handle, setHandle] = useState('');
   const [handleError, setHandleError] = useState('');
   const [pending, setPending] = useState(false);
@@ -51,7 +57,7 @@ function NewOrganizationPage() {
   useEffect(() => {
     let active = true;
     setHandle(readPendingOrganizationHandle());
-    void loadAccountSession().then((result) => {
+    void (initial ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
         const pendingState = pendingAccountOperationStepUpState();
@@ -68,6 +74,13 @@ function NewOrganizationPage() {
           return;
         }
         setAccountId(result.accountId);
+        setReturned(Boolean(pendingOperation));
+        const expected = accountOperationProfile('organization');
+        setNeedsProfile(
+          result.clientId !== expected.client_id ||
+            result.scopes?.length !== 1 ||
+            result.scopes[0] !== expected.scope[0],
+        );
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         setLoadState('signed-out');
@@ -79,7 +92,7 @@ function NewOrganizationPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initial]);
 
   useLayoutEffect(() => {
     if (handleError) handleInput.current?.focus();
@@ -104,7 +117,7 @@ function NewOrganizationPage() {
     setMessage('');
     setShowRetry(false);
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
-    const operationKey = operationKeyFor(operation);
+    const operationKey = operationKeyFor(operation, accountId);
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
     if (
@@ -116,9 +129,10 @@ function NewOrganizationPage() {
       setPending(false);
       return;
     }
-    const result = await runAccountOperation(operationKey, operation);
+    let result = await runAccountOperation(operationKey, operation);
+    if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
-      forgetOperationKey(operation);
+      forgetOperationKey(operation, accountId);
       storePendingOrganizationHandle('');
       clearPendingAccountOperationStepUp();
       setCreatedHandle(normalizedHandle);
@@ -141,8 +155,14 @@ function NewOrganizationPage() {
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
     } else if (result.reason === 'denied') {
-      setMessage(m.auth_organization_conflict());
-      setHandleError(m.auth_signup_handle_unavailable());
+      setMessage(m.auth_organization_refused());
+    } else if (result.reason === 'unknown') {
+      setUnknown(true);
+      setMessage(m.auth_account_operation_unknown());
+      setShowRetry(true);
+    } else if (result.reason === 'unavailable') {
+      setMessage(m.auth_account_operation_unavailable());
+      setShowRetry(true);
     } else {
       setMessage(m.auth_account_operation_failure());
       setShowRetry(true);
@@ -171,7 +191,12 @@ function NewOrganizationPage() {
       </AuthPage>
     );
 
-  if (loadState === 'loading') return <AuthPage heading={m.auth_organization_heading()} />;
+  if (loadState === 'loading')
+    return (
+      <AuthPage heading={m.auth_organization_heading()}>
+        <p role="status">{m.auth_inventory_loading()}</p>
+      </AuthPage>
+    );
 
   if (createdHandle)
     return (
@@ -186,6 +211,12 @@ function NewOrganizationPage() {
   return (
     <AuthPage heading={m.auth_organization_heading()}>
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
+        <p>{m.auth_organization_explanation()}</p>
+        {returned ? (
+          <Alert role="status">
+            <AlertDescription>{m.auth_account_operation_reconfirm()}</AlertDescription>
+          </Alert>
+        ) : null}
         <Field data-invalid={Boolean(handleError)}>
           <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
           <Input
@@ -205,7 +236,7 @@ function NewOrganizationPage() {
             }}
             aria-invalid={handleError ? true : undefined}
             aria-describedby={handleError ? handleErrorId : undefined}
-            readOnly={pending}
+            readOnly={pending || unknown}
             required
           />
           {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}

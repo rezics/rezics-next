@@ -1,0 +1,187 @@
+import { createServerFn } from '@tanstack/react-start';
+import { authPost } from './api';
+
+// Closed public DTOs from Auth's security inventory. Never keep native metadata.
+export type OwnedClient = { client_id: string; display_name: string | null; disabled: boolean; scopes: string[] };
+export type GrantedConsent = {
+  client_id: string;
+  display_name: string | null;
+  granted: string[];
+  status: 'current' | 'inactive' | 'unavailable';
+  reducible: boolean;
+  pending_reduction: boolean;
+};
+export type InventoryRows = { clients: OwnedClient; consents: GrantedConsent };
+export type InventoryView = keyof InventoryRows;
+type PublicPasskey = { id: string; name: string; created_at: string; last_used_at: string | null };
+export type InventoryPage<V extends InventoryView> =
+  | { kind: 'ready'; rows: InventoryRows[V][]; next: string | null }
+  | { kind: 'signed-out' | 'denied' | 'unavailable' | 'expired' };
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function strings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+export function parseInventoryPage<V extends InventoryView>(view: V, body: unknown): InventoryPage<V> {
+  if (
+    !record(body) ||
+    !Array.isArray(body[view]) ||
+    (body.next !== null && (typeof body.next !== 'string' || !body.next)) ||
+    body[view].length > 20
+  )
+    return { kind: 'unavailable' };
+  const rows: InventoryRows[InventoryView][] = [];
+  const seen = new Set<string>();
+  for (const entry of body[view]) {
+    if (
+      !record(entry) ||
+      typeof entry.client_id !== 'string' ||
+      !entry.client_id ||
+      seen.has(entry.client_id) ||
+      (entry.display_name !== null && typeof entry.display_name !== 'string')
+    )
+      return { kind: 'unavailable' };
+    seen.add(entry.client_id);
+    const label = { client_id: entry.client_id, display_name: entry.display_name };
+    if (view === 'clients') {
+      if (typeof entry.disabled !== 'boolean' || !strings(entry.scopes)) return { kind: 'unavailable' };
+      rows.push({ ...label, disabled: entry.disabled, scopes: entry.scopes });
+    } else {
+      if (
+        !strings(entry.granted) ||
+        !['current', 'inactive', 'unavailable'].includes(String(entry.status)) ||
+        typeof entry.reducible !== 'boolean' ||
+        typeof entry.pending_reduction !== 'boolean' ||
+        (entry.status !== 'current' && entry.granted.length > 0)
+      )
+        return { kind: 'unavailable' };
+      rows.push({
+        ...label,
+        granted: entry.granted,
+        status: entry.status as GrantedConsent['status'],
+        reducible: entry.reducible,
+        pending_reduction: entry.pending_reduction,
+      });
+    }
+  }
+  return { kind: 'ready', rows: rows as InventoryRows[V][], next: body.next as string | null };
+}
+
+type InventoryInput = { view: InventoryView; cursor?: string };
+async function issuerSecurityGet(path: string): Promise<Response> {
+  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+  const request = getRequest();
+  setResponseHeader('Cache-Control', 'private, no-store');
+  const origin = new URL(request.url).origin;
+  const nativeOrigin = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
+  if (
+    (request.headers.get('origin') !== origin && request.headers.get('origin') !== nativeOrigin) ||
+    request.headers.get('sec-fetch-site') === 'cross-site'
+  )
+    return new Response(null, { status: 403 });
+  // The existing issuer origin serves host.handler and owns its pools/keys and
+  // immutable accountOperations binding. No credentials leave this issuer.
+  return fetch(new URL(path, nativeOrigin), {
+    headers: {
+      Accept: 'application/json',
+      Origin: request.headers.get('origin')!,
+      Cookie: request.headers.get('cookie') ?? '',
+    },
+    redirect: 'error',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(5000),
+  });
+}
+
+// Browser GET cannot set Origin. Use the existing Start BFF and carry the
+// originating POST's real Origin/cookie to the same issuer's declared GET API.
+const readInventory = createServerFn({ method: 'POST' })
+  .inputValidator((value: unknown): InventoryInput => {
+    if (
+      !record(value) ||
+      !['clients', 'consents'].includes(String(value.view)) ||
+      Object.keys(value).some((key) => !['view', 'cursor'].includes(key)) ||
+      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 8192))
+    )
+      throw new Error('Invalid inventory request');
+    return value as InventoryInput;
+  })
+  .handler(async ({ data }): Promise<InventoryPage<InventoryView>> => {
+    const query = data.cursor ? `?${new URLSearchParams({ cursor: data.cursor })}` : '';
+    try {
+      const response = await issuerSecurityGet(`/${data.view}${query}`);
+      if (response.status === 401) return { kind: 'signed-out' };
+      if (response.status === 403) return { kind: 'denied' };
+      if (response.status === 400 && data.cursor) return { kind: 'expired' };
+      if (response.status !== 200) return { kind: 'unavailable' };
+      return parseInventoryPage(data.view, await response.json());
+    } catch {
+      return { kind: 'unavailable' };
+    }
+  });
+
+export async function loadInventory<V extends InventoryView>(view: V, cursor?: string): Promise<InventoryPage<V>> {
+  try {
+    return (await readInventory({ data: { view, ...(cursor ? { cursor } : {}) } })) as InventoryPage<V>;
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+// The existing passkey GET has the same exact-Origin guard as inventory.
+const readPasskeys = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<{ ok: true; body: { passkeys: PublicPasskey[] } } | { ok: false }> => {
+    try {
+      const response = await issuerSecurityGet('/passkeys');
+      if (response.status !== 200) return { ok: false };
+      const body: unknown = await response.json();
+      if (!record(body) || !Array.isArray(body.passkeys)) return { ok: false };
+      const passkeys = [];
+      for (const row of body.passkeys) {
+        if (
+          !record(row) ||
+          typeof row.id !== 'string' ||
+          typeof row.name !== 'string' ||
+          typeof row.created_at !== 'string' ||
+          (row.last_used_at !== null && typeof row.last_used_at !== 'string')
+        )
+          return { ok: false };
+        passkeys.push({ id: row.id, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at });
+      }
+      return { ok: true, body: { passkeys } };
+    } catch {
+      return { ok: false };
+    }
+  },
+);
+export async function loadPasskeyInventory() {
+  try {
+    return await readPasskeys();
+  } catch {
+    return { ok: false as const };
+  }
+}
+
+export type ConsentReductionResult = {
+  kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'unknown' | 'unavailable';
+};
+export async function removeConsent(consent: GrantedConsent): Promise<ConsentReductionResult> {
+  if (!consent.reducible || consent.pending_reduction || consent.status !== 'current' || !consent.granted.length)
+    return { kind: 'denied' };
+  const response = await authPost<{ client_id?: unknown; scope?: unknown }>('/consent', {
+    client_id: consent.client_id,
+    scope: [],
+  });
+  if (!response.ok) {
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status === 403 || response.status === 409) return { kind: 'denied' };
+    // A lost write response is not confirmation that permission was removed.
+    return { kind: response.code === 'unavailable' ? 'unknown' : 'unavailable' };
+  }
+  if (response.body.client_id !== consent.client_id || !strings(response.body.scope) || response.body.scope.length)
+    return { kind: 'unknown' };
+  return { kind: 'accepted' };
+}
