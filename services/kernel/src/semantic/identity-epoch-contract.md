@@ -1404,6 +1404,9 @@ It decrements only newly retained custody and never rewinds the
 scheduling cursor. These bounded transient locators add no retained copy or membership vector. Dirty-home repair
 keeps its individual scheduler steps and four pipelines. Pool and queue limits are unchanged. Individual
 source export/receiving/source ACK commands, raw100 bound, all4096 closure and every registered queue remain intact.
+The shared relay refills released worker slots from its current fixed-topology scan, retaining its normal four-worker
+limit, pause/stop drain and poll interval. It does not discard the rest of a scan after its first four launches,
+which would impose at least 102.4 seconds of polling on 4096 actual native homes. No checkpoint is fabricated.
 This changes scheduling overhead, not closure meaning or Community's default 30s settle deadline. Native growth
 64/512/4096, nested-function RLS/crash schedules and the actual default Community worker are the focused witnesses;
 full participant/output-generation, all-nine Cost, Content consumer acceptance and main/root promotion remain

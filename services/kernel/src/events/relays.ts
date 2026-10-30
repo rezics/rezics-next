@@ -19,6 +19,7 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
   let active = 0;
   let ticking = false;
   const inFlight = new Set<string>();
+  const running = new Set<Promise<void>>();
   const stopPositions = new Map<string, string>();
   const waiters: (() => void)[] = [];
   const key = (relay: Relay, partition: number) => `${relays.indexOf(relay)}:${partition}`;
@@ -71,10 +72,18 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
           return rows;
         });
         for (const row of partitions) {
+          // Refill a released slot from this scan instead of discarding its remaining partitions.
+          // The poll interval applies between scans, not between every four native homes.
+          while (!stopped && !paused && active >= concurrency) await Promise.race(running);
           if (stopped || paused) break;
           const partition = row.partition_no;
-          if (inFlight.has(key(relay, partition)) || active >= concurrency) continue;
-          void run(relay, partition);
+          if (inFlight.has(key(relay, partition))) continue;
+          const task = run(relay, partition);
+          running.add(task);
+          void task.then(
+            () => running.delete(task),
+            () => running.delete(task),
+          );
         }
       }
     } catch (error) {

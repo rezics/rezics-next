@@ -152,6 +152,8 @@ rather than serialize at topology home 0. The durable DBOS effect recovers a cra
 individual scheduler steps. All 4096 homes, including empty
 homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
 `readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.
+The shared relay refills completed worker slots from the current fixed-topology scan. Its normal concurrency and
+poll interval stay unchanged; initial all-home closure no longer waits one poll for each four native homes.
 
 Admission captures exact native input generations before effects, checks the 4096-original cap, and reserves P=1
 at the local control home. Overlapping input claims are busy; a different job occupying that home is locally
