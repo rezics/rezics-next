@@ -4,6 +4,7 @@ import {
   classifyLoadInducedFailures,
   parseJunit,
   rerunLoadFailures,
+  runLaneSuite,
   runTestFiles,
   scheduleFiles,
   testCommand,
@@ -14,6 +15,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
+import {
+  databaseCheck,
+  ownDatabase,
+  run as runAuthDatabaseCommand,
+  TEMPLATE_DATABASE,
+} from '../../../services/auth/scripts/database.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 
 export { ensureLocalWorkerVars };
@@ -349,6 +356,56 @@ export async function runHostTests(
   if (code !== 0) throw new Error(`host tests failed with status ${code}`);
 }
 
+/** Runs the Auth-backed Web host fixture in Auth's database lane without widening the general Web host suite. */
+async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const file = 'apps/web/tests/auth-binding.host.test.ts';
+  const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host'];
+  const code = await databaseCheck(remoteCommand, async () => {
+    const database = ownDatabase();
+    try {
+      const psql = async (sql: string): Promise<void> => {
+        runAuthDatabaseCommand('docker', [
+          'exec',
+          database.container,
+          'psql',
+          '-U',
+          'rezics',
+          '-d',
+          'postgres',
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-c',
+          sql,
+        ]);
+      };
+      const { failed } = await runLaneSuite({
+        service: 'auth',
+        directory: root,
+        files: [file],
+        partial: true,
+        createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
+        dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
+        environment: (name) => {
+          const url = database.url.replace(`/${TEMPLATE_DATABASE}?`, `/${name}?`);
+          return {
+            ...env,
+            AUTH_CHECK_CONTAINER: database.container,
+            AUTH_CHECK_LANE_OWNER: String(process.pid),
+            DATABASE_URL: url,
+            AUTH_TEST_DATABASE_URL: url,
+          };
+        },
+        env,
+      });
+      if (failed.length > 0) throw new Error(`Auth binding host test failed:\n${failed.join('\n')}`);
+    } finally {
+      database.close();
+    }
+    return 0;
+  });
+  if (code !== 0) throw new Error(`Auth binding host test placement failed with status ${code}`);
+}
+
 async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
   await runCommand('generate', 'bun', ['run', 'generate'], env);
   await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
@@ -417,6 +474,11 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 async function main(args: string[]): Promise<void> {
+  if (args[0] === '--auth-binding-host') {
+    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --auth-binding-host');
+    await runAuthBindingHostTest();
+    return;
+  }
   if (args.includes('--prepare-only')) {
     ensureLocalWorkerVars();
     await prepare(process.env);

@@ -181,8 +181,9 @@ bun run dev --host 127.0.0.1 --port 3000 --strictPort
 Use the same hostname throughout so Auth's session cookie reaches `/authorize` and `/logout`.
 Sign in with the person's password at Auth before following the site's sign-in link. Local HTTP changes neither
 the HTTPS API resource nor the issuer audience in client assertions. The automated proof needs Docker and runs
-from the repository root with `bun test apps/web/tests/auth-binding.host.test.ts`; it creates and removes its own
-migrated database, Auth listener and site process, and waits for the real five-minute token's refresh threshold.
+through the placed Auth database lane from the repository root with `bun apps/web/scripts/check.ts --auth-binding-host`;
+it creates and removes its own migrated database, Auth listener and site process, and waits for the real five-minute
+token's refresh threshold.
 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
 `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable. When it is missing,
