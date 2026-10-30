@@ -689,23 +689,34 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-stalled-runner-'));
   dirs.push(root);
-  await withRecoveryRunner(root, 0, async ({ id, log }) => {
-    const stale = new Date(Date.now() - 25);
-    utimesSync(join(root, log), stale, stale);
-    const out: string[] = [];
-    expect(
-      await waitWorkerCheck(id, root, 5_000, {
-        pollMs: 5,
-        stallMs: 10,
-        rerunStallMs: 1_000,
-        write: (chunk) => out.push(chunk),
-      }),
-    ).toBe(0);
-    expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
-    expect(out.join('')).toContain(`infrastructure failure (log did not grow for 10 ms) on ${hostname()}`);
-    expect(out.join('')).toContain('check: exit status 0');
-    expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
-  });
+  const log = '.temp/goal/checks/stalled.log';
+  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
+  writeFileSync(join(root, log), '');
+  const stale = new Date(Date.now() - 25);
+  utimesSync(join(root, log), stale, stale);
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  await new Promise<void>((resolveRunner) => runner.once('spawn', resolveRunner));
+  const id = '00000000-0000-4000-8000-000000000002';
+  writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
+  const out: string[] = [];
+  try {
+    await withQuietAdmission(async () =>
+      expect(
+        await waitWorkerCheck(id, root, 5_000, {
+          pollMs: 5,
+          stallMs: 10,
+          rerunStallMs: 1_000,
+          write: (chunk) => out.push(chunk),
+        }),
+      ).toBe(0),
+    );
+  } finally {
+    runner.kill('SIGKILL');
+  }
+  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+  expect(out.join('')).toContain('infrastructure failure (log did not grow for 10 ms) on stall-host-b');
+  expect(out.join('')).toContain('check: exit status 0');
+  expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
 });
 
 test('a second interrupted runner finishes as infrastructure failure without a third run', async () => {
