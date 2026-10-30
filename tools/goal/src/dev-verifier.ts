@@ -1,23 +1,24 @@
-import { createHash, randomUUID } from 'node:crypto';
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from 'node:fs';
-import { hostname } from 'node:os';
-import { basename, join } from 'node:path';
-import { Database } from 'bun:sqlite';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, parse } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import type { Settings, Task, DevVerifierEvidence, DevVerifierFinding, DevVerifierRun } from './types.ts';
+import type { Settings, Task } from './types.ts';
+import { siblingTestCommand } from './affected-tests.ts';
+import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import { matchesPath } from './briefs.ts';
-import { firstFailure, gateEnvironment, gateRunner, git, type GateRunner } from './merge.ts';
+import { gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
-import type { Database as DatabaseType } from 'bun:sqlite';
+import type { Database } from 'bun:sqlite';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
+import { createHash } from 'node:crypto';
+import { hostname } from 'node:os';
+import { Database as SqliteDatabase } from 'bun:sqlite';
+import { readdirSync } from 'node:fs';
+import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierRun } from './types.ts';
+import { firstFailure, gateEnvironment } from './merge.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
@@ -56,6 +57,24 @@ function head(cwd: string, branch: string): string {
 }
 function changedFiles(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'diff', '--name-only', '-z', `${base}..${target}`).split('\0').filter(Boolean);
+}
+function siblingTestFilesAtCommit(changedPaths: readonly string[], cwd: string, commit: string): string[] {
+  const tracked = new Set(git(cwd, 'ls-tree', '-r', '--name-only', commit).split('\n').filter(Boolean));
+  const tests = new Set<string>();
+  for (const source of changedPaths) {
+    if (
+      source.startsWith('services/kernel/') ||
+      !/\.(?:[cm]?[jt]sx?)$/i.test(source) ||
+      /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(source)
+    )
+      continue;
+    const extension = parse(source).ext;
+    const sameDirectory = join(dirname(source), `${parse(source).name}.test.ts`);
+    const workspaceTest = join('tests', `${basename(source, extension)}.test.ts`);
+    if (tracked.has(sameDirectory)) tests.add(sameDirectory);
+    else if (tracked.has(workspaceTest)) tests.add(workspaceTest);
+  }
+  return [...tests].sort();
 }
 function commits(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'rev-list', '--reverse', `${base}..${target}`).split('\n').filter(Boolean);
@@ -97,7 +116,7 @@ function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
 }
 function recordVerified(
   settings: Settings,
-  store: Pick<WorkerStore, 'tasks'> & { db?: DatabaseType },
+  store: Pick<WorkerStore, 'tasks'> & { db?: Database },
   base: string,
   target: string,
   passedTaskIds: ReadonlySet<string>,
@@ -117,7 +136,13 @@ function recordVerified(
     });
   }
 }
-function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
+function createChecks(
+  settings: Settings,
+  store: Pick<WorkerStore, 'tasks'>,
+  base: string,
+  target: string,
+  candidate = target,
+): Check[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, base, target);
   if (!files.length) return [];
@@ -125,9 +150,15 @@ function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
   const checks: Check[] = [
     { command: ['env', `TYPECHECK_CHANGED=${files.join('\n')}`, ...typecheck], closure: ['**'] },
   ];
-  for (const affected of settings.affectedTests ?? []) {
+  for (const affected of settings.verifierChecks ?? settings.affectedTests ?? []) {
     const selected = files.some((file) => matches(file, affected.paths));
     if (selected) checks.push({ command: [...affected.command], closure: [...affected.paths] });
+  }
+  if (settings.siblingTests) {
+    const nonSpecFiles = files.filter((file) => !file.startsWith('spec/') && !file.startsWith('specs/'));
+    const siblingFiles = siblingTestFilesAtCommit(nonSpecFiles, checkout, candidate);
+    const siblingCommand = siblingTestCommand(siblingFiles, settings.siblingTests.command);
+    if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
   }
   for (const task of taskLandings(settings, store, base, target))
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
@@ -246,27 +277,32 @@ function sourcePresentAt(cwd: string, commit: string, command: readonly string[]
   }
   return true;
 }
-function installDependencies(tree: string, stateDirectory: string): { passed: boolean; output: string; logPath: string } {
-  const logPath = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
-  if (!existsSync(join(tree, 'package.json')))
-    return { passed: true, output: '', logPath };
-  if (!existsSync(join(tree, 'bun.lock')))
-    return { passed: false, output: 'Baseline dependency setup failed: bun.lock is absent.', logPath };
-  let output = '';
+function installDependencies(tree: string, stateDirectory: string): boolean {
+  if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
+  const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
-    const attemptOutput = `${result.stdout ?? ''}${result.stderr ?? ''}${result.error ? `${result.error.message}\n` : ''}`;
-    output += `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n${attemptOutput}`;
-    appendFileSync(logPath, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n${attemptOutput}`);
-    if (result.status === 0) return { passed: true, output, logPath };
+    appendFileSync(installLog, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n`);
+    try {
+      const result = runBoundedInstallProcess({
+        command: 'bun',
+        args: ['install', '--frozen-lockfile'],
+        cwd: tree,
+        step: 'bun install --frozen-lockfile',
+        purpose: 'preparation',
+      });
+      appendFileSync(installLog, `${result.stdout}${result.stderr}`);
+      return true;
+    } catch (error) {
+      appendFileSync(installLog, `${error instanceof Error ? error.message : String(error)}\n`);
+    }
   }
-  return { passed: false, output, logPath };
+  return false;
 }
 
 export type DevVerifierOptions = {
   settings: Settings;
   store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask'> & {
-    db?: DatabaseType;
+    db?: Database;
     devVerifierRun?: (key: string) => DevVerifierRun | undefined;
     saveDevVerifierRun?: (run: DevVerifierRun) => void;
     devVerifierFindings?: (limit?: number) => DevVerifierFinding[];
@@ -345,7 +381,32 @@ function installDependenciesCached(
   });
   const cached = cachedRun(options.store, key);
   if (cached) return { passed: cached.passed, output: cached.output, logPath: cached.logPath };
-  const result = installDependencies(tree, options.settings.stateDirectory);
+  const { stateDirectory } = options.settings;
+  const logPrefix = 'dev-verify-install-';
+  const logSuffix = '.log';
+  const newLogPath = join(stateDirectory, `${logPrefix}${randomUUID()}${logSuffix}`);
+  let result: { passed: boolean; output: string; logPath: string };
+  if (!existsSync(join(tree, 'package.json'))) {
+    result = { passed: true, output: '', logPath: newLogPath };
+  } else if (!existsSync(join(tree, 'bun.lock'))) {
+    result = {
+      passed: false,
+      output: 'Baseline dependency setup failed: bun.lock is absent.',
+      logPath: newLogPath,
+    };
+  } else {
+    const previousLogs = new Set(readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)));
+    const passed = installDependencies(tree, stateDirectory);
+    const logName = readdirSync(stateDirectory).find(
+      (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
+    );
+    const logPath = logName ? join(stateDirectory, logName) : newLogPath;
+    let output = '';
+    try {
+      output = readFileSync(logPath, 'utf8');
+    } catch {}
+    result = { passed, output, logPath };
+  }
   const run: DevVerifierRun = {
     key,
     createdAt: new Date().toISOString(),
@@ -499,7 +560,7 @@ async function compareRange(
   target: string,
 ): Promise<Comparison> {
   const { settings, store } = options;
-  const checks: IndexedCheck[] = createChecks(settings, store, base, target).map((check, index) => ({
+  const checks: IndexedCheck[] = createChecks(settings, store, base, target, target).map((check, index) => ({
     ...check,
     index,
     signature: checkSignature(check, index),
@@ -1081,7 +1142,7 @@ function readFindingCounts(stateDirectory: string | undefined): VerificationFind
   if (!existsSync(path)) return empty;
   let db: Database | undefined;
   try {
-    db = new Database(path, { readonly: true, create: false });
+    db = new SqliteDatabase(path, { readonly: true, create: false });
     if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dev_verifier_findings'").get())
       return empty;
     const counts = db.query('SELECT status, count(*) AS count FROM dev_verifier_findings GROUP BY status').all() as {

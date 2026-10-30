@@ -36,6 +36,7 @@ export type Pool = {
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };
+export type SiblingTests = { command: string[] };
 export type DerivedFile = {
   path: string;
   stage: 'integration' | 'promotion';
@@ -69,7 +70,12 @@ export type Settings = {
   riskAreasFile: string;
   gate: string[];
   formatCommand: string[];
+  /** Checks selected by changed paths and run by the independent verifier after integration. */
+  verifierChecks?: AffectedTestCheck[];
+  /** Legacy landing selection retained for main-lane compatibility; never used by the dev landing train. */
   affectedTests?: AffectedTestCheck[];
+  /** The command prefix for sibling tests selected by the independent verifier. */
+  siblingTests?: SiblingTests;
   derivedFiles?: DerivedFile[];
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */

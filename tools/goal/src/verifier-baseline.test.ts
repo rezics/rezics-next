@@ -171,6 +171,45 @@ test('an existing baseline failure is recorded durably while a healthy landing a
   }
 });
 
+test('the verifier uses configured verifier checks and candidate sibling tests', async () => {
+  const root = repository();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  commit(root, 'tools/goal/src/fixture.ts', 'export const fixture = true;\n', 'add fixture source');
+  const head = commit(
+    root,
+    'tools/goal/src/fixture.test.ts',
+    "console.log('fixture test');\n",
+    'add fixture sibling test',
+  );
+  git(root, 'update-ref', 'refs/heads/dev', head, base);
+  const ctx = context(root);
+  const verifierCommand = ['bun', 'run', 'scripts/typecheck.ts'];
+  const legacyAffectedCommand = ['bun', 'test', 'scripts/typecheck.ts'];
+  const siblingCommand = ['bun', 'test'];
+  ctx.settings.verifierChecks = [{ paths: ['tools/goal/src/**'], command: verifierCommand }];
+  ctx.settings.affectedTests = [{ paths: ['tools/goal/src/**'], command: legacyAffectedCommand }];
+  ctx.settings.siblingTests = { command: siblingCommand };
+  const executed: string[][] = [];
+
+  try {
+    await verifyDev({
+      ...ctx,
+      runGate: runner(async (command) => {
+        executed.push([...command]);
+        return { passed: true, output: '', timedOut: false };
+      }),
+    });
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
+    expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(2);
+    expect(executed.filter((command) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
+    expect(
+      executed.filter((command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' ')),
+    ).toHaveLength(1);
+  } finally {
+    ctx.close();
+  }
+});
+
 test('a restarted verifier does not repeat prefix probes for an unchanged existing finding', async () => {
   const root = repository();
   const base = git(root, 'rev-parse', 'dev-verified');

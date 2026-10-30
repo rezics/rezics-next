@@ -746,25 +746,21 @@ always gates its own frozen integration candidate.
 ### Development verification
 
 Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
-merge train has landed its batch. It captures the exact previous `dev-verified` commit, selects typecheck, affected and
-landed acceptance commands from that range (excluding specification and research tasks), then runs each selected
-command at both the baseline and the captured head under the same environment and concurrency cap. Stable failing
-assertions present at both revisions are recorded as existing findings and do not prevent the verifier from advancing
-its progress ref. Assertions that are new in the range are attributed only to a task whose integrated changes can
-affect the failing command. For an affected-check failure after conflict resolution, ownership follows the integrated
-resolution commit and its original manager, even if an earlier task's source commit passes. The verifier reverts a
-proven culprit's integrated changes in one commit, returns that task to its manager with the exact head log, keeps the
-worker branch available for the fix, and advances verification past the culprit only after remaining commands reconcile.
-When a previously failing assertion passes at an intermediate landing prefix and fails again later, bounded prefix
-checks identify the later owning range.
+merge train has landed its batch. It starts from `dev-verified`, runs the root typecheck with `TYPECHECK_CHANGED`,
+the affected checks for changed paths, and each landed task's acceptance command (except specification and research
+tasks). Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries and rebases use that
+verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
+how many landings `dev` is ahead, and whether verification is pending, running or current.
 
-Every comparison is stored in SQLite with exact base, head, command, status and output evidence. Stable run and finding
-identities deduplicate unchanged work across restarts; unknown setup, missing-command, infrastructure and incomplete
-output results stay unknown and are never used as clean baseline evidence. Unknown infrastructure is retried at most
-twice per command, and bisection probes share the verifier's limit of three concurrent checks. `status` reports the
-verified progress ref, its distance from `dev`, the retained finding counts and that promotion still requires its full
-candidate gate. Promotion freezes the latest eligible integration head by its expected ref identity and does not use
-an older `dev-verified` ref as release authority.
+When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
+landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution
+commit to that resolution task's original manager, even if an earlier owner's source commit passes the check. It reverts
+only the culprit's integrated changes in one commit, returns the task to its manager with the exact failing log, and
+keeps the worker's source branch available for the owner's fix. It then advances the verified ref past the culprit so
+the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
+probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion. This
+moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
+promotion's verified input.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
 `.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements
@@ -851,3 +847,27 @@ format. `readSession` supplies optional session accounting, and `readAllowance` 
 quota-parser exports remain available for historical imports. Test an adapter through the real worker lifecycle with
 `withAgentAdapter`, whose binding stays local to that asynchronous lifecycle. Agents that cannot resume set
 `canResume` to false; retries then start a fresh session with the retry manifest.
+
+## Baseline findings and release gates
+
+This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
+and known findings; it is not a green release gate. For every captured `dev` head, the verifier compares every selected
+head check with the exact previous `dev-verified` commit under the same command selection, environment and concurrency
+limit. Selection uses `verifierChecks` (or legacy `affectedTests` when unset), the root typecheck with its exact
+`TYPECHECK_CHANGED` paths, candidate sibling tests for non-specification files, and landed task acceptance commands
+except for specification and research tasks.
+
+A stable assertion that fails at both revisions is durably recorded as an existing finding. It does not block the
+verification progress ref or earn a task a success receipt. A head assertion absent from the baseline is new and may
+be attributed only to a task whose integrated range can affect that check. The verifier reconciles every head result
+and its individual baseline comparison before advancing; a passing retry for one command cannot cover another
+unresolved failure. Stable assertion evidence distinguishes an existing failure from a different new failure in the
+same command. Unknown setup, absent commands, transport or other infrastructure errors, and incomplete output remain
+unknown rather than clean baseline results. Findings and exact run evidence are bounded and stored in SQLite so an
+unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
+three-check concurrency cap.
+
+Promotion selects the latest eligible integration head by its expected ref identity. It does not use an older
+`dev-verified` ref to pin a candidate. Each frozen promotion candidate still passes its full required gate, ancestry,
+quarantine, stabilization, ref-race and publication checks; known verifier findings do not turn a failed promotion
+command into a pass.
