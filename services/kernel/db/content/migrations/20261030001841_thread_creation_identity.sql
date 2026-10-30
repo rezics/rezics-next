@@ -1,3 +1,4 @@
+-- migrate:up
 DROP TRIGGER thread_identity ON content.thread;
 CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread
 FOR EACH ROW EXECUTE FUNCTION content.guard_identity(
