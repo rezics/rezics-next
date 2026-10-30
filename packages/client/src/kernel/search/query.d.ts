@@ -79,4 +79,3 @@ export declare function countFacets(search: OpenSearch, prefix: string, plan: {
         }[];
     }[];
 }>;
-export {};

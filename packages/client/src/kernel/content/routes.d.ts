@@ -7061,7 +7061,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     decision: {
                                         statement: string;
                                         target: {
-                                            kind: "post" | "thread";
+                                            kind: "board" | "post" | "thread";
                                             id: string;
                                         };
                                     };
@@ -7197,7 +7197,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                     decision: {
                                         statement: string;
                                         target: {
-                                            kind: "post" | "thread";
+                                            kind: "board" | "post" | "thread";
                                             id: string;
                                         };
                                     };

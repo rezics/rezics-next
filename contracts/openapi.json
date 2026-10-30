@@ -18557,8 +18557,9 @@
                                   },
                                   "kind": {
                                     "enum": [
-                                      "post",
-                                      "thread"
+                                      "board",
+                                      "thread",
+                                      "post"
                                     ],
                                     "type": "string"
                                   }
@@ -170229,8 +170230,9 @@
                                   },
                                   "kind": {
                                     "enum": [
-                                      "post",
-                                      "thread"
+                                      "board",
+                                      "thread",
+                                      "post"
                                     ],
                                     "type": "string"
                                   }
