@@ -95,6 +95,8 @@ export type GateOutcome = AttemptRef & {
   refusal?: GateOutcomeRefusal;
   /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
   rebaseConflict?: RebaseConflictContext;
+  /** A task repeated the same control-plane propagation conflict without source or target progress. */
+  controlPlaneConflictRepeated?: boolean;
   diffLines: number;
   mergedCommit?: string;
 };

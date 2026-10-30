@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import type { Attempt, Brief, Profile, Task } from './types.ts';
-import { createRuntime } from './config.ts';
+import { createRuntime, loadSettings } from './config.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import { runIntegration } from './integration-cli.ts';
 import { CONTROL_PLANE_CHECKS, MergeTrain } from './merge-train.ts';
@@ -13,6 +13,9 @@ import { CLASSIFIER_VERSION, emptySteps, emptyTokens } from './records.ts';
 import { openDb } from './db.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore } from './store.ts';
+import { SqliteManagerInbox } from './inbox.ts';
+import { WorkerJob } from './job.ts';
+import { WorkerTasks } from './tasks.ts';
 import { harness, repository } from './test-support.ts';
 
 type Fixture = {
@@ -23,6 +26,7 @@ type Fixture = {
   db: Database;
   store: WorkerStore;
   queue: SqliteLandingQueue;
+  job: WorkerJob;
   close(): void;
 };
 
@@ -41,6 +45,17 @@ function setup(): Fixture {
   const db = openDb(join(stateDirectory, 'goal.sqlite'));
   const store = new WorkerStore(db);
   const queue = new SqliteLandingQueue(db, store);
+  const loaded = loadSettings({ cwd: repo.main });
+  const settings = {
+    ...loaded,
+    mainCheckout: repo.main,
+    stateDirectory,
+    worktreeRoot,
+    integration: { ...loaded.integration, inboxDirectory: join(stateDirectory, 'inboxes') },
+  };
+  const tasks = new WorkerTasks(settings, store);
+  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const job = new WorkerJob(tasks, queue, inbox);
   const fixture: Fixture = {
     path: repo.path,
     main: repo.main,
@@ -49,6 +64,7 @@ function setup(): Fixture {
     db,
     store,
     queue,
+    job,
     close() {
       db.close();
       repo.close();
@@ -199,7 +215,7 @@ function runtime(fixture: Fixture, counts: { handoffs: number; pumps: number }):
     worktreeRoot: fixture.worktreeRoot,
     managerSocket: join(fixture.stateDirectory, 'missing-manager.sock'),
     fence: fixture.store,
-    sink: { onGateOutcome: () => {} },
+    sink: fixture.job,
     queue: fixture.queue,
     landing: (taskId) => landing(fixture, taskId),
     manager: () => {
@@ -253,12 +269,22 @@ function train(
     formatCommand: ['/bin/true'],
     queue: fixture.queue,
     fence: fixture.store,
-    sink: { onGateOutcome: () => {} },
+    sink: fixture.job,
     runGate: async (command, cwd) => {
       const passed = await runGate(command, cwd);
       return { passed, output: passed ? '' : 'unexpected check failure', timedOut: false };
     },
-    runLaunchSmoke: async () => ({ passed: true, output: '', timedOut: false }),
+    runLaunchSmoke: async (_command, cwd) => {
+      const candidate = git(cwd, 'rev-parse', 'HEAD');
+      const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+      return {
+        passed: true,
+        output:
+          `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} ` +
+          'scenarios=manager-landing:passed lifecycle-regressions=manager-landing:passed\n',
+        timedOut: false,
+      };
+    },
     ...(options.promote ? { promote: options.promote } : {}),
   });
 }
@@ -305,6 +331,7 @@ test('Owning manager land command integrates its ready accepted work without acc
     acceptanceRuns.push(command.join(' '));
     return true;
   }).run();
+  await fixture.job.drain();
   const integrated = fixture.store.task(task.id);
   expect(integrated.state).toBe('integrated');
   expect(integrated.integratedCommit).toBe(git(fixture.main, 'rev-parse', 'refs/heads/dev'));
@@ -409,6 +436,8 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
   const counts = { handoffs: 0, pumps: 0 };
   const integrationRuntime = runtime(fixture, counts);
   const managerGateRuns: string[] = [];
+  const compatibilityInstallRuns: string[] = [];
+  const compatibilityContractRuns: { command: string[]; cwd: string }[] = [];
   const managerPromotions: string[] = [];
   await withEnvironment(
     { GOAL_MANAGER: 'control-plane-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined },
@@ -422,8 +451,11 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
 
   const controller = train(
     fixture,
-    async (command) => {
-      managerGateRuns.push(command.join(' '));
+    async (command, cwd) => {
+      if (cwd.includes('control-plane-dev-')) compatibilityInstallRuns.push(command.join(' '));
+      else if (command[1] === 'tools/goal/scripts/check-compatibility.ts')
+        compatibilityContractRuns.push({ command: [...command], cwd });
+      else managerGateRuns.push(command.join(' '));
       return true;
     },
     {
@@ -433,9 +465,18 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
     },
   );
   await controller.run();
+  await fixture.job.drain();
   const mainHead = git(fixture.main, 'rev-parse', 'refs/heads/main');
   expect(fixture.store.task(task.id).integratedCommit).toBe(mainHead);
   expect(managerGateRuns).toEqual(CONTROL_PLANE_CHECKS.map((command) => command.join(' ')));
+  expect(compatibilityInstallRuns).toEqual(['bun install --frozen-lockfile']);
+  expect(compatibilityContractRuns).toHaveLength(1);
+  expect(compatibilityContractRuns[0]?.command.slice(0, 3)).toEqual([
+    'bun',
+    'tools/goal/scripts/check-compatibility.ts',
+    '--scripts-root',
+  ]);
+  expect(compatibilityContractRuns[0]?.command[3]).toContain('control-plane-dev-');
   expect(managerPromotions).toContain(mainHead);
   expect(existsSync(join(fixture.main, 'tools/goal/src/accepted.ts'))).toBe(true);
 });

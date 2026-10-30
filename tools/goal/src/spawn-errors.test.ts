@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { git as mergeGit } from './merge.ts';
 import { changedPathsBetween, MergeTrain } from './merge-train.ts';
@@ -33,7 +32,7 @@ test('merge train change inspection reports a spawn error when git cannot start'
   }
 });
 
-test('merge train branch lookup reports a spawn error when git cannot start', () => {
+test('the release snapshot preserves Git spawn failures and refuses a missing main ref', () => {
   const temp = temporaryDirectory();
   try {
     const checkout = join(temp.path, 'missing');
@@ -44,29 +43,42 @@ test('merge train branch lookup reports a spawn error when git cannot start', ()
       queue: {} as never,
       fence: {} as never,
       sink: {} as never,
+      integrationBranch: 'dev',
+      stabilizeBranch: 'stabilize',
     });
-    const trainWithBranchMerge = train as unknown as {
-      mergeCommitIntoBranch(
-        sourceCommit: string,
-        sourceBranch: string,
-        targetBranch: string,
-        logPath: string,
-      ): { error?: string };
+    const trainWithReleaseSnapshot = train as unknown as {
+      controlPlaneSnapshot(mainBranch: string): unknown;
     };
 
-    expect(
-      trainWithBranchMerge.mergeCommitIntoBranch('commit', 'source', 'target', join(temp.path, 'merge.log')).error,
-    ).toContain('ENOENT');
+    expect(() => trainWithReleaseSnapshot.controlPlaneSnapshot('main')).toThrow(/ENOENT/);
+
+    const repo = repository();
+    try {
+      const configured = new MergeTrain({
+        mainCheckout: repo.main,
+        stateDirectory: join(repo.path, 'state'),
+        worktreeRoot: join(repo.path, 'worktrees'),
+        queue: {} as never,
+        fence: {} as never,
+        sink: {} as never,
+        integrationBranch: 'dev',
+      }) as unknown as { controlPlaneSnapshot(mainBranch: string): unknown };
+      expect(() => configured.controlPlaneSnapshot('missing-main')).toThrow(
+        'Control-plane release requires missing-main',
+      );
+    } finally {
+      repo.close();
+    }
   } finally {
     temp.close();
   }
 });
 
-test('merge train reports the spawn error when its merge process cannot start', () => {
+test('prepared release merges preserve the exact merge-process spawn error', () => {
   const repo = repository();
   try {
     const source = repo.branch('source', 'source.txt');
-    repo.branch('target', 'target.txt');
+    const target = repo.branch('target', 'target.txt');
     const sourceCommit = mergeGit(source.worktree, 'rev-parse', 'HEAD');
     const train = new MergeTrain({
       mainCheckout: repo.main,
@@ -75,41 +87,38 @@ test('merge train reports the spawn error when its merge process cannot start', 
       queue: {} as never,
       fence: {} as never,
       sink: {} as never,
+      integrationBranch: 'dev',
+      runCandidateGit: (_cwd, args) =>
+        args[0] === 'merge'
+          ? {
+              status: null,
+              signal: null,
+              stdout: '',
+              stderr: '',
+              error: new Error('spawn ENOENT: git merge'),
+            }
+          : undefined,
     });
-    const trainWithBranchMerge = train as unknown as {
-      mergeCommitIntoBranch(
+    const trainWithReleaseMerge = train as unknown as {
+      mergeControlPlaneCandidate(
         sourceCommit: string,
         sourceBranch: string,
         targetBranch: string,
+        targetHead: string,
         logPath: string,
-        runSync: (
-          command: string,
-          args: string[],
-          options: { cwd: string; encoding: 'utf8' },
-        ) => { status: number | null; stdout: string | null; stderr: string | null; error?: Error },
-      ): { error?: string };
-    };
-    const runSync = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => {
-      if (args[0] === 'merge')
-        return { status: null, stdout: null, stderr: null, error: new Error('spawn ENOENT: git merge') };
-      const result = spawnSync(command, args, { cwd: options.cwd, encoding: options.encoding });
-      return {
-        status: result.status,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        ...(result.error ? { error: result.error } : {}),
-      };
+      ): { commit?: string; conflicts?: string[]; cause?: string };
     };
 
-    const result = trainWithBranchMerge.mergeCommitIntoBranch(
+    const result = trainWithReleaseMerge.mergeControlPlaneCandidate(
       sourceCommit,
       'source',
       'target',
+      mergeGit(target.worktree, 'rev-parse', 'HEAD'),
       join(repo.path, 'merge.log'),
-      runSync,
     );
 
-    expect(result.error).toContain('spawn ENOENT: git merge');
+    expect(result.commit).toBeUndefined();
+    expect(result.cause).toContain('spawn ENOENT: git merge');
   } finally {
     repo.close();
   }

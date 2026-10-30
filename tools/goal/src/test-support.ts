@@ -265,7 +265,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     if (entry) queue.acknowledge(entry.id);
     return h.store.task(task.id);
   }
-  async function train(runGate?: GateRunner, deliver = true) {
+  async function train(runGate?: GateRunner, deliver = true, runLaunchSmoke?: GateRunner) {
     await new MergeTrain({
       ...h.settings,
       queue,
@@ -277,6 +277,17 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         },
       },
       ...(runGate ? { runGate } : {}),
+      runLaunchSmoke:
+        runLaunchSmoke ??
+        (async (_command, cwd) => {
+          const candidate = repositoryGit(cwd, 'rev-parse', 'HEAD');
+          const devScriptTree = repositoryGit(cwd, 'rev-parse', 'refs/heads/dev');
+          return {
+            passed: true,
+            output: `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} scenarios=test:passed lifecycle-regressions=test:passed\n`,
+            timedOut: false,
+          };
+        }),
     }).run();
     await job.drain();
   }
