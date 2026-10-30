@@ -149,7 +149,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function failureDetails(value: unknown, status?: number, headers?: Headers): NativePreferenceFailure {
+function failureDetails(value: unknown, status?: number, headers?: HeadersInit): NativePreferenceFailure {
   const root = isRecord(value) ? value : undefined;
   const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
   const nativeStatus =
@@ -160,7 +160,7 @@ function failureDetails(value: unknown, status?: number, headers?: Headers): Nat
         ? problem.status
         : null);
   const retryAfter =
-    headers?.get('retry-after') ??
+    (headers === undefined ? undefined : new Headers(headers).get('retry-after')) ??
     (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined) ??
     (root && typeof root.retryAfter === 'string' ? root.retryAfter : undefined);
   return {
@@ -367,7 +367,7 @@ export async function changeNotifications(
         };
       return { ok: true, notifications, version: preferences.version };
     }
-    return writeFailure(failureDetails(result.error ?? result.data, statusOf(result), result.headers));
+    return writeFailure(failureDetails(result.error, statusOf(result), result.headers));
   } catch (error) {
     const failure = failureDetails(error);
     if (error instanceof MediaProblem && error.problem.code === 'forbidden')
