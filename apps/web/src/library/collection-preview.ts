@@ -1,7 +1,6 @@
-import type { KernelClient } from '@rezics/client';
+import type { SubjectRead } from '@rezics/client';
 
-type MemberPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']>;
-type SubjectSummary = NonNullable<MemberPage['members'][number]['subject']>;
+type SubjectSummary = NonNullable<SubjectRead['summary']>;
 
 /** Closed native list-preview declaration, pending inclusion in the generated client. */
 export type CollectionPreview = {

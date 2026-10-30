@@ -6,8 +6,15 @@ import { getLocale } from '../paraglide/runtime.js';
 import { displayLibraryTitle } from '../library/title';
 import { PageStory, exposureStory, libraryEntriesReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
+import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story';
+import { setContinueStorySize } from '../kernel/fake/library-continue';
+import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 
-const meta = { title: 'Pages/Library/Entries', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Library/Entries',
+  parameters: { layout: 'fullscreen' },
+  beforeEach: () => setLibraryEntriesStoryMode('recorded'),
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -25,6 +32,30 @@ export const SignedIn: Story = {
 };
 export const ExposureOpen: Story = exposureStory(pagePaths['library-entries']);
 export const ExposureClosed: Story = exposureStory(pagePaths['library-entries'], true);
+
+export const FilteredEmpty: Story = {
+  render: () => {
+    setLibraryEntriesStoryMode('empty');
+    setContinueStorySize(0);
+    setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+    return (
+      <PageStory
+        visitor="Signed In"
+        path={`${pagePaths['library-entries']}?state=${encodeURIComponent(entries.libraryEntries[0]!.state)}&layout=list&size=l`}
+      />
+    );
+  },
+  play: async (context) => {
+    await pageReady(context);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(await main.findByText(m.library_filter_empty_description())).toBeVisible();
+    expect(main.queryByText(m.library_empty_title())).toBeNull();
+    await expect(main.getByRole('link', { name: m.library_clear_state() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library?layout=list&size=l`,
+    );
+  },
+};
 
 async function removeFromShelf(
   context: { canvasElement: HTMLElement },
