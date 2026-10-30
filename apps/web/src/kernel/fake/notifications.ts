@@ -2,9 +2,9 @@ import { fromPlainText } from '@rezics/document';
 import type { FakeRoute } from '../fake-modules.ts';
 import type { ReporterStatus } from '../../moderation/reporter-status-model';
 
-function storyFixture(): string | null {
+function storyFixture(request: Request): string | null {
   const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url: string } }).__rezicsStoryContext;
-  return context ? new URL(context.url).searchParams.get('fixture') : null;
+  return context ? new URL(context.url, request.url).searchParams.get('fixture') : null;
 }
 
 const accountRoute = /^\/v1\/accounts\/[^/]+\/notifications(?:\/count)?$/;
@@ -119,12 +119,12 @@ const list: FakeRoute = {
   story: ({ request, recordings }) => {
     const url = new URL(request.url);
     if (url.pathname.endsWith('/count')) {
-      const fixture = url.searchParams.get('fixture') ?? storyFixture();
+      const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
       return fixture === 'many'
         ? { status: 200, count: 100, capped: false }
         : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
     }
-    const fixture = url.searchParams.get('fixture') ?? storyFixture();
+    const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
     if (fixture === 'preparing')
       return {
         status: 503,
@@ -175,8 +175,8 @@ const storyTargets: FakeRoute[] = [
   {
     method: 'GET',
     path: new RegExp(`^/v1/reports/${storyReport}$`),
-    story: () => {
-      const fixture = storyFixture();
+    story: ({ request }) => {
+      const fixture = storyFixture(request);
       if (fixture === 'report-moderator') {
         const { targetAvailability: _availability, ...report } = ownReport;
         return { status: 200, report: { ...report, partition: 1, transactionId: storyDecision } };

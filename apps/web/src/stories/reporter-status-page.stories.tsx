@@ -20,11 +20,19 @@ export const SubmittedReport: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await canvas.findByText('Repeated advertising in this discussion.');
     await canvas.findByRole('heading', { level: 1, name: m.reporter_status_heading() });
+    await expect(canvas.getAllByRole('main')).toHaveLength(1);
     const page = within(canvas.getByRole('main'));
     await expect(page.getByText(m.moderation_dismissed(), { exact: true })).toBeVisible();
+    await expect(page.getByText(m.reporter_status_dismissed_explanation())).toBeVisible();
+    await expect(page.getByText(m.report_spam(), { exact: true })).toBeVisible();
     await expect(page.getByText('Repeated advertising in this discussion.')).toBeVisible();
     await expect(page.getByText(m.moderation_target_unavailable())).toBeVisible();
+    await expect(page.getByText(m.reporter_status_submitted(), { exact: true })).toBeVisible();
+    await expect(page.getByText(m.reporter_status_reviewed(), { exact: true })).toBeVisible();
+    await expect(page.queryByText(m.reporter_status_pending(), { exact: true })).toBeNull();
+    await expect(page.queryByRole('alert')).toBeNull();
     await expect(page.getByRole('link', { name: m.reporter_status_back() })).toHaveAttribute(
       'href',
       localizeHref('/inbox'),

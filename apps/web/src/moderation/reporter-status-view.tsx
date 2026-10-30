@@ -11,7 +11,7 @@ type Retry = () => void | Promise<void>;
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(props: { report: ReporterStatus } | { onRetry: Retry }) {
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10">
+    <section className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="reporter-status-heading">
       <a
         href={localizeHref('/inbox')}
         className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -24,7 +24,7 @@ export function ReporterStatusPage(props: { report: ReporterStatus } | { onRetry
       ) : (
         <ReporterStatusFailure onRetry={props.onRetry} />
       )}
-    </main>
+    </section>
   );
 }
 

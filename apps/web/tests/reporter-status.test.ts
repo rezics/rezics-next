@@ -1,10 +1,14 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
 import { ReporterStatusPage, ReporterStatusView } from '../src/moderation/reporter-status-view';
 import { reporterStatusResponse, type ReporterStatus } from '../src/moderation/reporter-status-model';
 import { isSignedInPath } from '../src/session/guard';
+import { createKernelClient } from '@rezics/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { setStoryRequestContext } from '../.storybook/react-start';
 
 const submission: ReporterStatus = {
   id: 'report-1',
@@ -130,4 +134,96 @@ test('the served error state offers an explicit retry and inbox return without a
     submission.evidence ?? 'missing evidence',
   ])
     expect(html).not.toContain(value);
+});
+
+test('actual submitted report page resolves its owned source and renders exactly one accessible main in AppShell while unavailable and retry remain honest', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ loadReporterStatus }, { createStoryRecordedKernelFetch }, { AppShell }] = await Promise.all([
+    import('../src/moderation/reporter-status-read'),
+    import('../src/kernel/fake'),
+    import('../src/shell/shell'),
+  ]);
+  const id = '01a17a3b-0884-721b-91ef-d7ffd7bb58f3';
+  const path = `/en/moderation/reports/${id}?fixture=report-unavailable`;
+  const runtime = globalThis as typeof globalThis & {
+    __rezicsStoryContext?: { visitor: 'Signed In' | 'Signed Out'; url: string };
+  };
+  const previousContext = runtime.__rezicsStoryContext;
+  setStoryRequestContext({ visitor: 'Signed In', url: path });
+  const queryClient = new QueryClient();
+  try {
+    const calls: string[] = [];
+    const recordedFetch = createStoryRecordedKernelFetch();
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        calls.push(`${request.method} ${new URL(request.url).pathname}`);
+        expect(request.headers.get('authorization')).toBe('Bearer reporter');
+        return recordedFetch(request);
+      }) as typeof fetch,
+    });
+    const report = await loadReporterStatus(client, id, 'Bearer reporter');
+    expect(report).toEqual({
+      id,
+      target: { kind: 'post', id: '01a17a3b-0884-721b-91ef-d7ffd7bb58f2' },
+      revisionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58f6',
+      reason: 'spam',
+      evidence: 'Repeated advertising in this discussion.',
+      reporterId: '01a17a3b-0884-721b-91ef-d7ffd7bb58f0',
+      createdAt: '2026-10-27T08:00:00.000Z',
+      outcome: 'dismissed',
+      resolvedAt: '2026-10-28T08:00:00.000Z',
+      targetAvailability: 'unavailable',
+    });
+    expect(calls).toEqual([`GET /v1/reports/${id}`]);
+    if (!report) throw new Error('The submitted report fixture must resolve');
+
+    let failed = false;
+    const root = createRootRoute({
+      component: () =>
+        createElement(AppShell, {
+          children: failed
+            ? createElement(ReporterStatusPage, {
+                onRetry: async () => {
+                  throw new Error('Report status unavailable');
+                },
+              })
+            : createElement(ReporterStatusPage, { report }),
+        }),
+    });
+    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [path] }) });
+    await router.load();
+    const render = () =>
+      renderToStaticMarkup(
+        createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      );
+    const html = render();
+    expect(html.match(/<main\b/g)).toHaveLength(1);
+    expect(html).toMatch(/<main[^>]*id="main-content"/);
+    expect(html).not.toMatch(/<main[^>]*(?:hidden|aria-hidden="true")/);
+    expect(html).toContain('Repeated advertising in this discussion.');
+    expect(html).toContain('Dismissed');
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain(report.reporterId);
+
+    const unavailable = createKernelClient('http://kernel.local', {
+      fetch: (async () => Response.json({ code: 'dependency_unavailable' }, { status: 503 })) as typeof fetch,
+    });
+    await expect(loadReporterStatus(unavailable, id, 'Bearer reporter')).rejects.toThrow('Report status unavailable');
+    failed = true;
+    const failure = render();
+    expect(failure.match(/<main\b/g)).toHaveLength(1);
+    expect(failure).toContain('role="alert"');
+    expect(failure).toContain('Try again');
+    expect(failure).not.toContain(report.evidence!);
+    await expect(loadReporterStatus(unavailable, id, 'Bearer reporter')).rejects.toThrow('Report status unavailable');
+    const missing = createKernelClient('http://kernel.local', {
+      fetch: (async () => Response.json({ code: 'not_found' }, { status: 404 })) as typeof fetch,
+    });
+    expect(await loadReporterStatus(missing, id, 'Bearer reporter')).toBeNull();
+  } finally {
+    queryClient.clear();
+    if (previousContext) runtime.__rezicsStoryContext = previousContext;
+    else delete runtime.__rezicsStoryContext;
+  }
 });
