@@ -21,8 +21,12 @@ export class BoardChoiceUnavailable extends Error {
 
 /** No native bounded SKOS list export is installed. Never substitute a catalogue or guessed route. */
 export const unavailableBoardChoiceSource: BoardChoiceSource = {
-  async schemes() { throw new BoardChoiceUnavailable(); },
-  async concepts() { throw new BoardChoiceUnavailable(); },
+  async schemes() {
+    throw new BoardChoiceUnavailable();
+  },
+  async concepts() {
+    throw new BoardChoiceUnavailable();
+  },
 };
 
 export type BoardConceptSelection = { schemeId: string; choice: SetupChoice };
@@ -52,7 +56,9 @@ export class BoardChoicePager {
     this.scope = scope;
     this.cursor = undefined;
     this.update(loading);
-    this.timer = setTimeout(() => { void this.load(); }, debounceMs);
+    this.timer = setTimeout(() => {
+      void this.load();
+    }, debounceMs);
   }
   next() {
     if (this.page.status !== 'ready' || this.page.next === null) return;
@@ -63,7 +69,7 @@ export class BoardChoicePager {
     if (this.page.status === 'unavailable') void this.load();
   }
   choose(id: string): SetupChoice | null {
-    return this.page.status === 'ready' ? this.page.choices.find((choice) => choice.id === id) ?? null : null;
+    return this.page.status === 'ready' ? (this.page.choices.find((choice) => choice.id === id) ?? null) : null;
   }
   cancel() {
     clearTimeout(this.timer);
@@ -83,9 +89,10 @@ export class BoardChoicePager {
     try {
       if (scope.kind === 'concept' && !scope.schemeId) throw new BoardChoiceUnavailable();
       const input = { query: scope.query, ...(this.cursor === undefined ? {} : { cursor: this.cursor }) };
-      const result = scope.kind === 'scheme'
-        ? await scope.source.schemes(input)
-        : await scope.source.concepts({ ...input, schemeId: scope.schemeId });
+      const result =
+        scope.kind === 'scheme'
+          ? await scope.source.schemes(input)
+          : await scope.source.concepts({ ...input, schemeId: scope.schemeId });
       if (controller.signal.aborted) return;
       const choices = 'schemes' in result ? result.schemes : result.concepts;
       this.update({ status: 'ready', choices, next: result.next });

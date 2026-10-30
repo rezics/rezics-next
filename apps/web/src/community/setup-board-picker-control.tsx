@@ -8,7 +8,14 @@ import { m } from '../paraglide/messages.js';
 import type { SetupChoice } from './space-setup';
 import { BoardChoicePager, type BoardChoicePage, type BoardChoiceSource } from './setup-board-picker';
 
-export function SetupBoardPicker({ kind, schemeId = '', source, value, onChange, disabled }: {
+export function SetupBoardPicker({
+  kind,
+  schemeId = '',
+  source,
+  value,
+  onChange,
+  disabled,
+}: {
   kind: 'scheme' | 'concept';
   schemeId?: string;
   source: BoardChoiceSource;
@@ -21,14 +28,23 @@ export function SetupBoardPicker({ kind, schemeId = '', source, value, onChange,
   const [page, setPage] = useState<BoardChoicePage>({ status: 'loading', choices: [], next: null });
   const pager = useMemo(() => new BoardChoicePager(setPage), []);
   // Mask a previous source/query immediately, before the new effect has started.
-  const [loadedScope, setLoadedScope] = useState<{ source: BoardChoiceSource; query: string; schemeId: string; kind: string } | null>(null);
-  const current = loadedScope?.source === source && loadedScope.query === query && loadedScope.schemeId === schemeId && loadedScope.kind === kind;
+  const [loadedScope, setLoadedScope] = useState<{
+    source: BoardChoiceSource;
+    query: string;
+    schemeId: string;
+    kind: string;
+  } | null>(null);
+  const current =
+    loadedScope?.source === source &&
+    loadedScope.query === query &&
+    loadedScope.schemeId === schemeId &&
+    loadedScope.kind === kind;
   useEffect(() => {
     setLoadedScope({ source, query, schemeId, kind });
     if (!disabled) pager.search({ source, kind, schemeId, query });
     return () => pager.cancel();
   }, [pager, source, kind, schemeId, query, disabled]);
-  const shown = current ? page : { status: 'loading', choices: [], next: null } as const;
+  const shown = current ? page : ({ status: 'loading', choices: [], next: null } as const);
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
   return (
     <Field>
@@ -45,31 +61,61 @@ export function SetupBoardPicker({ kind, schemeId = '', source, value, onChange,
           </Button>
         </div>
       ) : null}
-      <Input id={id} type="search" value={query} maxLength={256} disabled={disabled}
-        aria-describedby={`${id}-hint`} placeholder={m.space_setup_board_choice_search()}
-        onChange={(event) => setQuery(event.target.value)} />
+      <Input
+        id={id}
+        type="search"
+        value={query}
+        maxLength={256}
+        disabled={disabled}
+        aria-describedby={`${id}-hint`}
+        placeholder={m.space_setup_board_choice_search()}
+        onChange={(event) => setQuery(event.target.value)}
+      />
       <div aria-busy={shown.status === 'loading' && !disabled} className="space-y-3">
         {shown.status === 'ready' ? (
           shown.choices.length ? (
-            <RadioGroup aria-label={label} value={value?.id ?? ''} disabled={disabled}
-              onValueChange={(id) => { const choice = pager.choose(String(id)); if (choice) onChange(choice); }}>
+            <RadioGroup
+              aria-label={label}
+              value={value?.id ?? ''}
+              disabled={disabled}
+              onValueChange={(id) => {
+                const choice = pager.choose(String(id));
+                if (choice) onChange(choice);
+              }}
+            >
               {shown.choices.map((choice, index) => (
-                <FieldLabel key={choice.id} htmlFor={`${id}-${index}`}
-                  className="flex min-h-12 min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-border p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5">
+                <FieldLabel
+                  key={choice.id}
+                  htmlFor={`${id}-${index}`}
+                  className="flex min-h-12 min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-border p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5"
+                >
                   <RadioGroupItem id={`${id}-${index}`} value={choice.id} />
                   <span className="min-w-0 break-words text-sm leading-relaxed">{choice.label}</span>
                 </FieldLabel>
               ))}
             </RadioGroup>
-          ) : <p role="status" className="text-sm text-muted-foreground">{m.space_setup_board_choice_no_matches()}</p>
+          ) : (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.space_setup_board_choice_no_matches()}
+            </p>
+          )
         ) : shown.status === 'unavailable' ? (
           <div role="status" className="space-y-3 rounded-xl border border-border bg-muted/50 p-4">
             <p className="text-sm leading-relaxed text-muted-foreground">{m.space_setup_board_choice_unavailable()}</p>
-            <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry()}>{m.space_setup_retry()}</Button>
+            <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry()}>
+              {m.space_setup_retry()}
+            </Button>
           </div>
-        ) : !disabled ? <p role="status" className="text-sm text-muted-foreground">{m.space_setup_loading()}</p> : null}
-        {shown.next !== null ? <Button type="button" variant="outline" disabled={disabled}
-          onClick={() => pager.next()}>{m.space_setup_board_choice_next()}</Button> : null}
+        ) : !disabled ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.space_setup_loading()}
+          </p>
+        ) : null}
+        {shown.next !== null ? (
+          <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.next()}>
+            {m.space_setup_board_choice_next()}
+          </Button>
+        ) : null}
       </div>
     </Field>
   );

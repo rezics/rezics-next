@@ -25,8 +25,14 @@ test('Guided board setup chooses installed SKOS scheme and exact member concept'
   const inputs: unknown[] = [];
   const requests: Request[] = [];
   const choices: BoardChoiceSource = {
-    schemes: async (input) => { inputs.push(input); return { schemes: [scheme], next: null }; },
-    concepts: async (input) => { inputs.push(input); return { concepts: [concept], next: null }; },
+    schemes: async (input) => {
+      inputs.push(input);
+      return { schemes: [scheme], next: null };
+    },
+    concepts: async (input) => {
+      inputs.push(input);
+      return { concepts: [concept], next: null };
+    },
   };
   const pager = new BoardChoicePager(() => {});
   pager.search({ source: choices, kind: 'scheme', schemeId: '', query: 'Reading' }, 0);
@@ -37,14 +43,17 @@ test('Guided board setup chooses installed SKOS scheme and exact member concept'
     fetch: async (input, init) => {
       const request = new Request(input, init);
       requests.push(request.clone());
-      return Response.json(request.method === 'PUT'
-        ? { realm: { ...realmRecording.realm, boardSchemeId: scheme.id } }
-        : boardRecording);
+      return Response.json(
+        request.method === 'PUT' ? { realm: { ...realmRecording.realm, boardSchemeId: scheme.id } } : boardRecording,
+      );
     },
   });
   const saved = await commandSetup(client, 'Bearer viewer', {
-    step: 'scheme', key, realmId: realmRecording.realm.realmId,
-    head: realmRecording.realm.headRevisionId, schemeId: pager.choose(scheme.id)!.id,
+    step: 'scheme',
+    key,
+    realmId: realmRecording.realm.realmId,
+    head: realmRecording.realm.headRevisionId,
+    schemeId: pager.choose(scheme.id)!.id,
   });
   expect(saved.kind).toBe('realm');
   pager.search({ source: choices, kind: 'concept', schemeId: scheme.id, query: 'Intro' }, 0);
@@ -52,15 +61,25 @@ test('Guided board setup chooses installed SKOS scheme and exact member concept'
   expect(pager.choose(concept.id)).toEqual(concept);
   expect(pager.choose(scheme.id)).toBeNull();
   const created = await commandSetup(client, 'Bearer viewer', {
-    step: 'board', key, realmId: realmRecording.realm.realmId, conceptId: pager.choose(concept.id)!.id,
-    title: 'Start here', purpose: 'reviews', visibility: 'protected',
+    step: 'board',
+    key,
+    realmId: realmRecording.realm.realmId,
+    conceptId: pager.choose(concept.id)!.id,
+    title: 'Start here',
+    purpose: 'reviews',
+    visibility: 'protected',
   });
   expect(created).toEqual({ kind: 'board', id: boardRecording.board.id });
   expect(inputs).toEqual([{ query: 'Reading' }, { schemeId: scheme.id, query: 'Intro' }]);
   expect(requests).toHaveLength(2);
   expect(new URL(requests[0]!.url).pathname).toBe(`/v1/realms/${realmRecording.realm.realmId}/boardScheme`);
   expect(requests[0]!.headers.get('if-match')).toBe(JSON.stringify(realmRecording.realm.headRevisionId));
-  expect(await requests[1]!.json()).toEqual({ title: 'Start here', conceptId: concept.id, purpose: 'reviews', visibility: 'protected' });
+  expect(await requests[1]!.json()).toEqual({
+    title: 'Start here',
+    conceptId: concept.id,
+    purpose: 'reviews',
+    visibility: 'protected',
+  });
   expect(requests.every((request) => request.headers.get('authorization') === 'Bearer viewer')).toBe(true);
   pager.cancel();
 });
@@ -69,7 +88,13 @@ test('search debounces, Next reads exactly one bounded page, and old query/sourc
   const inputs: unknown[] = [];
   let page: BoardChoicePage | undefined;
   let finishOld!: (result: { concepts: readonly { id: string; label: string }[]; next: null }) => void;
-  const old: BoardChoiceSource = { ...source, concepts: () => new Promise((resolve) => { finishOld = resolve; }) };
+  const old: BoardChoiceSource = {
+    ...source,
+    concepts: () =>
+      new Promise((resolve) => {
+        finishOld = resolve;
+      }),
+  };
   const current: BoardChoiceSource = {
     ...source,
     concepts: async (input) => {
@@ -77,7 +102,9 @@ test('search debounces, Next reads exactly one bounded page, and old query/sourc
       return { concepts: input.cursor ? [concept] : [scheme], next: input.cursor ? null : 'opaque-next' };
     },
   };
-  const pager = new BoardChoicePager((next) => { page = next; });
+  const pager = new BoardChoicePager((next) => {
+    page = next;
+  });
   pager.search({ source: old, kind: 'concept', schemeId: 'old-scheme', query: '' }, 0);
   await turn();
   pager.search({ source: current, kind: 'concept', schemeId: scheme.id, query: 'I' }, 10);
@@ -111,11 +138,16 @@ test('a missing or failed current source is unavailable, distinct from a success
   await expect(unavailableBoardChoiceSource.schemes({ query: '' })).rejects.toBeInstanceOf(BoardChoiceUnavailable);
   let page: BoardChoicePage | undefined;
   let calls = 0;
-  const choices: BoardChoiceSource = { ...source, schemes: async () => {
-    if (++calls === 1) throw new BoardChoiceUnavailable();
-    return { schemes: [], next: null };
-  } };
-  const pager = new BoardChoicePager((next) => { page = next; });
+  const choices: BoardChoiceSource = {
+    ...source,
+    schemes: async () => {
+      if (++calls === 1) throw new BoardChoiceUnavailable();
+      return { schemes: [], next: null };
+    },
+  };
+  const pager = new BoardChoicePager((next) => {
+    page = next;
+  });
   pager.search({ source: choices, kind: 'scheme', schemeId: '', query: '' }, 0);
   await turn();
   expect(page).toEqual({ status: 'unavailable', choices: [], next: null });
@@ -136,15 +168,25 @@ test('a changed saved scheme invalidates the pending topic without changing its 
 test('current native denial or membership conflict overrides display selection; uncertain retries preserve the exact command', async () => {
   let status = 503;
   const seen: { headers: Record<string, string>; body: unknown }[] = [];
-  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-    const request = new Request(input, init);
-    seen.push({ headers: Object.fromEntries(request.headers), body: await request.json() });
-    return Response.json({ code: 'current_authority_refused' }, { status });
-  } });
-  const original = setupAttempt(null, {
-    step: 'board', realmId: realmRecording.realm.realmId, conceptId: concept.id,
-    title: 'Keep this draft', purpose: 'discussion', visibility: 'draft',
-  }, key);
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      seen.push({ headers: Object.fromEntries(request.headers), body: await request.json() });
+      return Response.json({ code: 'current_authority_refused' }, { status });
+    },
+  });
+  const original = setupAttempt(
+    null,
+    {
+      step: 'board',
+      realmId: realmRecording.realm.realmId,
+      conceptId: concept.id,
+      title: 'Keep this draft',
+      purpose: 'discussion',
+      visibility: 'draft',
+    },
+    key,
+  );
   expect(retainSetupAttempt(await commandSetup(client, 'Bearer viewer', original))).toBe(true);
   const retry = setupAttempt(original, { ...original, title: 'Changed' }, crypto.randomUUID());
   expect(retry).toBe(original);
@@ -152,7 +194,11 @@ test('current native denial or membership conflict overrides display selection; 
   expect(seen[0]).toEqual(seen[1]);
   for (status of [403, 409, 422]) {
     const result = await commandSetup(client, 'Bearer viewer', original);
-    expect(result).toEqual({ kind: 'failure', reason: status === 403 ? 'denied' : status === 409 ? 'conflict' : 'invalid', status });
+    expect(result).toEqual({
+      kind: 'failure',
+      reason: status === 403 ? 'denied' : status === 409 ? 'conflict' : 'invalid',
+      status,
+    });
     expect(retainSetupAttempt(result)).toBe(false);
   }
 });

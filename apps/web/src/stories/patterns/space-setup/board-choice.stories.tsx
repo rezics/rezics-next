@@ -16,20 +16,30 @@ const concept = { id: '0192f3a0-6c1e-7b2a-9d4e-000000000004', label: 'Introducti
 const initial: SetupSnapshot = {
   kind: 'ready',
   space: {
-    id: spaceRecording.space.spaceId, head: spaceRecording.space.headRevisionId,
-    title: spaceRecording.space.title, summary: spaceRecording.space.summary,
-    address: spaceRecording.space.address, realmId: realmRecording.realm.realmId,
+    id: spaceRecording.space.spaceId,
+    head: spaceRecording.space.headRevisionId,
+    title: spaceRecording.space.title,
+    summary: spaceRecording.space.summary,
+    address: spaceRecording.space.address,
+    realmId: realmRecording.realm.realmId,
   },
   realm: {
-    id: realmRecording.realm.realmId, head: realmRecording.realm.headRevisionId,
-    title: realmRecording.realm.title, summary: realmRecording.realm.summary,
-    visibility: 'public', contextId: realmRecording.realm.contextId, schemeId: scheme.id,
+    id: realmRecording.realm.realmId,
+    head: realmRecording.realm.headRevisionId,
+    title: realmRecording.realm.title,
+    summary: realmRecording.realm.summary,
+    visibility: 'public',
+    contextId: realmRecording.realm.contextId,
+    schemeId: scheme.id,
   },
   permitted: { address: true, settings: true, scheme: true, board: true },
 };
 // Explicit display/command contract fixtures, not a production catalogue or permission source.
 const choices: BoardChoiceSource = {
-  schemes: async ({ query }) => ({ schemes: scheme.label.toLowerCase().includes(query.toLowerCase()) ? [scheme] : [], next: null }),
+  schemes: async ({ query }) => ({
+    schemes: scheme.label.toLowerCase().includes(query.toLowerCase()) ? [scheme] : [],
+    next: null,
+  }),
   concepts: async ({ schemeId, query }) => {
     if (schemeId !== scheme.id) throw new BoardChoiceUnavailable();
     return { concepts: concept.label.toLowerCase().includes(query.toLowerCase()) ? [concept] : [], next: null };
@@ -45,11 +55,16 @@ function BoardChoiceExample({ outcome = 'denied' }: { outcome?: 'denied' | 'conf
           if (first) await expect(command).toEqual(first);
           first = command;
         }
-        return { kind: 'failure', reason: outcome, status: outcome === 'denied' ? 403 : outcome === 'conflict' ? 409 : 503 };
+        return {
+          kind: 'failure',
+          reason: outcome,
+          status: outcome === 'denied' ? 403 : outcome === 'conflict' ? 409 : 503,
+        };
       },
-      read: async () => outcome === 'conflict'
-        ? { ...initial, realm: { ...initial.realm!, schemeId: '0192f3a0-6c1e-7b2a-9d4e-000000000005' } }
-        : { ...initial, permitted: { address: false, settings: false, scheme: false, board: false } },
+      read: async () =>
+        outcome === 'conflict'
+          ? { ...initial, realm: { ...initial.realm!, schemeId: '0192f3a0-6c1e-7b2a-9d4e-000000000005' } }
+          : { ...initial, permitted: { address: false, settings: false, scheme: false, board: false } },
     };
   }, [outcome]);
   return (
@@ -66,8 +81,15 @@ function BoardChoiceExample({ outcome = 'denied' }: { outcome?: 'denied' | 'conf
 const meta = {
   title: 'Patterns/Community/Space Setup/Board Choices',
   component: BoardChoiceExample,
-  parameters: { layout: 'fullscreen', docs: { description: { component:
-    'The existing setup form in AppShell, using explicit BoardChoiceSource display fixtures and native refusal response contracts. Review the same IDs at phone390/desktop1280 in light/dark. These states do not claim installed list availability or native authorization proof.' } } },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'The existing setup form in AppShell, using explicit BoardChoiceSource display fixtures and native refusal response contracts. Review the same IDs at phone390/desktop1280 in light/dark. These states do not claim installed list availability or native authorization proof.',
+      },
+    },
+  },
 } satisfies Meta<typeof BoardChoiceExample>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -91,7 +113,8 @@ export const Selection: Story = {
   },
 };
 export const StaleScheme: Story = {
-  args: { outcome: 'conflict' }, render,
+  args: { outcome: 'conflict' },
+  render,
   play: async ({ canvasElement }) => {
     const view = await chooseTopic(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
@@ -102,7 +125,8 @@ export const StaleScheme: Story = {
   },
 };
 export const Denied: Story = {
-  args: { outcome: 'denied' }, render,
+  args: { outcome: 'denied' },
+  render,
   play: async ({ canvasElement }) => {
     const view = await chooseTopic(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
@@ -112,7 +136,8 @@ export const Denied: Story = {
   },
 };
 export const UncertainRetry: Story = {
-  args: { outcome: 'unavailable' }, render,
+  args: { outcome: 'unavailable' },
+  render,
   play: async ({ canvasElement }) => {
     const view = await chooseTopic(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
