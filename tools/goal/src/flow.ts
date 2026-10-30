@@ -28,6 +28,11 @@ export const flowMigrations = [
     version: 1,
     sql: `CREATE TABLE flow_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, attempt INTEGER NOT NULL, stage TEXT NOT NULL, action TEXT NOT NULL, at TEXT NOT NULL, detail TEXT); CREATE INDEX flow_events_task ON flow_events(task_id, attempt, sequence); CREATE TABLE flow_alarm_sends (threshold TEXT PRIMARY KEY, sent_at TEXT NOT NULL); CREATE TABLE flow_audit_runs (day TEXT PRIMARY KEY, task_id TEXT NOT NULL);`,
   },
+  {
+    module: 'flow',
+    version: 2,
+    sql: `CREATE INDEX flow_events_launch_window ON flow_events(stage, action, at, task_id, attempt);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
@@ -116,7 +121,22 @@ function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
   return durations;
 }
 
-export function flowReport(events: FlowEvent[], tasks: Task[], now = Date.now()) {
+export type FlowTask = Pick<Task, 'id'> & { brief: Pick<Task['brief'], 'goal'> };
+
+/** Read only the task fields used by flow reporting, without decoding full task bodies in JavaScript. */
+export function readFlowTasks(db: Database): FlowTask[] {
+  const exists = db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worker_tasks'").get();
+  if (!exists) return [];
+  return (
+    db
+      .query("SELECT id, json_extract(body, '$.brief.goal') AS goal FROM worker_tasks ORDER BY sequence")
+      .all() as { id: string; goal: string | null }[]
+  )
+    .filter((row): row is { id: string; goal: string } => typeof row.goal === 'string')
+    .map((row) => ({ id: row.id, brief: { goal: row.goal } }));
+}
+
+export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
   const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
   const byTask = new Map<string, FlowEvent[]>();
   for (const event of ordered) byTask.set(event.taskId, [...(byTask.get(event.taskId) ?? []), event]);
