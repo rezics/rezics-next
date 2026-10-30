@@ -2,7 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
-import type { AccountWorkflowPorts } from '@rezics/auth-contract';
 import { createHash } from 'node:crypto';
 
 type Progress = {
