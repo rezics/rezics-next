@@ -3,11 +3,12 @@ import {
   Cover,
   listPresentationForCover,
   type CoverProps,
+  type CoverRatio,
   type CoverSubject,
   type CoverSummary,
   type ListPresentation,
 } from './cover.tsx';
-import { ListRow, ListRowLink } from './list-row.tsx';
+import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
 import { cn } from '../utils.ts';
 
 /** A member row keeps its actual Type, cover, title and bounded supplied details together. */
@@ -19,6 +20,7 @@ export function MemberListRow({
   title,
   titleLang,
   listPresentation,
+  ratio,
   suitability,
   labels,
   storyOverlay = false,
@@ -34,6 +36,8 @@ export function MemberListRow({
   titleLang?: string;
   /** A resolved release value when the current reader already has one. */
   listPresentation?: ListPresentation;
+  /** Composition fallback for an unknown Type; never replaces a known member's presentation. */
+  ratio?: CoverRatio;
   suitability?: CoverProps['suitability'];
   labels?: CoverProps['labels'];
   storyOverlay?: boolean;
@@ -43,14 +47,17 @@ export function MemberListRow({
 }) {
   const presentation = listPresentationForCover(subject, listPresentation);
   return (
-    <ListRow
-      forceOverlay={storyOverlay}
-      className={cn('flex min-w-0 items-start gap-4 py-2', className)}
-    >
+    <ListRow forceOverlay={storyOverlay} className={cn('flex min-w-0 items-start gap-4 py-2', className)}>
       <ListRowLink href={href} lang={titleLang}>
         {title}
       </ListRowLink>
-      <div data-slot="member-list-row-cover" className="w-[72px] shrink-0 sm:w-24">
+      <div
+        data-slot="member-list-row-cover"
+        className={cn(
+          'shrink-0 [&_button]:relative [&_button]:z-10',
+          presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
+        )}
+      >
         <Cover
           subject={subject}
           cover={cover}
@@ -58,6 +65,7 @@ export function MemberListRow({
           src={src}
           decorative
           {...(presentation ? { listPresentation: presentation } : {})}
+          {...(ratio ? { ratio } : {})}
           {...(suitability ? { suitability } : {})}
           {...(labels ? { labels } : {})}
         />
@@ -74,7 +82,7 @@ export function MemberListRow({
           </h2>
           {children}
         </div>
-        {trailing}
+        {trailing != null && <ListRowControl className="shrink-0">{trailing}</ListRowControl>}
       </div>
     </ListRow>
   );

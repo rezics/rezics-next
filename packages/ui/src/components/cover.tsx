@@ -3,11 +3,7 @@ import { useCallback, useState, type CSSProperties } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { cn } from '../utils.ts';
-import {
-  listPresentationForCover,
-  listPresentationRatio,
-  type ListPresentation,
-} from './list-presentation-model.ts';
+import { listPresentationRatio, parseListPresentation, type ListPresentation } from './list-presentation-model.ts';
 import {
   coverFallback,
   coverFit,
@@ -30,7 +26,12 @@ import {
 
 export { coverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
-export { fallbackListFactProperties, fallbackListPresentation, parseListPresentation } from './list-presentation-model.ts';
+export {
+  fallbackListFactProperties,
+  fallbackListPresentation,
+  listPresentationForCover,
+  parseListPresentation,
+} from './list-presentation-model.ts';
 export type { ListImageAspect, ListPresentation } from './list-presentation-model.ts';
 
 /** The responsive preload source for the same format and size that the page cover's image uses. */
@@ -108,7 +109,7 @@ export function Cover({
   className,
 }: CoverProps) {
   const text = { ...coverLabels, ...labels };
-  const memberPresentation = listPresentationForCover(subject, listPresentation);
+  const memberPresentation = parseListPresentation(listPresentation);
   const frameRatio =
     (memberPresentation ? listPresentationRatio(memberPresentation) : undefined) ??
     (ratio === undefined ? undefined : parseCoverRatio(ratio)) ??

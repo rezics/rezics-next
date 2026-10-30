@@ -1,5 +1,4 @@
-import type { CoverRatio } from './cover-model.ts';
-import type { CoverSubject } from './cover-model.ts';
+import type { CoverRatio, CoverSubject } from './cover-model.ts';
 
 export type ListImageAspect = 'portrait' | 'landscape' | 'square';
 
@@ -24,6 +23,7 @@ export function parseListPresentation(value: unknown): ListPresentation | undefi
   const imageAspect = record.imageAspect;
   const keyFacts = record.keyFacts;
   if (
+    Object.keys(record).some((key) => key !== 'imageAspect' && key !== 'keyFacts') ||
     (imageAspect !== 'portrait' && imageAspect !== 'landscape' && imageAspect !== 'square') ||
     !Array.isArray(keyFacts) ||
     keyFacts.length > 4 ||
@@ -57,6 +57,7 @@ const typeFallbacks = new Map<string, ListImageAspect>([
   ['wd:Q3464665', 'landscape'],
   ['schema:Episode', 'landscape'],
   ['wd:Q1983062', 'landscape'],
+  ['rezics:AnimeRelease', 'landscape'],
   ['schema:MusicAlbum', 'square'],
   ['wd:Q482994', 'square'],
   ['schema:Recipe', 'landscape'],
@@ -70,8 +71,8 @@ const factualFallbacks = new Map<string, readonly string[]>([
   ['wd:Q5398426', ['schema:numberOfEpisodes']],
   ['schema:TVSeason', ['schema:numberOfEpisodes']],
   ['wd:Q3464665', ['schema:numberOfEpisodes']],
-  ['schema:Episode', ['schema:episodeNumber', 'schema:duration']],
-  ['wd:Q1983062', ['schema:episodeNumber', 'schema:duration']],
+  ['schema:Episode', ['schema:duration']],
+  ['wd:Q1983062', ['schema:duration']],
 ]);
 
 function firstTypeValue<T>(types: readonly string[], values: ReadonlyMap<string, T>): T | undefined {

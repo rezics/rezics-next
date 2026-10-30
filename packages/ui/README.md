@@ -140,7 +140,9 @@ cover (US trade, Steam capsules) loses about 7% of its height in the frame; 3:4 
 
 The ratio is resolved from the subject's semantic type through its structural bases, the same way templates resolve; a creative work with no more specific type uses 5:7 and anything else uses 1:1. A coarse resource class, an empty type list or a summary that dropped the types never decides the ratio, so every read that feeds `Cover` carries the subject's type.
 
-A row, grid or list that mixes types uses one frame ratio for all its items (the ratio of most of its items, 5:7 when tied), so mixed shelves stay aligned; each image is then fitted by the rule below. A Zone's `cover` appearance token (`portrait`, `square`, `landscape`) chooses that shared ratio on its pages instead. A single-type list and the subject page header always use the type's own ratio.
+Standalone `Cover` keeps these legacy ratios and honors an explicit valid `ratio`. List rows and cards use the
+separate [list presentation](#list-presentation) contract. `sharedRatio` and a Zone's `cover` appearance token still
+supply composition fallbacks for members without a known list presentation.
 
 An image whose own ratio is within 15% of the frame fills it (`object-fit: cover`). A wider or taller image is shown whole (`object-fit: contain`) on a backdrop of its own placeholder colour, so landscape package art or a square album cover in a portrait slot is never cut to a sliver. Portraits of characters and people keep the top of the image when they are cropped (`object-position: top`); other images keep their stored focal point, or the centre.
 
@@ -178,8 +180,8 @@ mode, relation, edition and character tiles) follows one pattern:
 - Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
   relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
   the subject page. The last row places state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
-- Every cover in a grid or row has the frame ratio rules of [Cover](#cover), so covers align across the row and
-  text starts at the same height.
+- Every card keeps its actual member Type's list frame. Its title and metadata remain attached beneath that image;
+  a grid's composition ratio is only the fallback when the member has no known list presentation.
 - The whole card is one link to the subject; a site passes its client-side router link as `link`. Actions on the item (change status, remove, add to collection) live
   in the card's ⋯ menu, never as a button or select on the card.
 - Grid columns follow the container width (two on a phone, more on wider screens), with the same gap between
@@ -202,6 +204,25 @@ Checkboxes and radio buttons use the shadcn `Checkbox` and `RadioGroup` inside a
 ## Lists
 
 Import `ListRow`, `ListRowLink` and `ListRowControl` from `@rezics/ui/list-row` for item lists. Rows have no fixed height, dividers, borders or card background at rest. The rounded overlay is the only hover, keyboard-focus and press state. Stretch the title link over the row, and put controls or secondary links above it in `ListRowControl`. Prefer a larger vertical cover over denser rows: covers are at least 72 px wide on a phone and 96 px from `sm` up, at the subject's own ratio. Grids of cover cards are not lists.
+
+### List presentation
+
+The joint authority is [Collection presentation](../../docs/collection-presentation.md). Import `MemberListRow`
+from `@rezics/ui/list-presentation` and the `ListPresentation` type from `@rezics/ui/cover`. Both member rows and
+`CoverCard` accept optional effective `listPresentation` input: `imageAspect` chooses portrait 3:4, landscape 16:9
+or square 1:1; `keyFacts` selects up to four ordered unique effective property CURIEs. The renderer never invents
+inherited hints or fact values. The caller supplies already available, localized facts as content or card metadata.
+
+Without optional hints, current exact Type identities select book/edition/manga portrait frames, film/series/episode/
+AnimeRelease and recipe landscape frames, and music square frames. Unknown Types retain their valid composition or
+legacy Cover fallback. A Collection kind may guide composition; it never rewrites a member's actual Type. Rows use
+72/96 px portrait and square images and 128/192 px landscape images on phone/desktop, with a common radius and
+two-line attached title. Standalone `Cover` opts into list presentation only when explicitly passed that object.
+
+The complete behavior folder is `Components/List Presentation`, with attached docs, keyboard focus, actual menu
+interaction and suitability reveal. Review the same IDs `components-list-presentation--book`, `--video`, `--anime`,
+`--music`, `--recipe`, `--mixed`, `--missing-image`, `--withheld`, `--key-facts` and `--unknown-type` at 390 and 1280,
+using locale and theme globals. Width, locale and theme are not separate behavior states.
 
 ## Metadata lines
 

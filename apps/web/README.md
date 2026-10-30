@@ -399,6 +399,31 @@ that route exists.
 
 ## Cost
 
+### Render current member presentation
+
+Search `ResultList` and subject/related `CoverList` use the shared member row/card renderers. Their optional
+`listPresentationFor` callback consumes the already available release, using `releasedListPresentation` from
+`src/media/type-presentation.ts` as a narrow adapter for effective compiled annotations. This does not claim that
+current generated definitions publish `listPresentation`. Older releases use exact current member-Type fallbacks;
+no label matching or Collection-kind mutation selects a member's Type. The joint field contract remains owned by
+[Collection presentation](../../docs/collection-presentation.md).
+
+`CoverList.memberFacts` optionally accepts already supplied current-page facts keyed by member ID, using the
+existing Search Fact union. It makes no reads. The member-fact batch producer remains pending. Missing input stays
+absent; no year, creator, runtime or episode count is fabricated. Explicit empty key-fact hints clear the fact line.
+Existing relation notes remain visible. Search keeps its separately supplied publication-year metadata.
+
+- **Touches:** Only the current page's supplied Types, effective release annotations, covers and facts.
+- **Bound:** O(current bounded page), at most four selected properties, three supplied values per property and four
+  visible values per member, zero added network or detail reads. Effective release lookup uses the supplied Type
+  sequence with no client ancestor expansion. Source/protocol page limits and continuation remain unchanged.
+- **Growth check:** `tests/type-presentation.test.ts` renders the actual Search and cover-list callers at catalogue
+  sizes 1, 100 and 10,000 through one bounded page request, retaining the 100-member cap and zero enrichment reads.
+- **Visual handoff:** `patterns-type-presentation--mixed` reuses the actual callers. The ten
+  `components-list-presentation` behavior IDs are documented in UI's README. Every ID needs phone390/desktop1280,
+  en/zh-Hans and light/dark review through globals. Worker typing is not visual approval; controller review remains
+  pending.
+
 ### Signed-in routes
 
 Signed-in routes use `beforeLoad: requireSignedIn`; an unavailable session store shows the existing error page.

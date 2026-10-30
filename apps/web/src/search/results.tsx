@@ -13,6 +13,7 @@ import { ItemDescription } from '@rezics/ui/shadcn/item';
 import { m } from '../paraglide/messages.js';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
+import { listKeyFacts } from '../media/type-presentation';
 import { subjectHref } from '../subject/subject-href';
 
 export type Fact =
@@ -36,25 +37,14 @@ export type ResultHit = SubjectHit & {
   storyOverlay?: boolean;
 };
 
-const FACT_VALUES_PER_PROPERTY = 3;
-const LIST_FACT_LIMIT = 4;
-
 export function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
   const picked = pickText(labels, locale);
   return { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) };
 }
 
-function factText(fact: Fact, locale: string): { text: string; lang?: string } {
-  if (fact.kind === 'item') return localizedLabel(fact.labels, locale);
-  if (fact.kind === 'time') return { text: String(fact.year) };
-  if (fact.kind === 'quantity')
-    return { text: `${new Intl.NumberFormat(locale).format(fact.amount)}${fact.unit ? ` ${fact.unit}` : ''}` };
-  return { text: fact.value };
-}
-
 export function hitYear(facts: SubjectHit['facts'], properties?: readonly string[]): number | undefined {
-  for (const property of properties ?? Object.keys(facts ?? {})) {
-    const found = facts?.[property]?.find((value) => value.kind === 'time');
+  for (const property of (properties ?? Object.keys(facts ?? {})).slice(0, 4)) {
+    const found = facts?.[property]?.slice(0, 3).find((value) => value.kind === 'time' && Number.isInteger(value.year));
     if (found?.kind === 'time') return found.year;
   }
   return undefined;
@@ -93,28 +83,6 @@ export function listRatio(hits: readonly SubjectHit[]): CoverRatio {
   return sharedRatio(hits.map((hit) => coverSubject(hit.id, '', hit.summary, hit.type)));
 }
 
-function visibleFacts(
-  facts: SubjectHit['facts'],
-  properties: readonly string[] | undefined,
-  yearProperties: readonly string[],
-  locale: string,
-): { text: string; lang?: string }[] {
-  const entries = properties
-    ? properties.map((property) => [property, facts?.[property] ?? []] as const)
-    : Object.entries(facts ?? {});
-  const visible: { text: string; lang?: string }[] = [];
-  for (const [property, values] of entries) {
-    if (yearProperties.includes(property)) continue;
-    for (const value of values.slice(0, FACT_VALUES_PER_PROPERTY)) {
-      const formatted = factText(value, locale);
-      if (!formatted.text) continue;
-      visible.push(formatted);
-      if (visible.length >= LIST_FACT_LIMIT) return visible;
-    }
-  }
-  return visible;
-}
-
 export function ResultList({
   hits,
   locale,
@@ -139,11 +107,11 @@ export function ResultList({
         const year = hitYear(hit.facts, yearProperties);
         const subject = coverSubject(hit.id, label.text, hit.summary, hit.type);
         const releasedPresentation =
-          parseListPresentation(hit.listPresentation) ??
-          parseListPresentation(listPresentationFor?.(subject.types));
+          parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
         const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
         const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
-        const facts = visibleFacts(hit.facts, factProperties, yearProperties, locale);
+        const facts = listKeyFacts(hit.facts, factProperties, yearProperties, locale);
+        const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
         const score = hit.publicRating?.score;
         return (
           <MemberListRow
@@ -157,7 +125,7 @@ export function ResultList({
             {...(listPresentation ? { listPresentation } : {})}
             {...(hit.storyOverlay ? { storyOverlay: true } : {})}
             trailing={
-              score !== undefined && score !== null ? (
+              score !== undefined && score !== null && Number.isFinite(score) ? (
                 <div className="shrink-0 text-right text-sm" data-slot="public-rating-figure">
                   <span className="block text-xs text-muted-foreground">{m.search_global_score()}</span>
                   <strong className="tabular-nums">
@@ -172,7 +140,16 @@ export function ResultList({
               <p data-slot="member-list-row-facts" className="text-sm">
                 <MetaLine
                   items={facts.map((fact, index) => (
-                    <span key={index} lang={fact.lang}>
+                    <span
+                      key={index}
+                      lang={fact.lang}
+                      data-property={fact.property}
+                      className={
+                        badgeProperties.includes(fact.property)
+                          ? 'rounded-sm bg-muted px-1.5 py-0.5 text-xs tabular-nums'
+                          : undefined
+                      }
+                    >
                       {fact.text}
                     </span>
                   ))}
