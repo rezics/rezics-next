@@ -72,7 +72,9 @@ export function workerCheckProtocol(worktree: string, contractText = ''): string
     'A previous session may contain the superseded instruction to wait on that same check with `bun scripts/worker-check.ts --wait <id>`. That instruction is obsolete: do not follow it or invoke `--wait`.',
   ];
   const localRunner = join(worktree, 'scripts/worker-check.ts');
-  const namedRunner = /(?:^|\s)`?bun\s+["']?(\/[^"'`\s]+\/scripts\/worker-check\.ts)(?:["'`\s]|$)/m.exec(contractText)?.[1];
+  const namedRunner = /(?:^|\s)`?bun\s+["']?(\/[^"'`\s]+\/scripts\/worker-check\.ts)(?:["'`\s]|$)/m.exec(
+    contractText,
+  )?.[1];
   const runner = existsSync(localRunner)
     ? 'bun scripts/worker-check.ts'
     : namedRunner && existsSync(namedRunner)

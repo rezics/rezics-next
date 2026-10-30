@@ -157,7 +157,9 @@ test('a wake resumes the saved old session with current protocol and exact termi
     expect(continued.argv).not.toContain('--wait');
     const prompt = continued.argv.at(-1)!;
     expectCurrentCheckProtocol(prompt);
-    expect(prompt).toContain('check ' + checkId + ': exit status 0; passed; log path .temp/goal/checks/' + checkId + '.log');
+    expect(prompt).toContain(
+      'check ' + checkId + ': exit status 0; passed; log path .temp/goal/checks/' + checkId + '.log',
+    );
     expect(prompt).toContain('Every checks entry must be the bare UUID string');
     expect(prompt).toContain('superseded instruction');
     expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
@@ -182,9 +184,12 @@ test('a normal retry sends the current check protocol through the same-session r
 
     const retry = await h.tasks.retry(task.id);
     await waitForFile(join(task.worktree, '.temp/goal/continued-argv.json'));
-    const continued = JSON.parse(
-      readFileSync(join(task.worktree, '.temp/goal/continued-argv.json'), 'utf8'),
-    ) as { argv: string[]; savedPrompt: string; resumed: boolean; calls: number };
+    const continued = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/continued-argv.json'), 'utf8')) as {
+      argv: string[];
+      savedPrompt: string;
+      resumed: boolean;
+      calls: number;
+    };
     expect(continued.resumed).toBe(true);
     expect(continued.calls).toBe(2);
     expect(continued.savedPrompt).toContain('--wait <id>');
@@ -213,14 +218,15 @@ test('a nonresumable adapter starts a fresh turn with the check protocol and sup
     mkdirSync(resultDirectory, { recursive: true });
     writeFileSync(
       join(resultDirectory, `${checkId}.json`),
-      JSON.stringify({ exitStatus: 7, failureSummary: 'assertion failed', logPath: `.temp/goal/checks/${checkId}.log` }),
+      JSON.stringify({
+        exitStatus: 7,
+        failureSummary: 'assertion failed',
+        logPath: `.temp/goal/checks/${checkId}.log`,
+      }),
     );
     const continuedPath = join(task.worktree, '.temp/goal/continued-argv.json');
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    const recovery = withAgentAdapter(
-      { ...codexAdapter, canResume: false },
-      () => job.recoverOrphans(),
-    );
+    const recovery = withAgentAdapter({ ...codexAdapter, canResume: false }, () => job.recoverOrphans());
     await waitForFile(continuedPath);
     await recovery;
     const continued = JSON.parse(readFileSync(continuedPath, 'utf8')) as {
@@ -287,7 +293,6 @@ test('a contract-named existing runner outside the worktree enables detached che
   }
 });
 
-
 test('different repeated tool blockers report the current committed attempt without claiming a failed CLI launch', async () => {
   const oldCause = 'EACCES: old disposable fixture cleanup';
   const currentCause = 'Cannot execute shell command: current session exposes no callable shell tool.';
@@ -315,7 +320,15 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     await settle(h.tasks, current, { enqueue() {} });
     expect(git(task.worktree, ['log', '-1', '--format=%s'])).toBe('Complete source attempt 2');
     const notices: string[] = [];
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver(event) { notices.push(event.summary); } });
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue() {} },
+      {
+        deliver(event) {
+          notices.push(event.summary);
+        },
+      },
+    );
     job.onAttemptExit(current.attempt);
     expect(notices).toEqual([`Repeated tool failure: ${currentCause}`]);
     expect(notices[0]).not.toContain(oldCause);
@@ -323,7 +336,9 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     expect(h.store.attempt(current.attempt).blocker).toBe(currentCause);
     expect(h.store.task(task.id).state).toBe('stopped');
     expect(h.store.retryIntent(current.attempt)).toBeUndefined();
-    const context = h.store.events(task.id, current.attempt.attempt).find((event) => event.kind === 'repeated-tool-failure');
+    const context = h.store
+      .events(task.id, current.attempt.attempt)
+      .find((event) => event.kind === 'repeated-tool-failure');
     expect(JSON.parse(context!.body)).toEqual({
       current: { attempt: 2, detail: currentCause },
       previous: { attempt: 1, detail: oldCause },

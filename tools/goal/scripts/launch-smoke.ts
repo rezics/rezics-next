@@ -105,8 +105,13 @@ export function saveSmokeEvidence(path: string, evidence: unknown): void {
     if (typeof value === 'string') {
       const redacted = value
         .replace(/\bsk-[\w-]+/g, '<redacted>')
-        .replace(/((?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret)["']?\s*[:=]\s*)(?:Bearer\s+)?["']?[^\s,"'}]+/gi, '$1<redacted>');
-      let text = Buffer.from(redacted).subarray(0, Math.max(0, Math.min(4096, remaining))).toString('utf8');
+        .replace(
+          /((?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret)["']?\s*[:=]\s*)(?:Bearer\s+)?["']?[^\s,"'}]+/gi,
+          '$1<redacted>',
+        );
+      let text = Buffer.from(redacted)
+        .subarray(0, Math.max(0, Math.min(4096, remaining)))
+        .toString('utf8');
       while (Buffer.byteLength(JSON.stringify(text)) > Math.max(2, Math.min(4096, remaining)))
         text = text.slice(0, Math.floor(text.length * 0.75));
       remaining -= Buffer.byteLength(JSON.stringify(text));
@@ -118,8 +123,12 @@ export function saveSmokeEvidence(path: string, evidence: unknown): void {
       for (const [key, item] of Object.entries(value).slice(0, 40)) {
         if (remaining <= 0) break;
         remaining -= key.length + 8;
-        entries.push([key.slice(0, 100), /(?:password|secret|api[_-]?key|(?:access|refresh|id)[_-]?token)/i.test(key)
-          ? '<redacted>' : clean(item, depth + 1)]);
+        entries.push([
+          key.slice(0, 100),
+          /(?:password|secret|api[_-]?key|(?:access|refresh|id)[_-]?token)/i.test(key)
+            ? '<redacted>'
+            : clean(item, depth + 1),
+        ]);
       }
       return Object.fromEntries(entries);
     }
@@ -135,10 +144,14 @@ function safeSmokeArgv(args: string[]): string[] {
   const safe: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (arg === '--') { safe.push('--', '<prompt omitted>'); break; }
+    if (arg === '--') {
+      safe.push('--', '<prompt omitted>');
+      break;
+    }
     if (arg === '-c') {
       const config = args[++i] ?? '';
-      const allowed = /^(?:features\.[a-z_]+|model_reasoning_effort|model_auto_compact_token_limit|tool_output_token_limit|background_terminal_max_timeout|service_tier|model_context_window|approval_policy|web_search|project_doc_max_bytes)=([a-z_0-9.-]+|"[a-z_0-9.-]+")$/i;
+      const allowed =
+        /^(?:features\.[a-z_]+|model_reasoning_effort|model_auto_compact_token_limit|tool_output_token_limit|background_terminal_max_timeout|service_tier|model_context_window|approval_policy|web_search|project_doc_max_bytes)=([a-z_0-9.-]+|"[a-z_0-9.-]+")$/i;
       safe.push('-c', allowed.test(config) ? config : '<configuration omitted>');
     } else if (['-C', '-m', '-s', '--output-schema', 'resume'].includes(arg)) {
       safe.push(arg, args[++i] ?? '');
@@ -148,8 +161,13 @@ function safeSmokeArgv(args: string[]): string[] {
 }
 
 export type SmokeLaunchEvidence = {
-  mode: 'start' | 'resume'; program: string; argv: string[];
-  profile: AgentLaunchOptions['profile']; pool: string; worktree: string; session: string | null;
+  mode: 'start' | 'resume';
+  program: string;
+  argv: string[];
+  profile: AgentLaunchOptions['profile'];
+  pool: string;
+  worktree: string;
+  session: string | null;
   configuredFeatures: Record<string, boolean>;
 };
 /** Observe the actual adapter return value without changing argv, routing, or session semantics. */
@@ -164,14 +182,26 @@ export function observeSmokeAdapter(adapter: AgentAdapter, record: (value: Smoke
           if (typeof value === 'boolean') configuredFeatures[name] = value;
       }
     }
-    record({ mode, program: command[0], argv: safeSmokeArgv(command[1]), profile: options.profile,
-      pool: options.pool.name, worktree: options.worktree, session: options.resumeSession ?? null, configuredFeatures });
+    record({
+      mode,
+      program: command[0],
+      argv: safeSmokeArgv(command[1]),
+      profile: options.profile,
+      pool: options.pool.name,
+      worktree: options.worktree,
+      session: options.resumeSession ?? null,
+      configuredFeatures,
+    });
     return command;
   };
   return {
     ...adapter,
-    start(options) { return observe('start', options, adapter.start(options)); },
-    resume(options) { return observe('resume', { ...options, resumeSession: options.session }, adapter.resume(options)); },
+    start(options) {
+      return observe('start', options, adapter.start(options));
+    },
+    resume(options) {
+      return observe('resume', { ...options, resumeSession: options.session }, adapter.resume(options));
+    },
   };
 }
 
@@ -186,18 +216,31 @@ export function smokeRunSuffix(path: string, offset: number): unknown[] {
     const count = readSync(fd, buffer, 0, buffer.length, start);
     let lines = buffer.subarray(0, count).toString('utf8').split(/\r?\n/);
     if (start > offset) lines = lines.slice(1);
-    return lines.flatMap((line): unknown[] => {
-      try {
-        const event = JSON.parse(line);
-        const item = event.item ?? event.payload ?? {};
-        return [{ type: event.type, itemType: item.type, status: item.status,
-          toolName: item.name ?? item.tool_name, exitCode: item.exit_code,
-          error: event.error?.message ?? item.error?.message,
-          text: item.type === 'agent_message' ? item.text : undefined,
-          usage: event.usage }];
-      } catch { return []; }
-    }).slice(-32);
-  } finally { closeSync(fd); }
+    return lines
+      .flatMap((line): unknown[] => {
+        try {
+          const event = JSON.parse(line);
+          const item = event.item ?? event.payload ?? {};
+          return [
+            {
+              type: event.type,
+              itemType: item.type,
+              status: item.status,
+              toolName: item.name ?? item.tool_name,
+              exitCode: item.exit_code,
+              error: event.error?.message ?? item.error?.message,
+              text: item.type === 'agent_message' ? item.text : undefined,
+              usage: event.usage,
+            },
+          ];
+        } catch {
+          return [];
+        }
+      })
+      .slice(-32);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function smokeStderrSuffix(path: string): string {
@@ -206,8 +249,12 @@ function smokeStderrSuffix(path: string): string {
   try {
     const size = fstatSync(fd).size;
     const buffer = Buffer.alloc(Math.min(size, 2048));
-    return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length))).toString('utf8');
-  } finally { closeSync(fd); }
+    return buffer
+      .subarray(0, readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)))
+      .toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function reportLine(line: string): void {
@@ -242,11 +289,8 @@ export function createSmokeDirectory(
   root: string,
   prefix: 'launch-smoke-' | 'launch-smoke-workers-' | 'launch-smoke-test-',
 ) {
-  if (
-    prefix !== 'launch-smoke-' &&
-    prefix !== 'launch-smoke-workers-' &&
-    prefix !== 'launch-smoke-test-'
-  ) throw new Error('Invalid smoke directory prefix');
+  if (prefix !== 'launch-smoke-' && prefix !== 'launch-smoke-workers-' && prefix !== 'launch-smoke-test-')
+    throw new Error('Invalid smoke directory prefix');
   const temp = join(realpathSync(root), '.temp');
   mkdirSync(temp, { recursive: true });
   const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
@@ -691,8 +735,7 @@ async function runFakeSmoke(
           throw new Error('expected a waiting exit for the same session');
         checkId = requireSmokeWaitingCheckId(waiting.checks);
         baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
-        if (checkId !== startedCheckId)
-          throw new Error('fake agent did not return the real worker-check id');
+        if (checkId !== startedCheckId) throw new Error('fake agent did not return the real worker-check id');
       } else if (!/^worker-check-[\w-]+$/.test(checkId)) {
         throw new Error('fake worker-check id has an invalid shape');
       }
@@ -1284,25 +1327,47 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const snapshot = () => {
     if (!evidencePath) return;
     const task = taskId ? store.task(taskId) : undefined;
-    const attempt = task && task.currentAttempt > 0 ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }) : undefined;
+    const attempt =
+      task && task.currentAttempt > 0 ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }) : undefined;
     const events = attempt ? store.events(attempt.taskId, attempt.attempt) : [];
-    const run = events.filter((event) => event.kind === 'worker-run-started' && event.sequence > launchAfterSequence).at(-1);
-    const runBody = run ? JSON.parse(run.body) as { logStartOffset: number; resuming: boolean } : undefined;
+    const run = events
+      .filter((event) => event.kind === 'worker-run-started' && event.sequence > launchAfterSequence)
+      .at(-1);
+    const runBody = run ? (JSON.parse(run.body) as { logStartOffset: number; resuming: boolean }) : undefined;
     // A resumed attempt still holds its previous waiting result while it runs. Never present that as this turn's exit.
     let result: unknown = null;
     if (attempt && !activeRun) {
-      try { result = JSON.parse(attempt.result); } catch { result = attempt.result; }
+      try {
+        result = JSON.parse(attempt.result);
+      } catch {
+        result = attempt.result;
+      }
     }
     saveSmokeEvidence(evidencePath, {
       runId: process.env.REZICS_LAUNCH_SMOKE_RUN_ID,
       candidate: process.env.REZICS_LAUNCH_SMOKE_CANDIDATE,
       mergedCandidate: git(tree, 'rev-parse', 'HEAD'),
-      stage: currentStep, failure: currentFailure,
-      current: attempt ? { taskId: attempt.taskId, attempt: attempt.attempt, state: attempt.state,
-        activeRun, result, blocker: activeRun ? null : attempt.blocker, failureKind: activeRun ? null : attempt.failureKind,
-        session: attempt.session, profile: attempt.profile, pool: attempt.pool,
-        process: attempt.process, driver: attempt.driver, exitCode: activeRun ? null : attempt.exitCode,
-        worktree: task!.worktree, branch: task!.branch } : null,
+      stage: currentStep,
+      failure: currentFailure,
+      current: attempt
+        ? {
+            taskId: attempt.taskId,
+            attempt: attempt.attempt,
+            state: attempt.state,
+            activeRun,
+            result,
+            blocker: activeRun ? null : attempt.blocker,
+            failureKind: activeRun ? null : attempt.failureKind,
+            session: attempt.session,
+            profile: attempt.profile,
+            pool: attempt.pool,
+            process: attempt.process,
+            driver: attempt.driver,
+            exitCode: activeRun ? null : attempt.exitCode,
+            worktree: task!.worktree,
+            branch: task!.branch,
+          }
+        : null,
       launches,
       selection: { configuredProfile: selected, currentAttemptProfile: attempt?.profile, pool: attempt?.pool },
       currentRun: run ? { sequence: run.sequence, at: run.at, ...runBody } : null,
@@ -1312,7 +1377,11 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
       checks: (attempt?.checks ?? []).map((id) => {
         const path = join(task!.worktree, '.temp/goal/checks/results', `${id}.json`);
         let record: unknown = null;
-        try { record = JSON.parse(readFileSync(path, 'utf8')); } catch { /* No terminal record yet. */ }
+        try {
+          record = JSON.parse(readFileSync(path, 'utf8'));
+        } catch {
+          /* No terminal record yet. */
+        }
         return { id, record };
       }),
       launchErrors: launchErrors.slice(-8),
@@ -1323,8 +1392,11 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     activeRun = true;
     if (taskId) {
       const task = store.task(taskId);
-      launchAfterSequence = store.events(taskId, task.currentAttempt)
-        .filter((event) => event.kind === 'worker-run-started').at(-1)?.sequence ?? 0;
+      launchAfterSequence =
+        store
+          .events(taskId, task.currentAttempt)
+          .filter((event) => event.kind === 'worker-run-started')
+          .at(-1)?.sequence ?? 0;
     }
     snapshot();
   });
@@ -1388,7 +1460,11 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
       if (checkResult.exitCode !== 0)
         throw new Error(`worker-check ${checkId} finished with exit ${String(checkResult.exitCode ?? 'unknown')}`);
       const originalSession = waitingAttempt.session;
-      await withDeadline(withAgentAdapter(observed, () => job.recoverOrphans()), deadline, 'wake');
+      await withDeadline(
+        withAgentAdapter(observed, () => job.recoverOrphans()),
+        deadline,
+        'wake',
+      );
       activeRun = false;
       const resumedTask = store.task(task.id);
       const resumed = store.attempt({ taskId: task.id, attempt: resumedTask.currentAttempt });
@@ -1490,7 +1566,12 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   } finally {
     // Persist before stopping the task, closing the database, or removing any disposable files.
     let evidenceFailure: unknown;
-    try { snapshot(); } catch (error) { evidenceFailure = error; report(`evidence: failed: ${message(error)}`); }
+    try {
+      snapshot();
+    } catch (error) {
+      evidenceFailure = error;
+      report(`evidence: failed: ${message(error)}`);
+    }
     console.error = originalError;
     if (taskId) {
       try {

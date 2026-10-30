@@ -213,7 +213,9 @@ test('worker instructions start detached checks, keep working, and return waitin
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
     expect(prompt).toContain('Goal owns check continuation');
     expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
-    expect(prompt).toContain('`{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`');
+    expect(prompt).toContain(
+      '`{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`',
+    );
     expect(prompt).toContain('Every checks entry must be the bare UUID string');
     expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
     expect(prompt).toContain('A previous session may contain the superseded instruction');

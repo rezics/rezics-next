@@ -45,13 +45,17 @@ test('smoke evidence observes actual start and resume argv without exposing prom
     const cli = join(disposable.path, 'cli');
     writeFileSync(cli, '#!/usr/bin/env bun\nconsole.log(JSON.stringify(process.argv.slice(2)));\n');
     chmodSync(cli, 0o755);
-    writeFileSync(join(disposable.path, 'config.toml'), `api_key = "account-secret-never-record"\n[features]\nunified_exec = false\nshell_tool = true\n[mcp_servers.private]\ncommand = "private-server-never-record"\n`);
+    writeFileSync(
+      join(disposable.path, 'config.toml'),
+      `api_key = "account-secret-never-record"\n[features]\nunified_exec = false\nshell_tool = true\n[mcp_servers.private]\ncommand = "private-server-never-record"\n`,
+    );
     const launches: SmokeLaunchEvidence[] = [];
     const adapter = observeSmokeAdapter(codexAdapter, (value) => launches.push(value));
     const options = {
       pool: { ...fixturePool(disposable.path), command: cli },
       profile: { cli: 'codex' as const, model: 'fixture-model', effort: 'low' as const, poolClass: 'codex' },
-      worktree: disposable.path, prompt: 'private-prompt-never-record',
+      worktree: disposable.path,
+      prompt: 'private-prompt-never-record',
     };
     const commands = [adapter.start(options), adapter.resume({ ...options, session: 'actual-session' })];
     for (const [index, command] of commands.entries()) {
@@ -90,27 +94,58 @@ test('bounded evidence survives fixture cleanup with only the current run result
   const disposable = createSmokeDirectory(root, 'launch-smoke-test-');
   const retained = createSmokeDirectory(root, 'launch-smoke-test-');
   try {
-    const oldWaiting = JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'stale previous waiting result' } }) + '\n';
-    const currentResult = { status: 'blocked', summary: 'current tool unavailable', blocker: { kind: 'tool', detail: 'No callable shell tool in current session' } };
+    const oldWaiting =
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'stale previous waiting result' },
+      }) + '\n';
+    const currentResult = {
+      status: 'blocked',
+      summary: 'current tool unavailable',
+      blocker: { kind: 'tool', detail: 'No callable shell tool in current session' },
+    };
     const log = join(disposable.path, 'worker.log');
-    writeFileSync(log, oldWaiting + [
-      { type: 'thread.started', thread_id: 'current-session' },
-      { type: 'item.completed', item: { type: 'mcp_tool_call', name: 'shell', arguments: { api_key: 'raw-arguments-never-record' }, result: 'raw-tool-output-never-record', status: 'failed' } },
-      { type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(currentResult) } },
-      { type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 4 } },
-    ].map((event) => JSON.stringify(event)).join('\n') + '\n');
+    writeFileSync(
+      log,
+      oldWaiting +
+        [
+          { type: 'thread.started', thread_id: 'current-session' },
+          {
+            type: 'item.completed',
+            item: {
+              type: 'mcp_tool_call',
+              name: 'shell',
+              arguments: { api_key: 'raw-arguments-never-record' },
+              result: 'raw-tool-output-never-record',
+              status: 'failed',
+            },
+          },
+          { type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(currentResult) } },
+          { type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 4 } },
+        ]
+          .map((event) => JSON.stringify(event))
+          .join('\n') +
+        '\n',
+    );
     const evidence = join(retained.path, 'run.json');
     saveSmokeEvidence(evidence, {
-      candidate: 'exact-candidate', current: { taskId: 'current-task', attempt: 2, session: 'current-session', result: currentResult },
+      candidate: 'exact-candidate',
+      current: { taskId: 'current-task', attempt: 2, session: 'current-session', result: currentResult },
       logSuffix: smokeRunSuffix(log, Buffer.byteLength(oldWaiting)),
-      password: 'credential-never-record', error: 'authorization: Bearer token-never-record',
+      password: 'credential-never-record',
+      error: 'authorization: Bearer token-never-record',
       bulk: Array.from({ length: 100 }, () => '\u0000'.repeat(10000)),
     });
     disposable.remove();
     const saved = readFileSync(evidence, 'utf8');
     expect(Buffer.byteLength(saved)).toBeLessThanOrEqual(64 * 1024);
     const parsed = JSON.parse(saved);
-    expect(parsed.current).toEqual({ taskId: 'current-task', attempt: 2, session: 'current-session', result: currentResult });
+    expect(parsed.current).toEqual({
+      taskId: 'current-task',
+      attempt: 2,
+      session: 'current-session',
+      result: currentResult,
+    });
     expect(parsed.logSuffix.at(-2).text).toBe(JSON.stringify(currentResult));
     expect(saved).not.toContain('stale previous waiting result');
     expect(saved).not.toContain('raw-arguments-never-record');
@@ -179,11 +214,7 @@ test('generated smoke brief keeps its real acceptance command and WorkerTasks se
     const briefPath = join(h.settings.stateDirectory, 'briefs', 'generated-smoke.md');
     mkdirSync(join(h.settings.stateDirectory, 'briefs'), { recursive: true });
     writeFileSync(briefPath, markdown);
-    const task = h.store.createTask(
-      brief,
-      { briefPath, worktree, branch, base },
-      classifyTask(brief),
-    );
+    const task = h.store.createTask(brief, { briefPath, worktree, branch, base }, classifyTask(brief));
     let launched: { attempt: { profile: unknown }; prompt: string } | undefined;
     const tasks = new WorkerTasks(
       h.settings,
@@ -212,7 +243,11 @@ test('generated smoke brief keeps its real acceptance command and WorkerTasks se
   } finally {
     if (worktree && existsSync(worktree)) fixtureGit(h.root, ['worktree', 'remove', '--force', worktree]);
     if (branch) {
-      try { fixtureGit(h.root, ['branch', '-D', branch]); } catch { /* No branch was created. */ }
+      try {
+        fixtureGit(h.root, ['branch', '-D', branch]);
+      } catch {
+        /* No branch was created. */
+      }
     }
     h.dispose();
   }
@@ -243,23 +278,19 @@ test('real worker-check starts the generated acceptance command once and its ret
 
     const script = join(devTree, 'scripts/worker-check.ts');
     const marker = join(disposable.path, 'command-starts.txt');
-    const start = spawnSync(
-      process.execPath,
-      [script, '--local', '--', ...SMOKE_ACCEPTANCE_COMMAND],
-      {
-        cwd: devTree,
-        env: {
-          ...process.env,
-          REZICS_CHECK_MEMORY: 'off',
-          REZICS_CHECK_SCOPE: 'off',
-          REZICS_STACK_LEASE: 'off',
-          REZICS_LAUNCH_SMOKE_CHECK_MARKER: marker,
-        },
-        encoding: 'utf8',
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
+    const start = spawnSync(process.execPath, [script, '--local', '--', ...SMOKE_ACCEPTANCE_COMMAND], {
+      cwd: devTree,
+      env: {
+        ...process.env,
+        REZICS_CHECK_MEMORY: 'off',
+        REZICS_CHECK_SCOPE: 'off',
+        REZICS_STACK_LEASE: 'off',
+        REZICS_LAUNCH_SMOKE_CHECK_MARKER: marker,
       },
-    );
+      encoding: 'utf8',
+      timeout: 30_000,
+      maxBuffer: 2 * 1024 * 1024,
+    });
     if (start.status !== 0)
       throw new Error(
         `worker-check start failed with status ${String(start.status)}: ${start.stderr?.trim() || start.stdout?.trim() || start.error?.message || 'no diagnostic output'}`,
@@ -569,7 +600,8 @@ test('smoke cleanup removes its immutable store without changing outside symlink
     join(store, '../../..'),
     join(owned.path, 'dependency-stores'),
     owned.path,
-  ]) chmodSync(path, 0o555);
+  ])
+    chmodSync(path, 0o555);
   const beforeFile = lstatSync(sentinel);
   const beforeDirectory = lstatSync(outside);
   const beforeSibling = lstatSync(sibling.path);
@@ -621,7 +653,8 @@ test('smoke worker root cleanup safely removes its own immutable dependency cach
     join(store, '../../..'),
     join(workerRoot.path, 'dependency-stores'),
     workerRoot.path,
-  ]) chmodSync(path, 0o555);
+  ])
+    chmodSync(path, 0o555);
   const beforeFile = lstatSync(sentinel);
   const beforeDirectory = lstatSync(outside);
   try {
