@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { createWorkClient } from '../../src/work/client.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -14,6 +17,11 @@ beforeAll(async () => {
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
 }, 120000);
 afterAll(async () => {
+  for (const child of children) {
+    if (child.process.exitCode === null) child.process.kill('SIGKILL');
+    await child.process.exited;
+  }
+  await workClient?.close();
   await f?.close();
 });
 async function make(visibility = 'private') {
@@ -187,3 +195,115 @@ test('fresh Undo rechecks current native subject concealment without exposing th
   expect(await response.text()).not.toContain('original note');
   expect(await m.snapshot()).toEqual(before);
 });
+
+let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+const executorId = `member-retention-${crypto.randomUUID()}`;
+const directory = resolve(import.meta.dir, '../../../../.temp/member-retention', executorId);
+const clockPath = resolve(directory, 'clock');
+const children: ReturnType<typeof runtime>[] = [];
+function runtime(mode: string) {
+  const process = Bun.spawn(
+    [Bun.which('bun')!, `${import.meta.dir}/support/member-retention-runtime.ts`, mode, executorId, clockPath],
+    { env: globalThis.process.env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+  );
+  let output = '';
+  const streams = [process.stdout, process.stderr].map(async (stream) => {
+    for await (const chunk of stream) output += new TextDecoder().decode(chunk);
+  });
+  const child = {
+    process,
+    async until(marker: string) {
+      const deadline = Date.now() + 120000;
+      while (!output.includes(marker)) {
+        if (process.exitCode !== null || Date.now() >= deadline) throw new Error(`Missing ${marker}: ${output}`);
+        await Bun.sleep(20);
+      }
+    },
+    async stop(signal: 'SIGKILL' | 'SIGTERM') {
+      process.kill(signal);
+      await process.exited;
+      await Promise.all(streams);
+    },
+  };
+  children.push(child);
+  return child;
+}
+async function workerClient() {
+  mkdirSync(directory, { recursive: true });
+  return (workClient ??= await createWorkClient(process.env.DATABASE_URL!));
+}
+async function trigger() {
+  const client = await workerClient();
+  const schedule = await client.getSchedule('library.memberRetention.every-10-minutes');
+  expect(schedule?.workflowName).toBe('library.memberRetentionSweep');
+  expect(schedule?.schedule).toBe('*/10 * * * *');
+  expect(schedule?.cronTimezone).toBe('UTC');
+  return client.triggerSchedule('library.memberRetention.every-10-minutes');
+}
+async function nativeDeadline(m: Awaited<ReturnType<typeof make>>) {
+  return (
+    await f.pool.query(
+      'SELECT purge_after::text AS deadline FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3',
+      [routeOf(m.collection.id), m.collection.id, m.first.id],
+    )
+  ).rows[0].deadline as string;
+}
+async function gone(m: Awaited<ReturnType<typeof make>>) {
+  const deadline = Date.now() + 120000;
+  while ((await m.snapshot()).length) {
+    if (Date.now() >= deadline) throw new Error('Default member worker did not erase the private occurrence');
+    await Bun.sleep(20);
+  }
+}
+test('native member purge is exact episode bounded and never decrements public listing or visible counts twice', async () => {
+  const m = await make();
+  await m.add('surviving sibling');
+  const d1 = await m.remove();
+  const firstDeadline = await nativeDeadline(m);
+  await workerClient();
+  writeFileSync(clockPath, String(Date.parse(firstDeadline)));
+  const parked = runtime('park');
+  await parked.until('worker-ready');
+  const sweep = await trigger();
+  await parked.until('source-parked');
+  // Only discovery saw the due clock. The ordinary command remains strictly before the original deadline.
+  time += 1000;
+  expect((await f.send(owner.bearer, 'POST', m.path + ':restore', d1)).status).toBe(200);
+  const d3 = await m.remove();
+  expect(d3.deletionId).not.toBe(d1.deletionId);
+  const secondDeadline = await nativeDeadline(m);
+  parked.process.stdin.write('deliver\n');
+  await sweep.getResult({ pollingIntervalMs: 20 });
+  expect((await m.snapshot())[0].row.deletion_id).toBe(d3.deletionId);
+  expect((await m.parent()).memberCount).toBe(1);
+  writeFileSync(clockPath, String(Date.parse(secondDeadline)));
+  await (await trigger()).getResult({ pollingIntervalMs: 20 });
+  await gone(m);
+  expect((await m.parent()).memberCount).toBe(1);
+  await parked.stop('SIGTERM');
+}, 300000);
+test('native commit before durable checkpoint recovers on the same default worker without a second mutation', async () => {
+  const m = await make();
+  const deletion = await m.remove();
+  const deadline = await nativeDeadline(m);
+  await workerClient();
+  writeFileSync(clockPath, String(Date.parse(deadline)));
+  const crashed = runtime('crash');
+  await crashed.until('worker-ready');
+  const sweep = await trigger();
+  await crashed.until('native-committed');
+  expect(await m.snapshot()).toEqual([]);
+  const parent = await m.parent();
+  const receipt = await f.pool.query(
+    'SELECT response FROM core.receipt WHERE partition_no=$1 AND command_kind=$2 AND idempotency_key=$3',
+    [routeOf(m.collection.id)! >>> 4, 'library.collection.member.retention.purge', deletion.deletionId],
+  );
+  expect(receipt.rows).toEqual([{ response: { purged: true } }]);
+  await crashed.stop('SIGKILL');
+  const recovered = runtime('recover');
+  await recovered.until('worker-ready');
+  await sweep.getResult({ pollingIntervalMs: 20 });
+  expect(await m.snapshot()).toEqual([]);
+  expect(await m.parent()).toEqual(parent);
+  await recovered.stop('SIGTERM');
+}, 300000);
