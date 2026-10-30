@@ -250,7 +250,7 @@ test('Root-authorized legacy cancellation persists an idempotent tombstone and l
   writeFileSync(recordPath, recordBytes);
   const receiptReference = join(root, '..', `root-cancel-${randomUUID()}.json`);
   roots.push(receiptReference);
-  const rootReceipt = Buffer.from(JSON.stringify({ records: [{ id, task: taskId, argv }] }));
+  const rootReceipt = Buffer.from(JSON.stringify({ records: [{ id, taskId, attempt: 1, argv }] }));
   writeFileSync(receiptReference, rootReceipt);
   const authorization = {
     version: 1 as const,
@@ -309,7 +309,7 @@ test('missing registry and partial launcher identity fail before a detached comm
   configureTask(taskId, 1);
   delete process.env.GOAL_ATTEMPT;
   expect(() => startWorkerCheck(liveCommand(marker), root)).toThrow('GOAL_TASK_ID and GOAL_ATTEMPT');
-  expect(ownershipFromEnvironment({ GOAL_TASK_ID: taskId })).toThrow('GOAL_TASK_ID and GOAL_ATTEMPT');
+  expect(() => ownershipFromEnvironment({ GOAL_TASK_ID: taskId })).toThrow('GOAL_TASK_ID and GOAL_ATTEMPT');
   expect(existsSync(marker)).toBe(false);
 });
 

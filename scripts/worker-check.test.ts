@@ -25,6 +25,7 @@ import {
   scopeRootTypecheck,
   startWorkerCheck,
   startControllerWorkerCheck,
+  stopWorkerCheck,
   waitWorkerCheck,
   requestWorkerCheckCancellation,
   workerCheckCancellation,
@@ -33,7 +34,11 @@ import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 import {
   controllerProofReservationPath,
   controllerProofStatePath,
+  processGroupMembers,
+  processTreeMembers,
   registrationPath,
+  runnerCommandMatches,
+  sameProcess,
   validControllerProofRegistration,
   withCheckFence,
   writeAtomicJson,
@@ -574,77 +579,150 @@ function writeRunningRecord(
   );
 }
 
+async function withIsolatedTask(root: string, run: () => Promise<void>): Promise<void> {
+  const old = { ...process.env };
+  const registry = join(root, 'registry');
+  mkdirSync(registry);
+  process.env.GOAL_TASK_ID = randomUUID();
+  process.env.GOAL_ATTEMPT = '1';
+  process.env.GOAL_CHECK_REGISTRY = registry;
+  try {
+    await run();
+  } finally {
+    for (const key of ['GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_CHECK_REGISTRY']) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key];
+    }
+  }
+}
+
+async function stopFixtureCheck(id: string, root: string): Promise<void> {
+  const record = readWorkerCheckRecord(id, root);
+  if (!record.ownership || !record.physicalRunId || !record.runnerHost || !record.runnerIdentity)
+    throw new Error('fixture check did not publish physical custody');
+  if (record.status === 'finished') {
+    const identity = record.runnerIdentity;
+    await untilRecorded(() => !sameProcess(identity) && processGroupMembers(identity.group).length === 0);
+    return;
+  }
+  await stopWorkerCheck(id, root, {
+    ownership: record.ownership,
+    physicalRunId: record.physicalRunId,
+    runnerHost: record.runnerHost,
+    runnerIdentity: record.runnerIdentity,
+  });
+}
+
+// These positive recovery cases use the public launcher; legacy quarantine fixtures stay incomplete.
+async function withRecoveryRunner(
+  root: string,
+  reruns: 0 | 1,
+  run: (record: ReturnType<typeof readWorkerCheckRecord>, interrupt: () => Promise<void>) => Promise<void>,
+): Promise<void> {
+  await withIsolatedTask(root, async () =>
+    withQuietAdmission(async () => {
+      const attempts = join(root, 'physical-attempts');
+      const ready = join(root, 'command-ready');
+      const id = startWorkerCheck(
+        [
+          'bun',
+          '-e',
+          `
+const fs = require('node:fs');
+const attempts = ${JSON.stringify(attempts)};
+const n = fs.existsSync(attempts) ? Number(fs.readFileSync(attempts, 'utf8')) + 1 : 1;
+fs.writeFileSync(attempts, String(n));
+if (n === 1 && ${reruns} === 1) {
+  console.error('(fail) request [1ms]\\n  Error: HTTP 503 overloaded');
+  process.exit(1);
+}
+if (n === ${reruns + 1}) {
+  ${reruns ? "console.error('last rerun output');" : ''}
+  fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+  await Bun.sleep(4000);
+  process.exit(90);
+}
+fs.appendFileSync(${JSON.stringify(join(root, 'rerun-marker'))}, 'rerun\\\\n');
+`,
+        ],
+        root,
+      );
+      try {
+        await untilRecorded(() => existsSync(ready));
+        const record = readWorkerCheckRecord(id, root);
+        const identity = record.runnerIdentity;
+        if (!record.physicalRunId || !identity) throw new Error('fixture runner custody is unavailable');
+        expect(readWorkerCheckHistory(id, record.physicalRunId, root)?.runnerIdentity).toEqual(identity);
+        expect(record.reruns ?? 0).toBe(reruns);
+        await run(record, async () => {
+          if (!runnerCommandMatches(identity, join(repository, 'scripts/worker-check.ts'), id, record.physicalRunId!))
+            throw new Error('fixture runner identity changed before interruption');
+          const tree = processTreeMembers(identity.pid);
+          process.kill(identity.pid, 'SIGKILL');
+          await untilRecorded(
+            () => tree.every((member) => !sameProcess(member)) && processGroupMembers(identity.group).length === 0,
+          );
+        });
+      } finally {
+        await stopFixtureCheck(id, root);
+      }
+    }),
+  );
+}
+
 test('worker-check --wait reruns once when the runner is gone but its result still says running', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-dead-runner-'));
   dirs.push(root);
-  const log = '.temp/goal/checks/dead-runner.log';
-  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
-  writeFileSync(join(root, log), '');
-  const id = '00000000-0000-4000-8000-000000000001';
-  writeRunningRecord(root, id, log, 2_000_000_000, hostname());
-  const out: string[] = [];
-  await withQuietAdmission(async () =>
-    expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(0),
-  );
-  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
-  expect(out.join('')).toContain(`infrastructure failure (runner process exited) on ${hostname()}`);
-  expect(out.join('')).toContain('check: exit status 0');
-  const result = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
-  expect(result.reruns).toBe(1);
-  expect(result.infrastructureFailure).toContain(`old log ${log}`);
+  await withRecoveryRunner(root, 0, async ({ id, log }, interrupt) => {
+    await interrupt();
+    const out: string[] = [];
+    expect(await waitWorkerCheck(id, root, 5_000, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(0);
+    expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+    expect(out.join('')).toContain(`infrastructure failure (runner process exited) on ${hostname()}`);
+    expect(out.join('')).toContain('check: exit status 0');
+    const result = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
+    expect(result.reruns).toBe(1);
+    expect(result.infrastructureFailure).toContain(`old log ${log}`);
+  });
 });
 
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-stalled-runner-'));
   dirs.push(root);
-  const log = '.temp/goal/checks/stalled.log';
-  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
-  writeFileSync(join(root, log), '');
-  const stale = new Date(Date.now() - 25);
-  utimesSync(join(root, log), stale, stale);
-  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
-  await new Promise<void>((resolveRunner) => runner.once('spawn', resolveRunner));
-  const id = '00000000-0000-4000-8000-000000000002';
-  writeRunningRecord(root, id, log, runner.pid!, 'stall-host-b');
-  const out: string[] = [];
-  try {
-    await withQuietAdmission(async () =>
-      expect(
-        await waitWorkerCheck(id, root, 5_000, {
-          pollMs: 5,
-          stallMs: 10,
-          rerunStallMs: 1_000,
-          write: (chunk) => out.push(chunk),
-        }),
-      ).toBe(0),
-    );
-  } finally {
-    runner.kill('SIGKILL');
-  }
-  expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
-  expect(out.join('')).toContain('infrastructure failure (log did not grow for 10 ms) on stall-host-b');
-  expect(out.join('')).toContain('check: exit status 0');
-  expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
+  await withRecoveryRunner(root, 0, async ({ id, log }) => {
+    const stale = new Date(Date.now() - 25);
+    utimesSync(join(root, log), stale, stale);
+    const out: string[] = [];
+    expect(
+      await waitWorkerCheck(id, root, 5_000, {
+        pollMs: 5,
+        stallMs: 10,
+        rerunStallMs: 1_000,
+        write: (chunk) => out.push(chunk),
+      }),
+    ).toBe(0);
+    expect(readFileSync(join(root, 'rerun-marker'), 'utf8')).toBe('rerun\n');
+    expect(out.join('')).toContain(`infrastructure failure (log did not grow for 10 ms) on ${hostname()}`);
+    expect(out.join('')).toContain('check: exit status 0');
+    expect(out.join('')).toContain('log .temp/goal/checks/worker-check-');
+  });
 });
 
 test('a second interrupted runner finishes as infrastructure failure without a third run', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-second-runner-'));
   dirs.push(root);
-  const log = '.temp/goal/checks/second.log';
-  mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
-  writeFileSync(join(root, log), 'last rerun output\n');
-  const id = '00000000-0000-4000-8000-000000000003';
-  writeRunningRecord(root, id, log, 2_000_000_000, hostname(), 1);
-  const out: string[] = [];
-  await withQuietAdmission(async () =>
-    expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(1),
-  );
-  expect(() => readFileSync(join(root, 'rerun-marker'), 'utf8')).toThrow();
-  expect(out.join('')).toContain('second runner failed');
-  expect(out.join('')).toContain('check: exit status 1');
-  expect(
-    JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8')).infrastructureFailureFinal,
-  ).toBe(true);
+  await withRecoveryRunner(root, 1, async ({ id }, interrupt) => {
+    await interrupt();
+    const out: string[] = [];
+    expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(1);
+    expect(() => readFileSync(join(root, 'rerun-marker'), 'utf8')).toThrow();
+    expect(out.join('')).toContain('second runner failed');
+    expect(out.join('')).toContain('check: exit status 1');
+    expect(
+      JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'))
+        .infrastructureFailureFinal,
+    ).toBe(true);
+  });
 });
 
 test('an unrelated local pid and a runner recorded on another host are not treated as live runners', async () => {
@@ -844,28 +922,21 @@ test('only the outer receipt channel classifies a physical lifetime failure; nes
       const command = localCommand(fixture.localMarker);
       const commandClass = checkClass(command, fixture.root);
       for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
-      const id = randomUUID();
-      const recordFile = join(fixture.root, '.temp/goal/checks/results', `${id}.json`);
-      mkdirSync(dirname(recordFile), { recursive: true });
-      const log = join(fixture.root, '.temp/goal/checks/fixture.log');
-      writeFileSync(log, '');
-      writeFileSync(
-        recordFile,
-        JSON.stringify({
-          id,
-          cwd: fixture.root,
-          argv: command,
-          status: 'running',
-          log: '.temp/goal/checks/fixture.log',
-        }),
-      );
-      expect(await runWorkerCheck(command, fixture.root, false, log, 60_000, id, 0, id), mode).toBe(124);
-      const record = JSON.parse(readFileSync(recordFile, 'utf8'));
-      expect(Boolean(record.infrastructureFailure), mode).toBe(mode === 'lifetime-channel');
-      expect(existsSync(fixture.localMarker), mode).toBe(false);
-      expect(readFileSync(fixture.remoteEvents, 'utf8'), mode).toBe('remote\n');
-      if (mode === 'lifetime-channel')
-        expect(record.physicalRun).toMatchObject({ host: 'check-a', run: 'fixture-physical', exitCode: 124 });
+      await withIsolatedTask(fixture.root, async () => {
+        const id = startWorkerCheck(command, fixture.root);
+        const recordFile = join(fixture.root, '.temp/goal/checks/results', `${id}.json`);
+        try {
+          expect(await waitWorkerCheck(id, fixture.root, 60_000), mode).toBe(124);
+          const record = JSON.parse(readFileSync(recordFile, 'utf8'));
+          expect(Boolean(record.infrastructureFailure), mode).toBe(mode === 'lifetime-channel');
+          expect(existsSync(fixture.localMarker), mode).toBe(false);
+          expect(readFileSync(fixture.remoteEvents, 'utf8'), mode).toBe('remote\n');
+          if (mode === 'lifetime-channel')
+            expect(record.physicalRun).toMatchObject({ host: 'check-a', run: 'fixture-physical', exitCode: 124 });
+        } finally {
+          await stopFixtureCheck(id, fixture.root);
+        }
+      });
     } finally {
       restoreWorkerEnvironment(old);
     }
