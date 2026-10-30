@@ -1,5 +1,5 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
-import { candidateContext, type CandidateSlot } from '../../subject/candidates';
+import { candidateContext, candidateHasPayload, type CandidateSlot } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { subjectHref } from '../../subject/subject-href';
@@ -249,11 +249,9 @@ export async function readValueExplanation(
       else if (candidates.status !== 200 || !candidates.data) page.competition = failure(candidates.status);
       else {
         continuationSession = new Headers(candidates.headers).get('rezics-session-token') ?? continuationSession;
-        const candidate = candidates.data.candidates.find(
-          (row) => row.id === selected.id && !('deleted' in row && row.deleted === true),
-        );
+        const candidate = candidates.data.candidates.find((row) => row.id === selected.id);
         // Never serialize unrelated candidates, actors, Source tuples or write heads into this view.
-        page.competition = candidate
+        page.competition = candidate && candidateHasPayload(candidate)
           ? {
               kind: 'returned',
               decision: candidate.decision,

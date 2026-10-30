@@ -4,6 +4,7 @@ import { pickText } from '@rezics/composition';
 import {
   candidateContext,
   candidateFailure,
+  candidateHasPayload,
   selectCandidate,
   type CandidateCommand,
   type CandidateRead,
@@ -65,6 +66,9 @@ export async function readContextCuration(
       return label ? [{ id, label, multivalued: definition.multivalued === true }] : [];
     });
     const field = property ? definitions.properties[property] : undefined;
+    const page = competition?.data
+      ? { ...competition.data, candidates: competition.data.candidates.filter(candidateHasPayload) }
+      : null;
     if (property && !fields.some((entry) => entry.id === property)) return candidateFailure(400);
     const relation = field?.relation && field.relation.group !== 'classification';
     const metadata = relationFields(definitions, reading.data.subject.type, locale).find(
@@ -75,7 +79,7 @@ export async function readContextCuration(
       if (
         !metadata ||
         !validRelationSlot(address) ||
-        competition?.data?.candidates.some((candidate) => !relationSlotMatches(candidate.statement, address, metadata))
+        page?.candidates.some((candidate) => !relationSlotMatches(candidate.statement, address, metadata))
       )
         return candidateFailure(400);
     } else if (slot && Object.keys(slot).length) return candidateFailure(400);
@@ -91,7 +95,7 @@ export async function readContextCuration(
     return {
       ok: true,
       public: current.data,
-      page: competition?.data ?? null,
+      page,
       fields,
       names: Object.fromEntries(
         Object.entries(definitions.properties).map(([id, definition]) => [id, definition.labels]),

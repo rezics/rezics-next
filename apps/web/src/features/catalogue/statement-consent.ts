@@ -1,6 +1,6 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
-import { candidateContext, type Candidate, type CandidateSlot } from '../../subject/candidates';
+import { candidateContext, candidateHasPayload, type Candidate, type CandidateSlot } from '../../subject/candidates';
 
 export type ConsentAddress = { id: string; property: string; candidate: string; slot?: CandidateSlot };
 export type ConsentCommand = ConsentAddress & { operation: 'disclose' | 'retract'; key: string; session?: string };
@@ -163,7 +163,7 @@ export async function readStatementConsent(
     if (page.status !== 200 || !page.data) return consentFailure(page.status);
     const token = new Headers(page.headers).get('rezics-session-token') ?? session;
     const candidate = page.data.candidates.find((item) => item.id === address.candidate);
-    if (!candidate)
+    if (!candidate || !candidateHasPayload(candidate))
       return {
         ok: true,
         candidate: null,

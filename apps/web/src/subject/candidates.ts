@@ -1,8 +1,14 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
-export type CandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
-export type Candidate = CandidatePage['candidates'][number];
+type NativeCandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
+export type Candidate = Exclude<NativeCandidatePage['candidates'][number], { deleted: true }>;
+export type CandidatePage = Omit<NativeCandidatePage, 'candidates'> & { candidates: Candidate[] };
+
+/** Deleted references carry no comparison, disclosure or adoption payload. */
+export function candidateHasPayload(candidate: NativeCandidatePage['candidates'][number]): candidate is Candidate {
+  return !('deleted' in candidate && candidate.deleted === true);
+}
 export type CandidateField = { id: string; label: string; multivalued?: boolean };
 export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
 export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
@@ -135,7 +141,7 @@ export async function readCandidates(
       page: result?.data
         ? {
             ...result.data,
-            candidates: result.data.candidates.filter((item) => !('deleted' in item && item.deleted === true)),
+            candidates: result.data.candidates.filter(candidateHasPayload),
           }
         : null,
       ...(token ? { session: token } : {}),
