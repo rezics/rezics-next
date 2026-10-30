@@ -71,7 +71,5 @@ const appeal = {
 };
 
 export const Appeals: Story = {
-  render: () => (
-    <ModerationAppealsView appeals={[appeal]} targets={moderationQueueFixture.targets} next={null} />
-  ),
+  render: () => <ModerationAppealsView appeals={[appeal]} targets={moderationQueueFixture.targets} next={null} />,
 };

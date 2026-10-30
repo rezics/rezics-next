@@ -65,12 +65,7 @@ export function ModerationReportsView({
         )}
       </nav>
       {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
-      <BoardReportQueue
-        reports={reports}
-        targets={targets}
-        revisions={revisions}
-        onAction={onAction}
-      />
+      <BoardReportQueue reports={reports} targets={targets} revisions={revisions} onAction={onAction} />
       {next ? (
         <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext?.(next)}>
           {m.threads_next_page()}
