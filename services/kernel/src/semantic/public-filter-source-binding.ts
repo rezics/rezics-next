@@ -113,6 +113,8 @@ export function createPublicFilterSourceBinding(
   _routing: Uint8Array,
   _access: Access,
 ): PublicFilterSourceBinding {
+  if (!_pool || !(_routing instanceof Uint8Array) || _routing.byteLength !== 32 || !_access)
+    throw new TypeError('Native Source configuration is required');
   const unavailable = async (): Promise<PublicFilterBindingFailure> => ({
     status: 'unavailable',
     reason: 'owner_unavailable',

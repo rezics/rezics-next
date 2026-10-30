@@ -425,7 +425,12 @@ export function createDiscoveryProjection(options: {
               .filter((row) => row.visibility === 'visible' && row.redirect === null)
               .map(({ id }) => id),
           );
-          actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, counts);
+          const kinds = new Map(chunk.map((key) => [key.id, key.kind]));
+          const keyedSnapshot = {
+            ...snapshot,
+            subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
+          };
+          actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts);
           const semantic = actions.filter(
             (
               action,

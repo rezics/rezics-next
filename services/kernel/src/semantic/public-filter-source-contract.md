@@ -645,3 +645,23 @@ Native costs, failures, replay, result slots and frontier attempts remain charge
 A complete population is not a published facet generation: Search separately exhausts every subject's
 projection, evaluates the existing matcher and validates final current disclosure and consumer publication.
 Native producer adoption and the unchanged later acceptance remain required; typechecking is not native proof.
+
+### Selected native binding and key-page declarations
+
+`public-filter-source-binding.ts` publishes the selected `NativePublicSource`, `PublicFilterSourceDefinition`,
+`PublicFilterBindingFailure` and `PublicFilterSourceBinding` declarations. The synchronous constructor is
+`createPublicFilterSourceBinding(pool, routing: Uint8Array, access)`; native I/O belongs to `resolve` and `join`.
+`resolve({source, meaning, capture}, context)` returns `resolved` with the native definition or the closed binding
+failure. `join({queried, execution?}, context)` returns `joined` with that definition, the exact canonical queried
+observation, covered start and nullable retained execution/own rows, or the same failure. The queried type is
+imported/re-exported from Search's canonical consumer contract. Routing is the existing route key; these are
+Source-owned declarations, not a second Search reader or Source service.
+
+`subject-source-key-pages.ts` publishes `SubjectSourceKeyCursor`, `SubjectSourceKeyPage` and
+`SubjectSourceKeyPages`, with synchronous `createSubjectSourceKeyPages(pool, routing: Uint8Array, access)`.
+`read({partition, after, inputLimit}, context)` returns explicit `eligible` completeness/continuation with native
+epoch/position and IDs, `identity_pending`, or the closed `unavailable` result. Search's publication bridge adopts
+these exact declarations. `SubjectSourceKeyTraversal` preserves the separate existing `readSubjectKeyPage`
+capability on the ordinary subjectSource; the canonical factory port is `SubjectSourceKeyPages.read`.
+Neither provisional adapter invents runtime Source evidence; the actual native Source
+producer remains responsible for implementation, routing, identity availability and current definition semantics.

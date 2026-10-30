@@ -4,6 +4,14 @@ import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { activeRelease, readRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import { createSubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
+import { createPublicFilterCustody } from './public-filter-custody.ts';
+import { createRatedSubjectSource } from './rated-source.ts';
+import { subjectListingSource } from '../library/listing-counts.ts';
+import { createSearchWriterGuard } from './writer-guard.ts';
+import { subjectConsumer } from './runner.ts';
+import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import { ProblemError } from '../http/problem.ts';
 import { createPublicSuggestionOperations, type PublicSuggestionOperations } from './public-suggestion.ts';
 import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';
@@ -32,6 +40,10 @@ export type BoundPublicRequest = Readonly<{
 }>;
 export type DefaultPublicFilterRuntime = Readonly<{
   publication: SearchGenerationPublication;
+  preparePublication(
+    generation: number,
+    context: PublicFilterConsumerContext,
+  ): ReturnType<SearchGenerationPublication['prepare']>;
   bindRequest(
     request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
@@ -60,7 +72,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength !== 32)
     throw new TypeError('Public Search requires the canonical route key');
   const source = publicFilterSource(config);
-  const publication = createSearchGenerationPublication({ ...config, source });
+  const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
+  const sourceKeys = createSubjectSourceKeyPages(config.pool, config.routeKey, config.access);
+  const custody = createPublicFilterCustody(config.pool);
+  const nativeSource = createRatedSubjectSource(config.pool, config.routeKey).source;
+  const listing = subjectListingSource(config.pool);
   const owned = new Set<{ close(): Promise<void> }>();
   const pending = new Set<Promise<unknown>>();
   let closed = false;
@@ -71,6 +87,70 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     pending.add(promise);
     void promise.finally(() => pending.delete(promise)).catch(() => {});
     return promise;
+  };
+  async function publicationFor(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext) {
+    checkDeadline(context);
+    const release = await readRelease(config.pool, consumer.meaningDigest);
+    const match = /subjects-g([1-9][0-9]*)$/.exec(consumer.physicalTarget);
+    const generation = Number(match?.[1]);
+    if (
+      !release ||
+      !Number.isSafeInteger(generation) ||
+      consumer.physicalTarget !== subjectIndexName(config.prefix, generation)
+    )
+      notReady();
+    return createSearchGenerationPublication({
+      pool: config.pool,
+      search: config.search,
+      source,
+      sourceKeys,
+      binding,
+      clock: config.clock,
+      meaning: { digest: consumer.meaningDigest, release, type: 'schema:Thing' },
+      writerGuard: createSearchWriterGuard({
+        pool: config.pool,
+        search: config.search,
+        index: consumer.physicalTarget,
+        consumer: subjectConsumer(config.prefix, generation),
+        source: nativeSource,
+        listing,
+      }),
+    });
+  }
+  const publication: SearchGenerationPublication = {
+    prepare(consumer, context) {
+      return track(async () => {
+        const native = await publicationFor(consumer, context);
+        try {
+          return await native.prepare(consumer, context);
+        } finally {
+          await native.close();
+        }
+      });
+    },
+    step(job, context) {
+      return track(async () => {
+        const native = await publicationFor(job.consumer, context);
+        try {
+          return await native.step(job, context);
+        } finally {
+          await native.close();
+        }
+      });
+    },
+    activate(job, context) {
+      return track(async () => {
+        const native = await publicationFor(job.consumer, context);
+        try {
+          return await native.activate(job, context);
+        } finally {
+          await native.close();
+        }
+      });
+    },
+    async close() {
+      await custody.close();
+    },
   };
   async function create(
     physicalTarget: string,
@@ -102,6 +182,42 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   }
   return {
     publication,
+    preparePublication(generation, context) {
+      return track(async () => {
+        checkDeadline(context);
+        const current = await activeRelease(config.pool);
+        if (!current) notReady();
+        const resolved = await binding.resolve(
+          {
+            source,
+            meaning: { digest: current.digest, release: current.release, type: 'schema:Thing' },
+            capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 1 },
+          },
+          context,
+        );
+        if (resolved.status !== 'resolved')
+          return { status: resolved.status, reason: 'source_pending' as const, cost: resolved.cost };
+        const registered = await custody.register(
+          {
+            definition: resolved.definition,
+            physicalTarget: subjectIndexName(config.prefix, generation),
+            consumerGeneration: String(generation),
+            projectionGeneration: resolved.definition.readDefinition,
+          },
+          config.search,
+          context,
+        );
+        if (registered.status !== 'registered')
+          return { status: registered.status, reason: 'registration_missing' as const, cost: registered.cost };
+        // Resolve native producer/registration evidence; never synthesize a queried observation or ACK.
+        const native = await publicationFor(registered.consumer, context);
+        try {
+          return await native.prepare(registered.consumer, context);
+        } finally {
+          await native.close();
+        }
+      });
+    },
     bindRequest(request, context) {
       return track(async () => {
         checkDeadline(context);

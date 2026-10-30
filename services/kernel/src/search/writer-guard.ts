@@ -1,4 +1,10 @@
 import type { Pool } from 'pg';
+import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type {
+  PublicFilterConsumerContext,
+  PublicFilterConsumerUnavailable,
+} from './public-filter-consumer-contract.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
@@ -11,7 +17,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
-import { documentActions, validateIndexObservation } from './document.ts';
+import { documentActions, validateIndexObservation, type IndexAction, type SubjectDocument } from './document.ts';
 import { searchIdentityWriterChanged as changed } from './identity-epoch-participant-events.ts';
 import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import enroll from './identity-epoch-participant-enroll.sql';
@@ -66,35 +72,92 @@ export type SearchRetainedCopy = Readonly<{
   state: 'enrolled' | 'dispatched' | 'settled' | 'cancelled';
 }>;
 export type SearchWriterGuard = Readonly<{
-  /** No caller body/version or saved positive can be submitted. */
   write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
-  fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
-  /** Closes first absence under the same native gate as enrollment; does not assert population. */
-  closeGeneration(partition: number): Promise<SearchWriterBarrier>;
-  /** Publication consumes retained state, never fields from a diagnostic read or caller certificate. */
-  adoptGenerationPublicationBarrier(locator: SearchWriterBarrierLocator): Promise<SearchWriterBarrier>;
-  readRetainedCopies(
-    locator: SearchWriterBarrierLocator,
-    after: string | null,
-  ): Promise<
-    Readonly<{
-      copies: readonly SearchRetainedCopy[];
-      next: string | null;
-    }>
-  >;
-  /** Revokes at most 100 undispatched enrollments. Dispatched uncertainty remains a drain barrier. */
-  recoverInterrupted(
-    locator: SearchWriterBarrierLocator,
-    after: string | null,
-  ): Promise<
-    Readonly<{
-      examined: number;
-      revoked: number;
-      uncertain: number;
-      next: string | null;
-    }>
-  >;
 }>;
+export type SearchWriterNativeCustody = SearchWriterGuard &
+  Readonly<{
+    /** No caller body/version or saved positive can be submitted. */
+    write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
+    fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
+    /** Closes first absence under the same native gate as enrollment; does not assert population. */
+    closeGeneration(partition: number): Promise<SearchWriterBarrier>;
+    /** Publication consumes retained state, never fields from a diagnostic read or caller certificate. */
+    adoptGenerationPublicationBarrier(locator: SearchWriterBarrierLocator): Promise<SearchWriterBarrier>;
+    readRetainedCopies(
+      locator: SearchWriterBarrierLocator,
+      after: string | null,
+    ): Promise<
+      Readonly<{
+        copies: readonly SearchRetainedCopy[];
+        next: string | null;
+      }>
+    >;
+    /** Revokes at most 100 undispatched enrollments. Dispatched uncertainty remains a drain barrier. */
+    recoverInterrupted(
+      locator: SearchWriterBarrierLocator,
+      after: string | null,
+    ): Promise<
+      Readonly<{
+        examined: number;
+        revoked: number;
+        uncertain: number;
+        next: string | null;
+      }>
+    >;
+  }>;
+
+export type SearchWriterPublicationFence = Readonly<{ consumer: PublicFilterConsumer; job: string; fence: string }>;
+export type SearchWriterPublicationGuard = SearchWriterGuard &
+  Readonly<{
+    fencePublication(
+      request: Readonly<{ consumer: PublicFilterConsumer; job: string }>,
+      context: PublicFilterConsumerContext,
+    ): Promise<
+      | { status: 'fenced'; fence: SearchWriterPublicationFence; cost: PublicFilterCost }
+      | PublicFilterConsumerUnavailable
+    >;
+    drainPublication(
+      fence: SearchWriterPublicationFence,
+      context: PublicFilterConsumerContext,
+    ): Promise<
+      | { status: 'draining' | 'drained'; fence: SearchWriterPublicationFence; cost: PublicFilterCost }
+      | PublicFilterConsumerUnavailable
+    >;
+    adoptPublication(
+      fence: SearchWriterPublicationFence,
+      context: PublicFilterConsumerContext,
+    ): Promise<
+      { status: 'held'; fence: SearchWriterPublicationFence; cost: PublicFilterCost } | PublicFilterConsumerUnavailable
+    >;
+    releasePublication(
+      fence: SearchWriterPublicationFence,
+      context: PublicFilterConsumerContext,
+    ): Promise<{ status: 'released'; cost: PublicFilterCost } | PublicFilterConsumerUnavailable>;
+  }>;
+
+// Producer-private native readers retain the actual supplied Source/listing composition. This is
+// neither a generation registry nor caller evidence: only this factory installs a reader.
+const generationReaders = new WeakMap<
+  SearchWriterGuard,
+  (
+    partition: number,
+    ids: readonly string[],
+    obligation: bigint,
+  ) => Promise<readonly IndexAction<SubjectDocument>[] | null>
+>();
+
+/** Read current native projection bodies with the external versions actually settled by this writer.
+ * A later writer-custody command advances the home head without changing those external versions.
+ * Missing/uncertain custody returns null and cannot certify a generation.
+ */
+export async function readSearchWriterGenerationActions(
+  guard: SearchWriterGuard,
+  partition: number,
+  ids: readonly string[],
+  obligation: bigint,
+): Promise<readonly IndexAction<SubjectDocument>[] | null> {
+  return generationReaders.get(guard)?.(partition, ids, obligation) ?? null;
+}
 
 type GateRow = {
   consumer: string;
@@ -131,7 +194,7 @@ export function createSearchWriterGuard(options: {
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
-}): SearchWriterGuard {
+}): SearchWriterNativeCustody & SearchWriterPublicationGuard {
   if (!/^[a-z][a-z0-9_]{0,62}$/.test(options.consumer)) throw new TypeError('Invalid Search consumer');
   const match = /subjects-g([1-9][0-9]*)$/.exec(options.index);
   const generation = Number(match?.[1]);
@@ -212,7 +275,300 @@ export function createSearchWriterGuard(options: {
       throw unavailable('Search publication physical incarnation changed during adoption');
     return barrier;
   }
-  return {
+  type PublicationRow = GateRow & {
+    publication_job: string | null;
+    publication_consumer: PublicFilterConsumer | null;
+    publication_fence: string | null;
+    publication_released_fence: string | null;
+    publication_home: number;
+    publication_after: string | null;
+    publication_revision: string;
+  };
+  const publicationCost = (): PublicFilterCost => ({
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  });
+  class PublicationPending extends Error {}
+  const pendingPublication = () => {
+    throw new PublicationPending();
+  };
+  function publicationDeadline(context: PublicFilterConsumerContext) {
+    if (!Number.isSafeInteger(context.deadline)) throw new TypeError('Invalid publication deadline');
+    if (context.deadline <= Date.now()) throw new PublicationPending('deadline');
+  }
+  async function publicationCall<T>(
+    context: PublicFilterConsumerContext,
+    work: (cost: PublicFilterCost) => Promise<T>,
+  ): Promise<T | PublicFilterConsumerUnavailable> {
+    const cost = publicationCost();
+    try {
+      publicationDeadline(context);
+      return await work(cost);
+    } catch (error) {
+      if (error instanceof TypeError) throw error;
+      return {
+        status: error instanceof PublicationPending ? 'unready' : 'unavailable',
+        reason: error instanceof PublicationPending && error.message === 'deadline' ? 'deadline' : 'source_pending',
+        cost,
+      };
+    }
+  }
+  async function publicationLock(tx: CommandTransaction, exclusive: boolean) {
+    // Same lock in native admission and publication, including first absence of the home-zero gate.
+    await tx.query(
+      exclusive
+        ? 'SELECT pg_advisory_xact_lock(hashtextextended($1,741))'
+        : 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))',
+      [options.index],
+    );
+  }
+  async function publicationAdmission(tx: CommandTransaction) {
+    await publicationLock(tx, false);
+    const result = await tx.query(
+      'SELECT publication_fence FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
+      [options.index],
+    );
+    if (result.rows[0]?.publication_fence) throw unavailable('Search generation is fenced for native publication');
+  }
+  async function publicationJob(
+    tx: CommandTransaction,
+    request: Readonly<{ consumer: PublicFilterConsumer; job: string }>,
+  ) {
+    if (request.consumer.physicalTarget !== options.index || !/^[0-9a-f-]{36}$/.test(request.job))
+      return pendingPublication();
+    const result = await tx.query<{ phase: string }>(
+      `SELECT phase FROM search.generation_publication WHERE partition_no=0 AND job=$1
+       AND physical_target=$2 AND consumer=$3 AND native_incarnation=$4`,
+      [request.job, options.index, request.consumer, request.consumer.incarnation],
+    );
+    if (result.rowCount !== 1) return pendingPublication();
+    return result.rows[0]!;
+  }
+  async function publicationRetained(tx: CommandTransaction, value: SearchWriterPublicationFence) {
+    await publicationJob(tx, value);
+    const owner = await readPartition(tx, 0);
+    const row = (
+      await tx.query<PublicationRow>(
+        'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
+        [options.index],
+      )
+    ).rows[0];
+    if (
+      !owner ||
+      owner.writeState !== 'active' ||
+      !row ||
+      row.owner_epoch !== owner.epoch ||
+      row.consumer !== options.consumer ||
+      row.incarnation !== value.consumer.incarnation ||
+      row.publication_job !== value.job ||
+      row.publication_fence !== value.fence ||
+      !isDeepStrictEqual(row.publication_consumer, value.consumer)
+    )
+      return pendingPublication();
+    return row;
+  }
+  async function publicationPhysical(value: Readonly<{ consumer: PublicFilterConsumer }>) {
+    const target = await readSearchWriterPhysicalTarget(options.search, options.index);
+    if (target.incarnation !== value.consumer.incarnation) return pendingPublication();
+    return target;
+  }
+  const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
+    fencePublication(request, context) {
+      const input = structuredClone(request);
+      return publicationCall(context, async (cost) => {
+        const target = await publicationPhysical(input);
+        const result = await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
+          publicationDeadline(context);
+          const receipt = await native(tx, command.transactionId);
+          await publicationLock(tx, true);
+          await publicationJob(tx, input);
+          await gate(tx, receipt, target.incarnation, target.writeAlias);
+          const row = (
+            await tx.query<PublicationRow>(
+              'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 FOR UPDATE',
+              [options.index],
+            )
+          ).rows[0]!;
+          if (
+            row.publication_job === input.job &&
+            row.publication_fence &&
+            isDeepStrictEqual(row.publication_consumer, input.consumer)
+          )
+            return noEffect(row.publication_fence);
+          if (row.publication_fence) return pendingPublication();
+          const token = crypto.randomUUID();
+          await tx.query(
+            `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
+            publication_fence=$4,publication_home=0,publication_after=NULL,publication_revision=publication_revision+1
+            WHERE partition_no=0 AND physical_target=$1`,
+            [options.index, input.job, input.consumer, token],
+          );
+          return { value: token, events: changed() };
+        });
+        await publicationPhysical(input);
+        return {
+          status: 'fenced' as const,
+          fence: { ...input, fence: result.value },
+          cost: { ...cost, frontierWrites: 1 },
+        };
+      });
+    },
+    drainPublication(value, context) {
+      const input = structuredClone(value);
+      return publicationCall(context, async (cost) => {
+        await publicationPhysical(input);
+        const before = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
+        if (before.publication_home === 4096) {
+          // The actual native producer still reports firstApply/prepared as unavailable. An ordinary
+          // scan cannot invent receiving-system or retained-observation disposition for those owners.
+          return { status: 'draining' as const, fence: input, cost };
+        }
+        const home = before.publication_home;
+        const result = await runCommand(options.pool, { partition: home }, async (tx, command) => {
+          publicationDeadline(context);
+          const receipt = await native(tx, command.transactionId);
+          await publicationLock(tx, false);
+          const retained = await publicationRetained(tx, input);
+          if (retained.publication_revision !== before.publication_revision) return pendingPublication();
+          const page = (
+            await tx.query<{
+              copies: {
+                original_id: string;
+                dispatch_state: string;
+                writer_token: string | null;
+                incarnation: string;
+                owner_epoch: number;
+              }[];
+              more: boolean;
+            }>(
+              `WITH page AS MATERIALIZED (
+               SELECT original_id,dispatch_state,writer_token,incarnation,owner_epoch FROM search.identity_writer
+               WHERE partition_no=$1 AND physical_target=$2 AND ($3::uuid IS NULL OR original_id>$3)
+               ORDER BY original_id LIMIT 99 FOR UPDATE
+             ) SELECT COALESCE(jsonb_agg(to_jsonb(page) ORDER BY original_id),'[]') AS copies,
+               EXISTS(SELECT 1 FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
+                 AND original_id>COALESCE((SELECT max(original_id::text)::uuid FROM page),$3::uuid)
+                 LIMIT 1) AS more FROM page`,
+              [home, options.index, before.publication_after],
+            )
+          ).rows[0]!;
+          if (
+            page.copies.some(
+              (row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch,
+            )
+          )
+            return pendingPublication();
+          const revocable = page.copies
+            .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
+            .map((row) => row.original_id);
+          if (revocable.length)
+            await tx.query(
+              `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
+             settled_position=$5 WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])
+             AND dispatch_state='enrolled'`,
+              [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
+            );
+          const progress = {
+            page,
+            uncertain: page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
+            revoked: revocable.length,
+          };
+          return revocable.length ? { value: progress, events: changed() } : noEffect(progress);
+        });
+        const { page, uncertain, revoked } = result.value;
+        await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
+          publicationDeadline(context);
+          await native(tx, command.transactionId);
+          await publicationLock(tx, true);
+          const row = await publicationRetained(tx, input);
+          if (row.publication_revision !== before.publication_revision) return pendingPublication();
+          if (uncertain) return noEffect(null);
+          await tx.query(
+            `UPDATE search.identity_writer_gate SET publication_home=$3,publication_after=$4,
+            publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1 AND publication_fence=$2`,
+            [
+              options.index,
+              input.fence,
+              page.more ? home : home + 1,
+              page.more ? page.copies.at(-1)!.original_id : null,
+            ],
+          );
+          return { value: null, events: changed() };
+        });
+        await publicationPhysical(input);
+        return {
+          status: 'draining' as const,
+          fence: input,
+          cost: {
+            ...cost,
+            inputKeys: page.copies.length + Number(page.more),
+            resultWrites: revoked,
+            frontierWrites: Number(!uncertain),
+          },
+        };
+      });
+    },
+    adoptPublication(value, context) {
+      const input = structuredClone(value);
+      return publicationCall(context, async () => {
+        await publicationPhysical(input);
+        await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
+        // inspect()'s actual firstApply/prepared fields are unavailable in this delivered producer.
+        // Never turn its ordinary drain, a token, or elapsed time into the missing native barriers.
+        return pendingPublication();
+      });
+    },
+    releasePublication(value, context) {
+      const input = structuredClone(value);
+      return publicationCall(context, async (cost) => {
+        await publicationPhysical(input);
+        await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
+          publicationDeadline(context);
+          await native(tx, command.transactionId);
+          await publicationLock(tx, true);
+          const job = await publicationJob(tx, input);
+          const row = (
+            await tx.query<PublicationRow>(
+              'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 FOR UPDATE',
+              [options.index],
+            )
+          ).rows[0];
+          // A released locator remains retained for idempotent replay; another job cannot release it.
+          const owner = await readPartition(tx, 0);
+          if (
+            owner?.writeState === 'active' &&
+            row?.owner_epoch === owner.epoch &&
+            row.consumer === options.consumer &&
+            row.incarnation === input.consumer.incarnation &&
+            row.publication_job === input.job &&
+            row.publication_fence === null &&
+            row.publication_released_fence === input.fence &&
+            isDeepStrictEqual(row.publication_consumer, input.consumer)
+          )
+            return noEffect(null);
+          await publicationRetained(tx, input);
+          if (job.phase === 'intent') return pendingPublication();
+          await tx.query(
+            `UPDATE search.identity_writer_gate SET publication_released_fence=publication_fence,publication_fence=NULL,
+            publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1`,
+            [options.index],
+          );
+          return { value: null, events: changed() };
+        });
+        return { status: 'released' as const, cost: { ...cost, frontierWrites: 1 } };
+      });
+    },
+  };
+
+  const guard: SearchWriterNativeCustody & SearchWriterPublicationGuard = {
+    ...publication,
     fenceOriginal: (job, original) =>
       fenceSearchIdentityWriter(options.pool, { job, original, index: options.index, search: options.search }),
     adoptGenerationPublicationBarrier: inspect,
@@ -308,6 +664,7 @@ export function createSearchWriterGuard(options: {
       const token = crypto.randomUUID();
       const enrollment = await runCommand(options.pool, { partition }, async (tx, context) => {
         const receipt = await native(tx, context.transactionId);
+        await publicationAdmission(tx);
         const target = await gate(tx, receipt, incarnation, writeAlias);
         if (target.closed_token) throw unavailable('Search generation is closed to writer enrollment');
         await tx.query(
@@ -406,6 +763,52 @@ export function createSearchWriterGuard(options: {
       await release();
     },
   };
+  generationReaders.set(guard, async (partition, input, obligation) => {
+    const ids = keys(partition, input);
+    const target = await readSearchWriterPhysicalTarget(options.search, options.index);
+    const snapshot = await options.source.read(partition, ids);
+    const subjects = validateIndexObservation(snapshot, partition, ids, obligation);
+    const visible = ids.filter((id) => {
+      const subject = subjects.get(id);
+      return subject?.visibility === 'visible' && subject.redirect === null;
+    });
+    const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
+    const actions = await prepareBoundedSortKeys(options.search, options.index, documentActions(snapshot, ids, counts));
+    const versions = await withReadTransaction(options.pool, async (tx) => {
+      const owner = await readPartition(tx, partition);
+      if (!owner || owner.writeState !== 'active' || owner.position !== snapshot.position) return null;
+      const rows = (
+        await tx.query<CopyRow>(
+          `SELECT original_id::text,incarnation,owner_epoch,writer_token,dispatch_state,
+         source_position::text,visible_transaction_id,visible_position::text
+         FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2 AND original_id=ANY($3::uuid[])`,
+          [partition, options.index, ids],
+        )
+      ).rows;
+      if (
+        rows.length !== ids.length ||
+        rows.some(
+          (row) =>
+            row.incarnation !== target.incarnation ||
+            row.owner_epoch !== owner.epoch ||
+            row.writer_token !== null ||
+            row.dispatch_state !== 'settled' ||
+            row.source_position === null ||
+            row.visible_transaction_id === null ||
+            row.visible_position === null ||
+            BigInt(row.source_position) > snapshot.position ||
+            BigInt(row.visible_position) > snapshot.position,
+        )
+      )
+        return null;
+      return new Map(rows.map((row) => [row.original_id, BigInt(row.source_position!)]));
+    });
+    const current = await readSearchWriterPhysicalTarget(options.search, options.index);
+    if (!versions || current.incarnation !== target.incarnation || current.writeAlias !== target.writeAlias)
+      return null;
+    return actions.map((action) => ({ ...action, version: versions.get(action.id)! }));
+  });
+  return guard;
 }
 
 export type SearchIdentityWriterFence = Readonly<{
@@ -478,3 +881,28 @@ export async function fenceSearchIdentityWriter(
   });
   return result.value;
 }
+
+/** Provisional publication surface until the native producer installs its admission/copy barrier.
+ * Composing these methods with the real ordinary writer grants no publication authority.
+ */
+const unavailable = async (): Promise<PublicFilterConsumerUnavailable> => ({
+  status: 'unready',
+  reason: 'source_pending',
+  cost: {
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  },
+});
+export const unavailableSearchWriterPublication: Omit<SearchWriterPublicationGuard, 'write'> = Object.freeze({
+  fencePublication: unavailable,
+  drainPublication: unavailable,
+  adoptPublication: unavailable,
+  releasePublication: unavailable,
+});

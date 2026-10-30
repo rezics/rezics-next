@@ -1,4 +1,4 @@
-import type { SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
+import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import type { Pool } from 'pg';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ConfigError } from '../commerce/config.ts';

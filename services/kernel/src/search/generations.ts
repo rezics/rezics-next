@@ -1,4 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
+import { subjectSource } from '../semantic/search-source.ts';
+import { subjectListingSource } from '../library/listing-counts.ts';
+import { documentActions, type IndexAction } from './document.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
@@ -159,7 +162,7 @@ async function indexCounts(search: OpenSearch, index: string): Promise<Map<numbe
 }
 
 /** A write is never retried: only a fresh bounded native observation can resolve its effect. */
-async function observedWrite(
+export async function observedWrite(
   write: () => Promise<unknown>,
   observe: () => Promise<boolean>,
   message: string,
@@ -875,4 +878,128 @@ export async function rebuildDiscovery(options: {
   } finally {
     await runner.stop();
   }
+}
+
+/** Shared native keyed observations for publication; no census or prepared output is completeness evidence. */
+export async function nativeGenerationActions(options: {
+  pool: Pool;
+  search: OpenSearch;
+  index: string;
+  partition: number;
+  ids: readonly string[];
+  obligation: bigint;
+  registry?: DiscoveryRegistry;
+  keys?: readonly DiscoveryKey[];
+}): Promise<readonly (DiscoveryIndexAction | IndexAction<SubjectDocument>)[]> {
+  const { pool, search, index, partition, ids, obligation, registry } = options;
+  if (ids.length > 100) throw new RangeError('Generation reconciliation accepts at most 100 native keys');
+  const listing = subjectListingSource(pool);
+  if (!registry) {
+    const snapshot = await subjectSource(pool).read(partition, ids);
+    validateObservation(snapshot, partition, ids, obligation, true);
+    // The supplied native writer owns factual projection, foreign fences and rating decoration.
+    // This raw native observation supplies eligibility, key identity and external versions only.
+    return documentActions(snapshot, ids);
+  }
+  const keys = options.keys;
+  if (!keys || keys.length !== ids.length) throw new TypeError('Native discovery keys are required');
+  const account = keys[0]?.owner === 'accounts';
+  if (keys.some((key) => (key.owner === 'accounts') !== account)) throw new TypeError('Mixed owner key batch');
+  let actions: DiscoveryIndexAction[];
+  if (account) {
+    const entry = registry.get('account');
+    if (entry.owner !== 'accounts') throw new TypeError('Native Account producer is required');
+    const snapshot = validateAccountSnapshot(await entry.source.read(partition, ids), partition, ids, obligation);
+    actions = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys);
+  } else {
+    const entry = registry.entries.find((entry) => entry.owner === 'semantic');
+    if (!entry || entry.owner !== 'semantic') throw new TypeError('Native Subject producer is required');
+    const observed = await entry.source.read(partition, ids);
+    validateObservation(observed, partition, ids, obligation, true);
+    // A type change removes the old kind-key; native key enumeration separately supplies the new kind-key.
+    const kind = new Map(keys.map((key) => [key.id, key.kind]));
+    const snapshot = { ...observed, subjects: observed.subjects.filter((row) => kind.get(row.id) === row.type) };
+    const counts = await listing.read(
+      partition,
+      snapshot.subjects.map(({ id }) => id),
+    );
+    actions = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
+    const semantic = actions.filter(
+      (
+        action,
+      ): action is Extract<DiscoveryIndexAction, { op: 'index' }> & {
+        document: SubjectDocument & IndexedDiscoveryDocument;
+      } => action.op === 'index' && action.document.owner === 'semantic',
+    );
+    const prepared = await prepareBoundedSortKeys(search, index, semantic);
+    const byId = new Map(prepared.map((action) => [action.id, action]));
+    actions = actions.map((action) => byId.get(action.id) ?? action);
+  }
+  return actions;
+}
+
+export class GenerationReconciliationMismatch extends Error {
+  constructor() {
+    super('Native generation keys or external versions do not match');
+  }
+}
+
+/** Search-visible keyed evidence shared by ordinary and mixed physical generations.
+ * Ordinary bodies belong to the supplied native writer (including foreign fences and rating decoration);
+ * native mixed producers additionally provide their exact full projection for comparison here.
+ */
+export async function assertNativeGenerationActionsVisible(
+  search: OpenSearch,
+  index: string,
+  actions: readonly (DiscoveryIndexAction | IndexAction<SubjectDocument>)[],
+): Promise<number> {
+  if (actions.length > 100) throw new RangeError('Native reconciliation accepts at most 100 keyed actions');
+  if (!actions.length) return 0;
+  const response = await search.request<unknown>(
+    'POST',
+    `/${index}/_search`,
+    {
+      size: actions.length,
+      version: true,
+      track_total_hits: false,
+      query: { ids: { values: actions.map(({ id }) => id) } },
+    },
+    { query: { allow_partial_search_results: false } },
+  );
+  assertCompleteSearch(response.body);
+  if (
+    response.status !== 200 ||
+    !record(response.body) ||
+    !record(response.body.hits) ||
+    !Array.isArray(response.body.hits.hits) ||
+    response.body.hits.hits.length > actions.length
+  )
+    throw new GenerationReconciliationMismatch();
+  const hits = new Map<string, Record<string, unknown>>();
+  for (const hit of response.body.hits.hits) {
+    if (!record(hit) || hit._index !== index || typeof hit._id !== 'string' || hits.has(hit._id))
+      throw new GenerationReconciliationMismatch();
+    hits.set(hit._id, hit);
+  }
+  for (const action of actions) {
+    const hit = hits.get(action.id);
+    if (action.op === 'delete') {
+      if (hit) throw new GenerationReconciliationMismatch();
+    } else if (
+      !hit ||
+      String(hit._version) !== action.version.toString() ||
+      !nativeGenerationDocumentMatches(hit._source, action.document)
+    )
+      throw new GenerationReconciliationMismatch();
+    hits.delete(action.id);
+  }
+  if (hits.size) throw new GenerationReconciliationMismatch();
+  return response.body.hits.hits.length;
+}
+
+function nativeGenerationDocumentMatches(
+  actual: unknown,
+  expected: SubjectDocument | IndexedDiscoveryDocument,
+): boolean {
+  return isDeepStrictEqual(actual, expected);
 }

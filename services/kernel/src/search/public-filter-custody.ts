@@ -852,3 +852,64 @@ async function deletePit(pit: string, search: OpenSearch, context: PublicFilterC
     if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
   }
 }
+
+/** Publication adopts existing immutable custody; it never creates observation readiness.
+ * The source home and physical consumer indexes bound both lookups to one native record.
+ */
+export async function readGenerationPublicationCustody(
+  pool: Pool,
+  consumer: PublicFilterConsumer,
+  sourceHome: number | undefined,
+  context: PublicFilterConsumerContext,
+  observation?: string,
+): Promise<
+  | Readonly<{
+      definition: CustodyRetainedDefinition;
+      queried: PublicFilterQueriedObservation | null;
+      cost: CustodyCost;
+    }>
+  | CustodyFailure
+> {
+  const meter = cost();
+  try {
+    check(context);
+    if (sourceHome !== undefined) home(sourceHome);
+    const registered = await sql(
+      pool,
+      meter,
+      `SELECT r.partition_no,r.id,r.definition FROM search.public_filter_registration r
+       JOIN search.public_filter_target t USING(partition_no,physical_target)
+       WHERE ($1::integer IS NULL OR r.partition_no=$1) AND r.physical_target=$2 AND md5(r.consumer)=md5($3) AND r.consumer=$3 AND r.state='active'
+       AND t.incarnation=$4 LIMIT 2`,
+      [sourceHome, consumer.physicalTarget, encode(consumer), consumer.incarnation],
+    );
+    const row = registered.rows[0];
+    if (!row || registered.rows.length !== 1) throw new Failure('definition_missing');
+    sourceHome = row.partition_no as number;
+    const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
+    requireValue(definition.digest === digest(definition.data));
+    const found =
+      observation === undefined
+        ? await sql(
+            pool,
+            meter,
+            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
+         AND state='open' ORDER BY observation DESC LIMIT 1`,
+            [sourceHome, row.id],
+          )
+        : await sql(
+            pool,
+            meter,
+            `SELECT queried FROM search.public_filter_observation WHERE partition_no=$1 AND registration=$2
+         AND observation=$3 AND state='open'`,
+            [sourceHome, row.id, observation],
+          );
+    if (!found.rows[0]) return { definition: definition.data, queried: null, cost: meter };
+    const q = decode<PublicFilterQueriedObservation>(found.rows[0].queried);
+    requireValue(encode(q.consumer) === encode(consumer));
+    const native = await read(pool, { queried: q }, context, meter);
+    return { definition: native.definition, queried: native.queried, cost: meter };
+  } catch (error) {
+    return failure(error, meter);
+  }
+}

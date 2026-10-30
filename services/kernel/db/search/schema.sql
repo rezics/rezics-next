@@ -605,3 +605,62 @@ CREATE TABLE search.trending_blocked (
 
 
 CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (partition_no, physical_target, original_id) WHERE (writer_token IS NOT NULL);
+
+-- Retained bounded publication work over the existing native generation authorities.
+CREATE TABLE search.generation_publication (
+    partition_no integer DEFAULT 0 NOT NULL CHECK (partition_no = 0),
+    job uuid NOT NULL,
+    physical_target text COLLATE pg_catalog."C" NOT NULL,
+    consumer jsonb NOT NULL CHECK (octet_length(consumer::text) <= 8192),
+    prefix text COLLATE pg_catalog."C" NOT NULL,
+    generation bigint NOT NULL CHECK (generation BETWEEN 1 AND 9007199254740991),
+    family text NOT NULL CHECK (family IN ('subjects', 'discovery')),
+    native_incarnation text NOT NULL,
+    pass bigint DEFAULT 1 NOT NULL CHECK (pass > 0),
+    activated_at text NOT NULL,
+    kinds text[] NOT NULL,
+    source_home integer NOT NULL CHECK (source_home BETWEEN 0 AND 4095),
+    binding jsonb NOT NULL CHECK (octet_length(binding::text) <= 8192),
+    phase text DEFAULT 'subject' NOT NULL CHECK (phase IN ('subject','account','engine','validate','reconciled','fencing','intent','active')),
+    home integer DEFAULT 0 NOT NULL CHECK (home BETWEEN 0 AND 4096),
+    after_route integer,
+    after_id uuid,
+    engine_after jsonb CHECK (octet_length(engine_after::text) <= 8192),
+    pit text CHECK (octet_length(pit) <= 65536),
+    fence text CHECK (octet_length(fence) <= 8192),
+    fenced_pass boolean DEFAULT false NOT NULL,
+    observation text,
+    previous_target text,
+    previous_uuid text,
+    revision bigint DEFAULT 1 NOT NULL CHECK (revision > 0),
+    PRIMARY KEY (partition_no,job),
+    UNIQUE (partition_no,physical_target,consumer),
+    CHECK ((after_route IS NULL) = (after_id IS NULL))
+);
+CREATE TABLE search.generation_publication_home (
+    partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
+    job uuid NOT NULL,
+    pass bigint NOT NULL CHECK (pass > 0),
+    epoch integer NOT NULL,
+    position bigint NOT NULL CHECK (position >= 0),
+    account_revision bigint DEFAULT 0 NOT NULL,
+    claim_revision bigint DEFAULT 0 NOT NULL,
+    PRIMARY KEY (partition_no,job)
+);
+CREATE INDEX generation_publication_home_frontier
+  ON search.generation_publication_home(job,pass,partition_no);
+CREATE INDEX public_filter_registration_publication ON search.public_filter_registration USING btree
+    (physical_target,md5(consumer),partition_no) WHERE state = 'active';
+CREATE INDEX public_filter_observation_publication ON search.public_filter_observation USING btree
+    (partition_no,registration,observation DESC) WHERE state = 'open';
+
+ALTER TABLE search.identity_writer_gate
+  ADD COLUMN publication_job uuid,
+  ADD COLUMN publication_consumer jsonb CHECK (octet_length(publication_consumer::text)<=8192),
+  ADD COLUMN publication_fence uuid,
+  ADD COLUMN publication_released_fence uuid,
+  ADD COLUMN publication_home integer NOT NULL DEFAULT 0 CHECK (publication_home BETWEEN 0 AND 4096),
+  ADD COLUMN publication_after uuid,
+  ADD COLUMN publication_revision bigint NOT NULL DEFAULT 0 CHECK (publication_revision>=0),
+  ADD CHECK (publication_fence IS NULL OR (publication_job IS NOT NULL AND publication_consumer IS NOT NULL)),
+  ADD CHECK (partition_no=0 OR publication_job IS NULL);

@@ -1145,31 +1145,17 @@ so an expired attempt cannot overwrite a successor frontier. Maintenance locator
 not allocate a public output slot or extend its native quota grant. Only the consumer producer owns current/building
 public output reservations. First-start discovery no longer aliases an empty generation in this composition.
 
-`createSearchGenerationPublication` is the selected publication-owner factory. Its closed handoff is:
+The default maintenance worker composes the sole [bounded publication port](#bounded-generation-publication).
+Its `preparePublication` adapter resolves the native full-population binding and registers native custody,
+then passes the returned consumer to `prepare`. It retains only the publication job ID between steps.
+Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
+callback supplies authority. After finite population/replay, maintenance advances native reconciliation and
+publication through the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
+still requires actual retained-copy and writer evidence. Live physical generations remain capped at three.
 
-- `prepare({generation}, context)` resolves native generation state and returns a retained `locator`, the sole
-  publication `SubjectApplyGuard` admission hook as `writer`, and actual cost, or typed unavailable. It takes no completion assertion.
-- `step(locator, context)` performs the producer's bounded identified reconciliation, returning progress or
-  reconciled with actual cost, or typed unavailable. Population never substitutes query status or a count census.
-- `activate(locator, context)` resolves all native completion, incarnation, accepted meaning, refresh and old-writer
-  evidence itself, returning active generation/previous generation with cost, or typed unavailable.
-- `close()` drains this factory without closing supplied resources.
-
-The same returned publication admission hook brackets cold writes and ordinary replay through the existing
-indexer hook. Inside that hook, both use the delivered `createSearchWriterGuard` and its native enrollment,
-version, refresh and drain custody; the publication hook cannot replace it. The adapter adds no lock, writer
-registry, Source mirror, acknowledgement or reconciliation implementation. Population
-waits for actual `prepare` before writing. After the finite scan/replay it invokes `step` and then `activate`, always
-with the retained locator. Default CLI rebuild waits for that worker-owned alias publication; the legacy Subject
-reconciliation path remains available to its existing callers. Retirement still requires the native retained-copy
-and writer barrier, independently of population diagnostics. Live physical generations remain capped at three.
-
-Producer availability was inspected before editing. The existing `public-filter-consumer.ts`,
-`semantic/public-filter-source.ts` and `semantic/subject-source-key-pages.ts` are explicitly provisional adapters.
-`generation-publication.ts` now declares the publication handoff and returns typed unavailable until its owner
-implementation arrives. Integration must preserve actual producer code and replace/deduplicate provisional shims.
-The other exact handoffs remain `PublicFilterConsumerOperationsFactory`, `PublicFilterNativeSource` and
-`SubjectSourceKeyPages`. These adapters create no Source identity, permission, coverage, ACK, grant or ready output.
+The consumer, Source binding and Source key-page adapters remain provisional where owner runtime evidence
+is missing. They create no Source identity, permission, coverage, ACK, grant or ready output. Their absence
+returns typed unavailable while the independent native reconciliation/publication implementation remains installed.
 
 The adopted runtime plan and end-to-end research distinguish immutable engine observations from current disclosure,
 retain request-owned PIT lifetime, and place summaries inside the last privacy boundary. Reference source reads
@@ -1182,3 +1168,60 @@ hook and enqueues its admitted repair locators through the real WorkClient. Its 
 native publication. The focused `default-public-runtime.test.ts` retains the finite preparation, sparse privacy-lag,
 full/exhausted pages and generation-recovery case and adds a prefix/current-summary/privacy-repair journey.
 Native acceptance remains deferred to integration; local compilation supplies no native readiness evidence.
+
+## Bounded generation publication
+
+`createSearchGenerationPublication` in `generation-publication.ts` is the shared worker/CLI publication port.
+Its synchronous configuration is `{pool, search, source, sourceKeys, binding, clock, meaning, writerGuard,
+registry?}`. `writerGuard` is the extended **same native ordinary writer**, `SearchWriterPublicationGuard`.
+The optional registry pins the actual mixed Accounts/Subject producers and registered kinds. The four methods
+are `prepare(consumer, context)`, `step(job, context)`, `activate(job, context)` and draining `close()`; close
+never closes supplied resources. A job contains only `{consumer, job}` and resolves retained native work.
+It carries no permission, completion assertion, key list or caller frontier.
+
+Preparation adopts existing physical generation metadata and immutable native custody. Every adoption checks
+physical name/UUID, the discovery incarnation and registry, consumer/projection generation, meaning and native
+Source definition/configuration. Native Source key pages provide explicit completeness, epoch and position;
+Account pages preserve handleless rows. Each step advances one retained key frontier or at most 50 validation
+homes. Ordinary keys use the existing writer; mixed keys use `createDiscoveryProjection`, its permanent keyed
+deletion high water and native copy inventory. `nativeGenerationActions` supplies native keyed expectations.
+A refreshed physical PIT/composite traversal also examines engine-only keys. Native `after_key`, rather than
+page length, proves engine traversal exhaustion. Keyed search-visible identities and exact external versions
+must match native observations. Ordinary expectations use the actual writer's supplied native Source/listing,
+including foreign fences, ratings and counts, and the native retained copy's settled external version.
+Both ordinary and mixed comparisons check the complete projected body. Source census and query totals cannot
+certify reconciliation. A native repair invalidates the affected home's witness before replay. Interrupted
+pages repeat their actual work before committing the frontier. An owner move or pending identity invalidates
+the affected home, and physical recreation invalidates the entire old job.
+
+Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
+writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
+barrier. Current Source evidence comes from an existing immutable custody observation, the selected native
+binding join and canonical all-native-homes Source observation. Missing custody, routing, Source or native
+barrier evidence returns typed unready; no observation readiness is minted here. Old PIT/prepared observations
+remain bound to their own exact physical target and definition.
+
+Publication persists native fencing invocation intent before requesting the gate, and alias intent, including
+the previous physical target/UUID, before the native alias switch. A lost fence response resolves through the
+same producer/job. A Source change during adoption safely recovers outstanding intent before returning unready.
+Only exact native alias readback settles a lost response. Source and writer/copy custody are revalidated through
+the critical section, before generation metadata becomes active; release occurs afterwards. A safe abort restores
+only this exact alias intent while the fence remains held. Retained intent recovers a lost response or interrupted
+metadata update. Existing generation allocation, live-three-generation quota and activation expiry remain owned
+by the native generation implementations; this port neither allocates a parallel registry nor launches a worker.
+
+The Source binding/key-page modules publish the selected owner declarations and retain their existing
+unavailable adapters. The delivered ordinary writer retains its real native admission, dispatch, uncertainty
+and settlement implementation. Publication extends the same admission gate: a durable global target fence
+blocks new enrollment, and one bounded retained frontier visits all home-local writer copies, cancelling
+only undispatched enrollment. Dispatched uncertainty remains retained. The delivered native barrier still
+reports first-apply and prepared-copy custody unavailable, so `drainPublication` remains draining and
+`adoptPublication` remains typed unready even after ordinary copies have been visited. No native or
+public-runtime acceptance pass is inferred from compilation.
+
+Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
+steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
+only in generation maintenance. Publication adopts an unfiltered full-population definition; a narrowed
+query observation cannot provide generation-wide Source coverage. Expired enumeration PITs restart their finite
+engine pass without reusing an old frontier. New native outcomes cover incomplete population/barrier refusal, physical
+recreation and lost alias response recovery; existing generation growth bounds remain applicable.

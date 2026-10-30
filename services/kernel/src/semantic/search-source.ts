@@ -1,4 +1,7 @@
-import { readSubjectKeyPage, type SubjectSourceKeyPages } from './subject-source-key-pages.ts';
+import {
+  readSubjectKeyPage,
+  type SubjectSourceKeyTraversal as SubjectSourceKeyPages,
+} from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
 import { readRelease } from './definitions.ts';
 import type { Pool, PoolClient } from 'pg';

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { WorkClient } from '../work/client.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
+import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -68,12 +68,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const release = await activeRelease(options.pool);
     if (!release || release.digest !== state.meaning || (await indexUuid(options.search, index)) !== state.uuid)
       return store.advance(record, state, 5000);
-    const publication = await options.runtime.publication.prepare({ generation: state.generation }, context);
-    if (publication.status !== 'prepared') return store.advance(record, state, 1000);
-    if (state.publication !== null && state.publication !== publication.locator.publication)
+    const publication = await options.runtime.preparePublication(state.generation, context);
+    if (publication.status !== 'preparing') return store.advance(record, state, 1000);
+    if (state.publication !== null && state.publication !== publication.job.job)
       throw new SearchUnavailableError('Public publication identity changed during population');
-    if (state.publication === null)
-      return store.advance(record, { ...state, publication: publication.locator.publication });
+    if (state.publication === null) return store.advance(record, { ...state, publication: publication.job.job });
     const writer = createSearchWriterGuard({
       pool: options.pool,
       search: options.search,
@@ -84,7 +83,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     });
     if (state.partition === 4096) {
       if (state.phase !== 'activate') {
-        const reconciliation = await options.runtime.publication.step(publication.locator, context);
+        const reconciliation = await options.runtime.publication.step(publication.job, context);
         return store.advance(
           record,
           {
@@ -94,13 +93,13 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
         );
       }
-      const activated = await options.runtime.publication.activate(publication.locator, context);
-      if (activated.status === 'active') {
-        if (activated.generation !== state.generation)
+      const activated = await options.runtime.publication.activate(publication.job, context);
+      if (activated.status === 'activated') {
+        if (activated.consumer.physicalTarget !== index)
           throw new SearchUnavailableError('Public publication activated the wrong generation');
         return store.advance(record, null);
       }
-      return store.advance(record, state, 1000);
+      return store.advance(record, activated.status === 'preparing' ? { ...state, phase: 'native' } : state, 1000);
     }
     const home = await readPartition(options.pool, state.partition);
     if (!home || home.writeState !== 'active') return store.advance(record, state, 1000);
@@ -121,7 +120,6 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         consumer: subjectConsumer(options.prefix, state.generation),
         envelopes: 1,
         writer,
-        aroundApply: publication.writer,
       });
       const replay = await relay.run(state.partition);
       if (replay.status !== 'read') return store.advance(record, state, 1000);
@@ -143,7 +141,6 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         state.partition,
         state.pending.keys,
         BigInt(state.pending.position),
-        publication.writer,
       );
       return store.advance(record, {
         ...state,
@@ -194,13 +191,9 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   }
   return {
     enqueueRepair,
-    /** Publication admission only; the indexer also uses the delivered native SearchWriterGuard. */
-    writer(generation: number): import('./indexer.ts').SubjectApplyGuard {
-      return async (partition, envelopes, apply) => {
-        const prepared = await options.runtime.publication.prepare({ generation }, { deadline: Date.now() + 30_000 });
-        if (prepared.status !== 'prepared') throw new SearchUnavailableError('Public generation writer is unavailable');
-        await prepared.writer(partition, envelopes, apply);
-      };
+    /** The actual ordinary writer checks the native publication gate inside its enrollment transaction. */
+    writer(_generation: number): import('./indexer.ts').SubjectApplyGuard {
+      return async (_partition, _envelopes, apply) => apply();
     },
     async initialize(generation: number): Promise<string> {
       const current = await activeRelease(options.pool);
