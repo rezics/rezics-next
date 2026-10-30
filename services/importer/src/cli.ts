@@ -69,6 +69,8 @@ export type ImportCliOptions = {
   testOrigin?: string;
   instrumentDatabase?: (database: Database) => Database;
   observer?: ImportCliObserver;
+  /** Observe construction while retaining the real coordinator and its durable stores. */
+  createImporter?: typeof createImporter;
 };
 
 export type ImportCliResult = {
@@ -635,9 +637,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     const importerOptions: ImporterOptions = {
       path: config.state,
       transport: signalTransport,
+      now: () => clock.now(),
+      sleep: async (ms, sleepSignal) => {
+        throwIfAborted(sleepSignal);
+        await clock.sleep(ms);
+        throwIfAborted(sleepSignal);
+      },
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
     };
-    importer = createImporter(importerOptions);
+    importer = (options.createImporter ?? createImporter)(importerOptions);
     const media = createMediaResolver({
       bindings: importer.session.bindings,
       port: mediaPort,

@@ -97,6 +97,22 @@ This adopts the [bulk backpressure research](../../docs/research/importer-bulk-b
 
 `tests/write-width.test.ts` verifies this behaviour in `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes`.
 
+The ordinary account-key caller is connected to native Auth, Access, the public write-rate limiter and the
+registered media worker in
+[`cli-native-backpressure.test.ts`](../kernel/test/imports/cli-native-backpressure.test.ts).
+Seventeen supplied synthetic Bangumi records cross multiple public envelopes. One invocation recovers from real
+429 responses; competing authorized receipt replays then keep one refreshed record refused while independent
+records succeed. Exhaustion retains the completed source baseline and exact pending envelopes. After actual
+admission recovery, a fresh same-state CLI drains those envelopes with their original keys, preserving bootstrap
+and media evidence, original native receipts and an independent editor's accepted selection.
+
+`runImportCli` accepts optional `stdin`, `fetch`, `signal`, `clock`, `observer` and `createImporter` boundaries.
+The clock supplies both transport and coordinator retry timing. A construction observer can wrap transport
+calls and return the real `createImporter(options)`; it must retain the options object, since the CLI attaches
+its session-backed media resolver after construction. This boundary adds no command-line configuration or
+alternative writer. The [verification note](../../docs/research/imports-audit/cli-native-backpressure.md) describes
+the captured evidence and its limits; local protocol tests alone do not establish this native journey.
+
 ## Known own references
 
 Imports owns the default handoff of successful local claims to conversion, including ordinary
