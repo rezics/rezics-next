@@ -159,6 +159,23 @@ reads subjects/candidates/revisions and performs ordinary Context adoption; thos
 credential, so they do not prove every anonymous discovery surface. Native returned IDs and receipts are observed,
 not minted in an adapter. Cover bytes are reencoded and disclosed separately from source URLs.
 
+**Independent community converter caller:** the reusable
+[`public-bulk.ts`](../../packages/conversion/examples/public-bulk.ts) selects the
+four actual public exports/revisions, validates the exact successful create
+identity, and reconverts normalized input before sending bound proposals. It has
+no platform importer dependency. The frozen
+[`community-converter-caller.test.ts`](../../services/kernel/test/imports/community-converter-caller.test.ts)
+now binds a thin native fixture to real Auth account-key credentials, ordinary
+bulk HTTP, immutable receipt replay, source/candidate rows and editor-selected
+public reads for all four sources. Revoking the real bulk grant tests denial of
+the original bearer replay. Metadata-only input supplies no media intent or
+nonzero statistic; this is neither discovery closure nor a new growth series.
+The prior missing-caller red remains qualified as a missing binding, not a reached
+native product failure. Implementation/registration alone does not close the
+journey. Exact command, source evidence and execution stage are retained in the
+[community caller report](../research/imports-audit/community-converter-caller.md);
+other rights, deferred cells and promotion evidence remain as recorded here.
+
 **Native acceptance registration (commands recorded, not run here):**
 
 - `bun run --cwd services/kernel check test/imports/api-outcomes.test.ts`:

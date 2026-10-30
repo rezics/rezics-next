@@ -86,46 +86,64 @@ RFC 6901 `pointer`; it does not expose source text in an error message.
 `diagnostics` report fields that were safely retained or skipped because they
 have no supported mapping or permission. A diagnostic is not a proposal.
 
-## Bootstrap and proposal example
+## Public community caller example
 
-This example uses a record and nullable native revision supplied by the caller,
-plus its existing authorized public bulk transport. It contains no example
-identifiers or synthesized revisions:
+[`examples/public-bulk.ts`](examples/public-bulk.ts) is an executable, reusable
+four-source example independent of the platform importer. It selects the actual
+public converter export and its matching `converter_revision` for `bangumi`,
+`vndb`, `openlibrary` or `wikidata`. It is a source example, not another package
+entry point. Import it by its file path in a community tool:
 
 ```ts
-import { convertBangumi, converter_revision } from '@rezics/conversion/bangumi';
+import { publicBulkRecord } from './public-bulk.ts';
 import type { ConversionInput } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 
-type BatchWrite = (request: BatchWriteRequest) => Promise<BatchWriteResult>;
-
-async function importBangumiRecord(input: ConversionInput, batchWrite: BatchWrite) {
-  const bootstrap = convertBangumi(input, {}, { converterRevision: converter_revision });
-  const create = bootstrap.proposals[0];
-  if (bootstrap.proposals.length !== 1 || create?.op !== 'create') {
-    throw new Error('Expected one bootstrap create command');
-  }
-
-  const response = await batchWrite({ commands: [create] });
-  const result = response.results.find((entry) => entry.key === create.key);
-  if (!result || !('value' in result) || !('id' in result.value)) {
-    throw new Error('The public bulk response did not return a created subject id');
-  }
-
-  const converted = convertBangumi(
-    { ...input, record: bootstrap.normalizedRecord },
-    { subjectId: result.value.id },
-    { converterRevision: converter_revision },
-  );
-  return batchWrite({ commands: converted.proposals });
+// Acquired and validated source input and an ordinary authorized transport owned by the caller.
+declare const input: ConversionInput;
+declare const batchWrite: (request: BatchWriteRequest) => Promise<BatchWriteResult>;
+const result = await publicBulkRecord(input, 'bangumi', batchWrite, 'community-bangumi');
+if (result.outcome === 'submitted') {
+  // Inspect result.proposalResponse.results for each command's public outcome.
+  console.log(result.subjectId);
 }
 ```
 
-The bootstrap command contains subject type and labels only; it has no source
-statements. After a successful create response, the second conversion uses the
-actual returned subject id and emits source statements as `propose` commands.
-The caller owns transport, authorization, response handling, retries, storage,
-and any adoption workflow.
+The optional last argument is a trusted source registration alias, defaulting to
+the selected source kind (including `openlibrary`). It never comes from the
+source body. The example imports each public module's revision itself. The first
+write contains only the metadata bootstrap. Before binding any identity, the
+example validates the public result schema, exactly one successful create result
+for that exact command key, and its returned subject UUID. Missing, mismatched,
+malformed or unsuccessful identities throw a safe `ConversionError` before any
+bound send. It seals normalized native input before awaiting transport, then
+reconverts it through the same selected export with the returned identity and
+trusted registration. It leaves the supplied input unchanged.
+
+Ignored Bangumi/Wikidata records return `outcome: 'ignored'` without writes;
+unsupported source selection throws `ConversionError`. `submitted` means that
+the second batch was sent: it does not mean that all commands succeeded or that
+any candidate was adopted. The caller owns credentials, transport, retries,
+receipt retention, source fences and editorial selection. Server Auth, Access,
+current tuple fences, disclosure and rights checks remain authoritative.
+This example adds no importer, registration service, journal or retry system.
+It does not resolve relations, acquire media or send source statistics. Its native
+journey deliberately supplies metadata only, with no media intents or vote
+fields; it makes no claim about media availability or nonzero statistics.
+
+Local protocol-double tests in
+[`public-bulk-example.test.ts`](tests/public-bulk-example.test.ts) cover all four
+real exports, immutable input, ignored/unsupported input and rejection before
+binding. The separate frozen native journey uses real Auth account-key issuance,
+ordinary public bulk HTTP requests and actual returned IDs, native receipts and
+source/candidate rows, editor selection and public reads. Its execution evidence
+and limits are recorded in the
+[community caller report](../../docs/research/imports-audit/community-converter-caller.md).
+Run that native scenario through the repository check wrapper:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/community-converter-caller.test.ts
+```
 
 ## Source mappings and limits
 
@@ -405,6 +423,13 @@ cannot retract an earlier candidate from source data alone.
   checks existing caps and unchanged output at unrelated scales 1, 8 and 64.
   These are functional assertions and source-derived bounds, not timing or
   heap measurements.
+
+The community example touches one supplied bounded record, its exact source
+claim, returned subject/candidate identities and ordinary public receipts. It
+adds no catalogue/history enumeration. Existing public envelope and transport
+bounds apply; the connected outcome adds no growth series and does not replace
+the local counted ceilings or canonical/derived PostgreSQL suites. Missing native
+growth measurements remain missing.
 
 Pure conversion performs `O(record bytes)` work for one bounded record `M`.
 Native field and collection limits bound key counts (including canonical key
