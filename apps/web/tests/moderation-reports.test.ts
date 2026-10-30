@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const { readModerationReports, resolveReportTargets } = await import('../src/moderation/reports-read');
-const { dismissReport, takeDownReport } = await import('../src/moderation/actions');
+const { dismissReport, reportDecisionReason, takeDownReport } = await import('../src/moderation/actions');
 const { ModerationReportsView } = await import('../src/moderation/reports-page');
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -159,14 +159,16 @@ test('take down and dismiss send their established commands and return to read o
     reportId: id(1),
     targetKind: 'board',
     targetId: id(2),
-    reason: 'Policy reason',
-    statement: 'Decision',
+    reason: '  Policy reason  ',
   });
   await dismissReport(fetcher, { reportId: id(3) });
   expect(calls).toEqual([
-    { path: `/v1/boards/${id(2)}:takeDown`, body: { reason: 'Policy reason\n\nDecision' } },
+    { path: `/v1/boards/${id(2)}:takeDown`, body: { reason: 'Policy reason' } },
     { path: `/v1/reports/${id(3)}:dismiss`, body: {} },
   ]);
+  expect(() => reportDecisionReason('   ')).toThrow();
+  expect(() => reportDecisionReason('R'.repeat(1025))).toThrow();
+  expect(reportDecisionReason(`  ${'😀'.repeat(1024)}  `)).toBe('😀'.repeat(1024));
 });
 
 test('the reports page renders target, reason, report time and read outcomes without reporter identity', () => {
@@ -195,7 +197,7 @@ test('the reports page renders target, reason, report time and read outcomes wit
   expect(markup).not.toContain('Dismiss</button>');
 });
 
-test('open reports require a reason and statement for take down and offer dismissal', () => {
+test('open reports require one native-sized reason for take down and offer dismissal', () => {
   const markup = renderToStaticMarkup(
     createElement(ModerationReportsView, {
       reports: [report(1, { kind: 'post', id: id(50) })],
@@ -206,7 +208,9 @@ test('open reports require a reason and statement for take down and offer dismis
   expect(markup).toContain('Take down');
   expect(markup).toContain('Dismiss');
   expect(markup).toContain('name="reason" required');
-  expect(markup).toContain('name="statement" required');
+  expect(markup).not.toContain('name="statement"');
+  expect(markup.match(/<textarea/g)).toHaveLength(1);
+  expect(markup).toContain('maxLength="1024"');
 });
 
 test('withheld and deleted report targets use the existing content placeholders', () => {

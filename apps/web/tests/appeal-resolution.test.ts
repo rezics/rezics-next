@@ -72,7 +72,6 @@ test('lost-response retries retain the command key and commit no duplicate autho
               targetKind: 'post',
               targetId: id,
               reason: 'Rule',
-              statement: intent.statement,
               idempotencyKey,
             },
         'Bearer reviewer',
