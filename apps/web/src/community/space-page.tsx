@@ -139,7 +139,7 @@ function Published({
   continuation: React.ReactNode;
   complete: boolean;
   refresh: () => Promise<void>;
-  search?: EntityPickerSearch;
+  search?: EntityPickerSearch | undefined;
 }) {
   const locale = getLocale();
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
@@ -215,7 +215,7 @@ export function RealmShelf({
   realm: RealmHome;
   transport?: RealmShelfTransport;
   frozen?: boolean;
-  search?: EntityPickerSearch;
+  search?: EntityPickerSearch | undefined;
 }) {
   const { state, csrfToken, subject: reader } = useSession();
   const boards = useShelfList(

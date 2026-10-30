@@ -11,6 +11,7 @@ import search from '../../../kernel/recorded/search.json';
 const meta = {
   title: 'Patterns/Community/Realm Publication',
   component: RealmPublicationExample,
+  excludeStories: ['openPicker', 'chooseSubject'],
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof RealmPublicationExample>;
 export default meta;

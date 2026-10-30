@@ -60,7 +60,7 @@ export function PublicationControls({
   refresh,
   search,
 }: {
-  search?: EntityPickerSearch;
+  search?: EntityPickerSearch | undefined;
   control: ReturnType<typeof usePublicationControls>;
   refresh: () => Promise<void>;
 }) {
