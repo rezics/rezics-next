@@ -223,11 +223,22 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
   await chmod(launcherScript, 0o700);
 
   let browser: Browser | undefined;
+  let browserServer: Awaited<ReturnType<typeof chromium.launchServer>> | undefined;
   let closing: Promise<void> | undefined;
   let processOwnership: NativeProcessOwnership | undefined;
+  let browserServerClosed = false;
+  const closeBrowserServer = async (): Promise<void> => {
+    if (!browserServer || browserServerClosed) return;
+    const closed = await settledWithin(
+      browserServer.close().then(() => true),
+      2_000,
+    );
+    if (!closed) throw new Error('Private browser server close exceeded 2000ms');
+    browserServerClosed = true;
+  };
   try {
     lifecycle.assertOpen('launch private browser');
-    browser = await chromium.launch({
+    browserServer = await chromium.launchServer({
       executablePath: launcherScript,
       args: [`--proxy-server=http://127.0.0.1:${localProxyPort}`, '--proxy-bypass-list=<-loopback>'],
       env: {
@@ -240,27 +251,25 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
         NATIVE_BROWSER_SOCKET: socketPath,
       },
     });
-    lifecycle.assertOpen('register private browser process');
-    processOwnership = lifecycle.ownProcessGroup('private browser namespace', browser.process());
-    const browserProcess = browser.process();
+    processOwnership = lifecycle.ownProcessGroup('private browser namespace', browserServer.process());
+    lifecycle.assertOpen('connect private browser');
+    browser = await chromium.connect(browserServer.wsEndpoint());
     let forceClosing: Promise<void> | undefined;
     lifecycle.register({
       label: 'private browser',
       close: async () => {
-        if (!browser || !browser.isConnected()) return;
-        const closed = await settledWithin(browser.close(), 5_000);
-        if (closed === undefined) throw new Error('Private browser close exceeded 5000ms');
+        if (browser?.isConnected()) {
+          const disconnected = await settledWithin(
+            browser.close().then(() => true),
+            3_000,
+          );
+          if (!disconnected) throw new Error('Private browser disconnect exceeded 3000ms');
+        }
+        await closeBrowserServer();
       },
       force: () =>
         (forceClosing ??= (async () => {
           if (processOwnership) await processOwnership.force();
-          else if (browserProcess.pid) {
-            try {
-              process.kill(browserProcess.pid, 'SIGKILL');
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-            }
-          }
           await forceBridgeClose();
           await cleanDirectory();
         })()),
@@ -277,11 +286,18 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
       close() {
         return (closing ??= (async () => {
           const errors: unknown[] = [];
-          try {
-            if (browser) {
-              const closed = await settledWithin(browser.close(), 5_000);
-              if (closed === undefined) throw new Error('Private browser close exceeded 5000ms');
+          if (browser?.isConnected())
+            try {
+              const disconnected = await settledWithin(
+                browser.close().then(() => true),
+                3_000,
+              );
+              if (!disconnected) throw new Error('Private browser disconnect exceeded 3000ms');
+            } catch (error) {
+              errors.push(error);
             }
+          try {
+            await closeBrowserServer();
           } catch (error) {
             errors.push(error);
           }
@@ -301,6 +317,11 @@ exec unshare --user --map-root-user --net /bin/sh "$NATIVE_BROWSER_NAMESPACE_SCR
     };
   } catch (error) {
     if (processOwnership) await processOwnership.force().catch(() => {});
+    else if (browserServer)
+      await settledWithin(
+        browserServer.close().then(() => true),
+        2_000,
+      ).catch(() => {});
     else if (browser)
       await settledWithin(
         browser.close().then(() => true),
