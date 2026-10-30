@@ -56,9 +56,9 @@ export function DynamicCollectionPage({
   }, [current, readMembers, retries, retrying]);
   const ratio = rowRatio(current.members.map((member) => member.subject));
   const empty =
-    current.builtinKind === "everything"
+    current.builtinKind === 'everything'
       ? m.library_dynamic_empty_everything()
-      : current.builtinKind === "liked"
+      : current.builtinKind === 'liked'
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
   const locale = getLocale();
@@ -66,14 +66,12 @@ export function DynamicCollectionPage({
     <article className="max-w-4xl space-y-8 text-foreground">
       <header>
         <PageHeading>{current.title}</PageHeading>
-        {current.description ? (
-          <p className="mt-3 whitespace-pre-wrap">{current.description}</p>
-        ) : null}
+        {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
       </header>
       {current.filterProperties && current.filterParams ? (
         <CollectionFilters
           id={current.id}
-          type={current.filterType ?? "schema:Book"}
+          type={current.filterType ?? 'schema:Book'}
           properties={current.filterProperties}
           params={current.filterParams}
         />
@@ -81,20 +79,14 @@ export function DynamicCollectionPage({
       <CollectionFilterFeedback
         id={current.id}
         {...(current.filter === undefined ? {} : { filter: current.filter })}
-        {...(current.filterIgnored === undefined
-          ? {}
-          : { ignored: current.filterIgnored })}
-        {...(current.filterStatus === undefined
-          ? {}
-          : { status: current.filterStatus })}
+        {...(current.filterIgnored === undefined ? {} : { ignored: current.filterIgnored })}
+        {...(current.filterStatus === undefined ? {} : { status: current.filterStatus })}
         empty={current.members.length === 0}
         emptyLabel={empty}
-        {...(current.unavailable !== undefined
-          ? { unavailable: current.unavailable }
-          : {})}
+        {...(current.unavailable !== undefined ? { unavailable: current.unavailable } : {})}
       />
       {current.preparing ? (
-        current.filterStatus === "preparing" ? null : (
+        current.filterStatus === 'preparing' ? null : (
           <p role="status">{m.library_dynamic_preparing()}</p>
         )
       ) : current.unavailable ? (
@@ -102,24 +94,18 @@ export function DynamicCollectionPage({
       ) : current.members.length ? (
         <CoverGrid ratio={ratio}>
           {current.members.map(({ subject }, index) => {
-            const localizedTitle = subject
-              ? displayLibraryTitle(subject.label, locale)
-              : undefined;
+            const localizedTitle = subject ? displayLibraryTitle(subject.label, locale) : undefined;
             const title = localizedTitle?.text ?? m.library_subject_unavailable();
-            const href = subject
-              ? subjectHref({ id: subject.id, label: title }, locale)
-              : null;
+            const href = subject ? subjectHref({ id: subject.id, label: title }, locale) : null;
             return (
               <CoverCard
                 key={subject?.id ?? index}
                 {...(href ? { href: href.href } : {})}
                 title={title}
-                {...(localizedTitle?.lang
-                  ? { titleLang: localizedTitle.lang }
-                  : {})}
+                {...(localizedTitle?.lang ? { titleLang: localizedTitle.lang } : {})}
                 cover={{
                   subject: {
-                    id: subject?.id ?? "unavailable",
+                    id: subject?.id ?? 'unavailable',
                     title,
                     types: subject?.types ?? [],
                   },

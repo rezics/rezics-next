@@ -96,10 +96,9 @@ function Root() {
           staticData?: { sessionReread?: boolean };
         };
         const route = match.routeId
-          ? (router.routesById as unknown as Record<
-              string,
-              { options?: { staticData?: { sessionReread?: boolean } } }
-            >)[match.routeId]
+          ? (
+              router.routesById as unknown as Record<string, { options?: { staticData?: { sessionReread?: boolean } } }>
+            )[match.routeId]
           : undefined;
         return (
           match.staticData?.sessionReread === true ||
