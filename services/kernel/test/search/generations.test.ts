@@ -98,11 +98,15 @@ async function deployment(subjects: readonly IndexedSubject[]) {
   const memoryCount = fake.count;
   const position = async (partition: number) => {
     const { rows } = await admin.query<{ position: string }>(
-      'SELECT position::text FROM core.partition WHERE partition_no = $1', [partition],
+      'SELECT position::text FROM core.partition WHERE partition_no = $1',
+      [partition],
     );
     return BigInt(rows[0]!.position);
   };
-  fake.read = async (partition, ids) => ({ ...(await memoryRead(partition, ids)), position: await position(partition) });
+  fake.read = async (partition, ids) => ({
+    ...(await memoryRead(partition, ids)),
+    position: await position(partition),
+  });
   fake.count = async (partition) => ({ ...(await memoryCount(partition)), position: await position(partition) });
   const runner = await startSearchIndexing({
     pool,

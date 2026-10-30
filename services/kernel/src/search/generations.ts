@@ -145,9 +145,13 @@ async function observedWrite(
   try {
     const response = await write();
     if (
-      !record(response) || response.status !== 200 || !record(response.body) ||
-      response.body.acknowledged !== true || Object.hasOwn(response.body, 'error')
-    ) failure = new SearchUnavailableError(message);
+      !record(response) ||
+      response.status !== 200 ||
+      !record(response.body) ||
+      response.body.acknowledged !== true ||
+      Object.hasOwn(response.body, 'error')
+    )
+      failure = new SearchUnavailableError(message);
   } catch (error) {
     failure = error;
   }
@@ -250,7 +254,10 @@ export async function rebuildSubjects(options: {
           pending.set(partition, finish ?? start);
         }
       }
-      const added = await sourceCounts(options.source, [...after.keys()].filter((partition) => !before.has(partition)));
+      const added = await sourceCounts(
+        options.source,
+        [...after.keys()].filter((partition) => !before.has(partition)),
+      );
       for (const [partition, finish] of after) {
         if (!before.has(partition)) {
           pending.set(partition, finish);
@@ -289,9 +296,10 @@ export async function rebuildSubjects(options: {
 
     const activatedAt = new Date().toISOString();
     await observedWrite(
-      () => options.search.request('PUT', `/${index}/_mapping`, {
-        _meta: { name_sort_format: format, activated_at: activatedAt },
-      }),
+      () =>
+        options.search.request('PUT', `/${index}/_mapping`, {
+          _meta: { name_sort_format: format, activated_at: activatedAt },
+        }),
       async () => {
         const response = await options.search.request<unknown>('GET', `/${index}/_mapping`);
         if (!record(response) || response.status !== 200 || !record(response.body)) return false;
