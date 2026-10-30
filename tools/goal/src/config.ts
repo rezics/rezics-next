@@ -427,6 +427,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     integrationBranch: settings.integrationBranch,
     integration: settings.integration,
     formatCommand: settings.formatCommand,
+    // The configured list, not the package default: local configuration switches landing affected checks off.
+    affectedTests: settings.affectedTests ?? [],
     integrationChecks: () => {
       const configured = (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [];
       // The local file is read for every landing, so checks can be switched off or on without restarting the train.
