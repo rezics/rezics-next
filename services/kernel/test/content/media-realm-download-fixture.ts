@@ -52,19 +52,25 @@ export async function mediaRealmDownloadFixture() {
     secret: 'media-realm-download-native-write-rate-secret',
     overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
   });
+  const catalogue = actionCatalogue(testKernel({ pool: db.pool }));
+  const accessActions = new Map(catalogue);
+  accessActions.set('gate:any', { anonymous: false });
   const kernel = testKernel({
     pool: db.pool,
     auth: authConfig,
     writeRate: rateLimiter,
+    actions: accessActions,
   });
   const mutationPool = db.openPool({ max: 4 });
   const mutationKernel = testKernel({
     pool: mutationPool,
     auth: authConfig,
     writeRate: rateLimiter,
+    actions: accessActions,
   });
-  const actions = [...actionCatalogue(kernel).keys()].sort();
+  const actions = [...catalogue.keys()].sort();
   const ordinaryScopes = actions.filter((action) => action !== 'media:complete');
+  const governanceScopes = [...new Set([...ordinaryScopes, 'gate:any'])];
   const ordinaryClientId = `media_realm_${crypto.randomUUID()}`;
   const governanceClientId = `media_realm_governance_${crypto.randomUUID()}`;
   await registerTestClient(auth.host.service, {
@@ -75,7 +81,7 @@ export async function mediaRealmDownloadFixture() {
   await registerTestClient(auth.host.service, {
     clientId: governanceClientId,
     firstParty: true,
-    scopes: [...ordinaryScopes, 'gate:any'],
+    scopes: governanceScopes,
   });
 
   const websiteKeyPair = await generateKeyPair('ES256', { extractable: true });
@@ -185,7 +191,7 @@ export async function mediaRealmDownloadFixture() {
     const name = `media_${role}_${crypto.randomUUID()}`;
     const registered = await auth.person(name);
     const clientId = role === 'governor' ? governanceClientId : ordinaryClientId;
-    const scopes = role === 'governor' ? [...ordinaryScopes, 'gate:any'] : ordinaryScopes;
+    const scopes = role === 'governor' ? governanceScopes : ordinaryScopes;
     const signed = await auth.request('/signin', {
       email: `${name}@ordinary.test`,
       password,
