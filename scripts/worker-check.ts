@@ -1337,10 +1337,11 @@ export async function runWorkerCheck(
       }
     }
     if (recordedCheckId && physical) {
+      const physicalReceipt = physical;
       await withCheckFence(root, recordedCheckId, () => {
         const record = readRecord(root, recordedCheckId);
         if (record.physicalRunId !== physicalRunId || record.status !== 'running') return;
-        record.physicalRun = physical;
+        record.physicalRun = physicalReceipt;
         if (lifetimeReason) record.infrastructureFailure = lifetimeReason;
         writeRecord(record);
       });
