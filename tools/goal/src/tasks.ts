@@ -935,7 +935,12 @@ export class WorkerTasks {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree);
         }
-        if (!files.length && options.escalation === 'rebase-conflict') files = options.conflictFiles ?? [];
+        // Name conflicted files only while a rebase is really in progress here; otherwise the prompt sent the worker to
+        // continue a rebase that did not exist (the retry's own rebase onto its base had applied cleanly).
+        const rebasing = ['rebase-merge', 'rebase-apply'].some((name) =>
+          existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name]))),
+        );
+        if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
         retryPrepared = true;
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);

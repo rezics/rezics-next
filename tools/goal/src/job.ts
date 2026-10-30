@@ -1433,7 +1433,18 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
-        if (attempt.escalation === 'rebase-conflict') {
+        // The same landing conflict three times in recent attempts is not going to resolve by retrying: a resolution
+        // attempt that found no rebase in progress ended as an environment failure in between, so the previous-attempt
+        // check alone let one task loop 385 times (2026-10-29/30).
+        const fingerprint = failure?.fingerprint;
+        const repeatedConflict =
+          fingerprint !== undefined &&
+          store
+            .attempts(task.id)
+            .filter((a) => a.attempt < outcome.attempt)
+            .slice(-6)
+            .filter((a) => a.failure?.fingerprint === fingerprint).length >= 2;
+        if (attempt.escalation === 'rebase-conflict' || repeatedConflict) {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
             a.escalation = 'spec-conflict';
