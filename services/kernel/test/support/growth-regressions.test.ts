@@ -94,7 +94,7 @@ test('same-database measured nesting rejects before child effects and preserves 
     'SELECT ? AS parent_after_rejected_child',
   ]);
   expect(occurrences.map(({ plans }) => plans)).toEqual([[0], [1]]);
-  expect(occurrences.flatMap(({ planDocuments }) => planDocuments)).toEqual(parent.capture.plans);
+  expect(occurrences.flatMap(({ planDocuments }) => planDocuments)).toEqual([...parent.capture.plans]);
 
   const independent = await capture(db, () => db.pool.query('SELECT 433 AS independent_after_rejected_child'));
   expect(independent.capture.statements).toEqual(['SELECT 433 AS independent_after_rejected_child']);
