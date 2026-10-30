@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { formatBuildOutput } from '../scripts/storybook-build-output.ts';
 import { runDeployment, runStatus } from '../scripts/storybook-deploy.ts';
 import { smokeStorybook } from '../scripts/storybook-smoke.ts';
 
@@ -12,6 +13,51 @@ const cloudflareOutput = resolve(app, '.cloudflare/output');
 let browser: Browser;
 let previewServer: ReturnType<typeof Bun.serve>;
 let expectedCommit: string;
+
+describe('failed build diagnostics', () => {
+  test('retains the native fatal prelude and terminal socket error alongside useful stdout', () => {
+    const prelude = 'FATAL: native startup aborted\n';
+    const terminal = '\nerror: local socket closed';
+    const stdout = 'Generating export types\nStarting Storybook';
+    const details = formatBuildOutput(stdout, `${prelude}${'native detail\n'.repeat(2_000)}${terminal}`);
+
+    expect(details.startsWith(`[stderr]\n${prelude}`)).toBe(true);
+    expect(details).toContain(`${terminal}\n[stdout]\n${stdout}`);
+    expect(details).toContain('[output omitted]');
+    expect(details.split(prelude)).toHaveLength(2);
+    expect(details.split(terminal)).toHaveLength(2);
+    expect(details.length).toBeLessThanOrEqual(8_000);
+  });
+
+  test('preserves short output completely and identifies each nonempty stream', () => {
+    expect(formatBuildOutput('build progress\n', 'fatal error\n')).toBe(
+      '[stderr]\nfatal error\n\n[stdout]\nbuild progress\n',
+    );
+    expect(formatBuildOutput('', 'fatal error')).toBe('[stderr]\nfatal error');
+    expect(formatBuildOutput('build progress', '')).toBe('[stdout]\nbuild progress');
+    expect(formatBuildOutput('', '')).toBe('');
+  });
+
+  test('bounds combined output including labels and omission markers as either stream grows', () => {
+    for (const scale of [1, 8, 64]) {
+      const stderr = `fatal prelude\n${'e'.repeat(8_000 * scale)}\nterminal socket error`;
+      const stdout = `stdout beginning\n${'o'.repeat(8_000 * scale)}\nstdout ending`;
+      const streams = [
+        [stdout, stderr],
+        [stdout, 'short stderr'],
+        ['short stdout', stderr],
+      ] as const;
+      for (const [out, err] of streams) {
+        const details = formatBuildOutput(out, err);
+        expect(details.length).toBeLessThanOrEqual(8_000);
+        expect(details).toContain('[output omitted]');
+        expect(details.startsWith(`[stderr]\n${err.slice(0, 13)}`)).toBe(true);
+        expect(details).toContain(`${err.slice(-21)}\n[stdout]\n${out.slice(0, 16)}`);
+        expect(details.endsWith(out.slice(-13))).toBe(true);
+      }
+    }
+  });
+});
 
 function countStories(directory: string): number {
   return readdirSync(directory, { withFileTypes: true }).reduce((count, entry) => {

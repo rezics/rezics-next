@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { formatBuildOutput } from './storybook-build-output.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -19,7 +20,7 @@ function run(command: string[], cwd: string, env: Record<string, string | undefi
   delete environment.REZICS_UI_ACCESSIBILITY_PROBE;
   const result = Bun.spawnSync(command, { cwd, env: environment, stdout: 'pipe', stderr: 'pipe' });
   if (result.exitCode !== 0) {
-    const details = `${result.stdout.toString()}\n${result.stderr.toString()}`.slice(-8_000);
+    const details = formatBuildOutput(result.stdout.toString(), result.stderr.toString());
     process.stderr.write(details);
     throw new Error(`${command.join(' ')} failed with exit code ${result.exitCode}`);
   }
