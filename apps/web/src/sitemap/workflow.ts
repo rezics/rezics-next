@@ -11,7 +11,7 @@ type Run = {
   page?: SitemapObject[];
 };
 type CleanupState = {
-  phase: 'mark' | 'shards' | 'runs' | 'release';
+  phase: 'index' | 'mark' | 'shards' | 'runs' | 'release';
   cursor: string | null;
   page?: SitemapObject[];
   manifests?: string[];
@@ -39,6 +39,27 @@ function publication(body: Uint8Array | null, key: string): { time: number; type
 async function cleanupStep(store: SitemapStore, runId: string, state: CleanupState): Promise<CleanupState | null> {
   const refs = `runs/${runId}/cleanup/refs/`;
   const cutoff = state.cutoff;
+  if (state.phase === 'index') {
+    const body = await store.get('index.xml');
+    if (!body) throw new Error('Missing current sitemap index');
+    const xml = new TextDecoder().decode(body);
+    const locations = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)];
+    if (!xml.includes('<sitemapindex ') || locations.length === 0 || locations.length > 50_000)
+      throw new Error('Invalid current sitemap index');
+    const keys = locations.map((location) => {
+      const match = /^https:\/\/[^/]+\/sitemap-([a-z]+)-([0-9a-f]{24})\.xml\.gz$/.exec(location[1]!);
+      if (!match) throw new Error('Invalid current sitemap index location');
+      return `shards/${match[1]}-${match[2]}.xml.gz`;
+    });
+    const offset = state.offset ?? 0;
+    for (const key of keys.slice(offset, offset + groupSize)) await store.put(`${refs}${key}`, '');
+    state.offset = offset + groupSize;
+    if (state.offset >= keys.length) {
+      state.phase = 'mark';
+      delete state.offset;
+    }
+    return state;
+  }
   if (state.phase === 'mark') {
     if (state.manifests?.length) {
       const key = state.manifests[0]!;
@@ -61,7 +82,11 @@ async function cleanupStep(store: SitemapStore, runId: string, state: CleanupSta
         state.manifests = published.types.map((type) => `runs/${id}/${type}.json`);
       return state;
     }
-    if (state.page && state.cursor === null) return { ...state, phase: 'shards', page: undefined };
+    if (state.page && state.cursor === null) {
+      state.phase = 'shards';
+      delete state.page;
+      return state;
+    }
     const page = await store.list('runs/', state.cursor);
     state.page = page.objects.filter((object) => /^runs\/[^/]+\/published\.json$/.test(object.key ?? ''));
     state.cursor = page.cursor;
@@ -79,7 +104,11 @@ async function cleanupStep(store: SitemapStore, runId: string, state: CleanupSta
       }
       return state;
     }
-    if (state.page && state.cursor === null) return { ...state, phase: 'runs', page: undefined };
+    if (state.page && state.cursor === null) {
+      state.phase = 'runs';
+      delete state.page;
+      return state;
+    }
     const page = await store.list('shards/', state.cursor);
     state.page = page.objects;
     state.cursor = page.cursor;
@@ -94,7 +123,7 @@ async function cleanupStep(store: SitemapStore, runId: string, state: CleanupSta
         if (run.page?.length) {
           for (const object of run.page.splice(0, groupSize)) await store.delete(object.key!);
         } else if (run.page && run.cursor === null) {
-          state.run = undefined;
+          delete state.run;
         } else {
           const page = await store.list(prefix, run.cursor);
           run.page = page.objects;
@@ -112,7 +141,7 @@ async function cleanupStep(store: SitemapStore, runId: string, state: CleanupSta
         run.cursor = page.cursor;
         if (page.cursor === null) {
           if ((run.publishedAt ?? run.latest) <= cutoff) run.deleting = true;
-          else state.run = undefined;
+          else delete state.run;
         }
       }
       return state;
@@ -120,10 +149,15 @@ async function cleanupStep(store: SitemapStore, runId: string, state: CleanupSta
     if (state.page?.length) {
       const id = /^runs\/([^/]+)\//.exec(state.page.shift()!.key ?? '')?.[1];
       if (id && id !== runId && id !== state.lastRun) state.run = { id, cursor: null, latest: 0 };
-      state.lastRun = id;
+      if (id) state.lastRun = id;
+      else delete state.lastRun;
       return state;
     }
-    if (state.page && state.cursor === null) return { ...state, phase: 'release', page: undefined };
+    if (state.page && state.cursor === null) {
+      state.phase = 'release';
+      delete state.page;
+      return state;
+    }
     const page = await store.list('runs/', state.cursor);
     // Ordered listing lets adjacent pages share a run without retaining every historical run id.
     state.page = page.objects.filter((object, index) => {
@@ -163,7 +197,7 @@ export async function cleanupSitemapExportSegment(
     async () =>
       segment === 0
         ? {
-            phase: 'mark',
+            phase: 'index',
             cursor: null,
             indexEtag: (await store.head('index.xml'))?.etag ?? null,
             cutoff: now.valueOf() - retentionMs,
@@ -172,10 +206,10 @@ export async function cleanupSitemapExportSegment(
     sitemapStepRetryPolicy(),
   );
   for (let step = 0; step < maxSteps; step += 1) {
-    const previous = state;
+    const previous: CleanupState = state!;
     state = await runner.do(
       `cleanup:${segment}:${step}`,
-      () => cleanupStep(store, runId, structuredClone(previous!)),
+      (): Promise<CleanupState | null> => cleanupStep(store, runId, structuredClone(previous)),
       sitemapStepRetryPolicy(),
     );
     if (state === null) return true;

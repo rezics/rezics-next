@@ -12,7 +12,7 @@ import {
   type SitemapStepRunner,
   type SitemapWriteCondition,
 } from '../src/sitemap/export.ts';
-import type { SitemapFamily } from '../src/sitemap/pack.ts';
+import { sitemapIndexXml, type SitemapFamily } from '../src/sitemap/pack.ts';
 import { cleanupSitemapExportSegment } from '../src/sitemap/workflow.ts';
 import { sitemapResponse } from '../src/sitemap/serve.ts';
 
@@ -575,11 +575,24 @@ test('cleanup keeps an unfinished run with a newer object on a later page and st
   await store.put(shard, 'old shard');
   store.time = startTime;
   await store.put('runs/pending/z-new', 'new part');
-  await store.put('index.xml', 'first index');
+  const live = `shards/subjects-${'7'.repeat(24)}.xml.gz`;
+  store.time -= 10 * 24 * 60 * 60 * 1_000;
+  await store.put(live, 'current shard');
+  store.time = startTime;
+  await store.put(
+    'index.xml',
+    sitemapIndexXml(origin, [
+      {
+        path: `/sitemap-subjects-${'7'.repeat(24)}.xml.gz`,
+        lastmod: new Date(store.time).toISOString(),
+      },
+    ]),
+  );
   const runner: SitemapStepRunner = { do: (_name, run) => run() };
   let segment = 0;
   while (!(await cleanupSitemapExportSegment(store, runner, 'cleanup', new Date(store.time), segment, 5))) segment += 1;
   expect([...store.objects.keys()].filter((key) => key.startsWith('runs/pending/'))).toHaveLength(1_002);
+  expect(store.objects.has(live)).toBe(true);
   store.time -= 10 * 24 * 60 * 60 * 1_000;
   await store.put(shard, 'still old shard');
   store.time = startTime;
