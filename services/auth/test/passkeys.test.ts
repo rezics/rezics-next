@@ -618,3 +618,134 @@ test('default host accepts each exact Auth-page operation profile after native p
     database.close();
   }
 }, 60000);
+
+test('native passkey removal preserves exact immutable evidence and denies stale, foreign and replayed authority without another effect', async () => {
+  const f = await passkeyFixture();
+  try {
+    const person = await f.person();
+    const cookie = await f.login(person);
+    const registered = await f.register(cookie);
+    const other = await f.person();
+    const otherCookie = await f.login(other);
+    const sentinel = await f.register(otherCookie);
+    const state = async () => ({
+      effects: (await f.pool.query('SELECT * FROM auth_effect_receipt ORDER BY receipt_id')).rows,
+      approvals: (await f.kernelPool.query('SELECT * FROM access.workflow_approval ORDER BY approval_id')).rows,
+      floors: (await f.kernelPool.query('SELECT * FROM access.credential_floor_receipt ORDER BY receipt_id')).rows,
+      credentials: (await f.pool.query('SELECT * FROM passkey ORDER BY id')).rows,
+    });
+    const before = await state();
+    await f.pool.query('UPDATE session SET "authTime"=$2 WHERE "userId"=$1', [
+      person,
+      Math.floor(Date.now() / 1000) - 601,
+    ]);
+    const stale = await f.request('/passkeys/remove', { id: registered.passkey.id }, cookie);
+    expect(stale.status).toBe(401);
+    expect(await stale.json()).toEqual({ error: 'step_up_required', effect_status: 'not_applied' });
+    expect(await state()).toEqual(before);
+    await expect(
+      f.service.internal.stagePasskeyEffect({
+        key: randomUUID(),
+        subjectAccountId: person,
+        headers: new Headers({ cookie: otherCookie }),
+        credential: { kind: 'passkey', id: registered.passkey.id, remove: true },
+      }),
+    ).rejects.toThrow();
+    expect(await state()).toEqual(before);
+
+    const fresh = await f.login(person);
+    const epoch = Number(
+      (await f.kernelPool.query('SELECT minimum_authn_epoch FROM access.account WHERE account_id=$1', [person])).rows[0]
+        .minimum_authn_epoch,
+    );
+    const removed = await f.request('/passkeys/remove', { id: registered.passkey.id }, fresh);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ success: true });
+    const effects = await f.pool.query(
+      "SELECT * FROM auth_effect_receipt WHERE account_id=$1 AND purpose='remove-passkey'",
+      [person],
+    );
+    expect(effects.rows).toHaveLength(1);
+    const effect = effects.rows[0];
+    expect(effect).toMatchObject({
+      credential_row_id: registered.passkey.id,
+      credential_row_version: expect.any(String),
+      acting_human_id: person,
+      client_id: 'login',
+      scopes: ['account:manage'],
+      committed_at: expect.any(Date),
+      committed_result: { receiptId: effect.receipt_id, replayed: false },
+    });
+    const floor = await f.kernelPool.query(
+      'SELECT * FROM access.credential_floor_receipt WHERE route=$1 AND account_id=$2 AND opening_receipt_id=$3',
+      [routeOf(person), person, effect.opening_receipt_id],
+    );
+    expect(floor.rows).toHaveLength(1);
+    expect(floor.rows[0]).toMatchObject({
+      purpose: 'remove-passkey',
+      previous_floor: String(epoch),
+      minimum_authn_epoch: String(epoch + 1),
+      operation_key: effect.operation_key,
+      effect_reference: effect.effect_reference,
+      effect_digest: effect.effect_digest,
+      fenced: false,
+    });
+    const approval = await f.kernelPool.query(
+      'SELECT * FROM access.workflow_approval WHERE route=$1 AND approval_id=$2',
+      [routeOf(person), effect.opening_receipt_id],
+    );
+    expect(approval.rows).toHaveLength(1);
+    expect(approval.rows[0]).toMatchObject({
+      actor_id: person,
+      client_id: 'login',
+      scopes: ['account:manage'],
+      consumed_at: expect.any(Date),
+      consumed_transaction_id: expect.any(String),
+      operation: {
+        kind: 'credential',
+        subjectAccountId: person,
+        purpose: 'remove-passkey',
+        operationKey: effect.operation_key,
+        effectReference: effect.effect_reference,
+        effectDigest: effect.effect_digest,
+        subjectEpoch: epoch,
+      },
+    });
+    expect((await f.pool.query('SELECT id FROM session WHERE "userId"=$1', [person])).rows).toHaveLength(0);
+    const committed = await state();
+    expect((await f.request('/passkeys/remove', { id: registered.passkey.id }, fresh)).status).toBe(401);
+    await expect(
+      f.service.internal.applyCredentialEffect({
+        key: effect.operation_key,
+        effectRef: effect.effect_reference,
+        subjectAccountId: person,
+        headers: new Headers({ cookie: fresh }),
+        authorization: effect.opening_reference,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      f.pool.query('UPDATE auth_effect_receipt SET effect_digest=$2 WHERE receipt_id=$1', [
+        effect.receipt_id,
+        'f'.repeat(64),
+      ]),
+    ).rejects.toThrow('Credential stage is immutable');
+    await expect(
+      f.kernelPool.query('UPDATE access.workflow_approval SET operation_key=$2 WHERE route=$1 AND approval_id=$3', [
+        routeOf(person),
+        'substituted-operation',
+        effect.opening_receipt_id,
+      ]),
+    ).rejects.toThrow('Workflow approvals are immutable');
+    expect(await state()).toEqual(committed);
+    expect(
+      (await f.kernelPool.query('SELECT minimum_authn_epoch FROM access.account WHERE account_id=$1', [person])).rows[0]
+        .minimum_authn_epoch,
+    ).toBe(String(epoch + 1));
+    expect((await f.pool.query('SELECT id FROM passkey WHERE "userId"=$1', [other])).rows).toEqual([
+      { id: sentinel.passkey.id },
+    ]);
+    expect((await f.request('/session', undefined, otherCookie)).status).toBe(200);
+  } finally {
+    await f.close();
+  }
+}, 60000);
