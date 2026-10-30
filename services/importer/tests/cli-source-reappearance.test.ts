@@ -18,7 +18,7 @@ function record(source: SourceId, index: number, version: number): SourceRecord 
     source === 'bangumi'
       ? { id: n, type: 2, name: title }
       : source === 'openlibrary'
-        ? { key, type: { key: '/type/work' }, revision, title }
+        ? { key, type: { key: '/type/work' }, revision, title, last_modified: { value: '2026-10-25T00:00:00.000000' } }
         : source === 'vndb'
           ? {
               vn: { id: key, olang: 'en', c_votecount: 0, c_average: null },
@@ -59,7 +59,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
     const fences = new Set<string>();
     const transport = {
-      async readFence(tuple: { source: string; externalId: string; fieldGroup: string }) {
+      async readFence(tuple: { source: string; external_id: string; field_group: string }) {
         const fenced = fences.has(JSON.stringify(tuple));
         return { fenced, securityRevision: fenced ? '1' : null };
       },
@@ -143,7 +143,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
       expect(importer.session.bindings.claim(owner)).toEqual(claim);
       expect(importer.session.bindings.journal(owner, bootstrap.key)).toEqual(journal);
       expect((await run(2, true)).status).toBe('committed');
-      fences.add(JSON.stringify({ source, externalId: owner.external_id, fieldGroup: 'facts' }));
+      fences.add(JSON.stringify({ source, external_id: owner.external_id, field_group: 'facts' }));
       await reopen();
       const fencedStart = sent.length;
       expect((await run(3)).status).toBe('committed');
