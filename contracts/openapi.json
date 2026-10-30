@@ -27821,16 +27821,6 @@
             }
           },
           {
-            "in": "header",
-            "name": "idempotency-key",
-            "required": true,
-            "schema": {
-              "maxLength": 1024,
-              "minLength": 3,
-              "type": "string"
-            }
-          },
-          {
             "in": "query",
             "name": "revision",
             "required": true,
@@ -27839,25 +27829,21 @@
               "minimum": 1,
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 3,
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "204": {
-            "description": "Response for status 204",
-            "headers": {
-              "Library-Collection-Member-Deletion-Id": {
-                "schema": {
-                  "format": "uuid",
-                  "type": "string"
-                }
-              },
-              "Library-Collection-Member-Deletion-Revision": {
-                "schema": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
+            "description": "Response for status 204"
           },
           "400": {
             "content": {
@@ -30606,6 +30592,8 @@
                       "enum": [
                         false,
                         false,
+                        false,
+                        false,
                         false
                       ],
                       "type": "string"
@@ -30648,7 +30636,7 @@
                 }
               }
             },
-            "description": "Conflict; Collection full; Stale cursor"
+            "description": "Conflict; Collection full; Member restore stale; Member restore occupied; Member restore expired"
           },
           "422": {
             "content": {

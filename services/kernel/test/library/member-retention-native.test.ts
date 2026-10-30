@@ -310,6 +310,8 @@ test('native member purge is exact episode bounded and never decrements public l
   const d3 = await m.remove();
   expect(d3.deletionId).not.toBe(d1.deletionId);
   const secondDeadline = await nativeDeadline(m);
+  if (!parked.process.stdin || typeof parked.process.stdin === 'number')
+    throw new Error('Parked member worker stdin is not writable');
   parked.process.stdin.write('deliver\n');
   await sweep.getResult({ pollingIntervalMs: 20 });
   expect((await m.snapshot())[0].row.deletion_id).toBe(d3.deletionId);

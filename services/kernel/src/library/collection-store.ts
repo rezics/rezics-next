@@ -294,9 +294,18 @@ export async function deleteMember(
   });
   const row = rows[0];
   if (!row) return null;
-  if (row.deletionId === null || row.revision === null)
+  if (row.deletionId === null || row.revision === null || row.ordinalKey === null || row.addedAt === null)
     throw new Error('A removed Collection member must return its deletion episode revision');
-  return { ...asMember(row), deletionId: row.deletionId, revision: Number(row.revision) };
+  return {
+    collectionId: row.collectionId,
+    id: row.id,
+    subjectId: row.subjectId,
+    note: row.note,
+    ordinalKey: row.ordinalKey,
+    addedAt: iso(row.addedAt),
+    deletionId: row.deletionId,
+    revision: Number(row.revision),
+  };
 }
 
 export async function readMemberDeletion(

@@ -1071,6 +1071,10 @@ declare const productEventTypes: {
         memberId: Type.TString;
         subjectId: Type.TString;
     }>;
+    readonly 'com.rezics.library.collection.member.purged.v1': Type.TObject<{
+        memberId: Type.TString;
+        deletionId: Type.TString;
+    }>;
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
