@@ -190,7 +190,7 @@ test('every produced ladder width and format is downloadable per persona and ref
         expect(delivered.headers.get('cache-control')).toBe('private, no-cache');
         expect(delivered.headers.get('etag')).toBe(JSON.stringify(variant.sha256));
         const bytes = new Uint8Array(await delivered.arrayBuffer());
-        expect(bytes).toEqual(object.bytes);
+        expect(bytes).toEqual(Uint8Array.from(object.bytes));
         expect(bytes.byteLength).toBe(Number(variant.byte_count));
         expect(digest(bytes)).toBe(variant.sha256);
       }

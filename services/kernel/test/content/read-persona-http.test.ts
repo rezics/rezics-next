@@ -10,6 +10,7 @@ import { documentText, serializeDocument, type DocumentSnapshot } from '@rezics/
 import type { Board, Content } from '../../../../specs/content-disclosure-driver.ts';
 import { refreshBoardRankBatch } from '../../src/content/board-rank.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { createContentDisclosureDriver } from './disclosure-driver.ts';
 import * as nativeSystem from './support/native-system.ts';
 import { digest } from './support/media-fixtures.ts';
@@ -90,6 +91,7 @@ async function evidence() {
 }
 
 function assertBody(value: { body: DocumentSnapshot; sha256: string }, text: string, expectedDigest: string | null) {
+  if (expectedDigest === null) throw new Error('An available command revision must have a digest');
   expect(documentText(value.body)).toBe(text);
   expect(value.sha256).toBe(expectedDigest);
   expect(digest(new TextEncoder().encode(serializeDocument(value.body)))).toBe(expectedDigest);
