@@ -40,6 +40,7 @@ const typed = [
   'POST /v1/viewerActions',
   'POST /v1/webhooks/stripe',
   'GET /v1/offers/:offerId',
+  'GET /v1/offers',
   'POST /v1/offers',
   'PATCH /v1/offers/:offerId',
   'POST /v1/offers/:offerId/$delist',
@@ -450,4 +451,17 @@ test('trending Search keeps the adopted Search exposure group', () => {
   const operation = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths['/v1/trendingSearches']
     ?.get;
   expect(operation).toMatchObject({ 'x-exposure': 'gate:search', 'x-action': 'subject:read' });
+});
+
+test('creator offer listing declares exact own-account authority', () => {
+  const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
+  expect(openApiDocument(kernel).paths['/v1/offers']?.get).toMatchObject({
+    operationId: 'offer.list',
+    'x-action': 'offer:list',
+    'x-exposure': 'gate:selling',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': ['access.account'],
+    security: [{ bearerAuth: [] }],
+  });
+  expect(actionCatalogue(kernel).get('offer:list')).toMatchObject({ anonymous: false, authority: 'own-account' });
 });

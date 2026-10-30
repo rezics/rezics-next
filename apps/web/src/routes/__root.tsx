@@ -24,6 +24,24 @@ import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
 import { prepareExposure } from '../kernel/exposure';
 import { isSignedInPath } from '../session/guard';
+import { createNavigation } from '../shell/navigation';
+import { m } from '../paraglide/messages.js';
+import { Tags } from 'lucide-react';
+
+export const commerceNavigation = createNavigation([
+  {
+    id: 'commerce.creator-offers',
+    kind: 'navigation',
+    group: 'personal',
+    order: 15,
+    label: ({ locale }) => m.creator_offers_heading({}, { locale }),
+    href: '/creator/offers',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'offer.list',
+    icon: Tags,
+  },
+]);
 
 const setClosedResponseStatus = createIsomorphicFn()
   .server(() => setResponseStatus(403, 'Forbidden'))
@@ -129,7 +147,7 @@ function Root() {
         <HeadContent />
       </head>
       <body>
-        <AppShell>{platformClosed ? <ClosedPage /> : <Outlet />}</AppShell>
+        <AppShell navigation={commerceNavigation}>{platformClosed ? <ClosedPage /> : <Outlet />}</AppShell>
         <Scripts />
       </body>
     </html>

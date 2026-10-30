@@ -42,8 +42,14 @@ Content still rechecks current authority before final bytes. Fresh sale stays cl
 The delivered sole offer-consent writer supplies observed expectedOfferRevision and its digest; the composed
 fresh body preserves its revision conflict check after authorized exact receipt replay. The native Commerce
 buyer-fact reader is composed with Accounts Access independently of Content sale reads. Content final
-source/ancestry reads, subject discovery, owned navigation, native sale/use proof, reviewed UI and promoted-main
-journey remain pending.
+source/ancestry reads, subject discovery, native sale/use proof, reviewed UI and promoted-main
+journey remain pending. The [owner contract](../../services/kernel/src/commerce/README.md#private-creator-offer-history)
+now has a native bounded own-offer list with existing Access own-account authority, delisted history and sanitized
+seller terms, plus served private `/creator/offers` page source and additive AppShell navigation in eight locales.
+The current generated client lacks `offers.get`, so the exact typed unavailable adapter keeps the page truthful
+until controller generation binds it. Contract-shaped stories include 390/1280 layouts; no browser visual review
+or native run is claimed under minimal verification. Offer editing, private sales and final target use remain open;
+activity/receipts are not substitutes for this source journey.
 Tax/unit, reserves/carry/payability, richer external attestation and authenticated recovery require the explicit
 owner/Root commercial/shared adoption recorded in the purchase contract before runtime bodies.
 

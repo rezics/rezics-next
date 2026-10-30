@@ -61,13 +61,53 @@ API/storage behavior plus reviewed pages; an interim fake or an entitlement row 
 Creator minimums are an offer/benefit editor and owned-offer list, a bounded private sales view, and statement/detail
 views. Existing HTTP mutations are `POST /v1/offers`, `PATCH /v1/offers/:offerId` (price), and
 `POST /v1/offers/:offerId:delist`, under `offer:create`/`offer:manage` and `gate:selling`.
-Owned-offer listing, benefit publication/versioning and creator-sales projections are still missing interfaces;
-no guessed route or signature is adopted here. Creator-home sales projections use stable buyer-order effects,
+Owned-offer listing is `GET /v1/offers`, described below. The offer/benefit editor,
+benefit publication/versioning and creator-sales projections remain incomplete. Creator-home sales projections use stable buyer-order effects,
 show lag/unknowns and only necessary accounting/order locators, not buyer email, Library activity or use telemetry.
 They cannot authorize use or establish complete provider settlement. Existing statement APIs are
 `GET /v1/payoutStatements`, `GET /v1/payoutStatements/:statementId`,
 `GET /v1/payoutStatements/:statementId/lines` and `POST /v1/payoutStatements/:statementId:markPaid`, with the existing
 `payout_statement:list/read/mark_paid` checks. A statement read grants no arbitrary buyer-order access.
+
+### Private creator offer history
+
+`GET /v1/offers` is `offer.list`, exact scope/action `offer:list`, `gate:selling`, nonanonymous,
+with `x-authority-anchor: own-account` and `x-authority-resource-types: [access.account]`.
+The actual mounted action catalogue supplies the existing own-account Access operand on the verified acting
+account, never an owner query parameter. Clients must register and obtain consent for `offer:list` explicitly;
+first-party status or an older offer scope supplies no consent. A distinct principal still needs its independent
+current formula operand. No role, grant, source writer or alternative authorization mechanism is added.
+
+The closed response is `{offers,next}`. Each seller row contains exactly
+`{id,targetSubjectId,title,currency,unitAmountMinor,taxCode,royaltyBasisPoints,state,revision,contentEdition}`.
+`contentEdition` is the actual sanitized `contentEditionTermsView` or explicit `null` for UNKNOWN historic mapping.
+It never includes native source thread/post IDs, revision bodies, transactions, receipts or other account metadata.
+Captured title/terms remain readable when the current target is unavailable; they assert neither current sale
+eligibility nor permission to read bytes. There is no Content or subject HTTP fanout or foreign metadata join.
+
+One fenced `REPEATABLE READ` page seeks the exact `(route,creator_account_id,offer_id)` index with native actor
+equality, descending exclusive offer-ID keyset and `limit + 1` bound. Default limit is 20, maximum 100. No count,
+offset, filtering walk or all-creator scan is used. The signed cursor binds `offer.list`, acting account, route,
+seller-terms view/version, ordering and partition epoch; page size may change. Current Access runs before private
+SQL and again outside the snapshot before serialization, alongside final partition/epoch and session-position
+fences and the fixed request deadline. Missing/fenced/moved source is unavailable, never an empty list.
+Both ACTIVE and DELISTED offers appear. Public `GET /v1/offers/:offerId` still conceals DELISTED offers.
+
+The served `/creator/offers` route uses `requireSignedIn`, private no-store BFF reads, current credentials, signed
+pagination, retry/restart, unavailable/empty and explicit UNKNOWN states in all eight locales. Shared `ListRow`
+and exact minor-amount formatting keep each currency separate. Active rows link to the existing public offer
+page when `offer.get` is currently admitted; that page rechecks disclosure. Delisted rows are history without a
+Checkout link. Root navigation adds the immutable `commerce.creator-offers` personal signed-in contribution at
+order 15 for `offer.list`.
+
+Caller seam: `loadCreatorOffers` / `readCreatorOffers` in Web's `checkout/creator-offers.ts`.
+The generated client in this base has no `offers.get`; the authorized exact typed unavailable adapter is used,
+without hand-editing generated declarations or inventing a public-read substitute. Controller API/client generation
+must replace that adapter with the actual generated binding. Stories `pages-commerce-creator-offers--history`,
+`--second-page`, `--empty`, `--denied`, `--unavailable`, `--error`, `--stale`, `--preparing`, `--long-title`,
+`--mobile390` and `--desktop1280` describe contract-shaped source states, not recorded native evidence.
+390/1280 browser visual review, native acceptance and promoted-main proof remain controller work under minimal
+verification. The offer editor, private sales, target use and native sale/use proof remain open.
 
 ### Adopted native Content edition and delivery state
 

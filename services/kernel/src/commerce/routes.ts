@@ -18,6 +18,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { checkout } from './checkout.ts';
 import { reconcileOrder } from './order-reconcile.ts';
+import { listCreatorOffers } from './creator-offers.ts';
 import { createCommerceCommands, OfferRevisionConflictError, OfferUnavailableError } from './commands.ts';
 import { StripeUnavailableError, type Entitlement, type Offer, type Order, type StripePort } from './model.ts';
 import * as store from './store.ts';
@@ -93,6 +94,21 @@ const offerReadSchema = t.Object(
     currency: t.String(),
     unitAmountMinor: t.Integer(),
     state: t.Union([t.Literal('active'), t.Literal('delisted')]),
+  },
+  object,
+);
+const sellerOfferSchema = t.Object(
+  {
+    id,
+    targetSubjectId: id,
+    title: t.String(),
+    currency: t.String(),
+    unitAmountMinor: t.Integer(),
+    taxCode: t.String(),
+    royaltyBasisPoints: t.Integer(),
+    state: t.Union([t.Literal('active'), t.Literal('delisted')]),
+    revision: t.Integer({ minimum: 1 }),
+    contentEdition: contentEditionSchema,
   },
   object,
 );
@@ -279,6 +295,43 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     },
   });
   const routes = app
+    .get(
+      '/v1/offers',
+      {
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+          },
+          object,
+        ),
+        response: {
+          200: t.Object({ offers: t.Array(sellerOfferSchema), next: nullableId }, object),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          409: problemSchema('stale_cursor'),
+          503: unavailable,
+        },
+        detail: {
+          ...detail('offer.list', 'offer:list', 'gate:selling'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+        },
+      },
+      async ({ actor, authorize, query, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const account = requireAccount(actor);
+        const check = await authorize({ route: routeOf(account.accountId)!, id: account.accountId });
+        return admission.run('normal', job, () =>
+          listCreatorOffers(pool, tokens, actor, check, {
+            ...query,
+            deadline: job.deadline,
+            seen: session.components,
+          }),
+        );
+      },
+    )
     .get(
       '/v1/offers/:offerId',
       {
