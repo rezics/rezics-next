@@ -61,10 +61,11 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
         FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 ORDER BY command_kind,idempotency_key`, [account.partition, account.id])).rows;
       // These are observations of the owning facts, not a second effective-label/membership evaluator.
       const subjectFacts = (await database.query<LibraryLabelsInspection['subjectFacts'][number]>(`
-        SELECT account_id AS "ownerAccountId",route AS "ownerRoute",subject_id AS "subjectId",'entry'::text AS kind,
+        SELECT account_id AS "ownerAccountId",route AS "ownerRoute",subject_id AS "subjectId",'state'::text AS kind,
           subject_id AS "sourceId",true AS active FROM library.entry WHERE route=$1 AND account_id=$2 AND ($3::uuid[] IS NULL OR subject_id=ANY($3))
-        UNION ALL SELECT account_id,route,subject_id,'label',label_id,deleted_at IS NULL FROM library.label_assignment
-          WHERE route=$1 AND account_id=$2 AND ($3::uuid[] IS NULL OR subject_id=ANY($3))
+        UNION ALL SELECT a.account_id,a.route,a.subject_id,'label',a.assignment_id,a.deleted_at IS NULL AND p.deleted_at IS NULL AND p.label_id IS NOT NULL
+          FROM library.label_assignment a LEFT JOIN library.personal_label p ON p.route=a.route AND p.account_id=a.account_id AND p.label_id=a.label_id
+          WHERE a.route=$1 AND a.account_id=$2 AND a.slot_no IS NOT NULL AND ($3::uuid[] IS NULL OR a.subject_id=ANY($3))
         UNION ALL SELECT account_id,route,subject_id,'session',session_id,true FROM library.progress_session
           WHERE route=$1 AND account_id=$2 AND ($3::uuid[] IS NULL OR subject_id=ANY($3))
         UNION ALL SELECT account_id,route,subject_id,'holding',copy_id,deletion_id IS NULL FROM library.copy
@@ -98,7 +99,7 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
       accounts: { ...world.accounts, unscoped: world.accounts.owner }, unknown: { labelId: world.unknown.copyId, subjectId: world.unknown.subjectId },
       async provisionSubject(options = {}) {
         if (options.unprofiled && !unprofiledInstalled) { await publish(world, await compileProfileRelease()); unprofiledInstalled = true; }
-        const subject = options.unprofiled ? await world.native.subject(profileTypes.people) : await world.provisionSubject();
+        const subject = options.unprofiled ? await world.native.subject(profileTypes.people) : await world.native.subject(profileTypes.book);
         subjects.add(subject.id);
         if (options.ownerReadable === false) unavailable('semantic subject read revocation source');
         return subject;
@@ -134,7 +135,7 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
       async growUnrelated(input) {
         while (unrelatedLabels < input.labels) { await json(await invoke('other', 'library_label.create', { name: `unrelated ${unrelatedLabels++}` }, requestKey().slice(1,-1)), 201); }
         while (unrelatedAssignments < input.assignments) {
-          const subject = await world.provisionSubject();
+          const subject = await world.native.subject(profileTypes.book);
           const { label } = await json<{ label: { id: string } }>(await invoke('other', 'library_label.create', { name: `assignment ${unrelatedAssignments++}` }, requestKey().slice(1,-1)), 201);
           await json(await invoke('other', 'library_label.assign', { subjectId: subject.id, labelId: label.id }, requestKey().slice(1,-1)));
         }

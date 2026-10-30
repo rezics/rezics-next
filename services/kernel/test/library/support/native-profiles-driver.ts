@@ -53,7 +53,7 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
         assertFixture(f);
         return write(world, 'owner', 'PUT', `/v1/subjects/${subjectId}/ratings/${STANDARD_QUESTION_ID}/vote`, { units: value });
       },
-      request(f, persona, method, path, body, headers) { assertFixture(f); return world.native.request(persona, { method, path, body, headers }); },
+      request(f, persona, method, path, body, headers) { assertFixture(f); return world.native.request(persona, { method, path, body, ...(headers ? { headers } : {}) }); },
       async seedLegacyFacts(f) {
         assertFixture(f);
         return unavailable('committed historical pre-profile DATA restoration fixture; current commands cannot mint unpinned facts or old receipts');
@@ -109,12 +109,12 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
         const changes = (await database.query<LibraryProfilesInspection['changes'][number]>(`SELECT session_id AS "sessionId",change_no AS "changeNo",intent,
           recorded_at::text AS "recordedAt",transaction_id AS "transactionId" FROM library.progress_change WHERE route=$1 AND session_id=ANY($2::uuid[]) ORDER BY session_id,change_no`, [args[0], sessions.map(row => row.id)])).rows;
         const independentLabels = (await database.query('SELECT * FROM library.label_assignment WHERE route=$1 AND account_id=$2 ORDER BY subject_id,label_id', args)).rows;
-        const receipts = (await database.query<LibraryProfilesInspection['receipts'][number]>(`SELECT principal_id AS "accountId",idempotency_key AS "requestKey",encode(request_digest,'hex') AS digest,
+        const storedReceipts = (await database.query<Omit<LibraryProfilesInspection['receipts'][number], 'status'>>(`SELECT principal_id AS "accountId",idempotency_key AS "requestKey",encode(request_digest,'hex') AS digest,
           response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 ORDER BY command_kind,idempotency_key`, [world.accounts.owner.partition, args[1]])).rows;
         const events = (await database.query<LibraryProfilesInspection['events'][number]>('SELECT type,subject,data FROM core.outbox WHERE partition_no=$1 AND subject=$2 ORDER BY position,event_seq', [world.accounts.owner.partition, args[1]])).rows;
         const checkpoints = (await database.query('SELECT profile_migration_phase,profile_migration_digest,profile_migration_after FROM library.fact_source_head WHERE route=$1 AND account_id=$2', args)).rows;
         const jobs = (await world.native.workClient.listWorkflows({ limit: 10000 })).filter(row => row.workflowName === 'library.profileMigration');
-        return { entries, sessions, copies, completedUnits, changes, independentLabels, receipts, events,
+        return { entries, sessions, copies, completedUnits, changes, independentLabels, receipts: storedReceipts.map(() => unavailable('native receipt HTTP status and original historical request-key observation')), events,
           ratings: (await database.query('SELECT * FROM rating.vote WHERE route=$1 AND voter_id=$2 ORDER BY question_id,target_id', args)).rows,
           migration: { jobs, checkpoints, pages: unavailable('native migration page transaction and EXPLAIN observations') },
           importRuns: unavailable('exact native profile-fixture import-run inspection') };
