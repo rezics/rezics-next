@@ -19,6 +19,9 @@ import { PageHeading } from '../shell/page-heading';
 import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { ShelfEntries, stateLabel } from './shelf-view';
 import { useHydrated } from './shelf-rows';
+import { LabelShelfEntries } from './shelf-view';
+import type { LabelShelfPageData } from './label-shelf-read';
+import { SubjectLabelNotice } from './subject-labels.tsx';
 
 type Display = { layout: ShelfLayout; size: ShelfSize };
 function layoutLabel(layout: ShelfLayout): string {
@@ -35,14 +38,17 @@ function DisplayControls({
   state,
   locale,
   display,
+  label,
 }: {
   state?: LibraryEntryStateWrite;
   locale: string;
   display: Display;
+  label?: string;
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
   const stateSearch = state ? { state } : {};
+  const labelSearch = label ? { label } : {};
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
     return (
@@ -51,7 +57,7 @@ function DisplayControls({
           {shelfLayouts.map((layout) => (
             <a
               key={layout}
-              href={shelfHref(locale, { ...stateSearch, ...display, layout })}
+              href={shelfHref(locale, { ...stateSearch, ...display, layout, ...labelSearch })}
               aria-current={display.layout === layout ? 'page' : undefined}
               className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
             >
@@ -64,7 +70,7 @@ function DisplayControls({
             {shelfSizes.map((size) => (
               <a
                 key={size}
-                href={shelfHref(locale, { ...stateSearch, ...display, size })}
+                href={shelfHref(locale, { ...stateSearch, ...display, size, ...labelSearch })}
                 aria-current={display.size === size ? 'page' : undefined}
                 className={selected(display.size === size)}
               >
@@ -76,7 +82,7 @@ function DisplayControls({
         {state ? (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { layout: display.layout, size: display.size })}
+            href={shelfHref(locale, { layout: display.layout, size: display.size, ...labelSearch })}
           >
             {m.library_clear_state()}
           </a>
@@ -91,7 +97,8 @@ function DisplayControls({
         value={[display.layout]}
         onValueChange={(values) => {
           const layout = values[0] as ShelfLayout | undefined;
-          if (layout) void navigate({ to: '/library', search: { ...stateSearch, layout, size: display.size } });
+          if (layout)
+            void navigate({ to: '/library', search: { ...stateSearch, ...labelSearch, layout, size: display.size } });
         }}
         variant="outline"
       >
@@ -107,7 +114,11 @@ function DisplayControls({
           value={[display.size]}
           onValueChange={(values) => {
             const size = values[0] as ShelfSize | undefined;
-            if (size) void navigate({ to: '/library', search: { ...stateSearch, layout: display.layout, size } });
+            if (size)
+              void navigate({
+                to: '/library',
+                search: { ...stateSearch, ...labelSearch, layout: display.layout, size },
+              });
           }}
           variant="outline"
         >
@@ -121,7 +132,7 @@ function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { layout: display.layout, size: display.size })}
+          href={shelfHref(locale, { layout: display.layout, size: display.size, ...labelSearch })}
         >
           {m.library_clear_state()}
         </a>
@@ -226,5 +237,78 @@ export function PersonalLibraryPage({
         </section>
       </div>
     </Toaster>
+  );
+}
+
+/** One label's complete current page, with the same presentation controls and shelf tile primitives. */
+export function LabelShelfPage({
+  page,
+  locale,
+  display,
+}: {
+  page: LabelShelfPageData;
+  locale: string;
+  display: Display;
+}) {
+  if (page.state === 'closed')
+    return (
+      <div className="max-w-6xl space-y-6 text-foreground">
+        <PageHeading>{m.library_heading()}</PageHeading>
+        <p role="status">{m.library_label_shelf_closed()}</p>
+      </div>
+    );
+  if (page.state === 'signed-out')
+    return (
+      <div className="max-w-6xl space-y-6 text-foreground">
+        <PageHeading>{m.account_sign_in()}</PageHeading>
+      </div>
+    );
+  return (
+    <div className="max-w-6xl space-y-6 text-foreground">
+      <PageHeading>{page.label.name}</PageHeading>
+      <SubjectLabelNotice {...(page.labelResult !== undefined ? { result: page.labelResult } : {})} />
+      <DisplayControls locale={locale} display={display} label={page.label.id} />
+      {page.entries.length ? (
+        <LabelShelfEntries
+          entries={page.entries}
+          label={page.label}
+          locale={locale}
+          {...display}
+          csrfToken={page.csrfToken ?? null}
+        />
+      ) : (
+        <ShelfEmpty
+          kind="library"
+          title={m.library_label_shelf_empty()}
+          description={m.library_label_shelf_empty()}
+          actions={<span />}
+        />
+      )}
+      {page.next ? (
+        <a
+          href={shelfHref(locale, { label: page.label.id, ...display, cursor: page.next })}
+          className={buttonVariants({ variant: 'outline', size: 'lg' })}
+        >
+          {m.library_more()}
+        </a>
+      ) : null}
+      {page.undo ? (
+        <form
+          data-label-undo
+          method="post"
+          action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(page.label.id)}`}
+        >
+          <input type="hidden" name="intent" value="restore" />
+          <input type="hidden" name="subjectId" value={page.undo.subjectId} />
+          <input type="hidden" name="labelId" value={page.undo.labelId} />
+          <input type="hidden" name="assignmentId" value={page.undo.assignmentId} />
+          <input type="hidden" name="revision" value={page.undo.revision} />
+          <input type="hidden" name="csrf_token" value={page.csrfToken ?? ''} />
+          <button type="submit" className={buttonVariants({ variant: 'outline' })}>
+            {m.library_subject_label_undo()}
+          </button>
+        </form>
+      ) : null}
+    </div>
   );
 }

@@ -13,15 +13,19 @@ import {
   SelectValue,
 } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
-import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
+import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
 import {
+  mutateSubjectLabelAction,
   mutateSubjectLibrarySlot,
   readSubjectLibraryCollections,
+  searchSubjectLabelsAction,
   restoreSubjectLibrarySlot,
 } from './subject-slot-actions';
 import type {
@@ -31,6 +35,7 @@ import type {
   SubjectLibrarySlotData,
 } from './subject-slot';
 import { subjectSlotStateLabel } from './subject-slot';
+import { normalizeLibraryLabelName, type LibraryLabelSummary, type SubjectLabel } from './subject-labels.ts';
 
 type SubjectSlotProps = {
   subject: SubjectReference;
@@ -99,6 +104,7 @@ function LibraryStateSelect({
 export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
   const queryClient = useQueryClient();
   const action = subjectHref({ id: subject.id, label: subject.label }, locale).href;
+  const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);
@@ -113,6 +119,17 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [collectionMenuOpen, setCollectionMenuOpen] = useState(data.collectionsLoaded);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
+  const [labels, setLabels] = useState(data.labels ?? []);
+  const [labelQuery, setLabelQuery] = useState('');
+  const [labelChoices, setLabelChoices] = useState<LibraryLabelSummary[]>([]);
+  const [labelSearchState, setLabelSearchState] = useState<'idle' | 'loaded' | 'closed' | 'unavailable' | 'signed-out'>(
+    'idle',
+  );
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelPending, setLabelPending] = useState(false);
+  const [labelNotice, setLabelNotice] = useState(data.labelResult);
+  const [labelUndo, setLabelUndo] = useState(data.labelUndo);
+  const latestLabelQuery = useRef('');
   const stateOptions = [
     ['planned', m.library_subject_state_planned()],
     ['in_progress', m.library_subject_state_in_progress()],
@@ -129,6 +146,31 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     setCollections(data.collections);
     setCollectionsLoaded(data.collectionsLoaded);
   }, [data.entry, data.restore, data.collections, data.collectionsLoaded]);
+  useEffect(() => setLabels(data.labels ?? []), [data.labels]);
+  useEffect(() => {
+    setLabelNotice(data.labelResult);
+    setLabelUndo(data.labelUndo);
+  }, [data.labelResult, data.labelUndo]);
+  useEffect(() => {
+    if (!hydrated || !labelPickerOpen || data.session !== 'signed-in') return;
+    let current = true;
+    const query = labelQuery;
+    const timeout = setTimeout(() => {
+      void searchSubjectLabelsAction({ data: { query } })
+        .then((response) => {
+          if (!current || latestLabelQuery.current !== query) return;
+          setLabelChoices(response.labels);
+          setLabelSearchState(response.state);
+        })
+        .catch(() => {
+          if (current && latestLabelQuery.current === query) setLabelSearchState('unavailable');
+        });
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timeout);
+    };
+  }, [data.session, hydrated, labelPickerOpen, labelQuery]);
   const result = actionResult ?? data.result;
   const resultText =
     result === 'saved'
@@ -302,6 +344,147 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     }
   }
 
+  function labelFailure(reason: string) {
+    if (reason === 'capacity') setLabelNotice('label-capacity');
+    else if (reason === 'restore-stale') {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
+        router.invalidate(),
+      ]).then(() => setLabelNotice('label-restore-stale'));
+    } else if (reason === 'restore-expired') setLabelNotice('label-restore-expired');
+    else if (reason === 'restore-occupied') setLabelNotice('label-restore-occupied');
+    else if (reason === 'restore-capacity') setLabelNotice('label-restore-capacity');
+    else if (reason === 'closed') setLabelNotice('closed');
+    else setLabelNotice('unavailable');
+  }
+
+  async function writeLabel(input: {
+    intent: 'assign' | 'create-and-assign' | 'restore';
+    label?: LibraryLabelSummary | SubjectLabel;
+    name?: string;
+    assignment?: SubjectLabel;
+    revision?: number;
+  }) {
+    if (!hydrated || labelPending) return;
+    setLabelPending(true);
+    setLabelNotice(undefined);
+    try {
+      const headers = { 'X-CSRF-Token': data.csrfToken ?? '' };
+      const response =
+        input.intent === 'create-and-assign'
+          ? await mutateSubjectLabelAction({
+              data: {
+                intent: 'create-and-assign',
+                subjectId: subject.id,
+                name: input.name ?? '',
+                createKey: crypto.randomUUID(),
+                idempotencyKey: crypto.randomUUID(),
+              },
+              headers,
+            })
+          : input.intent === 'assign'
+            ? await mutateSubjectLabelAction({
+                data: {
+                  intent: 'assign',
+                  subjectId: subject.id,
+                  labelId: input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? ''),
+                  idempotencyKey: crypto.randomUUID(),
+                },
+                headers,
+              })
+            : await mutateSubjectLabelAction({
+                data: {
+                  intent: 'restore',
+                  subjectId: subject.id,
+                  labelId: input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? ''),
+                  assignmentId: input.assignment?.id ?? '',
+                  revision: input.revision ?? 0,
+                  idempotencyKey: crypto.randomUUID(),
+                },
+                headers,
+              });
+      if (!response.ok) {
+        labelFailure(response.reason);
+        return;
+      }
+      setLabelUndo(undefined);
+      setLabelPickerOpen(false);
+      setLabelQuery('');
+      latestLabelQuery.current = '';
+      setLabelChoices([]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
+        router.invalidate(),
+      ]);
+    } catch {
+      setLabelNotice('unavailable');
+    } finally {
+      setLabelPending(false);
+    }
+  }
+
+  async function submitLabelName(event: FormEvent<HTMLFormElement>) {
+    if (!hydrated) return;
+    event.preventDefault();
+    const name = normalizeLibraryLabelName(labelQuery);
+    if (!name) return;
+    const existing = labelChoices.find((candidate) => normalizeLibraryLabelName(candidate.name) === name);
+    if (existing) await writeLabel({ intent: 'assign', label: existing });
+    else await writeLabel({ intent: 'create-and-assign', name: labelQuery });
+  }
+
+  async function removeLabel(label: SubjectLabel) {
+    if (labelPending) return;
+    setLabelPending(true);
+    try {
+      const response = await mutateSubjectLabelAction({
+        data: {
+          intent: 'unassign',
+          subjectId: subject.id,
+          labelId: label.labelId,
+          assignmentId: label.id,
+          revision: label.revision,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+      });
+      if (!response.ok) {
+        labelFailure(response.reason);
+        return;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] }),
+        router.invalidate(),
+      ]);
+      const restoreRevision = response.restoreRevision;
+      if (restoreRevision === undefined) {
+        setLabelNotice('unavailable');
+        return;
+      }
+      undoToast(
+        m.library_subject_label_removed({ name: label.name }),
+        () =>
+          void writeLabel({
+            intent: 'restore',
+            label: { id: label.labelId, name: label.name, revision: 1 },
+            assignment: label,
+            revision: restoreRevision,
+          }),
+        { undo: m.library_subject_label_undo() },
+      );
+    } catch {
+      setLabelNotice('unavailable');
+    } finally {
+      setLabelPending(false);
+    }
+  }
+
+  function onRemoveForm(event: FormEvent<HTMLFormElement>, label: SubjectLabel) {
+    if (!hydrated) return;
+    event.preventDefault();
+    void removeLabel(label);
+  }
+
   return (
     <Toaster>
       <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
@@ -460,6 +643,174 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                 )}
               </div>
             </details>
+          </Exposure>
+        ) : null}
+        {data.session === 'signed-in' && data.labels !== null ? (
+          <Exposure operation="library_label.assignment_list">
+            <div data-subject-labels className="basis-full space-y-2">
+              {labels.length ? (
+                <ul className="flex flex-wrap items-center gap-2">
+                  {labels.map((label) => (
+                    <li
+                      key={label.id}
+                      data-subject-label-chip
+                      className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-muted/60 px-3 py-1 text-sm"
+                    >
+                      <a
+                        href={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(label.labelId)}`}
+                        className="max-w-48 truncate text-primary underline-offset-4 hover:underline"
+                      >
+                        {label.name}
+                      </a>
+                      <Exposure operation="library_label.unassign">
+                        <form
+                          data-subject-label-remove
+                          method="post"
+                          action={action}
+                          onSubmit={(event) => onRemoveForm(event, label)}
+                          className="m-0"
+                        >
+                          <input type="hidden" name="intent" value="unassign" />
+                          <input type="hidden" name="subjectId" value={subject.id} />
+                          <input type="hidden" name="labelId" value={label.labelId} />
+                          <input type="hidden" name="assignmentId" value={label.id} />
+                          <input type="hidden" name="revision" value={label.revision} />
+                          <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                          <button
+                            type="submit"
+                            disabled={hydrated && labelPending}
+                            aria-label={m.library_subject_label_remove({ name: label.name })}
+                            className="rounded-full px-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          >
+                            ×
+                          </button>
+                        </form>
+                      </Exposure>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <Exposure operation="library_label.list">
+                <details
+                  data-subject-label-picker-details
+                  open={labelPickerOpen}
+                  onToggle={(event) => setLabelPickerOpen(event.currentTarget.open)}
+                  className="max-w-md"
+                >
+                  <summary className={`${buttonClass} cursor-pointer list-none`}>
+                    {m.library_subject_label_add()}
+                  </summary>
+                  <form
+                    data-subject-label-picker
+                    method="post"
+                    action={action}
+                    onSubmit={(event) => void submitLabelName(event)}
+                    className="mt-2 space-y-2 rounded-lg border bg-background p-3"
+                  >
+                    <input type="hidden" name="intent" value="assign-by-name" />
+                    <input type="hidden" name="subjectId" value={subject.id} />
+                    <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                    <label className="grid gap-1 text-sm font-medium">
+                      {m.library_subject_label_input()}
+                      <input
+                        name="name"
+                        aria-label={m.library_subject_label_name()}
+                        autoComplete="off"
+                        maxLength={200}
+                        required
+                        value={labelQuery}
+                        onChange={(event) => {
+                          latestLabelQuery.current = event.currentTarget.value;
+                          setLabelQuery(event.currentTarget.value);
+                        }}
+                        className="h-9 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <Exposure operation="library_label.create">
+                        <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
+                          {m.library_subject_label_add()}
+                        </button>
+                      </Exposure>
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => {
+                          setLabelPickerOpen(false);
+                          setLabelQuery('');
+                          latestLabelQuery.current = '';
+                        }}
+                      >
+                        {m.library_collection_cancel()}
+                      </button>
+                    </div>
+                    {labelSearchState === 'loaded' ? (
+                      <ul aria-label={m.library_subject_label_input()} className="space-y-1">
+                        {labelChoices.map((choice) => (
+                          <li key={choice.id}>
+                            <Exposure operation="library_label.assign">
+                              <button
+                                type="button"
+                                disabled={hydrated && labelPending}
+                                onClick={() => void writeLabel({ intent: 'assign', label: choice })}
+                                className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
+                              >
+                                {choice.name}
+                              </button>
+                            </Exposure>
+                          </li>
+                        ))}
+                        {normalizeLibraryLabelName(labelQuery) &&
+                        !labelChoices.some(
+                          (choice) => normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
+                        ) ? (
+                          <li>
+                            <Exposure operation="library_label.create">
+                              <button
+                                type="button"
+                                disabled={hydrated && labelPending}
+                                onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
+                                className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
+                              >
+                                {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
+                              </button>
+                            </Exposure>
+                          </li>
+                        ) : null}
+                        {labelChoices.length === 0 ? (
+                          <li className="px-2 py-1 text-sm text-muted-foreground">
+                            {m.library_subject_label_no_results()}
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : labelSearchState === 'closed' ? (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.library_subject_label_closed()}
+                      </p>
+                    ) : labelSearchState === 'unavailable' ? (
+                      <p role="alert" className="text-sm text-muted-foreground">
+                        {m.library_subject_label_unavailable()}
+                      </p>
+                    ) : null}
+                  </form>
+                </details>
+              </Exposure>
+              <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
+              {labelUndo ? (
+                <form data-label-undo method="post" action={action} className="flex items-center gap-2 text-sm">
+                  <input type="hidden" name="intent" value="restore" />
+                  <input type="hidden" name="subjectId" value={subject.id} />
+                  <input type="hidden" name="labelId" value={labelUndo.labelId} />
+                  <input type="hidden" name="assignmentId" value={labelUndo.assignmentId} />
+                  <input type="hidden" name="revision" value={labelUndo.revision} />
+                  <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                  <span>{m.library_subject_label_removed_status()}</span>
+                  <button type="submit" className={linkClass}>
+                    {m.library_subject_label_undo()}
+                  </button>
+                </form>
+              ) : null}
+            </div>
           </Exposure>
         ) : null}
         {resultText ? (

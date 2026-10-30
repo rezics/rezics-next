@@ -6,6 +6,7 @@ import { configured, type SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
 import { libraryEntryStates, type LibraryEntryStateWrite } from './entries-read';
 import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
+import { readSubjectLabelAssignments, type SubjectLabel } from './subject-labels.ts';
 
 export const libraryEntryStatesWrite = libraryEntryStates;
 export type { LibraryEntryStateWrite };
@@ -46,7 +47,14 @@ export type SubjectLibrarySlotResult =
   | 'collection-full'
   | 'conflict'
   | 'closed'
-  | 'unavailable';
+  | 'unavailable'
+  | 'label-capacity'
+  | 'label-restore-stale'
+  | 'label-restore-expired'
+  | 'label-restore-occupied'
+  | 'label-restore-capacity'
+  | 'label-removed';
+export type SubjectLabelUndo = { labelId: string; assignmentId: string; revision: number };
 export type SubjectLibrarySlotData = {
   session: 'signed-in' | 'signed-out' | 'unavailable';
   csrfToken: string | null;
@@ -56,6 +64,9 @@ export type SubjectLibrarySlotData = {
   publicCollectionsNext: string | null;
   collectionsLoaded: boolean;
   collections: SubjectSlotCollection[] | null;
+  labels: SubjectLabel[] | null;
+  labelUndo?: SubjectLabelUndo;
+  labelResult?: SubjectLibrarySlotResult;
   result?: SubjectLibrarySlotResult;
   undo?: LibraryRestoreInput;
   restore?: LibraryRestoreResult;
@@ -84,11 +95,14 @@ export type SubjectSlotCollectionsResult = {
 type EntryResult = { libraryEntry: SubjectSlotEntry };
 type PublicCollectionsResult = { collections: SubjectPublicCollection[]; next: string | null };
 type CollectionsResult = { collections: SubjectSlotCollection[]; next: string | null };
-type SlotSession =
+export type SubjectSlotSession =
   | { state: 'signed-in'; subject: string; csrfToken: string; authorization: string }
   | { state: 'signed-out' | 'unavailable'; csrfToken: null };
 
-async function readSlotSession(request: Request, sessionEnv: Partial<SessionEnv>): Promise<SlotSession> {
+export async function readSubjectSlotSession(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<SubjectSlotSession> {
   if (!configured(sessionEnv)) return { state: 'unavailable', csrfToken: null };
   const id = cookie(request, SESSION_COOKIE);
   if (!validId(id)) return { state: 'signed-out', csrfToken: null };
@@ -144,7 +158,7 @@ export async function loadSubjectLibraryCollections(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
 ): Promise<SubjectSlotCollectionsResult> {
-  const identity = await readSlotSession(request, sessionEnv);
+  const identity = await readSubjectSlotSession(request, sessionEnv);
   if (identity.state !== 'signed-in') return { state: 'unavailable', collections: null };
   try {
     return {
@@ -164,8 +178,10 @@ export async function loadSubjectLibrarySlot(
   subjectId: string,
   loadCollections = false,
   resultValue?: string,
+  labelResultValue?: string,
+  labelUndo?: SubjectLabelUndo,
 ): Promise<SubjectLibrarySlotData> {
-  const identityPromise = readSlotSession(request, sessionEnv);
+  const identityPromise = readSubjectSlotSession(request, sessionEnv);
   const publicPromise = readPublicCollections(client, subjectId).then(
     (page) => ({ available: true as const, ...page }),
     () => ({ available: false as const, collections: null, next: null }),
@@ -175,6 +191,7 @@ export async function loadSubjectLibrarySlot(
   let entry: SubjectSlotEntry | null = null;
   let collections: SubjectSlotCollection[] | null = null;
   let collectionsLoaded = false;
+  let labels: SubjectLabel[] | null = null;
   if (identity.state === 'signed-in') {
     const entryPromise = readEntry(client, subjectId, identity.authorization).then(
       (value) => ({ available: true as const, value }),
@@ -187,11 +204,23 @@ export async function loadSubjectLibrarySlot(
             () => ({ loaded: false as const, value: null }),
           )
         : Promise.resolve({ loaded: false as const, value: null });
-    const [entryResult, collectionResult] = await Promise.all([entryPromise, collectionPromise]);
+    const labelsPromise = client.platform.exposure
+      .get({ headers: { authorization: identity.authorization } })
+      .then((result) => result.data?.admitted?.includes('library_label.assignment_list') ?? false)
+      .catch(() => false)
+      .then((allowed) =>
+        allowed ? readSubjectLabelAssignments(client, subjectId, identity.authorization).catch(() => null) : null,
+      );
+    const [entryResult, collectionResult, labelsResult] = await Promise.all([
+      entryPromise,
+      collectionPromise,
+      labelsPromise,
+    ]);
     entryAvailable = entryResult.available;
     entry = entryResult.value;
     collectionsLoaded = collectionResult.loaded;
     collections = collectionResult.value;
+    labels = labelsResult;
   }
   const result =
     resultValue === 'added' ||
@@ -200,8 +229,25 @@ export async function loadSubjectLibrarySlot(
     resultValue === 'collection-full' ||
     resultValue === 'conflict' ||
     resultValue === 'closed' ||
-    resultValue === 'unavailable'
+    resultValue === 'unavailable' ||
+    resultValue === 'label-capacity' ||
+    resultValue === 'label-restore-stale' ||
+    resultValue === 'label-restore-expired' ||
+    resultValue === 'label-restore-occupied' ||
+    resultValue === 'label-restore-capacity' ||
+    resultValue === 'label-removed'
       ? resultValue
+      : undefined;
+  const labelResult =
+    labelResultValue === 'label-capacity' ||
+    labelResultValue === 'label-restore-stale' ||
+    labelResultValue === 'label-restore-expired' ||
+    labelResultValue === 'label-restore-occupied' ||
+    labelResultValue === 'label-restore-capacity' ||
+    labelResultValue === 'label-removed' ||
+    labelResultValue === 'closed' ||
+    labelResultValue === 'unavailable'
+      ? labelResultValue
       : undefined;
   return {
     session: identity.state,
@@ -212,6 +258,9 @@ export async function loadSubjectLibrarySlot(
     publicCollectionsNext: publicResult.next,
     collectionsLoaded,
     collections,
+    labels,
+    ...(labelUndo ? { labelUndo } : {}),
+    ...(labelResult ? { labelResult } : {}),
     ...(result ? { result } : {}),
   };
 }

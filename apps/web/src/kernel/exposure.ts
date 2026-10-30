@@ -58,6 +58,13 @@ export const operationGroups = {
   'subject_collection.list': 'collections',
 } as const;
 export type GatedOperation = keyof typeof operationGroups;
+export type LibraryLabelOperation =
+  | 'library_label.create'
+  | 'library_label.list'
+  | 'library_label.assign'
+  | 'library_label.unassign'
+  | 'library_label.assignment_list';
+type ExposureOperation = GatedOperation | LibraryLabelOperation;
 
 const minute = 60_000;
 const closed: string[] = [];
@@ -105,7 +112,7 @@ export const prepareExposure = createIsomorphicFn()
 const subscribe = () => () => {};
 // Standalone server-rendered previews have no query provider and remain closed.
 const previewClient = new QueryClient();
-export function useOperation(operation: GatedOperation): boolean {
+export function useOperation(operation: ExposureOperation): boolean {
   const client = useContext(QueryClientContext) ?? previewClient;
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -119,9 +126,12 @@ export function useOperation(operation: GatedOperation): boolean {
     !hydrated || state === 'signed-out' ? publicGroups : state === 'signed-in' ? viewerGroups : undefined;
   // This future route must be explicitly advertised; today's group admission does not imply support.
   if (operation === 'library_entry.restore') return admitted?.includes(operation) ?? false;
-  return admitted?.includes(operationGroups[operation]) ?? false;
+  const admittedKey = Object.hasOwn(operationGroups, operation)
+    ? operationGroups[operation as GatedOperation]
+    : operation;
+  return admitted?.includes(admittedKey) ?? false;
 }
 
-export function Exposure({ operation, children }: { operation: GatedOperation; children: ReactNode }) {
+export function Exposure({ operation, children }: { operation: ExposureOperation; children: ReactNode }) {
   return useOperation(operation) ? createElement(Fragment, null, children) : null;
 }

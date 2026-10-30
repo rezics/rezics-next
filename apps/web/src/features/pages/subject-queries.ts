@@ -4,7 +4,7 @@ import { notFound } from '@tanstack/react-router';
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { personalRead, publicRead } from '../../kernel/query';
-import { loadSubjectLibrarySlot } from '../../library/subject-slot';
+import { loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
 import type { SessionEnv } from '../../session/client';
 import { loadReader } from '../../subject/load-reader';
 import type { LoadedSubject } from '../../subject/load-subject';
@@ -154,10 +154,29 @@ const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
       value.locale.length > 35 ||
-      (value.loadCollections !== undefined && typeof value.loadCollections !== 'boolean')
+      (value.loadCollections !== undefined && typeof value.loadCollections !== 'boolean') ||
+      (value.labelResult !== undefined && (typeof value.labelResult !== 'string' || value.labelResult.length > 64)) ||
+      (value.labelUndo !== undefined &&
+        (!value.labelUndo ||
+          typeof value.labelUndo !== 'object' ||
+          Array.isArray(value.labelUndo) ||
+          typeof (value.labelUndo as Record<string, unknown>).labelId !== 'string' ||
+          !(value.labelUndo as Record<string, unknown>).labelId ||
+          ((value.labelUndo as Record<string, unknown>).labelId as string).length > 128 ||
+          typeof (value.labelUndo as Record<string, unknown>).assignmentId !== 'string' ||
+          !(value.labelUndo as Record<string, unknown>).assignmentId ||
+          ((value.labelUndo as Record<string, unknown>).assignmentId as string).length > 128 ||
+          !Number.isSafeInteger((value.labelUndo as Record<string, unknown>).revision) ||
+          Number((value.labelUndo as Record<string, unknown>).revision) < 1))
     )
       throw notFound();
-    return { id: value.id, locale: value.locale, loadCollections: value.loadCollections === true };
+    return {
+      id: value.id,
+      locale: value.locale,
+      loadCollections: value.loadCollections === true,
+      labelResult: value.labelResult as string | undefined,
+      labelUndo: value.labelUndo as SubjectLabelUndo | undefined,
+    };
   })
   .handler(async ({ data }) => {
     const { env } = await import('cloudflare:workers');
@@ -168,6 +187,9 @@ const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
       env as Partial<SessionEnv>,
       data.id,
       data.loadCollections,
+      undefined,
+      data.labelResult,
+      data.labelUndo,
     );
   });
 
@@ -328,11 +350,28 @@ export const subjectLinksQuery = (id: string, locale: string, property?: string,
       readSubjectLinks({ data: { id, locale, ...(property ? { property } : {}), ...(cursor ? { cursor } : {}) } }),
   });
 
-export const subjectLibraryQuery = (id: string, locale: string, loadCollections = false) =>
+export const subjectLibraryQuery = (
+  id: string,
+  locale: string,
+  loadCollections = false,
+  labelResult?: string,
+  labelUndo?: SubjectLabelUndo,
+) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['subject-library', id, locale, ...(loadCollections ? [true] : [])] as const,
-    queryFn: () => readSubjectLibrary({ data: { id, locale, loadCollections } }),
+    queryKey: [
+      'subject-library',
+      id,
+      locale,
+      ...(loadCollections ? [true] : []),
+      ...(labelResult !== undefined || labelUndo
+        ? [{ labelResult: labelResult ?? null, labelUndo: labelUndo ?? null }]
+        : []),
+    ] as const,
+    queryFn: () =>
+      readSubjectLibrary({
+        data: { id, locale, loadCollections, labelResult, labelUndo },
+      }),
     retry: false,
   });
 

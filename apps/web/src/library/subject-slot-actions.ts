@@ -12,6 +12,7 @@ import {
 } from './subject-slot';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 import { restorePersonalLibraryEntry, type LibraryRestoreInput } from './entries-read';
+import { applySubjectLabelMutation, searchSubjectLabels, type SubjectLabelMutationInput } from './subject-labels.ts';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const incarnationIdPattern = idempotencyKeyPattern;
@@ -76,6 +77,81 @@ function validateCollectionsInput(input: unknown): { subjectId: string } {
   return { subjectId: input.subjectId };
 }
 
+function validateSubjectLabelSearch(input: unknown): { query: string } {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('query' in input) ||
+    typeof input.query !== 'string' ||
+    input.query.length > 200
+  )
+    throw new Error('Invalid subject label search');
+  return { query: input.query };
+}
+
+export function validateSubjectLabelMutation(input: unknown): SubjectLabelMutationInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid subject label action');
+  const value = input as Record<string, unknown>;
+  const validKey = (key: unknown) =>
+    typeof key === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key);
+  if (
+    typeof value.subjectId !== 'string' ||
+    !value.subjectId ||
+    value.subjectId.length > 128 ||
+    !validKey(value.idempotencyKey)
+  )
+    throw new Error('Invalid subject label action');
+  const subjectId = value.subjectId as string;
+  const idempotencyKey = value.idempotencyKey as string;
+  if (value.intent === 'create-and-assign') {
+    if (
+      typeof value.name !== 'string' ||
+      value.name.length > 200 ||
+      (value.createKey !== undefined && !validKey(value.createKey))
+    )
+      throw new Error('Invalid subject label action');
+    return {
+      intent: 'create-and-assign',
+      subjectId,
+      name: value.name,
+      ...(typeof value.createKey === 'string' ? { createKey: value.createKey } : {}),
+      idempotencyKey,
+    };
+  }
+  if (
+    value.intent === 'assign' &&
+    typeof value.labelId === 'string' &&
+    value.labelId.length > 0 &&
+    value.labelId.length <= 128
+  )
+    return {
+      intent: 'assign',
+      subjectId,
+      labelId: value.labelId,
+      idempotencyKey,
+    };
+  if (
+    (value.intent === 'unassign' || value.intent === 'restore') &&
+    typeof value.labelId === 'string' &&
+    value.labelId.length > 0 &&
+    value.labelId.length <= 128 &&
+    typeof value.assignmentId === 'string' &&
+    value.assignmentId.length > 0 &&
+    value.assignmentId.length <= 128 &&
+    Number.isSafeInteger(value.revision) &&
+    Number(value.revision) > 0
+  )
+    return {
+      intent: value.intent,
+      subjectId,
+      labelId: value.labelId,
+      assignmentId: value.assignmentId,
+      revision: Number(value.revision),
+      idempotencyKey,
+    };
+  throw new Error('Invalid subject label action');
+}
+
 export const readSubjectLibraryCollections = createServerFn({ method: 'GET' })
   .validator(validateCollectionsInput)
   .handler(async (): Promise<Awaited<ReturnType<typeof loadSubjectLibraryCollections>>> => {
@@ -112,4 +188,23 @@ export const restoreSubjectLibrarySlot = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return restorePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const searchSubjectLabelsAction = createServerFn({ method: 'GET' })
+  .validator(validateSubjectLabelSearch)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return searchSubjectLabels({
+      client: kernelClient(),
+      request: getRequest(),
+      sessionEnv: env as Partial<SessionEnv>,
+      query: data.query,
+    });
+  });
+
+export const mutateSubjectLabelAction = createServerFn({ method: 'POST' })
+  .validator(validateSubjectLabelMutation)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return applySubjectLabelMutation(getRequest(), env as Partial<SessionEnv>, data, kernelClient());
   });

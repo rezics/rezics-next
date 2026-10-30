@@ -29,6 +29,7 @@ import {
   subjectUrlForView,
 } from '../../features/pages/subject-queries';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -99,6 +100,53 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const contentType = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+        const contentLength = request.headers.get('content-length');
+        const canReadForm =
+          contentType === 'application/x-www-form-urlencoded' &&
+          (contentLength === null || (/^\d+$/.test(contentLength) && Number(contentLength) <= 4 * 1024));
+        const fields = canReadForm
+          ? await request
+              .clone()
+              .formData()
+              .catch(() => null)
+          : null;
+        const intents = fields?.getAll('intent') ?? [];
+        const intent =
+          intents.length === 1 &&
+          typeof intents[0] === 'string' &&
+          ['assign-by-name', 'unassign', 'restore'].includes(intents[0])
+            ? intents[0]
+            : null;
+        if (intent) {
+          const result = await submitSubjectLabelForm(request);
+          const url = new URL(request.url);
+          url.searchParams.delete('labelResult');
+          url.searchParams.delete('undoLabelId');
+          url.searchParams.delete('undoAssignmentId');
+          url.searchParams.delete('undoRevision');
+          url.searchParams.delete('ratingFailure');
+          if (result.ok && intent === 'unassign' && result.restoreRevision !== undefined) {
+            url.searchParams.set('labelResult', 'label-removed');
+            url.searchParams.set('undoLabelId', String(fields?.get('labelId') ?? ''));
+            url.searchParams.set('undoAssignmentId', String(fields?.get('assignmentId') ?? ''));
+            url.searchParams.set('undoRevision', String(result.restoreRevision));
+          } else if (!result.ok) {
+            const value =
+              result.reason === 'capacity'
+                ? 'label-capacity'
+                : result.reason.startsWith('restore-')
+                  ? `label-${result.reason}`
+                  : result.reason === 'closed'
+                    ? 'closed'
+                    : 'unavailable';
+            url.searchParams.set('labelResult', value);
+          }
+          return new Response(null, {
+            status: 303,
+            headers: { location: url.pathname + url.search, 'cache-control': 'private, no-store' },
+          });
+        }
         const { kernelClient } = await import('../../kernel/client');
         const result = await postSubjectRatingForm(kernelClient(), request, env as Partial<SessionEnv>);
         const url = new URL(request.url);
@@ -121,12 +169,34 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   },
   validateSearch: (
     search: Record<string, unknown>,
-  ): { slot?: 'collections'; slotResult?: string; ratingFailure?: true } => ({
+  ): {
+    slot?: 'collections';
+    slotResult?: string;
+    ratingFailure?: true;
+    labelResult?: string;
+    undoLabelId?: string;
+    undoAssignmentId?: string;
+    undoRevision?: number;
+  } => ({
     ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
     ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
     ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
+    ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
+    ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
+    ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
+    ...(typeof search.undoRevision === 'number' ||
+    (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
+      ? { undoRevision: Number(search.undoRevision) }
+      : {}),
   }),
-  loaderDeps: ({ search }) => ({ slot: search.slot, slotResult: search.slotResult }),
+  loaderDeps: ({ search }) => ({
+    slot: search.slot,
+    slotResult: search.slotResult,
+    labelResult: search.labelResult,
+    undoLabelId: search.undoLabelId,
+    undoAssignmentId: search.undoAssignmentId,
+    undoRevision: search.undoRevision,
+  }),
   loader: async ({ params, deps, location, context }) => {
     const data = await readSubject({
       data: {
@@ -173,7 +243,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 
 function SubjectRoute() {
   const { tabs, verification } = Route.useLoaderData();
-  const { slot, ratingFailure } = Route.useSearch();
+  const { slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const locale = getLocale();
@@ -183,13 +253,21 @@ function SubjectRoute() {
   const page = loaded.kind === 'page' ? loaded.page : undefined;
   if (!page) throw notFound();
   const id = page.subject!;
+  const labelUndo =
+    typeof undoLabelId === 'string' &&
+    typeof undoAssignmentId === 'string' &&
+    typeof undoRevision === 'number' &&
+    Number.isSafeInteger(undoRevision) &&
+    undoRevision > 0
+      ? { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: undoRevision }
+      : undefined;
   const type = subjectPageType(page);
   const { data: frame } = useSuspenseQuery(type ? subjectFrameQuery(type, locale) : subjectFrameQuery('', locale));
   const { data: relations } = useSuspenseQuery(subjectRelationsQuery(pageRelationProperties(page), locale));
   const { data: publicReactions } = useSuspenseQuery(subjectReactionsQuery(id, locale));
   const { data: publicRatings } = useSuspenseQuery(subjectRatingQuery(id, locale));
   const { data: library } = useQuery({
-    ...subjectLibraryQuery(id, locale, slot === 'collections'),
+    ...subjectLibraryQuery(id, locale, slot === 'collections', labelResult, labelUndo),
     enabled: session === 'signed-in',
   });
   const { data: reader } = useQuery({ ...subjectReaderQuery(id, locale), enabled: session === 'signed-in' });
@@ -257,6 +335,7 @@ function SubjectRoute() {
                     publicCollectionsNext: null,
                     collectionsLoaded: false,
                     collections: null,
+                    labels: null,
                   }
                 }
               />

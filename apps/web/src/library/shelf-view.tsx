@@ -1,7 +1,9 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { EntryRemoveForm } from './entry-undo';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
+import { Cover, coverRatio } from '@rezics/ui/cover';
 import { ProgressRow } from '@rezics/ui/progress-row';
+import { Tombstone } from '@rezics/ui/tombstone';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
@@ -35,6 +37,9 @@ import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
 import { shelfHref, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
+import type { LibrarySubject } from './reads';
+import { labelShelfProgress, type LabelShelfEntry } from './label-shelf-read';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/shadcn/table';
 
 export function stateLabel(state: LibraryEntryStateRead): string | undefined {
   return libraryEntryStateWrite(state) ? libraryEntryStateLabel(state) : undefined;
@@ -54,10 +59,10 @@ function titleOf(entry: PersonalLibraryEntry, locale: string) {
     ? displayLibraryTitle(entry.subject.label, locale)
     : { text: m.library_subject_unavailable(), lang: undefined };
 }
-function coverOf(entry: PersonalLibraryEntry) {
+export function shelfCover(subject: LibrarySubject | null) {
   return {
-    subject: coverSubject(entry.subject),
-    cover: entry.subject?.cover ?? null,
+    subject: coverSubject(subject),
+    cover: subject?.cover ?? null,
     src: coverSrc,
     labels: {
       withheld: m.thread_cover_withheld(),
@@ -66,6 +71,9 @@ function coverOf(entry: PersonalLibraryEntry) {
       via: m.thread_cover_via(),
     },
   };
+}
+function coverOf(entry: PersonalLibraryEntry) {
+  return shelfCover(entry.subject);
 }
 type Controls = ReturnType<typeof useShelfRows> & { locale: string; hydrated: boolean };
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
@@ -378,5 +386,161 @@ export function ShelfEntries({
         </AlertDialog>
       </Exposure>
     </>
+  );
+}
+
+function LabelAssignmentRemoveForm({
+  entry,
+  labelName,
+  locale,
+  csrfToken,
+}: {
+  entry: LabelShelfEntry;
+  labelName: string;
+  locale: string;
+  csrfToken: string | null;
+}) {
+  return (
+    <form method="post" action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(entry.labelId)}`}>
+      <input type="hidden" name="intent" value="unassign" />
+      <input type="hidden" name="subjectId" value={entry.subjectId} />
+      <input type="hidden" name="labelId" value={entry.labelId} />
+      <input type="hidden" name="assignmentId" value={entry.id} />
+      <input type="hidden" name="revision" value={entry.revision} />
+      <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
+      <Button type="submit" variant="outline" size="sm" aria-label={m.library_label_shelf_remove()}>
+        {m.library_label_shelf_remove()}
+      </Button>
+      <span className="sr-only">{labelName}</span>
+    </form>
+  );
+}
+
+/** The label shelf shares the main shelf's cover, list and table primitives without manufacturing entry state. */
+export function LabelShelfEntries({
+  entries,
+  label,
+  locale,
+  layout,
+  size,
+  csrfToken,
+}: {
+  entries: LabelShelfEntry[];
+  label: { id: string; name: string };
+  locale: string;
+  layout: ShelfLayout;
+  size: ShelfSize;
+  csrfToken: string | null;
+}) {
+  const title = (entry: LabelShelfEntry) =>
+    entry.subject ? displayLibraryTitle(entry.subject.label, locale).text : m.library_subject_unavailable();
+  const href = (entry: LabelShelfEntry) =>
+    entry.subject ? subjectHref({ id: entry.subject.id, label: title(entry) }, locale).href : `/${locale}/library`;
+  if (layout === 'grid')
+    return (
+      <CoverGrid ratio="5:7" density={densities[size]} fixedDensity>
+        {entries.map((entry) => {
+          if (!entry.subject)
+            return (
+              <div key={entry.id} className="min-w-0 space-y-2">
+                <Tombstone shape="card" />
+                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
+              </div>
+            );
+          const progress = labelShelfProgress(entry, locale);
+          return (
+            <CoverCard
+              key={entry.id}
+              href={href(entry)}
+              title={title(entry)}
+              cover={shelfCover(entry.subject)}
+              {...(progress ? { progress } : {})}
+              {...(entry.state ? { status: { label: libraryEntryStateLabel(entry.state) } } : {})}
+            />
+          );
+        })}
+      </CoverGrid>
+    );
+  if (layout === 'list')
+    return (
+      <ShelfList>
+        {entries.map((entry) => {
+          if (!entry.subject)
+            return (
+              <li key={entry.id} className="space-y-2 border-b py-3">
+                <Tombstone shape="row" />
+                <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
+              </li>
+            );
+          const progress = labelShelfProgress(entry, locale);
+          return (
+            <ShelfListRow
+              key={entry.id}
+              href={href(entry)}
+              cover={shelfCover(entry.subject)}
+              title={title(entry)}
+              meta={entry.subject.typeLabel}
+              {...(entry.state ? { status: libraryEntryStateLabel(entry.state) } : {})}
+              {...(progress ? { progress } : {})}
+              labels={{ select: title(entry), menu: m.library_menu_open() }}
+            />
+          );
+        })}
+      </ShelfList>
+    );
+  return (
+    <Table>
+      <TableHeader className="sticky top-0 z-10 bg-background">
+        <TableRow>
+          <TableHead />
+          <TableHead>{m.library_column_title()}</TableHead>
+          <TableHead>{m.library_column_type()}</TableHead>
+          <TableHead>{m.library_column_status()}</TableHead>
+          <TableHead>{m.library_progress_heading()}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {entries.map((entry) => {
+          if (!entry.subject)
+            return (
+              <TableRow key={entry.id}>
+                <TableCell colSpan={5}>
+                  <div className="space-y-2">
+                    <Tombstone shape="row" />
+                    <LabelAssignmentRemoveForm
+                      entry={entry}
+                      labelName={label.name}
+                      locale={locale}
+                      csrfToken={csrfToken}
+                    />
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          const cover = shelfCover(entry.subject);
+          const progress = labelShelfProgress(entry, locale);
+          return (
+            <TableRow key={entry.id}>
+              <TableCell>
+                <div
+                  className="w-10 overflow-hidden rounded"
+                  style={{ aspectRatio: coverRatio(cover.subject.types).replace(':', ' / ') }}
+                >
+                  <Cover {...cover} size="fill" ratio={coverRatio(cover.subject.types)} decorative caption={false} />
+                </div>
+              </TableCell>
+              <TableCell>
+                <a className="font-medium hover:underline" href={href(entry)}>
+                  {title(entry)}
+                </a>
+              </TableCell>
+              <TableCell>{entry.subject.typeLabel}</TableCell>
+              <TableCell>{entry.state ? libraryEntryStateLabel(entry.state) : null}</TableCell>
+              <TableCell>{progress ? <ProgressRow {...progress} /> : null}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

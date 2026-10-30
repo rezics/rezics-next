@@ -2,6 +2,7 @@ import type { Fixtures, KernelRecording } from './fake.ts';
 import * as libraryContinue from './fake/library-continue.ts';
 import * as reviewConflicts from './fake/review-conflicts.ts';
 import * as threadMediaReuse from './fake/thread-media-reuse.ts';
+import * as libraryLabelAssignments from './fake/library-label-assignments.ts';
 import { storySubjects } from './story-subjects';
 
 type RouteContext = {
@@ -69,11 +70,15 @@ function discover(): Discovered {
       ...ordered({
         ...Object.fromEntries(
           Object.entries(modules).filter(
-            ([file]) => !file.endsWith('/library-continue.ts') && !file.endsWith('/thread-media-reuse.ts'),
+            ([file]) =>
+              !file.endsWith('/library-continue.ts') &&
+              !file.endsWith('/thread-media-reuse.ts') &&
+              !file.endsWith('/library-label-assignments.ts'),
           ),
         ),
         './fake/library-continue.ts': libraryContinue,
         './fake/review-conflicts.ts': reviewConflicts,
+        './fake/library-label-assignments.ts': libraryLabelAssignments,
       }).flatMap(([, module]) => module.routes),
     ],
     recordings: Object.fromEntries(

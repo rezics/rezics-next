@@ -7,6 +7,21 @@ import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
 import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
+import { shelfHref } from './shelf-params';
+import type { LibraryLabelSummary } from './subject-labels';
+
+/** A catalogue label opens its complete personal shelf. */
+export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
+  return (
+    <a
+      data-library-label-link
+      href={shelfHref(locale, { label: label.id })}
+      className="text-primary underline-offset-4 hover:underline"
+    >
+      {label.name}
+    </a>
+  );
+}
 
 // The private loader's Exposure snapshot also gates the server-rendered, no-script forms.
 function LabelExposure({ page, operation, children }: { page: LabelsPage; operation: string; children: ReactNode }) {
@@ -159,6 +174,7 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
         <ul className="space-y-3">
           {page.labels.map((label) => (
             <li key={`${label.id}:${label.renameKey}`} className="space-y-3 rounded-md border p-4">
+              <LabelShelfLink label={label} locale={getLocale()} />
               <LabelExposure page={page} operation="rename">
                 <form method="post" action={path} onSubmit={onSubmit} className="space-y-2">
                   {hidden('rename', label.renameKey, label.id, label.revision)}
@@ -183,7 +199,6 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
                   </button>
                 </form>
               </LabelExposure>
-              {!page.operations.includes('library_label.rename') ? <p className="break-words">{label.name}</p> : null}
               <LabelExposure page={page} operation="delete">
                 <form method="post" action={path} onSubmit={onSubmit}>
                   {hidden('delete', label.deleteKey, label.id, label.revision)}
