@@ -1173,17 +1173,36 @@ async function stopBlockingProcess(child: ReturnType<typeof spawn>): Promise<voi
   const descendants: number[] = [];
   const collect = (pid: number) => {
     try {
-      const children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/).filter(Boolean).map(Number);
-      for (const owned of children) { collect(owned); descendants.push(owned); }
+      const children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(Number);
+      for (const owned of children) {
+        collect(owned);
+        descendants.push(owned);
+      }
     } catch {}
   };
   collect(child.pid);
   for (const owned of descendants) {
-    try { process.kill(owned, 'SIGTERM'); } catch {}
+    try {
+      process.kill(owned, 'SIGTERM');
+    } catch {}
   }
-  for (let attempt = 0; attempt < 100 && descendants.some((pid) => {
-    try { return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0] !== 'Z'; } catch { return false; }
-  }); attempt += 1) await Bun.sleep(10);
+  for (
+    let attempt = 0;
+    attempt < 100 &&
+    descendants.some((pid) => {
+      try {
+        return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0] !== 'Z';
+      } catch {
+        return false;
+      }
+    });
+    attempt += 1
+  )
+    await Bun.sleep(10);
   if (child.exitCode !== null) return;
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   child.kill();
@@ -1348,51 +1367,115 @@ test('a live landing head gets one bounded fitting opportunity, then native admi
   const hostRoot = join(testRoot, 'host');
   const marker = join(hostRoot, 'slots', 'landing-wait-head.lock');
   mkdirSync(dirname(marker), { recursive: true });
-  for (const [headSlots, requestSlots] of [[1, 3], [2, 2]] as const) {
-   for (const [deadline, expected] of [[Date.now() + 30_000, 75], [Date.now() - 1_000, 0]] as const) {
-    const markerHolder = spawn('python3', ['-c', 'import fcntl,os,time; f=open(os.environ["MARKER_PATH"],"w"); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); f.write(os.environ["MARKER_RECORD"]+"\\n"); f.flush(); time.sleep(20)'], {
-      env: { ...process.env, MARKER_PATH: marker, MARKER_RECORD: `${headSlots} 1 1 ${deadline}` },
-      stdio: 'ignore',
-    });
-    await Bun.sleep(30);
-    expect(markerHolder.exitCode).toBeNull();
-    const script = slotScript({
-      name: 'test', address: 'test', identity: 'test', memoryMaxGiB: 16, cpuQuotaPercent: 800,
-      slots: 4, processorsPerSlot: 2,
-    }, requestSlots, 3, 3, 3, false, undefined, false, undefined, undefined, CHECK_SLOT_MEMORY_BYTES, undefined, 20)
-      .replaceAll('/srv/rezics-check', hostRoot);
-    const take = Bun.spawn(['/bin/sh', '-c', script], {
-      stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: slotScriptEnvironment(testRoot),
-    });
-    try {
-      take.stdin.write(`backfill-${deadline}\n`);
-      await take.stdin.flush();
-      if (expected === 75) {
-        expect(await take.exited).toBe(expected);
-      } else {
-        await waitForSlotToken(take, requestSlots);
-        const heldLocks = Array.from({ length: requestSlots }, (_, slot) => join(hostRoot, 'slots', `${slot}.lock`));
-        expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status !== 0)).toBe(true);
-        await take.stdin.end();
-        expect(await take.exited).toBe(expected);
-        expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status === 0)).toBe(true);
-      }
-    } finally {
-      try { await take.stdin.end(); } catch {}
-      if (markerHolder.exitCode === null) {
-        markerHolder.kill('SIGTERM');
-        await new Promise<void>((resolve) => markerHolder.once('exit', () => resolve()));
+  for (const [headSlots, requestSlots] of [
+    [1, 3],
+    [2, 2],
+  ] as const) {
+    for (const [deadline, expected] of [
+      [Date.now() + 30_000, 75],
+      [Date.now() - 1_000, 0],
+    ] as const) {
+      const markerHolder = spawn(
+        'python3',
+        [
+          '-c',
+          'import fcntl,os,time; f=open(os.environ["MARKER_PATH"],"w"); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); f.write(os.environ["MARKER_RECORD"]+"\\n"); f.flush(); time.sleep(20)',
+        ],
+        {
+          env: { ...process.env, MARKER_PATH: marker, MARKER_RECORD: `${headSlots} 1 1 ${deadline}` },
+          stdio: 'ignore',
+        },
+      );
+      await Bun.sleep(30);
+      expect(markerHolder.exitCode).toBeNull();
+      const script = slotScript(
+        {
+          name: 'test',
+          address: 'test',
+          identity: 'test',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 4,
+          processorsPerSlot: 2,
+        },
+        requestSlots,
+        3,
+        3,
+        3,
+        false,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        CHECK_SLOT_MEMORY_BYTES,
+        undefined,
+        20,
+      ).replaceAll('/srv/rezics-check', hostRoot);
+      const take = Bun.spawn(['/bin/sh', '-c', script], {
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: slotScriptEnvironment(testRoot),
+      });
+      try {
+        take.stdin.write(`backfill-${deadline}\n`);
+        await take.stdin.flush();
+        if (expected === 75) {
+          expect(await take.exited).toBe(expected);
+        } else {
+          await waitForSlotToken(take, requestSlots);
+          const heldLocks = Array.from({ length: requestSlots }, (_, slot) => join(hostRoot, 'slots', `${slot}.lock`));
+          expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status !== 0)).toBe(true);
+          await take.stdin.end();
+          expect(await take.exited).toBe(expected);
+          expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status === 0)).toBe(true);
+        }
+      } finally {
+        try {
+          await take.stdin.end();
+        } catch {}
+        if (markerHolder.exitCode === null) {
+          markerHolder.kill('SIGTERM');
+          await new Promise<void>((resolve) => markerHolder.once('exit', () => resolve()));
+        }
       }
     }
-   }
   }
   writeFileSync(marker, '1 1 1 0\n');
-  const staleTake = Bun.spawn(['/bin/sh', '-c', slotScript({
-    name: 'test', address: 'test', identity: 'test', memoryMaxGiB: 16, cpuQuotaPercent: 800,
-    slots: 4, processorsPerSlot: 2,
-  }, 1, 3, 3, 3, false, undefined, false, undefined, undefined, CHECK_SLOT_MEMORY_BYTES, undefined).replaceAll('/srv/rezics-check', hostRoot)], {
-    stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: slotScriptEnvironment(testRoot),
-  });
+  const staleTake = Bun.spawn(
+    [
+      '/bin/sh',
+      '-c',
+      slotScript(
+        {
+          name: 'test',
+          address: 'test',
+          identity: 'test',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 4,
+          processorsPerSlot: 2,
+        },
+        1,
+        3,
+        3,
+        3,
+        false,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        CHECK_SLOT_MEMORY_BYTES,
+        undefined,
+      ).replaceAll('/srv/rezics-check', hostRoot),
+    ],
+    {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: slotScriptEnvironment(testRoot),
+    },
+  );
   staleTake.stdin.end('stale-marker-reap\n');
   expect(await staleTake.exited).toBe(0);
   expect(existsSync(marker)).toBe(false);
@@ -2695,7 +2778,10 @@ test('a busy selected host is retained until it frees, without falling back to a
     seen
       .filter((event) => event.kind === 'slot' && event.address === 'ops@b.test')
       .map(({ kind, granted }) => ({ kind, granted })),
-  ).toEqual([{ kind: 'slot', granted: false }, { kind: 'slot', granted: true }]);
+  ).toEqual([
+    { kind: 'slot', granted: false },
+    { kind: 'slot', granted: true },
+  ]);
   expect(seen.find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
 
   const waiting = scenario({ a: { available: 4.5e9, busy: 2 }, b: { available: 30e9, busy: 2 } });
@@ -2789,7 +2875,10 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
   const multiplexed = sshEvents.filter((event) => event.transport === 'control-master');
   expect(multiplexed.length).toBeGreaterThan(0);
   const selectedControlPath = (multiplexed[0]!.options as string[]).find((option) => option.startsWith('ControlPath='));
-  expect(new Set(multiplexed.map((event) => (event.options as string[]).find((option) => option.startsWith('ControlPath=')))).size).toBe(1);
+  expect(
+    new Set(multiplexed.map((event) => (event.options as string[]).find((option) => option.startsWith('ControlPath='))))
+      .size,
+  ).toBe(1);
 
   const rsyncEvents = events().filter((event) => event.kind === 'rsync');
   expect(rsyncEvents).toHaveLength(2);
@@ -2802,7 +2891,9 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
   const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
   expect(statSync(controlDirectory).mode & 0o777).toBe(0o700);
   await remote(env, workspace(), ['true']);
-  const repeated = events().filter((event) => event.kind === 'control-probe').at(-1)!;
+  const repeated = events()
+    .filter((event) => event.kind === 'control-probe')
+    .at(-1)!;
   const repeatedPath = (repeated.options as string[]).find((option) => option.startsWith('ControlPath='));
   expect(repeatedPath).toMatch(new RegExp(`^ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/[a-z0-9]{8}-%C$`));
   expect(repeatedPath).not.toBe(selectedControlPath);
@@ -3959,7 +4050,11 @@ test('the generated shell invocation preserves spaces, quotes and dollar text in
   const result = fixture.execute(script);
 
   expect(result.status, result.stderr).toBe(0);
-  expect(readFileSync(join(fixture.directory, 'runs/literal-arguments/command-arguments.bin'), 'utf8').split('\n').slice(0, -1)).toEqual(argumentsToPreserve);
+  expect(
+    readFileSync(join(fixture.directory, 'runs/literal-arguments/command-arguments.bin'), 'utf8')
+      .split('\n')
+      .slice(0, -1),
+  ).toEqual(argumentsToPreserve);
   expect(existsSync(join(fixture.directory, 'runs/literal-arguments/should-not-exist'))).toBe(false);
 });
 
@@ -4432,7 +4527,10 @@ test('slow upload and slow returns run without a slot while the remote command o
     const seen = events();
     const transfers = seen.filter((event) => event.kind === 'rsync');
     expect(transfers.length, item.name).toBe(item.name === 'upload' ? 1 : 2);
-    expect(transfers.every((event) => event.slotHeld === false), item.name).toBe(true);
+    expect(
+      transfers.every((event) => event.slotHeld === false),
+      item.name,
+    ).toBe(true);
     const runAt = seen.findIndex((event) => event.kind === 'run');
     const releaseAt = seen.findIndex((event) => event.kind === 'release');
     const transferAt = seen.findIndex((event) => event.kind === 'rsync');
@@ -4471,7 +4569,10 @@ test('success, command failure, verified transport loss and abort release the re
       expect(stopAt, label).toBeGreaterThan(runAt);
       expect(stopAt, label).toBeLessThan(releaseAt);
       expect(seen[stopAt]!.slotHeld, label).toBe(true);
-      expect(seen.some((event) => event.kind === 'returns'), label).toBe(false);
+      expect(
+        seen.some((event) => event.kind === 'returns'),
+        label,
+      ).toBe(false);
     } else {
       const returnAt = seen.findIndex((event) => event.kind === 'returns');
       expect(returnAt, label).toBeGreaterThan(releaseAt);
@@ -4511,13 +4612,22 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(uploadResult.stderr).toContain('connection to a failed during workspace upload');
   expect(upload.events().filter((event) => event.kind === 'rsync')).toHaveLength(3);
   expect(upload.events().filter((event) => event.kind === 'rsync-stopped')).toHaveLength(3);
-  expect(upload.events().filter((event) => event.kind === 'rsync').every((event) => event.slotHeld === false)).toBe(true);
   expect(
-    upload.events().filter((event) => event.kind === 'rsync').every((event) =>
-      upload.events()
-        .filter((probe) => probe.kind === 'control-probe')
-        .some((probe) => String(event.rsh).includes(`ControlPath=${String(probe.controlPath)}`)),
-    ),
+    upload
+      .events()
+      .filter((event) => event.kind === 'rsync')
+      .every((event) => event.slotHeld === false),
+  ).toBe(true);
+  expect(
+    upload
+      .events()
+      .filter((event) => event.kind === 'rsync')
+      .every((event) =>
+        upload
+          .events()
+          .filter((probe) => probe.kind === 'control-probe')
+          .some((probe) => String(event.rsh).includes(`ControlPath=${String(probe.controlPath)}`)),
+      ),
   ).toBe(true);
   expect(upload.events().some((event) => event.kind === 'run')).toBe(false);
   expect(slotMarkers(upload.env, 'a')).toEqual([]);
@@ -4538,9 +4648,7 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.slotHeld).toBe(false);
   expect(
     String(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.rsh),
-  ).toContain(
-    `ControlPath=${String(returnedEvents.find((event) => event.kind === 'control-probe')!.controlPath)}`,
-  );
+  ).toContain(`ControlPath=${String(returnedEvents.find((event) => event.kind === 'control-probe')!.controlPath)}`);
   expect(returnedEvents.filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(slotMarkers(returns.env, 'a')).toEqual([]);
 
@@ -4638,13 +4746,17 @@ test('an admission wait re-reads slot capacity and stays on its uploaded host un
   raised.env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
   const raisedRun = startRemote(raised.env, workspace(), ['true']);
   try {
-    await waitFor(() => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    await waitFor(
+      () => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2,
+    );
     const additionalSlot = join(raised.env.FAKE_DIR!, `${hostKey('a')}.slot.1`);
     mkdirSync(additionalSlot);
     writeFileSync(additionalSlot + '.memory', String(2.5 * 2 ** 30));
     rewriteHosts(raised.env, [{ name: 'a', slots: 3 }]);
     rewriteHostConfig(raised.env, 'a', { slots: 3 });
-    await waitFor(() => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4);
+    await waitFor(
+      () => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4,
+    );
     await Bun.sleep(20);
     rmSync(additionalSlot, { recursive: true, force: true });
     rmSync(additionalSlot + '.memory', { force: true });
@@ -4663,7 +4775,9 @@ test('an admission wait re-reads slot capacity and stays on its uploaded host un
   const movedRun = startRemote(moved.env, workspace(), ['true']);
   try {
     await waitFor(() => moved.events().some((event) => event.kind === 'rsync'));
-    await waitFor(() => moved.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    await waitFor(
+      () => moved.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2,
+    );
     rewriteHostConfig(moved.env, 'b', { slots: 2 });
     rewriteHosts(moved.env, [{ name: 'b', slots: 2 }]);
     const [code, stderr] = await Promise.all([movedRun.child.exited, movedRun.stderr]);
@@ -4691,9 +4805,13 @@ test('a malformed host-file rewrite keeps the last valid host list through the a
   const run = startRemote(env, workspace(), ['true']);
   try {
     await waitFor(() => events().some((event) => event.kind === 'rsync'));
-    await waitFor(() => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2,
+    );
     writeFileSync(env.KERNEL_CHECK_REMOTE!, '{ "hosts": [');
-    await waitFor(() => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4);
+    await waitFor(
+      () => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4,
+    );
     const busySlot = join(env.FAKE_DIR!, `${hostKey('a')}.slot.0`);
     rmSync(busySlot, { recursive: true, force: true });
     rmSync(busySlot + '.memory', { force: true });
@@ -5684,16 +5802,21 @@ function preparationFixture() {
   const events = join(directory, 'installer-events');
   mkdirSync(bin);
   writeFileSync(events, '');
-  writeFileSync(join(bin, 'systemd-run'), `#!/bin/sh
+  writeFileSync(
+    join(bin, 'systemd-run'),
+    `#!/bin/sh
 if [ "$1" = --help ]; then echo --expand-environment; exit 0; fi
 while [ "$#" -gt 0 ] && [ "$1" != python3 ]; do shift; done
 exec "$@"
-`);
+`,
+  );
   writeFileSync(join(bin, 'systemctl'), '#!/bin/sh\nexit 0\n');
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
   for (const name of ['systemd-run', 'systemctl', 'docker']) chmodSync(join(bin, name), 0o755);
   const bun = join(bin, 'pinned-bun');
-  writeFileSync(bun, `#!/usr/bin/env python3
+  writeFileSync(
+    bun,
+    `#!/usr/bin/env python3
 import json, os, pathlib, subprocess, sys, time
 if sys.argv[1] == '--eval':
     if os.environ.get('PREPARATION_MODE') == 'runtime-stall':
@@ -5767,24 +5890,61 @@ root = package.parent.parent
 (root / 'node_modules/.bin/native').symlink_to('../native-installer/bin/native')
 """], cwd=package)
 sys.exit(child.wait())
-`);
+`,
+  );
   chmodSync(bun, 0o755);
   let count = 0;
-  const create = (settings: { mode?: string; source?: string; bound?: number; lifetime?: number; version?: string; lock?: string; delay?: string; program?: string; revision?: string; command?: string[] } = {}) => {
+  const create = (
+    settings: {
+      mode?: string;
+      source?: string;
+      bound?: number;
+      lifetime?: number;
+      version?: string;
+      lock?: string;
+      delay?: string;
+      program?: string;
+      revision?: string;
+      command?: string[];
+    } = {},
+  ) => {
     const id = `preparation-${count++}`;
     const run = join(directory, 'runs', id);
     mkdirSync(run, { recursive: true });
-    writeFileSync(join(run, 'package.json'), JSON.stringify({ name: 'fixture', nativeVersion: settings.version ?? '1.2.3' }));
+    writeFileSync(
+      join(run, 'package.json'),
+      JSON.stringify({ name: 'fixture', nativeVersion: settings.version ?? '1.2.3' }),
+    );
     writeFileSync(join(run, 'bun.lock'), settings.lock ?? 'frozen-native-1');
     writeFileSync(join(run, 'source.txt'), settings.source ?? 'original source');
     const pids = join(directory, id + '-pids');
     const ready = join(directory, id + '-ready');
-    const command = settings.command ?? ['sh', '-c', 'test "$(node_modules/.bin/native)" = "$(cat generated/lifecycle.txt)" && touch command-invoked'];
-    let script = runScript(id, `/srv/rezics-check/runs/${id}`, '.', command, 'native-host', 60_000, 'ordinary', settings.bound ?? 5_000, undefined, settings.lifetime)
+    const command = settings.command ?? [
+      'sh',
+      '-c',
+      'test "$(node_modules/.bin/native)" = "$(cat generated/lifecycle.txt)" && touch command-invoked',
+    ];
+    let script = runScript(
+      id,
+      `/srv/rezics-check/runs/${id}`,
+      '.',
+      command,
+      'native-host',
+      60_000,
+      'ordinary',
+      settings.bound ?? 5_000,
+      undefined,
+      settings.lifetime,
+    )
       .replaceAll('/srv/rezics-check', directory)
       .replaceAll(':/usr/local/bin:', ':');
-    if (settings.program) script = script.replaceAll(Buffer.from(dependencyPreparationProgram).toString('base64'), Buffer.from(settings.program).toString('base64'));
-    if (settings.revision) script = script.replace(/expected_revision=[a-f0-9]+/, `expected_revision=${settings.revision}`);
+    if (settings.program)
+      script = script.replaceAll(
+        Buffer.from(dependencyPreparationProgram).toString('base64'),
+        Buffer.from(settings.program).toString('base64'),
+      );
+    if (settings.revision)
+      script = script.replace(/expected_revision=[a-f0-9]+/, `expected_revision=${settings.revision}`);
     const environment = {
       ...cleanTestEnvironment(process.env),
       PATH: `${bin}:${process.env.PATH}`,
@@ -5796,11 +5956,20 @@ sys.exit(child.wait())
       PREPARATION_INSTALL_DELAY: settings.delay ?? '0',
     };
     return {
-      run, ready, pids, script,
+      run,
+      ready,
+      pids,
+      script,
       environment,
-      execute: () => spawnSync('sh', ['-c', script], { env: environment, cwd: repository, encoding: 'utf8', timeout: 10_000 }),
+      execute: () =>
+        spawnSync('sh', ['-c', script], { env: environment, cwd: repository, encoding: 'utf8', timeout: 10_000 }),
       start: () => {
-        const child = Bun.spawn(['sh', '-c', script], { env: environment, cwd: repository, stdout: 'pipe', stderr: 'pipe' });
+        const child = Bun.spawn(['sh', '-c', script], {
+          env: environment,
+          cwd: repository,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        });
         return { child, stdout: new Response(child.stdout).text(), stderr: new Response(child.stderr).text() };
       },
       receipt: () => JSON.parse(readFileSync(join(run, 'preparation-status.json'), 'utf8')),
@@ -5813,7 +5982,8 @@ sys.exit(child.wait())
     };
   };
   return {
-    directory, create,
+    directory,
+    create,
     events: () => readFileSync(events, 'utf8').trim().split('\n').filter(Boolean),
   };
 }
@@ -5826,7 +5996,14 @@ test('remote dependency preparation has an absolute three-minute default and rea
   const result = run.execute();
   expect(result.status, result.stderr).toBe(70);
   const receipt = run.receipt();
-  expect(receipt).toMatchObject({ status: 'infrastructure-failure', host: 'native-host', phase: 'install/preparation', reason: 'absolute preparation deadline exceeded', activePackages: [{ name: '@fixture/native-installer', version: '1.2.3' }], packageClassification: 'active' });
+  expect(receipt).toMatchObject({
+    status: 'infrastructure-failure',
+    host: 'native-host',
+    phase: 'install/preparation',
+    reason: 'absolute preparation deadline exceeded',
+    activePackages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
+    packageClassification: 'active',
+  });
   expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_200);
   expect(receipt.elapsedMs).toBeLessThan(5_000);
   expect(Buffer.byteLength(receipt.logTail)).toBeLessThanOrEqual(8_192);
@@ -5836,7 +6013,17 @@ test('remote dependency preparation has an absolute three-minute default and rea
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
   expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('70\n');
   run.reaped();
-  console.info('preparation timeout evidence', JSON.stringify({ boundMs: 1_200, elapsedMs: receipt.elapsedMs, phase: receipt.phase, activePackages: receipt.activePackages, descendantsReaped: true, commandStarted: false }));
+  console.info(
+    'preparation timeout evidence',
+    JSON.stringify({
+      boundMs: 1_200,
+      elapsedMs: receipt.elapsedMs,
+      phase: receipt.phase,
+      activePackages: receipt.activePackages,
+      descendantsReaped: true,
+      commandStarted: false,
+    }),
+  );
 });
 
 test('the preparation bound includes runtime verification and honestly reports unknown before any package starts', () => {
@@ -5844,7 +6031,11 @@ test('the preparation bound includes runtime verification and honestly reports u
   const run = fixture.create({ mode: 'runtime-stall', bound: 500 });
   const result = run.execute();
   expect(result.status, result.stderr).toBe(70);
-  expect(run.receipt()).toMatchObject({ phase: 'install/preparation', activePackages: [], packageClassification: 'unknown' });
+  expect(run.receipt()).toMatchObject({
+    phase: 'install/preparation',
+    activePackages: [],
+    packageClassification: 'unknown',
+  });
   expect(fixture.events()).toEqual([]);
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
 });
@@ -5857,7 +6048,9 @@ test('failed installation is infrastructure, never command failure or a successf
   expect(run.receipt()).toMatchObject({ status: 'infrastructure-failure', phase: 'install/preparation' });
   expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
   expect(existsSync(join(run.run, '.bun-install-complete'))).toBe(false);
-  expect(readdirSync(join(fixture.directory, 'dependency-artifacts')).every((name) => name.endsWith('.lock'))).toBe(true);
+  expect(readdirSync(join(fixture.directory, 'dependency-artifacts')).every((name) => name.endsWith('.lock'))).toBe(
+    true,
+  );
 });
 
 for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
@@ -5867,8 +6060,12 @@ for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
     const unrelated = Bun.spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' });
     const running = run.start();
     try {
-      for (let attempt = 0; attempt < 250 && !existsSync(run.ready) && running.child.exitCode === null; attempt += 1) await Bun.sleep(10);
-      expect(existsSync(run.ready), await (running.child.exitCode === null ? Promise.resolve('installer startup') : running.stderr)).toBe(true);
+      for (let attempt = 0; attempt < 250 && !existsSync(run.ready) && running.child.exitCode === null; attempt += 1)
+        await Bun.sleep(10);
+      expect(
+        existsSync(run.ready),
+        await (running.child.exitCode === null ? Promise.resolve('installer startup') : running.stderr),
+      ).toBe(true);
       // Both shell entries exec, so this is the production supervisor's PID.
       running.child.kill(signal);
       expect(await running.child.exited, await running.stderr).toBe(signal === 'SIGTERM' ? 143 : 129);
@@ -5893,7 +6090,11 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   const warm = fixture.create();
   const result = warm.execute();
   expect(result.status, result.stderr).toBe(0);
-  expect(warm.artifacts()).toMatchObject({ cache: 'hit', key: cold.artifacts().key, packages: [{ name: '@fixture/native-installer', version: '1.2.3' }] });
+  expect(warm.artifacts()).toMatchObject({
+    cache: 'hit',
+    key: cold.artifacts().key,
+    packages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
+  });
   expect(fixture.events()).toEqual(['install:1.2.3', 'postinstall:1.2.3', 'download:1.2.3']);
   expect(existsSync(join(warm.run, 'command-invoked'))).toBe(true);
   const binary = 'node_modules/native-installer/bin/native';
@@ -5903,7 +6104,17 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   expect(third.execute().status).toBe(0);
   expect(third.artifacts().cache).toBe('hit');
   expect(fixture.events()).toHaveLength(3);
-  console.info('preparation cache evidence', JSON.stringify({ packages: warm.artifacts().packages, runs: 3, installs: 1, postinstalls: 1, downloads: 1, privateCopies: true }));
+  console.info(
+    'preparation cache evidence',
+    JSON.stringify({
+      packages: warm.artifacts().packages,
+      runs: 3,
+      installs: 1,
+      postinstalls: 1,
+      downloads: 1,
+      privateCopies: true,
+    }),
+  );
 });
 
 test('native preparation invalidates changed package version, lock, platform, runtime revision and corrupt or partial artifacts', () => {
@@ -5912,7 +6123,8 @@ test('native preparation invalidates changed package version, lock, platform, ru
   expect(first.execute().status).toBe(0);
   const originalKey = first.artifacts().key;
   for (const settings of [
-    { version: '2.0.0' }, { lock: 'changed-frozen-lock' },
+    { version: '2.0.0' },
+    { lock: 'changed-frozen-lock' },
     { program: dependencyPreparationProgram.replace('platform.machine()', "'other-platform'") },
     { revision: 'abcdef1234' },
   ]) {
@@ -5938,7 +6150,12 @@ test('concurrent native preparation publishes once atomically and a bounded cach
   const fixture = preparationFixture();
   const first = fixture.create({ delay: '1.0' });
   const running = first.start();
-  for (let attempt = 0; attempt < 250 && !fixture.events().includes('postinstall:1.2.3') && running.child.exitCode === null; attempt += 1) await Bun.sleep(10);
+  for (
+    let attempt = 0;
+    attempt < 250 && !fixture.events().includes('postinstall:1.2.3') && running.child.exitCode === null;
+    attempt += 1
+  )
+    await Bun.sleep(10);
   expect(fixture.events()).toContain('postinstall:1.2.3');
   const waiter = fixture.create({ bound: 400 });
   const waiting = waiter.start();
@@ -5962,11 +6179,14 @@ test('admission probes refresh only the uploaded placement so queued work cannot
   const result = await remote(fixture.env, workspace(), ['true']);
   expect(result.code).toBe(0);
   const upload = fixture.events().find((event) => event.kind === 'rsync')!;
-  const directory = String(upload.destination).slice(String(upload.destination).indexOf(':') + 1).replace(/\/$/, '');
+  const directory = String(upload.destination)
+    .slice(String(upload.destination).indexOf(':') + 1)
+    .replace(/\/$/, '');
   const probes = fixture.events().filter((event) => event.kind === 'probe');
-  expect(probes.some((event) => String((event.argv as string[]).at(-1)).includes(`touch ${directory}/.alive`))).toBe(true);
+  expect(probes.some((event) => String((event.argv as string[]).at(-1)).includes(`touch ${directory}/.alive`))).toBe(
+    true,
+  );
 });
-
 
 test('successful preparation leaves a quiet live command outside the preparation bound and preserves native failure status', () => {
   const fixture = preparationFixture();
@@ -5984,7 +6204,6 @@ test('successful preparation leaves a quiet live command outside the preparation
   expect(fixture.events().filter((event) => event.startsWith('download:'))).toHaveLength(1);
 });
 
-
 test('native preparation rejects a stale workerd binary even when its installer returned success', () => {
   const fixture = preparationFixture();
   const run = fixture.create({ mode: 'invalid-native', version: '1.20261019.1' });
@@ -5998,7 +6217,8 @@ test('native preparation rejects a stale workerd binary even when its installer 
 
 test('native preparation certifies both workerd versions and pinned Bun revision before warm reuse', () => {
   const fixture = preparationFixture();
-  const bunVersion = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager.slice(4) + '+fixture';
+  const bunVersion =
+    JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager.slice(4) + '+fixture';
   const evidence = [];
   for (const version of ['1.20261019.1', '1.20261023.1']) {
     const cold = fixture.create({ mode: 'native', version });
@@ -6009,13 +6229,24 @@ test('native preparation certifies both workerd versions and pinned Bun revision
     const reused = warm.execute();
     expect(reused.status, reused.stderr).toBe(0);
     expect(warm.artifacts()).toMatchObject({ cache: 'hit', key: cold.artifacts().key });
-    expect(warm.artifacts().nativeChecks).toContainEqual({ name: 'workerd', version, binaryVersion: `workerd ${version.slice(2, 6)}-${version.slice(6, 8)}-${version.slice(8, 10)}` });
-    expect(warm.artifacts().nativeChecks).toContainEqual({ name: 'bun', version: bunVersion, revision: expect.any(String) });
+    expect(warm.artifacts().nativeChecks).toContainEqual({
+      name: 'workerd',
+      version,
+      binaryVersion: `workerd ${version.slice(2, 6)}-${version.slice(6, 8)}-${version.slice(8, 10)}`,
+    });
+    expect(warm.artifacts().nativeChecks).toContainEqual({
+      name: 'bun',
+      version: bunVersion,
+      revision: expect.any(String),
+    });
     expect(fixture.events().filter((event) => event === `download:${version}`)).toHaveLength(1);
     evidence.push(warm.artifacts().nativeChecks);
   }
   expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(2);
-  console.info('native version cache evidence', JSON.stringify({ runs: 4, workerdDownloads: 2, bunDownloads: 2, verifiedPackages: evidence }));
+  console.info(
+    'native version cache evidence',
+    JSON.stringify({ runs: 4, workerdDownloads: 2, bunDownloads: 2, verifiedPackages: evidence }),
+  );
 });
 
 test('fresh source edits reuse verified native packages while source-dependent lifecycle outputs regenerate', () => {
@@ -6039,27 +6270,52 @@ test('owned physical resource samples cover preparation and command with native 
   writeFileSync(join(group, 'invocation'), 'fixture-owned-generation');
   writeFileSync(join(group, 'cpu.stat'), 'usage_usec 1000\n');
   writeFileSync(join(group, 'memory.peak'), '4096\n');
-  const program = dependencyPreparationProgram.replace('RESOURCE_CGROUP_OVERRIDE = None', `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`);
-  const run = fixture.create({ program, delay: '.08', command: ['python3', '-c', `import pathlib,time
+  const program = dependencyPreparationProgram.replace(
+    'RESOURCE_CGROUP_OVERRIDE = None',
+    `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`,
+  );
+  const run = fixture.create({
+    program,
+    delay: '.08',
+    command: [
+      'python3',
+      '-c',
+      `import pathlib,time
 time.sleep(.08)
 p=pathlib.Path(${JSON.stringify(group)})
 (p/'cpu.stat').write_text('usage_usec 201000\\n')
 (p/'memory.peak').write_text('8192\\n')
 time.sleep(.04)
-print('exact native output')`] });
+print('exact native output')`,
+    ],
+  });
   const result = run.execute();
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain('exact native output');
   const resources = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
-  const physical = { schema: 1, host: 'native-host', run: resources.run, exitCode: 0, lifetimeFailure: null, resources };
+  const physical = {
+    schema: 1,
+    host: 'native-host',
+    run: resources.run,
+    exitCode: 0,
+    lifetimeFailure: null,
+    resources,
+  };
   expect(parseRemotePhysicalRunReceipt(physical)).toEqual(physical);
   expect(resources.boot).toBe(readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim());
   expect(resources.supervisor.pid).toBeGreaterThan(0);
   expect(existsSync(`/proc/${resources.supervisor.pid}`)).toBe(false);
-  expect(resources.cgroup).toMatchObject({ path: group, invocation: 'fixture-owned-generation', inode: statSync(group).ino, device: statSync(group).dev });
+  expect(resources.cgroup).toMatchObject({
+    path: group,
+    invocation: 'fixture-owned-generation',
+    inode: statSync(group).ino,
+    device: statSync(group).dev,
+  });
   expect(resources.samples.map((s: { phase: string }) => s.phase)).toContain('preparation');
   expect(resources.samples.map((s: { phase: string }) => s.phase)).toContain('command');
-  const terminal = resources.samples.filter((s: { phase: string; usageUsec: number | null }) => s.phase === 'terminal' && s.usageUsec !== null);
+  const terminal = resources.samples.filter(
+    (s: { phase: string; usageUsec: number | null }) => s.phase === 'terminal' && s.usageUsec !== null,
+  );
   expect(terminal.at(-1)).toMatchObject({ usageUsec: 201000, memoryPeakBytes: 8192 });
   expect(resources.sampledMaxCores).toBeGreaterThan(0);
   const intervals = resources.samples.filter((s: { cores: number | null }) => s.cores !== null);
@@ -6071,60 +6327,110 @@ print('exact native output')`] });
   expect(parseRemotePhysicalRunReceipt({ ...physical, resources: { ...resources, host: 'other-host' } })).toBeNull();
 });
 
-for (const mode of ['missing', 'regression', 'generation'] as const) {
+for (const mode of ['missing', 'regression', 'generation', 'boot', 'invocation'] as const) {
   test(`physical resource ${mode} is unavailable and cannot replace the native failure or restart work`, () => {
     const fixture = preparationFixture();
     const group = join(fixture.directory, 'owned-cgroup');
     mkdirSync(group);
     writeFileSync(join(group, 'invocation'), 'native-counter-fixture');
+    writeFileSync(join(group, 'boot'), 'native-host-boot');
     writeFileSync(join(group, 'cpu.stat'), 'usage_usec 500000\n');
     writeFileSync(join(group, 'memory.peak'), '4096\n');
-    const program = dependencyPreparationProgram.replace('RESOURCE_CGROUP_OVERRIDE = None', `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`);
-    const change = mode === 'missing' ? `(p/'cpu.stat').unlink()` : mode === 'regression' ? `(p/'cpu.stat').write_text('usage_usec 1\\n')` : `p.rename(str(p)+'-old'); p.mkdir(); (p/'cpu.stat').write_text('usage_usec 800000\\n'); (p/'memory.peak').write_text('8192\\n')`;
-    const run = fixture.create({ program, command: ['python3', '-c', `import pathlib,time,sys
+    const program = dependencyPreparationProgram
+      .replace('RESOURCE_CGROUP_OVERRIDE = None', `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`)
+      .replace(
+        "RESOURCE_BOOT_FILE = '/proc/sys/kernel/random/boot_id'",
+        `RESOURCE_BOOT_FILE = ${JSON.stringify(join(group, 'boot'))}`,
+      );
+    const change =
+      mode === 'missing'
+        ? `(p/'cpu.stat').unlink()`
+        : mode === 'boot'
+          ? `(p/'boot').write_text('different-host-boot')`
+          : mode === 'invocation'
+            ? `(p/'invocation').write_text('different-generation')`
+            : mode === 'regression'
+              ? `(p/'cpu.stat').write_text('usage_usec 1\\n')`
+              : `p.rename(str(p)+'-old'); p.mkdir(); (p/'cpu.stat').write_text('usage_usec 800000\\n'); (p/'memory.peak').write_text('8192\\n')`;
+    const run = fixture.create({
+      program,
+      command: [
+        'python3',
+        '-c',
+        `import pathlib,time,sys
 time.sleep(.05)
 p=pathlib.Path(${JSON.stringify(group)})
 ${change}
 print('remote-check: infrastructure failure: remote run timed out {}')
-sys.exit(7)`] });
+sys.exit(7)`,
+      ],
+    });
     const result = run.execute();
     expect(result.status, result.stderr).toBe(7);
     const resource = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
-    expect(resource.samples.some((s: { phase: string; unavailable: unknown; usageUsec: unknown }) => s.phase === 'terminal' && s.unavailable !== null && s.usageUsec === null)).toBe(true);
+    expect(
+      resource.samples.some(
+        (s: { phase: string; unavailable: unknown; usageUsec: unknown }) =>
+          s.phase === 'terminal' && s.unavailable !== null && s.usageUsec === null,
+      ),
+    ).toBe(true);
     expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('7\n');
     expect(existsSync(join(run.run, 'run-lifetime-status.json'))).toBe(false);
-    expect(fixture.events().filter(e => e.startsWith('install:'))).toHaveLength(1);
+    expect(fixture.events().filter((e) => e.startsWith('install:'))).toHaveLength(1);
   });
 }
 
 test('durable cancellation at probe, upload, slot admission and command completion never retries or starts a fallback command', async () => {
   for (const phase of ['probe', 'rsync', 'slot', 'run', 'returns'] as const) {
-    const config = phase === 'returns' ? { present: ['.temp/output'], slowReturnsMs: 200 } : phase === 'rsync' ? { slowUploadMs: 200 } : phase === 'slot' ? { busy: 100 } : phase === 'run' ? { hang: true, silentHang: true } : {};
+    const config =
+      phase === 'returns'
+        ? { present: ['.temp/output'], slowReturnsMs: 200 }
+        : phase === 'rsync'
+          ? { slowUploadMs: 200 }
+          : phase === 'slot'
+            ? { busy: 100 }
+            : phase === 'run'
+              ? { hang: true, silentHang: true }
+              : {};
     const fixture = scenario({ a: { available: 8e9, ...config } });
     const cancellation = { file: join(fixture.env.FAKE_DIR!, 'cancel.json'), id: `cancel-${phase}` };
     fixture.env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
     fixture.env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
     if (phase === 'probe') requestExecutionCancellation(cancellation);
-    const run = startRemote(fixture.env, workspace(), ['true'], phase === 'returns' ? ['--returns', '.temp/output'] : []);
+    const run = startRemote(
+      fixture.env,
+      workspace(),
+      ['true'],
+      phase === 'returns' ? ['--returns', '.temp/output'] : [],
+    );
     if (phase !== 'probe') {
-      await waitFor(() => fixture.events().some(e => e.kind === phase));
+      await waitFor(() => fixture.events().some((e) => e.kind === phase));
       requestExecutionCancellation(cancellation);
     }
     expect(await run.child.exited, await run.stderr).toBe(143);
     await run.stdout;
-    expect(fixture.events().filter(e => e.kind === 'run')).toHaveLength(phase === 'run' || phase === 'returns' ? 1 : 0);
+    expect(fixture.events().filter((e) => e.kind === 'run')).toHaveLength(
+      phase === 'run' || phase === 'returns' ? 1 : 0,
+    );
     expect(slotMarkers(fixture.env, 'a')).toEqual([]);
-    expect(fixture.events().filter(e => e.kind === 'rsync').length).toBeLessThanOrEqual(phase === 'returns' ? 2 : 1);
+    expect(fixture.events().filter((e) => e.kind === 'rsync').length).toBeLessThanOrEqual(phase === 'returns' ? 2 : 1);
   }
 });
 
 test('physical run lifetime uses safe estimate arithmetic, a finite fallback and an unraisable two-hour cap', () => {
   for (const [estimate, maximum, expected] of [
-    [undefined, undefined, 7_200_000], [0, undefined, 7_200_000], [1, undefined, 1_000],
-    [400, undefined, 1_200], [120_000, undefined, 360_000], [3_000_000, undefined, 7_200_000],
-    [Number.MAX_SAFE_INTEGER, undefined, 7_200_000], [120_000, 123, 123],
-    [120_000, 9_000_000, 360_000], [undefined, Number.MAX_SAFE_INTEGER, 7_200_000],
-  ] as const) expect(effectiveRunLifetimeMs(estimate, maximum)).toBe(expected);
+    [undefined, undefined, 7_200_000],
+    [0, undefined, 7_200_000],
+    [1, undefined, 1_000],
+    [400, undefined, 1_200],
+    [120_000, undefined, 360_000],
+    [3_000_000, undefined, 7_200_000],
+    [Number.MAX_SAFE_INTEGER, undefined, 7_200_000],
+    [120_000, 123, 123],
+    [120_000, 9_000_000, 360_000],
+    [undefined, Number.MAX_SAFE_INTEGER, 7_200_000],
+  ] as const)
+    expect(effectiveRunLifetimeMs(estimate, maximum)).toBe(expected);
   for (const invalid of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     expect(() => effectiveRunLifetimeMs(invalid)).toThrow('estimate-ms');
     expect(() => effectiveRunLifetimeMs(1, invalid)).toThrow('max-ms');
@@ -6136,28 +6442,64 @@ test('physical run lifetime uses safe estimate arithmetic, a finite fallback and
 test('ordinary, multi-slot, gate and try-once callers pass the same lifetime policy to the actual host entry', async () => {
   for (const flags of [[], ['--slots', '2'], ['--gate']]) {
     const fixture = scenario({ a: { available: 40e9, slots: 4 } });
-    expect((await remote(fixture.env, workspace(), ['true'], [...flags, '--estimate-ms', '3000', '--max-ms', '8000'])).code).toBe(0);
-    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 8000');
+    expect(
+      (await remote(fixture.env, workspace(), ['true'], [...flags, '--estimate-ms', '3000', '--max-ms', '8000'])).code,
+    ).toBe(0);
+    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain(
+      '# REMOTE_CHECK_RUN_LIFETIME_MS 8000',
+    );
   }
   const fixture = scenario({ a: { available: 40e9, slots: 4 } });
   const directory = workspace();
-  const child = Bun.spawn([process.execPath, '--eval', `
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `
     const { tryRemoteCheck, readHosts } = await import(${JSON.stringify(remoteCheck)});
     const result = await tryRemoteCheck({hosts:readHosts(process.env.KERNEL_CHECK_REMOTE),workspace:${JSON.stringify(directory)},command:['true'],estimateMs:3000},new AbortController().signal);
     if (result.status !== 'ran' || result.code !== 0) process.exit(1);
-  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  `,
+    ],
+    { env: fixture.env, stdout: 'pipe', stderr: 'pipe' },
+  );
   const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(await child.exited, (await output).join('')).toBe(0);
-  expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 9000');
+  expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain(
+    '# REMOTE_CHECK_RUN_LIFETIME_MS 9000',
+  );
 });
 
 test('run-lifetime classification requires the named schema, never a native exit 124 or test-own timeout', () => {
-  const receipt = { schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host: 'native-host', run: 'native-run', limitMs: 900, elapsedMs: 1100, command: 'bun test [2 arguments]' };
+  const receipt = {
+    schema: 1,
+    status: 'infrastructure-failure',
+    phase: 'run-lifetime',
+    host: 'native-host',
+    run: 'native-run',
+    limitMs: 900,
+    elapsedMs: 1100,
+    command: 'bun test [2 arguments]',
+  };
   expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toEqual(receipt);
-  const physical = { schema: 1 as const, host: receipt.host, run: receipt.run, exitCode: 124, lifetimeFailure: parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt)), resources: null };
+  const physical = {
+    schema: 1 as const,
+    host: receipt.host,
+    run: receipt.run,
+    exitCode: 124,
+    lifetimeFailure: parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt)),
+    resources: null,
+  };
   expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toBeUndefined();
-  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt), physical)).toBe(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
-  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify({ ...receipt, run: 'nested-run' }), physical)).toBeUndefined();
+  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt), physical)).toBe(
+    RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt),
+  );
+  expect(
+    remoteLifetimeInfrastructureCause(
+      RUN_LIFETIME_FAILURE_MARKER + JSON.stringify({ ...receipt, run: 'nested-run' }),
+      physical,
+    ),
+  ).toBeUndefined();
   expect(remoteLifetimeInfrastructureCause('test timed out; native exit 124')).toBeUndefined();
   expect(parseRunLifetimeFailure('test timed out after 5000 ms; exit 124')).toBeNull();
   expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + '{"phase":"install/preparation"}')).toBeNull();
@@ -6182,7 +6524,10 @@ with open(root/'command-pids','a') as f: f.write(str(os.getpid())+'\\n')
 while True:
  ${noisy ? "os.write(1,b'x'*65536); os.write(2,b'y'*65536)" : 'time.sleep(.02)'}
 `;
-    const run = fixture.create({ lifetime: 1_500, command: ['python3', '-c', command, '--token=never-record-this-secret'] });
+    const run = fixture.create({
+      lifetime: 1_500,
+      command: ['python3', '-c', command, '--token=never-record-this-secret'],
+    });
     const script = join(fixture.directory, 'host-entry.sh');
     writeFileSync(script, run.script);
     // This native caller disappears immediately. Its detached host supervisor is adopted by a fixture subreaper;
@@ -6208,17 +6553,32 @@ while True:
 fcntl.flock(lock,fcntl.LOCK_UN)
 `;
     const sentinel = Bun.spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' });
-    const caller = Bun.spawn(['python3', '-c', driver, script, run.run], { env: run.environment, stdout: 'pipe', stderr: 'pipe' });
+    const caller = Bun.spawn(['python3', '-c', driver, script, run.run], {
+      env: run.environment,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const output = Promise.all([new Response(caller.stdout).text(), new Response(caller.stderr).text()]);
     try {
-      for (let attempt = 0; attempt < 250 && !existsSync(join(run.run, 'command-ready')) && caller.exitCode === null; attempt++) await Bun.sleep(10);
+      for (
+        let attempt = 0;
+        attempt < 250 && !existsSync(join(run.run, 'command-ready')) && caller.exitCode === null;
+        attempt++
+      )
+        await Bun.sleep(10);
       expect(existsSync(join(run.run, 'command-ready'))).toBe(true);
       expect(existsSync(join(run.run, 'caller-lost'))).toBe(true);
       expect(existsSync(join(run.run, 'exit-status'))).toBe(false);
       expect(spawnSync('flock', ['-n', join(run.run, 'capacity.lock'), 'true']).status).toBe(1);
       expect(await caller.exited, (await output).join('')).toBe(0);
       const receipt = JSON.parse(readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'));
-      expect(receipt).toMatchObject({ schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host: 'native-host', limitMs: 1_500 });
+      expect(receipt).toMatchObject({
+        schema: 1,
+        status: 'infrastructure-failure',
+        phase: 'run-lifetime',
+        host: 'native-host',
+        limitMs: 1_500,
+      });
       expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_500);
       expect(receipt.elapsedMs).toBeLessThan(6_000);
       expect(receipt.command).toContain('python3');
@@ -6230,8 +6590,21 @@ fcntl.flock(lock,fcntl.LOCK_UN)
       expect(readFileSync(join(run.run, 'command-count'), 'utf8')).toBe('run\n');
       expect(existsSync(`/proc/${sentinel.pid}`)).toBe(true);
       expect(spawnSync('flock', ['-n', join(run.run, 'capacity.lock'), 'true']).status).toBe(0);
-      expect(readFileSync(join(fixture.directory, 'receipts', receipt.run, 'run-lifetime-status.json'), 'utf8')).toBe(readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'));
-      console.info('host lifetime evidence', JSON.stringify({ noisy, limitMs: receipt.limitMs, elapsedMs: receipt.elapsedMs, command: receipt.command, ownedReaped: owned.length, callerLost: true, commands: 1 }));
+      expect(readFileSync(join(fixture.directory, 'receipts', receipt.run, 'run-lifetime-status.json'), 'utf8')).toBe(
+        readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'),
+      );
+      console.info(
+        'host lifetime evidence',
+        JSON.stringify({
+          noisy,
+          limitMs: receipt.limitMs,
+          elapsedMs: receipt.elapsedMs,
+          command: receipt.command,
+          ownedReaped: owned.length,
+          callerLost: true,
+          commands: 1,
+        }),
+      );
     } finally {
       sentinel.kill('SIGTERM');
       await sentinel.exited;
@@ -6244,7 +6617,10 @@ fcntl.flock(lock,fcntl.LOCK_UN)
 
 test('host lifetime preserves successful output and a native command exit 124 without a lifetime infrastructure receipt', () => {
   const fixture = preparationFixture();
-  const success = fixture.create({ lifetime: 2_000, command: ['sh', '-c', 'printf exact-output; printf returned > returned-artifact'] });
+  const success = fixture.create({
+    lifetime: 2_000,
+    command: ['sh', '-c', 'printf exact-output; printf returned > returned-artifact'],
+  });
   const completed = success.execute();
   expect(completed.status, completed.stderr).toBe(0);
   expect(completed.stdout).toBe('exact-output');
@@ -6258,15 +6634,26 @@ test('host lifetime preserves successful output and a native command exit 124 wi
 });
 
 test('a failed returns transfer cannot erase a named lifetime failure or repeat its command locally', async () => {
-  const fixture = scenario({ a: { available: 20e9, exit: 124, lifetimeFailure: true, present: ['artifact'], rsyncBackExit: 12 } });
+  const fixture = scenario({
+    a: { available: 20e9, exit: 124, lifetimeFailure: true, present: ['artifact'], rsyncBackExit: 12 },
+  });
   const directory = workspace();
-  const completed = await remote(fixture.env, directory, ['bun', 'test', 'named.test.ts'], ['--estimate-ms', '3000', '--returns', 'artifact']);
+  const completed = await remote(
+    fixture.env,
+    directory,
+    ['bun', 'test', 'named.test.ts'],
+    ['--estimate-ms', '3000', '--returns', 'artifact'],
+  );
   expect(completed.code).toBe(124);
   expect(completed.stderr).toContain(RUN_LIFETIME_FAILURE_MARKER);
   expect(completed.stderr).toContain('returns failed after recorded run-lifetime infrastructure failure');
   const receipt = parseRunLifetimeFailure(completed.stderr)!;
   expect(receipt).toMatchObject({ phase: 'run-lifetime', limitMs: 9000 });
-  expect(JSON.parse(readFileSync(join(directory, '.temp/remote-check/receipts', receipt.run, 'run-lifetime-status.json'), 'utf8'))).toEqual(receipt);
+  expect(
+    JSON.parse(
+      readFileSync(join(directory, '.temp/remote-check/receipts', receipt.run, 'run-lifetime-status.json'), 'utf8'),
+    ),
+  ).toEqual(receipt);
   expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
   expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
   expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);

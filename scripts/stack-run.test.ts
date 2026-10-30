@@ -421,10 +421,15 @@ test('stack-run shares the estimate-derived host lifetime for ordinary, multi-sl
   for (const flags of [[], ['--slots', '2']]) {
     const fixture = scenario({ a: { available: 40e9, slots: 4 } });
     expect((await stack(fixture.env, ['true'], [...flags, '--estimate-ms', '3000'])).code).toBe(0);
-    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 9000');
+    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain(
+      '# REMOTE_CHECK_RUN_LIFETIME_MS 9000',
+    );
   }
   const fixture = scenario({ a: { available: 40e9, slots: 4 } });
-  const result = await runOnCheckHost({ label: 'nested', root: `${ROOT}/runs/outer`, cwd: `${ROOT}/runs/outer`, command: ['true'], estimateMs: 10 }, fixture.env);
+  const result = await runOnCheckHost(
+    { label: 'nested', root: `${ROOT}/runs/outer`, cwd: `${ROOT}/runs/outer`, command: ['true'], estimateMs: 10 },
+    fixture.env,
+  );
   expect(result).toBeNull();
   expect(fixture.events()).toEqual([]);
 });

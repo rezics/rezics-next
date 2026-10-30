@@ -21,8 +21,16 @@ import {
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { checkWaitRecorder, executionCancellation, requestExecutionCancellation, ownedLocalCommand, parseRunLifetimeFailure,
-  parseRemotePhysicalRunReceipt, RUN_LIFETIME_FAILURE_MARKER, type RemotePhysicalRunReceipt } from './remote-check.ts';
+import {
+  checkWaitRecorder,
+  executionCancellation,
+  requestExecutionCancellation,
+  ownedLocalCommand,
+  parseRunLifetimeFailure,
+  parseRemotePhysicalRunReceipt,
+  RUN_LIFETIME_FAILURE_MARKER,
+  type RemotePhysicalRunReceipt,
+} from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
@@ -43,11 +51,19 @@ const SIGNALS = {
 } as const;
 
 /** The host receipt, rather than exit 124 or test output, establishes a terminal infrastructure timeout. */
-export function remoteLifetimeInfrastructureCause(output: string, physical?: RemotePhysicalRunReceipt): string | undefined {
+export function remoteLifetimeInfrastructureCause(
+  output: string,
+  physical?: RemotePhysicalRunReceipt,
+): string | undefined {
   const receipt = parseRunLifetimeFailure(output);
-  return receipt && physical?.lifetimeFailure && physical.exitCode === 124 && receipt.host === physical.host &&
-    receipt.run === physical.run && JSON.stringify(receipt) === JSON.stringify(physical.lifetimeFailure)
-    ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt) : undefined;
+  return receipt &&
+    physical?.lifetimeFailure &&
+    physical.exitCode === 124 &&
+    receipt.host === physical.host &&
+    receipt.run === physical.run &&
+    JSON.stringify(receipt) === JSON.stringify(physical.lifetimeFailure)
+    ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt)
+    : undefined;
 }
 
 export function workerCheckCancellation(id: string, cwd = process.cwd()) {
@@ -625,7 +641,10 @@ export async function runWorkerCheck(
   if (argv[0] === '--') argv = argv.slice(1);
   if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] [--returns <path>...] -- <command...>');
   const root = resolve(cwd);
-  const cancellation = workerCheckCancellation(recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID()), root);
+  const cancellation = workerCheckCancellation(
+    recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID()),
+    root,
+  );
   const cancelled = () => executionCancellation(cancellation);
   const initialIntent = cancelled();
   if (initialIntent) return 128 + initialIntent.signal;
@@ -753,13 +772,22 @@ export async function runWorkerCheck(
       ],
       {
         cwd: root,
-        env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off', REMOTE_CHECK_RECEIPT_FD: '3', REMOTE_CHECK_RECEIPT_NONCE: receiptNonce },
+        env: {
+          ...env,
+          REZICS_CHECK_MEMORY: 'off',
+          REZICS_STACK_LEASE: 'off',
+          REMOTE_CHECK_RECEIPT_FD: '3',
+          REMOTE_CHECK_RECEIPT_NONCE: receiptNonce,
+        },
         stdio: ['inherit', 'pipe', 'pipe', 'pipe'],
       },
     );
     (remote.stdio[3] as import('node:stream').Readable).on('data', (chunk: Buffer) => {
       receiptContents += chunk.toString('utf8');
-      if (receiptContents.length > 512_000) { receiptContents = ''; return; }
+      if (receiptContents.length > 512_000) {
+        receiptContents = '';
+        return;
+      }
       let newline: number;
       while ((newline = receiptContents.indexOf('\n')) >= 0) {
         const line = receiptContents.slice(0, newline);
@@ -769,10 +797,17 @@ export async function runWorkerCheck(
           const candidate = parseRemotePhysicalRunReceipt(envelope.receipt);
           if (envelope.nonce === receiptNonce && candidate) physical = candidate;
           const failure = envelope.transportFailure;
-          if (envelope.nonce === receiptNonce && failure?.schema === 1 && typeof failure.message === 'string' &&
-              failure.message.length <= 2000 && failure.message.startsWith('remote-check: connection to '))
+          if (
+            envelope.nonce === receiptNonce &&
+            failure?.schema === 1 &&
+            typeof failure.message === 'string' &&
+            failure.message.length <= 2000 &&
+            failure.message.startsWith('remote-check: connection to ')
+          )
             transportReason = failure.message;
-        } catch { /* A malformed channel is unavailable, never a native verdict or fabricated receipt. */ }
+        } catch {
+          /* A malformed channel is unavailable, never a native verdict or fabricated receipt. */
+        }
       }
     });
     const saveRemote = (chunk: Buffer): void => {
@@ -794,7 +829,10 @@ export async function runWorkerCheck(
     });
     const cancellationTimer = setInterval(() => {
       const intent = cancelled();
-      if (intent) { remoteSignal ??= intent.signal; remote.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM'); }
+      if (intent) {
+        remoteSignal ??= intent.signal;
+        remote.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM');
+      }
     }, 25);
     let remoteCode: number;
     try {
@@ -810,7 +848,10 @@ export async function runWorkerCheck(
       for (const [name, forward] of remoteForwarders) process.off(name, forward);
     }
     const lifetimeReason = physical?.lifetimeFailure
-      ? remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(physical.lifetimeFailure), physical)
+      ? remoteLifetimeInfrastructureCause(
+          RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(physical.lifetimeFailure),
+          physical,
+        )
       : undefined;
     remoteSignal ??= cancelled()?.signal;
     if (growthProfilePath !== undefined && previousGrowthProfile !== '' && existsSync(growthProfilePath)) {
@@ -985,7 +1026,10 @@ export async function runWorkerCheck(
   });
   const localCancellationTimer = setInterval(() => {
     const intent = cancelled();
-    if (intent) { signalNumber ??= intent.signal; child.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM'); }
+    if (intent) {
+      signalNumber ??= intent.signal;
+      child.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM');
+    }
   }, 25);
 
   let code: number;

@@ -729,14 +729,26 @@ test('only the outer receipt channel classifies a physical lifetime failure; nes
       mkdirSync(dirname(recordFile), { recursive: true });
       const log = join(fixture.root, '.temp/goal/checks/fixture.log');
       writeFileSync(log, '');
-      writeFileSync(recordFile, JSON.stringify({ id, cwd: fixture.root, argv: command, status: 'running', log: '.temp/goal/checks/fixture.log' }));
+      writeFileSync(
+        recordFile,
+        JSON.stringify({
+          id,
+          cwd: fixture.root,
+          argv: command,
+          status: 'running',
+          log: '.temp/goal/checks/fixture.log',
+        }),
+      );
       expect(await runWorkerCheck(command, fixture.root, false, log, 60_000, id, 0, id), mode).toBe(124);
       const record = JSON.parse(readFileSync(recordFile, 'utf8'));
       expect(Boolean(record.infrastructureFailure), mode).toBe(mode === 'lifetime-channel');
       expect(existsSync(fixture.localMarker), mode).toBe(false);
       expect(readFileSync(fixture.remoteEvents, 'utf8'), mode).toBe('remote\n');
-      if (mode === 'lifetime-channel') expect(record.physicalRun).toMatchObject({ host: 'check-a', run: 'fixture-physical', exitCode: 124 });
-    } finally { restoreWorkerEnvironment(old); }
+      if (mode === 'lifetime-channel')
+        expect(record.physicalRun).toMatchObject({ host: 'check-a', run: 'fixture-physical', exitCode: 124 });
+    } finally {
+      restoreWorkerEnvironment(old);
+    }
   }
 });
 
@@ -756,18 +768,29 @@ test('durable cancellation preceding a transport exit prevents local fallback an
     const id = randomUUID();
     const recordFile = join(fixture.root, '.temp/goal/checks/results', `${id}.json`);
     mkdirSync(dirname(recordFile), { recursive: true });
-    const record = { id, cwd: fixture.root, argv: command, status: 'running', log: '.temp/goal/checks/cancelled.log', runnerHost: hostname() };
+    const record = {
+      id,
+      cwd: fixture.root,
+      argv: command,
+      status: 'running',
+      log: '.temp/goal/checks/cancelled.log',
+      runnerHost: hostname(),
+    };
     writeFileSync(recordFile, JSON.stringify(record));
     writeFileSync(join(fixture.root, record.log), 'old truthful output\n');
     requestWorkerCheckCancellation(id, fixture.root);
     const output: string[] = [];
-    expect(await waitWorkerCheck(id, fixture.root, 100, { stallMs: 1, pollMs: 1, write: text => output.push(text) })).toBe(143);
+    expect(
+      await waitWorkerCheck(id, fixture.root, 100, { stallMs: 1, pollMs: 1, write: (text) => output.push(text) }),
+    ).toBe(143);
     expect(JSON.parse(readFileSync(recordFile, 'utf8'))).toEqual(record);
     expect(existsSync(workerCheckCancellation(id, fixture.root).file)).toBe(true);
     expect(output.join('')).toContain('automatic restart is disabled');
     expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
     expect(existsSync(fixture.localMarker)).toBe(false);
-  } finally { restoreWorkerEnvironment(old); }
+  } finally {
+    restoreWorkerEnvironment(old);
+  }
 });
 
 test('local cancellation reaps its TERM-resistant detached descendants before returning capacity and preserves a peer', async () => {
@@ -787,11 +810,11 @@ test('local cancellation reaps its TERM-resistant detached descendants before re
     expect(await completion).toBe(143);
     const owned = readFileSync(pids, 'utf8').trim().split('\n').map(Number);
     expect(owned).toHaveLength(2);
-    expect(owned.every(pid => !existsSync(`/proc/${pid}`))).toBe(true);
+    expect(owned.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
     expect(existsSync(`/proc/${peer.pid}`)).toBe(true);
   } finally {
     peer.kill('SIGTERM');
-    await new Promise(resolve => peer.once('close', resolve));
+    await new Promise((resolve) => peer.once('close', resolve));
     restoreWorkerEnvironment(old);
   }
 });

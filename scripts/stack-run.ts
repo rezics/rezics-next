@@ -254,7 +254,8 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     }
     return outcome;
   } catch (error) {
-    if (error instanceof Aborted || received !== undefined || cancelled()) return 128 + (received ?? cancelled()?.signal ?? 15);
+    if (error instanceof Aborted || received !== undefined || cancelled())
+      return 128 + (received ?? cancelled()?.signal ?? 15);
     if (answered || started) throw error;
     // Only an unanswered host probe is a local placement; do not bypass a reachable host after another error.
     console.error(`stack-run: ${run.label} local, ${error instanceof Error ? error.message : error}`);
@@ -325,7 +326,10 @@ if (import.meta.main) {
         async (env) => {
           const cancellation = executionCancellationFromEnvironment();
           const observed = observeExecutionCancellation(cancellation);
-          if (observed.signal.aborted) { observed.close(); return 128 + (executionCancellation(cancellation)?.signal ?? 15); }
+          if (observed.signal.aborted) {
+            observed.close();
+            return 128 + (executionCancellation(cancellation)?.signal ?? 15);
+          }
           const child = Bun.spawn(ownedLocalCommand(command), {
             cwd: resolve(cwd),
             env: { ...process.env, ...env },
@@ -342,7 +346,9 @@ if (import.meta.main) {
           const cancel = () => child.kill('SIGTERM');
           observed.signal.addEventListener('abort', cancel, { once: true });
           try {
-            return await child.exited;
+            const code = await child.exited;
+            const intent = executionCancellation(cancellation);
+            return intent ? 128 + intent.signal : code;
           } finally {
             observed.close();
             observed.signal.removeEventListener('abort', cancel);

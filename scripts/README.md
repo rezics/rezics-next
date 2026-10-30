@@ -169,7 +169,7 @@ One slot is express capacity. Only a non-gate, one-slot run with an explicit est
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.
 Long and unestimated runs cannot take express. Estimates classify runs; they do not stop overruns.
 When its memory reservation fits, express lets short work proceed while ordinary work is full.
-There is no enforced 120-second command deadline; `--estimate-ms` classifies slot eligibility only. A live landing/critical waiter gets one configured admission poll of first opportunity on its chosen host. If it has not taken capacity by then, native slot admission and client ranking backfill capacity that fits later eligible requests while preserving actual slot, memory, gate and express limits. Abandoned marker files are removed only after the marker lock proves the holder has exited.
+There is no enforced 120-second command deadline; `--estimate-ms` classifies slot eligibility and sets the independent physical lifetime described below. A live landing/critical waiter gets one configured admission poll of first opportunity on its chosen host. If it has not taken capacity by then, native slot admission and client ranking backfill capacity that fits later eligible requests while preserving actual slot, memory, gate and express limits. Abandoned marker files are removed only after the marker lock proves the holder has exited.
 
 A waiting gate holds a host's `gate-wait.lock` over SSH. While that marker is held, non-gates may occupy
 at most `O - G` ordinary slots (one when `O` is positive). Short runs may still take express.

@@ -29,7 +29,21 @@
 // Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import {
+  appendFileSync,
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 export type Host = {
@@ -105,13 +119,24 @@ export function requestExecutionCancellation(cancellation: ExecutionCancellation
   try {
     writeSync(descriptor, JSON.stringify({ schema: 1, id, signal }));
     fsyncSync(descriptor);
-  } finally { closeSync(descriptor); }
+  } finally {
+    closeSync(descriptor);
+  }
   try {
-    try { linkSync(pending, file); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    try {
+      linkSync(pending, file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
     const directory = openSync(dirname(file), 'r');
-    try { fsyncSync(directory); } finally { closeSync(directory); }
-  } finally { unlinkSync(pending); }
+    try {
+      fsyncSync(directory);
+    } finally {
+      closeSync(directory);
+    }
+  } finally {
+    unlinkSync(pending);
+  }
 }
 
 export function executionCancellation(cancellation?: ExecutionCancellation): CancellationIntent | null {
@@ -127,7 +152,9 @@ export function executionCancellation(cancellation?: ExecutionCancellation): Can
   }
 }
 
-export function executionCancellationFromEnvironment(env: Record<string, string | undefined> = process.env): ExecutionCancellation | undefined {
+export function executionCancellationFromEnvironment(
+  env: Record<string, string | undefined> = process.env,
+): ExecutionCancellation | undefined {
   const file = env.REMOTE_CHECK_CANCELLATION_FILE;
   const id = env.REMOTE_CHECK_CANCELLATION_ID;
   if (file === undefined && id === undefined) return undefined;
@@ -145,14 +172,24 @@ export function observeExecutionCancellation(cancellation: ExecutionCancellation
   };
   const abort = () => controller.abort();
   parent?.addEventListener('abort', abort, { once: true });
-  const timer = cancellation ? setInterval(() => {
-    try { check(); } catch { controller.abort(); }
-  }, 25) : undefined;
+  const timer = cancellation
+    ? setInterval(() => {
+        try {
+          check();
+        } catch {
+          controller.abort();
+        }
+      }, 25)
+    : undefined;
   if (parent?.aborted || alreadyCancelled) controller.abort();
-  return { signal: controller.signal, check, close() {
-    clearInterval(timer);
-    parent?.removeEventListener('abort', abort);
-  } };
+  return {
+    signal: controller.signal,
+    check,
+    close() {
+      clearInterval(timer);
+      parent?.removeEventListener('abort', abort);
+    },
+  };
 }
 
 export type RemotePhysicalRunReceipt = {
@@ -175,8 +212,15 @@ export type PhysicalResourceReceipt = {
   startedMonoMs: number;
   commandStartedMonoMs: number | null;
   terminalMonoMs: number;
-  samples: { monoMs: number; phase: 'preparation' | 'command' | 'terminal'; usageUsec: number | null;
-    memoryPeakBytes: number | null; intervalMs: number | null; cores: number | null; unavailable: string | null }[];
+  samples: {
+    monoMs: number;
+    phase: 'preparation' | 'command' | 'terminal';
+    usageUsec: number | null;
+    memoryPeakBytes: number | null;
+    intervalMs: number | null;
+    cores: number | null;
+    unavailable: string | null;
+  }[];
   sampledMaxCores: number | null;
 };
 
@@ -184,8 +228,17 @@ export type PhysicalResourceReceipt = {
 export function parseRemotePhysicalRunReceipt(value: unknown): RemotePhysicalRunReceipt | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as RemotePhysicalRunReceipt;
-  if (v.schema !== 1 || typeof v.host !== 'string' || !v.host || !/^[a-zA-Z0-9-]+$/.test(v.run) ||
-      !Number.isInteger(v.exitCode) || v.exitCode < 0 || v.exitCode > 255) return null;
+  if (
+    v.schema !== 1 ||
+    typeof v.host !== 'string' ||
+    !v.host ||
+    typeof v.run !== 'string' ||
+    !/^[a-zA-Z0-9-]+$/.test(v.run) ||
+    !Number.isInteger(v.exitCode) ||
+    v.exitCode < 0 ||
+    v.exitCode > 255
+  )
+    return null;
   if (v.lifetimeFailure !== null) {
     const failure = parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(v.lifetimeFailure));
     if (!failure || failure.host !== v.host || failure.run !== v.run || v.exitCode !== 124) return null;
@@ -193,21 +246,50 @@ export function parseRemotePhysicalRunReceipt(value: unknown): RemotePhysicalRun
   if (v.resources !== null) {
     const r = v.resources;
     const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-    if (!r || r.schema !== 1 || r.host !== v.host || r.run !== v.run || typeof r.boot !== 'string' ||
-        !r.supervisor || !Number.isSafeInteger(r.supervisor.pid) || typeof r.supervisor.start !== 'string' ||
-        !Number.isSafeInteger(r.supervisor.group) || r.cadenceMs !== 5000 || !finite(r.startedMonoMs) ||
-        !finite(r.terminalMonoMs) || r.terminalMonoMs < r.startedMonoMs ||
-        (r.commandStartedMonoMs !== null && (!finite(r.commandStartedMonoMs) || r.commandStartedMonoMs < r.startedMonoMs || r.commandStartedMonoMs > r.terminalMonoMs)) ||
-        !Array.isArray(r.samples) || r.samples.length > 1444 ||
-        (r.sampledMaxCores !== null && !finite(r.sampledMaxCores))) return null;
-    if (r.cgroup !== null && (!r.cgroup || typeof r.cgroup.path !== 'string' || !r.cgroup.path.startsWith('/') ||
-        !Number.isSafeInteger(r.cgroup.device) || !Number.isSafeInteger(r.cgroup.inode) || !r.cgroup.invocation)) return null;
+    if (
+      !r ||
+      r.schema !== 1 ||
+      r.host !== v.host ||
+      r.run !== v.run ||
+      typeof r.boot !== 'string' ||
+      !r.supervisor ||
+      !Number.isSafeInteger(r.supervisor.pid) ||
+      typeof r.supervisor.start !== 'string' ||
+      !Number.isSafeInteger(r.supervisor.group) ||
+      r.cadenceMs !== 5000 ||
+      !finite(r.startedMonoMs) ||
+      !finite(r.terminalMonoMs) ||
+      r.terminalMonoMs < r.startedMonoMs ||
+      (r.commandStartedMonoMs !== null &&
+        (!finite(r.commandStartedMonoMs) ||
+          r.commandStartedMonoMs < r.startedMonoMs ||
+          r.commandStartedMonoMs > r.terminalMonoMs)) ||
+      !Array.isArray(r.samples) ||
+      r.samples.length > 1444 ||
+      (r.sampledMaxCores !== null && !finite(r.sampledMaxCores))
+    )
+      return null;
+    if (
+      r.cgroup !== null &&
+      (!r.cgroup ||
+        typeof r.cgroup.path !== 'string' ||
+        !r.cgroup.path.startsWith('/') ||
+        !Number.isSafeInteger(r.cgroup.device) ||
+        !Number.isSafeInteger(r.cgroup.inode) ||
+        !r.cgroup.invocation)
+    )
+      return null;
     let previous = r.startedMonoMs;
     for (const s of r.samples) {
-      if (!finite(s.monoMs) || s.monoMs < previous || s.monoMs > r.terminalMonoMs ||
-          !['preparation', 'command', 'terminal'].includes(s.phase) ||
-          [s.usageUsec, s.memoryPeakBytes, s.intervalMs, s.cores].some(n => n !== null && !finite(n)) ||
-          (s.unavailable !== null && typeof s.unavailable !== 'string')) return null;
+      if (
+        !finite(s.monoMs) ||
+        s.monoMs < previous ||
+        s.monoMs > r.terminalMonoMs ||
+        !['preparation', 'command', 'terminal'].includes(s.phase) ||
+        [s.usageUsec, s.memoryPeakBytes, s.intervalMs, s.cores].some((n) => n !== null && !finite(n)) ||
+        (s.unavailable !== null && typeof s.unavailable !== 'string')
+      )
+        return null;
       previous = s.monoMs;
     }
   }
@@ -289,12 +371,25 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
     if (start < 0) continue;
     try {
       const value = JSON.parse(line.slice(start + RUN_LIFETIME_FAILURE_MARKER.length));
-      if (value.schema === 1 && value.status === 'infrastructure-failure' && value.phase === 'run-lifetime' &&
-          typeof value.host === 'string' && typeof value.run === 'string' && typeof value.command === 'string' &&
-          value.command.length <= 256 && /^[a-zA-Z0-9-]+$/.test(value.run) &&
-          Number.isSafeInteger(value.limitMs) && value.limitMs > 0 && value.limitMs <= HARD_RUN_LIFETIME_MS &&
-          Number.isSafeInteger(value.elapsedMs) && value.elapsedMs >= value.limitMs) return value;
-    } catch { /* A native command's output is not an infrastructure receipt. */ }
+      if (
+        value.schema === 1 &&
+        value.status === 'infrastructure-failure' &&
+        value.phase === 'run-lifetime' &&
+        typeof value.host === 'string' &&
+        typeof value.run === 'string' &&
+        typeof value.command === 'string' &&
+        value.command.length <= 256 &&
+        /^[a-zA-Z0-9-]+$/.test(value.run) &&
+        Number.isSafeInteger(value.limitMs) &&
+        value.limitMs > 0 &&
+        value.limitMs <= HARD_RUN_LIFETIME_MS &&
+        Number.isSafeInteger(value.elapsedMs) &&
+        value.elapsedMs >= value.limitMs
+      )
+        return value;
+    } catch {
+      /* A native command's output is not an infrastructure receipt. */
+    }
   }
   return null;
 }
@@ -318,8 +413,7 @@ const RSYNC_COMPRESS_LEVEL = 3;
 function configuredTimeout(value: number | undefined, envName: string, fallback: number): number {
   const fromEnvironment = process.env[envName];
   const timeout = value ?? (fromEnvironment === undefined ? fallback : Number(fromEnvironment));
-  if (!Number.isSafeInteger(timeout) || timeout < 1)
-    throw new Error(`${envName} must be a positive safe integer`);
+  if (!Number.isSafeInteger(timeout) || timeout < 1) throw new Error(`${envName} must be a positive safe integer`);
   return timeout;
 }
 
@@ -1653,6 +1747,7 @@ def clean_run_resources(run):
 
 RESOURCE_CGROUP_ROOT = '/sys/fs/cgroup'
 RESOURCE_CGROUP_OVERRIDE = None  # Native fixtures replace source constants, never production environment policy.
+RESOURCE_BOOT_FILE = '/proc/sys/kernel/random/boot_id'
 
 
 class Resources:
@@ -1665,7 +1760,7 @@ class Resources:
         self.invalid = None
         fields = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()
         self.receipt = {'schema': 1, 'host': host, 'run': run,
-            'boot': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+            'boot': Path(RESOURCE_BOOT_FILE).read_text().strip(),
             'supervisor': {'pid': os.getpid(), 'start': fields[19], 'group': os.getpgrp()},
             'cgroup': None, 'cadenceMs': 5000, 'startedMonoMs': started * 1000,
             'commandStartedMonoMs': None, 'terminalMonoMs': started * 1000,
@@ -1715,12 +1810,21 @@ class Resources:
                 raise ValueError(self.invalid)
             if self.path is None:
                 raise ValueError('owned cgroup not yet available')
-            if Path('/proc/sys/kernel/random/boot_id').read_text().strip() != self.receipt['boot']:
+            if Path(RESOURCE_BOOT_FILE).read_text().strip() != self.receipt['boot']:
                 self.invalid = 'host boot changed'
                 raise ValueError(self.invalid)
             stat = self.path.stat()
             if (stat.st_dev, stat.st_ino) != self.identity:
                 self.invalid = 'cgroup generation changed'
+                raise ValueError(self.invalid)
+            if RESOURCE_CGROUP_OVERRIDE:
+                invocation = (self.path / 'invocation').read_text().strip()
+            else:
+                invocation = subprocess.run(['systemctl', 'show', '--property=InvocationID', '--value',
+                    'rezics-check-' + self.receipt['run'] + '.scope'], stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, text=True, timeout=.1).stdout.strip()
+            if invocation != self.receipt['cgroup']['invocation']:
+                self.invalid = 'cgroup invocation changed'
                 raise ValueError(self.invalid)
             # cgroup pseudo-files are tiny; bound reads explicitly. Missing/invalid counters are unavailable, never zero.
             with open(self.path / 'cpu.stat') as source:
@@ -1740,7 +1844,7 @@ class Resources:
                 self.receipt['sampledMaxCores'] = max(old_max or 0, row['cores'])
             row.update(usageUsec=usage, memoryPeakBytes=peak)
             self.previous = (now, usage, peak)
-        except (OSError, ValueError, StopIteration) as error:
+        except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired) as error:
             row['unavailable'] = str(error)[:160]
             self.previous = None
         self.receipt['samples'].append(row)
@@ -1780,8 +1884,12 @@ def lifetime():
         script = source.read()
     child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
         REMOTE_CHECK_HOST_PREPARATION_DEADLINE=str(preparation_deadline)), start_new_session=True)
-    resources = Resources(host, run, root, started)
-    resources.sample('preparation', True)
+    resources = None
+    try:
+        resources = Resources(host, run, root, started)
+        resources.sample('preparation', True)
+    except Exception:
+        pass
     reason = None
     stopped_at = None
     packages = []
@@ -1903,7 +2011,9 @@ except Exception as error:
 
 /** Linux local commands use the host lifecycle's existing identity-safe subreaper, without remote placement or install. */
 export function ownedLocalCommand(command: readonly string[]): string[] {
-  return process.platform === 'linux' ? ['python3', '-c', dependencyPreparationProgram, 'local', ...command] : [...command];
+  return process.platform === 'linux'
+    ? ['python3', '-c', dependencyPreparationProgram, 'local', ...command]
+    : [...command];
 }
 
 /**
@@ -1918,7 +2028,11 @@ export function runScript(
   hostName: string,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
   priorityClass = 'ordinary',
-  preparationTimeoutMs = configuredTimeout(undefined, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+  preparationTimeoutMs = configuredTimeout(
+    undefined,
+    'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
+    DEFAULT_PREPARATION_TIMEOUT_MS,
+  ),
   estimateMs?: number,
   maxMs?: number,
 ): string {
@@ -2087,7 +2201,9 @@ exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlic
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
   sh -c "$systemd_script" sh ${[cwd, ...command].map(quote).join(' ')}`;
   const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
-  const subcommand = ['test', 'run', 'check', 'build', 'typecheck', 'verify', 'lint'].includes(command[1] ?? '') ? ` ${command[1]}` : '';
+  const subcommand = ['test', 'run', 'check', 'build', 'typecheck', 'verify', 'lint'].includes(command[1] ?? '')
+    ? ` ${command[1]}`
+    : '';
   const identity = `${executable}${subcommand} [${Math.max(0, command.length - 1)} arguments]`;
   // fd 3 carries the literal original script independently of command stdin. No second shell quoting pass touches argv.
   const delimiter = `REMOTE_CHECK_HOST_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
@@ -2302,7 +2418,6 @@ type HostProbe = {
   landingWaitingStarted: number | null;
   landingWaitingEstimateMs: number | null;
   landingWaitingMemoryBytes: number;
-
 };
 type RankedHost = {
   host: Host;
@@ -2576,11 +2691,14 @@ async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostPr
 touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
 `
     : '';
-  const child = Bun.spawn(['ssh', ...sshOptions(host, undefined, true), host.address, placementHeartbeat + probeScript(host)], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'ignore',
-  });
+  const child = Bun.spawn(
+    ['ssh', ...sshOptions(host, undefined, true), host.address, placementHeartbeat + probeScript(host)],
+    {
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'ignore',
+    },
+  );
   const [code, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
   return code === 0 ? parseProbe(output) : null;
 }
@@ -2793,10 +2911,15 @@ async function rankedHosts(
 
   uploadedPlacement?: { host: Placement; directory: string },
 ): Promise<RankedHost[]> {
-  const probes = await Promise.all(hosts.map(async (host) => ({
-    host,
-    probe: await probeHost(host, uploadedPlacement?.host.address === host.address ? uploadedPlacement.directory : undefined),
-  })));
+  const probes = await Promise.all(
+    hosts.map(async (host) => ({
+      host,
+      probe: await probeHost(
+        host,
+        uploadedPlacement?.host.address === host.address ? uploadedPlacement.directory : undefined,
+      ),
+    })),
+  );
   if (signal.aborted) throw new Aborted();
   const skipped: Array<{ host: Host; probe: HostProbe }> = [];
   for (const entry of probes) {
@@ -2896,7 +3019,9 @@ async function selectPlacement(
   let waitingState = 'no responding hosts';
   let waitingConfiguration = 'no configured hosts';
   const printWaiting = () => {
-    console.error(`remote-check: waiting for an eligible check host (${waitingState}); configured ${waitingConfiguration}`);
+    console.error(
+      `remote-check: waiting for an eligible check host (${waitingState}); configured ${waitingConfiguration}`,
+    );
   };
   try {
     while (true) {
@@ -2935,7 +3060,11 @@ async function selectPlacement(
         }
         const shortRun = priority === undefined && isShortRun(requestedSlots, estimateMs, gate);
         const viable = ranked.filter(({ ordinaryCapacity, gateCapacity, capacity }) =>
-          gate ? gateCapacity >= requestedSlots : shortRun ? capacity >= requestedSlots : ordinaryCapacity >= requestedSlots,
+          gate
+            ? gateCapacity >= requestedSlots
+            : shortRun
+              ? capacity >= requestedSlots
+              : ordinaryCapacity >= requestedSlots,
         );
         if (viable.length > 0) {
           const immediatelyStartable = viable.filter(({ freeSlots }) => freeSlots >= requestedSlots);
@@ -3164,7 +3293,9 @@ async function acquire(
       const ranked = placement
         ? allRanked.filter(
             ({ host }) =>
-              host.name === placement.name && host.address === placement.address && host.identity === placement.identity,
+              host.name === placement.name &&
+              host.address === placement.address &&
+              host.identity === placement.identity,
           )
         : allRanked;
       if (placement && ranked.length === 0) return null;
@@ -3622,14 +3753,7 @@ async function copyReturns(
     stderr: 'pipe',
   });
   const transferLimit = transferTimeout(options);
-  const [probed, output] = await boundedTextChild(
-    probe,
-    signal,
-    transferLimit,
-    host,
-    'returns probe',
-    false,
-  );
+  const [probed, output] = await boundedTextChild(probe, signal, transferLimit, host, 'returns probe', false);
   if (signal.aborted) throw new Aborted();
   if (probed !== 0) throw new RemoteTransportError(host.name, 'returns probe', probed, false);
   const present: string[] = [];
@@ -3665,14 +3789,7 @@ async function copyReturns(
     ],
     { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
   );
-  const { code: synced, stderr } = await finishedRsync(
-    sync,
-    signal,
-    host,
-    'returns copy',
-    transferLimit,
-    false,
-  );
+  const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'returns copy', transferLimit, false);
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFileCount(stderr));
@@ -3719,17 +3836,10 @@ async function uploadRun(
     ],
     { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
   );
-  const { code: synced, stderr } = await finishedRsync(
-    sync,
-    signal,
-    host,
-    'workspace upload',
-    transferLimit,
-  );
+  const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
   reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
   if (signal.aborted) throw new Aborted();
-  if ([10, 12, 30, 35, 255].includes(synced))
-    throw new RemoteTransportError(host.name, 'workspace upload', synced);
+  if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
   if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
   else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
   return { host, id, directory, connectionId };
@@ -3770,7 +3880,11 @@ if [ -r "$file" ]; then printf '%s' ${quote(RUN_LIFETIME_FAILURE_MARKER)}; head 
   return null;
 }
 
-async function recoverResources(prepared: PreparedRun, workspace: string, code: number): Promise<PhysicalResourceReceipt | null> {
+async function recoverResources(
+  prepared: PreparedRun,
+  workspace: string,
+  code: number,
+): Promise<PhysicalResourceReceipt | null> {
   const reader = `import json,sys
 from pathlib import Path
 path=Path(${JSON.stringify(`${ROOT}/receipts/${prepared.id}/physical-resources.json`)})
@@ -3785,14 +3899,22 @@ print(json.dumps(value))`;
     const result = await boundedSsh(prepared.host, prepared.connectionId, script, 'physical resource receipt', 1000);
     if (result.code !== 0 || !result.output.trim()) return null;
     const resources = JSON.parse(result.output);
-    const receipt = parseRemotePhysicalRunReceipt({ schema: 1, host: prepared.host.name, run: prepared.id, exitCode: code,
-      lifetimeFailure: null, resources });
+    const receipt = parseRemotePhysicalRunReceipt({
+      schema: 1,
+      host: prepared.host.name,
+      run: prepared.id,
+      exitCode: code,
+      lifetimeFailure: null,
+      resources,
+    });
     if (!receipt) return null;
     const path = join(workspace, '.temp/remote-check/receipts', prepared.id);
     mkdirSync(path, { recursive: true });
     writeFileSync(join(path, 'physical-resources.json'), JSON.stringify(resources) + '\n');
     return receipt.resources;
-  } catch { return null; } // Sampling cannot change native exits, fallback, capacity or cleanup.
+  } catch {
+    return null;
+  } // Sampling cannot change native exits, fallback, capacity or cleanup.
 }
 
 /** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
@@ -3832,7 +3954,11 @@ async function runLeased(
           host.name,
           options.progressIntervalMs,
           options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
-          configuredTimeout(options.preparationTimeoutMs, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+          configuredTimeout(
+            options.preparationTimeoutMs,
+            'REMOTE_CHECK_PREPARATION_TIMEOUT_MS',
+            DEFAULT_PREPARATION_TIMEOUT_MS,
+          ),
           options.estimateMs,
           options.maxMs,
         ),
@@ -3894,12 +4020,7 @@ async function runLeased(
         (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
         parsed > 255
       ) {
-        throw new RemoteTransportError(
-          host.name,
-          'remote command',
-          status.code || REMOTE_TRANSPORT_FAILURE,
-          false,
-        );
+        throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
       }
       if (recorded === 'NOT_STARTED') {
         commandTerminal = true;
@@ -3927,18 +4048,34 @@ async function runLeased(
       try {
         lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
       } catch (error) {
-        console.error(`remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`);
+        console.error(
+          `remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`,
+        );
       }
     }
     const resources = await recoverResources(prepared, options.workspace, code);
-    const physical: RemotePhysicalRunReceipt = { schema: 1, host: host.name, run: id, exitCode: code, lifetimeFailure, resources };
-    try { options.completed?.(physical); }
-    catch (error) { console.error(`remote-check: physical receipt consumer failed: ${error instanceof Error ? error.message : error}`); }
+    const physical: RemotePhysicalRunReceipt = {
+      schema: 1,
+      host: host.name,
+      run: id,
+      exitCode: code,
+      lifetimeFailure,
+      resources,
+    };
+    try {
+      options.completed?.(physical);
+    } catch (error) {
+      console.error(
+        `remote-check: physical receipt consumer failed: ${error instanceof Error ? error.message : error}`,
+      );
+    }
     try {
       await copyReturns(host, directory, connectionId, options, signal);
     } catch (error) {
       if (!lifetimeFailure || signal.aborted) throw error;
-      console.error(`remote-check: returns failed after recorded run-lifetime infrastructure failure: ${error instanceof Error ? error.message : error}`);
+      console.error(
+        `remote-check: returns failed after recorded run-lifetime infrastructure failure: ${error instanceof Error ? error.message : error}`,
+      );
     }
     assertExecutionAllowed(options, signal);
     return code;
@@ -3962,8 +4099,9 @@ async function runLeased(
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  const result = await withExecutionCancellation(options, signal,
-    (ownedSignal) => runWithTransportRetries(options, options.hosts, files, ownedSignal, false));
+  const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
+    runWithTransportRetries(options, options.hosts, files, ownedSignal, false),
+  );
   if (result === null) throw new Error('remote-check: no check host answered');
   return result;
 }
@@ -3972,10 +4110,18 @@ function assertExecutionAllowed(options: RemoteCheck, signal: AbortSignal): void
   if (signal.aborted || executionCancellation(options.cancellation)) throw new Aborted();
 }
 
-async function withExecutionCancellation<T>(options: RemoteCheck, parent: AbortSignal, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function withExecutionCancellation<T>(
+  options: RemoteCheck,
+  parent: AbortSignal,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   const observed = observeExecutionCancellation(options.cancellation, parent);
-  try { observed.check(); return await operation(observed.signal); }
-  finally { observed.close(); }
+  try {
+    observed.check();
+    return await operation(observed.signal);
+  } finally {
+    observed.close();
+  }
 }
 
 /** Retries only failures known to have happened before a remote command produced a result. */
@@ -4000,9 +4146,7 @@ async function runWithTransportRetries(
     assertExecutionAllowed(options, signal);
     if (transportAttempts > 0) {
       const delay = (options.retryBackoffMs ?? 100) * 2 ** (transportAttempts - 1);
-      console.error(
-        `remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`,
-      );
+      console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
       await sleep(delay, signal);
     }
     const hostProvider: HostProvider = () => {
@@ -4035,11 +4179,7 @@ async function runWithTransportRetries(
     };
     let managedByRun = false;
     try {
-      prepared.connectionId = await probeControl(
-        host,
-        prepared.connectionId,
-        controlProbeTimeout(options),
-      );
+      prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       await uploadRun(host, prepared.connectionId, id, options, files, signal);
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
@@ -4074,12 +4214,7 @@ async function runWithTransportRetries(
     } catch (error) {
       if (!managedByRun) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
-      if (
-        !(error instanceof RemoteTransportError) ||
-        !error.retryable ||
-        transportAttempts === 2 ||
-        signal.aborted
-      )
+      if (!(error instanceof RemoteTransportError) || !error.retryable || transportAttempts === 2 || signal.aborted)
         throw error;
       lastFailure = error;
       failedHosts.add(error.host);
@@ -4090,14 +4225,12 @@ async function runWithTransportRetries(
 }
 
 /** The first unresponsive-host round may hand local work to its caller; later loss keeps waiting. */
-export async function remoteCheckUnlessUnreachable(
-  options: RemoteCheck,
-  signal: AbortSignal,
-): Promise<number | null> {
+export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  return await withExecutionCancellation(options, signal,
-    (ownedSignal) => runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered));
+  return await withExecutionCancellation(options, signal, (ownedSignal) =>
+    runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered),
+  );
 }
 
 /** Tries each available host once without waiting for a slot. */
@@ -4144,11 +4277,7 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
     connectionId: randomUUID().slice(0, 8),
   };
   try {
-    prepared.connectionId = await probeControl(
-      host,
-      prepared.connectionId,
-      controlProbeTimeout(options),
-    );
+    prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
     await uploadRun(host, prepared.connectionId, id, options, files, signal);
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
@@ -4176,7 +4305,11 @@ async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): P
       return { status: 'no-slot' };
     }
     prepared.host = lease.host;
-    return { status: 'ran', host: lease.host.name, code: await runLeased(lease, prepared, options, performance.now(), signal) };
+    return {
+      status: 'ran',
+      host: lease.host.name,
+      code: await runLeased(lease, prepared, options, performance.now(), signal),
+    };
   } catch (error) {
     await cleanupPreparedRun(prepared);
     throw error;
@@ -4314,7 +4447,10 @@ if (import.meta.main) {
       process.exitCode = SLOT_REQUEST_TOO_LARGE;
     } else {
       if (!(error instanceof Aborted)) console.error(error instanceof Error ? error.message : error);
-      process.exitCode = error instanceof Aborted ? 128 + (executionCancellation(executionCancellationFromEnvironment())?.signal ?? received ?? 15) : 1;
+      process.exitCode =
+        error instanceof Aborted
+          ? 128 + (executionCancellation(executionCancellationFromEnvironment())?.signal ?? received ?? 15)
+          : 1;
     }
   }
   if (received !== undefined) process.exitCode = 128 + received;
