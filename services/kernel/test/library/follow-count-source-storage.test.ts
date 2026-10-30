@@ -61,7 +61,10 @@ function live(snapshot: Awaited<ReturnType<typeof inspect>>, count: number) {
 }
 
 function normalizeStatement(statement: string): string {
-  return statement.replace(/'(?:''|[^'])*'|\$\d+|\?\d*|\b\d+(?:\.\d+)?\b/g, '?').replace(/\s+/g, ' ').trim();
+  return statement
+    .replace(/'(?:''|[^'])*'|\$\d+|\?\d*|\b\d+(?:\.\d+)?\b/g, '?')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function planEntries(document: unknown): { queryText: string; plan: Record<string, unknown> }[] {
@@ -370,7 +373,12 @@ test('native source hook rows and statements stay constant with logarithmic bloc
              SELECT $1,$2,n+1,'adopt',$3,
                     ('30000000-0000-7000-8000-' || lpad(to_hex(n),12,'0'))::uuid
              FROM generate_series(1,$4::int) n`,
-            [routeOf(revisionHistorySubject)!, revisionHistorySubject, fixture.originalDigest, semanticRevisionBaseline],
+            [
+              routeOf(revisionHistorySubject)!,
+              revisionHistorySubject,
+              fixture.originalDigest,
+              semanticRevisionBaseline,
+            ],
           );
         }
         if (!revisionHistorySubject) throw new Error('Native revision history subject was not provisioned');
@@ -513,7 +521,10 @@ test('native source hook rows and statements stay constant with logarithmic bloc
           })),
       ),
     );
-    const receiptPlanSequences = new Map<number, { scale: number; phase: 'warmup' | 'measured'; planShape: string }[]>();
+    const receiptPlanSequences = new Map<
+      number,
+      { scale: number; phase: 'warmup' | 'measured'; planShape: string }[]
+    >();
     for (const run of perRun) {
       for (const occurrence of run.receiptPlanOccurrences) {
         if (occurrence.backend === undefined) continue;
@@ -530,7 +541,14 @@ test('native source hook rows and statements stay constant with logarithmic bloc
         const steadyWarmup = warmups.at(-1)?.planShape;
         const planTransitions = scaleSequence.flatMap((occurrence, index) =>
           index > 0 && occurrence.planShape !== scaleSequence[index - 1]!.planShape
-            ? [{ execution: index + 1, phase: occurrence.phase, from: scaleSequence[index - 1]!.planShape, to: occurrence.planShape }]
+            ? [
+                {
+                  execution: index + 1,
+                  phase: occurrence.phase,
+                  from: scaleSequence[index - 1]!.planShape,
+                  to: occurrence.planShape,
+                },
+              ]
             : [],
         );
         return {
@@ -540,7 +558,8 @@ test('native source hook rows and statements stay constant with logarithmic bloc
           warmupPlanShapes: warmups.map(({ planShape }) => planShape),
           measuredPlanShapes: measured.map(({ planShape }) => planShape),
           planTransitions,
-          measuredMatchesSteadyWarmup: steadyWarmup !== undefined && measured.every(({ planShape }) => planShape === steadyWarmup),
+          measuredMatchesSteadyWarmup:
+            steadyWarmup !== undefined && measured.every(({ planShape }) => planShape === steadyWarmup),
         };
       });
       return {
@@ -552,7 +571,10 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     const measuredStatementCountsByBackend = new Map<number, number>();
     for (const occurrence of measuredReceiptOccurrences) {
       if (occurrence.backend === undefined) continue;
-      measuredStatementCountsByBackend.set(occurrence.backend, (measuredStatementCountsByBackend.get(occurrence.backend) ?? 0) + 1);
+      measuredStatementCountsByBackend.set(
+        occurrence.backend,
+        (measuredStatementCountsByBackend.get(occurrence.backend) ?? 0) + 1,
+      );
     }
     const revisionPlanShapes = perRun
       .filter(({ phase }) => phase === 'measured')
@@ -561,13 +583,17 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     const lastRevisionShape = revisionPlanShapes.find(({ scale }) => scale === 4096);
     const measurement = {
       semanticRevisionBaseline,
-      samePartitionRevisionHistory: populations.map(({ scale, samePartitionRevisionHistory }) => ({ scale, rows: samePartitionRevisionHistory })),
+      samePartitionRevisionHistory: populations.map(({ scale, samePartitionRevisionHistory }) => ({
+        scale,
+        rows: samePartitionRevisionHistory,
+      })),
       perRun,
       measuredReceiptOccurrences,
       measuredStatementCountsByBackend: Object.fromEntries(measuredStatementCountsByBackend),
       receiptBackendEvidence,
       revisionPlanShapes,
-      revisionPointPlanShapeStable: firstRevisionShape !== undefined &&
+      revisionPointPlanShapeStable:
+        firstRevisionShape !== undefined &&
         lastRevisionShape !== undefined &&
         firstRevisionShape.nodeType === lastRevisionShape.nodeType &&
         firstRevisionShape.indexName === lastRevisionShape.indexName &&
@@ -579,9 +605,14 @@ test('native source hook rows and statements stay constant with logarithmic bloc
     expect(slots).toHaveLength(30);
     expect(measuredReceiptOccurrences.length).toBeGreaterThan(0);
     expect(receiptBackendEvidence.some(({ executions }) => executions >= 6)).toBe(true);
-    expect(receiptBackendEvidence.every(({ perScale }) => perScale.every(({ warmupExecutions, measuredPlanShapes, measuredMatchesSteadyWarmup }) =>
-      measuredPlanShapes.length === 0 || (warmupExecutions >= 5 && measuredMatchesSteadyWarmup),
-    ))).toBe(true);
+    expect(
+      receiptBackendEvidence.every(({ perScale }) =>
+        perScale.every(
+          ({ warmupExecutions, measuredPlanShapes, measuredMatchesSteadyWarmup }) =>
+            measuredPlanShapes.length === 0 || (warmupExecutions >= 5 && measuredMatchesSteadyWarmup),
+        ),
+      ),
+    ).toBe(true);
     for (const [backend, count] of measuredStatementCountsByBackend)
       expect(
         receiptBackendEvidence
@@ -590,22 +621,33 @@ test('native source hook rows and statements stay constant with logarithmic bloc
       ).toBe(count);
     expect(
       receiptBackendEvidence.some(({ perScale }) =>
-        perScale.some(({ executions, planTransitions }) =>
-          executions >= 6 && planTransitions.some(({ phase }) => phase === 'warmup'),
+        perScale.some(
+          ({ executions, planTransitions }) =>
+            executions >= 6 && planTransitions.some(({ phase }) => phase === 'warmup'),
         ),
       ),
     ).toBe(true);
     expect(revisionPlanShapes.length).toBeGreaterThan(0);
-    expect(revisionPlanShapes.every(({ nodeType, indexName, indexCondition, filter, rowsRemovedByFilter }) =>
-      ['Index Scan', 'Index Only Scan'].includes(String(nodeType)) &&
-      typeof indexName === 'string' && indexName.includes('revision') &&
-      typeof indexCondition === 'string' && indexCondition.includes('route') && indexCondition.includes('subject_id') &&
-      filter === undefined && Number(rowsRemovedByFilter) === 0,
-    )).toBe(true);
+    expect(
+      revisionPlanShapes.every(
+        ({ nodeType, indexName, indexCondition, filter, rowsRemovedByFilter }) =>
+          ['Index Scan', 'Index Only Scan'].includes(String(nodeType)) &&
+          typeof indexName === 'string' &&
+          indexName.includes('revision') &&
+          typeof indexCondition === 'string' &&
+          indexCondition.includes('route') &&
+          indexCondition.includes('subject_id') &&
+          filter === undefined &&
+          Number(rowsRemovedByFilter) === 0,
+      ),
+    ).toBe(true);
     expect(measurement.revisionPointPlanShapeStable).toBe(true);
     // Keep every repetition, statement attribution and relation population, rather
     // than treating returned row counts or an isolated sample as physical work.
-    await Bun.write(new URL('growth.json', evidence), JSON.stringify({ populations, report, calibrationEvidence }, null, 2));
+    await Bun.write(
+      new URL('growth.json', evidence),
+      JSON.stringify({ populations, report, calibrationEvidence }, null, 2),
+    );
     for (const sample of report.samples) {
       for (const cost of sample.repetitions) {
         expect(cost.rows).toBeGreaterThan(0);
