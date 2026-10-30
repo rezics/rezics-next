@@ -260,6 +260,7 @@ const typed = [
   'GET /v1/accounts/:accountId/collections',
   'GET /v1/collections/:collectionId',
   'PATCH /v1/collections/:collectionId',
+  'PUT /v1/collections/:collectionId/rule',
   'DELETE /v1/collections/:collectionId',
   'GET /v1/collections/:collectionId/members',
   'POST /v1/collections/:collectionId/members',
