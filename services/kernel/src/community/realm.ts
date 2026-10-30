@@ -426,8 +426,11 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
 export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
   const author = account(actor).accountId;
   let presentation: RealmPresentation | undefined;
-  try { presentation = input.presentation === undefined ? undefined : realmPresentation(input.presentation); }
-  catch { throw new RealmInputError(); }
+  try {
+    presentation = input.presentation === undefined ? undefined : realmPresentation(input.presentation);
+  } catch {
+    throw new RealmInputError();
+  }
   const votes = input.votes === undefined ? undefined : voteMap(input.votes, RealmInputError);
   const body = {
     realmId: input.realmId,
@@ -464,14 +467,21 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
       ...options(deps, actor, route, 'community.realm.update', body, context),
       authorization: (() => {
         const base = realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId });
-        return { ...base, async prepare(attempt: Parameters<NonNullable<typeof base.prepare>>[0]) {
-          const proof = await base.prepare!(attempt);
-          if (presentation?.rules) {
-            try { await prepareRealmRulesSelection(deps, actor, body.realmId, presentation.rules, context); }
-            catch (error) { if (error instanceof TypeError) throw new RealmInputError(); throw error; }
-          }
-          return proof;
-        } };
+        return {
+          ...base,
+          async prepare(attempt: Parameters<NonNullable<typeof base.prepare>>[0]) {
+            const proof = await base.prepare!(attempt);
+            if (presentation?.rules) {
+              try {
+                await prepareRealmRulesSelection(deps, actor, body.realmId, presentation.rules, context);
+              } catch (error) {
+                if (error instanceof TypeError) throw new RealmInputError();
+                throw error;
+              }
+            }
+            return proof;
+          },
+        };
       })(),
     },
     async (tx, command) => {
@@ -513,8 +523,12 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
       )
         throw new RealmConflictError();
       if (presentation && (presentation.avatarMediaId !== null || presentation.bannerMediaId !== null))
-        await claimRealmPresentationMedia(tx, { realmId: body.realmId, author: actor,
-          avatarMediaId: presentation.avatarMediaId, bannerMediaId: presentation.bannerMediaId });
+        await claimRealmPresentationMedia(tx, {
+          realmId: body.realmId,
+          author: actor,
+          avatarMediaId: presentation.avatarMediaId,
+          bannerMediaId: presentation.bannerMediaId,
+        });
       if (visibility === 'protected') await ensureRealmMemberGrant(tx, { realmId: body.realmId });
       return {
         value: { realmId: body.realmId, revisionId: revision },

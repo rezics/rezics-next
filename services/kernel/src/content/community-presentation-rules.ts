@@ -15,6 +15,10 @@ export async function prepareRealmRulesSelection(
   reference: RulesReference,
   context: { deadline: number },
 ): Promise<void> {
-  const result = await readExactPublishedRules(deps, [{ ...reference, realmId }], { actor, deadline: context.deadline });
-  if (!result.has(rulesKey(reference, realmId))) throw new TypeError('Rules require a readable published Text revision in this Realm, at most 64 KiB');
+  const result = await readExactPublishedRules(deps, [{ ...reference, realmId }], {
+    actor,
+    deadline: context.deadline,
+  });
+  if (!result.has(rulesKey(reference, realmId)))
+    throw new TypeError('Rules require a readable published Text revision in this Realm, at most 64 KiB');
 }

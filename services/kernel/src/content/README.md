@@ -1123,6 +1123,7 @@ retain their original source-owned outcome/recovery contract; aggregate callers 
 See the [Community owner contract](../community/README.md#public-realm-discussion-discovery) for the exact reader,
 predecessor, lifecycle binding and consumer obligations. Source qualification and synchronous mutation responses
 are unchanged.
+
 ## Community presentation
 
 `community-presentation-model.ts` exports `CommunityPresentation` and its closed runtime schema, composed into

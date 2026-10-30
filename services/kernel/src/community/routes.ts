@@ -905,13 +905,29 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
         if (!current) throw new ProblemError('not_found');
-        const community = current.realmId ? (await readCommunityPresentations(
-          { pool: dependencies.pool, access: dependencies.access(), ...(dependencies.clock ? { clock: dependencies.clock } : {}) },
-          [current.realmId], { actor, deadline: job.deadline },
-        )).get(current.realmId) : null;
+        const community = current.realmId
+          ? (
+              await readCommunityPresentations(
+                {
+                  pool: dependencies.pool,
+                  access: dependencies.access(),
+                  ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+                },
+                [current.realmId],
+                { actor, deadline: job.deadline },
+              )
+            ).get(current.realmId)
+          : null;
         if (current.realmId && !community) throw new ProblemError('not_found');
         // Re-read the Space after optional enrichment with the original admission.
-        const final = await readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check);
+        const final = await readSpaceForViewer(
+          spaceDependencies(),
+          actor,
+          spaceId,
+          observedAt(),
+          { deadline: job.deadline },
+          check,
+        );
         if (!final || final.headRevisionId !== current.headRevisionId || final.realmId !== current.realmId)
           throw new ProblemError('not_found');
         const representation = published(final, final.realmId);
