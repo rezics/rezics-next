@@ -39,6 +39,17 @@ Search stores distinct record classes:
   Released template IDs/source remain immutable; installation does not expire older scripts. There is no template
   cleanup job or user delete/purge route. This retention differs from generation retirement.
 
+Template startup validates every required released version with one native PUT followed by one exact keyed GET.
+Only HTTP 200 with the complete native `{ "acknowledged": true }` receipt admits readback. Readback must be HTTP
+200, identify that version, report `found: true` and contain the exact released language, source bytes and compiler
+options representation. OpenSearch's `StoredScriptSource` emits string sources verbatim and omits empty options;
+these releases use strings without options. No whitespace, escaping, params or total-count semantics are normalized.
+Installation passes a fresh request clone so transport mutation cannot change later installs or expected readback.
+Any incomplete, contradictory, failed or lost receipt makes the invocation unavailable. Genuine partial native
+installs may remain; the next ordinary invocation repeats and validates the whole fixed set without discovery,
+an installed-version registry or internal retries. This proves adapter installation only; population, Source and
+permission readiness retain their separate gates.
+
 `disclosure/check.ts` rejects missing, hidden, redirected or security-revision-mismatched candidates and evaluates
 current filter evidence in the existing partial implementation; hit data is projected from the current source snapshot. Suggestions
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
@@ -323,6 +334,18 @@ new measurements or passing tests.
 
 Relay discovery, freshness, reconciliation and retirement use cross-partition SQL on a shared pool. Their fixed
 4,096-partition cardinality does not make them executable on separately placed partition databases.
+
+### Install and validate released templates
+
+- Touches: one PUT and one exact keyed GET per required released template, using bounded native response bodies
+  and immutable literal comparison. No document, Source or SQL reads are involved.
+- Bound: O(fixed template count and bytes), independent of native document/script population. The first failure
+  stops that invocation. Each later invocation repeats the same fixed set; there is no inventory or hidden retry.
+- Growth check: `test/search/query.test.ts` installs with 64, 512 and 4,096 unrelated native documents and scripts,
+  retaining exact paths, request bodies/bytes, completed native receipts, failed readback and independent retries.
+  Its native first/middle/last controls cover acknowledgement/readback failures, lost responses, actual substitution,
+  mutation isolation and legitimate existing releases. Original query and generation suites run after genuine recovery;
+  `test/search/template-installation.test.ts` retains the independent negative native acknowledgement boundary.
 
 ### Consume one engine response
 

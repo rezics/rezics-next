@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { chooseLabel } from '../semantic/language.ts';
 import { readFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import type { Facet } from './facets.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import {
@@ -13,7 +14,7 @@ import {
   validateSearchAfter,
 } from './query-payload.ts';
 import { subjectAlias, subjectIndexName } from './indices.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { type OpenSearch, SearchUnavailableError } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import { searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
@@ -117,7 +118,27 @@ function subjectHit(hit: StoredHit): SubjectHit {
 
 export async function installTemplates(search: OpenSearch, prefix: string): Promise<void> {
   subjectAlias(prefix);
-  for (const { name, body } of templates) await search.request('PUT', `/_scripts/${prefix}${name}`, body);
+  try {
+    for (const { name, body } of templates) {
+      const id = `${prefix}${name}`;
+      const path = `/_scripts/${id}`;
+      // The transport owns its request object. Never expose the private released literals to it.
+      const installed = await search.request('PUT', path, structuredClone(body));
+      if (installed.status !== 200 || !isDeepStrictEqual(installed.body, { acknowledged: true }))
+        throw new SearchUnavailableError();
+
+      // StoredScriptSource emits string sources verbatim and omits empty compiler options. All released
+      // templates use strings without options; do not normalize whitespace, escaping or template params.
+      const stored = await search.request('GET', path);
+      const script = (body as { script: unknown }).script;
+      if (stored.status !== 200 || !isDeepStrictEqual(stored.body, { _id: id, found: true, script }))
+        throw new SearchUnavailableError();
+    }
+  } catch {
+    // A partial write or lost response is unavailable, even if native state changed. A later invocation
+    // repeats the same fixed PUT/GET set, including versions already installed, without a registry or retry.
+    throw new SearchUnavailableError('OpenSearch template installation is unavailable');
+  }
 }
 
 export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchPlan): Promise<SearchResult> {

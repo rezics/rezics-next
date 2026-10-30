@@ -1,13 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import {
   createOpenSearch,
+  type OpenSearch,
   OpenSearchError,
   SearchUnavailableError,
-  type OpenSearch,
 } from '../../src/search/opensearch.ts';
 import {
+  countFacets,
+  FACET_TEMPLATE,
   installTemplates,
   SEARCH_TEMPLATE,
   searchSubjects,
@@ -102,7 +105,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const target of [prefix, large, empty, concrete, keyset]) {
     await search.request('DELETE', `/${subjectIndexName(target, 1)}`).catch(() => undefined);
-    for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE]) {
+    for (const name of installationNames) {
       await search.request('DELETE', `/_scripts/${target}${name}`).catch(() => undefined);
     }
   }
@@ -431,3 +434,405 @@ test('malformed direct ordinary after tuples reject before engine I/O', () => {
       ).toThrow(RangeError);
   expect(calls).toBe(0);
 });
+// Every control first executes the native request. Only a clone of its completed receipt is corrupted.
+const installationNames = [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE];
+type Receipt = { status: number; body: unknown };
+type InstallationCall = {
+  method: string;
+  path: string;
+  body: unknown;
+  raw?: Receipt;
+  returned?: Receipt;
+  lost?: boolean;
+};
+type ReceiptControl = (receipt: Receipt, call: InstallationCall) => Receipt | Promise<Receipt>;
+
+function installationTransport(target: string, control?: ReceiptControl) {
+  const calls: InstallationCall[] = [];
+  const client: OpenSearch = {
+    bulk: search.bulk,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, body] = args;
+      expect(path.startsWith(`/_scripts/${target}`)).toBe(true);
+      const call: InstallationCall = { method, path, body: structuredClone(body) };
+      calls.push(call);
+      let response: { status: number; body: T };
+      try {
+        response = await search.request<T>(...args);
+      } catch (error) {
+        if (error instanceof OpenSearchError) call.raw = { status: error.status, body: structuredClone(error.body) };
+        else call.lost = true;
+        throw error;
+      }
+      call.raw = structuredClone(response);
+      try {
+        const returned = control ? await control(structuredClone(response), call) : response;
+        call.returned = structuredClone(returned);
+        return returned as { status: number; body: T };
+      } catch (error) {
+        call.lost = true;
+        throw error;
+      }
+    },
+  };
+  return { client, calls };
+}
+
+function installationPaths(target: string) {
+  return installationNames.flatMap((name) => [
+    ['PUT', `/_scripts/${target}${name}`],
+    ['GET', `/_scripts/${target}${name}`],
+  ]);
+}
+
+function retainInstallation(label: string, calls: InstallationCall[]) {
+  console.info('native template installation', JSON.stringify({ label, calls }));
+}
+
+async function removeInstalled(target: string) {
+  for (const name of installationNames)
+    await search.request('DELETE', `/_scripts/${target}${name}`).catch((error: unknown) => {
+      if (!(error instanceof OpenSearchError) || error.status !== 404) throw error;
+    });
+}
+
+async function verifiedInstallation(target: string) {
+  // A new caller and a new transport must revalidate every version, including genuine partial installs.
+  const { client, calls } = installationTransport(target);
+  try {
+    await installTemplates(client, target);
+    expect(calls.map(({ method, path }) => [method, path])).toEqual(installationPaths(target));
+    for (const [index, name] of installationNames.entries()) {
+      const put = calls[index * 2]!;
+      const get = calls[index * 2 + 1]!;
+      expect(put.raw).toEqual({ status: 200, body: { acknowledged: true } });
+      expect(get.raw).toEqual({
+        status: 200,
+        body: { _id: `${target}${name}`, found: true, script: (put.body as { script: unknown }).script },
+      });
+      if (name !== FACET_TEMPLATE) {
+        const released: unknown = JSON.parse(
+          readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8'),
+        );
+        expect(put.body).toEqual(released);
+      } else {
+        expect(put.body).toEqual({
+          script: {
+            lang: 'mustache',
+            source: `{
+        "size": 0,
+        "track_total_hits": 10000,
+        "query": {{#toJson}}query{{/toJson}},
+        "aggs": {{#toJson}}aggregations{{/toJson}}
+      }`,
+          },
+        });
+      }
+    }
+    return calls;
+  } finally {
+    retainInstallation('genuine installation/recovery', calls);
+  }
+}
+
+// Run every original query assertion below the same genuine partial-install recovery boundary.
+beforeAll(async () => {
+  for (const target of [prefix, large, empty, concrete, keyset]) {
+    const { client, calls } = installationTransport(target, (receipt, call) => {
+      if (call.method === 'GET' && call.path.endsWith(FACET_TEMPLATE)) throw new Error('lost completed readback');
+      return receipt;
+    });
+    try {
+      await expect(installTemplates(client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+      expect(calls.map(({ method, path }) => [method, path])).toEqual(installationPaths(target));
+    } finally {
+      retainInstallation('original query fixtures lost final readback', calls);
+    }
+    await verifiedInstallation(target);
+  }
+}, 120_000);
+
+type NamedControl = { name: string; change: (receipt: Receipt) => Receipt };
+const ackControls: NamedControl[] = [
+  { name: 'missing acknowledgement', change: (receipt) => ({ ...receipt, body: {} }) },
+  ...[false, undefined, null, 0, 1, 'true', {}, []].map((acknowledged) => ({
+    name: `acknowledged=${JSON.stringify(acknowledged)}`,
+    change: (receipt: Receipt) => ({ ...receipt, body: { acknowledged } }),
+  })),
+  ...[undefined, null, true, [], 'acknowledged'].map((body) => ({
+    name: `body=${JSON.stringify(body)}`,
+    change: (receipt: Receipt) => ({ ...receipt, body }),
+  })),
+  ...[201, 202, 204, 400, 500, 503].map((status) => ({
+    name: `HTTP ${status}`,
+    change: (receipt: Receipt) => ({ ...receipt, status }),
+  })),
+  ...[{ error: {} }, { errors: true }, { acknowledged_extra: true }, { _shards: { failed: 1 } }].map((extra) => ({
+    name: `contradictory ${JSON.stringify(extra)}`,
+    change: (receipt: Receipt) => ({ ...receipt, body: { ...(receipt.body as object), ...extra } }),
+  })),
+];
+
+function readbackChange(name: string, change: (body: Record<string, unknown>) => void): NamedControl {
+  return {
+    name,
+    change: (receipt) => {
+      change(receipt.body as Record<string, unknown>);
+      return receipt;
+    },
+  };
+}
+const readbackControls: NamedControl[] = [
+  ...[201, 202, 204, 404, 500, 503].map((status) => ({
+    name: `HTTP ${status}`,
+    change: (receipt: Receipt) => ({ ...receipt, status }),
+  })),
+  ...[undefined, null, [], true, 'script'].map((body) => ({
+    name: `body=${JSON.stringify(body)}`,
+    change: (receipt: Receipt) => ({ ...receipt, body }),
+  })),
+  readbackChange('missing id', (body) => {
+    delete body._id;
+  }),
+  readbackChange('wrong version id', (body) => {
+    body._id = `${body._id}-other`;
+  }),
+  readbackChange('missing found', (body) => {
+    delete body.found;
+  }),
+  ...[false, 1, 'true', null].map((found) =>
+    readbackChange(`found=${found}`, (body) => {
+      body.found = found;
+    }),
+  ),
+  readbackChange('missing script', (body) => {
+    delete body.script;
+  }),
+  readbackChange('malformed script', (body) => {
+    body.script = [];
+  }),
+  readbackChange('missing language', (body) => {
+    delete (body.script as Record<string, unknown>).lang;
+  }),
+  readbackChange('wrong language', (body) => {
+    (body.script as Record<string, unknown>).lang = 'painless';
+  }),
+  readbackChange('missing source', (body) => {
+    delete (body.script as Record<string, unknown>).source;
+  }),
+  readbackChange('object source', (body) => {
+    (body.script as Record<string, unknown>).source = { query: { match_all: {} } };
+  }),
+  readbackChange('changed source bytes', (body) => {
+    (body.script as { source: string }).source += ' ';
+  }),
+  readbackChange('unexpected empty options', (body) => {
+    (body.script as Record<string, unknown>).options = {};
+  }),
+  readbackChange('changed compiler options', (body) => {
+    (body.script as Record<string, unknown>).options = { content_type: 'text/plain' };
+  }),
+  readbackChange('success with error', (body) => {
+    body.error = { type: 'script_exception' };
+  }),
+];
+
+for (const method of ['PUT', 'GET'] as const) {
+  test(`first, middle and last native ${method} reject incomplete, contradictory, malformed and lost receipts and recover`, async () => {
+    const target = fresh();
+    try {
+      for (const [index, name] of installationNames.entries()) {
+        const cases: { name: string; change: ReceiptControl }[] = [
+          ...(method === 'PUT' ? ackControls : readbackControls),
+          {
+            name: 'lost completed response',
+            change: () => {
+              throw new Error('lost native response');
+            },
+          },
+          {
+            name: 'transport error after native completion',
+            change: () => {
+              throw new OpenSearchError(500, { error: { type: 'script_exception' } });
+            },
+          },
+        ];
+        for (const control of cases) {
+          await removeInstalled(target);
+          const { client, calls } = installationTransport(target, (receipt, call) =>
+            call.method === method && call.path === `/_scripts/${target}${name}`
+              ? control.change(receipt, call)
+              : receipt,
+          );
+          try {
+            await expect(installTemplates(client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+            const stop = index * 2 + (method === 'PUT' ? 1 : 2);
+            expect(calls.map(({ method, path }) => [method, path])).toEqual(installationPaths(target).slice(0, stop));
+            expect(calls.at(-1)!.raw!.status).toBe(200);
+            if (method === 'PUT') expect(calls.at(-1)!.raw!.body).toEqual({ acknowledged: true });
+            else expect(calls.at(-1)!.raw!.body).toMatchObject({ _id: `${target}${name}`, found: true });
+          } finally {
+            retainInstallation(`${method} ${name}: ${control.name}`, calls);
+          }
+          await verifiedInstallation(target);
+        }
+      }
+    } finally {
+      await removeInstalled(target);
+    }
+  }, 240_000);
+}
+
+test('actual native script substitution and disappearance cannot establish readiness, and independent callers restore every release', async () => {
+  const target = fresh();
+  try {
+    for (const name of installationNames) {
+      for (const substitute of ['source', 'options', 'delete'] as const) {
+        const { client, calls } = installationTransport(target, async (receipt, call) => {
+          if (call.method === 'PUT' && call.path.endsWith(name)) {
+            if (substitute === 'delete') await search.request('DELETE', call.path);
+            else
+              await search.request('PUT', call.path, {
+                script: {
+                  lang: 'mustache',
+                  source: '{"query":{"match_all":{}}}',
+                  ...(substitute === 'options' ? { options: { content_type: 'text/plain' } } : {}),
+                },
+              });
+          }
+          return receipt;
+        });
+        try {
+          await expect(installTemplates(client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+          expect(calls.at(-1)!.method).toBe('GET');
+          expect(calls.at(-1)!.raw!.status).toBe(substitute === 'delete' ? 404 : 200);
+        } finally {
+          retainInstallation(`actual ${name} ${substitute}`, calls);
+        }
+        await verifiedInstallation(target);
+        await verifiedInstallation(target);
+      }
+    }
+  } finally {
+    await removeInstalled(target);
+  }
+}, 120_000);
+
+test('completed transport request and receipt mutation cannot alter any later release or independent installation', async () => {
+  const target = fresh();
+  const calls: InstallationCall[] = [];
+  const mutating: OpenSearch = {
+    bulk: search.bulk,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, body] = args;
+      const raw = await search.request<T>(...args);
+      calls.push({ method, path, body: structuredClone(body), raw: structuredClone(raw) });
+      if (method === 'PUT') (body as { script: { source: string } }).script.source = 'transport-owned mutation';
+      const returned = structuredClone(raw);
+      // A retained response may be mutated by the transport after the adapter has consumed it.
+      setTimeout(() => {
+        (returned as Receipt).body = null;
+      }, 0);
+      return returned;
+    },
+  };
+  try {
+    await installTemplates(mutating, target);
+    await installTemplates(mutating, target);
+    expect(calls.map(({ method, path }) => [method, path])).toEqual([
+      ...installationPaths(target),
+      ...installationPaths(target),
+    ]);
+    await verifiedInstallation(target);
+  } finally {
+    retainInstallation('request and retained receipt mutation', calls);
+    await removeInstalled(target);
+  }
+}, 120_000);
+
+test('all released native callers still execute after recovery, including facet templates', async () => {
+  await verifiedInstallation(prefix);
+  expect((await countFacets(search, prefix, { facets: [{ property: 'type', size: 10 }], sample: 100 })).facets).toEqual(
+    [
+      {
+        property: 'type',
+        relation: 'exact',
+        values: [
+          { value: 'schema:Book', count: 4 },
+          { value: 'schema:Recipe', count: 1 },
+        ],
+      },
+    ],
+  );
+});
+
+test('installation work stays fixed at 64, 512 and 4096 unrelated native documents and scripts', async () => {
+  const target = fresh();
+  const noise: string[] = [];
+  let baseline: { method: string; path: string; body: unknown; bytes: number }[] | undefined;
+  await createSubjectIndex(search, target, 1);
+  try {
+    for (const scale of [64, 512, 4096]) {
+      const previous = noise.length;
+      // Fixture setup and cleanup are bounded batches, separate from the measured installation invocation.
+      for (let start = previous; start < scale; start += 16) {
+        await Promise.all(
+          Array.from({ length: Math.min(16, scale - start) }, async (_, offset) => {
+            const path = `/_scripts/${target}noise-${start + offset}`;
+            noise.push(path);
+            expect(
+              await search.request('PUT', path, { script: { lang: 'mustache', source: '{"query":{"match_all":{}}}' } }),
+            ).toEqual({ status: 200, body: { acknowledged: true } });
+          }),
+        );
+      }
+      for (let start = previous; start < scale; start += 512) {
+        const subjects = Array.from({ length: Math.min(512, scale - start) }, (_, offset) =>
+          subject(start + offset + 1, 'Unrelated'),
+        );
+        const actions = documentActions(
+          { partition: 10, position: 1n, subjects },
+          subjects.map(({ id }) => id),
+        );
+        const bulk = await search.bulk<{ errors: boolean }>(bulkLines(subjectIndexName(target, 1), actions), {
+          query: { refresh: 'wait_for' },
+        });
+        expect(bulk.errors).toBe(false);
+      }
+      expect(
+        (await search.request<{ count: number }>('GET', `/${subjectIndexName(target, 1)}/_count`)).body.count,
+      ).toBe(scale);
+      const calls = await verifiedInstallation(target);
+      const work = calls.map(({ method, path, body }) => ({
+        method,
+        path,
+        body,
+        bytes: body === undefined ? 0 : Buffer.byteLength(JSON.stringify(body)),
+      }));
+      baseline ??= work;
+      expect(work).toEqual(baseline);
+      // Repeated and failed work remain visible at every scale, without discovery or a private installed registry.
+      expect((await verifiedInstallation(target)).map(({ method, path, body }) => ({ method, path, body }))).toEqual(
+        calls.map(({ method, path, body }) => ({ method, path, body })),
+      );
+      const failed = installationTransport(target, (receipt, call) =>
+        call.method === 'GET' && call.path.endsWith(SUGGEST_TEMPLATE)
+          ? { ...receipt, body: { ...(receipt.body as object), found: false } }
+          : receipt,
+      );
+      try {
+        await expect(installTemplates(failed.client, target)).rejects.toBeInstanceOf(SearchUnavailableError);
+        expect(failed.calls.map(({ method, path }) => [method, path])).toEqual(installationPaths(target).slice(0, 4));
+      } finally {
+        retainInstallation(`scale ${scale} failed readback`, failed.calls);
+      }
+      await verifiedInstallation(target);
+      console.info('native installation growth', JSON.stringify({ scale, work }));
+    }
+  } finally {
+    await search.request('DELETE', `/${subjectIndexName(target, 1)}`);
+    await removeInstalled(target);
+    for (let start = 0; start < noise.length; start += 16)
+      await Promise.all(noise.slice(start, start + 16).map((path) => search.request('DELETE', path)));
+  }
+}, 600_000);

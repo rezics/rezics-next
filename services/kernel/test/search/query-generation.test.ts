@@ -6,7 +6,12 @@ import { createPool } from '../../src/database/pool.ts';
 import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
-import { createOpenSearch, type OpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
+import {
+  createOpenSearch,
+  type OpenSearch,
+  OpenSearchError,
+  SearchUnavailableError,
+} from '../../src/search/opensearch.ts';
 import {
   countFacets,
   suggestSubjects,
@@ -153,6 +158,36 @@ beforeAll(async () => {
   });
   // Establish a legal native baseline before testing the additive generation contract.
   for (const sort of sorts) await read(plan(sort), 2, alias);
+}, 120_000);
+
+// All original generation cases execute after a real final PUT whose completed response was lost.
+beforeAll(async () => {
+  const calls: { method: string; path: string; raw: unknown }[] = [];
+  const interrupted: OpenSearch = {
+    bulk: engine.bulk,
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const response = await engine.request<T>(...args);
+      calls.push({ method: args[0], path: args[1], raw: structuredClone(response) });
+      if (args[0] === 'PUT' && args[1] === `/_scripts/${prefix}${FACET_TEMPLATE}`)
+        throw new Error('lost completed final template PUT');
+      return response;
+    },
+  };
+  try {
+    await expect(installTemplates(interrupted, prefix)).rejects.toBeInstanceOf(SearchUnavailableError);
+    expect(calls.map(({ method }) => method)).toEqual(['PUT', 'GET', 'PUT', 'GET', 'PUT']);
+  } finally {
+    console.info('native generation template interruption', JSON.stringify(calls));
+  }
+  const recovered = transport();
+  await installTemplates(recovered.search, prefix);
+  expect(recovered.calls.map(({ method, path }) => [method, path])).toEqual(
+    [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE].flatMap((name) => [
+      ['PUT', `/_scripts/${prefix}${name}`],
+      ['GET', `/_scripts/${prefix}${name}`],
+    ]),
+  );
+  console.info('native generation template recovery', JSON.stringify(recovered.calls));
 }, 120_000);
 
 afterAll(async () => {
