@@ -28,25 +28,35 @@ const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.
 // Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
 const drainWaiters = new Map<string, Set<() => void>>();
 function drainSignal(observation: string) {
-  let wake!: () => void;
-  const signalled = new Promise<void>((resolve) => {
-    wake = resolve;
-  });
+  let signalled = false;
+  let resume: (() => void) | undefined;
+  const wake = () => {
+    signalled = true;
+    resume?.();
+  };
   const waiters = drainWaiters.get(observation) ?? new Set<() => void>();
   waiters.add(wake);
   drainWaiters.set(observation, waiters);
   return {
     async wait(until: number) {
+      if (signalled) {
+        signalled = false;
+        return;
+      }
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
-          signalled,
+          new Promise<void>((resolve) => {
+            resume = resolve;
+          }),
           new Promise<void>((resolve) => {
             timer = setTimeout(resolve, Math.max(0, until - Date.now()));
           }),
         ]);
       } finally {
         clearTimeout(timer);
+        resume = undefined;
+        signalled = false;
       }
     },
     dispose() {
