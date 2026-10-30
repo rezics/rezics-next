@@ -16,7 +16,6 @@ import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readContinueEntries } from '../../library/continue-read';
-import type { PersonalLibraryView } from '../../library/entries-read';
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const readLabelShelf = createServerFn({ method: 'GET' })
@@ -160,7 +159,7 @@ export const Route = createFileRoute('/library/')({
       readPersonalLibrary({
         data: { ...(deps.state ? { state: deps.state } : {}), ...(deps.cursor ? { cursor: deps.cursor } : {}) },
       }),
-      readContinueEntries(),
+      readContinueEntries({ data: {} }),
     ]);
     return { page, continueEntries };
   },
@@ -178,12 +177,12 @@ export const Route = createFileRoute('/library/')({
 function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   const data = Route.useLoaderData();
-  if (search.label)
-    return <LabelShelfPage page={data as LabelShelfPageData} locale={getLocale()} display={shelfDisplay(search)} />;
+  if (!('page' in data))
+    return <LabelShelfPage page={data} locale={getLocale()} display={shelfDisplay(search)} />;
   return (
     <PersonalLibraryPage
-      page={(data as { page: PersonalLibraryView }).page}
-      continueEntries={(data as { continueEntries: Awaited<ReturnType<typeof readContinueEntries>> }).continueEntries}
+      page={data.page}
+      continueState={data.continueEntries}
       locale={getLocale()}
       display={shelfDisplay(search)}
       {...(search.cursor ? { cursor: search.cursor } : {})}

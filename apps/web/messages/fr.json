@@ -1747,5 +1747,10 @@
   "search_history_remove": "Supprimer {name}",
   "search_history_offline": "Hors connexion. Les modifications seront synchronisées à la reconnexion.",
   "search_history_conflict": "L’historique a changé sur un autre appareil. Rechargez pour abandonner les modifications en attente.",
-  "search_history_reload": "Recharger l’historique actuel"
+  "search_history_reload": "Recharger l’historique actuel",
+  "library_continue_empty": "Rien à reprendre pour le moment.",
+  "library_continue_preparing": "Votre liste de reprise est en cours de préparation.",
+  "library_continue_loading": "Chargement de votre liste de reprise…",
+  "library_continue_unavailable": "Votre liste de reprise est indisponible pour le moment.",
+  "library_continue_denied": "Votre liste de reprise est inaccessible avec cette session."
 }

@@ -1748,5 +1748,10 @@
   "search_history_remove": "Remove {name}",
   "search_history_offline": "Offline. Changes will sync when connected.",
   "search_history_conflict": "History changed on another device. Reload to discard pending changes.",
-  "search_history_reload": "Reload current history"
+  "search_history_reload": "Reload current history",
+  "library_continue_empty": "Nothing to continue yet.",
+  "library_continue_preparing": "Your Continue list is being prepared.",
+  "library_continue_loading": "Loading your Continue list…",
+  "library_continue_unavailable": "Your Continue list is unavailable right now.",
+  "library_continue_denied": "Your Continue list is not accessible with this session."
 }

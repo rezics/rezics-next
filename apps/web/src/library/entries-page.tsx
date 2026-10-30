@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
@@ -5,10 +6,10 @@ import { Toaster } from '@rezics/ui/shadcn/toast';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
-import { ContinueSection } from './continue';
+import { ContinueSection, useContinueRefresh } from './continue';
 import { LibraryNavigation } from './library-nav';
 import { libraryNavigationQuery } from './pins-read';
-import type { ContinueEntry } from './continue-read';
+import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
 import type {
   LibraryEntryStateWrite,
   LibraryRestoreInput,
@@ -148,7 +149,8 @@ export function PersonalLibraryPage({
   locale,
   display,
   cursor,
-  continueEntries = [],
+  continueEntries,
+  continueState,
   undo,
   restore,
   csrfToken,
@@ -158,11 +160,16 @@ export function PersonalLibraryPage({
   display: Display;
   cursor?: string;
   continueEntries?: ContinueEntry[];
+  continueState?: ContinueView;
   undo?: LibraryRestoreInput;
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
 }) {
   const navigation = useQuery(libraryNavigationQuery(locale));
+  const readContinue = useCallback(() => readContinueEntries({ data: {} }), []);
+  const resume = useContinueRefresh(continueState, readContinue, locale);
+  const currentContinue = continueState ? resume.result : undefined;
+
   if (!page.signedIn)
     return (
       <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -186,12 +193,15 @@ export function PersonalLibraryPage({
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
         {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
         <ContinueSection
-          entries={continueEntries}
+          {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
+          onRetry={() => void resume.refresh()}
+          busy={resume.busy}
           locale={locale}
           density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
         />
         <LibraryNavigation
           current="tracked"
+          locale={locale}
           pins={navigation.data?.pins ?? { state: 'closed' }}
           collections={navigation.data?.collections ?? []}
         />

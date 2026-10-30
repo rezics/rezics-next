@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
 import { CoverCard, CoverRow, type CoverDensity } from '@rezics/ui/cover-card';
@@ -12,7 +12,7 @@ import { subjectHref } from '../subject/subject-href';
 import { progressView } from './progress-label';
 import { pageText } from '../features/pages/shared';
 import { SectionHeading } from './section-heading';
-import type { ContinueEntry } from './continue-read';
+import { continueRetryDelay, type ContinueEntry, type ContinueResult, type ContinueView } from './continue-source';
 
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched
@@ -24,10 +24,12 @@ export function ContinueRow({
   entries,
   locale,
   density = 'medium',
+  heading = true,
 }: {
   entries: ContinueEntry[];
   locale: string;
   density?: CoverDensity;
+  heading?: boolean;
 }) {
   const admitted = useOperation('progress_session.list');
   const rowHost = useRef<HTMLDivElement>(null);
@@ -93,7 +95,7 @@ export function ContinueRow({
   }, [entries.length]);
   return (
     <>
-      <SectionHeading>{m.home_continue_heading()}</SectionHeading>
+      {heading ? <SectionHeading>{m.home_continue_heading()}</SectionHeading> : null}
       <div ref={rowHost} className="relative">
         <CoverRow ratio={ratio} label={m.home_continue_heading()} density={density}>
           {cards}
@@ -135,19 +137,107 @@ export function ContinueRow({
   );
 }
 
-/** Keep the signed-in slot's final height while the browser waits for personal library data. */
+/** Retry preparation twice, respecting the producer's delay; unavailable reads never poll. */
+export function useContinuePreparation(
+  result: ContinueView | undefined,
+  refresh: () => Promise<object>,
+  scope: string,
+) {
+  const attempts = useRef(0);
+  useEffect(() => { attempts.current = 0; }, [scope]);
+  useEffect(() => {
+    if (!result) return;
+    const delay = continueRetryDelay(result, attempts.current);
+    if (delay === null) return;
+    const timer = setTimeout(() => {
+      attempts.current += 1;
+      void refresh();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [result, refresh, scope]);
+}
+
+/** A loader result stays current across navigation; retry discards old personal data immediately. */
+export function useContinueRefresh(initial: ContinueView | undefined, read: () => Promise<ContinueResult>, scope: string) {
+  const [snapshot, setSnapshot] = useState({ initial, scope, result: initial, busy: false });
+  const current = snapshot.initial === initial && snapshot.scope === scope;
+  const result = (current ? snapshot.result : initial) ?? { state: 'unknown' as const };
+  const busy = current && snapshot.busy;
+  const refresh = useCallback(async () => {
+    setSnapshot({ initial, scope, result: { state: 'unknown' }, busy: true });
+    let result: ContinueResult;
+    try { result = await read(); } catch { result = { state: 'unavailable' }; }
+    setSnapshot({ initial, scope, result, busy: false });
+    return result;
+  }, [initial, read, scope]);
+  useContinuePreparation(result, refresh, scope);
+  return { result, busy, refresh };
+}
+
+/** The same honest personal region appears on Home, Library and Continue. */
 export function ContinueSection({
   entries,
+  state,
   locale,
   density = 'medium',
+  onRetry,
+  busy = false,
+  destination = false,
 }: {
-  entries: ContinueEntry[];
+  /** Retained for existing component consumers that already have a successful page. */
+  entries?: ContinueEntry[];
+  state?: ContinueView;
   locale: string;
   density?: CoverDensity;
+  onRetry?: () => void;
+  busy?: boolean;
+  destination?: boolean;
 }) {
-  return entries.length > 0 ? (
-    <ContinueRow entries={entries} locale={locale} density={density} />
-  ) : (
-    <div aria-hidden="true" className="min-h-[20rem] sm:min-h-[24rem]" />
+  const result = state ?? (entries ? { state: 'loaded', entries, next: null } : { state: 'unknown' });
+  if (result.state === 'signed-out') return null;
+  const options = { locale: locale as Locale };
+  const title = m.home_continue_heading({}, options);
+  const message = result.state === 'loaded'
+    ? m.library_continue_empty({}, options)
+    : result.state === 'preparing'
+      ? m.library_continue_preparing({}, options)
+      : result.state === 'unknown'
+        ? m.library_continue_loading({}, options)
+        : result.state === 'denied'
+          ? m.library_continue_denied({}, options)
+          : m.library_continue_unavailable({}, options);
+  return (
+    <section aria-label={title} data-continue-state={result.state} className="min-w-0 space-y-4">
+      {!destination ? (
+        <div className="flex items-baseline justify-between gap-4">
+          <SectionHeading>{title}</SectionHeading>
+          <a href={`/${locale}/library/continue`} className="text-sm text-primary underline-offset-4 hover:underline">
+            {m.library_more({}, options)}
+          </a>
+        </div>
+      ) : null}
+      {result.state === 'loaded' && result.entries.length > 0 ? (
+        <ContinueRow entries={result.entries} locale={locale} density={density} heading={false} />
+      ) : (
+        <div className="rounded-lg border border-border p-6 sm:p-8" aria-busy={busy || result.state === 'unknown'}>
+          <p role={result.state === 'unavailable' ? 'alert' : 'status'} className="text-sm text-muted-foreground">
+            {message}
+          </p>
+          {onRetry && (result.state === 'unavailable' || result.state === 'preparing') ? (
+            <Button type="button" variant="outline" className="mt-4" disabled={busy} onClick={onRetry}>
+              {m.library_follow_retry({}, options)}
+            </Button>
+          ) : null}
+        </div>
+      )}
+      {destination && result.state === 'loaded' && result.next ? (
+        <a
+          href={`/${locale}/library/continue?cursor=${encodeURIComponent(result.next)}`}
+          className="text-sm text-primary underline-offset-4 hover:underline"
+        >
+          {m.library_next_page({}, options)}
+        </a>
+      ) : null}
+    </section>
   );
 }

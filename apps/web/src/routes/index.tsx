@@ -2,32 +2,16 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import { exposureQuery, useSession } from '../session/query';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { kernelClient } from '../kernel/client';
-import { homePageQuery } from '../features/pages/home-queries';
+import { homePageQuery, readHomeContinue } from '../features/pages/home-queries';
 import { homeJsonLd } from '../features/pages/jsonld';
 import { RoutePage, routePageJsonLd } from '../features/pages/route';
-import { ContinueSection } from '../library/continue';
-import { homeContinueQuery, loadContinue } from '../library/continue-read';
-import { Exposure, operationGroups } from '../kernel/exposure';
-import type { SessionEnv } from '../session/client';
+import { ContinueSection, useContinuePreparation } from '../library/continue';
+import { homeContinueQuery } from '../library/continue-read';
+import { operationGroups } from '../kernel/exposure';
 import { pageHead } from '../shell/head';
 import { PageHeading } from '../shell/page-heading';
-
-const readHomeContinue = createServerFn({ method: 'GET' })
-  .validator((locale: unknown) => {
-    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
-    return locale;
-  })
-  .handler(async ({ data: locale }) => {
-    const { env } = await import('cloudflare:workers');
-    const request = getRequest();
-    setResponseHeader('Cache-Control', 'private, no-store');
-    return loadContinue(kernelClient(locale), request, env as Partial<SessionEnv>);
-  });
 
 /** The public page query calls loadRoutePage() once on the server. */
 export const Route = createFileRoute('/')({
@@ -53,12 +37,14 @@ function Home() {
   });
   const hasContinueList = viewerGroups?.includes(operationGroups['library_continue.list']) ?? false;
   const exposureReady = viewerGroups !== undefined;
-  const { data: resume = [], isPending } = useQuery({
-    ...homeContinueQuery(getLocale(), () =>
-      hasContinueList ? readHomeContinue({ data: getLocale() }) : Promise.resolve([]),
-    ),
-    enabled: personalRead.enabled && state === 'signed-in' && exposureReady,
+  const resume = useQuery({
+    ...homeContinueQuery(getLocale(), () => readHomeContinue({ data: getLocale() })),
+    enabled: personalRead.enabled && state === 'signed-in' && hasContinueList,
   });
+  useContinuePreparation(resume.data, resume.refetch, getLocale());
+  const continueState = resume.isError || (exposureReady && !hasContinueList)
+    ? { state: 'unavailable' as const }
+    : resume.data ?? { state: 'unknown' as const };
   const nonce = useRouter().options.ssr?.nonce;
   if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
   return (
@@ -68,14 +54,15 @@ function Home() {
       heading={m.home_heading()}
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
-      {...(state === 'signed-in' && (isPending || resume.length > 0)
+      {...(state === 'signed-in'
         ? {
-            personal: hasContinueList ? (
-              <Exposure operation="library_continue.list">
-                <ContinueSection entries={resume} locale={getLocale()} />
-              </Exposure>
-            ) : (
-              <ContinueSection entries={resume} locale={getLocale()} />
+            personal: (
+              <ContinueSection
+                state={continueState}
+                locale={getLocale()}
+                {...(hasContinueList ? { onRetry: () => void resume.refetch() } : {})}
+                busy={resume.isFetching}
+              />
             ),
           }
         : {})}

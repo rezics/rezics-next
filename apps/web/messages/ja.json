@@ -1747,5 +1747,10 @@
   "search_history_remove": "{name}を削除",
   "search_history_offline": "オフラインです。接続後に変更を同期します。",
   "search_history_conflict": "別の端末で履歴が変更されました。再読み込みすると未同期の変更を破棄します。",
-  "search_history_reload": "現在の履歴を再読み込み"
+  "search_history_reload": "現在の履歴を再読み込み",
+  "library_continue_empty": "続ける作品はまだありません。",
+  "library_continue_preparing": "続きのリストを準備しています。",
+  "library_continue_loading": "続きのリストを読み込んでいます…",
+  "library_continue_unavailable": "現在、続きのリストを利用できません。",
+  "library_continue_denied": "このセッションでは続きのリストにアクセスできません。"
 }

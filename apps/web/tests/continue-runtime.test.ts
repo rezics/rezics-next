@@ -177,9 +177,9 @@ test('state labels are emitted only for known state IDs', async () => {
   expect(result.find((entry) => entry.subjectId === 'null-state')?.stateLabel).toBeUndefined();
 });
 
-test('a failed Continue read, including 503, leaves the row empty', async () => {
+test('a failed Continue read, including 503, remains unavailable', async () => {
   const { client, calls } = clientFor(subjects, { failContinue: true });
-  expect(await loadContinue(client, request(), makeEnv())).toEqual([]);
+  await expect(loadContinue(client, request(), makeEnv())).rejects.toMatchObject({ state: 'unavailable' });
   expect(calls.map((call) => call.operation)).toEqual(['continue']);
 });
 

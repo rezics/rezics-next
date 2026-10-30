@@ -1747,5 +1747,10 @@
   "search_history_remove": "{name} entfernen",
   "search_history_offline": "Offline. Änderungen werden nach dem Verbinden synchronisiert.",
   "search_history_conflict": "Der Verlauf wurde auf einem anderen Gerät geändert. Beim Neuladen werden ausstehende Änderungen verworfen.",
-  "search_history_reload": "Aktuellen Verlauf neu laden"
+  "search_history_reload": "Aktuellen Verlauf neu laden",
+  "library_continue_empty": "Noch nichts zum Fortsetzen.",
+  "library_continue_preparing": "Deine Liste zum Fortsetzen wird vorbereitet.",
+  "library_continue_loading": "Deine Liste zum Fortsetzen wird geladen…",
+  "library_continue_unavailable": "Deine Liste zum Fortsetzen ist gerade nicht verfügbar.",
+  "library_continue_denied": "Mit dieser Sitzung kannst du nicht auf deine Liste zum Fortsetzen zugreifen."
 }

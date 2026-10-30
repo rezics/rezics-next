@@ -7,7 +7,7 @@ import { builtinCollectionDestinations, type BuiltinCollectionRecord } from './b
 import type { LibraryPinsRead } from './pins-read';
 import { dynamicCollectionTitle } from './dynamic-collection';
 
-export type LibraryDestination = 'tracked' | 'collections' | { collectionId: string };
+export type LibraryDestination = 'tracked' | 'continue' | 'collections' | { collectionId: string };
 
 type Entry = {
   id: string;
@@ -21,8 +21,9 @@ function entryHref(locale: string, destination: string): string {
   return `/${locale}${destination}`;
 }
 
-function isCurrent(current: LibraryDestination, destination: 'tracked' | 'collections' | string): boolean {
+function isCurrent(current: LibraryDestination, destination: 'tracked' | 'continue' | 'collections' | string): boolean {
   if (destination === 'tracked') return current === 'tracked';
+  if (destination === 'continue') return current === 'continue';
   if (destination === 'collections') return current === 'collections';
   return typeof current === 'object' && current.collectionId === destination;
 }
@@ -44,7 +45,7 @@ function destinations(
     },
     {
       id: 'tracked',
-      label: m.library_state_all(),
+      label: m.library_nav_tracked_entries(),
       href: entryHref(locale, '/library'),
       current: isCurrent(current, 'tracked'),
     },
@@ -52,7 +53,7 @@ function destinations(
       id: 'continue',
       label: m.library_continue(),
       href: entryHref(locale, '/library/continue'),
-      current: false,
+      current: isCurrent(current, 'continue'),
     },
     ...builtins.map((item) => ({
       id: item.id,
