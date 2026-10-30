@@ -21,6 +21,7 @@ export const Route = createFileRoute('/entitlements/')({
       <EntitlementsPage
         page={Route.useLoaderData()}
         locale={getLocale()}
+        continuation={Route.useSearch().cursor !== undefined}
         retry={() => {
           void router.invalidate();
         }}

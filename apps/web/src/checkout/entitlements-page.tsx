@@ -65,10 +65,12 @@ export function EntitlementsPage({
   page,
   locale,
   retry,
+  continuation = false,
 }: {
   page: BuyerEntitlementsPage;
   locale: string;
   retry?: () => void;
+  continuation?: boolean;
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
@@ -84,7 +86,9 @@ export function EntitlementsPage({
       ) : page.data.entitlements.length === 0 ? (
         <Empty className="border border-border">
           <EmptyHeader>
-            <EmptyTitle>{page.data.next ? m.entitlements_page_empty() : m.entitlements_empty()}</EmptyTitle>
+            <EmptyTitle>
+              {continuation || page.data.next ? m.entitlements_page_empty() : m.entitlements_empty()}
+            </EmptyTitle>
             <EmptyDescription>{m.entitlements_empty_hint()}</EmptyDescription>
           </EmptyHeader>
         </Empty>

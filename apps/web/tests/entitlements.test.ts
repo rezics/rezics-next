@@ -109,6 +109,15 @@ test('only a successful empty page is empty; preparation, stale cursor, denial a
     kind: 'ready',
     data: { entitlements: [], next: null },
   });
+  const continuation = renderToString(
+    createElement(EntitlementsPage, {
+      page: { kind: 'ready', data: { entitlements: [], next: null } },
+      locale: 'en',
+      continuation: true,
+    }),
+  );
+  expect(continuation).toContain('No records on this page');
+  expect(continuation).not.toContain('No purchased access records');
   for (const [status, kind] of [
     [202, 'preparing'],
     [400, 'cursor-error'],
