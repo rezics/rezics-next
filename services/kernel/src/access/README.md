@@ -518,11 +518,47 @@ resumable reconciliation through opaque native keyset pages over at most the adm
 exact old reservations and source-proof points, with persisted progress. Historical live, unpublished and uncertain
 cases remain distinct and redrivable. No migration alone certifies completion.
 
-Implementation gap: the current workflow retains a successful Realm join's stable coordination hold and has no
-generation-bound publication-proof consumer or bounded legacy reconciler. The native deletion-entry acceptance in
-`test/access/realm-membership-transition.test.ts` requires real Auth approval and execution while membership and
-inverse rows remain. Closing this entry gap does not establish Access, Community or shared-history erasure or their
-acknowledgements; their physical custody and final cleanup remain separate obligations.
+`membership-inverse.reserve` returns `{ accountId, principal, reservationId, transition: { generationId,
+operationId } }` for a positive Realm transition. `createRealmMembershipTransitions({ pool, authority })` exposes
+`proof(transition)` and `consume({ ...transition, key, proofTransactionId? })`. The native Community authority's
+`readTransition(client, transition)` returns `RealmMembershipProof | null`: the same tuple, outcome, immutable
+source `transactionId` and `publicationTransactionId`. It verifies the exact native receipt and its response
+commitment. Consumption locks the account and atomically records the proof and deletes only that generation's
+matching coordination row. Repeating consumption is durable even after tombstone or a later generation.
+
+The normal Accounts registrar installs `recover`, `finalize` and `cancel` durable steps for Realm work. A committed
+publication is recovered before bearer restoration; finalization uses only its exact mechanical obligation.
+Cancellation serializes with publication at the Realm row and commits its own immutable source proof. Neither a
+missing source nor a terminal workflow status implies success. Missing production protocol wiring refuses Realm
+work. Organization workflow ordering and terminal inverse release are unchanged.
+
+Deployment first stops old membership writers and drains or explicitly resolves their in-flight operations, applies
+both Realm transition migrations, then installs the new writers and normal Accounts host. Configure
+`KERNEL_REALM_MEMBERSHIP_BARRIER` with that deployment's barrier identity before dispatching the internal
+`accounts.realm-membership.reconcile` workflow with `{ accountId, cursor?, redrive? }`. It returns at most 32 items
+and a sealed cursor bound to account, barrier and mode. Resume that cursor until complete; persisted unresolved
+items require explicit redrive. The exact old stable hold must match inverse provenance; live and terminal source
+points require their committed native receipts. Missing publication stays pending; disagreement stays uncertain.
+The cap probe refuses an overflowing neighborhood. Page completion records traversal, never source completeness.
+No migration clears holds or certifies old memberships. Re-enabling an old writer after this barrier is unsupported.
+
+Cost:
+
+- Touches: one account lock, exact inverse/generation/coordination keys, an exact Realm proof and native receipt;
+  legacy work adds a 33-key page and at most 32 exact source/adoption/consumption/progress commands. Source checkouts
+  finish before the next owner command. Proof and reconciliation evidence remain owned retention obligations.
+- Bound: constant rows, statements, connections and output for one transition; logarithmic index blocks in unrelated
+  holds, proofs, receipts and historical generations. Legacy rows/output are linear in its fixed page and its
+  admission probe is capped at 1,001; temporal interval index work is measured in rows and blocks independently of
+  SQL-call counts.
+- Growth check: `test/access/growth-realm-membership-transition.test.ts` grows same-home holds, proofs, receipts and
+  historical generations at 64/512/4096 around a real public join/leave and one selected unresolved legacy item.
+  The shared harness includes nested Access, proof, DBOS and transaction-control work and measured backend counts.
+  Plan assertions use its measured-layout helper.
+
+The native deletion-entry acceptance in `test/access/realm-membership-transition.test.ts` requires real Auth
+approval and execution while membership and inverse rows remain. This entry does not establish Access, Community
+or shared-history erasure or their acknowledgements; physical custody and final cleanup remain separate obligations.
 
 `createMembershipWorkPorts` accepts an installed `RealmMembershipCommands` port from the owning Realm module. When the principal kind is `realm`, the enqueue check and the later publication step both call that port's `authorize`, and reserve, publication and terminalization call the port's commands. Organization creation and organization membership keep the supplied authorizer, or the native approval resolver when none was supplied. A Realm principal stays on the Realm port. With no Realm port installed, Realm membership work throws `RealmMembershipUnavailableError` before any inverse, coordination or publication write.
 

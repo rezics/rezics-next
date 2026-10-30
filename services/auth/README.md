@@ -1539,12 +1539,18 @@ expiry checks. Reusing an old ID does not restore an expired authorization:
   callback-only unapproved revoke paths use `wf:<ID>:<phase>` native keys;
   production bindings refuse unapproved operations.
   Operator session opening and transfer acceptance do not start a DBOS workflow.
-- `accounts.membership`: the pure registrar reauthorizes reserve and publish;
-  native authorization expires independently of DBOS history. Reserve, publish,
-  terminalize and release use `wf:<ID>:<phase>` native receipt keys. Cleanup carries
-  the exact reservation and terminal proof, so repeating it cannot release a
-  different reservation. This registrar runs in the composing caller's executor;
-  Auth retention never visits kernel's system schema/application.
+- `accounts.membership`: the shared registrar reauthorizes reserve and new publication;
+  native authorization expires independently of DBOS history. Every positive Realm operation reserves a fresh
+  generation, including role confirmation and rejoin. Its registered publication step first recovers an exact
+  committed source proof mechanically, without needing a lost bearer or publishing again. Registered `finalize`
+  consumes proof after publication; compensation commits `cancel` before finalization. Realm work refuses missing
+  protocol wiring. These steps use `wf:<ID>:<phase>` native keys and bind the original input. Stable inverse
+  reservation and generation have separate lifetimes; replay cannot spend a later generation. Ordinary leave,
+  organization and operator authorization/order remain unchanged. Terminal release carries the exact reservation
+  and terminal proof. This registrar runs in the composing caller's executor; Auth retention never visits kernel's
+  system schema/application. Access documents the migration and stopped-old-writer reconciliation barrier.
+  Cost: constant durable steps and point commands per operation; native rows/blocks/connections/output, including
+  nested DBOS and proof work, are measured at 64/512/4096 in the kernel's Realm transition growth acceptance.
 - `auth.maintenance.tick`, `auth.workflowRetention`, and the separately composed
   `accounts.website-protocol-expiry` schedule intentionally repeat bounded,
   idempotent pruning primitives. Signing pruning uses its generation compare and

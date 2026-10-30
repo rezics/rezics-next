@@ -88,9 +88,13 @@ Realm membership is not an organization ownership or operator responsibility. Ac
 [Realm transition coordination contract](../services/kernel/src/access/README.md#realm-transition-coordination-and-deletion-entry)
 requires an exact committed-publication or cancellation proof to close each transient hold, retaining the inverse
 until authoritative leave or post-erasure cleanup. An in-flight or uncertain transition still prevents tombstone
-before T, the erasure obligation and its event. The current successful-join hold prevents that entry and remains
-an implementation gap. Post-T cleanup cannot satisfy its own pre-T prerequisite. Once entry is implemented, genuine
-participant cleanup, shared history and physical custody must still complete before final acknowledgement.
+before T, the erasure obligation and its event. The default native membership workflow now closes only its exact
+committed transition, so a current member can reach genuine Auth approval, tombstone, obligation and event while
+inverse and membership remain for real cleanup. Old stable holds require the stopped-old-writer barrier and bounded
+resumable reconciliation described by Access; absence or uncertainty never clears them. Genuine participant cleanup,
+shared history and physical custody must still complete before final acknowledgement. The new immutable transition,
+source-proof and reconciliation records also remain physical retention obligations; this entry slice produces no
+participant acknowledgement.
 
 ### Shared-history participant
 

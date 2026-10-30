@@ -4,6 +4,8 @@ import type { AccessClient } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import transitionAcquire from './realm-membership-transition-acquire.sql';
+import { first, type RealmTransitionAuthority } from './realm-membership-transition.ts';
 import accountRead from './lifecycle-account.sql';
 import read from './membership-inverse-20261025093747-read.sql';
 import reserve from './membership-inverse-20261025093747-reserve.sql';
@@ -18,6 +20,7 @@ export type MembershipReservation = {
   accountId: string;
   principal: MembershipPrincipal;
   reservationId: string;
+  transition?: { generationId: string; operationId: string };
 };
 export type MembershipAdmission = { accountId: string; principal: MembershipPrincipal; key: string };
 export type MembershipRelease = MembershipReservation & { key: string };
@@ -98,7 +101,7 @@ export async function readMembershipInverse(
  * termination. A Realm module must install this adapter before Realm release or
  * bootstrap is available. Reserve itself needs no Realm checkout or placement.
  */
-export type RealmMembershipAuthority = {
+export type RealmMembershipAuthority = Partial<RealmTransitionAuthority> & {
   readTerminal(
     client: AccessClient,
     input: MembershipReservation,
@@ -206,10 +209,22 @@ export function createMembershipInverseCommands(config: {
         if (!rows[0]) throw new MembershipLimitError();
         requireAllowed(rows[0].provenanceValid);
         requireAllowed(rows[0].admitted <= MEMBERSHIP_LIMIT);
+        let transition: MembershipReservation['transition'];
+        if (input.principal.kind === 'realm' && !sourceTransactionId) {
+          const generationId = derivedId(NAMESPACE, `${transactionId}:transition`, route(input.accountId));
+          const acquired = first(await transitionAcquire.run(tx, {
+            route: route(input.accountId), account_id: input.accountId, realm_id: input.principal.id,
+            reservation_id: rows[0].reservationId, generation_id: generationId,
+            operation_id: input.key, transaction_id: transactionId,
+          }));
+          requireAllowed(acquired);
+          transition = { generationId, operationId: input.key };
+        }
         return {
           accountId: input.accountId,
           principal: input.principal,
           reservationId: rows[0].reservationId,
+          ...(transition ? { transition } : {}),
           ...(sourceTransactionId ? { sourceTransactionId } : {}),
         };
       },

@@ -76,7 +76,8 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
       input.kind === 'organization' ? { kind: 'organization' as const, id: input.organizationId } : input.principal;
     if (input.kind === 'membership' && input.role === null && !input.reservationId)
       throw new Error('Missing reservation');
-    if (input.kind === 'membership' && input.reservationId)
+    if (input.kind === 'membership' && input.reservationId &&
+        (input.role === null || input.principal.kind !== 'realm'))
       return { accountId, principal, reservationId: input.reservationId };
     try {
       return (await ports.reserve({ accountId, principal, key: key('reserve') })).value;
@@ -87,6 +88,13 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
     }
   });
   const publish = step('publish', async (input: MembershipWorkInput, reservation: MembershipWorkReservation) => {
+    if (reservation.principal.kind === 'realm' && input.kind === 'membership' && input.role !== null) {
+      if (!reservation.transition || !ports.recover || !ports.finalize || !ports.cancel)
+        throw new Error('Realm transition protocol unavailable');
+      // An exact committed obligation needs no lost bearer on restart. This
+      // read runs again if the publication step died after its foreign commit.
+      if (await ports.recover(reservation, key('recover'))) return;
+    }
     await ports.publish(await authorized(input), input, reservation, key('publish'));
   });
   // Cleanup carries only the exact native reservation. Its terminal proof,
@@ -97,20 +105,31 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
   const release = step('release', async (reservation: MembershipWorkReservation) => {
     await ports.release({ ...reservation, key: key('release') });
   });
+  const finalize = step('finalize', async (reservation: MembershipWorkReservation) => {
+    if (!ports.finalize) throw new Error('Realm transition protocol unavailable');
+    await ports.finalize(reservation, key('finalize'));
+  });
+  const cancel = step('cancel', async (reservation: MembershipWorkReservation) => {
+    if (!ports.cancel) throw new Error('Realm transition protocol unavailable');
+    await ports.cancel(reservation, key('cancel'));
+  });
   return DBOS.registerWorkflow(
     async (input: MembershipWorkInput): Promise<MembershipWorkResult> => {
       const reservation = await reserve(input);
       if ('status' in reservation) return reservation;
+      const positiveRealm = reservation.principal.kind === 'realm' && input.kind === 'membership' && input.role !== null;
       await coordinateMembership({
         leaving: input.kind === 'membership' && input.role === null,
         reserve: async () => reservation,
         publish: (held) => publish(input, held),
         release,
         compensate: async (held) => {
+          if (positiveRealm) { await cancel(held); await finalize(held); return; }
           await terminalize(held);
           await release(held);
         },
       });
+      if (positiveRealm) await finalize(reservation);
       return {
         status: 'completed',
         accountId: input.kind === 'organization' ? input.organizationId : input.memberAccountId,

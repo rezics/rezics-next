@@ -178,6 +178,12 @@ let shared: SharedCommunity | undefined;
 
 /** Pause this file's worker without changing its HTTP application or database. */
 export const worker = {
+  /** Test-local process death, scoped to this fixture's own child only. */
+  async crash(): Promise<void> {
+    if (!shared) throw new Error('Community driver is not open');
+    shared.worker.child.kill('SIGKILL');
+    await shared.worker.stop();
+  },
   async stop(): Promise<void> {
     if (!shared) throw new Error('Community driver is not open');
     await shared.worker.stop();

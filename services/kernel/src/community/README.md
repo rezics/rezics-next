@@ -123,6 +123,35 @@ It does not enumerate grants, boards or members. `test/community/growth-ban.test
 covers both identities as B grows through 256, 1024 and 4096 records, holding statements
 and returned rows constant.
 
+## Realm transition publication proof
+
+Every positive native membership publication requires the fresh Access transition returned by inverse reservation.
+Stable reservation and transition generation are separate. Under the Realm row lock the transaction writes
+membership (or confirms the same live reservation), its native receipt response and an immutable
+`realm_membership_proof` keyed by Realm, member and generation. The receipt binds the original operation, generation,
+stable reservation, outcome and publication transaction. `authority.readTransition(client, transition)` returns
+`RealmMembershipProof | null` only for this exact committed source. A closed or unrelated generation cannot publish;
+a queued old writer encounters the already committed proof slot and refuses. Raw native receipt replay retains its
+original digest and result.
+
+`cancel(transition, key)` is an exact mechanical compensation command. It serializes against publication and returns
+its committed publication if publication won; otherwise it commits immutable cancellation. An existing live member
+is never erased to manufacture terminal absence. Ordinary `terminalize` and terminal inverse release keep their
+existing authoritative rules. The shared Accounts workflow releases the source checkout before consuming proof on
+the account anchor. Publication retains the membership and inverse.
+
+The deployment-only `certifyLegacy(transition, key)` requires adopted stable provenance under the stopped-old-writer
+barrier. It certifies an exact native live or terminal source receipt, not a missing source. The normal Accounts host
+registers its bounded, persisted coordinator; see [Access's transition protocol](../access/README.md#realm-transition-coordination-and-deletion-entry).
+Both migrations are required before new writers start. Source proofs and their receipt transaction index support
+exact probes, without scanning membership or receipt history. They remain physical-custody obligations pending real
+erasure producers; this protocol supplies deletion entry, not participant completion.
+
+Cost: one active Realm lock, current membership/ban/authorization probes, one generation proof and exact receipt
+binding per publication/cancellation; constant rows/statements/output with logarithmic index blocks. The native
+64/512/4096 growth series in `test/access/growth-realm-membership-transition.test.ts` includes the shared workflow,
+Access consumers, source proofs, transaction controls and DBOS work.
+
 ## Account erasure
 
 The account-partition `party_locator` projects the committing ban, membership-operation and curator-verdict

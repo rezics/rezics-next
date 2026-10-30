@@ -555,7 +555,10 @@ export type MembershipWorkInput =
       authorization: string;
     }
   | { kind: 'organization'; organizationId: string; authorization: string };
-export type MembershipWorkReservation = { accountId: string; principal: MembershipPrincipal; reservationId: string };
+export type MembershipWorkReservation = {
+  accountId: string; principal: MembershipPrincipal; reservationId: string;
+  transition?: { generationId: string; operationId: string };
+};
 export type MembershipWorkResult =
   | { status: 'completed'; accountId: string; reservationId: string }
   | { status: 'membership_limit'; code: 'membership_limit' };
@@ -569,6 +572,10 @@ export interface MembershipWorkflowPorts<Context> {
     reservation: MembershipWorkReservation,
     key: string,
   ): Promise<unknown>;
+  /** Realm-only mechanical obligation ports. A Realm workflow fails closed when unavailable. */
+  recover?(reservation: MembershipWorkReservation, key: string): Promise<boolean>;
+  finalize?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
+  cancel?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   terminalize(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   release(input: MembershipWorkReservation & { key: string }): Promise<unknown>;
 }

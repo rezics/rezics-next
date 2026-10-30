@@ -413,7 +413,7 @@ Realm membership itself does not prevent account deletion. Its inverse survives 
 post-erasure cleanup; only its in-flight publication transition holds deletion. Exact native committed-publication
 or cancellation proof closes that transition through the shared durable workflow. Fresh generations prevent an
 old receipt from closing a later transition. [Realm transition coordination and deletion entry][access-transition]
-owns proof binding, crash recovery, bounded legacy reconciliation and the current implementation gap. Organization
+owns the implemented proof binding, crash recovery and bounded legacy reconciliation protocol. Organization
 ownership and operator responsibilities retain their existing deletion barriers.
 
 ## 6. Auth ownership and registration

@@ -1,4 +1,5 @@
 import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
+import { registerRealmMembershipReconciliation } from './realm-membership-transition-legacy.ts';
 import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
@@ -8,6 +9,7 @@ import {
   registerMembershipWorkflows,
 } from '@rezics/auth/membership-workflows';
 import canonicalize from 'canonicalize';
+import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { accountsWorkModule as writeRateExpiryWorkModule } from './write-rate-expiry.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -17,6 +19,7 @@ import {
   type RealmMembershipAuthority,
   type MembershipReservation,
 } from './membership-inverse.ts';
+import { createRealmMembershipTransitions, type RealmMembershipTransition } from './realm-membership-transition.ts';
 import { createAccess as trustedPermissionAccess } from './permission.ts';
 import { createAccess, createWorkflowApprovals } from './index.ts';
 import {
@@ -57,6 +60,8 @@ export type MembershipAuthorization = (reference: string, input: MembershipWorkI
 /** Installed by the owning Realm module. Following a Realm has no operation here. */
 export type RealmMembershipCommands = {
   authority: RealmMembershipAuthority;
+  cancel?(reservation: RealmMembershipTransition, key: string): Promise<unknown>;
+  certifyLegacy?(reservation: RealmMembershipTransition, key: string): Promise<'published' | 'cancelled'>;
   /** Enqueue check and later step resolution for a Realm principal. */
   authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest>;
   publish(
@@ -178,6 +183,36 @@ function membershipWorkPorts(
         key,
       });
     },
+    async recover(held, key) {
+      if (held.principal.kind !== 'realm' || !held.transition || !realm().authority.readTransition)
+        throw new RealmMembershipUnavailableError();
+      const transitions = createRealmMembershipTransitions({
+        pool: context.pool,
+        authority: { readTransition: realm().authority.readTransition! },
+      });
+      const proof = await transitions.proof(held as RealmMembershipTransition);
+      if (!proof) return false;
+      await transitions.consume({ ...(held as RealmMembershipTransition), key });
+      if (proof.outcome !== 'published') throw new MembershipAuthorizationUnavailableError();
+      return true;
+    },
+    async finalize(held, key) {
+      if (held.principal.kind !== 'realm' || !held.transition || !realm().authority.readTransition)
+        throw new RealmMembershipUnavailableError();
+      const result = await createRealmMembershipTransitions({
+        pool: context.pool,
+        authority: { readTransition: realm().authority.readTransition! },
+      }).consume({ ...(held as RealmMembershipTransition), key });
+      if (result.value.outcome === 'cancelled') {
+        const terminal = await withConnection(context.pool, (client) => realm().authority.readTerminal(client, held));
+        if (terminal) await inverse.release({ ...held, key: `${key}:terminal-release` });
+      }
+      return result;
+    },
+    async cancel(held, key) {
+      if (!held.transition || !realm().cancel) throw new RealmMembershipUnavailableError();
+      return realm().cancel!(held as RealmMembershipTransition, key);
+    },
     async terminalize(held, key) {
       if (held.principal.kind === 'realm') return realm().terminalize(held, key);
       return internal.terminalizeMembership({
@@ -209,6 +244,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
       registerAgentVerificationWork(context);
       registerAccountDiscoveryWork(context);
       registerAccounts(context, membershipWorkPorts(context, options, config));
+      if (options.realm && config) registerRealmMembershipReconciliation(context, options.realm, config.referenceKeys);
       context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);
       registerOrganizationCloseWork(context);
