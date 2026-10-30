@@ -395,9 +395,7 @@ test(
         expect(response.status).toBe(200);
         expect(page.threads.map(({ id }) => id)).toEqual(visible.slice(0, 100));
         expect(page.threads).toHaveLength(100);
-        expect(page.threads.every((thread) => JSON.stringify(thread.firstPost.body) === JSON.stringify(document))).toBe(
-          true,
-        );
+        for (const thread of page.threads) expect(thread.firstPost.body).toEqual(document);
         expect(page.next).toEqual(expect.any(String));
         return page;
       },
