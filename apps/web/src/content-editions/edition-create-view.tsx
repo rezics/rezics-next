@@ -10,6 +10,7 @@ import { exactRevisionHref } from '../threads/exact-revision-href';
 import { commandEditionPublication, readEditionCreateSource, reviewEditionPublication } from './edition-create-actions';
 import {
   EditionPublicationController,
+  editionMatchesSource,
   editionSourceFromLink,
   type EditionCreateApi,
   type EditionSourceIdentity,
@@ -88,7 +89,13 @@ export function EditionPublication({
     setConfirmed(false);
   }, [state.review, state.edition?.editionRevision, state.targetSubjectId]);
   const { source, edition, failure } = state;
-  const published = edition?.state === 'published' && !failure && source;
+  const published =
+    edition?.state === 'published' &&
+    source !== null &&
+    !state.busy &&
+    !state.uncertain &&
+    !failure &&
+    editionMatchesSource(edition, source, state.targetSubjectId);
   return (
     <article
       className="mx-auto w-full max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"

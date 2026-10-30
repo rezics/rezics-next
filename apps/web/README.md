@@ -2115,9 +2115,12 @@ cannot replace the fresh read. Source denial retains the pointer, subject and un
 preview. An unknown create result cannot be discarded by a refresh. Once a real command supplies an edition ID, an
 explicit bound current read can resolve its state. Only the confirmed published section links to the assigned
 `/creator/offers/new?editionId=<published ID>` route, localized with `localizeHref` and carrying the encoded current
-native edition ID. Its separate `/editions/{id}` link opens the reader. Navigation creates no offer or purchase fact;
-the offer editor owns fresh native sale metadata, rights, capture, consent and financial policy checks. The assigned
-route can be developed in parallel; this link does not establish its runtime availability.
+native edition ID. Both links remain hidden during pending or uncertain work and require the edition to match the
+current source and selected subject. Its separate `/editions/{id}` link opens the reader. Navigation creates no offer,
+payment or buyer fact and grants no role. The offer editor retains fresh native sale metadata and rights checks under
+[Content's fixed-edition authority](../../services/kernel/src/content/README.md#fixed-authored-paid-editions), plus
+capture, current consent and financial policy under the [Commerce contract](../../services/kernel/src/commerce/README.md#what-is-bought).
+The assigned route can be developed in parallel; this link does not establish its runtime availability.
 
 The isolated typed wire binding uses configured `KERNEL_ORIGIN`, the existing session/Origin/CSRF boundary and private,
 no-store native transport with read-after-write session headers. It never uses the development fake. Without the native
@@ -2171,7 +2174,7 @@ Cost: create, publish, review and uncertain retry
 - Growth check: later native edition outcomes and physical checks remain required; these fixture tests claim no growth
   or promoted-source result.
 
-### Public Realm discovery
+## Public Realm discovery
 
 `community/realm-discovery/index.ts` exports the sole `RealmDiscoverySection`, `loadRealmDiscovery` and the adopted
 `RealmDiscoverySort`, `RealmDiscoveryCard`, `RealmDiscoveryState` and `RealmDiscoverySectionProps` types. Search and
