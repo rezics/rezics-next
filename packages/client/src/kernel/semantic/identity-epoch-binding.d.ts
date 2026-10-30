@@ -78,7 +78,18 @@ export declare function readAccountIdentityUndo(pool: Pool, receipt: Extract<Ide
     kind: 'account-agent.verify';
 }>): Promise<{
     source: Readonly<{
-        input: IdentityAdmissionInput;
+        input: Readonly<{
+            intent: import("./identity-epoch-contract.ts").IdentityIntent;
+            receipt: Readonly<{
+                kind: 'account-agent.verify';
+                account: string;
+                receipt: string;
+            }> | Readonly<{
+                kind: 'account-agent.unverify';
+                account: string;
+                receipt: string;
+            }>;
+        }>;
         partition: number;
         epoch: number;
         position: bigint;

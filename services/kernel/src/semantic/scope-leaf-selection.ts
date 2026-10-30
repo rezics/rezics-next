@@ -131,12 +131,13 @@ export class LeafNativeWork {
   }
   pair(client: PoolClient, route: number, subject: string, property: string, value: string,
     phase: 'compact' | 'witness', after: string | null) {
-    const input = { route, subject_id: subject, property, value, after: phase === 'compact' ? after ?? '0' : after,
-      has_after: after !== null };
-    return (phase === 'compact'
-      ? this.query(client, pairCompact, input, { keys: 1, points: 1, rows: 1, witnesses: 1 })
-      : this.query(client, pairWitness, input, { keys: 1, points: 1, rows: 1, witnesses: 1 }))
-      .then((rows) => rows[0] ?? null);
+    const common = { route, subject_id: subject, property, value };
+    if (phase === 'compact')
+      return this.query(client, pairCompact, { ...common, after: after ?? '0', has_after: after !== null },
+        { keys: 1, points: 1, rows: 1, witnesses: 1 }).then((rows) => rows[0] ?? null);
+    return this.query(client, pairWitness, {
+      ...common, after: after ?? '00000000-0000-0000-0000-000000000000', has_after: after !== null,
+    }, { keys: 1, points: 1, rows: 1, witnesses: 1 }).then((rows) => rows[0] ?? null);
   }
   locator(client: PoolClient, route: number, subject: string, witness: string) {
     return this.query(client, locator, { route, subject_id: subject, candidate_id: witness },

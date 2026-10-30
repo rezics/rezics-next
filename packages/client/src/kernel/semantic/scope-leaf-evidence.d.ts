@@ -67,9 +67,6 @@ export type LeafOptions = Readonly<{
     work?: never;
 }> | LeafWorkContext);
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
-/**
- * The native evidence producer is not connected yet. Valid reservations therefore fail closed as
- * not ready; they never prepare Access, query SQL, or claim a current fact or coverage.
- */
+/** Native selected evidence only; matching remains the shared Search pure matcher. */
 export declare function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence>;
 export {};
