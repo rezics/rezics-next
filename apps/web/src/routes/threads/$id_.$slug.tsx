@@ -458,17 +458,13 @@ export function ThreadReadingPost({
               review={review}
             />
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            {post.revisionId ? (
-              <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
-            ) : (
-              <span />
-            )}
-            <div className="flex min-w-0 flex-wrap items-center gap-1">
-              <SharePost onCopyLink={copyLink} />
-              {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
-            </div>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center justify-end gap-1">
+            <SharePost onCopyLink={copyLink} />
+            {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
           </div>
+          {post.revisionId ? (
+            <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
+          ) : null}
         </>
       )}
     </ListRow>

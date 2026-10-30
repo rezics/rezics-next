@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import { documentText, fromPlainText } from '@rezics/document';
@@ -39,6 +40,7 @@ async function readingPage(): Promise<ThreadReadingPage> {
     { sitekey: '', scriptUrl: '' },
     'anonymous',
   );
+  if ('redirect' in page) throw new Error('The recorded reading page must not redirect');
   return { ...page, provenanceSubjects: page.subjects };
 }
 async function render(page: ThreadReadingPage, personal?: ThreadReadingPersonal) {
@@ -54,9 +56,12 @@ async function render(page: ThreadReadingPage, personal?: ThreadReadingPersonal)
     onPageRefresh: async () => page,
   });
   const route = createRootRoute({ component: () => region });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }), ssr: {} });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await router.load();
-  return renderToStaticMarkup(createElement(RouterProvider, { router }));
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+  );
 }
 
 test('the real reading region renders current documents, honest community context and lifecycle slots at a readable measure', async () => {
@@ -78,8 +83,8 @@ test('the real reading region renders current documents, honest community contex
     posts: {
       ...page.posts,
       posts: page.posts.posts.map((post, index): ThreadPost => {
-        if (index === 0) return post;
-        return index === 1
+        if (index === 2 || post.availability !== 'available') return post;
+        return index === 0
           ? { ...post, body: null, sha256: null, removed: true, availability: 'erased' }
           : { ...post, body: null, sha256: null, removed: true, availability: 'withheld' };
       }),
@@ -91,8 +96,10 @@ test('the real reading region renders current documents, honest community contex
   expect(removed).toContain(m.thread_post_deleted());
   expect(removed).toContain(m.thread_post_withheld());
   expect(removed).toContain(m.thread_reply_parent_deleted());
-  for (const post of page.posts.posts.slice(1)) {
-    if (post.availability === 'available') expect(removed).not.toContain(documentText(post.body));
+  for (const post of page.posts.posts.slice(0, 2)) {
+    if (post.availability === 'available') {
+      for (const text of documentText(post.body).split('\n').filter(Boolean)) expect(removed).not.toContain(text);
+    }
   }
   const empty = await render({ ...page, posts: { ...page.posts, posts: [], next: 'signed-continuation' } });
   expect(empty).toContain(m.thread_reading_empty_page());

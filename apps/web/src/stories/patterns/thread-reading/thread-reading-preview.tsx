@@ -55,7 +55,7 @@ function Connected({ state }: { state: ReadingState }) {
           posts: {
             ...loaded.posts,
             posts: loaded.posts.posts.map((post, index): ThreadPost => {
-              if (index !== 1) return post;
+              if (index !== 1 || post.availability !== 'available') return post;
               return state === 'deleted'
                 ? { ...post, body: null, sha256: null, removed: true, availability: 'erased' }
                 : { ...post, body: null, sha256: null, removed: true, availability: 'withheld' };

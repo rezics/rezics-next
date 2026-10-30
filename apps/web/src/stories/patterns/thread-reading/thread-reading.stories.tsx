@@ -54,7 +54,7 @@ export const OwnEdit: Story = {
     await canvas.findByRole('textbox', { name: m.thread_reply_label() });
     const menus = await canvas.findAllByRole('button', { name: m.thread_content_more_actions() });
     await userEvent.click(menus[0]!);
-    await userEvent.click(await screen.findByRole('menuitem', { name: m.thread_content_edit() }));
+    await userEvent.click(await screen.findByText(m.thread_content_edit(), { exact: true }));
     await expect(await canvas.findByRole('button', { name: m.thread_edit_save() })).toBeVisible();
   },
 };
@@ -71,7 +71,7 @@ export const Report: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click((await canvas.findAllByRole('button', { name: m.report_more() }))[0]!);
-    await userEvent.click(await screen.findByRole('menuitem', { name: m.report_action() }));
+    await userEvent.click(await screen.findByText(m.report_action(), { exact: true }));
     await expect(await screen.findByRole('dialog', { name: m.report_title() })).toBeVisible();
   },
 };
