@@ -363,6 +363,8 @@ export async function readCollectionKindSourcePage(input: CollectionKindSourceSt
   if (
     prefix.observation.basis.digest !== input.source.observation.basis.digest ||
     prefix.observation.incarnation !== input.source.observation.incarnation ||
+    prefix.observation.stamp.epoch !== input.source.observation.stamp.epoch ||
+    prefix.observation.stamp.position !== input.source.observation.stamp.position ||
     prefix.candidates.length > COLLECTION_KIND_RAW_LIMIT
   )
     throw new ProblemError('dependency_unavailable');
@@ -459,6 +461,7 @@ export function validateCollectionKindPage(
     (page.frontier !== null &&
       (!page.frontier || new TextEncoder().encode(page.frontier).byteLength > COLLECTION_KIND_BYTE_LIMIT)) ||
     (page.status === 'complete' && page.frontier !== null) ||
+    (page.votes.length > 0 && page.afterSubject === null) ||
     (page.status === 'progress' && page.afterSubject === after && page.frontier === frontier) ||
     (page.afterSubject !== null && after !== null && page.afterSubject < after) ||
     (page.afterSubject === null && after !== null)
@@ -497,7 +500,7 @@ export function createCollectionKindReads(
     if (row.presentationKind !== null)
       return { presentationKind: row.presentationKind, presentationKindSource: 'owner' };
     // Only the actual complete curated count certifies this shortcut; dynamic sources never use self-zero.
-    if (row.membershipKind !== 'dynamic' && row.memberCount === 0)
+    if (row.membershipKind === 'curated' && row.memberCount === 0)
       return { presentationKind: null, presentationKindSource: 'empty' };
     const selected = await native.select({ collectionId: row.id, actor, deadline });
     if (selected.status !== 'selected') return pendingCollectionKind();

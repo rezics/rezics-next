@@ -16,6 +16,7 @@ import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identi
 import { readBuiltinStateReference } from './builtin-reference-store.ts';
 import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from './owner-index.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import type { CollectionKind } from './collection-kind.ts';
 
 export type BuiltinCollectionView = {
   id: string;
@@ -28,8 +29,8 @@ export type BuiltinCollectionView = {
   title: string | null;
   description: string | null;
   revision: number;
-  presentationKind: null;
-  presentationKindSource: 'empty';
+  presentationKind: CollectionKind['presentationKind'];
+  presentationKindSource: CollectionKind['presentationKindSource'];
   cover: null;
   coverSource: 'none';
 };
@@ -53,7 +54,8 @@ function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollec
     description: null,
     revision: 0,
     presentationKind: null,
-    presentationKindSource: 'empty',
+    // A logical descriptor has no complete audience-specific native Type observation.
+    presentationKindSource: 'pending',
     cover: null,
     coverSource: 'none',
   };
