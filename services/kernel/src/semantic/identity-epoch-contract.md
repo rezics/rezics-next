@@ -1405,6 +1405,7 @@ revision-1/self-mapping/self-gate same-transaction custody. A SERIALIZABLE comma
 locks would miss a drained writer; it is not used for this migration inspection. Under those same locks the
 installation enables the deferred birth guard and commits immutable `identity_epoch_installation_cut`
 custody. An interrupted cut rolls back atomically; a committed cut without native closure remains unavailable.
+Even all 4096 retained native topology closures cannot substitute for the missing installation receipt.
 
 A separately released home-0 command verifies the committed cut and installed guards and records the actual
 bootstrap native commit plus `identity_epoch_installation` closure. The exported result is

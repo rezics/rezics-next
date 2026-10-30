@@ -11,6 +11,7 @@ import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import {
   readIdentityEpochCutover,
+  runIdentityEpochBootstrapBatch,
   stepIdentityEpochBootstrap,
   stepIdentityEpochBootstrapWork,
 } from '../../src/semantic/identity-epoch-bootstrap.ts';
@@ -370,3 +371,47 @@ test('absence repair visits a new dirty home before wrapping to an unfinished ea
     await db.close();
   }
 }, 30_000);
+
+test('full native topology closure cannot substitute for an interrupted installation receipt', async () => {
+  await closeCommunityDrivers();
+  const db = await identityEpochDatabase();
+  try {
+    await db.admin.query('SELECT semantic.prepare_identity_epoch_installation()');
+    const cut = (await db.admin.query('SELECT * FROM semantic.identity_epoch_installation_cut')).rows[0]!;
+    expect(cut.mode).toBe('absence');
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    // Drive the actual bounded producer while the installation command is interrupted.
+    // No topology, source ACK, receiving custody or completion row is installed by test SQL.
+    let remaining = 4096;
+    for (let batch = 0; batch < 100 && remaining > 0; batch++) {
+      await runIdentityEpochBootstrapBatch(db.pool);
+      remaining = (await db.admin.query('SELECT remaining FROM semantic.identity_epoch_bootstrap_topology')).rows[0]!
+        .remaining;
+    }
+    expect(
+      (
+        await db.admin.query(`
+        SELECT
+          (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_home h
+           JOIN semantic.identity_epoch_native_commit c
+             ON (c.partition_no,c.transaction_id,c.epoch,c.position)=
+                (h.partition_no,h.sealed_transaction_id,h.sealed_epoch,h.sealed_position)
+           JOIN core.partition p ON p.partition_no=h.partition_no AND p.epoch=h.sealed_epoch
+           WHERE c.purpose='bootstrap' AND p.write_state='active' AND p.position>=h.sealed_position
+             AND NOT h.needs_work) homes,
+          (SELECT count(*)::integer FROM semantic.identity_epoch_topology_custody) custody,
+          (SELECT remaining FROM semantic.identity_epoch_bootstrap_topology WHERE partition_no=0) remaining
+      `)
+      ).rows,
+    ).toEqual([{ homes: 4096, custody: 4096, remaining: 0 }]);
+    expect((await db.admin.query('SELECT * FROM semantic.identity_epoch_installation')).rows).toEqual([]);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    const installed = await installIdentityEpochBootstrap(db.pool);
+    expect(installed.mode).toBe('absence');
+    expect(installed.installationXid).toBe(cut.installation_xid);
+    expect(installed.native.position).toBeGreaterThan(0n);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
+  } finally {
+    await db.close();
+  }
+}, 180_000);
