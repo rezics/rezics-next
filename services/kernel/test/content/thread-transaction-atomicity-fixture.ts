@@ -322,8 +322,8 @@ function routeIndependentThreadKey(
   namespace: string,
   desiredRoute?: number,
 ) {
-  for (let index = 0; index < 100_000; index++) {
-    const key = `${namespace}-thread-${index}-${randomUUID()}`;
+  for (let index = 0; index < 1_000_000; index++) {
+    const key = `${namespace}-thread-${index}`;
     const route = threadTarget(system.routeKey, accountId, key).route;
     if (route !== boardRoute && (desiredRoute === undefined || route === desiredRoute)) return key;
   }
