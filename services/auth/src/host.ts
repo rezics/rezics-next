@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { readWorkflowRetentionConfig } from './retention.ts';
 import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
@@ -14,7 +15,7 @@ import { AUTH_MAINTENANCE_CRON, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } fr
 
 export class AuthHostConfigurationError extends Error {
   override readonly name = 'AuthHostConfigurationError';
-  constructor(readonly code: 'database' | 'staging-key' | 'schedule' | 'executor') {
+  constructor(readonly code: 'database' | 'staging-key' | 'schedule' | 'executor' | 'operation-client') {
     super(`Invalid Auth host configuration: ${code}`);
   }
 }
@@ -164,6 +165,18 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       if (stopping) return Promise.reject(new Error('Auth host is stopped'));
       return (starting ??= (async () => {
         try {
+          try {
+            await auth.internal.registerClient({
+              clientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+              firstParty: true,
+              scopes: [...new Set(Object.values(AUTH_PAGE_OPERATION_SCOPES).flat())],
+              mode: 'create-or-match',
+            });
+          } catch (error) {
+            if (error instanceof Error && 'status' in error && (error.status === 400 || error.status === 401))
+              throw new AuthHostConfigurationError('operation-client');
+            throw error;
+          }
           await registerLoginClient();
           await workflows.start();
           await maintenance!.start(schedule);

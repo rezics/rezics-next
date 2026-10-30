@@ -163,13 +163,17 @@ Only trusted application code may call the internal effects:
 - `internal.revokeSessions(accountId)` uses Better Auth's
   `internalAdapter.deleteUserSessions`. Operator authorization and any epoch fence
   must already have succeeded as Access commands before this effect is called.
-- `internal.registerClient({ clientId, firstParty, scopes, displayName? })` persists trusted
+- `internal.registerClient({ clientId, firstParty, scopes, displayName?, mode? })` persists trusted
   client configuration. When supplied, `displayName` must contain 1–100 characters
   after trimming; invalid names are refused with 400. Re-registration replaces the
   display name, and omitting it stores null. Only trusted deployment/application code decides which
   clients are first party. Scope growth does not change existing sessions.
   Removing scopes or changing a first-party client to third party uses the workflow
   host's `reduceClientScopes`; direct `registerClient` calls continue to refuse reductions.
+  With `mode: 'create-or-match'`, the same native client lock and reduction guards
+  protect insertion or an exact first-party flag and normalized scope-set match.
+  A match preserves all existing metadata; a mismatch rolls back without writes.
+  Invalid modes are refused. Omitting the mode retains the ordinary upsert behavior.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
 Registration command durability, retries and Access activation remain the
@@ -584,6 +588,26 @@ leaves an existing `login` client unchanged. Repeated or concurrent starts
 register it once. `createAuthService` does not register it. SIGINT/SIGTERM stop
 DBOS before closing the product pool and any injected `systemDatabasePool`.
 
+Before resolving, `host.start()` also registers the first-party client
+`rezics-auth-account-operations` through trusted `registerClient` in
+`create-or-match` mode. `@rezics/auth-contract` exports its nonsecret
+`AUTH_PAGE_OPERATION_CLIENT_ID` and readonly `AUTH_PAGE_OPERATION_SCOPES`:
+`organization: ['organization:create']` and `delete: ['account:delete']`.
+Its ceiling is exactly their deduplicated union. An incompatible existing party
+or scope set fails startup with `AuthHostConfigurationError`, code
+`operation-client`, preserving the registry and native reduction fences.
+
+The existing `POST /signin` (`email`, `password`, `client_id`, `scope`) and
+`POST /signin/passkey` (`response`, `client_id`, `scope`, after its options ceremony)
+accept one selected fixed profile after real authentication. Their sessions and
+live proof tokens retain that exact client and scope. This registration supplies
+no grant, managed-account deletion or security-setting authority, and never enables
+cookie sign-in as the confidential `rezics-website` client.
+Web owns the step-up consumer: retain the initiating account, exact pending operation
+key and body, verify the returned account, and require normal confirmation plus
+fresh caller-bound native approval. `return_to` is navigation only; it selects
+neither client nor scopes. The native organizations platform gate remains mandatory.
+
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
 system pool must name that same database. The SDK creates and migrates its schema;
@@ -839,6 +863,14 @@ its native entry point; helper checks do not stand in for extra handler or durab
 wrapper I/O. Startup/schema migration, bootstrap and one-time legacy session
 upgrade discovery/trimming are excluded. Unimplemented account-erasure participant
 and terminal workflow steps have no runtime row.
+
+Host startup adds one fixed operation-client registration under its existing
+one-client lock. It performs exact-key reduction and registry reads; absence adds
+the native registry and coverage inserts. A matching replay makes three selected-client
+registry touches (lock, reduction read, client read) at 1/8/64 unrelated clients in
+`test/auth-page-operation-client.test.ts`. Work is constant in total accounts,
+clients and history, with logarithmic indexed access. It runs only at startup;
+sign-in and operation paths retain the bounds below.
 
 R counts examined relation rows, B shared-block accesses, and Q client SQL statements
 including BEGIN/COMMIT and advisory locks; native FK/trigger work counts in R/B

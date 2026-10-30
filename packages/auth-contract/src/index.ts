@@ -1,3 +1,10 @@
+/** Nonsecret first-party identity for the two Auth-page self-operation profiles. */
+export const AUTH_PAGE_OPERATION_CLIENT_ID = 'rezics-auth-account-operations';
+export const AUTH_PAGE_OPERATION_SCOPES = Object.freeze({
+  organization: Object.freeze(['organization:create'] as const),
+  delete: Object.freeze(['account:delete'] as const),
+});
+
 /** Maximum consented scopes in a session or durable actor snapshot. */
 export const MAX_CONSENTED_SCOPES = 512;
 /** Maximum joined ASCII scope bytes, including the single-space separators. */

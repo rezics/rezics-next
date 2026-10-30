@@ -342,6 +342,8 @@ export interface AuthService {
       firstParty: boolean;
       scopes: string[];
       displayName?: string;
+      /** Insert when absent; otherwise require exact party/scopes without replacing metadata. */
+      mode?: 'create-or-match';
     }): Promise<void>;
   };
 }

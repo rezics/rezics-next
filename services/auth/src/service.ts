@@ -1481,6 +1481,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       registerWebsiteClient: website.register,
       async registerClient(input) {
+        if (input.mode !== undefined && input.mode !== 'create-or-match') throw new Denied(400);
         const id = text(input.clientId);
         let displayName: string | null = null;
         if (input.displayName !== undefined) {
@@ -1506,6 +1507,16 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             (previous.scopes.some((scope) => !granted.includes(scope)) || (previous.first_party && !input.firstParty))
           )
             throw new Denied();
+          if (previous && input.mode === 'create-or-match') {
+            if (
+              previous.first_party !== input.firstParty ||
+              new Set(previous.scopes).size !== granted.length ||
+              previous.scopes.some((scope) => !granted.includes(scope))
+            )
+              throw new Denied();
+            await connection.query('COMMIT');
+            return;
+          }
           await connection.query(
             'INSERT INTO auth_client (client_id, first_party, scopes, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes, display_name=EXCLUDED.display_name',
             [id, input.firstParty, granted, displayName],
