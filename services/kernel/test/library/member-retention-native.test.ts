@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { syncSubjectListing, subjectCollections } from '../../src/library/listing.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
@@ -309,6 +310,58 @@ test('native member purge is exact episode bounded and never decrements public l
   await gone(m);
   expect((await m.parent()).memberCount).toBe(1);
   await parked.stop('SIGTERM');
+
+  // Active public parents retain only structural identity when an independent child
+  // expires. The surviving duplicate keeps its Collection in the public listing once.
+  const publicCollection = await make('public');
+  const publicSibling = await publicCollection.add('public sibling');
+  const listing = { pool: f.pool, clock: () => new Date(time) };
+  await syncSubjectListing(listing, {
+    subjectId: publicCollection.subjectId,
+    collectionId: publicCollection.collection.id,
+  });
+  expect(await subjectCollections(f.pool, publicCollection.subjectId, null, 10)).toEqual([
+    expect.objectContaining({ collectionId: publicCollection.collection.id }),
+  ]);
+  const publicDeletion = await publicCollection.remove();
+  const publicDeadline = await nativeDeadline(publicCollection);
+  await syncSubjectListing(listing, {
+    subjectId: publicCollection.subjectId,
+    collectionId: publicCollection.collection.id,
+  });
+  expect(await subjectCollections(f.pool, publicCollection.subjectId, null, 10)).toEqual([
+    expect.objectContaining({ collectionId: publicCollection.collection.id }),
+  ]);
+  writeFileSync(clockPath, String(Date.parse(publicDeadline)));
+  await (await trigger()).getResult({ pollingIntervalMs: 20 });
+  const retained = await f.pool.query(
+    `SELECT route,collection_id,member_id,subject_id,note,ordinal_key,added_at,deletion_id,
+            deletion_revision,deleted_at,purge_after,deleted_ordinal_key
+       FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3`,
+    [routeOf(publicCollection.collection.id), publicCollection.collection.id, publicCollection.first.id],
+  );
+  expect(retained.rows).toHaveLength(1);
+  expect(retained.rows[0]).toMatchObject({
+    route: routeOf(publicCollection.collection.id),
+    collection_id: publicCollection.collection.id,
+    member_id: publicCollection.first.id,
+    subject_id: publicCollection.subjectId,
+    note: null,
+    added_at: null,
+    deletion_id: publicDeletion.deletionId,
+    deletion_revision: null,
+    deleted_at: null,
+    purge_after: null,
+    deleted_ordinal_key: null,
+  });
+  expect(retained.rows[0].ordinal_key).toBe(`~${publicCollection.first.id}`);
+  expect((await publicCollection.snapshot()).find((row) => row.row.member_id === publicSibling.id)?.row.note).toBe(
+    'public sibling',
+  );
+  expect((await publicCollection.parent()).memberCount).toBe(1);
+  expect(await subjectCollections(f.pool, publicCollection.subjectId, null, 10)).toEqual([
+    expect.objectContaining({ collectionId: publicCollection.collection.id }),
+  ]);
 }, 300000);
 test('native commit before durable checkpoint recovers on the same default worker without a second mutation', async () => {
   const m = await make();
