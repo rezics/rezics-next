@@ -172,9 +172,9 @@ test('Exact revision and history use genuine current derivative images', async (
   expect(page.revision.sha256).toBe(selected.sha256);
   expect(page.thread.differentHead).toBe(true);
   // History shares this exact absence boundary; it has no per-revision/per-image substitute.
-  expect(
-    await loadRevisionDocumentMedia(kernel, revisionDocumentImageIds([revision, later]), 'Bearer reader'),
-  ).toEqual({ kind: 'unavailable' });
+  expect(await loadRevisionDocumentMedia(kernel, revisionDocumentImageIds([revision, later]), 'Bearer reader')).toEqual(
+    { kind: 'unavailable' },
+  );
   expect(requests).toHaveLength(3);
   expect(
     requests
@@ -233,5 +233,10 @@ test('history image references stay within each native page and each available r
     expect(revisionDocumentImageIds([{ ...revision, availability }])).toEqual([]);
   expect(revisionDocumentImageIds([{ ...revision, body: null }])).toEqual([]);
   // A declaration on a different revision in the same page is also insufficient.
-  expect(revisionDocumentImageIds([{ ...revision, body: selected.body }, { ...nextPage, mediaIds: [] }])).toEqual([]);
+  expect(
+    revisionDocumentImageIds([
+      { ...revision, body: selected.body },
+      { ...nextPage, mediaIds: [] },
+    ]),
+  ).toEqual([]);
 });
