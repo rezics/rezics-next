@@ -4,6 +4,7 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readLibraryResult, type CollectionVisibility } from '../library/reads';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { securityHrefFromIssuer } from './account-safety-links';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
@@ -228,12 +229,7 @@ function presentNotifications(value: unknown): NotificationPreferences | undefin
 
 /** The Auth site owns password, passkeys and sessions; the settings page only links to them. */
 function securityHref(sessionEnv: Partial<SessionEnv>): string | null {
-  if (!sessionEnv.AUTH_ISSUER) return null;
-  try {
-    return new URL('/security', sessionEnv.AUTH_ISSUER).href;
-  } catch {
-    return null;
-  }
+  return securityHrefFromIssuer(sessionEnv.AUTH_ISSUER);
 }
 
 /** One session read and one `GET /v1/accounts/<id>/preferences` for the signed-in account. */

@@ -1,9 +1,9 @@
-import { useSession } from '../session/query';
+import { exposureQuery, useSession } from '../session/query';
+import { useQuery } from '@tanstack/react-query';
 import { useId, useLayoutEffect, useState, useEffect } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { cn } from '@rezics/ui/utils';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
@@ -19,6 +19,8 @@ import type { NativePreferenceFailure, ReadingPreferences, SettingsPage, Spoiler
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
+import { AccountSafetyCard } from './account-safety';
+import { SectionsNavigation, settingsSections } from './sections-navigation';
 
 type Signal =
   | 'idle'
@@ -268,33 +270,7 @@ function ReadingCard({
   );
 }
 
-function AccountCard({ securityHref, csrfToken }: { securityHref: string | null; csrfToken: string | null }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 id="settings-account-heading">{m.settings_account_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_account_text()}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-3">
-        {securityHref ? (
-          <a href={securityHref} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }))}>
-            {m.account_security_settings()}
-          </a>
-        ) : null}
-        <form method="post" action="/auth/sign-out" className="m-0">
-          <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-          <Button type="submit" variant="outline" size="lg" disabled={!csrfToken}>
-            {m.account_sign_out()}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-export function SettingsPageView({
+function SettingsSections({
   page,
   csrfToken,
 }: {
@@ -302,6 +278,12 @@ export function SettingsPageView({
   csrfToken: string | null;
 }) {
   const collectionsAdmitted = useOperation('account.collections');
+  const verificationAdmitted = useOperation('agent_verification.request');
+  const { state: sessionState } = useSession();
+  // Observe the same admission and verification reads as the sections, without adding requests.
+  const exposure = useQuery({ ...exposureQuery, enabled: false });
+  const verification = useQuery({ queryKey: ['settings', 'verification'], enabled: false });
+  const showVerification = verificationAdmitted && verification.error?.message !== 'rezics-platform-closed';
   const location = useLocation();
   const router = useRouter();
   const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
@@ -311,108 +293,104 @@ export function SettingsPageView({
     if ('preferences' in page) setVersion(page.preferences.version);
   }, [page]);
   return (
+    <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
+      <SectionsNavigation
+        sections={settingsSections({
+          notifications: 'preferences' in page,
+          collections: collectionsAdmitted,
+          verification: showVerification,
+          readingState: 'preferences' in page ? undefined : page.state,
+        })}
+        pending={sessionState === 'unknown' || (sessionState === 'signed-in' && exposure.isPending)}
+      />
+      <div className="min-w-0 space-y-8">
+        <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
+          {'preferences' in page ? (
+            <ReadingCard
+              key={page.preferences.version}
+              initial={page.preferences}
+              version={version}
+              onVersionChange={setVersion}
+            />
+          ) : (
+            <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
+          )}
+        </section>
+        {'preferences' in page ? (
+          <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
+            {page.notifications ? (
+              <NotificationsCard
+                initial={page.notifications}
+                version={version}
+                csrfToken={formCsrfToken}
+                action={location.publicHref.split(/[?#]/, 1)[0]!}
+                initialFailed={notificationError}
+                onVersionChange={setVersion}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Alert variant="destructive">
+                    <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
+                    <AlertDescription>
+                      <p>{m.settings_unavailable_text()}</p>
+                      <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
+                        {m.settings_retry()}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        ) : null}
+        <CollectionPrivacySection />
+        {showVerification ? (
+          <section
+            id="verification"
+            aria-label={m.settings_verification_heading()}
+            className="scroll-mt-6"
+            tabIndex={-1}
+          >
+            <VerificationSection />
+          </section>
+        ) : null}
+        <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
+          <ProfileSection />
+        </section>
+        <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
+          <PublicViewsSection />
+        </section>
+        <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6">
+          <AccountSafetyCard
+            state="signed-in"
+            securityHref={page.securityHref}
+            csrfToken={formCsrfToken}
+            onReload={() => window.location.reload()}
+          />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export function SettingsPageView({ page, csrfToken }: { page: SettingsPage; csrfToken: string | null }) {
+  const location = useLocation();
+  return (
     <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
       <header>
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
-      <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
-        <nav aria-label={m.settings_sections_label()} className="hidden lg:block">
-          <ul className="sticky top-6 space-y-2 border-l border-border pl-4 text-sm">
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#reading">
-                {m.settings_reading_heading()}
-              </a>
-            </li>
-            {'preferences' in page ? (
-              <li>
-                <a className="text-muted-foreground hover:text-foreground" href="#notifications">
-                  {m.settings_notifications_heading()}
-                </a>
-              </li>
-            ) : null}
-            {collectionsAdmitted ? (
-              <li>
-                <a className="text-muted-foreground hover:text-foreground" href="#privacy">
-                  {m.settings_privacy_heading()}
-                </a>
-              </li>
-            ) : null}
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#profile">
-                {m.settings_profile_heading()}
-              </a>
-            </li>
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#public-activity">
-                {m.settings_public_activity_heading()}
-              </a>
-            </li>
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#account">
-                {m.settings_account_heading()}
-              </a>
-            </li>
-          </ul>
-        </nav>
-        <div className="min-w-0 space-y-8">
-          <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
-            {'preferences' in page ? (
-              <ReadingCard
-                key={page.preferences.version}
-                initial={page.preferences}
-                version={version}
-                onVersionChange={setVersion}
-              />
-            ) : (
-              <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
-            )}
-          </section>
-          {'preferences' in page ? (
-            <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
-              {page.notifications ? (
-                <NotificationsCard
-                  initial={page.notifications}
-                  version={version}
-                  csrfToken={formCsrfToken}
-                  action={location.publicHref.split(/[?#]/, 1)[0]!}
-                  initialFailed={notificationError}
-                  onVersionChange={setVersion}
-                />
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Alert variant="destructive">
-                      <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
-                      <AlertDescription>
-                        <p>{m.settings_unavailable_text()}</p>
-                        <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
-                          {m.settings_retry()}
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  </CardContent>
-                </Card>
-              )}
-            </section>
-          ) : null}
-          <CollectionPrivacySection />
-          <VerificationSection />
-          <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
-            <ProfileSection />
-          </section>
-          <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
-            <PublicViewsSection />
-          </section>
-          <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6">
-            <AccountCard securityHref={page.securityHref} csrfToken={formCsrfToken} />
-          </section>
-        </div>
-      </div>
+      {page.signedIn ? (
+        <SettingsSections page={page} csrfToken={csrfToken} />
+      ) : (
+        <AccountSafetyCard state="signed-out" returnTo={location.publicHref} />
+      )}
     </article>
   );
 }

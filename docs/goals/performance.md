@@ -35,6 +35,11 @@ The [kernel README](../../services/kernel/README.md), module Cost sections and
 [verification](../development/verification.md) describe the evidence. Product-code fixes require coordination with
 the owning Goal and one writer per shared path. A shared harness API change is a cross-owner contract.
 
+Performance also owns the website account-settings, notices and preferences journeys: section navigation,
+account safety entry and the assigned profile/preference regions, using the existing Web shell and real typed
+APIs. Accounts, Auth and Content retain backend behavior. Web owns shared patterns and Storybook organization
+and reviews the component stories; Root reviews screenshots before these interface journeys count as complete.
+
 ## Dependencies
 
 Requires native owner operations and realistic fixtures with isolated resources. Other Goals use the common harness

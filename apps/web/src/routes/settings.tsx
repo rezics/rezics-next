@@ -17,6 +17,6 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsRoute() {
   const { csrfToken } = useSession();
-  const page = Route.useLoaderData() as Extract<Awaited<ReturnType<typeof readSettingsPage>>, { signedIn: true }>;
+  const page = Route.useLoaderData();
   return <SettingsPageView page={page} csrfToken={csrfToken} />;
 }
