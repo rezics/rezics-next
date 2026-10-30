@@ -443,7 +443,7 @@ export async function loadEditableCollectionPage(
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,
     following,
-    viewerActions,
+    ...(viewerActions ? { viewerActions } : {}),
     memberState,
     ...(input.filter ? { filter: input.filter } : {}),
     ...(input.filterIgnored ? { filterIgnored: input.filterIgnored } : {}),
