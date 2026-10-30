@@ -110,7 +110,6 @@ export function VerificationCard({
   const [statement, setStatement] = useState(initialDraft?.statement ?? '');
   const [links, setLinks] = useState(initialDraft?.links ?? [{ label: '', url: '' }]);
   const [confirmation, setConfirmation] = useState(false);
-  const admitted = useOperation('agent_verification.request');
   const pending = state.phase === 'sending' || state.phase === 'reading';
   const verification = state.current?.verificationRequest ?? null;
   const subjectTitle = state.current?.subjectTitle ?? null;
