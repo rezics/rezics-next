@@ -1,5 +1,5 @@
 /** Match the BFF's HTTPS policy, including its explicit local-development exception. */
-function trustedAuthUrl(value: string | null | undefined): URL | null {
+export function trustedAuthUrl(value: string | null | undefined): URL | null {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -8,8 +8,8 @@ function trustedAuthUrl(value: string | null | undefined): URL | null {
       (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
       url.username ||
       url.password ||
-      url.search ||
-      url.hash
+      url.href.includes('?') ||
+      url.href.includes('#')
     )
       return null;
     return url;

@@ -31,6 +31,7 @@ import {
 import type { CollectionVisibility } from '../library/reads';
 import { collectionPrivacyRead, type CollectionPrivacyRead } from './collection-privacy-data';
 import { readAccountRenameContext } from './account-rename-data';
+import { accountRenameNavigation } from './account-rename-actions';
 
 /** One bounded owner read for one page, made only by the browser query. */
 export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
@@ -91,7 +92,11 @@ export const readSettingsPage = createServerFn({ method: 'GET' }).handler(async 
   const accountId = sessionSubject(request);
   const renameAccount =
     authorization && accountId ? await readAccountRenameContext(kernelClient(), authorization, accountId) : null;
-  return { ...page, csrfToken: requestCsrfToken(request), renameAccount };
+  return {
+    ...page,
+    csrfToken: requestCsrfToken(request),
+    renameAccount: accountRenameNavigation(env as Partial<SessionEnv>, renameAccount),
+  };
 });
 
 export const savePreferences = createServerFn({ method: 'POST' })

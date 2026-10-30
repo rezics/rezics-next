@@ -244,10 +244,11 @@ element, and the token is never placed in a cookie.
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
 
 The private Settings Account section offers handle rename at exactly `<AUTH_ISSUER origin>/account/rename`,
-derived from the same validated configuration as `/security`. Its self context comes from the existing session
-account key, `GET /v1/accounts/{accountId}/profile` and `POST /v1/viewerActions`; only an exact self
-`account:update` entry advertising installed `account.update` enables navigation. Missing context, issuer or
-capability stays unavailable. Handleless accounts use the same private key, never a public handle lookup.
+only when `/account/rename` is declared in `AUTH_MANAGEMENT_PAGE_ROUTES`. Its self context comes from the existing
+session account key, `GET /v1/accounts/{accountId}/profile` and `POST /v1/viewerActions`; only an exact self
+`account:update` entry advertising installed `account.update`, together with deployment availability, enables
+navigation. Missing context, issuer, route declaration or capability stays unavailable. Handleless accounts use
+the same private key, never a public handle lookup.
 This is navigation only: no target, scopes, approval, return URL, website credentials or operation body travel
 to Auth, and the anchor suppresses the referrer. Auth owns `GET /account/rename`: it must load its actual native
 account/session, choose a separate exact rename management profile, and require explicit confirmation and current
@@ -268,6 +269,18 @@ Configure these variables in the environment of `bun run dev`:
 
 - `AUTH_ISSUER`: Auth's exact OpenID issuer identifier. HTTPS is required except for loopback development issuers
   (`127.0.0.1`, `localhost`, or `[::1]`).
+- `AUTH_MANAGEMENT_PAGE_ROUTES`: optional trusted website deployment configuration, a JSON string array of at most
+  four unique literal paths and at most 1024 UTF-8 bytes: `/account/rename`, `/organizations/members`,
+  `/operators/transfer`, `/organizations/delete`. Missing, malformed, unknown or duplicate entries make all these
+  new management pages unavailable; there is no wildcard, default or inferred availability. The deployment owner
+  lists only pages actually deployed with production triggers and real native transport. This change enables none.
+  `session/auth-page-routes.ts` exports `AuthManagementPagePath` and `authManagementPageHref(env, path, targetId?)`:
+  server callers receive a nullable href on the validated issuer's origin. Rename accepts no target; members and
+  organization deletion require a UUID as `organizationId`, and transfer requires a UUID as `accountId`. A target
+  selects a resource and supplies no authority. The server passes nullable hrefs to the UI; request, browser and
+  route parameters and issuer claims never supply this configuration. Availability grants no permission or native
+  outcome proof; current native capabilities, consent, gates and Auth final route/step-up validation still apply.
+  Existing `/security` and `/account/delete` links retain their behavior.
 - `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.

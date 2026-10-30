@@ -5,6 +5,8 @@ import type { SessionStore } from './store.ts';
 export type SessionEnv = {
   SITE_ORIGINS?: string;
   AUTH_ISSUER: string;
+  /** Exact optional Auth management pages explicitly available in this deployment. */
+  AUTH_MANAGEMENT_PAGE_ROUTES?: string;
   /** Native-host transport for the reserved WebAuthn test issuer only. */
   AUTH_TEST_LOOPBACK_ORIGIN?: string;
   API_RESOURCE: string;

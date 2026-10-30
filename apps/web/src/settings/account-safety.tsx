@@ -7,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { SignInPrompt } from '../threads/write-prompts';
 import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
-import type { AccountRenameContext } from './account-rename-data';
+import type { AccountRenameNavigation } from './account-rename-actions';
 
 export type AccountSafetyProps =
   | {
@@ -15,7 +15,7 @@ export type AccountSafetyProps =
       securityHref: string | null;
       csrfToken: string | null;
       onReload: () => void;
-      renameAccount?: AccountRenameContext | null;
+      renameAccount?: AccountRenameNavigation | null;
     }
   | { state: 'signed-out'; returnTo: string };
 
@@ -39,7 +39,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink context={props.renameAccount ?? null} securityHref={props.securityHref} />
+            <AccountRenameLink context={props.renameAccount ?? null} />
             {links ? (
               <a href={links.security} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), linkClass)}>
                 {m.account_security_settings()}

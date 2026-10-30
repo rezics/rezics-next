@@ -8,7 +8,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { securityHrefFromIssuer } from './account-safety-links';
 import { collectionPrivacyFailure, readCollectionPrivacyResult } from './collection-privacy-data';
-import type { AccountRenameContext } from './account-rename-data';
+import type { AccountRenameNavigation } from './account-rename-actions';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
@@ -31,7 +31,7 @@ export type SettingsPage =
       notifications?: NotificationPreferences;
       csrfToken?: string | null;
       securityHref: string | null;
-      renameAccount?: AccountRenameContext | null;
+      renameAccount?: AccountRenameNavigation | null;
     }
   | {
       signedIn: true;
@@ -39,7 +39,7 @@ export type SettingsPage =
       failure: NativePreferenceFailure;
       csrfToken?: string | null;
       securityHref: string | null;
-      renameAccount?: AccountRenameContext | null;
+      renameAccount?: AccountRenameNavigation | null;
     };
 
 export type PreferenceChange = {

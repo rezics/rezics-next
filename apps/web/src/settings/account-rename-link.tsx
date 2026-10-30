@@ -1,17 +1,10 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
-import type { AccountRenameContext } from './account-rename-data';
-import { accountRenameHref } from './account-safety-links';
+import type { AccountRenameNavigation } from './account-rename-actions';
 
-export function AccountRenameLink({
-  context,
-  securityHref,
-}: {
-  context?: AccountRenameContext | null;
-  securityHref: string | null;
-}) {
-  const href = context?.available ? accountRenameHref(securityHref) : null;
+export function AccountRenameLink({ context }: { context?: AccountRenameNavigation | null }) {
+  const href = context?.available ? context.href ?? null : null;
   return (
     <div className="space-y-3">
       <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
