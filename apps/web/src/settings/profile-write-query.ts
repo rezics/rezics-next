@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useLayoutEffect } from 'react';
+import { useCallback, useLayoutEffect } from 'react';
 import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
 import { csrfHeaders } from '../threads/composer';
@@ -7,16 +7,19 @@ import { readProfile, saveProfile } from './actions';
 import type { ProfileValues } from './profile-data';
 import { ProfileEditor } from './profile-write';
 
-const editors = new WeakMap<QueryClient, { token: string | null; editor: ProfileEditor }>();
+type EditorEntry = { token: string | null; subject: string | null; editor: ProfileEditor; users: number };
+const editors = new WeakMap<QueryClient, EditorEntry>();
 
 export function useProfileEditor() {
   const session = useSession();
   const client = useQueryClient();
-  const token = session.csrfToken;
+  const writable = session.state === 'signed-in' && !!session.csrfToken;
+  const token = writable ? session.csrfToken : null;
+  const subject = writable ? (session.subject ?? null) : null;
   // Session CSRF identity changes with sign-in. No private profile is reused by another session.
-  const key = ['settings', 'profile', token] as const;
+  const key = ['settings', 'profile', token, subject] as const;
   let entry = editors.get(client);
-  if (!entry || entry.token !== token) {
+  if (!entry || entry.token !== token || entry.subject !== subject) {
     const editor = new ProfileEditor(
       {
         read: async () => {
@@ -27,15 +30,28 @@ export function useProfileEditor() {
           await client.cancelQueries({ queryKey: key });
           return saveProfile({ data: attempt, headers: csrfHeaders() });
         },
-        confirmed: (profile) => client.setQueryData(key, profile),
+        confirmed: (profile) => {
+          if (editors.get(client)?.editor === editor) client.setQueryData(key, profile);
+        },
       },
       token ? (client.getQueryData<ProfileValues>(key) ?? null) : null,
     );
-    entry = { token, editor };
+    entry = { token, subject, editor, users: 0 };
     editors.set(client, entry);
   }
   const editor = entry.editor;
-  const writable = session.state === 'signed-in' && !!token;
+  const isCurrent = useCallback(() => editors.get(client) === entry && !!entry.token, [client, entry]);
+  useLayoutEffect(() => {
+    entry.users++;
+    return () => {
+      entry.users--;
+      // The profile and activity sections share one mount. Cancelled navigation never releases it.
+      // A microtask lets StrictMode reconnect before retiring the last consumer's private draft.
+      queueMicrotask(() => {
+        if (entry.users === 0 && editors.get(client) === entry) editors.delete(client);
+      });
+    };
+  }, [client, entry]);
   const query = useQuery({
     ...personalRead,
     queryKey: key,
@@ -47,7 +63,7 @@ export function useProfileEditor() {
   });
   useLayoutEffect(() => {
     if (query.isError || (session.state !== 'unknown' && !writable)) editor.unavailable();
-    else if (query.data) editor.receive(query.data);
+    else if (writable && query.data) editor.receive(query.data);
   }, [editor, query.data, query.isError, session.state, writable]);
-  return { editor, writable };
+  return { editor, writable, isCurrent };
 }

@@ -8,6 +8,7 @@ import {
   type ProfileEditorIO,
 } from '../src/settings/profile-write';
 import { parseProfileWrite } from '../src/settings/profile-write-input';
+import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
 
 function initial(): ProfileValues {
   return {
@@ -328,4 +329,81 @@ test('organization-only speaker listing and native avatar references use the ord
   );
   const editor = new ProfileEditor(boundary.io, initial());
   expect(() => editor.receive({ ...initial(), accountId: 'different-account' })).toThrow('Profile account changed');
+});
+
+test('a cancelled discard decision retains the actual draft and immutable original unresolved attempt for retry', async () => {
+  const sent: ProfileAttempt[] = [];
+  let current = initial();
+  const editor = new ProfileEditor(
+    {
+      read: async () => current,
+      save: async (attempt) => {
+        sent.push(attempt);
+        current = attempt.after;
+        if (sent.length === 1) throw new Error('Response lost');
+        return { ok: true, profile: current };
+      },
+    },
+    initial(),
+  );
+  editor.edit({ displayName: 'Sent name' });
+  await editor.submit('profile');
+  editor.edit({ biography: 'Later local draft' });
+  const before = editor.snapshot();
+  expect(profileNeedsNavigationDecision(before)).toBe(true);
+  // Stay resolves only the router decision; no reload, edit, retry or draft replacement occurs.
+  expect(editor.snapshot()).toBe(before);
+  expect(editor.snapshot().draft).toBe(before.draft);
+  expect(editor.snapshot().attempt).toBe(before.attempt);
+  expect(Object.isFrozen(before.attempt)).toBe(true);
+  await editor.retry();
+  expect(sent[1]).toBe(sent[0]);
+  expect(editor.snapshot().draft?.biography).toBe('Later local draft');
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(true);
+});
+
+test('clean and confirmed-saved profiles need no decision, but later edits and unresolved commands do', async () => {
+  const boundary = api();
+  const editor = new ProfileEditor(boundary.io, initial());
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(false);
+  editor.edit({ displayName: 'Saved name' });
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(true);
+  await editor.submit('profile');
+  expect(editor.snapshot().phase).toBe('saved');
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(false);
+  editor.edit({ biography: 'Later edit' });
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(true);
+
+  const uncertain = new ProfileEditor(
+    {
+      read: async () => initial(),
+      save: async () => {
+        throw new Error('Response lost');
+      },
+    },
+    initial(),
+  );
+  uncertain.edit({ displayName: 'Unresolved name' });
+  await uncertain.submit('profile');
+  uncertain.edit({ displayName: initial().displayName });
+  expect(uncertain.snapshot().draft).toEqual(uncertain.snapshot().known);
+  expect(profileNeedsNavigationDecision(uncertain.snapshot())).toBe(true);
+});
+
+test('the shared activity draft and local image selection also require a discard decision', () => {
+  const editor = new ProfileEditor(
+    {
+      read: async () => initial(),
+      save: async () => {
+        throw new Error('Unused');
+      },
+    },
+    initial(),
+  );
+  editor.edit({ publicViews: { ...initial().publicViews, reviews: false } });
+  expect(profileNeedsNavigationDecision(editor.snapshot())).toBe(true);
+  editor.edit({ publicViews: initial().publicViews });
+  for (const phase of ['uploading', 'ready', 'error'] as const)
+    expect(profileNeedsNavigationDecision(editor.snapshot(), { phase, url: 'blob:local-selection' })).toBe(true);
+  expect(profileNeedsNavigationDecision(editor.snapshot(), { phase: 'cancelled', url: null })).toBe(false);
 });

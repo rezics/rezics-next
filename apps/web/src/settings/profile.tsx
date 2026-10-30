@@ -13,6 +13,7 @@ import { ProfileEditor, profileFieldErrors, type ProfileScope } from './profile-
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import type { AvatarUpload } from './profile-avatar-upload';
+import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 
 function profileError(status: number) {
   if (status === 400 || status === 422) return m.settings_profile_invalid_error();
@@ -80,8 +81,12 @@ export function ProfileFeedback({
 }
 
 export function ProfileSection() {
-  const { editor, writable } = useProfileEditor();
-  return <ProfileCard key={writable ? 'signed-in' : 'unavailable'} editor={editor} writable={writable} />;
+  const { editor, writable, isCurrent } = useProfileEditor();
+  return (
+    <ProfileNavigation editor={editor} writable={writable} isCurrent={isCurrent}>
+      <ProfileCard key={writable ? 'signed-in' : 'unavailable'} editor={editor} writable={writable} />
+    </ProfileNavigation>
+  );
 }
 
 export function ProfileCard({
@@ -101,6 +106,7 @@ export function ProfileCard({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const closed = !writable || state.phase === 'unavailable';
   const avatar = useProfileAvatarUpload(editor, closed, avatarUpload);
+  useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;
   const changed =
     !!profile &&
