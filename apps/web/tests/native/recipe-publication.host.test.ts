@@ -58,7 +58,7 @@ function graph(html: string): Record<string, unknown> {
   const scripts = [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
   const nodes = scripts.flatMap((match) => {
     const value = JSON.parse(match[1]!);
-    return value['@graph'] ?? [value];
+    return [value, ...(value['@graph'] ?? [])];
   });
   const recipe = nodes.find((node) => node['@type'] === 'Recipe');
   expect(recipe).toBeDefined();
@@ -119,6 +119,9 @@ test('native served Recipe duration agrees with its ordinary public read at incr
     await served();
     const result = await served();
     expect(result.jsonld.cookTime).toBe('PT25M');
+    expect(result.jsonld.recipeInstructions).toEqual(
+      english.map((text) => ({ '@type': 'HowToStep', text, inLanguage: 'en' })),
+    );
     const signature = result.requests.map(({ method, url }) => `${method} ${url}`).sort();
     baseline ??= signature;
     bytes ??= JSON.stringify(result.jsonld).length;
@@ -127,6 +130,12 @@ test('native served Recipe duration agrees with its ordinary public read at incr
     const visible = result.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '');
     expect(visible).toContain('Native public rice');
     expect(visible).toContain('25');
+    let previous = -1;
+    for (const text of english) {
+      const position = visible.indexOf(text);
+      expect(position).toBeGreaterThan(previous);
+      previous = position;
+    }
     expect(visible).not.toContain('Unrelated native recipe');
     expect(JSON.stringify(result.jsonld)).not.toContain('Unrelated native recipe');
   }

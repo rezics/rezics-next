@@ -1019,7 +1019,8 @@ Space response at 390 and 1280 pixels.
   minute unit (`http://www.wikidata.org/entity/Q7727`): `+25` becomes `PT25M`, including zero and safe large integers.
   Unknown units, malformed or unsafe amounts and uncertain bounds cannot produce a duration. Other quantities retain
   their existing representation. Instructions use the page's rank and document language selection, document reading
-  units and language attributes. Paragraphs and list items become ordered `HowToStep` items, grouped under authored
+  units and language attributes. Paragraphs, including those in nested lists and tables, become ordered `HowToStep`
+  items, grouped under authored
   headings as `HowToSection` items. Concealed statement and inline spoiler branches stay out; opaque components supply
   only their visible fallback. A related diet keeps its disclosed identity; a label alone supplies no ontology mapping.
 - **Bound:** O(public statement and document bytes), with the existing page descriptor limits (16 reads, cost 128) and

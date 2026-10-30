@@ -113,7 +113,22 @@ function instructions(content: unknown): JsonValue[] | undefined {
         section = { '@type': 'HowToSection', name, inLanguage: lang, itemListElement: [] };
         steps.push(section);
       }
-    } else if (['orderedList', 'bulletList', 'taskList', 'blockquote'].includes(node.type)) {
+    } else if (
+      [
+        'orderedList',
+        'bulletList',
+        'taskList',
+        'listItem',
+        'taskItem',
+        'blockquote',
+        'table',
+        'tableRow',
+        'tableCell',
+        'tableHeader',
+      ].includes(node.type)
+    ) {
+      // Containers preserve reading order; each leaf keeps its own authored language.
+      // In particular, a nested list must not be folded into its parent's step.
       for (const child of node.content ?? []) visit(child, lang);
     } else {
       const text = textOf(node);

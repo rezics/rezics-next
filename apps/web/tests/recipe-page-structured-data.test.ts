@@ -76,6 +76,78 @@ const expected = [
   { '@type': 'HowToSection', name: 'Cook', inLanguage: 'en', itemListElement: [step('Simmer for 25 minutes.')] },
 ];
 
+test('nested lists, tasks and table cells keep exact reading order and authored leaf languages', () => {
+  const paragraph = (text: string, lang?: string) => ({
+    type: 'paragraph',
+    ...(lang ? { attrs: { lang } } : {}),
+    content: [{ type: 'text', text }],
+  });
+  const document = normalizeDocument({
+    version: 'rezics-document-v1',
+    profile: 'blocks',
+    doc: withDocumentIds({
+      type: 'doc',
+      content: [
+        {
+          type: 'orderedList',
+          attrs: { start: 3 },
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                paragraph('Prepare the rice.'),
+                {
+                  type: 'bulletList',
+                  content: [{ type: 'listItem', content: [paragraph('米を洗う。', 'ja')] }],
+                },
+                paragraph('Then add water.'),
+              ],
+            },
+          ],
+        },
+        {
+          type: 'taskList',
+          attrs: { lang: 'fr' },
+          content: [{ type: 'taskItem', attrs: { checked: true }, content: [paragraph('Laisser reposer.')] }],
+        },
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                { type: 'tableHeader', content: [paragraph('Finish.')] },
+                { type: 'tableCell', attrs: { lang: 'ja' }, content: [paragraph('盛り付ける。')] },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  expect(checkDocument(document)).toBe(true);
+  expect(build([instruction('en', document)]).recipeInstructions).toEqual([
+    step('Prepare the rice.'),
+    step('米を洗う。', 'ja'),
+    step('Then add water.'),
+    step('Laisser reposer.', 'fr'),
+    step('Finish.'),
+    step('盛り付ける。', 'ja'),
+  ]);
+});
+
+test('a selected concealed language never falls back to a different public instruction body', () => {
+  const concealed = [
+    { property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: value({ amount: '+1', unit: '1' }) },
+  ];
+  const entries = [
+    instruction('en', fromPlainText('Concealed English.'), 'normal', concealed),
+    instruction('ja', fromPlainText('米を洗う。')),
+  ];
+  expect(build(entries, 'en')).not.toHaveProperty('recipeInstructions');
+  expect(build(entries, 'ja').recipeInstructions).toEqual(step('米を洗う。', 'ja'));
+});
+
 test('validated documents preserve ordered sections, steps, source rank and selected language', () => {
   expect(checkDocument(instructions)).toBe(true);
   expect(build([instruction('en', instructions)]).recipeInstructions).toEqual(expected);
