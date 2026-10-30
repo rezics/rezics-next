@@ -99,7 +99,7 @@ async function issuerSecurityGet(path: string): Promise<Response> {
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the
 // originating POST's real Origin/cookie to the same issuer's declared GET API.
 const readInventory = createServerFn({ method: 'POST' })
-  .inputValidator((value: unknown): InventoryInput => {
+  .validator((value: unknown): InventoryInput => {
     if (
       !record(value) ||
       !['clients', 'consents'].includes(String(value.view)) ||
