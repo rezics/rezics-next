@@ -91,7 +91,7 @@ function SettingsSections({
   const formCsrfToken = page.csrfToken ?? csrfToken;
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
   useEffect(() => {
-    if ('preferences' in page) setVersion(page.preferences.version);
+    if ('preferences' in page) setVersion((current) => Math.max(current, page.preferences.version));
   }, [page]);
   return (
     <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
