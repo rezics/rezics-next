@@ -33,7 +33,12 @@ import {
 // The selection supplies no authority and is never accepted as an own-delete target.
 export const Route = createFileRoute('/organizations/delete')({
   validateSearch: (search: Record<string, unknown>) => ({
-    organization_id: isAccountId(search.organization_id) ? search.organization_id : undefined,
+    organization_id:
+      search.organization_id === undefined
+        ? undefined
+        : isAccountId(search.organization_id)
+          ? search.organization_id
+          : '',
   }),
   loader: () => readPrivacyContact(),
   head: () => ({ meta: [{ title: `${m.auth_organization_delete_heading()} · REZICS` }] }),
@@ -65,13 +70,16 @@ export function OrganizationDeleteContent({
   const [message, setMessage] = useState('');
   const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
   const submitting = useRef(false);
+  const revision = useRef(0);
   const selectedId = useRef<string | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
+    revision.current += 1;
     setLoaded(null);
+    setConfirmationError(false);
     setMessage('');
     setConfirmation('');
     setOutcome('form');
@@ -128,6 +136,7 @@ export function OrganizationDeleteContent({
       return;
     }
     submitting.current = true;
+    const submittedRevision = revision.current;
     setPending(true);
     setConfirmationError(false);
     setMessage('');
@@ -146,6 +155,8 @@ export function OrganizationDeleteContent({
         return;
       }
       const result = await executeOrganizationDeletion(target, key, read);
+      // Navigation cannot apply an earlier target's result to the new selection.
+      if (revision.current !== submittedRevision) return;
       if (result.ok) {
         forgetOperationKey(operation, target.humanAccountId);
         clearOrganizationDeleteStepUp();
@@ -178,8 +189,10 @@ export function OrganizationDeleteContent({
         clearOrganizationDeleteStepUp();
         setLoaded({ kind: 'unavailable' });
         setMessage(m.auth_organization_delete_changed());
-      } else if (result.reason === 'denied') setMessage(m.auth_organization_delete_denied());
-      else if (result.reason === 'platform-closed') setMessage(m.auth_organization_not_open());
+      } else if (result.reason === 'denied') {
+        setLoaded({ kind: 'denied' });
+        setMessage(m.auth_organization_delete_denied());
+      } else if (result.reason === 'platform-closed') setMessage(m.auth_organization_not_open());
       else if (result.reason === 'unavailable') setMessage(m.auth_account_operation_unavailable());
       else setMessage(m.auth_account_operation_failure());
     } finally {
@@ -191,9 +204,11 @@ export function OrganizationDeleteContent({
   async function readback(currentOrganizationId: string) {
     if (submitting.current) return;
     submitting.current = true;
+    const submittedRevision = revision.current;
     setPending(true);
     try {
       const result = await loadOrganizationDeletion(currentOrganizationId, read);
+      if (revision.current !== submittedRevision) return;
       // A missing/denied read is not proof of deletion; a readable target is not
       // proof that an earlier command failed. Preserve the unknown command state.
       setLoaded(result);
