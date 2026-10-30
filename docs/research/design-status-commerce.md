@@ -78,7 +78,8 @@ proof remain pending. The positive current mapped-offer fixture now supplies its
 `{system:'stripe-api',exponent:2,factsVersion:'stripe-money-v1'}` unit, retaining the raw `1299` amount and exact
 `$12.99` assertion. Its omitted tax convention remains unknown, preserving the no-before-tax assertion and all
 existing mapped/revoked, reader-denial, bounded-read and credential assertions. Historical recordings remain
-unchanged. Earlier buyer fixture proof above predates this reconciliation; current local typing is pending.
+unchanged. Earlier buyer fixture proof above predates this reconciliation. Local
+`bun run --cwd apps/web typecheck` passes with no type errors in 1,051 files; no other checks ran for this change.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
