@@ -207,6 +207,43 @@ export async function createReply(
   return created.body.post;
 }
 
+export async function createSameRouteThread(
+  system: ContentSystem,
+  kernel: ReturnType<typeof createKernel>,
+  author: ContentCredential,
+  board: ContentBoard,
+  conceptId: string,
+  desiredRoute: number,
+  namespace: string,
+): Promise<ContentThread> {
+  const key = routeIndependentThreadKey(
+    system,
+    author.actor.accountId,
+    board.route,
+    namespace,
+    desiredRoute,
+  );
+  const created = await call<ThreadResponse>(
+    kernel,
+    author,
+    'POST',
+    '/v1/threads',
+    {
+      title: `Unrelated growth thread ${namespace}`,
+      body: fromPlainText(`Unrelated growth anchor: ${namespace} 東京`),
+      licence: 'MIT',
+      subjectIds: [conceptId],
+      boardId: board.id,
+      visibility: 'published',
+    },
+    key,
+  );
+  requireStatus(created, 201, 'create unrelated same-route growth thread');
+  const thread = created.body.thread;
+  if (thread.route !== desiredRoute) throw new Error('Growth thread did not use its selected fixture route');
+  return thread;
+}
+
 export async function grantByHttp(
   kernel: ReturnType<typeof createKernel>,
   governance: ContentCredential,
@@ -284,10 +321,17 @@ export function requireStatus(result: CallResult, expected: number, action: stri
     throw new Error(`${action} failed (${result.response.status}): ${JSON.stringify(result.body)}`);
 }
 
-function routeIndependentThreadKey(system: ContentSystem, accountId: string, boardRoute: number, namespace: string) {
+function routeIndependentThreadKey(
+  system: ContentSystem,
+  accountId: string,
+  boardRoute: number,
+  namespace: string,
+  desiredRoute?: number,
+) {
   for (let index = 0; index < 100_000; index++) {
     const key = `${namespace}-thread-${index}-${randomUUID()}`;
-    if (threadTarget(system.routeKey, accountId, key).route !== boardRoute) return key;
+    const route = threadTarget(system.routeKey, accountId, key).route;
+    if (route !== boardRoute && (desiredRoute === undefined || route === desiredRoute)) return key;
   }
   throw new Error('Could not derive a thread route independent of the board route');
 }

@@ -6,6 +6,7 @@ import type { Pool } from 'pg';
 import {
   createAtomicityKernel,
   createReply,
+  createSameRouteThread,
   createThreadAtomicityWorld,
   call,
   reserveAvailableImage,
@@ -62,12 +63,16 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     subjectIds: [conceptId],
     parentId: thread.firstPost.id,
   });
-  const unrelatedPost = await createReply(system, kernel, system.actors.author, thread, {
-    body: fromPlainText('Unrelated post whose revision history grows.'),
-    licence: 'MIT',
-    subjectIds: [conceptId],
-    parentId: thread.firstPost.id,
-  });
+  const unrelatedThread = await createSameRouteThread(
+    system,
+    kernel,
+    system.actors.author,
+    world.board,
+    conceptId,
+    thread.route,
+    `thread_transaction_growth_${randomUUID().replaceAll('-', '')}`,
+  );
+  const unrelatedPost = unrelatedThread.firstPost;
   const storage = createMediaStorage();
   try {
     const mediaTemplate = await reserveAvailableImage(
@@ -93,7 +98,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       tag,
       route: thread.route,
       partition,
-      threadId: thread.id,
+      threadId: unrelatedThread.id,
       boardId: thread.boardId,
       postId: unrelatedPost.id,
       actorId: system.actors.author.actor.accountId,
