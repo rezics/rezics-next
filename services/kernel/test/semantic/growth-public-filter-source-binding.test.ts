@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { releaseDigest } from '@rezics/definitions';
 import { createPublicFilterSourceBinding } from '../../src/semantic/public-filter-source-binding.ts';
 import type { PublicFilterSourceCaptureInput } from '../../src/semantic/public-filter-source-binding.ts';
+import type { PublicFilterDependencyKey } from '../../src/semantic/public-filter-source-contract.ts';
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
 import type { PublicFilterConsumerCaptureInput } from '../../src/search/public-filter-consumer-contract.ts';
 import { parseText } from '../../src/search/text.ts';
@@ -49,15 +50,15 @@ test('native Source binding lookups stay bounded as unrelated subjects, history,
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
     const definition = structuredClone(resolved.definition);
     expect(definition.meaning.digest).toBe(releaseDigest(definition.meaning.release));
-    for (const key of [
+    const expectedDependencies = [
       { kind: 'property', property: 'schema:author' },
       { kind: 'property', property: 'ex:left' },
       { kind: 'order', order: 'name' },
       { kind: 'order', order: 'relevance' },
       { kind: 'field', field: 'id' },
       { kind: 'field', field: 'descriptions' },
-    ])
-      expect(definition.dependencyKeys).toContainEqual(key);
+    ] satisfies PublicFilterDependencyKey[];
+    for (const key of expectedDependencies) expect(definition.dependencyKeys).toContainEqual(key);
     const registered = await custody.register(
       {
         definition,
@@ -379,10 +380,23 @@ test('original capture survives native derived execution windows and exact relea
         );
         expect(final.status).toBe('observed');
         if (final.status !== 'observed') throw new Error(final.reason);
-        return { second, final };
+        return { first, second, final };
       },
       { includeBackends: true },
     );
+    // Charge the original dispatch as well as the derived window, including rejected,
+    // lookahead and unused raw rows. A retained execution does not make its work free.
+    const costs = [whole.value.first.cost, whole.value.second.cost, whole.value.final.cost];
+    for (const cost of costs)
+      for (const count of Object.values(cost)) expect(Number.isSafeInteger(count) && count >= 0).toBe(true);
+    const candidates = costs.reduce((sum, cost) => sum + cost.candidates, 0);
+    expect(candidates).toBeLessThanOrEqual(Math.min(600, 6 * 2 + 3));
+    expect(costs.reduce((sum, cost) => sum + cost.inputKeys, 0)).toBeLessThanOrEqual(256);
+    expect(costs.reduce((sum, cost) => sum + cost.accessPoints + cost.dependencyPoints, 0)).toBeLessThanOrEqual(
+      16 + 8 * candidates,
+    );
+    expect(costs.reduce((sum, cost) => sum + cost.engineSearches, 0)).toBeLessThanOrEqual(6);
+    expect(costs.reduce((sum, cost) => sum + cost.outputSlots, 0)).toBeLessThanOrEqual(2);
     // Existing shared role attribution asserts paired <=2 SQL/64+2*(behind+changed) separately
     // from WHOLE native/engine/page limits. Binding metadata gets no extra request allowance.
     await assertPageCapture(
