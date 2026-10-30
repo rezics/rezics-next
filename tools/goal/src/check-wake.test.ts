@@ -211,8 +211,26 @@ test('worker instructions start detached checks, keep working, and return waitin
     const prompt = workerPrompt(task, undefined, undefined, [], h.root);
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
     expect(prompt).toContain('run your acceptance command once after your last relevant edit');
+    expect(prompt).toContain('Goal owns check continuation');
+    expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    expect(prompt).toContain(
+      '`{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`',
+    );
+    expect(prompt).toContain('Every checks entry must be the bare UUID string');
+    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).toContain('A previous session may contain the superseded instruction');
+    expect(prompt).toContain('do not follow it or invoke `--wait`');
+    expect(prompt).toContain('or start a duplicate check');
     expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
     expect(prompt).toContain('landing batch runs the root typecheck, affected checks for every changed path');
+    const pollingInstructions = prompt
+      .split(/(?<=[.!?])\s+/)
+      .filter(
+        (sentence) =>
+          /\b(?:poll(?:ing)?|--wait)\b/i.test(sentence) &&
+          !/\b(?:do not|don't|never|obsolete|superseded|previous session may contain)\b/i.test(sentence),
+      );
+    expect(pollingInstructions).toEqual([]);
     expect(prompt).not.toContain('{"status":"waiting","checks":["<id>",...]}');
     expect(prompt).not.toContain('Never poll');
   } finally {

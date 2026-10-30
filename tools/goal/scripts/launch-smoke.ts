@@ -2,19 +2,30 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  closeSync,
+  constants,
   existsSync,
+  fchmodSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
+  readdirSync,
   readFileSync,
+  readSync,
+  renameSync,
   realpathSync,
-  rmSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostname } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { loadSettings, mainCheckout } from '../src/config.ts';
+import { agentAdapter, withAgentAdapter, type AgentAdapter, type AgentLaunchOptions } from '../src/agents.ts';
 import {
   parseJsonLines,
   parseWorkerResult,
@@ -50,7 +61,201 @@ type SmokeReport = {
   failure?: { step: string; detail: string; classification: 'failure' | 'infrastructure/unverified' };
 };
 
+export const SMOKE_ACCEPTANCE_COMMAND = [
+  process.execPath,
+  '-e',
+  'if (process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER) require("node:fs").appendFileSync(process.env.REZICS_LAUNCH_SMOKE_CHECK_MARKER, "started\\n"); setTimeout(() => console.log("launch smoke check passed"), 100)',
+] as const;
+
+/** Produce the unpinned smoke task that production dispatch routes from its configured table. */
+export function launchSmokeBrief(workerCheckScript: string, paths = ['tools/goal/scripts/launch-smoke.ts']): string {
+  return `---
+goal: launch-smoke
+kind: specification
+paths: ${JSON.stringify(paths)}
+riskAreas: []
+acceptance:
+  command: ${JSON.stringify(SMOKE_ACCEPTANCE_COMMAND)}
+  tests: [smoke]
+  failing: true
+estimate:
+  lines: 1
+  files: 1
+criticalPath: false
+waiting: []
+---
+Run the acceptance command once with the worker-check wrapper's \`--local\` option for this disposable smoke. The wrapper is \`bun ${JSON.stringify(workerCheckScript)}\` if this worktree has no local runner. If that invocation returns a check id before it finishes, use the exact UUID it returned; do not wait before the wrapper has started the check. Do not edit files.
+`;
+}
+
+export function requireSmokeWaitingCheckId(checks: unknown): string {
+  if (!Array.isArray(checks) || checks.length !== 1 || typeof checks[0] !== 'string' || !CHECK_ID.test(checks[0]))
+    throw new Error('waiting result must contain one bare worker-check UUID');
+  return checks[0];
+}
+
 type Reporter = (line: string) => void;
+
+/** Store bounded diagnostics, never prompts, account configuration, or unrestricted tool arguments. */
+export function saveSmokeEvidence(path: string, evidence: unknown): void {
+  let remaining = 40_000;
+  const clean = (value: unknown, depth = 0): unknown => {
+    if (remaining <= 0 || depth > 8) return '<truncated>';
+    remaining -= 16;
+    if (typeof value === 'string') {
+      const redacted = value
+        .replace(/\bsk-[\w-]+/g, '<redacted>')
+        .replace(
+          /((?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret)["']?\s*[:=]\s*)(?:Bearer\s+)?["']?[^\s,"'}]+/gi,
+          '$1<redacted>',
+        );
+      let text = Buffer.from(redacted)
+        .subarray(0, Math.max(0, Math.min(4096, remaining)))
+        .toString('utf8');
+      while (Buffer.byteLength(JSON.stringify(text)) > Math.max(2, Math.min(4096, remaining)))
+        text = text.slice(0, Math.floor(text.length * 0.75));
+      remaining -= Buffer.byteLength(JSON.stringify(text));
+      return text;
+    }
+    if (Array.isArray(value)) return value.slice(0, 64).map((item) => clean(item, depth + 1));
+    if (value && typeof value === 'object') {
+      const entries: [string, unknown][] = [];
+      for (const [key, item] of Object.entries(value).slice(0, 40)) {
+        if (remaining <= 0) break;
+        remaining -= key.length + 8;
+        entries.push([
+          key.slice(0, 100),
+          /(?:password|secret|api[_-]?key|(?:access|refresh|id)[_-]?token)/i.test(key)
+            ? '<redacted>'
+            : clean(item, depth + 1),
+        ]);
+      }
+      return Object.fromEntries(entries);
+    }
+    return value;
+  };
+  const json = JSON.stringify(clean(evidence), null, 2);
+  if (Buffer.byteLength(json) > 64 * 1024) throw new Error('Smoke evidence exceeded its size bound');
+  writeFileSync(`${path}.tmp`, json + '\n', { mode: 0o600 });
+  renameSync(`${path}.tmp`, path);
+}
+
+function safeSmokeArgv(args: string[]): string[] {
+  const safe: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--') {
+      safe.push('--', '<prompt omitted>');
+      break;
+    }
+    if (arg === '-c') {
+      const config = args[++i] ?? '';
+      const allowed =
+        /^(?:features\.[a-z_]+|model_reasoning_effort|model_auto_compact_token_limit|tool_output_token_limit|background_terminal_max_timeout|service_tier|model_context_window|approval_policy|web_search|project_doc_max_bytes)=([a-z_0-9.-]+|"[a-z_0-9.-]+")$/i;
+      safe.push('-c', allowed.test(config) ? config : '<configuration omitted>');
+    } else if (['-C', '-m', '-s', '--output-schema', 'resume'].includes(arg)) {
+      safe.push(arg, args[++i] ?? '');
+    } else safe.push(arg === 'exec' || /^--[a-z-]+$/.test(arg) ? arg : '<argument omitted>');
+  }
+  return safe;
+}
+
+export type SmokeLaunchEvidence = {
+  mode: 'start' | 'resume';
+  program: string;
+  argv: string[];
+  profile: AgentLaunchOptions['profile'];
+  pool: string;
+  worktree: string;
+  session: string | null;
+  configuredFeatures: Record<string, boolean>;
+};
+/** Observe the actual adapter return value without changing argv, routing, or session semantics. */
+export function observeSmokeAdapter(adapter: AgentAdapter, record: (value: SmokeLaunchEvidence) => void): AgentAdapter {
+  const observe = (mode: 'start' | 'resume', options: AgentLaunchOptions, command: [string, string[]]) => {
+    const configuredFeatures: Record<string, boolean> = {};
+    if (adapter.cli === 'codex') {
+      const config = join(options.pool.configDirectory, 'config.toml');
+      if (existsSync(config)) {
+        const parsed = Bun.TOML.parse(readFileSync(config, 'utf8')) as { features?: Record<string, unknown> };
+        for (const [name, value] of Object.entries(parsed.features ?? {}))
+          if (typeof value === 'boolean') configuredFeatures[name] = value;
+      }
+    }
+    record({
+      mode,
+      program: command[0],
+      argv: safeSmokeArgv(command[1]),
+      profile: options.profile,
+      pool: options.pool.name,
+      worktree: options.worktree,
+      session: options.resumeSession ?? null,
+      configuredFeatures,
+    });
+    return command;
+  };
+  return {
+    ...adapter,
+    start(options) {
+      return observe('start', options, adapter.start(options));
+    },
+    resume(options) {
+      return observe('resume', { ...options, resumeSession: options.session }, adapter.resume(options));
+    },
+  };
+}
+
+/** Only the current run's bounded suffix; omit raw tool arguments, environment and tool output. */
+export function smokeRunSuffix(path: string, offset: number): unknown[] {
+  if (!existsSync(path)) return [];
+  const fd = openSync(path, 'r');
+  try {
+    const size = statSync(path).size;
+    const start = Math.max(offset, size - 32 * 1024);
+    const buffer = Buffer.alloc(Math.max(0, size - start));
+    const count = readSync(fd, buffer, 0, buffer.length, start);
+    let lines = buffer.subarray(0, count).toString('utf8').split(/\r?\n/);
+    if (start > offset) lines = lines.slice(1);
+    return lines
+      .flatMap((line): unknown[] => {
+        try {
+          const event = JSON.parse(line);
+          const item = event.item ?? event.payload ?? {};
+          return [
+            {
+              type: event.type,
+              itemType: item.type,
+              status: item.status,
+              toolName: item.name ?? item.tool_name,
+              exitCode: item.exit_code,
+              error: event.error?.message ?? item.error?.message,
+              text: item.type === 'agent_message' ? item.text : undefined,
+              usage: event.usage,
+            },
+          ];
+        } catch {
+          return [];
+        }
+      })
+      .slice(-32);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function smokeStderrSuffix(path: string): string {
+  if (!existsSync(path)) return '';
+  const fd = openSync(path, 'r');
+  try {
+    const size = fstatSync(fd).size;
+    const buffer = Buffer.alloc(Math.min(size, 2048));
+    return buffer
+      .subarray(0, readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)))
+      .toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
 
 function reportLine(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -79,10 +284,78 @@ function git(cwd: string, ...args: string[]): string {
   return checked('git', args, cwd);
 }
 
-function uuidPath(root: string, prefix: string): string {
-  const temp = join(root, '.temp');
+/** Owns only a newly created smoke directory, including its disposable immutable dependency store. */
+export function createSmokeDirectory(
+  root: string,
+  prefix: 'launch-smoke-' | 'launch-smoke-workers-' | 'launch-smoke-test-',
+) {
+  if (prefix !== 'launch-smoke-' && prefix !== 'launch-smoke-workers-' && prefix !== 'launch-smoke-test-')
+    throw new Error('Invalid smoke directory prefix');
+  const temp = join(realpathSync(root), '.temp');
   mkdirSync(temp, { recursive: true });
-  return mkdtempSync(join(temp, prefix));
+  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  const parent = openSync(temp, flags);
+  const descriptorPath = (fd: number) => `/proc/self/fd/${fd}`;
+  const sameInode = (left: ReturnType<typeof fstatSync>, right: ReturnType<typeof fstatSync>) =>
+    left.dev === right.dev && left.ino === right.ino;
+  let directory: number;
+  let path: string;
+  try {
+    path = join(temp, basename(mkdtempSync(join(descriptorPath(parent), prefix))));
+    directory = openSync(join(descriptorPath(parent), basename(path)), flags);
+  } catch (error) {
+    closeSync(parent);
+    throw error;
+  }
+  let closed = false;
+  const assertOwned = () => {
+    if (
+      realpathSync(temp) !== temp ||
+      !sameInode(lstatSync(temp), fstatSync(parent)) ||
+      !sameInode(lstatSync(path), fstatSync(directory))
+    )
+      throw new Error(`Refusing cleanup of replaced smoke directory: ${path}`);
+  };
+  // The smoke already requires Linux/systemd. Descriptor paths anchor traversal even if an ancestor is renamed;
+  // O_NOFOLLOW and inode checks reject replaced directories. Only directory descriptors are ever chmodded.
+  const clearDirectory = (fd: number) => {
+    const stat = fstatSync(fd);
+    if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
+    for (const name of readdirSync(descriptorPath(fd))) {
+      const child = join(descriptorPath(fd), name);
+      const before = lstatSync(child);
+      if (before.isDirectory()) {
+        const childFd = openSync(child, flags);
+        try {
+          if (!sameInode(before, fstatSync(childFd))) throw new Error(`Smoke directory changed: ${child}`);
+          clearDirectory(childFd);
+          if (!sameInode(before, lstatSync(child))) throw new Error(`Smoke directory changed: ${child}`);
+          rmdirSync(child);
+        } finally {
+          closeSync(childFd);
+        }
+      } else {
+        // Unlink files and symlinks without changing their modes or following their targets, including hardlinks.
+        unlinkSync(child);
+      }
+    }
+  };
+  return {
+    path,
+    remove() {
+      if (closed) return;
+      try {
+        assertOwned();
+        clearDirectory(directory);
+        assertOwned();
+        rmdirSync(join(descriptorPath(parent), basename(path)));
+      } finally {
+        closed = true;
+        closeSync(directory);
+        closeSync(parent);
+      }
+    },
+  };
 }
 
 export function resolveSmokeReportPath(root: string, requested?: string): string {
@@ -377,7 +650,7 @@ async function runFakeSmoke(
   report: Reporter,
   suppliedEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const directory = uuidPath(root, 'launch-smoke-test-');
+  const { path: directory, remove } = createSmokeDirectory(root, 'launch-smoke-test-');
   let checkId = '';
   const session = 'launch-smoke-fake-session';
   let resultPath = '';
@@ -396,7 +669,8 @@ async function runFakeSmoke(
     try {
       // Control-plane candidates do not carry the check runner. Exercise the version on dev, as the real smoke does.
       const sourceRoot = mainCheckout(root);
-      const sourceSettings = loadSettings({ cwd: root });
+      // The fake-agent path uses package defaults and must not depend on operator-local account notes or pool data.
+      const sourceSettings = loadSettings({ cwd: root, localFile: join(directory, 'local.json') });
       git(directory, 'init', '--quiet');
       clone = join(directory, 'repository');
       const cloned = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
@@ -459,12 +733,9 @@ async function runFakeSmoke(
       if (waiting) {
         if (waiting.status !== 'waiting' || waiting.session !== session)
           throw new Error('expected a waiting exit for the same session');
-        if (!Array.isArray(waiting.checks) || waiting.checks.length !== 1 || typeof waiting.checks[0] !== 'string')
-          throw new Error('expected one worker-check id');
-        checkId = waiting.checks[0];
+        checkId = requireSmokeWaitingCheckId(waiting.checks);
         baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
-        if (!CHECK_ID.test(checkId) || checkId !== startedCheckId)
-          throw new Error('fake agent did not return the real worker-check id');
+        if (checkId !== startedCheckId) throw new Error('fake agent did not return the real worker-check id');
       } else if (!/^worker-check-[\w-]+$/.test(checkId)) {
         throw new Error('fake worker-check id has an invalid shape');
       }
@@ -509,7 +780,7 @@ async function runFakeSmoke(
         /* The disposable clone is removed below. */
       }
     }
-    rmSync(directory, { recursive: true, force: true });
+    remove();
   }
 }
 
@@ -622,7 +893,13 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
   let currentStep = 'candidate';
   const startedAt = Date.now();
   const deadline = startedAt + INNER_BUDGET_MS;
-  const evidencePath = resolveSmokeReportPath(root, requestedReportPath);
+  const reportPath = resolveSmokeReportPath(root, requestedReportPath);
+  const runId = randomUUID();
+  const runEvidenceDirectory = join(root, '.temp/launch-smoke-evidence');
+  mkdirSync(runEvidenceDirectory, { recursive: true });
+  const runEvidencePath = join(runEvidenceDirectory, `${runId}.json`);
+  let candidate: string | undefined;
+  let failed = false;
   const evidence: SmokeReport = {
     version: 1,
     status: 'running',
@@ -633,23 +910,53 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
   };
   let temporary = '';
   let workerRoot = '';
+  let removeTemporary: (() => void) | undefined;
+  let removeWorkerRoot: (() => void) | undefined;
   let clone = '';
   let tree = '';
   let devTree = '';
   let branch = '';
   let worktreeAdded = false;
   let devWorktreeAdded = false;
-  persistReport(root, evidencePath, evidence);
-  report(`evidence: ${evidencePath}`);
+  const saveRunEvidence = (extra: Record<string, unknown> = {}) => {
+    let previous: Record<string, unknown> = {};
+    try {
+      if (existsSync(runEvidencePath)) {
+        const value: unknown = JSON.parse(readFileSync(runEvidencePath, 'utf8'));
+        if (value && typeof value === 'object' && !Array.isArray(value)) previous = value as Record<string, unknown>;
+      }
+    } catch {
+      // Replace an incomplete prior write with the current bounded facts.
+    }
+    saveSmokeEvidence(runEvidencePath, {
+      ...previous,
+      runId,
+      candidate,
+      startedAt: new Date(startedAt).toISOString(),
+      stage: currentStep,
+      ...extra,
+    });
+  };
+  persistReport(root, reportPath, evidence);
+  saveRunEvidence();
+  report(`evidence: ${reportPath}`);
+  report(`run evidence: ${runEvidencePath}`);
   try {
-    const candidate = git(root, 'rev-parse', 'HEAD');
+    candidate = git(root, 'rev-parse', 'HEAD');
     evidence.candidate = candidate;
-    persistReport(root, evidencePath, evidence);
+    persistReport(root, reportPath, evidence);
+    saveRunEvidence();
     git(root, 'diff', '--quiet', 'HEAD', '--');
     const sourceRoot = mainCheckout(root);
     const sourceSettings = loadSettings({ cwd: root });
-    temporary = uuidPath(root, 'launch-smoke-');
-    workerRoot = uuidPath(root, 'launch-smoke-workers-');
+    if (sourceSettings.codex.serviceTier.trim().toLowerCase() === 'fast')
+      throw new Error('Codex service tier is Fast; launch smoke only permits the configured non-Fast tier');
+    const disposable = createSmokeDirectory(root, 'launch-smoke-');
+    temporary = disposable.path;
+    removeTemporary = disposable.remove;
+    const disposableWorkerRoot = createSmokeDirectory(root, 'launch-smoke-workers-');
+    workerRoot = disposableWorkerRoot.path;
+    removeWorkerRoot = disposableWorkerRoot.remove;
     clone = join(temporary, 'repository');
     tree = join(temporary, 'candidate');
     const cloneResult = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
@@ -695,21 +1002,26 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
         REZICS_LAUNCH_SMOKE_STATE: join(temporary, 'state'),
         REZICS_LAUNCH_SMOKE_WORKTREES: workerRoot,
         REZICS_LAUNCH_SMOKE_DEADLINE: String(deadline),
-        REZICS_LAUNCH_SMOKE_REPORT_PATH: evidencePath,
+        REZICS_LAUNCH_SMOKE_REPORT_PATH: reportPath,
+        REZICS_LAUNCH_SMOKE_EVIDENCE: runEvidencePath,
+        REZICS_LAUNCH_SMOKE_RUN_ID: runId,
+        REZICS_LAUNCH_SMOKE_CANDIDATE: candidate,
       },
       Math.max(1, remaining + 5_000),
       report,
     );
-    const completed = readReport(evidencePath);
+    const completed = readReport(reportPath);
     if (completed.status !== 'passed')
       throw new Error('inner lifecycle suite exited without complete passing evidence');
-    report(`evidence: ${evidencePath}`);
+    saveRunEvidence({ status: 'passed', completedAt: new Date().toISOString() });
+    report(`evidence: ${reportPath}`);
   } catch (error) {
     const detail = message(error);
+    failed = true;
     const reportedStep = /^(candidate|setup|start|wake|success|lifecycle regressions): failed:/.exec(detail)?.[1];
     if (reportedStep) currentStep = reportedStep;
     try {
-      const current = existsSync(evidencePath) ? readReport(evidencePath) : evidence;
+      const current = existsSync(reportPath) ? readReport(reportPath) : evidence;
       current.status = timeoutFailure(error) ? 'unverified' : 'failed';
       current.finishedAt = new Date().toISOString();
       current.failure = {
@@ -722,9 +1034,14 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
         status: current.status === 'unverified' ? 'unverified' : 'failed',
         detail,
       });
-      persistReport(root, evidencePath, current);
+      persistReport(root, reportPath, current);
     } catch {
       // Keep the original smoke failure as the actionable error.
+    }
+    try {
+      saveRunEvidence({ failure: detail, failedAt: new Date().toISOString() });
+    } catch (evidenceError) {
+      report(`run evidence: failed: ${message(evidenceError)}`);
     }
     if (reportedStep) throw new Error(detail);
     throw stepFailure(currentStep, error, report);
@@ -751,18 +1068,39 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
         /* The disposable repository is removed below. */
       }
     }
-    if (workerRoot) {
+    const cleanupErrors: string[] = [];
+    for (const [label, remove, path] of [
+      ['worker data', removeWorkerRoot, workerRoot],
+      ['disposable data', removeTemporary, temporary],
+    ] as const) {
+      if (!remove) continue;
       try {
-        rmSync(workerRoot, { recursive: true, force: true });
+        remove();
       } catch (error) {
-        report(`cleanup: retained worker data at ${workerRoot}: ${message(error)}`);
+        const detail = `cleanup: retained ${label} at ${path}: ${message(error)}`;
+        cleanupErrors.push(detail);
+        report(detail);
       }
     }
-    if (temporary) {
+    if (cleanupErrors.length) {
       try {
-        rmSync(temporary, { recursive: true, force: true });
-      } catch (error) {
-        report(`cleanup: retained disposable data at ${temporary}: ${message(error)}`);
+        saveRunEvidence({ cleanupErrors, cleanupFailedAt: new Date().toISOString() });
+      } catch (evidenceError) {
+        report(`run evidence: failed: ${message(evidenceError)}`);
+      }
+      if (!failed) {
+        const detail = cleanupErrors[0]!;
+        try {
+          const current = existsSync(reportPath) ? readReport(reportPath) : evidence;
+          current.status = 'failed';
+          current.finishedAt = new Date().toISOString();
+          current.failure = { step: 'cleanup', detail, classification: 'failure' };
+          upsertScenario(current, { id: 'smoke-step-cleanup', status: 'failed', detail });
+          persistReport(root, reportPath, current);
+        } catch {
+          // Report the owned cleanup failure even if the lifecycle evidence cannot be updated.
+        }
+        throw new Error(detail);
       }
     }
   }
@@ -905,8 +1243,6 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     throw new Error('the configured specification route must select Codex for real provider smoke');
   const codexPools = settings.pools.filter((pool) => pool.cli === 'codex' && pool.classes.includes(selected.poolClass));
   if (!codexPools.length) throw new Error(`no configured Codex pool admits route class ${selected.poolClass}`);
-  const model = selected.model;
-  const effort = selected.effort;
   mkdirSync(stateDirectory, { recursive: true });
   mkdirSync(worktreeRoot, { recursive: true });
   const originalPath = process.env.PATH;
@@ -982,6 +1318,88 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   let taskId: string | undefined;
   let startPromise: Promise<void> | undefined;
   const launchErrors: string[] = [];
+  const evidencePath = process.env.REZICS_LAUNCH_SMOKE_EVIDENCE;
+  const launches: SmokeLaunchEvidence[] = [];
+  let currentStep: 'setup' | 'start' | 'wake' | 'success' = 'setup';
+  let currentFailure: string | null = null;
+  let activeRun = false;
+  let launchAfterSequence = 0;
+  const snapshot = () => {
+    if (!evidencePath) return;
+    const task = taskId ? store.task(taskId) : undefined;
+    const attempt =
+      task && task.currentAttempt > 0 ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }) : undefined;
+    const events = attempt ? store.events(attempt.taskId, attempt.attempt) : [];
+    const run = events
+      .filter((event) => event.kind === 'worker-run-started' && event.sequence > launchAfterSequence)
+      .at(-1);
+    const runBody = run ? (JSON.parse(run.body) as { logStartOffset: number; resuming: boolean }) : undefined;
+    // A resumed attempt still holds its previous waiting result while it runs. Never present that as this turn's exit.
+    let result: unknown = null;
+    if (attempt && !activeRun) {
+      try {
+        result = JSON.parse(attempt.result);
+      } catch {
+        result = attempt.result;
+      }
+    }
+    saveSmokeEvidence(evidencePath, {
+      runId: process.env.REZICS_LAUNCH_SMOKE_RUN_ID,
+      candidate: process.env.REZICS_LAUNCH_SMOKE_CANDIDATE,
+      mergedCandidate: git(tree, 'rev-parse', 'HEAD'),
+      stage: currentStep,
+      failure: currentFailure,
+      current: attempt
+        ? {
+            taskId: attempt.taskId,
+            attempt: attempt.attempt,
+            state: attempt.state,
+            activeRun,
+            result,
+            blocker: activeRun ? null : attempt.blocker,
+            failureKind: activeRun ? null : attempt.failureKind,
+            session: attempt.session,
+            profile: attempt.profile,
+            pool: attempt.pool,
+            process: attempt.process,
+            driver: attempt.driver,
+            exitCode: activeRun ? null : attempt.exitCode,
+            worktree: task!.worktree,
+            branch: task!.branch,
+          }
+        : null,
+      launches,
+      selection: { configuredProfile: selected, currentAttemptProfile: attempt?.profile, pool: attempt?.pool },
+      currentRun: run ? { sequence: run.sequence, at: run.at, ...runBody } : null,
+      events: events.slice(-16).map((event) => ({ sequence: event.sequence, kind: event.kind, at: event.at })),
+      logSuffix: attempt && runBody ? smokeRunSuffix(attempt.logPath, runBody.logStartOffset) : [],
+      stderrSuffix: attempt && runBody ? smokeStderrSuffix(`${attempt.logPath}.err`) : '',
+      checks: (attempt?.checks ?? []).map((id) => {
+        const path = join(task!.worktree, '.temp/goal/checks/results', `${id}.json`);
+        let record: unknown = null;
+        try {
+          record = JSON.parse(readFileSync(path, 'utf8'));
+        } catch {
+          /* No terminal record yet. */
+        }
+        return { id, record };
+      }),
+      launchErrors: launchErrors.slice(-8),
+    });
+  };
+  const observed = observeSmokeAdapter(agentAdapter('codex'), (launch) => {
+    launches.push(launch);
+    activeRun = true;
+    if (taskId) {
+      const task = store.task(taskId);
+      launchAfterSequence =
+        store
+          .events(taskId, task.currentAttempt)
+          .filter((event) => event.kind === 'worker-run-started')
+          .at(-1)?.sequence ?? 0;
+    }
+    snapshot();
+  });
   const originalError = console.error;
   console.error = (...values: unknown[]) => {
     const line = values.map(String).join(' ');
@@ -989,27 +1407,8 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     if (!/Worker systemd scope unavailable; starting without a scope:/.test(line)) originalError(...values);
   };
   try {
-    const frontMatter = `---
-goal: launch-smoke
-kind: specification
-paths: [tools/goal/scripts/launch-smoke.ts]
-riskAreas: []
-model: ${model}
-effort: ${effort}
-acceptance:
-  command: ["true"]
-  tests: [smoke]
-  failing: true
-estimate:
-  lines: 1
-  files: 1
-criticalPath: false
-waiting: []
----
-Use at most 2000 generated tokens for this task. Run exactly this command once: \`bun ${JSON.stringify(workerCheckScript)} --local -- bun -e 'setTimeout(() => console.log("launch smoke check passed"), 7000)'\`.
-Do not poll or start another check. Return exactly the required result fields. For the wait, use \`{"status":"waiting","summary":"check started","blocker":null,"checks":["<id>"],"approaches":[]}\`, replacing <id> with the id printed by worker-check. When resumed with exit status 0, return \`{"status":"success","summary":"check passed","blocker":null,"checks":[],"approaches":[]}\`. Do not edit files.
-`;
-    const brief = parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
+    const frontMatter = launchSmokeBrief(workerCheckScript);
+    parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
     const briefPath = join(stateDirectory, 'briefs', `${randomUUID()}.md`);
     mkdirSync(dirname(briefPath), { recursive: true });
     writeFileSync(briefPath, frontMatter, { flag: 'wx' });
@@ -1018,10 +1417,11 @@ Do not poll or start another check. Return exactly the required result fields. F
     if (task.currentAttempt !== 0) throw new Error('smoke task did not start at attempt zero');
     report('setup: passed');
 
-    let currentStep: 'start' | 'wake' | 'success' = 'start';
+    currentStep = 'start';
     try {
-      startPromise = job.start(task.id, { expectedAttempt: 0 });
+      startPromise = withAgentAdapter(observed, () => job.start(task.id, { expectedAttempt: 0 }));
       await withDeadline(startPromise, deadline, 'start');
+      activeRun = false;
       const waitingTask = store.task(task.id);
       const waitingAttempt = store.attempt({ taskId: task.id, attempt: waitingTask.currentAttempt });
       if (waitingAttempt.state !== 'waiting')
@@ -1031,18 +1431,18 @@ Do not poll or start another check. Return exactly the required result fields. F
       if (waitingAttempt.exitCode !== 0)
         throw new Error(`waiting worker exited with code ${String(waitingAttempt.exitCode)}`);
       if (!waitingAttempt.session) throw new Error('waiting attempt did not save its session id');
-      if (!waitingAttempt.checks || waitingAttempt.checks.length !== 1 || !CHECK_ID.test(waitingAttempt.checks[0]!))
-        throw new Error('waiting attempt did not save one real worker-check UUID');
+      const checkId = requireSmokeWaitingCheckId(waitingAttempt.checks);
       if (
         waitingAttempt.profile.cli !== 'codex' ||
-        waitingAttempt.profile.model !== model ||
-        waitingAttempt.profile.effort !== effort
+        waitingAttempt.profile.model !== selected.model ||
+        waitingAttempt.profile.effort !== selected.effort ||
+        waitingAttempt.profile.poolClass !== selected.poolClass
       )
         throw new Error('worker did not use the configured specification Codex profile');
       const waitingResult = parseWorkerResult(
         parseProviderObject(readLogTail(waitingAttempt.logPath), 'waiting'),
         'waiting',
-        waitingAttempt.checks[0],
+        checkId,
       );
       if (launchErrors.some((line) => /Worker systemd scope unavailable; starting without a scope:/.test(line)))
         throw new Error(
@@ -1051,7 +1451,6 @@ Do not poll or start another check. Return exactly the required result fields. F
       report('start: passed');
 
       currentStep = 'wake';
-      const checkId = waitingAttempt.checks[0]!;
       const resultPath = join(waitingTask.worktree, '.temp/goal/checks/results', `${checkId}.json`);
       const checkResult = await withDeadline(waitForCheck(resultPath, deadline), deadline, 'wake');
       if (checkResult.infrastructureFailureFinal === true || checkResult.infrastructureFailure)
@@ -1061,7 +1460,12 @@ Do not poll or start another check. Return exactly the required result fields. F
       if (checkResult.exitCode !== 0)
         throw new Error(`worker-check ${checkId} finished with exit ${String(checkResult.exitCode ?? 'unknown')}`);
       const originalSession = waitingAttempt.session;
-      await withDeadline(job.recoverOrphans(), deadline, 'wake');
+      await withDeadline(
+        withAgentAdapter(observed, () => job.recoverOrphans()),
+        deadline,
+        'wake',
+      );
+      activeRun = false;
       const resumedTask = store.task(task.id);
       const resumed = store.attempt({ taskId: task.id, attempt: resumedTask.currentAttempt });
       if (resumedTask.currentAttempt !== waitingTask.currentAttempt)
@@ -1094,8 +1498,8 @@ Do not poll or start another check. Return exactly the required result fields. F
       const actualArgv = parseJsonLines<string[]>(argvLog);
       const schema = join(tree, 'tools/goal/worker-result.schema.json');
       assertCodexArgv(actualArgv, {
-        model,
-        effort,
+        model: waitingAttempt.profile.model,
+        effort: waitingAttempt.profile.effort,
         serviceTier: settings.codex.serviceTier,
         session: originalSession,
         worktree: waitingTask.worktree,
@@ -1124,7 +1528,7 @@ Do not poll or start another check. Return exactly the required result fields. F
         status: 'passed',
         evidence: {
           pool: waitingAttempt.pool,
-          profile: { model, effort, serviceTier: settings.codex.serviceTier },
+          profile: { ...waitingAttempt.profile, serviceTier: settings.codex.serviceTier },
           session: originalSession,
           checkId,
           states: [waitingAttempt.state, resumed.state],
@@ -1137,6 +1541,7 @@ Do not poll or start another check. Return exactly the required result fields. F
       persistEvidence();
       report('success: passed');
     } catch (error) {
+      currentFailure = message(error);
       let failure: unknown = error;
       try {
         if (taskId) {
@@ -1155,7 +1560,18 @@ Do not poll or start another check. Return exactly the required result fields. F
       }
       throw stepFailure(currentStep, failure, report);
     }
+  } catch (error) {
+    currentFailure ??= message(error);
+    throw error;
   } finally {
+    // Persist before stopping the task, closing the database, or removing any disposable files.
+    let evidenceFailure: unknown;
+    try {
+      snapshot();
+    } catch (error) {
+      evidenceFailure = error;
+      report(`evidence: failed: ${message(error)}`);
+    }
     console.error = originalError;
     if (taskId) {
       try {
@@ -1211,6 +1627,7 @@ Do not poll or start another check. Return exactly the required result fields. F
       /* The task's failure is already reported with its step. */
     }
     db.close();
+    if (evidenceFailure && !currentFailure) throw evidenceFailure;
   }
 
   if (originalPath === undefined) delete process.env.PATH;

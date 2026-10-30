@@ -35,7 +35,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityWaiters, checkWaitMs, launch, workerPrompt } from './launch.ts';
+import { capacityWaiters, checkWaitMs, launch, workerCheckProtocol, workerPrompt } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree } from './worktree-lifetime.ts';
@@ -403,6 +403,7 @@ export class WorkerJob implements GateOutcomeSink {
         ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
         : []),
       `The checks you started have finished or could not be found. ${message}`,
+      ...(canResume ? [workerCheckProtocol(task.worktree, task.brief.markdown)] : []),
       'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
     const failureCount = () =>
@@ -1271,8 +1272,12 @@ export class WorkerJob implements GateOutcomeSink {
           const firstLine = (
             attempt.result.startsWith('stalled: no output for ')
               ? attempt.result
-              : previous.result || previous.blocker || 'Worker CLI failed before starting a session'
+              : attempt.blocker || attempt.result || 'Worker reported a tool failure without details'
           ).split(/\r?\n/, 1)[0]!;
+          store.event(ref, 'repeated-tool-failure', {
+            current: { attempt: attempt.attempt, detail: attempt.blocker ?? attempt.result },
+            previous: { attempt: previous.attempt, detail: previous.blocker ?? previous.result },
+          });
           store.updateTask(ref, (t) => {
             t.state = 'stopped';
           });
@@ -1287,7 +1292,7 @@ export class WorkerJob implements GateOutcomeSink {
             kind: 'stalled' as const,
             summary: firstLine.startsWith('stalled: no output for ')
               ? firstLine.replace(/[\r\n]+/g, ' ')
-              : `Repeated launch failure: ${firstLine}`.replace(/[\r\n]+/g, ' '),
+              : `Repeated tool failure: ${firstLine}`.replace(/[\r\n]+/g, ' '),
             evidencePath,
           };
           store.event(ref, 'manager-event', event);
