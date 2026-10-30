@@ -18,6 +18,8 @@ function EditorExample({ scenario }: { scenario: AuthoredScenario | 'loading' })
   const query = useQuery({
     queryKey: ['authored-story', scenario, locale],
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: () => (scenario === 'loading' ? new Promise<never>(() => {}) : fixture.transport.read()),
   });
   if (!query.data)
@@ -163,6 +165,12 @@ export const Conflict: Story = {
     await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
       'A quiet story about friendship.',
     );
+    await expect(canvas.getByRole('button', { name: m.authored_review_draft() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeDisabled();
+    await expect(canvas.getByRole('textbox', { name: m.authored_licence() })).toHaveValue('CC-BY-4.0');
+    await expect(canvas.getByRole('textbox', { name: m.authored_citation() })).toHaveValue(
+      'https://example.org/original-notes',
+    );
     await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.authored_review_draft() }));
     await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toHaveValue('en');
@@ -180,6 +188,9 @@ export const Conflict: Story = {
     await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
       'A quiet story about friendship.',
     );
+    await expect(canvas.getByRole('button', { name: m.authored_review_draft() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeDisabled();
+    await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toBeDisabled();
   },
 };
 export const Unavailable: Story = {
@@ -215,5 +226,10 @@ export const Selected: Story = {
     await userEvent.click(within(selected).getByRole('button', { name: m.correction_reload() }));
     await within(selected).findByText('A quiet story about friendship.');
     await expect(within(selected).queryByText('An aviator meets a young traveller in the desert.')).toBeNull();
+    const comparison = canvas.getByRole('region', { name: m.candidate_title() });
+    // Current, proposed and selection values reuse the exact authorized native document.
+    await expect(
+      (await within(comparison).findAllByText('A quiet story about friendship.')).length,
+    ).toBeGreaterThanOrEqual(3);
   },
 };

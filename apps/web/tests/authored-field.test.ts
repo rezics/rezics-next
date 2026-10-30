@@ -258,3 +258,152 @@ test('unsupported metadata, denied reads and an unbound production transport nev
     expect(html).not.toContain('An aviator meets a young traveller in the desert.');
   }
 });
+
+const { authoredState, initialAuthoredState } = await import('../src/features/catalogue/authored-field-state');
+const { CandidateValue } = await import('../src/features/pages/data');
+
+test('a native stale rejection retains frozen draft and recovery while exact readable document references reuse authorized current preview and unreadable values stay truthful', async () => {
+  const fixture = authoredFixture('stale');
+  const initial = await fixture.transport.read();
+  if (!initial.ok || !initial.selected || !initial.body?.ok) throw new Error('Expected readable current text');
+  const draft = {
+    document: fromPlainText('A private original draft retained after rejection.'),
+    language: 'en',
+    licence: 'CC-BY-4.0',
+    citation: 'https://example.org/original-notes',
+    original: true,
+  };
+  let state = authoredState(initialAuthoredState(initial), { type: 'edit', property: authoredProperty, change: draft });
+  const command: AuthoredCommand = {
+    id: fixture.id,
+    key: crypto.randomUUID(),
+    statement: authoredStatement(authoredProperty, draft.document, draft.language, draft.licence, draft.citation),
+    session: initial.session,
+  };
+  state = authoredState(state, { type: 'submit', command });
+  const frozen = JSON.stringify(state.command);
+  const rejected = await fixture.transport.propose(state.command!);
+  expect(rejected).toEqual({ ok: false, reason: 'stale' });
+  state = authoredState(state, { type: 'result', result: rejected });
+  // A delayed editor emission or successful metadata refetch cannot clear a native rejection or its request.
+  state = authoredState(state, { type: 'edit', property: authoredProperty, change: { language: 'ja' } });
+  const refreshed = await fixture.transport.read();
+  state = authoredState(state, { type: 'read', read: refreshed, reviewDraft: false });
+  state = authoredState(state, { type: 'submit', command: { ...command, key: crypto.randomUUID() } });
+  expect(state.failure).toBe('stale');
+  expect(state.proposed).toBeUndefined();
+  expect(state.drafts[authoredProperty]).toEqual(draft);
+  expect(JSON.stringify(state.command)).toBe(frozen);
+  // An unsuccessful explicit recovery retains the stale recovery action, rather than turning it into a retry.
+  state = authoredState(state, { type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft: true });
+  expect(state.failure).toBe('stale');
+  expect(JSON.stringify(state.command)).toBe(frozen);
+  const preview = (documents?: unknown) =>
+    renderToStaticMarkup(
+      createElement(CandidateValue, {
+        snak: initial.selected!,
+        related: initial.public.related,
+        locale: 'en',
+        subject: fixture.id,
+        documents,
+      }),
+    );
+  expect(preview({ [initial.selected.id]: initial.body.document })).toContain('An aviator meets a young traveller');
+  expect(preview()).toContain('This value has no readable preview.');
+  expect(preview({ [initial.selected.id]: draft })).toContain('This value has no readable preview.');
+  // A successful explicit review unlocks the same draft; a deliberate resubmission makes a new intent.
+  state = authoredState(state, { type: 'read', read: refreshed, reviewDraft: true });
+  expect(state.command).toBeNull();
+  expect(state.failure).toBeUndefined();
+  expect(state.drafts[authoredProperty]).toEqual(draft);
+  const next = { ...command, key: crypto.randomUUID() };
+  state = authoredState(state, { type: 'submit', command: next });
+  state = authoredState(state, { type: 'result', result: await fixture.transport.propose(state.command!) });
+  expect(state.failure).toBe('stale');
+  expect(state.command?.key).toBe(next.key);
+  expect(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.key)).toEqual([
+    command.key,
+    next.key,
+  ]);
+});
+
+test('current, proposed and selected native document values use exact authorized readback without row hydration or draft substitution', async () => {
+  const fixture = authoredFixture();
+  const proposal = await fixture.transport.propose({
+    id: fixture.id,
+    key: crypto.randomUUID(),
+    statement: authoredStatement(
+      authoredProperty,
+      fromPlainText('An independently read original replacement.'),
+      'en',
+      'CC-BY-4.0',
+      'https://example.org/original-notes',
+    ),
+  });
+  if (!proposal.ok) throw new Error('Expected a proposal');
+  const review = await fixture.transport.review(authoredProperty, proposal.candidate);
+  const current = review.current;
+  if (!review.comparison.ok || !review.body?.ok || !current?.selected || !current.body?.ok)
+    throw new Error('Expected independent public and private document reads');
+  const candidate = review.comparison.page!.candidates.find((item) => item.id === proposal.candidate)!;
+  const render = (snak: typeof candidate.statement, documents?: unknown, subject = fixture.id) =>
+    renderToStaticMarkup(createElement(CandidateValue, { snak, related: {}, locale: 'en', subject, documents }));
+  const publicDocuments = { [current.selected.id]: current.body.document };
+  const candidateDocuments = { ...publicDocuments, [candidate.id]: review.body.document };
+  const requests = fixture.calls.length;
+  expect(render(current.selected, publicDocuments)).toContain('An aviator meets a young traveller');
+  expect(render(candidate.statement, candidateDocuments)).toContain('An independently read original replacement.');
+  // Private readability does not authorize a public preview.
+  expect(render(candidate.statement, publicDocuments)).not.toContain('original replacement');
+  expect(fixture.calls.length).toBe(requests);
+  await fixture.confirm({
+    id: fixture.id,
+    property: authoredProperty,
+    candidate: candidate.id,
+    operation: 'accept',
+    head: null,
+    key: crypto.randomUUID(),
+  });
+  await fixture.confirm({
+    id: fixture.id,
+    property: authoredProperty,
+    candidate: candidate.id,
+    operation: 'adopt',
+    head: 1,
+    key: crypto.randomUUID(),
+    selection: [{ candidate: candidate.id, rank: 'normal' }],
+  });
+  const selected = await fixture.transport.read();
+  if (!selected.ok || !selected.selected || !selected.body?.ok) throw new Error('Expected current public readback');
+  const document = selected.body.document;
+  const readable = { [candidate.id]: document };
+  // Public readback and the reviewed candidate retain their native references while sharing the authorized body.
+  for (const statement of [selected.selected, candidate.statement])
+    expect(render(statement, readable)).toContain('An independently read original replacement.');
+  for (const changed of [
+    { id: fixture.old.id },
+    { subjectId: fixture.old.id },
+    { candidateId: fixture.old.id },
+    { digest: 'd'.repeat(64) },
+    { language: 'ja' },
+    { availability: 'withheld' },
+    { availability: 'erased' },
+    { body: null },
+  ])
+    expect(render(selected.selected, { [candidate.id]: { ...document, ...changed } })).not.toContain(
+      'original replacement',
+    );
+  for (const unreadable of [undefined, {}, { [document.id]: document }, { [candidate.id]: proposal }])
+    expect(render(selected.selected, unreadable)).not.toContain('original replacement');
+  expect(render(selected.selected, readable, fixture.old.id)).not.toContain('original replacement');
+  expect(render({ ...selected.selected, value: { type: 'value', content: document.id } }, readable)).not.toContain(
+    document.id,
+  );
+  // Revocation uses the new read, with no fallback to the readable proposal or an earlier public body.
+  fixture.documents.delete(document.id);
+  const revoked = await fixture.transport.read();
+  expect(revoked.ok && revoked.body?.ok).toBe(false);
+  expect(
+    render(selected.selected, revoked.ok && revoked.body?.ok ? { [candidate.id]: revoked.body.document } : {}),
+  ).not.toContain('original replacement');
+});

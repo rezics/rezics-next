@@ -40,7 +40,11 @@ export type AuthoredRead =
       body: AuthoredBody | null;
       session?: string;
     };
-export type AuthoredReview = { comparison: CandidateRead; body: AuthoredBody | null };
+export type AuthoredReview = {
+  comparison: CandidateRead;
+  body: AuthoredBody | null;
+  current?: Extract<AuthoredRead, { ok: true }>;
+};
 export type AuthoredTransport = {
   read: (property?: string, session?: string) => Promise<AuthoredRead>;
   propose: (command: AuthoredCommand) => Promise<ProposalResult>;
@@ -243,6 +247,7 @@ export async function readAuthoredReview(
     (candidate) => candidate.id === address.candidate && candidate.retracted === null,
   );
   return {
+    current: form,
     comparison: {
       ...comparison,
       fields: [{ id: address.property, label: pickText(field.labels, locale).text, multivalued: field.multivalued }],

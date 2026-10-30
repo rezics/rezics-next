@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { RichTextEditor } from '@rezics/ui';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -6,7 +6,6 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import type { Violation } from '@rezics/definitions/validate';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
@@ -16,19 +15,15 @@ import { CandidateValue, pageText } from '../pages/data';
 import { SpoilerGate } from '../pages/values';
 import { spoilerLevel } from '../pages/shared';
 import { EditorFailure } from './statement-editor-view';
-import type { ProposalResult } from './statement-editor';
+import { authoredState, initialAuthoredState, type AuthoredDraft } from './authored-field-state';
 import {
   authoredProperties,
   authoredStatement,
   validateAuthored,
   type AuthoredBody,
-  type AuthoredCommand,
   type AuthoredRead,
   type AuthoredTransport,
 } from './authored-field';
-
-type Draft = { document: DocumentSnapshot; language: string; licence: string; citation: string; original: boolean };
-const blank = (): Draft => ({ document: fromPlainText(''), language: '', licence: '', citation: '', original: false });
 
 function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale: string }) {
   const o = { locale: locale as never };
@@ -73,53 +68,59 @@ export function AuthoredField({
   confirm: CandidateTransport['confirm'];
 }) {
   const o = { locale: locale as never };
+  const [metadata, setMetadata] = useState(initial);
   const [current, setCurrent] = useState(initial.ok ? initial : undefined);
-  const [failure, setFailure] = useState(initial.ok ? undefined : initial.reason);
-  const [drafts, setDrafts] = useState<Record<string, Draft>>(() =>
-    initial.ok ? { [initial.property]: blank() } : {},
+  const [{ drafts, command, proposed, failure: submissionFailure }, dispatch] = useReducer(
+    authoredState,
+    initial,
+    initialAuthoredState,
   );
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Violation[]>([]);
-  const [proposed, setProposed] = useState<Extract<ProposalResult, { ok: true }>>();
   const [reviewing, setReviewing] = useState(false);
   const [proposalBody, setProposalBody] = useState<AuthoredBody | null>();
-  const command = useRef<AuthoredCommand | null>(null);
   const running = useRef(false);
   const session = useRef(initial.ok ? initial.session : undefined);
   const requestedProperty = useRef(initial.ok ? initial.property : '');
+  useEffect(() => {
+    if (initial.ok) session.current = initial.session ?? session.current;
+  }, [initial]);
+  // A metadata refresh replaces read authority without remounting or discarding the submission state.
+  if (metadata !== initial) {
+    setMetadata(initial);
+    setCurrent(initial.ok ? initial : undefined);
+    dispatch({ type: 'read', read: initial, reviewDraft: false });
+  }
   const property = current?.property ?? requestedProperty.current;
   const draft = drafts[property];
-  const locked = busy || !!command.current || !!proposed || !current || failure === 'denied';
+  const failure = submissionFailure ?? (!current ? 'unavailable' : undefined);
+  const locked = busy || !!command || !!proposed || !current || failure === 'denied';
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const id = current?.public.subject.id;
-  const update = (change: Partial<Draft>) => {
-    if (locked || !draft) return;
-    setDrafts((previous) => ({ ...previous, [property]: { ...previous[property]!, ...change } }));
+  const update = (change: Partial<AuthoredDraft>) => {
+    if (locked || running.current || !draft) return;
+    dispatch({ type: 'edit', property, change });
     setErrors([]);
-    setFailure(undefined);
   };
 
   async function refresh(nextProperty = property, reviewDraft = false) {
-    if (running.current || (command.current && !reviewDraft)) return;
+    if (running.current || (command && !reviewDraft)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
     setBusy(true);
     setProposalBody(undefined);
     try {
       const next = await transport.read(nextProperty || undefined, session.current);
+      dispatch({ type: 'read', read: next, reviewDraft });
       if (!next.ok) {
-        setFailure(next.reason);
         setCurrent(undefined);
       } else {
         setCurrent(next);
         session.current = next.session ?? session.current;
-        setDrafts((previous) => (previous[next.property] ? previous : { ...previous, [next.property]: blank() }));
-        setFailure(undefined);
-        if (reviewDraft) command.current = null;
       }
     } catch {
       setCurrent(undefined);
-      setFailure('unavailable');
+      dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft });
     } finally {
       running.current = false;
       setBusy(false);
@@ -130,7 +131,6 @@ export function AuthoredField({
     // A write denial clears private comparison data. Only a fresh public read may restore selected text.
     setCurrent(undefined);
     setProposalBody(undefined);
-    setProposed(undefined);
     setReviewing(false);
     try {
       const next = await transport.read(property || undefined, session.current);
@@ -144,14 +144,15 @@ export function AuthoredField({
   }
 
   async function submit() {
-    if (running.current || proposed || !current || !draft || failure === 'stale') return;
-    if (!command.current) {
+    if (running.current || proposed || !current || !draft || failure === 'stale' || failure === 'denied') return;
+    let request = command;
+    if (!request) {
       const statement = authoredStatement(property, draft.document, draft.language, draft.licence, draft.citation);
       const violations = validateAuthored(statement, current.release);
       if (!draft.original) violations.push({ pointer: '/original', code: 'required' });
       setErrors(violations);
       if (violations.length) return;
-      command.current = {
+      request = {
         id: current.public.subject.id,
         key: crypto.randomUUID(),
         statement: structuredClone(statement),
@@ -160,20 +161,17 @@ export function AuthoredField({
     }
     running.current = true;
     setBusy(true);
-    setFailure(undefined);
+    dispatch({ type: 'submit', command: request });
     try {
-      const result = await transport.propose(command.current);
+      const result = await transport.propose(request);
+      dispatch({ type: 'result', result });
       if (result.ok) {
         session.current = result.session ?? session.current;
-        setProposed(result);
-        command.current = null;
       } else {
-        setFailure(result.reason);
-        if (result.reason !== 'unavailable' && result.reason !== 'stale') command.current = null;
         if (result.reason === 'denied') await rereadAfterDenial();
       }
     } catch {
-      setFailure('unavailable');
+      dispatch({ type: 'result', result: { ok: false, reason: 'unavailable' } });
     } finally {
       running.current = false;
       setBusy(false);
@@ -203,6 +201,7 @@ export function AuthoredField({
       setProposalBody(undefined);
       const result = await transport.review(property, proposed.candidate, cursor, session.current);
       if (result.comparison.ok) session.current = result.comparison.session ?? session.current;
+      if (result.current) setCurrent(result.current);
       setProposalBody(result.body);
       return result.comparison;
     },
@@ -214,7 +213,7 @@ export function AuthoredField({
         // Read the actual public statement and its authorized body, never the submission or decision receipt.
         await refresh();
       } else if (result.reason === 'denied') {
-        setFailure('denied');
+        dispatch({ type: 'denied' });
         await rereadAfterDenial();
       }
       return result;
@@ -268,10 +267,10 @@ export function AuthoredField({
             variant="outline"
             disabled={busy}
             onClick={() =>
-              void (command.current && failure === 'unavailable' ? submit() : refresh(property, failure === 'stale'))
+              void (command && failure === 'unavailable' ? submit() : refresh(property, failure === 'stale'))
             }
           >
-            {command.current && failure === 'unavailable'
+            {command && failure === 'unavailable'
               ? m.correction_retry({}, o)
               : failure === 'stale'
                 ? m.authored_review_draft({}, o)
@@ -309,7 +308,7 @@ export function AuthoredField({
             ) : (
               <p>{m.authored_no_selected({}, o)}</p>
             )}
-            <Button variant="outline" disabled={busy || !!command.current} onClick={() => void refresh()}>
+            <Button variant="outline" disabled={busy || !!command} onClick={() => void refresh()}>
               {m.correction_reload({}, o)}
             </Button>
           </section>
@@ -430,6 +429,13 @@ export function AuthoredField({
                     transport={review}
                     initialProperty={property}
                     exactCandidate={proposed.candidate}
+                    documents={{
+                      public: current.body?.ok ? { [current.body.document.candidateId]: current.body.document } : {},
+                      candidates: {
+                        ...(current.body?.ok ? { [current.body.document.candidateId]: current.body.document } : {}),
+                        ...(proposalBody?.ok ? { [proposalBody.document.candidateId]: proposalBody.document } : {}),
+                      },
+                    }}
                   />
                 </>
               )}

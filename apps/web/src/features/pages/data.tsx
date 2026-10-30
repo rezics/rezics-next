@@ -45,15 +45,7 @@ import {
   type Sources,
   type Stmt,
 } from './shared';
-import {
-  DocumentValue,
-  LanguageTag,
-  MediaValue,
-  readableDocument,
-  SPOILER_PROPERTY,
-  SpoilerGate,
-  type ValueLabels,
-} from './values';
+import { DocumentValue, LanguageTag, MediaValue, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
 
 type CoreMessages = {
   unknown: string;
@@ -244,7 +236,20 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
 }
 
 /** Reuse ordinary field rendering in the private candidate comparison, without exposing raw JSON or ids. */
-export function CandidateValue({ snak, related, locale }: { snak: Snak; related: Related; locale: string }) {
+export function CandidateValue({
+  snak,
+  related,
+  locale,
+  subject,
+  documents,
+}: {
+  snak: Snak & { id?: string };
+  related: Related;
+  locale: string;
+  subject?: string;
+  /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
+  documents?: unknown;
+}) {
   const messages = {
     ...subjectMessages,
     unknown: m.subject_value_unknown({}, { locale: locale as never }),
@@ -255,9 +260,9 @@ export function CandidateValue({ snak, related, locale }: { snak: Snak; related:
     search: '',
   };
   const content = snak.value.type === 'value' ? snak.value.content : undefined;
-  if (snak.property.data_type === 'document' && isRecord(content)) {
-    const document = readableDocument(content.document);
-    if (document)
+  if (snak.value.type === 'value' && snak.property.data_type === 'document') {
+    const document = statementDocument(subject ?? '', snak, documents);
+    if (document && isRecord(content))
       return (
         <DocumentValue
           document={document}
@@ -269,6 +274,7 @@ export function CandidateValue({ snak, related, locale }: { snak: Snak; related:
           }}
         />
       );
+    return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
   }
   if (snak.property.data_type === 'media')
     return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;

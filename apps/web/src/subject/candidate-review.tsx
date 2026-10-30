@@ -34,6 +34,7 @@ export function CandidateReview({
   exactCandidate,
   context,
   slot,
+  documents,
 }: {
   id: string;
   locale: string;
@@ -42,6 +43,7 @@ export function CandidateReview({
   exactCandidate?: string;
   context?: string;
   slot?: CandidateSlot | undefined;
+  documents?: { public: unknown; candidates: unknown };
 }) {
   const options = { locale: locale as never };
   const [opened, setOpened] = useState(false);
@@ -360,6 +362,8 @@ export function CandidateReview({
                                 snak={item.statement}
                                 related={(current.contextReview?.reading ?? current.public).related}
                                 locale={locale}
+                                subject={id}
+                                documents={documents?.candidates}
                               />
                               <p className="text-sm text-muted-foreground">{state(item)}</p>
                               <CandidateProvenance candidate={item} read={current} locale={locale} />
@@ -399,7 +403,13 @@ export function CandidateReview({
                           ) : publicStatements.length ? (
                             publicStatements.map((statement) => (
                               <div key={statement.id}>
-                                <CandidateValue snak={statement} related={publicRead.related} locale={locale} />
+                                <CandidateValue
+                                  snak={statement}
+                                  related={publicRead.related}
+                                  locale={locale}
+                                  subject={id}
+                                  documents={documents?.public}
+                                />
                               </div>
                             ))
                           ) : (
@@ -412,6 +422,8 @@ export function CandidateReview({
                             snak={candidate.statement}
                             related={(current.contextReview?.reading ?? current.public).related}
                             locale={locale}
+                            subject={id}
+                            documents={documents?.candidates}
                           />
                           <p className="text-sm text-muted-foreground">{state(candidate)}</p>
                           {candidate.statement.qualifiers.map((snak, index) => (
@@ -528,6 +540,8 @@ export function CandidateReview({
                                           snak={value.statement}
                                           related={(current.contextReview?.reading ?? current.public).related}
                                           locale={locale}
+                                          subject={id}
+                                          documents={documents?.candidates}
                                         />
                                       ) : (
                                         <span>{m.candidate_choice_unresolved({}, options)}</span>
@@ -613,6 +627,8 @@ export function CandidateReview({
                             snak={value.statement}
                             related={(current!.contextReview?.reading ?? current!.public).related}
                             locale={locale}
+                            subject={id}
+                            documents={documents?.candidates}
                           />
                         )}
                         <span className="ml-2 text-sm">

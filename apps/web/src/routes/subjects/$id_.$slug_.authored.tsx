@@ -89,7 +89,7 @@ function AuthoredRoute() {
         <EditorFailure reason="denied" locale={locale} />
       </div>
     );
-  if (query.isError)
+  if (query.isError && !query.data)
     return (
       <div className="space-y-3 p-6">
         <EditorFailure reason="unavailable" locale={locale} />
@@ -107,7 +107,7 @@ function AuthoredRoute() {
   return (
     <AuthoredField
       key={`${id}:${property}:${locale}`}
-      initial={query.data}
+      initial={query.isError ? { ok: false, reason: 'unavailable' } : query.data}
       locale={locale}
       transport={{
         read,
