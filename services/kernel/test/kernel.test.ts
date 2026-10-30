@@ -499,12 +499,20 @@ test('commerce money schema publishes only closed static configured money facts 
   expect(schema.required).toEqual(['factsVersion', 'taxBehavior', 'configuredSaleCurrencies']);
 });
 
-
 test('subject offer discovery declares its native read action, purchase gate and bounded raw page', () => {
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   const operation = openApiDocument(kernel).paths['/v1/subjects/{id}/offers']?.get;
-  expect(operation).toMatchObject({ operationId: 'subject_offers.list', 'x-action': 'subject:read',
-    'x-exposure': 'gate:purchases', security: [{ bearerAuth: [] }, {}] });
-  expect(operation?.parameters).toContainEqual(expect.objectContaining({ name: 'limit', in: 'query',
-    schema: expect.objectContaining({ default: 10, minimum: 1, maximum: 20 }) }));
+  expect(operation).toMatchObject({
+    operationId: 'subject_offers.list',
+    'x-action': 'subject:read',
+    'x-exposure': 'gate:purchases',
+    security: [{ bearerAuth: [] }, {}],
+  });
+  expect(operation?.parameters).toContainEqual(
+    expect.objectContaining({
+      name: 'limit',
+      in: 'query',
+      schema: expect.objectContaining({ default: 10, minimum: 1, maximum: 20 }),
+    }),
+  );
 });

@@ -33,15 +33,25 @@ export async function readSubjectOfferSource(pool: Pool, id: string, deadline: n
     try {
       const owner = await readPartition(client, partitionOf(route));
       if (!owner || owner.writeState !== 'active')
-        throw new CommandUnavailableError(owner?.writeState === 'moved' ? 'moved' : 'fenced', partitionOf(route), owner?.movedTo);
+        throw new CommandUnavailableError(
+          owner?.writeState === 'moved' ? 'moved' : 'fenced',
+          partitionOf(route),
+          owner?.movedTo,
+        );
       const offer = await readOffer(client, route, id);
-      if (!offer) { await client.query('COMMIT'); return null; }
+      if (!offer) {
+        await client.query('COMMIT');
+        return null;
+      }
       const creator = await readAccount(client, route, offer.creatorAccountId);
       if (!creator) throw new ProblemError('dependency_unavailable');
       await client.query('COMMIT');
       if (creator.state !== 'active' || creator.fenced) return null;
       return offer;
-    } catch (error) { await connection.query('ROLLBACK'); throw error; }
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    }
   });
 }
 
@@ -50,38 +60,56 @@ export async function readSubjectOfferSource(pool: Pool, id: string, deadline: n
  */
 async function mayReadOffer(deps: Dependencies, actor: Actor, offer: Offer, deadline: number): Promise<boolean> {
   const resource = { route: routeOf(offer.id)!, id: offer.id };
-  const check = await accessCheck(deps.access, actor, 'offer:read', {
-    ...resource,
-    eligibility: createResourcePublicEligibility({
-      resource,
-      action: 'offer:read',
-      async prepare() { return { revision: offer.revision }; },
-      async verify({ client, evidence }) {
-        const current = await readOffer(client, resource.route, resource.id);
-        return current?.state === 'active' && current.revision === evidence.revision && current.contentEdition != null;
-      },
-    }),
-  }, { pool: deps.pool, deadline });
+  const check = await accessCheck(
+    deps.access,
+    actor,
+    'offer:read',
+    {
+      ...resource,
+      eligibility: createResourcePublicEligibility({
+        resource,
+        action: 'offer:read',
+        async prepare() {
+          return { revision: offer.revision };
+        },
+        async verify({ client, evidence }) {
+          const current = await readOffer(client, resource.route, resource.id);
+          return (
+            current?.state === 'active' && current.revision === evidence.revision && current.contentEdition != null
+          );
+        },
+      }),
+    },
+    { pool: deps.pool, deadline },
+  );
   return withConnection(deps.pool, (client) => check(deadlineClient(client, deadline)));
 }
 
 export function publicOfferCard(offer: Offer): PublicOfferCard {
   return {
-    id: offer.id, targetSubjectId: offer.targetSubjectId, title: offer.title,
-    currency: offer.currency, unitAmountMinor: offer.unitAmountMinor,
-    moneyUnit: offer.moneyUnit ?? null, taxBehavior: offer.taxBehavior ?? null,
-    revision: offer.revision, contentEdition: contentEditionTermsView(offer.contentEdition),
+    id: offer.id,
+    targetSubjectId: offer.targetSubjectId,
+    title: offer.title,
+    currency: offer.currency,
+    unitAmountMinor: offer.unitAmountMinor,
+    moneyUnit: offer.moneyUnit ?? null,
+    taxBehavior: offer.taxBehavior ?? null,
+    revision: offer.revision,
+    contentEdition: contentEditionTermsView(offer.contentEdition),
   };
 }
 
 /** Eventual positive discovery. Rejects consume raw slots and advance the signed raw cursor. */
 export function listSubjectOffers(
-  deps: Dependencies, actor: Actor, subject: string,
+  deps: Dependencies,
+  actor: Actor,
+  subject: string,
   input: { cursor?: string; limit?: number; deadline: number },
 ): Promise<SubjectOffersPage> {
   return withRequestDeadline(input.deadline, async (): Promise<SubjectOffersPage> => {
     const size = input.limit ?? 10;
-    if (!Number.isInteger(size) || size < 1 || size > SUBJECT_OFFER_RAW_LIMIT) throw new ProblemError('invalid_request');
+    if (!Number.isInteger(size) || size < 1 || size > SUBJECT_OFFER_RAW_LIMIT)
+      throw new ProblemError('invalid_request');
     if (routeOf(subject) === null) throw new ProblemError('not_found');
     const disclosure = () => readCurrentSubjectSummaries({ ...deps, actor, deadline: input.deadline }, [subject]);
     const before = await disclosure();
@@ -93,12 +121,20 @@ export function listSubjectOffers(
     }
     const terminal = identity.terminal;
     const route = routeOf(terminal)!;
-    const binding = { operation: 'subject_offers.list', parameters: { subject, terminal, identityEpoch: identity.epoch.toString(), order: 'raw-offer-id-asc-v1' } };
+    const binding = {
+      operation: 'subject_offers.list',
+      parameters: { subject, terminal, identityEpoch: identity.epoch.toString(), order: 'raw-offer-id-asc-v1' },
+    };
     let after = SUBJECT_OFFER_START;
     let cursorEpoch: number | undefined;
     if (input.cursor !== undefined) {
       const decoded = decodeCursor(deps.tokens, binding, input.cursor);
-      if (!decoded.ok || decoded.after.length !== 1 || typeof decoded.after[0] !== 'string' || routeOf(decoded.after[0]) === null)
+      if (
+        !decoded.ok ||
+        decoded.after.length !== 1 ||
+        typeof decoded.after[0] !== 'string' ||
+        routeOf(decoded.after[0]) === null
+      )
         throw new ProblemError('invalid_cursor');
       after = decoded.after[0];
       cursorEpoch = decoded.epoch;
@@ -125,34 +161,70 @@ export function listSubjectOffers(
       if (!ref.listed) continue;
       try {
         const offer = await readSubjectOfferSource(deps.pool, ref.offerId, input.deadline);
-        if (!offer || offer.state !== 'active' || offer.revision !== ref.sourceRevision || !offer.contentEdition ||
-            !Number.isSafeInteger(offer.unitAmountMinor) || offer.unitAmountMinor < 1 ||
-            offer.targetSubjectId !== ref.originalSubjectId || offer.creatorAccountId !== offer.contentEdition.creatorAccountId ||
-            offer.targetSubjectId !== offer.contentEdition.targetSubjectId) continue;
+        if (
+          !offer ||
+          offer.state !== 'active' ||
+          offer.revision !== ref.sourceRevision ||
+          !offer.contentEdition ||
+          !Number.isSafeInteger(offer.unitAmountMinor) ||
+          offer.unitAmountMinor < 1 ||
+          offer.targetSubjectId !== ref.originalSubjectId ||
+          offer.creatorAccountId !== offer.contentEdition.creatorAccountId ||
+          offer.targetSubjectId !== offer.contentEdition.targetSubjectId
+        )
+          continue;
         const [mapped] = await readIdentityMappings(deps.pool, [offer.targetSubjectId]);
-        if (mapped?.state !== 'mapped') { preparing = true; continue; }
+        if (mapped?.state !== 'mapped') {
+          preparing = true;
+          continue;
+        }
         if (mapped.terminal !== terminal || mapped.epoch.toString() !== ref.identityEpoch) continue;
-        const subjects = await readCurrentSubjectSummaries({ ...deps, actor, deadline: input.deadline }, [offer.targetSubjectId]);
-        if (!subjects.summaries.get(offer.targetSubjectId) || !(await mayReadOffer(deps, actor, offer, input.deadline))) continue;
-        const current = await captureCurrentContentEdition(offer.contentEdition.benefit.resource.id, deps, { actor, deadline: input.deadline });
+        const subjects = await readCurrentSubjectSummaries({ ...deps, actor, deadline: input.deadline }, [
+          offer.targetSubjectId,
+        ]);
+        if (!subjects.summaries.get(offer.targetSubjectId) || !(await mayReadOffer(deps, actor, offer, input.deadline)))
+          continue;
+        const current = await captureCurrentContentEdition(offer.contentEdition.benefit.resource.id, deps, {
+          actor,
+          deadline: input.deadline,
+        });
         if (!sameCapturedContentEdition(offer.contentEdition, current)) continue;
         const final = await readSubjectOfferSource(deps.pool, offer.id, input.deadline);
-        if (!final || final.state !== 'active' || final.revision !== offer.revision || !sameCapturedContentEdition(final.contentEdition, current) ||
-            !(await mayReadOffer(deps, actor, final, input.deadline))) continue;
+        if (
+          !final ||
+          final.state !== 'active' ||
+          final.revision !== offer.revision ||
+          !sameCapturedContentEdition(final.contentEdition, current) ||
+          !(await mayReadOffer(deps, actor, final, input.deadline))
+        )
+          continue;
         const [finalMapping] = await readIdentityMappings(deps.pool, [offer.targetSubjectId]);
-        if (finalMapping?.state !== 'mapped') { preparing = true; continue; }
+        if (finalMapping?.state !== 'mapped') {
+          preparing = true;
+          continue;
+        }
         if (finalMapping.terminal !== terminal || finalMapping.epoch !== mapped.epoch) continue;
         await subjects.verify();
         offers.push(publicOfferCard(final));
       } catch (error) {
-        if (classifyUnavailability(error) || (error instanceof ProblemError && error.code === 'dependency_unavailable')) { preparing = true; continue; }
+        if (
+          classifyUnavailability(error) ||
+          (error instanceof ProblemError && error.code === 'dependency_unavailable')
+        ) {
+          preparing = true;
+          continue;
+        }
         throw error;
       }
     }
     // Revalidate the original and terminal after all point confirmations, with fresh native disclosure.
     await before.verify();
     const [finalIdentity] = await readIdentityMappings(deps.pool, [subject]);
-    if (finalIdentity?.state !== 'mapped' || finalIdentity.terminal !== terminal || finalIdentity.epoch !== identity.epoch)
+    if (
+      finalIdentity?.state !== 'mapped' ||
+      finalIdentity.terminal !== terminal ||
+      finalIdentity.epoch !== identity.epoch
+    )
       return { offers: [], next: null, projectionState: 'preparing' };
     const finalDisclosure = await disclosure();
     if (!finalDisclosure.summaries.get(subject)) throw new ProblemError('not_found');
@@ -166,7 +238,10 @@ export function listSubjectOffers(
     const last = directory.rows.at(-1);
     return {
       offers,
-      next: directory.rows.length === size && last ? encodeCursor(deps.tokens, binding, { epoch: directory.epoch, after: [last.offerId] }) : null,
+      next:
+        directory.rows.length === size && last
+          ? encodeCursor(deps.tokens, binding, { epoch: directory.epoch, after: [last.offerId] })
+          : null,
       projectionState: preparing ? 'preparing' : 'ready',
     };
   }).catch((error: unknown) => {
