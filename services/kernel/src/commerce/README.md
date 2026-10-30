@@ -585,6 +585,23 @@ and denial behavior. The digest binds the offer ID and expected revision: an exa
 captured order after repricing, while a changed revision under the same key is `422 idempotency_conflict`.
 No lock or native connection spans provider I/O or a foreign-home checkout.
 
+A retained native create-order receipt from before revision consent used `{offerId}` in the semantic digest.
+Only a real modern digest conflict permits one additional `runCommand` invocation with that old digest, in the
+same principal/kind/key/partition namespace. It prepares and runs the full current parent, principal, assignment,
+scope, account-floor and buyer account-T authorization again at its own attempt T, then returns Core's
+`receipt-only` mode. It performs no fresh sale preparation or business execution. Missing old evidence preserves
+the original idempotency conflict; current denials and unavailable/erased evidence propagate normally. A missing
+current offer cannot bypass parent authorization. No alternate key, Session, inferred revision or receipt rewrite
+is admitted. Before returning the genuine old response, Commerce requires its captured native `offerId` and
+`offerRevision` to equal the submitted intent exactly; a mismatch remains an idempotency conflict without disclosure.
+
+Old responses retain their original UNKNOWN or mapped benefit and money provenance. Native checkout reads the
+current owned order after replay; it does not return the receipt's pre-Checkout state or treat history as authority
+for a fresh charge. Existing immutable physical request/expiry and 23-hour retry guards still apply. Focused
+[historical replay cases](../../test/commerce/legacy-order-replay.test.ts) use real current Auth/Access and Content
+setup plus immutable historical order/receipt data only. These cases await controller-owned native/full proof;
+source implementation and local typing alone do not establish compatibility acceptance.
+
 The offer page displays the observed terms/revision and submits that revision once through CSRF/BFF/client.
 A revision conflict shows localized terms-changed copy and an explicit reload/review action. Reload obtains a
 new displayed snapshot and intent key, and buying requires another deliberate action. Uncertain retries keep
@@ -743,7 +760,6 @@ as fee tax, and excludes non-withheld dispute-movement fees from creator deducti
 local allocation/reserve assumptions, **not provider facts**. Preserve actual provider gross/fee/net separately;
 unknown classifications/FX/tax evidence cannot justify payment. A full customer refund need not zero net receipts
 or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees or full reversal evidence.
-
 Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
 release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
 attestation with actual date/method/amount/currency/reference. These are the provider

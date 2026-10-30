@@ -414,76 +414,114 @@ export function createCommerceCommands(config: {
     route(offerId);
     if (!Number.isSafeInteger(expectedOfferRevision) || expectedOfferRevision < 1)
       throw new TypeError('Invalid expected offer revision');
-    const parent = offerParentAnchor(offerId);
-    const authorization = parentCreationAuthorization({
-      access,
-      actor,
-      action: 'order:create',
-      parent,
-      context: {
-        ...context(),
-        resource: { route: r, id },
-        creation: {
-          async validate() {
-            return false;
+    // Every actual attempt gets fresh parent/account evidence at its own T.
+    function admission() {
+      const parent = offerParentAnchor(offerId);
+      const authorization = accountAuthorization(
+        actor,
+        parentCreationAuthorization({
+          access,
+          actor,
+          action: 'order:create',
+          parent,
+          context: {
+            ...context(),
+            resource: { route: r, id },
+            creation: {
+              async validate() {
+                return false;
+              },
+            },
           },
-        },
-      },
-    });
-    const sale = withSalePreparation(accountAuthorization(actor, authorization), async (attempt, deadline) => {
+        }),
+      );
+      return { parent, authorization };
+    }
+    const { parent, authorization } = admission();
+    const sale = withSalePreparation(authorization, async (attempt, deadline) => {
       const offer = parent.at(attempt.time);
       return requireCurrentContentEdition(offer.contentEdition, { pool, access }, { actor, deadline });
     });
-    return runCommand(
-      pool,
-      {
-        ...options(actor, r, 'commerce.order.create', requestKey, { offerId, expectedOfferRevision }),
-        authorization: sale.authorization,
-      },
-      async (tx, command) => {
-        const offer = parent.at(command.time);
-        if (!parent.availableAt(command.time) || offer.state !== 'active') throw new OfferUnavailableError();
-        // The command body runs only after current authorization and exact receipt replay.
-        if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
-        let money;
-        try {
-          money = validateOfferAmount({ currency: offer.currency, amountMinor: offer.unitAmountMinor }, moneyPolicy);
-        } catch (error) {
-          if (error instanceof RangeError) throw new OfferUnavailableError();
+    try {
+      return await runCommand(
+        pool,
+        {
+          ...options(actor, r, 'commerce.order.create', requestKey, { offerId, expectedOfferRevision }),
+          authorization: sale.authorization,
+        },
+        async (tx, command) => {
+          const offer = parent.at(command.time);
+          if (!parent.availableAt(command.time) || offer.state !== 'active') throw new OfferUnavailableError();
+          // The command body runs only after current authorization and exact receipt replay.
+          if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
+          let money;
+          try {
+            money = validateOfferAmount({ currency: offer.currency, amountMinor: offer.unitAmountMinor }, moneyPolicy);
+          } catch (error) {
+            if (error instanceof RangeError) throw new OfferUnavailableError();
+            throw error;
+          }
+          if (
+            offer.taxBehavior !== money.taxBehavior ||
+            !offer.moneyUnit ||
+            offer.moneyUnit.system !== money.moneyUnit.system ||
+            offer.moneyUnit.exponent !== money.moneyUnit.exponent ||
+            offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion
+          )
+            throw new OfferUnavailableError();
+          const contentEdition = sale.at(tx, command.time);
+          if (
+            !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
+            offer.creatorAccountId !== contentEdition.creatorAccountId ||
+            offer.targetSubjectId !== contentEdition.targetSubjectId
+          )
+            throw new GrantDeniedError();
+          await admitBenefitAcquisition(tx, buyer, id, contentEdition);
+          await declareCommerceCommandHistory(tx, 'commerce.order.create', {
+            creatorAccountId: offer.creatorAccountId,
+            buyerAccountId: buyer.accountId,
+          });
+          const order = await store.insertOrder(
+            tx,
+            r,
+            { id, buyerAccountId: buyer.accountId, offer },
+            { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+          );
+          return {
+            value: order,
+            events: [{ type: 'com.rezics.commerce.order.created.v1', subject: id, data: { orderId: id } }],
+          };
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof IdempotencyConflictError)) throw error;
+      const legacy = admission().authorization;
+      const replay = await runCommand<Order>(
+        pool,
+        {
+          ...options(actor, r, 'commerce.order.create', requestKey, { offerId }),
+          authorization: {
+            ...legacy,
+            async authorize(tx, attempt, evidence) {
+              // Retain the full current policy, then remove fresh execution capability.
+              await legacy.authorize(tx, attempt, evidence);
+              return 'receipt-only';
+            },
+            // Only Core's missing-receipt branch uses this denial. Current policy
+            // failures still propagate from the normal authorization above.
+            denied: () => error,
+          },
+        },
+        async () => {
+          // Defensive only: Core must never invoke a receipt-only business body.
           throw error;
-        }
-        if (
-          offer.taxBehavior !== money.taxBehavior ||
-          !offer.moneyUnit ||
-          offer.moneyUnit.system !== money.moneyUnit.system ||
-          offer.moneyUnit.exponent !== money.moneyUnit.exponent ||
-          offer.moneyUnit.factsVersion !== money.moneyUnit.factsVersion
-        )
-          throw new OfferUnavailableError();
-        const contentEdition = sale.at(tx, command.time);
-        if (
-          !sameCapturedContentEdition(offer.contentEdition, contentEdition) ||
-          offer.creatorAccountId !== contentEdition.creatorAccountId ||
-          offer.targetSubjectId !== contentEdition.targetSubjectId
-        )
-          throw new GrantDeniedError();
-        await admitBenefitAcquisition(tx, buyer, id, contentEdition);
-        await declareCommerceCommandHistory(tx, 'commerce.order.create', {
-          creatorAccountId: offer.creatorAccountId,
-          buyerAccountId: buyer.accountId,
-        });
-        const order = await store.insertOrder(
-          tx,
-          r,
-          { id, buyerAccountId: buyer.accountId, offer },
-          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
-        );
-        return {
-          value: order,
-          events: [{ type: 'com.rezics.commerce.order.created.v1', subject: id, data: { orderId: id } }],
-        };
-      },
-    );
+        },
+      );
+      // The historical digest did not bind consent to a revision. Check the
+      // actual immutable native response before returning it to any caller.
+      if (replay.value.offerId !== offerId || replay.value.offerRevision !== expectedOfferRevision) throw error;
+      return replay;
+    }
   }
   // Both trusted creation ports fence the current buyer before receipt lookup and hold
   // the one order lock only through native work. No permission snapshot reaches Stripe.
