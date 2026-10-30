@@ -481,10 +481,11 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       )
     ).rows;
     const templateRoles = (
-      await db.admin.query('SELECT * FROM access.resource_role_grant WHERE route=$1 AND resource_id=ANY($2::uuid[])', [
-        thread.route,
-        [thread.id, templatePost.post_id],
-      ])
+      await db.admin.query(
+        `SELECT route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id
+         FROM access.resource_role_grant WHERE route=$1 AND resource_id=ANY($2::uuid[])`,
+        [thread.route, [thread.id, templatePost.post_id]],
+      )
     ).rows;
     // Clone native fixture state administratively; preparing spare targets must not consume write admission.
     await seed(
