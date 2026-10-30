@@ -105,13 +105,13 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     });
     expect(signed.status).toBe(200);
     const access = (
-      await f.kernel.query('SELECT state,authn_epoch FROM access.account WHERE route=$1 AND account_id=$2', [
+      await f.kernel.query('SELECT state,minimum_authn_epoch FROM access.account WHERE route=$1 AND account_id=$2', [
         f.routeOf(owner),
         owner,
       ])
     ).rows[0]!;
     expect(access.state).toBe('deleted');
-    expect(Number(access.authn_epoch)).toBe(obligation.barrier);
+    expect(Number(access.minimum_authn_epoch)).toBe(obligation.barrier);
     const due = obligation.consent_due_at;
     // Stale native issuance/recovery/reduction cannot recreate any of these rows.
     await expect(

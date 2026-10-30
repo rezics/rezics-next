@@ -44,15 +44,21 @@ function verificationPlugin(alreadyInTransaction = false) {
       function adapterFor(db: NativeDatabase, inTransaction = false): DBAdapter {
         const adapter = kyselyAdapter(db, { type: 'postgres', transaction: !inTransaction })(context.options);
         const create = adapter.create;
-        adapter.create = async (query) => {
+        adapter.create = async <T extends Record<string, unknown>, R = T>(query: {
+          model: string;
+          data: Omit<T, 'id'>;
+          select?: string[];
+          forceAllowId?: boolean;
+        }): Promise<R> => {
           const model = query.model;
-          if (!['verification', 'oauthClientAssertion', 'oauthRefreshFamily'].includes(model)) return create(query);
+          if (!['verification', 'oauthClientAssertion', 'oauthRefreshFamily'].includes(model))
+            return create<T, R>(query);
           // The artifact and its typed ownership fields commit together even when
           // Better Auth calls create outside an explicit adapter transaction.
           if (!inTransaction)
-            return db.transaction().execute((transaction) => adapterFor(transaction, true).create(query));
-          const result = await create(query);
-          const id = (result as { id: string }).id;
+            return db.transaction().execute((transaction) => adapterFor(transaction, true).create<T, R>(query));
+          const result = await create<T, R>(query);
+          const id = (result as unknown as { id: string }).id;
           if (model === 'verification') {
             const attribution = verificationAttribution(query.data);
             if (attribution) await db.updateTable('verification').set(attribution).where('id', '=', id).execute();

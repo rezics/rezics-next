@@ -39,6 +39,7 @@ export async function nativeFixture() {
     else process.env.DATABASE_URL = previous;
   }
   const actions = new Map(modules.LIFECYCLE_ACTIONS);
+  actions.set('account:manage', { anonymous: false });
   let host: Awaited<ReturnType<typeof createAuthHost>>;
   const access = modules.createAccess({
     actions,
@@ -74,6 +75,9 @@ export async function nativeFixture() {
   const context = () => ({ pool: kernel, deadline: Date.now() + 30_000 });
   const accountOperations: AccountOperationAccess = {
     context,
+    async admitGroup() {
+      throw new Error('This fixture does not exercise gated groups');
+    },
     approve: (token, input, ctx) => approvals.approve(token, input as never, ctx as never),
     resolveForCaller: (token, reference, operation, ctx) =>
       approvals.resolveForCaller(token, reference, operation as never, ctx as never),
