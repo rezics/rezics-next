@@ -813,6 +813,19 @@ END; $$;
 
 
 --
+-- Name: capture_identity_source_consumer_custody_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_source_consumer_custody_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,TG_TABLE_NAME,NEW.erasure_key,NEW.transaction_id);
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_inbound_link_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -3684,6 +3697,48 @@ CREATE TABLE semantic.identity_epoch_receiving_record (
 
 
 --
+-- Name: identity_epoch_source_consumer_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_epoch_source_consumer_custody (
+    partition_no integer NOT NULL,
+    receipt_key text NOT NULL,
+    source_digest text NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid CONSTRAINT identity_epoch_source_consumer_c_source_transaction_id_not_null NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    barrier_account_id uuid CONSTRAINT identity_epoch_source_consumer_cust_barrier_account_id_not_null NOT NULL,
+    barrier_account_route integer CONSTRAINT identity_epoch_source_consumer_c_barrier_account_route_not_null NOT NULL,
+    barrier_version integer NOT NULL,
+    barrier_at timestamp with time zone NOT NULL,
+    erased_role text NOT NULL,
+    binding_generation bigint CONSTRAINT identity_epoch_source_consumer_cust_binding_generation_not_null NOT NULL,
+    binding_transaction_id uuid CONSTRAINT identity_epoch_source_consumer__binding_transaction_id_not_null NOT NULL,
+    scope_digest text NOT NULL,
+    owner_epoch integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    state text DEFAULT 'retained'::text NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    CONSTRAINT identity_epoch_source_consumer_cust_barrier_account_route_check CHECK (((barrier_account_route >= 0) AND (barrier_account_route <= 65535))),
+    CONSTRAINT identity_epoch_source_consumer_custody_barrier_version_check CHECK ((barrier_version > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_binding_generation_check CHECK ((binding_generation > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_check CHECK ((barrier_account_route = ((get_byte(uuid_send(barrier_account_id), 10) * 256) + get_byte(uuid_send(barrier_account_id), 11)))),
+    CONSTRAINT identity_epoch_source_consumer_custody_erased_role_check CHECK ((erased_role = ANY (ARRAY['subject'::text, 'requester'::text, 'decider'::text]))),
+    CONSTRAINT identity_epoch_source_consumer_custody_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_source_consumer_custody_receipt_key_check CHECK ((octet_length(receipt_key) <= 160)),
+    CONSTRAINT identity_epoch_source_consumer_custody_scope_digest_check CHECK ((octet_length(scope_digest) <= 128)),
+    CONSTRAINT identity_epoch_source_consumer_custody_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_epoch_source_consumer_custody_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT identity_epoch_source_consumer_custody_state_check CHECK ((state = 'retained'::text))
+);
+
+
+--
 -- Name: identity_epoch_step; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -5428,6 +5483,14 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 
 --
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
+    ADD CONSTRAINT identity_epoch_source_consumer_custody_pkey PRIMARY KEY (partition_no, receipt_key, source_digest, barrier_account_id, barrier_version, barrier_at, erased_role, binding_generation);
+
+
+--
 -- Name: identity_epoch_step identity_epoch_step_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -6376,6 +6439,13 @@ CREATE UNIQUE INDEX identity_epoch_receiving_record_erasure_key ON semantic.iden
 --
 
 CREATE INDEX identity_epoch_scoped_generation_original ON semantic.identity_epoch_original USING btree (partition_no, generation, terminal, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_source_consumer_custody_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_source_consumer_custody_erasure_key ON semantic.identity_epoch_source_consumer_custody USING btree (partition_no, erasure_key);
 
 
 --
@@ -7795,6 +7865,27 @@ CREATE TRIGGER identity_epoch_receiving_record_immutable BEFORE DELETE OR UPDATE
 
 
 --
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_custody_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_source_consumer_custody_erasure_capture AFTER INSERT ON semantic.identity_epoch_source_consumer_custody DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_source_consumer_custody_erasure();
+
+
+--
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_custody_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_source_consumer_custody_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_source_consumer_custody FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_custody_no_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_source_consumer_custody_no_truncate BEFORE TRUNCATE ON semantic.identity_epoch_source_consumer_custody FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: identity_epoch_step identity_epoch_step_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -8507,6 +8598,22 @@ ALTER TABLE ONLY semantic.identity_epoch_receiving_record
 
 ALTER TABLE ONLY semantic.identity_epoch_receiving_record
     ADD CONSTRAINT identity_epoch_receiving_recor_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id);
+
+
+--
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consume_partition_no_receipt_key_bin_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
+    ADD CONSTRAINT identity_epoch_source_consume_partition_no_receipt_key_bin_fkey FOREIGN KEY (partition_no, receipt_key, binding_generation) REFERENCES semantic.identity_epoch_receipt_claim(partition_no, receipt_key, generation);
+
+
+--
+-- Name: identity_epoch_source_consumer_custody identity_epoch_source_consumer_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_epoch_source_consumer_custody
+    ADD CONSTRAINT identity_epoch_source_consumer_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES semantic.erasure_source_commit(partition_no, transaction_id);
 
 
 --
