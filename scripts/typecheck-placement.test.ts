@@ -62,6 +62,45 @@ test.each([
   expect(status).toBe(23);
 });
 
+test.each([
+  [[], ['bun', 'scripts/typecheck.ts'], ['services/kernel/.reylo']],
+  [
+    ['--emit-client'],
+    ['bun', 'scripts/typecheck.ts', '--emit-client'],
+    ['services/kernel/.reylo', 'packages/client/src/kernel'],
+  ],
+  [
+    ['--emit-schema=semantic'],
+    ['bun', 'scripts/typecheck.ts', '--emit-schema=semantic'],
+    ['services/kernel/.reylo', 'services/kernel/db/semantic/schema.sql'],
+  ],
+  [
+    ['--emit-schema=semantic', '--emit-client'],
+    ['bun', 'scripts/typecheck.ts', '--emit-client', '--emit-schema=semantic'],
+    ['services/kernel/.reylo', 'services/kernel/db/semantic/schema.sql', 'packages/client/src/kernel'],
+  ],
+])('Kernel placement returns files written by the selected emission modes: %j', async (args, command, returns) => {
+  let descriptor: { keepsFiles: boolean | undefined; returns: string[] | undefined } | undefined;
+  const status = await runKernelTypecheck(
+    { PATH: process.env.PATH },
+    {
+      place: async (run) => {
+        expect(run.command).toEqual(command);
+        descriptor = { keepsFiles: run.keepsFiles, returns: run.returns };
+        return 23;
+      },
+      withThrowawayDatabase: async () => {
+        throw new Error('should not start locally');
+      },
+    },
+    args,
+  );
+
+  expect(descriptor?.keepsFiles).toBe(true);
+  expect(descriptor?.returns).toEqual(returns);
+  expect(status).toBe(23);
+});
+
 test.each([false, true])('explicit local opt-out preserves the compiler emission mode: %j', async (emitClient) => {
   const databaseEnv = { DATABASE_URL: 'postgres://throwaway.test/db' };
   const status = await runKernelTypecheck(

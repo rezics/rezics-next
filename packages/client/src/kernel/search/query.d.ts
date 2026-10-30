@@ -1,6 +1,6 @@
 import type { FilterRelease } from '@rezics/filter';
 import type { Facet } from './facets.ts';
-import { type OpenSearch } from './opensearch.ts';
+import { type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 export declare const HIT_TEMPLATE = "subjects-hits-v1";
@@ -22,6 +22,8 @@ export type SearchPlan = {
     after?: readonly SortValue[];
     /** Distinct statement properties in the admitted filter. */
     overflowProperties?: readonly string[];
+    /** Internal native request allowance; never a public query or sort. */
+    work?: SearchRequestWork;
 };
 export type SubjectHit = {
     id: string;
