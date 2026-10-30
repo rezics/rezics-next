@@ -7,6 +7,7 @@ import {
 import { runCommand, type CommandTransaction, type AuthoritativeTime } from '../../src/command/command.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity, type NativeSourceFrontier } from '../../src/library/native-source-custody.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
+import erasureProbe from '../../src/library/erasure-probe.sql';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
@@ -263,4 +264,24 @@ test('live native holds survive generation changes and deletion; only committed 
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'progress', removed: 3 });
   await finishPrivateCleanup(key);
   expect(await snapshot(row.id)).toEqual([]);
+}, 120000);
+
+
+test('unheld ever-public native capture stays retained and its whole custody family remains in the terminal probe', async () => {
+  const row = await make('public'), captured = await captureForRetirement(row.id);
+  await remove(row.id, row.revision);
+  const key = await locator(row.id);
+  now += 720 * 3600 * 1000;
+  expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({
+    status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition',
+  });
+  const sourceGeneration = (await f.pool.query('SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2', [key.route, row.id])).rows[0].generation as string;
+  const result = await custodyCommand(captured.identity, (client, at) => captured.custody.retireCapture({
+    ...retirementWork(), ...captured, client, at, sourceGeneration,
+    episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
+  }));
+  expect(result.value).toMatchObject({ status: 'blocked', reason: 'public_custody' });
+  expect((await f.pool.query('SELECT 1 FROM library.native_source_capture WHERE route=$1 AND capture_id=$2', [key.route, captured.captureId])).rows).toHaveLength(1);
+  const pending = (await erasureProbe.run(f.pool, { route: key.route, account_id: key.accountId })).map((row) => row.store);
+  for (const store of ['native_source_capture', 'native_source_receipt', 'native_source_hold', 'native_source_fence']) expect(pending).toContain(store);
 }, 120000);
