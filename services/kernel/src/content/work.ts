@@ -35,6 +35,7 @@ import { createReactionCountEffect } from './reaction-projection.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
 import { createAuthorItemEffect } from './author-item-index.ts';
 import { createReportLocatorEffect } from './report-locator.ts';
+import { createCreatorEditionIndexEffect } from './edition-index.ts';
 import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
 import { registerAccountErasureWork } from './account-erasure.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
@@ -447,6 +448,7 @@ async function registerWork(
     createSubjectThreadEffect(context.pool),
     createAuthorItemEffect(context.pool),
     createReportLocatorEffect(context.pool),
+    createCreatorEditionIndexEffect(context.pool),
     createPartyLocatorEffect(context.pool),
     createAccountUploadIndexEffect(context.pool, storage),
   ]);

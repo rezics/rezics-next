@@ -1261,6 +1261,37 @@ Both reads use private, no-store responses; conditional headers never skip autho
 Unknown, removed and hidden resources return 404; ordinary native refusals and retryable infrastructure errors retain
 their normal problem semantics.
 
+### Returning to authored editions
+
+`readCreatorEditions({ pool, access, clock? }, actor, { accountId, cursor?, limit? }, { deadline })` returns
+`CreatorEditionPage = Readonly<{ editions: readonly ContentEditionView[]; next: string | null }>`, importing the
+actual edition model. `GET /v1/accounts/{accountId}/editions` exposes that exact page under the installed
+`edition:read` action with private, no-store responses. Only an authenticated actor for that same account can list;
+another account receives 404, including when it could read an individual published edition.
+
+The native default worker's `content_creator_edition` effect consumes the existing committed creation event.
+It validates the exact outbox slot and original account write basis against the immutable edition creation
+transaction, releases the original home, and inserts only `(creator account, edition ID)` in the creator home.
+Duplicate delivery has no effect. The existing creation and publication commands, identity attribution, owner grants,
+immutable bindings and sole native body remain unchanged. A closed native content erasure fence refuses late
+candidate enrollment; this locator is not a new erasure participant or acknowledgement proof.
+
+The primary key supports ascending immutable edition-ID keysets. Each request examines at most `min(limit, 20)`
+candidates (default 20), with no refill or lookahead row. A full candidate page has a continuation even if every
+candidate was hidden; a final full page can require one empty continuation. Shared authenticated encrypted list
+cursors bind account, viewer, effective page size, home epoch and the last examined ID, expire after 15 minutes,
+and conceal skipped IDs. A dedicated HMAC-derived key uses the existing pool-bound native receipt key ring, so
+the producer interface needs no new signing configuration and does not reuse receipt MACs.
+
+Candidates confer no authority. Each candidate is read through the owning metadata reader before and at final
+disclosure, with the creator's ordinary source read required for published editions as well. Current source,
+subject, seller/creator identity, ancestry and installed edition metadata grants decide the exact DTO. Refused or
+missing resources are skipped; retryable source/partition/Access failures propagate and never become an empty
+success. Drafts and withdrawn editions follow that same native metadata authority. Inventory does not require or
+claim Commerce sale eligibility, entitlement, delivery, ownership count or body access. There is no historical
+backfill or completeness claim: pre-index editions require a separately supported bounded original-row enrollment,
+never a request-time table scan. Web owns the consuming creator page.
+
 `readContentEditionSaleAuthority({ pool, access, clock? }, editionId, context)` returns only an active current
 publication. The server-only `readContentEditionMechanicalSaleAuthority({ pool, access, clock? }, editionId,
 { deadline })` uses that same private native verifier for fresh Commerce capture/fulfilment eligibility without a buyer
@@ -1295,4 +1326,6 @@ grants still use the ordinary formula. No Content permission evaluator is added.
 | Edition draft creation                        | Exact post/revision/write basis and selected subject association, released native subject and board/Realm/Space/account homes, ordinary ancestry, one edition INSERT and native owner grant initialization                               | One fixed source and subject; at most 33 posts; body at most 2 MiB; O(H log N) plus existing Access bounds                                                                                                              | None: focused native outcomes in `test/content/edition.test.ts`; no growth claim in this delivery                                                                            |
 | Edition publish/unpublish                     | Exact edition/source/subject, ordinary source/ancestry Access, one CAS; publication adds one immutable operation and receipt commitment                                                                                                  | One source, subject and operation; at most 512 recorded scopes; no history scan                                                                                                                                         | None: focused native outcomes in `test/content/edition.test.ts`; fixed indexed keys                                                                                          |
 | Edition metadata                              | Exact edition/source and released subject existence/read checks before and final, ordinary current parent guards and edition Access                                                                                                      | One pinned subject; at most 33 posts and one board/Realm/Space; no bytes or source URLs                                                                                                                                 | None: focused native outcomes in `test/content/edition.test.ts`; no growth run requested                                                                                     |
+| Creator edition candidate projection | Exact committed outbox slot, immutable edition and original write basis in one released source snapshot; one creator-home fence and idempotent candidate insert | Constant indexed keys and one candidate per creation event; O(log N) per home; no cross-home write inside creation | Focused native outcomes in `test/content/edition-index.test.ts`; no growth claim |
+| Creator edition inventory | One creator-home primary-key range; at most two owning metadata reads per examined candidate, each releasing all checkouts | At most min(limit,20) examined keys, no refill; O(log N + L × H log N) plus native Access bounds, L ≤ 20 and H ≤ 33 posts per metadata read; no body DTO, count or history scan | Focused native denial, continuation, race and unavailability outcomes in `test/content/edition-index.test.ts`; no growth run requested |
 | Edition sale/mechanical eligibility/byte read | Independent native publisher restorations per action and resource, exact receipt/operation/source, current subject and parent guards, final native checks; authenticated delivery separately checks the buyer edition grant and ancestry | At most 40 restorations for two sale actions, subject, board, Realm, Space, thread and at most 33 posts; shared 1,000 ms deadline; one exact revision at most 2 MiB; no history/entitlement enumeration or copied bytes | None: focused native outcomes in `test/content/edition.test.ts` and `test/content/edition-mechanical.test.ts`; producer integration and runtime verification remain separate |

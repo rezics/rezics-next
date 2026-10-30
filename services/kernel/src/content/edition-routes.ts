@@ -16,6 +16,7 @@ import {
   type EditionCommandDependencies,
 } from './edition-commands.ts';
 import { readContentEdition, readContentEditionRevision } from './edition-reads.ts';
+import { readCreatorEditions, InvalidCreatorEditionCursorError } from './edition-index.ts';
 import {
   ContentEditionInputSchema,
   ContentEditionSchema,
@@ -60,6 +61,7 @@ async function operation<T>(read: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
+    if (error instanceof InvalidCreatorEditionCursorError) throw new ProblemError('invalid_cursor');
     throw error;
   }
 }
@@ -73,11 +75,43 @@ function expected(request: Request): string {
 export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: EditionCommandDependencies) {
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
-    if (new URL(request.url).pathname.startsWith('/v1/contentEditions'))
+    if (new URL(request.url).pathname.startsWith('/v1/contentEditions') ||
+      /^\/v1\/accounts\/[^/]+\/editions$/.test(new URL(request.url).pathname))
       response.headers.set('cache-control', 'private, no-store');
     return response;
   });
   return app
+    .get(
+      '/v1/accounts/:accountId/editions',
+      {
+        params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+        query: t.Object({
+          cursor: t.Optional(t.String({ maxLength: 4096 })),
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+        }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(t.Object({
+            editions: t.Array(strictContentSchema(ContentEditionSchema), { maxItems: 20 }),
+            next: t.Union([t.String(), t.Null()]),
+          }, { additionalProperties: false }), { 'cache-control': t.String() }),
+          ...failures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.editions',
+          'x-exposure': 'public',
+          'x-action': 'edition:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ actor, params: { accountId }, query, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        set.headers['cache-control'] = 'private, no-store';
+        return operation(() => admission.run('normal', job, () =>
+          readCreatorEditions(deps, actor, { accountId, ...query }, { deadline: job.deadline }),
+        ));
+      },
+    )
     .post(
       '/v1/contentEditions',
       {

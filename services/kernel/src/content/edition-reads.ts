@@ -22,10 +22,21 @@ import type { ContentEditionView, ContentEditionRevisionView } from './edition-m
 type Dependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
 /** Closed authorized metadata never returns source post/thread IDs, body, URLs or history. */
 export async function readContentEdition(deps: Dependencies, id: string, context: ReadContext) {
+  return readEditionMetadata(deps, id, context, false);
+}
+
+/** Creator inventory additionally retains ordinary source authority, even after publication. */
+export async function readCreatorContentEdition(deps: Dependencies, id: string, context: ReadContext) {
+  return readEditionMetadata(deps, id, context, true);
+}
+
+async function readEditionMetadata(deps: Dependencies, id: string, context: ReadContext, creator: boolean) {
   if (routeOf(id) === null) throw new ContentNotFoundError();
   return withEditionReadTime(deps, context, async (time) => {
     const row = (await editionSnapshot(deps, id, context, (client) => editionRow(client, id))).value;
     if (!row) throw new ContentNotFoundError();
+    if (creator && (context.actor.kind !== 'account' || context.actor.accountId !== row.creator_account_id))
+      throw new ContentNotFoundError();
     if (
       row.state !== 'published' &&
       (context.actor.kind !== 'account' || context.actor.accountId !== row.creator_account_id)
@@ -33,7 +44,7 @@ export async function readContentEdition(deps: Dependencies, id: string, context
       throw new ContentNotFoundError();
     const accessContext = { pool: deps.pool, deadline: context.deadline, time };
     const source = sourceOf(row);
-    const guard = await prepareEditionSource(deps, source, context, time, accessContext, row.state !== 'published');
+    const guard = await prepareEditionSource(deps, source, context, time, accessContext, creator || row.state !== 'published');
     if (!guard || !(await guard.final())) throw new ContentNotFoundError();
     const resource = {
       route: row.route,

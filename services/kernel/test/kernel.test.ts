@@ -104,6 +104,7 @@ const typed = [
   'PATCH /v1/accounts/:accountId',
   'GET /v1/accounts/:accountId/speakers',
   'GET /v1/accounts/:accountId/preferences',
+  'GET /v1/accounts/:accountId/editions',
   'PATCH /v1/accounts/:accountId/preferences',
   'GET /v1/me/realms',
   'GET /v1/platform/exposure',

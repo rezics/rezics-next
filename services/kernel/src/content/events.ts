@@ -29,6 +29,10 @@ const editionEvent = Type.Object(
 );
 
 export const CONTENT_EVENTS = {
+  'com.rezics.content.edition.creator-indexed.v1': Type.Object(
+    { editionId: UUID, creatorAccountId: UUID },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.edition.created.v1': editionEvent,
   'com.rezics.content.edition.published.v1': editionEvent,
   'com.rezics.content.edition.unpublished.v1': editionEvent,
