@@ -11,6 +11,8 @@ import {
   growthByteViolations,
   checkGrowth,
   costOf,
+  medianCost,
+  type Cost,
   openGrowthDatabase,
   seed,
   settle,
@@ -141,75 +143,78 @@ test('default durable due keysets and exact purge charge native SDK work at 64/5
       await runtime.call('time', { time: now });
       await grow(scale, previous);
       previous = scale;
-      // Resume after the last already examined native due key. A fixed suffix of
-      // eight identities proves one page independently of the growing due prefix.
-      const checkpoint =
-        (
-          await db.admin.query(`SELECT restore_until::text AS "restoreUntil",route,copy_id AS "copyId"
+      const repetitions: Cost[] = [];
+      // Match the shared harness: one native warm-up and five complete measured pages.
+      for (let repetition = 0; repetition < 6; repetition++) {
+        // Resume after the last already examined native due key. A fixed suffix of
+        // eight identities proves one page independently of the growing due prefix.
+        const checkpoint =
+          (
+            await db.admin.query(`SELECT restore_until::text AS "restoreUntil",route,copy_id AS "copyId"
         FROM library.copy WHERE partition_no=4095 AND deletion_id IS NOT NULL
         ORDER BY restore_until DESC,route DESC,copy_id DESC LIMIT 1`)
-        ).rows[0] ?? null;
-      now += 1000;
-      const ids: string[] = [];
-      for (let index = 0; index < 8; index++) {
-        const current = await actor();
-        const item = await commands.createCopy(current, input(), entryKey());
-        ids.push(item.value.id);
-        await commands.deleteCopy(current, item.value.id, 1, entryKey());
-      }
-      now += 720 * 60 * 60 * 1000;
-      await runtime.call('time', { time: now });
-      // Let the actual default relay consume seeded commands before measuring a
-      // selected due page. No checkpoint, envelope or SDK result is manufactured.
-      const relayDeadline = Date.now() + 30_000;
-      for (const partition of [4094, 4095]) {
-        for (;;) {
-          const { rows } = await db.admin.query(
-            `SELECT p.position <= COALESCE(c.position,0) AS caught_up
+          ).rows[0] ?? null;
+        now += 1000;
+        const ids: string[] = [];
+        for (let index = 0; index < 8; index++) {
+          const current = await actor();
+          const item = await commands.createCopy(current, input(), entryKey());
+          ids.push(item.value.id);
+          await commands.deleteCopy(current, item.value.id, 1, entryKey());
+        }
+        now += 720 * 60 * 60 * 1000;
+        await runtime.call('time', { time: now });
+        // Let the actual default relay consume seeded commands before measuring a
+        // selected due page. No checkpoint, envelope or SDK result is manufactured.
+        const relayDeadline = Date.now() + 30_000;
+        for (const partition of [4094, 4095]) {
+          for (;;) {
+            const { rows } = await db.admin.query(
+              `SELECT p.position <= COALESCE(c.position,0) AS caught_up
              FROM core.partition p LEFT JOIN core.consumer_checkpoint c
              ON c.partition_no=p.partition_no AND c.consumer='effects' WHERE p.partition_no=$1`,
-            [partition],
-          );
-          if (rows[0]?.caught_up) break;
-          if (Date.now() >= relayDeadline) throw new Error('Default effects relay did not drain native seed');
-          await Bun.sleep(20);
+              [partition],
+            );
+            if (rows[0]?.caught_up) break;
+            if (Date.now() >= relayDeadline) throw new Error('Default effects relay did not drain native seed');
+            await Bun.sleep(20);
+          }
         }
+        await settle(db, { analyze: true });
+        const workflowId = entryKey();
+        const native = (await runtime.call('capture', { partition: 4095, workflowId, checkpoint })) as Capture;
+        const occurrences = statementOccurrences(native);
+        // Actual shared per-occurrence accounting, including background SDK/queue work.
+        const all = [...occurrences.statements, ...occurrences.backgroundStatements];
+        const pages = all.filter((item) => item.statement.includes('copy-retention-page.sql'));
+        expect(pages.length).toBeGreaterThan(0);
+        for (const page of pages) {
+          expect(page.rows).toBeLessThanOrEqual(8);
+          expect(page.plans.length).toBeGreaterThan(0);
+        }
+        expect(all.filter((item) => /DELETE FROM library\.copy/.test(item.statement))).toHaveLength(8);
+        for (const id of ids)
+          expect(
+            (await db.admin.query('SELECT copy_id FROM library.copy WHERE route=$1 AND copy_id=$2', [routeOf(id), id]))
+              .rows,
+          ).toEqual([]);
+        const steps = (await client.listWorkflowSteps(workflowId))!;
+        expect(steps.length).toBeLessThanOrEqual(20);
+        for (const step of steps)
+          expect(Buffer.byteLength(JSON.stringify(step.output ?? null))).toBeLessThanOrEqual(4096);
+        const cost = costOf(native);
+        // SDK/background costs remain charged; no cost subtraction or planner hints.
+        if (repetition > 0)
+          repetitions.push({
+            ...cost,
+            statements: cost.statements + (cost.backgroundStatements ?? 0),
+            rows: cost.rows + (cost.backgroundRows ?? 0),
+            blocks: cost.blocks + (cost.backgroundBlocks ?? 0),
+            requestBytes: (cost.requestBytes ?? 0) + (cost.backgroundRequestBytes ?? 0),
+            responseBytes: (cost.responseBytes ?? 0) + (cost.backgroundResponseBytes ?? 0),
+          });
       }
-      await settle(db, { analyze: true });
-      const workflowId = entryKey();
-      const native = (await runtime.call('capture', { partition: 4095, workflowId, checkpoint })) as Capture;
-      const occurrences = statementOccurrences(native);
-      // Actual shared per-occurrence accounting, including background SDK/queue work.
-      const all = [...occurrences.statements, ...occurrences.backgroundStatements];
-      const pages = all.filter((item) => item.statement.includes('copy-retention-page.sql'));
-      expect(pages.length).toBeGreaterThan(0);
-      for (const page of pages) {
-        expect(page.rows).toBeLessThanOrEqual(8);
-        expect(page.plans.length).toBeGreaterThan(0);
-      }
-      expect(all.filter((item) => /DELETE FROM library\.copy/.test(item.statement))).toHaveLength(8);
-      for (const id of ids)
-        expect(
-          (await db.admin.query('SELECT copy_id FROM library.copy WHERE route=$1 AND copy_id=$2', [routeOf(id), id]))
-            .rows,
-        ).toEqual([]);
-      const steps = (await client.listWorkflowSteps(workflowId))!;
-      expect(steps.length).toBeLessThanOrEqual(20);
-      for (const step of steps)
-        expect(Buffer.byteLength(JSON.stringify(step.output ?? null))).toBeLessThanOrEqual(4096);
-      const cost = costOf(native);
-      // SDK/background costs remain charged; no cost subtraction or planner hints.
-      samples.push({
-        scale,
-        cost: {
-          ...cost,
-          statements: cost.statements + (cost.backgroundStatements ?? 0),
-          rows: cost.rows + (cost.backgroundRows ?? 0),
-          blocks: cost.blocks + (cost.backgroundBlocks ?? 0),
-          requestBytes: (cost.requestBytes ?? 0) + (cost.backgroundRequestBytes ?? 0),
-          responseBytes: (cost.responseBytes ?? 0) + (cost.backgroundResponseBytes ?? 0),
-        },
-      });
+      samples.push({ scale, cost: medianCost(repetitions) });
     }
     assertGrowth(samples, { rows: 'constant', statements: 'constant', blocks: 'logarithmic' });
     expect(growthByteViolations(samples, { requestBytes: 'constant', responseBytes: 'constant' })).toEqual([]);
