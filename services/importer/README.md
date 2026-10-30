@@ -457,6 +457,14 @@ Planning checks `(source, external_id, field_group)` takedown fences before even
 the unchanged-record shortcut, and dispatch checks them again. Never clear
 those fences or terminal source claims to recreate withheld material.
 
+The public import transport and standalone media resolver admit open fence evidence only with
+`fenced: false` and `securityRevision: null`. Closed evidence requires `fenced: true` and a nonempty
+string proof; standalone ports preserve opaque proofs without imposing a numeric revision grammar.
+Malformed or contradictory evidence throws before media journal preparation, POST or status calls,
+including for an already bound exact owner. The frozen [fence evidence cases](tests/media-fence-evidence.test.ts)
+exercise the actual public transport and SQLite-bound resolver. These checks add no read pass or retained state;
+existing media resolution growth evidence and native receipts and limits remain unchanged.
+
 The `run_reference_signatures` table holds only exact source/key dependency outcome signatures.
 It is coordination metadata for every role, has no role-specific product surface, and contains
 no account, bearer or owner data. It follows the same restart and retention restrictions below.

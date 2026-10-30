@@ -383,8 +383,9 @@ export function createImportTransport(options: ImportTransportOptions) {
         typeof value === 'object' &&
         Object.keys(value).length === 2 &&
         typeof value.fenced === 'boolean' &&
-        (value.securityRevision === null ||
-          (typeof value.securityRevision === 'string' && value.securityRevision.length > 0)),
+        (value.fenced
+          ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
+          : value.securityRevision === null),
     );
     return value as { fenced: boolean; securityRevision: string | null };
   }

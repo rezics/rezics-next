@@ -172,11 +172,11 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
       );
       signal.throwIfAborted();
       ensure(fence && typeof fence.fenced === 'boolean');
-      ensure(fence.securityRevision === null || typeof fence.securityRevision === 'string');
       if (fence.fenced) {
         ensure(typeof fence.securityRevision === 'string' && fence.securityRevision.length > 0);
         return { outcome: 'fenced', securityRevision: fence.securityRevision, mediaIds: {} };
       }
+      ensure(fence.securityRevision === null);
 
       const result: Extract<MediaResolution, { outcome: 'resolved' }> = {
         outcome: 'resolved',
