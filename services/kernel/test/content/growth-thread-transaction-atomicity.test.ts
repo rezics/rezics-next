@@ -6,7 +6,6 @@ import type { Pool } from 'pg';
 import {
   createAtomicityKernel,
   createReply,
-  createSameRouteThread,
   createThreadAtomicityWorld,
   call,
   reserveAvailableImage,
@@ -35,6 +34,7 @@ type RevisionTemplate = {
   readonly boardId: string;
 };
 type MediaTemplate = {
+  readonly containerId: string;
   readonly mediaType: string;
   readonly byteCount: string;
   readonly declaredSha256: string | null;
@@ -67,16 +67,9 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         parentId: thread.firstPost.id,
       }),
     );
-  const unrelatedThread = await createSameRouteThread(
-    system,
-    kernel,
-    system.actors.author,
-    world.board,
-    conceptId,
-    thread.route,
-    `thread_transaction_growth_${randomUUID().replaceAll('-', '')}`,
-  );
-  const unrelatedPost = unrelatedThread.firstPost;
+  const unrelatedPost = world.reply;
+  expect(unrelatedPost.id).not.toBe(thread.firstPost.id);
+  expect(unrelatedPost.threadId).toBe(thread.id);
   const storage = createMediaStorage();
   try {
     const mediaTemplate = await reserveAvailableImage(
@@ -87,7 +80,13 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       thread.id,
       storage,
     );
-    const template = await templates(growthDb.admin, unrelatedPost.id, unrelatedPost.revisionId, mediaTemplate.id);
+    const template = await templates(
+      growthDb.admin,
+      thread.id,
+      unrelatedPost.id,
+      unrelatedPost.revisionId,
+      mediaTemplate.id,
+    );
     const partition = partitionOf(thread.route);
     const start = await growthDb.admin.query<{ position: string; epoch: number }>(
       'SELECT position::text,epoch FROM core.partition WHERE partition_no=$1',
@@ -102,7 +101,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       tag,
       route: thread.route,
       partition,
-      threadId: unrelatedThread.id,
+      threadId: thread.id,
       boardId: thread.boardId,
       postId: unrelatedPost.id,
       actorId: system.actors.author.actor.accountId,
@@ -127,7 +126,10 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (database, scale, previous) => {
         await seed(database, population, { from: previous, to: scale });
-        countsAtScale.set(scale, await fixtureCounts(database, tag, thread.route, unrelatedPost.id, partition, scale));
+        countsAtScale.set(
+          scale,
+          await fixtureCounts(database, tag, thread.route, thread.id, unrelatedPost.id, partition, scale),
+        );
       },
       async operation(database, _scale, run) {
         const growthTarget = growthTargets[run];
@@ -378,6 +380,7 @@ function growthPopulation(input: {
 
 async function templates(
   pool: Pool,
+  threadId: string,
   postId: string,
   revisionId: string,
   mediaId: string,
@@ -389,13 +392,14 @@ async function templates(
       licence: string;
       subject_ids: string[];
       board_id: string;
+      thread_id: string;
     }>(
-      `SELECT body,body_sha256,licence,subject_ids,board_id
+      `SELECT body,body_sha256,licence,subject_ids,board_id,thread_id
        FROM content.revision WHERE route=$1 AND post_id=$2 AND revision_id=$3`,
       [routeOf(postId), postId, revisionId],
     ),
     pool.query<MediaTemplate>(
-      `SELECT media_type AS "mediaType",byte_count::text AS "byteCount",declared_sha256 AS "declaredSha256",
+      `SELECT container_id AS "containerId",media_type AS "mediaType",byte_count::text AS "byteCount",declared_sha256 AS "declaredSha256",
               actual_byte_count::text AS "actualByteCount",sha256
        FROM content.media WHERE route=$1 AND media_id=$2`,
       [routeOf(mediaId), mediaId],
@@ -404,6 +408,8 @@ async function templates(
   if (!revision.rows[0] || !media.rows[0])
     throw new Error('Growth templates must come from real committed content and media');
   const row = revision.rows[0];
+  if (row.thread_id !== threadId || media.rows[0].containerId !== threadId)
+    throw new Error('Growth revision and available media must belong to the original measured thread');
   return {
     revision: {
       body: row.body,
@@ -420,18 +426,23 @@ async function fixtureCounts(
   database: GrowthDatabase,
   tag: string,
   route: number,
+  threadId: string,
   postId: string,
   partition: number,
   scale: number,
 ) {
   const [revisions, media, receipts, outbox, bases] = await Promise.all([
     database.admin.query<{ total: number; hot: number }>(
-      'SELECT count(*)::integer AS total,count(*) FILTER (WHERE route=$2)::integer AS hot FROM content.revision WHERE search_text=$1',
-      [tag, route],
+      `SELECT count(*)::integer AS total,
+              count(*) FILTER (WHERE route=$2 AND thread_id=$3 AND post_id=$4)::integer AS hot
+       FROM content.revision WHERE search_text=$1`,
+      [tag, route, threadId, postId],
     ),
     database.admin.query<{ total: number; hot: number }>(
-      'SELECT count(*)::integer AS total,count(*) FILTER (WHERE route=$2)::integer AS hot FROM content.media WHERE reservation_request_id LIKE $1',
-      [`${tag}-%`, route],
+      `SELECT count(*)::integer AS total,
+              count(*) FILTER (WHERE route=$2 AND container_id=$3)::integer AS hot
+       FROM content.media WHERE reservation_request_id LIKE $1`,
+      [`${tag}-%`, route, threadId],
     ),
     database.admin.query<{ total: number; hot: number }>(
       'SELECT count(*)::integer AS total,count(*) FILTER (WHERE partition_no=$2)::integer AS hot FROM core.receipt WHERE idempotency_key LIKE $1',
