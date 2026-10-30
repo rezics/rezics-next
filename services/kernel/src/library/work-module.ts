@@ -2,6 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { purgeLabelRetentionPage } from './label-retention.ts';
+import { cutoverEntryIncarnationsPage } from './entry-incarnation-cutover.ts';
 
 export const libraryWorkModule: WorkModule = {
   name: 'library',
@@ -17,8 +18,59 @@ export const libraryWorkModule: WorkModule = {
     await registerLibraryPublishedLogRetentionWork(context);
     const { registerCopyRetention } = await import('./copy-retention.ts');
     await registerCopyRetention(context);
+    await registerEntryIncarnationCutover(context);
   },
 };
+
+export const ENTRY_INCARNATION_CUTOVER_SWEEP_WORKFLOW = 'library.entryIncarnationCutoverSweep';
+export const ENTRY_INCARNATION_CUTOVER_SCHEDULE = 'library.entryIncarnationCutover.every-10-minutes';
+type IncarnationSweep = { root: string; sequence: number; partition: number; after: string | null };
+
+async function registerEntryIncarnationCutover({ pool, client, clock }: WorkContext) {
+  const page = DBOS.registerStep(
+    async (partition: number, after: string | null) =>
+      cutoverEntryIncarnationsPage({ pool, client, clock }, { partition, after, limit: 100 }),
+    { name: 'library.entryIncarnationCutoverPage', ...COMMAND_STEP_RETRIES },
+  );
+  const continuation = DBOS.registerStep(
+    async (input: IncarnationSweep) => {
+      await client.enqueue(
+        {
+          workflowName: 'library.entryIncarnationCutoverSegment',
+          queueName: 'maintenance',
+          workflowID: `library.entryIncarnationCutover:${input.root}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    { name: 'library.entryIncarnationCutoverContinue', ...COMMAND_STEP_RETRIES },
+  );
+  const segment = async (input: IncarnationSweep) => {
+    let { partition, after } = input;
+    // Fixed routing probes, empty pages and nonlegacy keys all pay the same segment budget.
+    for (let n = 0; n < 100 && partition < 4096; n++) {
+      after = (await page(partition, after)).next;
+      if (after === null) partition++;
+    }
+    if (partition < 4096) await continuation({ ...input, partition, after, sequence: input.sequence + 1 });
+    return { partition, after };
+  };
+  DBOS.registerWorkflow(segment, { name: 'library.entryIncarnationCutoverSegment' });
+  DBOS.registerWorkflow(() => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }), {
+    name: ENTRY_INCARNATION_CUTOVER_SWEEP_WORKFLOW,
+  });
+  await client.applySchedules([
+    {
+      scheduleName: ENTRY_INCARNATION_CUTOVER_SCHEDULE,
+      workflowName: ENTRY_INCARNATION_CUTOVER_SWEEP_WORKFLOW,
+      schedule: '*/10 * * * *',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+      queueName: 'maintenance',
+    },
+  ]);
+}
 
 export const LABEL_RETENTION_SWEEP_WORKFLOW = 'library.labelRetentionSweep';
 export const LABEL_RETENTION_SCHEDULE = 'library.labelRetention.every-10-minutes';

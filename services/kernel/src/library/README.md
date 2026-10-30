@@ -371,7 +371,7 @@ then locks the exact live primary key and checks revision and incarnation before
 A current legacy NULL row remains pre-cutover and keeps its existing omitted-guard compatibility; a supplied
 mismatch never bypasses it. A real row lock serializes fresh commands with stamping, updates and replacement.
 No owner/global readiness marker, feature flag, receipt rewrite or historical-input exemption supplies cutover
-evidence. Bounded default backfill remains separately required: at most 100 raw live primary keys per page before
+evidence. The bounded default repair below examines at most 100 raw live primary keys per page before
 null/pending filters, with CAS on observed revision, transaction identity and `incarnation_id IS NULL`, preserving
 values, revision, pins and timestamps. GET never stamps. This API slice does not certify all historical NULL rows
 or retained-profile readiness as migrated.
@@ -382,6 +382,36 @@ row with its original sequence and returns exact receipt metadata; Undo restores
 owner sequence. Pre-retention physical-delete receipts still return empty 204 without invented headers. Automatic
 purge, terminal account full-graph cleanup and shared evidence minimization remain separate lifecycle work; this
 fresh-write guard slice makes no completion claim for them. First-public Library legal holds remain deferred.
+
+**Native incarnation repair.** `entry-incarnation-cutover.ts` exports the private
+`cutoverEntryIncarnationsPage({pool,clock?},{partition,after,limit})`. A partition is 0–4095 and a raw page limit is
+1–100. The optional internal `client` dependency reuses the worker's existing DBOS client. Discovery checks the
+current native partition and materializes at most the requested number of live primary keys in
+`(route,account_id,subject_id)` order, including non-null and subsequently ineligible rows. No NULL-only index,
+global count or owner enumeration is required. A full page resumes after its last raw key; an underfull page ends
+that partition's snapshot traversal. Progress contains only versioned routing/key coordinates, never entry payload,
+revision, transaction provenance, MVCC version, pin or user chronology, and the complete page result is below 4 KiB.
+The raw seek and exact source lock live in `entry-incarnation-cutover-page.sql` and
+`entry-incarnation-cutover-lock.sql`, executed through their native Reylo adapters.
+
+The source checkout is released before separately entering Core `runOperationalTransaction` in `work-step` mode
+for each legacy candidate. Current partition and account fences precede an exact PK/revision/transaction/NULL lock.
+The captured transient `xmin` additionally rejects any intervening row change without copying its values. Only
+after that lock succeeds does `newId(route)` allocate the opaque identity, applied through the existing
+`entry-legacy-incarnation-stamp.sql`. The update changes only `incarnation_id`; native source hooks remain enabled.
+It allocates no user sequence, receipt, command transaction identity, event or profile stamp. Non-null identities
+stay byte-equal. Account T, absent custody and unavailable partitions remain pending under their existing owners;
+repair supplies neither account revival nor a cleanup acknowledgement. An exact-source CAS loser is pending too.
+
+The single default `libraryWorkModule` registers `library.entryIncarnationCutover.every-10-minutes` on the existing
+maintenance queue, with UTC cron and no automatic backfill. Each segment performs at most 100 bounded page steps;
+an unfinished routing frontier continues with deterministic root/sequence workflow IDs in existing DBOS history.
+Native commit before checkpoint is replay-safe. Every new scheduled sweep starts at partition zero rather than a
+permanent highwater, so moved/fenced partitions, CAS losers and behind-frontier changes can be recovered. This is
+technical identity repair, not owner-sequence, profile, canonical-index or full Library readiness. New native fills
+already allocate non-null IDs and updates preserve them; fresh-request guard enforcement uses the locked current
+row as described above. Owner GET reads expose the actual stored guard and never stamp it.
+
 Existing first-scope concealment, Everything support from other live facts, the 18 legacy outcome pairs, and
 public/private policy stay unchanged.
 
@@ -552,6 +582,15 @@ Shared copies added here are owner/label IDs in the Core outbox event and exact 
 workflow input, output and step history. The event declares the actual shared-history personal subject contract.
 Their owners must minimize these private identities through shared custody; workflow age alone is not erasure and
 missing durable-work custody stays pending. No new account-erasure participant or NoData acknowledgement is added.
+
+Incarnation cutover adds personal owner custody in the same shared DBOS stores: page step inputs and outputs carry
+the private raw-key boundary (route/account/subject), continuation step input and child workflow input copy that
+boundary, and segment/workflow output checkpoints may retain it. Root/sequence IDs and aggregate counters are
+technical progress; they do not remove the personal status of a copied owner key. Discovery's revision,
+transaction ID and `xmin` stay in memory and are never checkpointed. The cutover creates no receipt/outbox payload
+and no parallel custody registry or erasure participant. Accounts' shared-history minimizer owns all actual DBOS
+status/input/output/operation/message/checkpoint copies and their exact locators. Until producer coverage supplies
+that custody, minimization stays pending; neither a successful sweep nor workflow age proves None or permits ACK.
 
 Native tests cover original expiry, child pages, source/commit crash cuts, stale parent and assignment episodes,
 slot reuse, account T and fixed-page growth including raw SQL, control, SDK, bytes and occurrences. These outcomes
@@ -811,6 +850,22 @@ Library primary keys are B-trees beginning with `route`.
 `M` is the member count of one Collection and is at most 5000. Mounted pages use `s` at most 100. One progress record names at most 100 unit ids. A session's completed-unit count is at most 20000. History length is not capped by that number.
 `listing-counts.sql` is the search reader. One statement probes `subject_listing` by primary key, `LIMIT 1`, once per supplied id in one partition. No library growth test measures that reader, so this Cost section does not cite it.
 Where a named test does not call the operation, or does not grow the rows that operation can touch, the subsection says so. A bound the indexes do not support is stated as not derivable.
+
+### Native entry incarnation cutover page
+
+- Touches: one partition metadata point and at most 100 materialized raw live entry keys through the route-leading
+  primary key; each legacy candidate separately pays Core's native gate/time/partition/account fences, an exact
+  row lock and the existing NULL-incarnation CAS. Native fact-version hooks stay installed. Nonlegacy rows, failed
+  CAS and fenced/terminal candidates remain charged; no history, catalogue, NULL count or payload scan is admitted.
+- Bound: at most 100 raw keys, cursor at most 512 encoded bytes, complete page output below 4,096 bytes; fixed SQL and
+  control work per candidate plus indexed depth. A segment runs at most 100 page steps, including empty or pending
+  routing probes, before deterministic continuation. Transient source stamps never cross the durable boundary.
+- Growth check: `entry-incarnation-cutover-growth.test.ts` independently grows unrelated live entries, native
+  receipts and real SDK histories at 64/512/4,096. It captures rows, blocks, statements, request/response bytes,
+  controls, background work and statement occurrences for dense raw100, sparse after-page and nonlegacy inputs,
+  actual default maintenance-queue segments and a native serialization retry, under unchanged shared growth rules.
+  Worker cases also exercise source/commit crash replay, concurrent replacement/CAS loss, account T and moved/fenced
+  fresh-sweep recovery. This scope proves neither global absence/readiness nor complete shared-history erasure.
 
 ### Built-in membership and indexed filtering (required; runtime incomplete)
 
