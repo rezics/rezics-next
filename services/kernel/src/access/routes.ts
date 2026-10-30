@@ -223,10 +223,12 @@ const editableProfileFields = {
   avatar: nullable(coverSummary),
   publicViews: publicProfile.properties.publicViews,
 };
-const editableProfile = t.Unsafe<EditableAccountProfile>(t.Union([
-  t.Object({ ...editableProfileFields, kind: t.Literal('actor') }, closed),
-  t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
-]));
+const editableProfile = t.Unsafe<EditableAccountProfile>(
+  t.Union([
+    t.Object({ ...editableProfileFields, kind: t.Literal('actor') }, closed),
+    t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
+  ]),
+);
 const profilePatch = t.Object(
   {
     displayName: t.Optional(nullable(t.String({ maxLength: 4096 }))),

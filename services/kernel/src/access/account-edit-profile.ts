@@ -38,10 +38,15 @@ export async function readEditableAccountProfile(
     const bounded = deadlineClient(pool, deadline);
     const acting = await readAccount(bounded, routeOf(actor.accountId)!, actor.accountId);
     if (
-      !acting || acting.kind !== 'actor' || acting.state !== 'active' || acting.fenced ||
-      !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
+      !acting ||
+      acting.kind !== 'actor' ||
+      acting.state !== 'active' ||
+      acting.fenced ||
+      !Number.isSafeInteger(actor.authnEpoch) ||
+      actor.authnEpoch < 1 ||
       acting.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-    ) throw new ProblemError('forbidden');
+    )
+      throw new ProblemError('forbidden');
     const subject = await readAccount(bounded, route, accountId);
     if (!subject || subject.state !== 'active' || subject.fenced) throw new ProblemError('forbidden');
     const operatorId = subject.kind === 'actor' ? subject.operatorAccountId : null;
