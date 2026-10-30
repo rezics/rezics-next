@@ -97,7 +97,8 @@ export async function appearanceRecording(
     };
   if (path === `/v1/realms/${snapshot.realmId}/boards` || path === `/v1/realms/${snapshot.realmId}/publications`)
     return { status: 200, items: [], next: null };
-  if (path !== `/v1/spaces/${appearanceSpaceId}`) return;
+  const presentation = path === `/v1/realms/${snapshot.realmId}/presentation`;
+  if (!presentation && path !== `/v1/spaces/${appearanceSpaceId}`) return;
   const body = fromPlainText(
     snapshot.rules.state === 'available' ? `${snapshot.rules.value.title}\n${snapshot.rules.value.summary}` : '',
   );
@@ -105,7 +106,7 @@ export async function appearanceRecording(
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
-  return {
+  const home = {
     status: 200,
     space: { ...space.space, spaceId: appearanceSpaceId, realmId: snapshot.realmId, address: appearanceAddress },
     community: {
@@ -127,6 +128,7 @@ export async function appearanceRecording(
       join: { membership: 'unknown', action: null },
     },
   };
+  return presentation ? { status: 200, community: home.community } : home;
 }
 
 export const routes: FakeRoute[] = [

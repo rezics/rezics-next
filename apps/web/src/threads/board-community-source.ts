@@ -1,41 +1,12 @@
 import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
-import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import type { CommunityPresentation } from '../../../../packages/client/src/kernel/content/community-presentation-model';
+import type {
+  RealmPresentationImage,
+  RealmPresentationOptional,
+} from '../../../../packages/client/src/kernel/content/realm-media';
 import * as v from 'valibot';
 
-// Temporary consumer declarations for the adopted native producer. Replace with its generated exports when installed.
-export type RealmPresentationOptional<T> =
-  | Readonly<{ state: 'available'; value: T }>
-  | Readonly<{ state: 'none' | 'unavailable'; value: null }>;
-export type RealmPresentationImage = Readonly<{
-  id: string;
-  containerId: string;
-  digest: string;
-  width: number;
-  height: number;
-  variants: readonly Readonly<{ format: 'avif' | 'webp'; width: number; height: number }>[];
-  placeholder: Readonly<{ thumbhash: string; color: string }> | null;
-  focalPoint: Readonly<{ x: number; y: number }> | null;
-  credit: MediaImportRequest['credit'] | null;
-}>;
-export type CommunityPresentation = Readonly<{
-  realmId: string;
-  spaceId: string;
-  contextId: string;
-  name: string;
-  description: string;
-  avatar: RealmPresentationOptional<RealmPresentationImage>;
-  banner: RealmPresentationOptional<RealmPresentationImage>;
-  members:
-    | Readonly<{ state: 'current'; count: number; version: string }>
-    | Readonly<{ state: 'unknown'; count: null; version: null }>;
-  rules: RealmPresentationOptional<
-    Readonly<{ postId: string; revisionId: string; body: DocumentSnapshot; licence: string; sha256: string }>
-  >;
-  join: Readonly<{
-    membership: 'member' | 'nonmember' | 'unknown';
-    action: 'join' | 'leave' | 'sign-in' | null;
-  }>;
-}>;
+export type { CommunityPresentation, RealmPresentationImage, RealmPresentationOptional };
 
 /** Null is exclusively Global. An uninstalled/unreadable optional producer has no cached positive value. */
 export type BoardCommunitySource =

@@ -30,7 +30,8 @@ import type { ContainerLifecycleAdapter } from './container-lifecycle';
 import { RealmAppearancePanel } from './realm-presentation-panel';
 import { RealmClaimPanel } from './realm-claim-panel';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import type { RealmClaimAdapter, RealmClaimRead, RealmClaimSnapshot } from './realm-claim';
+import { sameRealmClaimSource, type RealmClaimAdapter, type RealmClaimRead, type RealmClaimSnapshot } from './realm-claim';
+import { RealmHomeHeader } from './realm-home-header';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -94,32 +95,6 @@ function Boards({
       ) : null}
       {unavailable > 0 ? <p className="text-muted-foreground">{m.realm_boards_unavailable()}</p> : null}
       {continuation}
-    </section>
-  );
-}
-
-function CarriedRealm({ realm }: { realm: RealmHome }) {
-  return (
-    <section className="space-y-4" aria-labelledby="space-realm-heading">
-      <h2 id="space-realm-heading" className="text-xl font-semibold">
-        {m.space_realm_heading()}
-      </h2>
-      <ul className="space-y-1">
-        <ListRow className="flex items-start gap-4 rounded-xl px-4 py-3">
-          <Link
-            to="/realms/$id"
-            params={{ id: realm.id }}
-            data-slot="list-row-link"
-            className="absolute inset-1 z-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <span className="sr-only">{realm.title}</span>
-          </Link>
-          <div className="min-w-0 flex-1 space-y-1">
-            <h3 className="font-semibold">{realm.title}</h3>
-            {realm.summary ? <p className="text-sm leading-relaxed text-muted-foreground">{realm.summary}</p> : null}
-          </div>
-        </ListRow>
-      </ul>
     </section>
   );
 }
@@ -287,16 +262,20 @@ function Home({
   claim,
   frozen,
   readable,
+  presentationCurrent,
+  participation,
 }: {
   realm: RealmHome;
   management: ReactNode;
   claim: ReactNode;
   frozen: boolean;
   readable: boolean;
+  presentationCurrent: boolean;
+  participation: ReactNode;
 }) {
   return (
     <>
-      {readable ? <CarriedRealm realm={realm} /> : null}
+      {readable && !frozen && presentationCurrent ? <RealmHomeHeader realm={realm} participation={participation} /> : null}
       {readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
       {claim}
       {frozen || !readable ? null : management}
@@ -389,15 +368,7 @@ export function SpacePage({
         ) : null}
         <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
           <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
-          {page.realm && !realmRemoved && readable ? (
-            <div className="shrink-0">
-              <RealmMembership
-                realm={page.realm}
-                spaceId={page.space.id}
-                returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
-              />
-            </div>
-          ) : null}
+
         </div>
         {page.space.summary && !spaceRemoved ? (
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
@@ -419,6 +390,16 @@ export function SpacePage({
           realm={page.realm}
           frozen={frozen}
           readable={readable}
+          presentationCurrent={
+            !claimRead || (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot))
+          }
+          participation={
+            <RealmMembership
+              realm={page.realm}
+              spaceId={page.space.id}
+              returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+            />
+          }
           claim={
             <RealmClaimPanel
               realmId={page.realm.id}

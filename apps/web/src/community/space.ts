@@ -6,6 +6,7 @@ import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, viewerCredential } from '../session/request';
 import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
+import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -41,6 +42,8 @@ export type RealmHome = {
   visibility: 'public' | 'protected';
   /** Current native ownership continuity; absence never admits a claim request. */
   continuity?: RealmClaimSnapshot | null;
+  /** One current native presentation, independent of Space identity and personal membership. */
+  presentation?: RealmHomePresentation;
   boards: RealmBoard[];
   /** Boards the native page reports as unavailable, rather than the genuinely empty list. */
   unavailableBoards?: number;
@@ -174,6 +177,7 @@ async function readHome(
   realm: NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'],
   auth: Auth,
   credentialMode: ReadCredentialMode,
+  space: NonNullable<Awaited<ReturnType<ReturnType<KernelClient['spaces']>['get']>>['data']>['space'],
 ): Promise<RealmHome> {
   const realmId = realm.realmId;
   const [boards, publications] = await Promise.all([
@@ -189,9 +193,12 @@ async function readHome(
   ).length;
   const publishedIds = publicationItems.slice(0, COVER_ROW_LIMIT).map((item) => item.subjectId);
   const published = await readPublished(client, publishedIds, auth);
+  const presentation = await readRealmHomePresentation(client, auth, realm, space);
   return {
     id: realmId,
     title: realm.title ?? '',
+    summary: realm.summary,
+    presentation,
     visibility: realm.visibility,
     continuity: realmClaimSnapshot(realm),
     boards: boardItems
@@ -324,7 +331,7 @@ export async function loadSpacePage(
   const realmId = space.realmId;
   const realm = await readOptional(client.realms({ realmId }).get(auth));
   if (!realm) return { space: base, realm: null };
-  const home = await readHome(client, realm.realm, auth, credentialMode);
+  const home = await readHome(client, realm.realm, auth, credentialMode, space);
   return {
     space: base,
     realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
@@ -346,7 +353,7 @@ export async function locateRealm(
   const { realm } = readCommunity(await client.realms({ realmId: input.realmId }).get(auth));
   const { space } = readCommunity(await client.spaces({ spaceId: realm.spaceId }).get(auth));
   if (space.address) return { kind: 'redirect', address: space.address };
-  const home = await readHome(client, realm, auth, credentialMode);
+  const home = await readHome(client, realm, auth, credentialMode, space);
   return {
     kind: 'page',
     page: {
