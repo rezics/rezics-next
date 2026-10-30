@@ -258,7 +258,7 @@ Admission retries races against other callers. The default probe interval is fiv
    `node_modules` inodes. A per-key kernel lock serializes publishers; its wait is part of the deadline. Publication is
    a verified atomic directory rename. Failed/aborted publishers leave no consumable partial entry, and a timed-out waiter
    cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
-   A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
+   A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Native identities compare by package name and version, so a verified older publication with a different traversal order remains reusable. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
    Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
    bounded diagnostic receipt with host, run, phase, elapsed time and actual active package names/versions from owned
    process working directories and package metadata. Unknown package identity stays unknown; previously observed packages
@@ -266,6 +266,9 @@ Admission retries races against other callers. The default probe interval is fiv
    cannot trigger local fallback. Signal/transport teardown retains systemd custody and stops/reaps the owned installer
    descendants (including detached grandchildren) before releasing capacity. Successful cache reuse writes
    `preparation-install.json` with its key, hit/miss, `nativeCache` hit/miss (null on a complete-install hit), package versions and verified native identities. These files can be declared as return paths.
+   After preparation succeeds, teardown of residual command descendants preserves the command's native exit status;
+   it does not relabel a native failure as an installer failure. Local command custody also reacts to runner death
+   and reaps detached descendants before their inherited capacity locks become free.
    The existing transfer timeout does not apply to preparation or a quiet command.
    Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
    The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
