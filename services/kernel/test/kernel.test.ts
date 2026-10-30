@@ -136,6 +136,7 @@ const typed = [
   'DELETE /v1/posts/:id',
   'POST /v1/subjects/$merge',
   'GET /v1/subjects/:id',
+  'PATCH /v1/subjects/:id/terms',
   'GET /v1/subject-pages',
   'POST /v1/subjects/:id/$hide',
   'POST /v1/subjects/:id/$takedown',
