@@ -50,6 +50,21 @@ export type AffectedTestResult = {
   durationMs: number;
   output: string;
 };
+export type PromotionPlacementSettings = {
+  /** Untracked ordinary-host source; promotion derives a one-host gate file from this input. */
+  ordinaryHostsFile: string;
+};
+export type PromotionPlacementSnapshot = {
+  sourcePath: string;
+  sourceSha256: string;
+  hostsFile: string;
+  host: 'c';
+  hostProjectionSha256: string;
+  gateSlots: number;
+  ordinarySlots: number;
+  cOrdinarySlots: number;
+  retainedOrdinarySlots: number;
+};
 export type Settings = {
   version: 1;
   mainCheckout: string;
@@ -63,6 +78,7 @@ export type Settings = {
   integrationBranch: string;
   stabilizeBranch: string;
   promotionParallelism: number;
+  promotionPlacement?: PromotionPlacementSettings;
   branchPrefix: string;
   localFile: string;
   pools: Pool[];
@@ -258,6 +274,8 @@ export type PromotionRun = {
   taskIds: string[];
   rootGate: string[];
   promotionParallelism: number;
+  /** Snapshot of the ordinary host input used by every gate in this promotion run. */
+  placement?: PromotionPlacementSnapshot;
   boundaries: { taskId: string; commit: string }[];
   headResults: PromotionGateResult[];
   prefixResults: PromotionGateResult[];

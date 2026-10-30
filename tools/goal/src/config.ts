@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import type { DerivedFile, Pool, Settings } from './types.ts';
+import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
 import { readPoolPolicies } from './pools.ts';
@@ -21,6 +21,7 @@ import { watch } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
+import { preparePromotionGate } from './promotion-placement.ts';
 import { verifyDev } from './dev-verifier.ts';
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
@@ -194,6 +195,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'integrationBranch',
       'stabilizeBranch',
       'promotionParallelism',
+      'promotionPlacement',
       'branchPrefix',
       'terminationGraceMs',
       'silenceMs',
@@ -222,6 +224,14 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const path = (value: unknown, fallback: string, variable?: string) =>
     resolve(main, variable ?? (value === undefined ? fallback : text(value, 'path')));
   const stateDirectory = path(local.stateDirectory, '.temp/goal', env.GOAL_STATE_DIRECTORY);
+  const promotionPlacement: PromotionPlacementSettings | undefined =
+    local.promotionPlacement === undefined
+      ? undefined
+      : (() => {
+          const placement = object(local.promotionPlacement, 'promotionPlacement');
+          keys(placement, ['ordinaryHostsFile'], 'promotionPlacement');
+          return { ordinaryHostsFile: path(text(placement.ordinaryHostsFile, 'promotionPlacement.ordinaryHostsFile'), '') };
+        })();
   const integration: Record<string, unknown> = {
     ...defaults.integration,
     ...object(local.integration ?? {}, 'integration'),
@@ -297,6 +307,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     stabilizeBranch: text(local.stabilizeBranch ?? 'stabilize', 'stabilizeBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
+    ...(promotionPlacement === undefined ? {} : { promotionPlacement }),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
     gate: gate as string[],
     formatCommand: formatCommand as string[],
@@ -522,6 +533,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       settings,
       job,
       runGate: promotionGate,
+      prepareGateCommand: (run, command) => preparePromotionGate(settings, run, command)?.command ?? null,
       derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
       ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
     });

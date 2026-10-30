@@ -975,7 +975,7 @@ export function runScript(
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       cd "$1"
       code=$?
-      shift
+      shift${process.env.KERNEL_CHECK_CONCURRENCY === undefined ? '' : `; export KERNEL_CHECK_CONCURRENCY=${quote(process.env.KERNEL_CHECK_CONCURRENCY)}`}
       if [ "$code" -eq 0 ]; then
         command_started=$(date +%s%N)
         touch ${quote(`${directory}/command-started`)}
@@ -1564,7 +1564,10 @@ function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore
       released = true;
       // Closing stdin ends the remote `cat`, which releases the lock; the kill only covers a stuck connection.
       try {
-        await holder.stdin.end();
+        const stdin = holder.stdin;
+        if (stdin && typeof stdin === 'object' && 'end' in stdin && typeof stdin.end === 'function') {
+          await stdin.end();
+        }
       } catch {
         // The connection may already be gone.
       }

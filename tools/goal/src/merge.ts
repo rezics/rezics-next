@@ -40,7 +40,11 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
   return {
     ...Object.fromEntries(
       Object.entries(parent).filter(
-        ([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID' && name !== 'KERNEL_CHECK_REMOTE',
+        ([name]) =>
+          !name.startsWith('GOAL_') &&
+          name !== 'CODEX_THREAD_ID' &&
+          name !== 'KERNEL_CHECK_REMOTE' &&
+          name !== 'KERNEL_CHECK_ON_REMOTE',
       ),
     ),
     ...NO_COMPILE_CACHE,

@@ -67,6 +67,18 @@ function writeOutput(text: string, stream: 'stdout' | 'stderr' = 'stdout'): void
 /** The hosts file when this gate should run on check hosts: named, readable and not already on one. */
 function remoteHostsFile(): string | null {
   const file = process.env.KERNEL_CHECK_REMOTE;
+  const promotionRoute =
+    process.env.GATE_REMOTE_SLOTS === '3' &&
+    process.env.KERNEL_CHECK_CONCURRENCY === '5' &&
+    !process.env.KERNEL_CHECK_ON_REMOTE;
+  if (promotionRoute) {
+    if (!file) throw new Error('KERNEL_CHECK_REMOTE is required for promotion; refusing to run the gate locally');
+    try {
+      accessSync(file, constants.R_OK);
+    } catch {
+      throw new Error(`KERNEL_CHECK_REMOTE ${file} is not readable; refusing to run the gate locally`);
+    }
+  }
   if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
   try {
     accessSync(file, constants.R_OK);

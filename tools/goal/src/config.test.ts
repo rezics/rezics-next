@@ -5,6 +5,31 @@ import { loadSettings, readDerivedFiles } from './config.ts';
 import { git } from './tasks.ts';
 import { harness } from './test-support.ts';
 
+test('promotion placement requires an explicit ordinary host source in untracked local settings', () => {
+  const h = harness();
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.promotionPlacement = { ordinaryHostsFile: '.temp/goal/remote-check-hosts.json' };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(loadSettings({ cwd: h.root, env: {} }).promotionPlacement).toEqual({
+      ordinaryHostsFile: join(h.root, '.temp/goal/remote-check-hosts.json'),
+    });
+
+    local.promotionPlacement = {};
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('promotionPlacement.ordinaryHostsFile');
+
+    local.promotionPlacement = {
+      ordinaryHostsFile: '.temp/goal/remote-check-hosts.json',
+      gateSlots: 3,
+    };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('unknown promotionPlacement.gateSlots');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('derived file input globs load with the declared generator', () => {
   expect(
     readDerivedFiles([

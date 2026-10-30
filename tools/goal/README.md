@@ -845,6 +845,50 @@ managers, tell every manager to resume and retry its stopped tasks, and remove `
 are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
 file.
 
+
+## Promotion placement and observations
+
+Future full promotion gates can opt into the measured one-host placement by adding this field to the untracked local
+`.temp/goal/local.json`:
+
+```json
+{
+  "promotionPlacement": {
+    "ordinaryHostsFile": ".temp/goal/remote-check-hosts.json"
+  }
+}
+```
+
+The path is resolved from the main checkout. It must name the existing untracked ordinary remote-check host input in
+the public `{ "hosts": [...] }` schema. Goal reads it through `scripts/remote-check.ts`'s `readHosts` export, checks
+the measured a/b/c topology, then writes a c-only derived host file under the state directory. It preserves c's
+address, SSH identity, slots, memory limit and CPU quota from that input; it does not edit or replace the ordinary host
+file. Missing or changed input, a different host topology, a tracked source, or an invalid gate command fails closed.
+
+For the existing full root gate, Goal derives the supported command
+`env KERNEL_CHECK_CONCURRENCY=5 KERNEL_CHECK_REMOTE=<derived c-only file> GATE_REMOTE_SLOTS=3 bun scripts/gate.ts`.
+The root script forwards those existing settings to its remote invocation. Both workspace groups keep full coverage;
+the one-host gate uses c's existing four ordinary slots, so its two three-slot groups serialize. This is prospective
+placement policy, not a measured throughput result. With one gate holding three slots, ordinary worker capacity is
+11/14 slots (78.57%); counting only a and b leaves 10/14 (71.43%). The groups can take longer when serialized.
+
+Root/controller owns the live migration: review the exact source path and local command, then add
+`promotionPlacement.ordinaryHostsFile` to its untracked local settings. This implementation does not edit live
+`local.json` or `gate-hosts.json`, interrupt an active gate, or run a gate. Ordinary verifier priority and concurrency
+three stay as configured. Promotion still uses the frozen candidate and publishes only after the full gate passes.
+
+Goal persists logical parent and group windows, including separate enqueue, wait, logical admission, preparation,
+execution and terminal times, and stores bounded command metadata. Current public `scripts/remote-check.ts` exposes no
+structured host/run/incarnation/cgroup custody descriptor or terminal custody event. Until its existing owner supplies
+that public boundary, physical status and CPU/memory samples remain explicitly unavailable (`NULL`), never inferred
+from nested log text, caller exit codes, or missing timestamps. The exact measured decision and current evidence are in
+[`reports/delivery-lessons-20261030.md`](reports/delivery-lessons-20261030.md).
+
+The logical candidate commit is not proof of the source revision that a remote client actually launched. Until the
+producer returns an authenticated launch source revision, `scripts/remote-check.ts` hash, integrated producer
+revision, and client cohort, those source fields also remain `NULL`; passing local producer tests establish source
+integration, not rollout into an already queued client.
+
 ## Measurements and historical imports
 
 Records contain task/class/profile/pool, routing version and experiment, timing, steps, critical-path flag, input,

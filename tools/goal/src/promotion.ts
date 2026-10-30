@@ -13,6 +13,16 @@ import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
 import { recordFlow } from './flow.ts';
+import {
+  beginPromotionGroupWindow,
+  beginPromotionParentWindow,
+  finishPromotionGroupWindow,
+  finishPromotionParentWindow,
+  linkPromotionParentWindow,
+  markPromotionGroupPhase,
+  recordPromotionCustodyUnavailable,
+  recoverIncompletePromotionWindows,
+} from './promotion-observation.ts';
 
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 export type PromotionOptions = {
@@ -21,7 +31,18 @@ export type PromotionOptions = {
   runGate?: GateRunner;
   beforeAdvance?: () => void;
   derivedFiles?: DerivedFile[];
+  prepareGateCommand?: (run: PromotionRun, command: readonly string[]) => string[] | null;
+  observationParentId?: string;
 };
+
+function observe<T>(action: () => T): T | undefined {
+  try {
+    return action();
+  } catch {
+    // Promotion observation is best-effort and can never alter a gate verdict.
+    return undefined;
+  }
+}
 
 // The root gate runs every workspace on one gate host; with every workspace grown it outlasted two hours (a timeout at
 // 2 h 05 m on 2026-10-29 blocked every promotion), so it gets four.
@@ -238,7 +259,17 @@ async function gateAt(
   const tree = join(options.settings.worktreeRoot, `promotion-${run.id}-${label}`);
   for (let index = 0; index < commands.length; index++) {
     const command = [...commands[index]!];
-    const cached = force
+    const placementBefore = run.placement;
+    let preparedForCache: string[] | null = null;
+    let placementPreflightFailed = false;
+    try {
+      preparedForCache = options.prepareGateCommand?.(run, command) ?? null;
+    } catch {
+      placementPreflightFailed = true;
+    }
+    if (preparedForCache) store.savePromotion(run);
+    const needsFreshPlacementGate = preparedForCache !== null && placementBefore === undefined;
+    const cached = force || placementPreflightFailed || needsFreshPlacementGate
       ? undefined
       : run[target].find(
           (result) => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command),
@@ -248,6 +279,21 @@ async function gateAt(
     if (!cached.passed) return results;
   }
   if (results.length === commands.length) return results;
+  const missingCommands = commands.slice(results.length).map((command) => [...command]);
+  const observationWindowId = observe(() =>
+    beginPromotionGroupWindow(store.db, {
+      ...(options.observationParentId === undefined ? {} : { parentWindowId: options.observationParentId }),
+      promotionId: run.id,
+      group: label,
+      commit,
+      commands: missingCommands,
+    }),
+  );
+  observe(() => linkPromotionParentWindow(store.db, options.observationParentId, run.id));
+  observe(() => recordPromotionCustodyUnavailable(store.db, observationWindowId));
+  observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'wait-ended'));
+  observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'admitted'));
+  observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-started'));
   const logFor = (index: number) => join(options.settings.stateDirectory, `promotion-${run.id}-${label}-${index}.log`);
   mkdirSync(options.settings.worktreeRoot, { recursive: true });
   if (existsSync(tree)) {
@@ -255,7 +301,12 @@ async function gateAt(
       git(main, 'worktree', 'remove', '--force', tree);
     } catch {}
   }
-  git(main, 'worktree', 'add', '--detach', tree, commit);
+  try {
+    git(main, 'worktree', 'add', '--detach', tree, commit);
+  } catch (error) {
+    observe(() => finishPromotionGroupWindow(store.db, observationWindowId, 'failed', false));
+    throw error;
+  }
   try {
     mkdirSync(join(tree, '.temp'), { recursive: true });
     results.length = 0;
@@ -279,9 +330,13 @@ async function gateAt(
         };
         appendResult(run, target, result);
         store.savePromotion(run);
+        observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-ended'));
+        observe(() => finishPromotionGroupWindow(store.db, observationWindowId, 'failed', false));
         return [result];
       }
     }
+    let executionStarted = false;
+    let preparationEnded = false;
     for (let index = 0; index < commands.length; index++) {
       const command = [...commands[index]!];
       const cached = force
@@ -296,7 +351,23 @@ async function gateAt(
       }
       let result: PromotionGateResult;
       try {
-        const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(command, tree, logFor(index));
+        const prepared = options.prepareGateCommand?.(run, command) ?? null;
+        const executionCommand = prepared ?? command;
+        store.savePromotion(run);
+        if (!preparationEnded) {
+          observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-ended'));
+          preparationEnded = true;
+        }
+        if (!executionStarted) {
+          observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-started'));
+          executionStarted = true;
+        }
+        const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
+          executionCommand,
+          tree,
+          logFor(index),
+        );
+        observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-ended'));
         let failure = outcome.passed ? undefined : firstFailure(outcome.output);
         if (git(tree, 'rev-parse', 'HEAD') !== commit || git(tree, 'status', '--porcelain'))
           failure = firstFailure(`${failure?.assertion ?? ''}\nGate changed the checked commit or worktree`);
@@ -308,6 +379,11 @@ async function gateAt(
           ...(failure ? { firstFailure: failure } : {}),
         };
       } catch (error) {
+        if (!preparationEnded) {
+          observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-ended'));
+          preparationEnded = true;
+        }
+        if (executionStarted) observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-ended'));
         result = { commit, command, passed: false, timedOut: false, firstFailure: firstFailure(String(error)) };
       }
       results.push(result);
@@ -316,6 +392,15 @@ async function gateAt(
       // The first failure decides the run; later commands on a broken commit only cost time.
       if (!result.passed) break;
     }
+    const failure = results.find((result) => !result.passed);
+    observe(() =>
+      finishPromotionGroupWindow(
+        store.db,
+        observationWindowId,
+        failure ? 'failed' : 'passed',
+        failure?.timedOut ?? false,
+      ),
+    );
   } finally {
     await stopProcessesUnder(tree, options.settings.terminationGraceMs);
     git(main, 'worktree', 'remove', '--force', tree);
@@ -1023,6 +1108,12 @@ export async function promote(options: PromotionOptions): Promise<void> {
     if (error instanceof LeaseHeldError) return;
     throw error;
   }
+  observe(() => recoverIncompletePromotionWindows(store.db));
+  const previousParentId = options.observationParentId;
+  const observationParentId = observe(() =>
+    beginPromotionParentWindow(store.db, store.promotion()?.id ?? null),
+  );
+  if (observationParentId) options.observationParentId = observationParentId;
   try {
     for (;;) {
       if (paused()) return;
@@ -1262,6 +1353,9 @@ export async function promote(options: PromotionOptions): Promise<void> {
       return;
     }
   } finally {
+    observe(() => finishPromotionParentWindow(store.db, observationParentId));
+    if (previousParentId === undefined) delete options.observationParentId;
+    else options.observationParentId = previousParentId;
     lease.release();
   }
 }
