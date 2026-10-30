@@ -7,7 +7,7 @@ import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks, git } from './tasks.ts';
 import type { Brief, Pool, PoolReading, Settings, Task } from './types.ts';
-import type { GateOutcome, ManagerEvent } from './contracts.ts';
+import { StaleAttemptError, type AttemptFence, type GateOutcome, type ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
@@ -46,6 +46,53 @@ export function repository() {
       repositoryGit(worker, 'add', '.');
       repositoryGit(worker, 'commit', '-m', `Change ${file}`);
       return { taskId: name, attempt: 1, branch: name, worktree: worker, declaredPaths: [file], gate: ['true'] };
+    },
+  };
+}
+
+/** A real-Git landing train fixture for tests that need to inspect candidate publication boundaries. */
+export function mergeTrainHarness() {
+  const repo = repository();
+  const db = openDb(join(repo.path, 'state.sqlite'));
+  let current = 1;
+  const fence: AttemptFence = {
+    assertCurrent(ref) {
+      if (current !== ref.attempt) throw new StaleAttemptError(ref, current);
+    },
+    commitMerge(ref, merge) {
+      return db
+        .transaction(() => {
+          fence.assertCurrent(ref);
+          return merge();
+        })
+        .immediate();
+    },
+  };
+  const queue = new SqliteLandingQueue(db, fence);
+  const outcomes: GateOutcome[] = [];
+  const stateDirectory = join(repo.path, 'state');
+  mkdirSync(stateDirectory, { recursive: true });
+  return {
+    ...repo,
+    db,
+    fence,
+    queue,
+    outcomes,
+    options: {
+      mainCheckout: repo.main,
+      stateDirectory,
+      worktreeRoot: join(repo.path, 'trees'),
+      queue,
+      fence,
+      sink: {
+        onGateOutcome(outcome: GateOutcome) {
+          outcomes.push(outcome);
+        },
+      },
+    },
+    close() {
+      db.close();
+      repo.close();
     },
   };
 }
