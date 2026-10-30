@@ -253,3 +253,224 @@ test('a page holds at most sixteen valid reads, runs at most four at a time and 
   expect(twice.results.c).toEqual(twice.results.d);
   expect(shared.seen.length).toBe(2);
 });
+
+test('closed descriptors and malformed owned JSON are refused before any dispatch or dedup', async () => {
+  let calls = 0;
+  const dispatch = async () => {
+    calls++;
+    throw new Error('invalid plans must not dispatch');
+  };
+  const closed = readPage({
+    incoming: incoming(),
+    session: { ring, scope },
+    dispatch,
+    reads: {
+      clean: { kind: 'subject', id: book },
+      subject: { kind: 'subject', id: book, 'extra/~': true } as never,
+      search: { kind: 'search', body: search, 'extra/~': true } as never,
+      'bad/~': { kind: 'search', body: { cursor: 'hidden', limit: 0 } },
+    },
+  });
+  await expect(closed).rejects.toBeInstanceOf(PageReadError);
+  await closed.catch((error: PageReadError) =>
+    expect(error.errors).toEqual([
+      { pointer: '/reads/bad~1~0', code: 'invalid_format' },
+      { pointer: '/reads/bad~1~0/body/cursor', code: 'unknown_field' },
+      { pointer: '/reads/bad~1~0/body/limit', code: 'out_of_range' },
+      { pointer: '/reads/search/extra~1~0', code: 'unknown_field' },
+      { pointer: '/reads/subject/extra~1~0', code: 'unknown_field' },
+    ]),
+  );
+  let hooks = 0;
+  const cycle: Record<string, unknown> = {};
+  cycle.self = cycle;
+  const badData = [
+    { 'x/~': undefined },
+    { 'x/~': NaN },
+    { 'x/~': Infinity },
+    { 'x/~': 1n },
+    { 'x/~': () => true },
+    { 'x/~': Symbol('value') },
+    { 'x/~': new Date() },
+    { 'x/~': cycle },
+    { 'x/~': [, 1] },
+    Object.create({ limit: 100 }),
+    {
+      toJSON() {
+        hooks++;
+        return { limit: 1 };
+      },
+    },
+    Object.defineProperty({}, 'limit', {
+      enumerable: true,
+      get() {
+        hooks++;
+        return 1;
+      },
+    }),
+  ];
+  for (const body of badData) {
+    await expect(
+      readPage({
+        incoming: incoming(),
+        session: { ring, scope },
+        dispatch,
+        reads: { clean: { kind: 'subject', id: book }, bad: { kind: 'search', body } },
+      }),
+    ).rejects.toBeInstanceOf(PageReadError);
+  }
+  expect(hooks).toBe(0);
+  expect(calls).toBe(0);
+});
+
+test('every limited descriptor validates its positive native range before any IO', async () => {
+  const descriptors = [
+    { kind: 'links', id: book, property: 'schema:author', limit: 25 },
+    { kind: 'collections', id: book, limit: 7 },
+    { kind: 'accountThreads', id: book, threadKind: 'review', limit: 21 },
+    { kind: 'accountPosts', id: book, limit: 21 },
+    { kind: 'accountCollections', id: book, limit: 25 },
+    ...[0, -1, 1.5, 101, null, '20', false].map((limit) => ({ kind: 'search', body: { limit } })),
+  ];
+  let calls = 0;
+  for (const descriptor of descriptors) {
+    const operation = readPage({
+      incoming: incoming(),
+      session: { ring, scope },
+      reads: { clean: { kind: 'subject', id: book }, bad: descriptor } as never,
+      async dispatch() {
+        calls++;
+        throw new Error('invalid plan dispatched');
+      },
+    });
+    await expect(operation).rejects.toBeInstanceOf(PageReadError);
+    await operation.catch((error: PageReadError) =>
+      expect(error.errors).toEqual([
+        { pointer: descriptor.kind === 'search' ? '/reads/bad/body/limit' : '/reads/bad/limit', code: 'out_of_range' },
+      ]),
+    );
+  }
+  expect(calls).toBe(0);
+});
+
+test('a subject redirect cannot change operation, origin or canonical URL custody', async () => {
+  const locations = [
+    '/v1/subjects:search',
+    `/v1/subjects/${survivor}/links`,
+    '/v1/accounts',
+    `/v1/subjects/${survivor}?context=${book}`,
+    `/v1/subjects/${survivor}?`,
+    `/v1/subjects/${survivor}#fragment`,
+    `/v1/subjects/${survivor}#`,
+    `http://foreign.test/v1/subjects/${survivor}`,
+    `https://kernel.test/v1/subjects/${survivor}`,
+    `http://user:password@kernel.test/v1/subjects/${survivor}`,
+    `//kernel.test/v1/subjects/${survivor}`,
+    `/v1/subjects/${survivor.toUpperCase()}`,
+    '/v1/subjects/not-an-id',
+    `/v1/subjects/${survivor}/`,
+    `/v1/subjects/../subjects/${survivor}`,
+    `/v1/subjects/%30${survivor.slice(1)}`,
+    'http://[',
+  ];
+  for (const location of locations) {
+    let calls = 0;
+    const observed = encodeSession(ring, scope, [{ partition: 11, epoch: 1, position: 10n }]);
+    const page = await readPage({
+      incoming: incoming(),
+      session: { ring, scope },
+      reads: { old: { kind: 'subject', id: merged } },
+      async dispatch() {
+        calls++;
+        return Response.json(
+          { redirect: { from: merged, to: survivor } },
+          {
+            status: 308,
+            headers: { location, [SESSION_HEADER]: observed },
+          },
+        );
+      },
+    });
+    expect(calls, location).toBe(1);
+    expect(page.results.old).toEqual({ status: 308, body: { redirect: { from: merged, to: survivor } } });
+    expect(decodeSession(ring, scope, page.session!)!).toContainEqual({ partition: 11, epoch: 1, position: 10n });
+  }
+});
+
+test('a second canonical redirect is returned without a third dispatch and preserves both observations', async () => {
+  const seen: string[] = [];
+  const page = await readPage({
+    incoming: incoming(),
+    session: { ring, scope },
+    reads: { old: { kind: 'subject', id: merged } },
+    async dispatch(request) {
+      seen.push(request.url);
+      expect(request.method).toBe('GET');
+      expect(request.redirect).toBe('manual');
+      expect(request.headers.get('authorization')).toBe('Bearer reader');
+      expect(request.headers.get(SESSION_HEADER)).toBe(callerToken);
+      return Response.json(
+        { redirect: { from: survivor, to: book } },
+        {
+          status: 308,
+          headers: {
+            location: seen.length === 1 ? `http://kernel.test/v1/subjects/${survivor}` : `/v1/subjects/${book}`,
+            [SESSION_HEADER]: encodeSession(ring, scope, [{ partition: 11, epoch: 1, position: BigInt(seen.length) }]),
+          },
+        },
+      );
+    },
+  });
+  expect(seen).toEqual([`http://kernel.test/v1/subjects/${merged}`, `http://kernel.test/v1/subjects/${survivor}`]);
+  expect(page.results.old!.status).toBe(308);
+  expect(decodeSession(ring, scope, page.session!)!).toContainEqual({ partition: 11, epoch: 1, position: 2n });
+});
+
+test('malformed data reports its deterministic escaped pointer and never invokes serialization', async () => {
+  const operation = readPage({
+    incoming: incoming(),
+    session: { ring, scope },
+    reads: { bad: { kind: 'search', body: { 'field/~': undefined } } },
+    async dispatch() {
+      throw new Error('malformed data dispatched');
+    },
+  });
+  await expect(operation).rejects.toBeInstanceOf(PageReadError);
+  await operation.catch((error: PageReadError) =>
+    expect(error.errors).toEqual([{ pointer: '/reads/bad/body/field~1~0', code: 'invalid_type' }]),
+  );
+});
+
+test('non-subject operations never follow a redirect and dispatch failures drain admitted siblings', async () => {
+  let calls = 0;
+  const operation = await readPage({
+    incoming: incoming(),
+    session: { ring, scope },
+    reads: { search: { kind: 'search', body: search } },
+    async dispatch() {
+      calls++;
+      return Response.json({ redirect: true }, { status: 308, headers: { location: `/v1/subjects/${book}` } });
+    },
+  });
+  expect(calls).toBe(1);
+  expect(operation.results.search!.status).toBe(308);
+  const failed = new Error('first read failed');
+  const completed: string[] = [];
+  const ids = Array.from({ length: 6 }, (_, index) => `018f0000-0000-7000-8000-${String(index).padStart(12, '0')}`);
+  await expect(
+    readPage({
+      incoming: incoming(),
+      session: { ring, scope },
+      reads: Object.fromEntries(ids.map((id, index) => [`r${index}`, { kind: 'subject', id }])),
+      async dispatch(request) {
+        const id = new URL(request.url).pathname.split('/').at(-1)!;
+        await Bun.sleep(id === ids[0] ? 10 : 1);
+        completed.push(id);
+        if (id === ids[0]) throw failed;
+        if (id === ids[1]) throw new Error('later read failed');
+        return Response.json(notFound, { status: 404 });
+      },
+    }),
+  ).rejects.toBe(failed);
+  expect(completed.sort()).toEqual(ids);
+});

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, profileDigest, templateViews, type PresentationProfile } from '@rezics/composition';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -13,6 +13,12 @@ import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/seman
 import { linksCaughtUp } from '../../src/semantic/link-freshness.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { readPage } from '../../src/presentation/reads.ts';
+import { SESSION_HEADER } from '../../src/http/request.ts';
+import { decodeSession } from '../../src/tokens/session.ts';
+import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { newId } from '../../src/route/route.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -237,3 +243,203 @@ test('the kernel contract documents the page read', () => {
   });
   expect(Object.keys(operation.responses!).sort()).toEqual(['200', '308', '400', '401', '404', '503']);
 });
+
+test('native subject redirect, credentials and aggregate observations retain standalone authority', async () => {
+  const personas = { reader: '019a1b2c-3d4e-7f00-8a00-ed170e000002' };
+  const access = await createRealAccess(admin, personas, ['subject:create', 'subject:merge', 'subject:read']);
+  for (const action of ['subject:create', 'subject:merge'])
+    await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'reader', action);
+  const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
+  const native = createKernel({
+    pool,
+    routeKey: new Uint8Array(32).fill(7),
+    requestDeadlineMs: 30_000,
+    access: access.access,
+    writeRate: access.writeRate,
+    tokens: ring,
+  });
+  const bearer = `Bearer ${access.bearer('reader')}`;
+  async function send(path: string, body?: unknown) {
+    const response = await native.handle(
+      new Request(`http://kernel.test${path}`, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          authorization: bearer,
+          ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    return { response, body: (await response.json()) as any };
+  }
+  const ids: string[] = [];
+  for (const label of ['Canonical subject', 'Merged subject']) {
+    const created = await send('/v1/subjects', { type: 'schema:Book', labels: { en: label } });
+    expect(created.response.status, JSON.stringify(created.body)).toBe(201);
+    ids.push(created.body.subject.id);
+  }
+  ids.sort();
+  const [survivor, redirected] = ids as [string, string];
+  const merged = await send('/v1/subjects:merge', { subjects: ids });
+  expect(merged.response.status, JSON.stringify(merged.body)).toBe(200);
+  const callerSession = merged.response.headers.get(SESSION_HEADER)!;
+  expect(callerSession).not.toBeNull();
+  const seen: Request[] = [];
+  const observations: string[] = [callerSession];
+  const session = { ring, scope: `account:${personas.reader}` };
+  const missing = randomUUID();
+  const page = await readPage({
+    incoming: new Request('http://kernel.test/v1/pages:read', {
+      headers: { authorization: bearer, [SESSION_HEADER]: callerSession, cookie: 'unforwarded=secret' },
+    }),
+    reads: {
+      old: { kind: 'subject', id: redirected },
+      alias: { kind: 'subject', id: redirected },
+      unknown: { kind: 'subject', id: missing },
+    },
+    session,
+    async dispatch(request) {
+      seen.push(request);
+      const response = await native.handle(request);
+      const token = response.headers.get(SESSION_HEADER);
+      if (token !== null) observations.push(token);
+      return response;
+    },
+  });
+  expect(seen.map((request) => new URL(request.url).pathname).sort()).toEqual(
+    [`/v1/subjects/${redirected}`, `/v1/subjects/${survivor}`, `/v1/subjects/${missing}`].sort(),
+  );
+  expect(page.results.old!.status).toBe(200);
+  expect(page.results.old).toBe(page.results.alias);
+  expect(page.results.old!.body).toEqual((await send(`/v1/subjects/${survivor}`)).body);
+  expect(page.results.unknown!.status).toBe(404);
+  expect(withoutRequestId(page.results.unknown!.body as Record<string, unknown>)).toEqual(
+    withoutRequestId((await send(`/v1/subjects/${missing}`)).body),
+  );
+  expect(page.session).not.toBeNull();
+  const mergedComponents = decodeSession(ring, session.scope, page.session!)!;
+  for (const token of observations) {
+    const components = decodeSession(ring, session.scope, token)!;
+    expect(components).not.toBeNull();
+    for (const component of components) {
+      const observed = mergedComponents.find(({ partition }) => partition === component.partition)!;
+      expect(observed.epoch).toBeGreaterThanOrEqual(component.epoch);
+      if (observed.epoch === component.epoch) expect(observed.position).toBeGreaterThanOrEqual(component.position);
+    }
+  }
+  for (const request of seen) {
+    expect(request.headers.get('authorization')).toBe(bearer);
+    expect(request.headers.get(SESSION_HEADER)).toBe(callerSession);
+    expect(request.headers.get('cookie')).toBeNull();
+  }
+  const invalid = await readPage({
+    incoming: new Request('http://kernel.test/v1/pages:read', { headers: { authorization: 'Bearer invalid' } }),
+    reads: { subject: { kind: 'subject', id: survivor } },
+    session,
+    dispatch: (request) => native.handle(request),
+  });
+  expect(invalid.results.subject!.status).toBe(401);
+  expect((invalid.results.subject!.body as any).code).toBe('invalid_credentials');
+  expect(access.readChecks).toContainEqual({
+    persona: 'reader',
+    action: 'subject:read',
+    resource: { route: routeOf(survivor), id: survivor },
+  });
+});
+
+test('a fixed native admitted plan retains dispatch, row and byte bounds at 64, 512 and 4096 unrelated subjects and revisions', async () => {
+  const db = await openGrowthDatabase(url);
+  try {
+    await bootstrapRelease(db.pool, bundledRelease);
+    const access = await createRealAccess(
+      db.admin,
+      {
+        editor: '019a1b2c-3d4e-7f00-8a00-ed170e000003',
+      },
+      ['subject:create'],
+    );
+    await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+    const native = createKernel({
+      pool: db.pool,
+      routeKey: new Uint8Array(32).fill(7),
+      requestDeadlineMs: 30_000,
+      access: access.access,
+      writeRate: access.writeRate,
+    });
+    const response = await native.handle(
+      new Request('http://kernel.test/v1/subjects', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${access.bearer('editor')}`,
+          'content-type': 'application/json',
+          'idempotency-key': `"${randomUUID()}"`,
+        },
+        body: JSON.stringify({ type: 'schema:Book', labels: { en: 'Fixed admission anchor' } }),
+      }),
+    );
+    const created = (await response.json()) as any;
+    expect(response.status, JSON.stringify(created)).toBe(201);
+    const anchor: string = created.subject.id;
+    const population: Population = {
+      name: 'aggregate-unrelated-subjects-and-history',
+      hotPartition: partitionOf(routeOf(anchor)!),
+      hotShare: 1,
+      rows: ({ ordinal, route }) => {
+        const id = newId(route);
+        const tx = randomUUID();
+        return {
+          'semantic.subject': [{ route, subject_id: id, type: 'schema:Book', recorded_transaction_id: tx }],
+          'semantic.revision': [1, 2].map((revision) => ({
+            route,
+            subject_id: id,
+            revision,
+            kind: revision === 1 ? 'create' : 'adopt',
+            release: bundledDigest,
+            recorded_transaction_id: tx,
+          })),
+          'semantic.fact': itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } }).map((fact) => ({
+            ...fact,
+            route,
+            subject_id: id,
+            recorded_transaction_id: tx,
+          })),
+        };
+      },
+    };
+    const report = await checkGrowth(db, {
+      name: 'a fixed native admitted plan retains dispatch, row and byte bounds at 64, 512 and 4096 unrelated subjects and revisions',
+      scales: [64, 512, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+      grow: (database, scale, previous) =>
+        seed({ pool: database.pool, admin: database.admin }, population, {
+          from: previous,
+          to: scale,
+        }),
+      operation: async () => {
+        let calls = 0;
+        const page = await readPage({
+          incoming: new Request('http://kernel.test/v1/pages:read'),
+          session: { ring: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) }, scope: 'anonymous' },
+          reads: { anchor: { kind: 'subject', id: anchor }, alias: { kind: 'subject', id: anchor } },
+          async dispatch(request) {
+            calls++;
+            return native.handle(request);
+          },
+        });
+        expect(calls).toBe(1);
+        expect(page.results.anchor!.status).toBe(200);
+        expect(page.results.anchor).toBe(page.results.alias);
+        expect((page.results.anchor!.body as any).subject.id).toBe(anchor);
+        return page;
+      },
+    });
+    expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.responseBytes!).toBeGreaterThan(0);
+    }
+  } finally {
+    await db.close();
+  }
+}, 180_000);

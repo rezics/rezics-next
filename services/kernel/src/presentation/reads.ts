@@ -1,11 +1,13 @@
 import canonicalize from 'canonicalize';
+import { MAX_PAGE_READS, MAX_PAGE_COST, readCost } from '@rezics/composition';
 import { SESSION_HEADER } from '../http/request.ts';
 import type { FieldError } from '../http/problem.ts';
+import { validateSearchLimit } from '../search/service.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { decodeSession, encodeSession, mergeSession } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 
-export const MAX_PAGE_READS = 16;
+export { MAX_PAGE_READS } from '@rezics/composition';
 
 export type PageRead =
   | { kind: 'subject'; id: string }
@@ -41,7 +43,7 @@ type PreparedRead = {
 type DispatchResult = { result: PageResult; tokens: string[] };
 
 const KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\s\S])/;
 const CURIE_PATTERN = /^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$/;
 const HANDLE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -68,14 +70,60 @@ function unknownFields(
   }
 }
 
+/** Own JSON data only: canonicalization must never invoke hooks or discard malformed inputs. */
+function copyJSON(value: unknown, pointer: string, ancestors = new Set<object>()): unknown {
+  const invalid = (): never => {
+    throw new PageReadError([{ pointer, code: 'invalid_type' }]);
+  };
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : invalid();
+  if (typeof value !== 'object') return invalid();
+  const array = Array.isArray(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (
+    (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) ||
+    ancestors.has(value)
+  )
+    return invalid();
+  ancestors.add(value);
+  try {
+    const entries: [string, unknown][] = [];
+    for (const key of Reflect.ownKeys(value)) {
+      if (array && key === 'length') continue;
+      if (typeof key !== 'string') return invalid();
+      const fieldPointer = `${pointer}/${escapePointerSegment(key)}`;
+      const field = Object.getOwnPropertyDescriptor(value, key)!;
+      if (!field.enumerable || !Object.hasOwn(field, 'value'))
+        throw new PageReadError([{ pointer: fieldPointer, code: 'invalid_type' }]);
+      if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)) return invalid();
+      entries.push([key, copyJSON(field.value, fieldPointer, ancestors)]);
+    }
+    if (array) {
+      if (entries.length !== value.length) return invalid();
+      return entries.map(([, item]) => item);
+    }
+    return Object.fromEntries(entries);
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 function validateReads(reads: unknown): PreparedRead[] {
   const errors: FieldError[] = [];
   if (!isObject(reads)) {
     throw new PageReadError([{ pointer: '/reads', code: 'invalid_type' }]);
   }
 
-  const entries = Object.entries(reads);
-  if (entries.length > MAX_PAGE_READS) addError(errors, '/reads', 'out_of_range');
+  if (Object.keys(reads).length > MAX_PAGE_READS)
+    throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
+  // Take custody before any await, validation or dedup can observe a different input.
+  try {
+    reads = copyJSON(reads, '/reads');
+  } catch (error) {
+    if (error instanceof PageReadError) throw error;
+    throw new PageReadError([{ pointer: '/reads', code: 'invalid_type' }]);
+  }
+  const entries = Object.entries(reads as Record<string, unknown>);
 
   const prepared: PreparedRead[] = [];
   for (const [key, descriptor] of entries) {
@@ -88,6 +136,7 @@ function validateReads(reads: unknown): PreparedRead[] {
 
     let canonicalDescriptor: PageRead | undefined;
     if (descriptor.kind === 'subject') {
+      unknownFields(descriptor, ['kind', 'id'], pointer, errors);
       if (typeof descriptor.id !== 'string' || !UUID_PATTERN.test(descriptor.id)) {
         addError(errors, `${pointer}/id`, 'invalid_format');
       } else {
@@ -177,10 +226,16 @@ function validateReads(reads: unknown): PreparedRead[] {
         };
       }
     } else if (descriptor.kind === 'search') {
+      unknownFields(descriptor, ['kind', 'body'], pointer, errors);
       if (!isObject(descriptor.body)) {
         addError(errors, `${pointer}/body`, 'invalid_type');
       } else {
         if (Object.hasOwn(descriptor.body, 'cursor')) addError(errors, `${pointer}/body/cursor`, 'unknown_field');
+        try {
+          validateSearchLimit(descriptor.body.limit);
+        } catch {
+          addError(errors, `${pointer}/body/limit`, 'out_of_range');
+        }
         canonicalDescriptor = { kind: 'search', body: descriptor.body };
       }
     } else {
@@ -300,7 +355,16 @@ async function executeRead(
       } catch {
         // An invalid Location leaves the original redirect response as the result.
       }
-      if (target?.origin === origin) {
+      if (
+        target?.origin === origin &&
+        target.username === '' &&
+        target.password === '' &&
+        target.search === '' &&
+        target.hash === '' &&
+        /^\/v1\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(target.pathname) &&
+        // URL parsing normalizes dot segments and empty query/fragment markers; refuse those too.
+        (location === target.pathname || location === `${origin}${target.pathname}`)
+      ) {
         response = await dispatch(requestFor(target, read.descriptor, credentials));
         readToken(response, tokens);
       }
@@ -317,20 +381,31 @@ export async function readPage(options: {
   session: SessionKeys;
   languages?: readonly string[];
 }): Promise<{ results: Record<string, PageResult>; session: string | null }> {
-  const reads = validateReads(options.reads);
+  const reads = validateReads(options.reads).map((read) => {
+    if (read.descriptor.kind !== 'search') return read;
+    const descriptor: PageRead = {
+      kind: 'search',
+      body: {
+        ...read.descriptor.body,
+        limit: validateSearchLimit((read.descriptor.body as Record<string, unknown>).limit),
+        ...(options.languages === undefined ? {} : { languages: [...options.languages] }),
+      },
+    };
+    return { ...read, descriptor, canonical: canonicalize(descriptor)! };
+  });
   const unique = new Map<string, PreparedRead>();
   for (const read of reads) if (!unique.has(read.canonical)) unique.set(read.canonical, read);
 
-  const distinctReads = [...unique.values()].map((read) => {
-    if (read.descriptor.kind !== 'search' || options.languages === undefined) return read;
-    return {
-      ...read,
-      descriptor: {
-        ...read.descriptor,
-        body: { ...read.descriptor.body, languages: [...options.languages] },
-      },
-    };
-  });
+  const distinctReads = [...unique.values()];
+  const cost = distinctReads.reduce(
+    (sum, { descriptor }) =>
+      sum +
+      (descriptor.kind === 'search'
+        ? validateSearchLimit((descriptor.body as Record<string, unknown>).limit)
+        : readCost(descriptor)),
+    0,
+  );
+  if (cost > MAX_PAGE_COST) throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
   const origin = new URL(options.incoming.url).origin;
   const credentials = {
     authorization: options.incoming.headers.get('authorization'),

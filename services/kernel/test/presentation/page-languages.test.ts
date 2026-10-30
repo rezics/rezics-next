@@ -16,6 +16,7 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { createFakeSource } from '../search/support/fake-source.ts';
+import { PageReadError, readPage, type PageRead } from '../../src/presentation/reads.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -156,5 +157,173 @@ test('a page read refuses an invalid language chain at /languages', async () => 
     expect(answer.response.status).toBe(400);
     expect(answer.body.code).toBe('invalid_request');
     expect(answer.body.errors).toEqual([error]);
+  }
+});
+
+function nativePlan(reads: Record<string, PageRead>, languages?: readonly string[]) {
+  let calls = 0;
+  let active = 0;
+  let peak = 0;
+  const operation = readPage({
+    incoming: new Request('http://kernel.test/v1/pages:read'),
+    reads,
+    session: { ring: tokens, scope: 'anonymous' },
+    languages,
+    async dispatch(request) {
+      calls++;
+      active++;
+      peak = Math.max(peak, active);
+      try {
+        return await kernel.handle(request);
+      } finally {
+        active--;
+      }
+    },
+  });
+  return { operation, calls: () => calls, peak: () => peak };
+}
+const nativeSearch = (limit?: number): PageRead => ({
+  kind: 'search',
+  body: { filter: searchBody.filter, sort: 'name', ...(limit === undefined ? {} : { limit }) },
+});
+
+test('actual native searches admit 127 and 128 slots and refuse 129 before dispatch', async () => {
+  for (const slots of [127, 128, 129]) {
+    const plan = nativePlan({ first: nativeSearch(100), second: nativeSearch(slots - 100) });
+    if (slots > 128) {
+      await expect(plan.operation).rejects.toBeInstanceOf(PageReadError);
+      await plan.operation.catch((error: PageReadError) =>
+        expect(error.errors).toEqual([{ pointer: '/reads', code: 'out_of_range' }]),
+      );
+      expect(plan.calls()).toBe(0);
+    } else {
+      const { results } = await plan.operation;
+      expect(plan.calls()).toBe(2);
+      for (const result of Object.values(results)) {
+        expect(result.status).toBe(200);
+        expect((result.body as { subjects: { id: string }[] }).subjects.map(({ id }) => id)).toEqual([book.id]);
+      }
+    }
+  }
+});
+
+test('native default search slots and aliases use the effective positive limit', async () => {
+  for (const extra of [8, 9]) {
+    const plan = nativePlan({
+      hundred: nativeSearch(100),
+      default: nativeSearch(),
+      explicit: nativeSearch(20),
+      extra: nativeSearch(extra),
+    });
+    if (extra === 9) {
+      await expect(plan.operation).rejects.toBeInstanceOf(PageReadError);
+      expect(plan.calls()).toBe(0);
+    } else {
+      const { results } = await plan.operation;
+      expect(plan.calls()).toBe(3);
+      expect(results.default!.status).toBe(200);
+      expect(results.default).toBe(results.explicit);
+    }
+  }
+  for (const limit of [1, 20, 64, 100]) {
+    const plan = nativePlan({ search: nativeSearch(limit) });
+    const { results } = await plan.operation;
+    const standalone = await call('/v1/subjects:search', { ...searchBody, limit });
+    expect(results.search!.status).toBe(200);
+    expect(stableSearchResult(results.search!.body as Record<string, any>)).toEqual(
+      stableSearchResult(standalone.body),
+    );
+  }
+});
+
+test('sixteen native read descriptors retain the concurrency ceiling and share duplicate alias work', async () => {
+  const distinct = nativePlan(
+    Object.fromEntries(
+      Array.from({ length: 16 }, (_, index) => [
+        `r${index}`,
+        { kind: 'search', body: { ...searchBody, limit: 1, text: `missing${index}` } } as PageRead,
+      ]),
+    ),
+  );
+  const result = await distinct.operation;
+  expect(Object.keys(result.results)).toHaveLength(16);
+  expect(Object.values(result.results).map(({ status }) => status)).toEqual(Array(16).fill(200));
+  expect(distinct.calls()).toBe(16);
+  expect(distinct.peak()).toBeLessThanOrEqual(4);
+  const aliases = (length: number) =>
+    Object.fromEntries(Array.from({ length }, (_, index) => [`r${index}`, nativeSearch(100)]));
+  const shared = nativePlan(aliases(16));
+  const { results } = await shared.operation;
+  expect(shared.calls()).toBe(1);
+  expect(Object.keys(results)).toHaveLength(16);
+  expect(results.r0!.status).toBe(200);
+  for (const result of Object.values(results)) expect(result).toBe(results.r0);
+  const overflow = nativePlan(aliases(17));
+  await expect(overflow.operation).rejects.toBeInstanceOf(PageReadError);
+  expect(overflow.calls()).toBe(0);
+});
+
+test('page language binding precedes canonical dedup and retains every native alias result', async () => {
+  const reads: Record<string, PageRead> = {
+    japanese: { kind: 'search', body: { ...searchBody, limit: 100, languages: ['ja'] } },
+    english: { kind: 'search', body: { ...searchBody, limit: 100, languages: ['en'] } },
+    all: { kind: 'search', body: { ...searchBody, limit: 100 } },
+  };
+  const bound = nativePlan(reads, ['en']);
+  const { results } = await bound.operation;
+  expect(bound.calls()).toBe(1);
+  expect(results.english!.status).toBe(200);
+  expect((results.english!.body as any).subjects[0].labels).toEqual({ en: 'Kokoro' });
+  expect(results.japanese).toBe(results.english);
+  expect(results.all).toBe(results.english);
+  expect((reads.japanese as { body: any }).body.languages).toEqual(['ja']);
+
+  const unbound = nativePlan({
+    japanese: { kind: 'search', body: { ...searchBody, languages: ['ja'] } },
+    english: { kind: 'search', body: { ...searchBody, languages: ['en'] } },
+  });
+  const separate = await unbound.operation;
+  expect(unbound.calls()).toBe(2);
+  expect((separate.results.japanese!.body as any).subjects[0].labels).toEqual({ ja: 'こころ' });
+  expect((separate.results.english!.body as any).subjects[0].labels).toEqual({ en: 'Kokoro' });
+});
+
+test('native per-read Search grammar errors remain isolated from admitted siblings', async () => {
+  const plan = nativePlan({
+    valid: nativeSearch(12),
+    invalid: { kind: 'search', body: { ...searchBody, sort: 'not-a-sort' } },
+  });
+  const { results } = await plan.operation;
+  expect(plan.calls()).toBe(2);
+  expect(results.valid!.status).toBe(200);
+  expect((results.valid!.body as any).subjects[0].id).toBe(book.id);
+  expect(results.invalid!.status).toBe(400);
+  expect((results.invalid!.body as any).code).toBe('invalid_request');
+});
+
+test('admission takes custody of native inputs and page languages before asynchronous dispatch', async () => {
+  const bodies = Array.from({ length: 6 }, (_, index) => ({ ...searchBody, limit: index + 1 }));
+  const languages = ['en'];
+  let calls = 0;
+  const result = await readPage({
+    incoming: new Request('http://kernel.test/v1/pages:read'),
+    reads: Object.fromEntries(bodies.map((body, index) => [`r${index}`, { kind: 'search', body }])),
+    session: { ring: tokens, scope: 'anonymous' },
+    languages,
+    async dispatch(request) {
+      if (calls++ === 0) {
+        for (const body of bodies) body.limit = 100;
+        languages[0] = 'ja';
+      }
+      const posted = (await request.clone().json()) as { limit: number; languages: string[] };
+      expect(posted.limit).toBeLessThanOrEqual(6);
+      expect(posted.languages).toEqual(['en']);
+      return kernel.handle(request);
+    },
+  });
+  expect(calls).toBe(6);
+  for (const read of Object.values(result.results)) {
+    expect(read.status).toBe(200);
+    expect((read.body as any).subjects[0].labels).toEqual({ en: 'Kokoro' });
   }
 });

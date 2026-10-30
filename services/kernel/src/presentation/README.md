@@ -59,11 +59,38 @@ lookup/hop. Automated accounts retain the [SoftwareApplication template and iden
 Render and JSON-LD use the same current public source bodies. A fixture canary that was never sent is not
 native Kernel or Auth privacy proof.
 
-The 16 distinct descriptors and 128 total requested output slots are publication/output admission only. They do
-not bound backend postings, native Access or dependency work, bytes or SQL. A controlled issuer exercising real
+The shared composition limits of 16 descriptors and 128 total distinct output slots apply at publication and at
+the actual aggregate executor. They do not bound backend postings, native Access or dependency work, bytes or SQL. A controlled issuer exercising real
 Access is distinct from the six-case driver using the real Auth and Access services. Simple-page permissive Access
 growth and profile lookup growth do not measure full native route authorization or every descriptor combination.
 The Cost qualifications below remain scoped to their named operations.
+
+## Aggregate execution admission
+
+`readPage` admits the whole plan before dispatch. Every descriptor has closed outer fields and owns plain JSON
+data; inherited inputs, accessors, serialization hooks, cycles, non-finite numbers and values JSON would discard
+are refused. Validation precedes deduplication, so an invalid alias cannot hide behind a valid read. Errors use
+sorted, escaped `/reads/...` pointers. The raw descriptor count remains at most `MAX_PAGE_READS` (16), including
+aliases. Search continuation cursors are unavailable in page descriptors; other Search grammar and authorization
+remain with the standalone route and its per-read result.
+
+Search limits use the standalone positive integer range 1–100 and default 20. Page languages override descriptor
+languages when supplied; without them each descriptor keeps its language choice, and an omitted chain keeps every
+language. After binding languages and the native limit default, canonical effective reads share one dispatch and
+the exact same result for every original key. Sum the distinct reads' output slots using `MAX_PAGE_COST` (128): one
+for subject, reaction or account identity, and the validated native limit for list reads. Overflow refuses the whole
+plan before any dispatch. Dispatch still runs at most four reads at once, forwards only authorization and session
+credentials, retains public statement hydration, and merges all observed session tokens with the caller's token.
+
+A subject `308` can follow once, using the same GET operation, to an exact canonical same-origin
+`/v1/subjects/<id>` Location (root-relative or absolute). Credentials in the URL, query strings, fragments, encoded
+or normalized path variants and other operations are refused. A refused redirect or the second response is returned
+with the existing per-read semantics; observations from both allowed hops remain in the aggregate session.
+
+The declared native page, language and read suites cover admission boundaries, aliases, standalone errors,
+credentials and redirect custody. The fixed-plan growth case in `test/presentation/pages.test.ts` measures actual
+native subject dispatch, database rows and wire bytes at 64, 512 and 4096 unrelated subjects and revision histories.
+This evidence covers aggregate admission and custody, without claiming whole-query privacy or release promotion.
 
 Later Zone common-page execution is separate from inert starters and the original common page format. Its proof
 still requires admitted direct/prepared plans, preparation of a second plan after an earlier read, current

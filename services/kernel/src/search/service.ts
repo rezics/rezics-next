@@ -97,6 +97,14 @@ function missingTemplate(error: unknown): boolean {
   );
 }
 
+/** The standalone result-slot bound, also used before aggregate dispatch. */
+export function validateSearchLimit(value: unknown): number {
+  const limit = value === undefined ? 20 : value;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100)
+    invalid('/limit', 'out_of_range');
+  return limit;
+}
+
 function validate(request: SearchRequest) {
   let text;
   try {
@@ -124,8 +132,7 @@ function validate(request: SearchRequest) {
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
-  const limit = request.limit === undefined ? 20 : request.limit;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalid('/limit', 'out_of_range');
+  const limit = validateSearchLimit(request.limit);
   const hitOptions = validateHitOptions(request);
 
   return {
