@@ -102,11 +102,7 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
         throw new Error('Production Access did not authenticate a native fixture account');
     }
 
-    const request = (
-      method: string,
-      path: string,
-      requestOptions: IsolationRequestOptions = {},
-    ): Promise<Response> => {
+    const request = (method: string, path: string, requestOptions: IsolationRequestOptions = {}): Promise<Response> => {
       const actor = requestOptions.actor === undefined ? actors.author : requestOptions.actor;
       const hasBody = requestOptions.body !== undefined || requestOptions.rawBody !== undefined;
       return app.handle(

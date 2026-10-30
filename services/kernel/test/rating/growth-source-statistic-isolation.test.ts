@@ -1,13 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { partitionOf } from '../../src/route/route.ts';
-import {
-  assertGrowthAccessPaths,
-  checkGrowth,
-  type GrowthDatabase,
-} from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import {
   createSourceStatisticIsolationFixture,
   SOURCE_STATISTIC_GROWTH_SCALES,
@@ -256,9 +251,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   expect(report.samples.map(({ scale }) => scale)).toEqual([...SOURCE_STATISTIC_GROWTH_SCALES]);
   const touchedRelations = [
     ...new Set(
-      report.samples.flatMap((sample) =>
-        sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)),
-      ),
+      report.samples.flatMap((sample) => sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations))),
     ),
   ];
   expect(touchedRelations).toEqual(

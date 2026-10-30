@@ -3,10 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import {
-  createSourceStatisticIsolationFixture,
-  type IsolationActor,
-} from './source-statistic-isolation-fixture.ts';
+import { createSourceStatisticIsolationFixture, type IsolationActor } from './source-statistic-isolation-fixture.ts';
 
 const fixtureOptions = { withRatingWorker: true };
 let fixture: Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>;
@@ -24,8 +21,7 @@ type SourceStatistic = {
 
 async function readJson(response: Response, status = 200): Promise<unknown> {
   const body = await response.clone().text();
-  if (response.status !== status)
-    throw new Error(`Expected HTTP ${status}, received ${response.status}: ${body}`);
+  if (response.status !== status) throw new Error(`Expected HTTP ${status}, received ${response.status}: ${body}`);
   return body ? JSON.parse(body) : null;
 }
 
@@ -52,7 +48,9 @@ async function until<T>(read: () => Promise<T>, ready: (value: T) => boolean, la
       `SELECT state, wait_event_type, wait_event FROM pg_stat_activity
        WHERE datname = current_database() AND pid <> pg_backend_pid()`,
     );
-    throw new Error(`${label} did not reach its committed-event barrier: ${JSON.stringify({ value, pending: pending.rows, activity: activity.rows })}`);
+    throw new Error(
+      `${label} did not reach its committed-event barrier: ${JSON.stringify({ value, pending: pending.rows, activity: activity.rows })}`,
+    );
   }
   return value;
 }
@@ -167,11 +165,11 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     attribution: 'Independent subject attribution.',
   };
 
-  const otherBeforeRefresh = await fixture.request(
-    'PUT',
-    `/v1/subjects/${otherSubjectId}/source-statistics/vndb`,
-    { actor: fixture.actors.secondImporter, body: otherSubjectValue, key: randomUUID() },
-  );
+  const otherBeforeRefresh = await fixture.request('PUT', `/v1/subjects/${otherSubjectId}/source-statistics/vndb`, {
+    actor: fixture.actors.secondImporter,
+    body: otherSubjectValue,
+    key: randomUUID(),
+  });
   expect(await readJson(otherBeforeRefresh)).toEqual({ source: 'vndb', ...otherSubjectValue });
 
   const originalKey = randomUUID();
@@ -239,23 +237,19 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(await readProblem(revokedNewWrite, 403)).toMatchObject({ code: 'forbidden' });
   expect(await mutationState(subjectId)).toEqual(beforeDeniedRequests);
 
-  const secondImporterWrite = await fixture.request(
-    'PUT',
-    `/v1/subjects/${hiddenSubjectId}/source-statistics/vndb`,
-    {
-      actor: fixture.actors.secondImporter,
-      body: {
-        sourceRecordId: 'private-attribution-sentinel-record',
-        scale: { min: 0, max: 10 },
-        mean: 8.5,
-        count: 999,
-        asOf: '2026-10-25',
-        licence: 'Private attribution sentinel licence',
-        attribution: 'Private attribution sentinel attribution.',
-      },
-      key: randomUUID(),
+  const secondImporterWrite = await fixture.request('PUT', `/v1/subjects/${hiddenSubjectId}/source-statistics/vndb`, {
+    actor: fixture.actors.secondImporter,
+    body: {
+      sourceRecordId: 'private-attribution-sentinel-record',
+      scale: { min: 0, max: 10 },
+      mean: 8.5,
+      count: 999,
+      asOf: '2026-10-25',
+      licence: 'Private attribution sentinel licence',
+      attribution: 'Private attribution sentinel attribution.',
     },
-  );
+    key: randomUUID(),
+  });
   expect(secondImporterWrite.status).toBe(200);
   expect(await sourceStatistics(otherSubjectId, fixture.actors.secondImporter)).toEqual([
     { source: 'vndb', ...otherSubjectValue },
@@ -280,11 +274,9 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel licence');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel attribution.');
 
-  const standardQuestionResponse = await fixture.request(
-    'GET',
-    `/v1/rating-questions/${STANDARD_QUESTION_ID}`,
-    { actor: null },
-  );
+  const standardQuestionResponse = await fixture.request('GET', `/v1/rating-questions/${STANDARD_QUESTION_ID}`, {
+    actor: null,
+  });
   const standardQuestion = (await readJson(standardQuestionResponse)) as {
     id: string;
     grain: string;
@@ -472,12 +464,18 @@ test('invalid strict source-statistic JSON and provenance domains reject without
   const invalid: Array<{ name: string; path?: string; body?: unknown; rawBody?: string }> = [
     { name: 'unknown JSON property', body: { ...validValue, importedScore: 9 } },
     { name: 'unsupported source path', path: 'bangumi', body: validValue },
-    { name: 'scale maximum beyond the current 4096 domain', body: { ...validValue, scale: { min: 0, max: 4097 }, mean: 8.5 } },
+    {
+      name: 'scale maximum beyond the current 4096 domain',
+      body: { ...validValue, scale: { min: 0, max: 4097 }, mean: 8.5 },
+    },
     { name: 'scale with no positive interval', body: { ...validValue, scale: { min: 10, max: 10 }, mean: 10 } },
     { name: 'mean outside the accepted scale', body: { ...validValue, mean: 10.01 } },
     { name: 'count beyond the current int32 schema maximum', body: { ...validValue, count: 2_147_483_648 } },
     { name: 'non-calendar date', body: { ...validValue, asOf: '2026-02-30' } },
-    { name: 'attribution beyond the current 2000-character schema maximum', body: { ...validValue, attribution: 'a'.repeat(2001) } },
+    {
+      name: 'attribution beyond the current 2000-character schema maximum',
+      body: { ...validValue, attribution: 'a'.repeat(2001) },
+    },
     { name: 'empty source record id', body: { ...validValue, sourceRecordId: '' } },
     { name: 'empty licence', body: { ...validValue, licence: '' } },
     { name: 'malformed JSON object', rawBody: '{"sourceRecordId":' },
