@@ -159,3 +159,29 @@ test('a failed subject feed response rejects the export step without changing ex
     'threads',
   ]);
 });
+
+test('subject feed hrefs reach XML and reciprocal page links with exactly one locale prefix', async () => {
+  const { familyXml } = await import('../src/sitemap/xml.ts');
+  const { pageLinks } = await import('../src/shell/head.ts');
+  const { sitemapPagePaths } = await import('../src/sitemap/url.ts');
+  const origin = 'https://public.example';
+  // Only fields declared by the current native endpoint: sparse real labels, no guessed original language.
+  const item = entry({ fr: 'Le livre', 'zh-Hant': '書' });
+  const family = feed.family(item)!;
+  const result = familyXml(origin, family.paths);
+  expect(result.urls).toEqual(locales.map((locale) => `${origin}${family.paths[locale]}`));
+  expect(result.xml.match(/<url>/g)).toHaveLength(8);
+  expect(result.xml.match(/<xhtml:link /g)).toHaveLength(64);
+  expect(result.xml).not.toContain('<lastmod>');
+  const paths = sitemapPagePaths(family.paths);
+  for (const locale of locales) {
+    const links = pageLinks(origin, locale, '/', paths);
+    expect(links[0]!.href).toBe(`${origin}${family.paths[locale]}`);
+    for (const alternate of locales)
+      expect(links).toContainEqual({
+        rel: 'alternate',
+        hrefLang: alternate,
+        href: `${origin}${family.paths[alternate]}`,
+      });
+  }
+});

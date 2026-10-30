@@ -1,5 +1,6 @@
 import { locales } from '../paraglide/runtime.js';
 import { pageLinks, type PagePaths } from '../shell/head.ts';
+import { sitemapPagePaths } from './url.ts';
 
 export const sitemapNamespace = 'http://www.sitemaps.org/schemas/sitemap/0.9';
 export const xmlDeclaration = '<?xml version="1.0" encoding="UTF-8"?>\n';
@@ -50,11 +51,12 @@ export function utcLastmod(value: string): string | undefined {
 
 /** The eight `<url>` records of one page family, one per locale, each listing all eight alternates. */
 export function familyXml(origin: string, paths: PagePaths, lastmod?: string): { xml: string; urls: string[] } {
+  const pagePaths = sitemapPagePaths(paths);
   const urls: string[] = [];
   let alternates = '';
   let xml = '';
   for (const locale of locales) {
-    const links = pageLinks(origin, locale, '/', paths);
+    const links = pageLinks(origin, locale, '/', pagePaths);
     if (alternates === '') {
       alternates = links
         .filter((link) => link.rel === 'alternate' && link.hrefLang !== 'x-default')
