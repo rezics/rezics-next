@@ -62,7 +62,7 @@ export async function readSubjectSortFormat(
   try {
     response = await search.request('GET', `/${index}/_mapping`);
   } catch (error) {
-    if (error instanceof OpenSearchError && error.type === 'index_not_found_exception')
+    if (error instanceof OpenSearchError)
       throw new SearchUnavailableError('Subject generation mapping is unavailable', { cause: error });
     throw error;
   }

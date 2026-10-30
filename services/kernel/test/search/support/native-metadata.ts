@@ -1,8 +1,8 @@
 import { subjectAlias, subjectIndexName } from '../../../src/search/indices.ts';
-import type { OpenSearch } from '../../../src/search/opensearch.ts';
+import { OpenSearchError, type OpenSearch } from '../../../src/search/opensearch.ts';
 
 export type MetadataReceipt = { status: number; body: unknown };
-export type MetadataControl = { name: string; corrupt(receipt: MetadataReceipt): void };
+export type MetadataControl = { name: string; reject?: boolean; corrupt(receipt: MetadataReceipt): void };
 type ResolveBody = {
   indices: { name: unknown; attributes?: unknown; aliases?: unknown; data_stream?: unknown }[];
   aliases: { name: unknown; indices?: unknown }[];
@@ -30,6 +30,7 @@ export function captureMetadata(
         control.corrupt(changed);
         call.changed = changed;
         console.info('native metadata boundary', JSON.stringify({ control: control.name, ...call }));
+        if (control.reject) throw new OpenSearchError(changed.status, changed.body);
         return changed as { status: number; body: T };
       }
       return response;
@@ -53,6 +54,12 @@ export function resolveControls(prefix: string): MetadataControl[] {
       corrupt: (receipt) => {
         receipt.status = status;
       },
+    });
+  for (const status of [404, 429, 500])
+    controls.push({
+      name: `resolve rejected HTTP ${status}`,
+      reject: true,
+      corrupt: (receipt) => { receipt.status = status; },
     });
   for (const value of [null, [], 'metadata', 1])
     controls.push({
@@ -221,6 +228,12 @@ export function mappingControls(index: string): MetadataControl[] {
       corrupt: (receipt) => {
         receipt.status = status;
       },
+    });
+  for (const status of [404, 429, 500])
+    controls.push({
+      name: `mapping rejected HTTP ${status}`,
+      reject: true,
+      corrupt: (receipt) => { receipt.status = status; },
     });
   for (const value of [null, [], 'mapping', {}])
     controls.push({
