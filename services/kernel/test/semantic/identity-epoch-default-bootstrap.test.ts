@@ -52,3 +52,30 @@ test('default Community worker closes every native home and then repairs real ca
     terminal: fixture.subject.id,
   });
 }, 180_000);
+
+test('fresh native default startup does not sweep empty homes when no legacy identity source exists', async () => {
+  // A new actual Community system clones the untouched migrated template. Neither this test nor
+  // the driver installs legacy subjects, ready bits, mappings, receiving receipts or source ACKs.
+  await closeCommunityDrivers();
+  const driver = await createCommunityDriver();
+  const fixture = await driver.provision();
+  await driver.settle();
+  const closure = await queryCommunityDatabase<{ empty_home_exports: number; empty_home_custody: number }>(`
+    SELECT
+      (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_home h
+       WHERE NOT EXISTS (SELECT 1 FROM semantic.subject s WHERE s.route / 16 = h.partition_no)
+         AND NOT EXISTS (SELECT 1 FROM semantic.merge_member m WHERE m.route / 16 = h.partition_no)
+      ) empty_home_exports,
+      (SELECT count(*)::integer FROM semantic.identity_epoch_topology_custody c
+       WHERE NOT EXISTS (SELECT 1 FROM semantic.subject s WHERE s.route / 16 = c.source_partition)
+         AND NOT EXISTS (SELECT 1 FROM semantic.merge_member m WHERE m.route / 16 = c.source_partition)
+      ) empty_home_custody
+  `);
+  expect(closure).toEqual([{ empty_home_exports: 0, empty_home_custody: 0 }]);
+  const { system } = communityFixtureRuntime();
+  expect(await identityEpochStore.readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
+    state: 'mapped',
+    original: fixture.subject.id,
+    terminal: fixture.subject.id,
+  });
+}, 180_000);
