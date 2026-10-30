@@ -164,6 +164,9 @@ Read-only reference source consulted: Ghost's indexed `content-gating.js` and `p
 `commerce-ownership/ghost/ghost/core/server/services/members/`, plus the retained reference index and adopted
 Commerce research. No external source was copied or executed. Source delivery and local typing do not establish
 native, privacy, protected-use, whole-journey, current visual or promoted-main acceptance; all remain pending.
+Local `bun run --cwd apps/web typecheck` passes with no type errors in 1,156 files. The six focused acceptance
+cases were written but not executed under the minimal verification contract. No separate build check was run;
+route/localization generation is part of the existing typecheck command.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
