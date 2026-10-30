@@ -48,7 +48,11 @@ export async function readAccountDiscoveryReductionBinding(
           const home = homes.get(partition);
           if (!home) throw new CommandUnavailableError('contention', partition);
           if (home.writeState !== 'active')
-            throw new CommandUnavailableError(home.writeState === 'moved' ? 'moved' : 'fenced', partition, home.movedTo);
+            throw new CommandUnavailableError(
+              home.writeState === 'moved' ? 'moved' : 'fenced',
+              partition,
+              home.movedTo,
+            );
           const counter = byPartition.get(partition);
           if (!counter || BigInt(counter.revision) <= 0n || BigInt(counter.claimRevision) <= 0n)
             throw new CommandUnavailableError('contention', partition);
@@ -65,8 +69,7 @@ export async function readAccountDiscoveryReductionBinding(
     );
   } catch (error) {
     const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-    if (code === '42P01' || code === '42703')
-      throw new CommandUnavailableError('contention', requested[0]!);
+    if (code === '42P01' || code === '42703') throw new CommandUnavailableError('contention', requested[0]!);
     // Preserve moved/fenced routing information, and classify bounded read failures.
     throwAccessUnavailable(error, deadline);
     throw error;

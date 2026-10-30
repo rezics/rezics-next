@@ -46,12 +46,12 @@ test('bounded native binding copies sorted full home coverage, including empty p
   await expect(read([])).rejects.toBeInstanceOf(RangeError);
   await expect(read(Array.from({ length: 101 }, (_, index) => index))).rejects.toBeInstanceOf(RangeError);
   for (const invalid of [-1, 4096, 1.5, NaN]) await expect(read([invalid])).rejects.toBeInstanceOf(RangeError);
-  await expect(
-    readAccountDiscoveryReductionBinding(pool, [3900], { deadline: Date.now() - 1 }),
-  ).rejects.toBeInstanceOf(AccessUnavailableError);
-  await expect(
-    readAccountDiscoveryReductionBinding(pool, [3900], { deadline: Infinity }),
-  ).rejects.toBeInstanceOf(TypeError);
+  await expect(readAccountDiscoveryReductionBinding(pool, [3900], { deadline: Date.now() - 1 })).rejects.toBeInstanceOf(
+    AccessUnavailableError,
+  );
+  await expect(readAccountDiscoveryReductionBinding(pool, [3900], { deadline: Infinity })).rejects.toBeInstanceOf(
+    TypeError,
+  );
 });
 
 test('native Account reduction binding includes excluded and order populations and never reuses restored heads', async () => {
@@ -74,7 +74,10 @@ test('native Account reduction binding includes excluded and order populations a
     const reduced = await read([partition]);
     expect(head(reduced, partition).revision).toBeGreaterThan(head(original, partition).revision);
     // An excluded row still affects NOT/zero-hit/count and future name/id order.
-    await pool.query("UPDATE access.account SET display_name='Earlier name' WHERE route=$1 AND account_id=$2", [route, id]);
+    await pool.query("UPDATE access.account SET display_name='Earlier name' WHERE route=$1 AND account_id=$2", [
+      route,
+      id,
+    ]);
     const renamed = await read([partition]);
     expect(head(renamed, partition).revision).toBeGreaterThan(head(reduced, partition).revision);
     expect(head(renamed, partition).claimRevision).toBe(head(original, partition).claimRevision);
@@ -82,7 +85,9 @@ test('native Account reduction binding includes excluded and order populations a
       "UPDATE access.account SET authn_fenced=false,display_name='Original display' WHERE route=$1 AND account_id=$2",
       [route, id],
     );
-    expect((await source.read(partition, [id])).accounts).toMatchObject([{ id, handle: null, displayName: 'Original display' }]);
+    expect((await source.read(partition, [id])).accounts).toMatchObject([
+      { id, handle: null, displayName: 'Original display' },
+    ]);
     const restored = await read([partition]);
     expect(head(restored, partition).revision).toBeGreaterThan(head(renamed, partition).revision);
     // Native restoration can serve a fresh query, but cannot equal the original
@@ -106,10 +111,12 @@ test('exact-claim reductions advance their foreign home before delivery and repa
   } while (partitionOf(claimRoute) === partition);
   const claimPartition = partitionOf(claimRoute);
   const id = await seed(route, handle);
-  const insert = () => pool.query(
-    `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
-     VALUES($1,$2,$3,'active',$3)`, [claimRoute, handle, id],
-  );
+  const insert = () =>
+    pool.query(
+      `INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id)
+     VALUES($1,$2,$3,'active',$3)`,
+      [claimRoute, handle, id],
+    );
   try {
     await insert();
     await redriveAccountDiscovery({ pool }, claimPartition);
@@ -121,7 +128,10 @@ test('exact-claim reductions advance their foreign home before delivery and repa
       "state='pending',expires_at=now()+interval '1 day',reserved_until=NULL",
       "state='reserved',expires_at=NULL,reserved_until=now()+interval '1 day',former_until=now()+interval '1 hour'",
     ]) {
-      await pool.query(`UPDATE access.handle_claim SET ${assignment} WHERE route=$1 AND normalized_handle=$2`, [claimRoute, handle]);
+      await pool.query(`UPDATE access.handle_claim SET ${assignment} WHERE route=$1 AND normalized_handle=$2`, [
+        claimRoute,
+        handle,
+      ]);
       expect((await source.read(partition, [id])).accounts).toMatchObject([{ id, handle: null }]);
       const changed = await read([partition, claimPartition]);
       expect(head(changed, claimPartition).claimRevision).toBeGreaterThan(head(previous, claimPartition).claimRevision);
@@ -158,20 +168,39 @@ test('exact-claim reductions advance their foreign home before delivery and repa
 test('missing, moved, fenced, partial and uninstalled claim homes refuse instead of returning partial evidence', async () => {
   const partition = 3889;
   const other = 3888;
-  const native = (await pool.query<{
-    node: string; write_state: string; moved_to: string | null; epoch: number; position: string;
-  }>('SELECT node,write_state,moved_to,epoch,position::text FROM core.partition WHERE partition_no=$1', [partition])).rows[0]!;
-  const population = (await pool.query<{ population: string; revision: string; claim_revision: string }>(
-    'SELECT population::text,revision::text,claim_revision::text FROM access.account_discovery_population WHERE partition_no=$1',
-    [partition],
-  )).rows[0]!;
+  const native = (
+    await pool.query<{
+      node: string;
+      write_state: string;
+      moved_to: string | null;
+      epoch: number;
+      position: string;
+    }>('SELECT node,write_state,moved_to,epoch,position::text FROM core.partition WHERE partition_no=$1', [partition])
+  ).rows[0]!;
+  const population = (
+    await pool.query<{ population: string; revision: string; claim_revision: string }>(
+      'SELECT population::text,revision::text,claim_revision::text FROM access.account_discovery_population WHERE partition_no=$1',
+      [partition],
+    )
+  ).rows[0]!;
   const original = await read([partition]);
   try {
     for (const state of ['moved', 'fenced']) {
-      await pool.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [partition, state, state === 'moved' ? 'elsewhere' : null]);
-      await expect(read([other, partition])).rejects.toMatchObject({ name: 'CommandUnavailableError', reason: state, partition });
+      await pool.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+        partition,
+        state,
+        state === 'moved' ? 'elsewhere' : null,
+      ]);
+      await expect(read([other, partition])).rejects.toMatchObject({
+        name: 'CommandUnavailableError',
+        reason: state,
+        partition,
+      });
     }
-    await pool.query("UPDATE core.partition SET write_state='active',moved_to=NULL,epoch=epoch+1 WHERE partition_no=$1", [partition]);
+    await pool.query(
+      "UPDATE core.partition SET write_state='active',moved_to=NULL,epoch=epoch+1 WHERE partition_no=$1",
+      [partition],
+    );
     const movedBack = await read([partition]);
     expect(head(movedBack, partition).epoch).toBe(native.epoch + 1);
     expect(movedBack).not.toEqual(original);
@@ -186,7 +215,9 @@ test('missing, moved, fenced, partial and uninstalled claim homes refuse instead
     );
   }
   try {
-    await pool.query('UPDATE access.account_discovery_population SET claim_revision=0 WHERE partition_no=$1', [partition]);
+    await pool.query('UPDATE access.account_discovery_population SET claim_revision=0 WHERE partition_no=$1', [
+      partition,
+    ]);
     await expect(read([other, partition])).rejects.toBeInstanceOf(CommandUnavailableError);
     await pool.query('DELETE FROM access.account_discovery_population WHERE partition_no=$1', [partition]);
     await expect(read([other, partition])).rejects.toBeInstanceOf(CommandUnavailableError);
