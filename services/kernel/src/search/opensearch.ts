@@ -21,7 +21,8 @@ export class OpenSearchError extends Error {
     const details = error && typeof error === 'object' ? (error as { type?: unknown; reason?: unknown }) : undefined;
     const type = typeof details?.type === 'string' ? details.type : null;
     const reason = typeof details?.reason === 'string' ? details.reason : null;
-    super(reason ?? `OpenSearch request failed with HTTP ${status}`);
+    // Native diagnostics are internal metadata, never the error's printable message.
+    super(`OpenSearch request failed with HTTP ${status}`);
     this.name = 'OpenSearchError';
     this.status = status;
     this.type = type;
@@ -38,13 +39,37 @@ export class SearchUnavailableError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
-function parseResponse(text: string): unknown {
-  if (!text) return undefined;
+async function readResponse(response: Response, controller: AbortController, limit: number): Promise<string> {
+  // HEAD may advertise the GET representation's length without containing any response bytes.
+  if (!response.body) return '';
+  const reader = response.body.getReader();
   try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return text;
+    const length = response.headers.get('content-length');
+    if (length !== null && /^\d+$/.test(length) && Number(length) > limit) throw new SearchUnavailableError();
+
+    // One fixed-capacity buffer bounds retained state even for millions of tiny chunks. Inspect each native
+    // chunk before copying or decoding; neither a small Content-Length nor an error status bypasses this count.
+    let bytes: Uint8Array | undefined;
+    let used = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value.byteLength > limit - used) throw new SearchUnavailableError();
+      if (value.byteLength === 0) continue;
+      bytes ??= new Uint8Array(limit);
+      bytes.set(value, used);
+      used += value.byteLength;
+    }
+    return bytes ? new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, used)) : '';
+  } catch (error) {
+    // Abort the native producer as well as cancelling the stream before relinquishing reader ownership.
+    controller.abort();
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -53,9 +78,15 @@ function unavailableMessage(error: unknown): string {
   return 'OpenSearch is unavailable';
 }
 
-export function createOpenSearch(url: string, options: { timeoutMs?: number } = {}): OpenSearch {
+export function createOpenSearch(
+  url: string,
+  options: { timeoutMs?: number; /** Internal tests may only lower the hard ceiling. */ maxResponseBytes?: number } = {},
+): OpenSearch {
   const base = new URL(url.endsWith('/') ? url : `${url}/`);
   const defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const responseLimit = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
+  if (!Number.isSafeInteger(responseLimit) || responseLimit < 1 || responseLimit > MAX_RESPONSE_BYTES)
+    throw new RangeError('OpenSearch response limit must be a positive integer at most 4 MiB');
 
   async function send<T>(
     method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
@@ -71,24 +102,40 @@ export function createOpenSearch(url: string, options: { timeoutMs?: number } = 
 
     const headers = new Headers({ accept: 'application/json' });
     if (contentType) headers.set('content-type', contentType);
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(new DOMException('OpenSearch request timed out', 'TimeoutError')),
+      requestOptions.timeoutMs ?? defaultTimeoutMs,
+    );
     const request: RequestInit = {
       method,
       headers,
-      signal: AbortSignal.timeout(requestOptions.timeoutMs ?? defaultTimeoutMs),
+      signal: controller.signal,
     };
     if (method !== 'HEAD' && body !== undefined) request.body = body;
     let response: Response;
     let responseText: string;
     try {
       response = await fetch(target, request);
-      responseText = await response.text();
+      responseText = await readResponse(response, controller, responseLimit);
     } catch (error) {
-      throw new SearchUnavailableError(unavailableMessage(error), { cause: error });
+      // Fetch/parser errors can carry configured credentials or response excerpts. Do not retain them as causes.
+      throw new SearchUnavailableError(unavailableMessage(error));
+    } finally {
+      clearTimeout(timeout);
     }
 
-    const responseBody = parseResponse(responseText);
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       throw new SearchUnavailableError(`OpenSearch is unavailable (HTTP ${response.status})`);
+    }
+    let responseBody: unknown;
+    if (responseText) {
+      try {
+        responseBody = JSON.parse(responseText) as unknown;
+      } catch {
+        if (response.status < 400) throw new SearchUnavailableError();
+        // Non-JSON native errors retain their HTTP classification without retaining a raw response payload.
+      }
     }
     if (response.status >= 400) throw new OpenSearchError(response.status, responseBody);
     return { status: response.status, body: responseBody as T };

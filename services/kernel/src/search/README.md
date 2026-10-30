@@ -319,6 +319,27 @@ new measurements or passing tests.
 Relay discovery, freshness, reconciliation and retirement use cross-partition SQL on a shared pool. Their fixed
 4,096-partition cardinality does not make them executable on separately placed partition databases.
 
+### Consume one engine response
+
+- Touches: `opensearch.ts` reads the original native HTTP response stream once, with one reader and abort
+  controller per request. Request/query/bulk serialization and engine operation counts are unchanged.
+- Bound: At most 4 MiB of observed response bytes may enter the retained buffer before UTF-8 decoding and JSON
+  parsing, including chunked and error bodies. An honest oversized Content-Length can refuse at headers; every
+  received chunk is still counted when the length is absent, invalid or smaller. Retained bytes use one fixed-capacity
+  buffer, processing is O(bytes), and refusal aborts/cancels the producer and releases the reader. The deadline covers
+  headers and the entire body. Internal constructor tests may lower the ceiling but cannot raise or disable it;
+  no public request or environment setting changes this budget. HEAD and empty responses retain undefined bodies.
+  Malformed successful JSON fails unavailable; bounded native 4xx JSON retains internal `OpenSearchError` diagnostic
+  metadata, while printable messages omit response payloads and native failures have no credential-bearing cause.
+  Gateway failures (502/503/504), network loss, abort and oversized responses remain unavailable.
+- Growth check: [native transport acceptance](../../test/search/opensearch.test.ts) checks actual byte counts and
+  one native request at three unrelated engine populations, exact/boundary+1 bytes, split multibyte UTF-8, length
+  faults, error bodies, deadlines, cancellation, cleanup and subsequent native recovery. Successful query/bulk/search
+  responses come from the check's real OpenSearch node. The frozen
+  [oversized-response acceptance](../../test/search/bounded-opensearch-transport.test.ts) covers the production
+  ceiling. This is transport accounting, not proof of whole-engine physical work, heap peak, Source composition
+  or private-data safety; original operation/candidate limits still apply.
+
 ### Relay discovery
 
 - Touches: `events/scan-partitions.sql` runs one statement per live consumer each tick (default 100 ms), reading the
