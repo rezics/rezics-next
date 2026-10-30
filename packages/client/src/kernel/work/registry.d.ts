@@ -4,6 +4,8 @@ import { type WorkClient } from './client.ts';
 import { type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
 import { HistoryRegistry } from '../history/registry.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { type WorkerAuthorization } from './authorization.ts';
 export type WorkService = {
     stop(): Promise<void>;
 };
@@ -14,6 +16,7 @@ export type WorkContext = {
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly clock: KernelClock;
     readonly history?: HistoryRegistry;
+    getAuthorization(): WorkerAuthorization;
     addEffects(effects: Effect[]): void;
     addNativeEffects?(effects: NativeEffect[]): void;
     addService(start: () => WorkService | Promise<WorkService>): void;
@@ -30,6 +33,7 @@ export type WorkOptions = {
     env?: Readonly<Record<string, string | undefined>>;
     /** Trusted service composition only. */
     clock?: KernelClock;
+    receiptKeys?: KeyRing;
 };
 /** Registration owns the process-global SDK once. Pools and clients belong to the caller. */
 export declare function composeWork(modules: readonly WorkModule[], options: WorkOptions): Promise<{

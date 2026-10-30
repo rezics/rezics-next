@@ -53,15 +53,15 @@ export declare function mutateContentPoint(deps: ErasePostDependencies, actor: A
 }>>;
 /** The ordinary owner DELETE retains history during its restore window. */
 export declare function softDeletePost(deps: ErasePostDependencies, actor: Actor, input: ErasePostInput, context: ErasePostContext): Promise<{
+    value: {
+        postId: string;
+        securityRevision: string;
+    };
     partition: number;
     epoch: number;
     position: bigint;
     transactionId: string;
     replayed: boolean;
-    value: {
-        postId: string;
-        securityRevision: string;
-    };
 }>;
 export declare function erasePostLogical(deps: ErasePostDependencies, actor: Actor, input: ErasePostInput, context: ErasePostContext): Promise<CommandOutcome<{
     postId: string;

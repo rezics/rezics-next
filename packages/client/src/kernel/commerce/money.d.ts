@@ -54,3 +54,19 @@ export declare function validateOfferAmount(input: {
     moneyUnit: StripeMoneyUnit;
     taxBehavior: 'exclusive';
 }>;
+/** Persisted observation contexts, mapped to the canonical field-unit authority below. */
+export type StripeMoneyContext = 'checkout.integration' | 'checkout.presentment' | 'balance_transaction';
+export declare function stripeEvidenceMoneyUnit(currency: string, context: StripeMoneyContext): StripeMoneyUnit | null;
+export declare function sameMoneyUnit(a: StripeMoneyUnit | null | undefined, b: StripeMoneyUnit | null | undefined): boolean;
+/** Validates serialized recorded meaning; never fills missing historical metadata. */
+export declare function recordedMoneyUnit(value: unknown): StripeMoneyUnit | null;
+/** Lineage of the actual API operation, excluding credentials, tokens and provider bodies. */
+export type StripeMoneyProvenance = Readonly<{
+    accountNamespace: string;
+    livemode: boolean;
+    objectId: string;
+    object: 'checkout.session' | 'balance_transaction';
+    context: StripeMoneyContext;
+    requestApiVersion: string;
+    responseApiVersion: string | null;
+}>;

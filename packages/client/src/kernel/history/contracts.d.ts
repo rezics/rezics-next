@@ -161,6 +161,7 @@ export declare const EVENT_CLASSIFICATIONS: Readonly<{
     'com.rezics.commerce.order.updated.v1': EventClassification;
     'com.rezics.commerce.payout_statement.paid.v1': EventClassification;
     'com.rezics.commerce.payout_statement.updated.v1': EventClassification;
+    'com.rezics.commerce.money.observed.v1': EventClassification;
     'com.rezics.commerce.transactions.recorded.v1': EventClassification;
     'com.rezics.community.publication.adopted.v1': Readonly<{
         kind: 'non-personal';

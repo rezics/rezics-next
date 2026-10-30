@@ -615,6 +615,10 @@ declare const productEventTypes: {
         orderId: Type.TString;
         revision: Type.TInteger;
     }>;
+    readonly 'com.rezics.commerce.money.observed.v1': Type.TObject<{
+        orderId: Type.TString;
+        transactionIds: Type.TArray<Type.TString>;
+    }>;
     readonly 'com.rezics.commerce.transactions.recorded.v1': Type.TObject<{
         orderId: Type.TString;
         creatorAccountId: Type.TString;

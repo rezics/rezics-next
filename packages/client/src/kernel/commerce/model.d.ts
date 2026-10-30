@@ -1,8 +1,9 @@
-import type { StripeMoneyUnit } from './money.ts';
 /**
  * Shared commerce types. Offers live in the creator account's partition; orders, their Stripe transactions and
  * entitlements live in the buyer account's partition. Amounts retain exact raw provider integers; interpretation requires captured unit metadata.
  */
+import type { StripeMoneyUnit, StripeMoneyProvenance } from './money.ts';
+export type { StripeMoneyUnit, StripeMoneyProvenance } from './money.ts';
 /** Maximum balance transactions in one complete provider snapshot. */
 export declare const MAX_ORDER_TRANSACTIONS = 256;
 /** Historical purchase outcome, independent of provider cash availability and current benefit permission. */
@@ -92,6 +93,9 @@ export type Entitlement = {
 export type TransactionKind = 'charge' | 'refund' | 'refund_reversal' | 'dispute' | 'dispute_reversal';
 /** One Stripe balance transaction for an order, in the settlement currency. */
 export type StripeTransaction = {
+    moneyUnit?: StripeMoneyUnit | null;
+    providerApiVersion?: string | null;
+    moneyProvenance?: StripeMoneyProvenance | null;
     /** The balance transaction ID, `txn_…`. */
     id: string;
     kind: TransactionKind;
@@ -133,13 +137,21 @@ export type CheckoutLocator = {
 };
 /** Stripe's current state of one Checkout Session, read through the Stripe API, never taken from a webhook payload. */
 export type CheckoutSnapshot = {
+    integrationMoneyUnit?: StripeMoneyUnit | null;
+    providerApiVersion?: string | null;
+    moneyProvenance?: StripeMoneyProvenance | null;
+    presentment?: Readonly<{
+        currency: string;
+        amountMinor: number;
+        moneyUnit: StripeMoneyUnit | null;
+    }> | null;
     sessionId: string;
     clientReferenceId: string | null;
     metadataOrderId: string | null;
     livemode: boolean;
     status: 'open' | 'complete' | 'expired';
     paymentStatus: 'paid' | 'unpaid' | 'no_payment_required';
-    /** In the presentment currency. */
+    /** Session integration currency, independent of optional actual local presentment. */
     currency: string | null;
     amountSubtotalMinor: number | null;
     amountTaxMinor: number | null;

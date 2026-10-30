@@ -3971,6 +3971,11 @@ export declare function payoutRoutes(app: ReturnType<typeof definitionRoutes>, {
                             creatorAccountId: string;
                             period: string;
                             currency: string;
+                            moneyUnit?: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
                             grossMinor: number;
                             taxMinor: number;
                             feeMinor: number;
@@ -4092,6 +4097,11 @@ export declare function payoutRoutes(app: ReturnType<typeof definitionRoutes>, {
                                 creatorAccountId: string;
                                 period: string;
                                 currency: string;
+                                moneyUnit?: {
+                                    system: "stripe-api";
+                                    exponent: 0 | 2;
+                                    factsVersion: "stripe-money-v1";
+                                } | null;
                                 grossMinor: number;
                                 taxMinor: number;
                                 feeMinor: number;
@@ -4193,6 +4203,11 @@ export declare function payoutRoutes(app: ReturnType<typeof definitionRoutes>, {
                                     offerId: string;
                                     creatorAccountId: string;
                                     currency: string;
+                                    moneyUnit?: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    } | null;
                                     kind: "charge" | "dispute" | "dispute_reversal" | "refund" | "refund_reversal";
                                     created: string;
                                     grossMinor: number;
