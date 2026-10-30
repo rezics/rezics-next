@@ -80,6 +80,9 @@ Web's next ordinary 390/1280, eight-locale review receives
 `pages-commerce-offer--acquisition-pending` and `pages-commerce-offer--acquisition-pending-mobile`;
 retain `pages-commerce-offer--terms-changed` and `pages-commerce-offer--terms-changed-mobile` for comparison.
 Source fixtures are not payment, protected-use, native, visual or promoted-main approval.
+Independent source review found no blocking issue. The sole local verification,
+`bun run --cwd apps/web typecheck`, passed on the committed implementation with no type errors in 1,163 files.
+No tests, browser, Storybook, native or remote checks ran for this change.
 
 **Creator offers and exact money.** The [native money policy](../../services/kernel/src/commerce/README.md#native-money-policy-and-captured-prices)
 owns closed USD/EUR sale configuration, recorded units and nullable historical tax facts. The served
