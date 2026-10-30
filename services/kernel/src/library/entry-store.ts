@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import type { EntryShelfWrite, HeadSnapshot } from './shelf-contract.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import { newId } from '../route/route.ts';
 import copyDelete from './entry-store-copy-delete.sql';
@@ -115,6 +116,7 @@ export async function insertEntry(
   entry: EntryDraft,
   context: WriteContext,
   pin?: LibraryProfilePin,
+  shelf?: EntryShelfWrite & { head: HeadSnapshot },
 ): Promise<Entry> {
   const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
   if (acceptedPin === null) assertState(entry.state);
@@ -123,7 +125,14 @@ export async function insertEntry(
     account_id: entry.accountId,
     subject_id: entry.subjectId,
     requested_subject_id: entry.requestedSubjectId,
-    incarnation_id: newId(route),
+    incarnation_id: shelf?.incarnationId ?? newId(route),
+    type_id: shelf?.type?.typeId ?? null,
+    source_id: shelf?.type?.sourceId ?? null,
+    source_partition: shelf?.type?.stamp.partition ?? null,
+    source_epoch: shelf?.type?.stamp.epoch ?? null,
+    source_position: shelf?.type?.stamp.position.toString() ?? null,
+    last_changed_at: shelf?.head.lastChangedAt ?? null,
+    last_completed_at: shelf?.head.lastCompletedAt ?? null,
     state: entry.state,
     library_profile_pin: acceptedPin,
     ...write(context),

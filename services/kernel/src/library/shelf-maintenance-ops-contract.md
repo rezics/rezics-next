@@ -10,10 +10,11 @@ profile-pin repair also share the same gate through their live operational trans
 or derived-page authority.
 
 The allocator and source owners compose their already published `ShelfTypeKeys` and preparation observation ports
-through `derivedKeys` and `sources`. These are trusted service dependencies, never locator fields or permission
-booleans. This checkout has no delivered native allocator or identity-only source factory; a nonempty type phase
-keeps its exact native frontier pending until that real composition is available. Empty native owners still finish
-all phases and publish. No stub observer or allocator is called, no missing evidence becomes a type or ready claim. Backfill validation
+through `derivedKeys` and `sources`. The default composition uses `createShelfTypeKeys` and the native
+`observePreparationSource`/`observePreparationIdentity` adapter. These are trusted service dependencies, never locator
+fields or permission booleans. The allocator accepts only the runner’s live WeakMap page, reloading its exact
+transaction/run/epoch/build evidence before dictionary work. Missing source evidence keeps the exact frontier pending;
+it never becomes a type or readiness claim. Backfill validation
 rechecks each stored source/origin identity through released identity-only observations. A changed identity cancels
 its exact private reservation and refreshes that frontier; a changed validation input abandons the private count
 build and recounts into a fresh generation. Missing identity leaves the exact checkpoint pending.

@@ -11,6 +11,7 @@ export const LIBRARY_EVENTS = {
     { collectionId: id, deletionId: id, removed: Type.Integer({ minimum: 1, maximum: 64 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.library.type-preparation.changed.v1': Type.Object({ preparationId: id }, { additionalProperties: false }),
   'com.rezics.library.account-graph.purged.v1': Type.Object(
     {
       accountId: id,

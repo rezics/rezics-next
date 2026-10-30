@@ -29,6 +29,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
 import sessionLock from './session-lock.sql';
+import { enterShelfWrite } from './shelf-counter-owner.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
@@ -154,6 +155,7 @@ export function createSessionCommands(config: Dependencies) {
         valid(parseSessionCreate(parsed, descriptor(source.profile, parsed)));
         const route = requireRoute(owner.accountId);
         const write = { client: tx, route, accountId: owner.accountId };
+        await enterShelfWrite(write);
         await heads.ensure(write, source.subjectId);
         const time = authoritativeTimeValue(command.time);
         const session = await store.insertSession(
@@ -231,6 +233,7 @@ export function createSessionCommands(config: Dependencies) {
         const observed = await load(tx, owner, sessionId);
         const write = { client: tx, route, accountId: owner.accountId };
         // Every session writer orders the shared subject head before the session point lock.
+        await enterShelfWrite(write);
         await heads.ensure(write, observed.subjectId);
         await sessionLock.run(tx, { route, session_id: sessionId });
         const fact = await store.readSessionFact(tx, route, sessionId);

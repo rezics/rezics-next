@@ -1,4 +1,6 @@
 import { createBuiltinRuntime } from './builtin-runtime.ts';
+import { enterShelfWrite } from './shelf-counter-owner.ts';
+import { createShelfCounters } from './shelf-counters.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
@@ -56,7 +58,6 @@ import {
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
-import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
@@ -391,6 +392,8 @@ export function createCollectionCommands(config: {
         const attempt = accountAttempt(tx);
         const proof = await authorization.prepare!(attempt);
         if ((await authorization.authorize(tx, attempt, proof)) !== 'execute') throw new GrantDeniedError();
+        const shelfWrite = { client: tx, route, accountId: actor.accountId };
+        await enterShelfWrite(shelfWrite);
         const at = authoritativeTimeValue(command.time);
         const collectionDraft = { id, curatorAccountId: actor.accountId, title, description, visibility, ...selection };
         const context = { transactionId: command.transactionId, time: at };
@@ -399,6 +402,7 @@ export function createCollectionCommands(config: {
           await insertSavedCollection(tx, route, collectionDraft, prepared.admitted, context);
           value = await activeCollection(tx, route, id);
         } else value = await insertCollection(tx, route, collectionDraft, context);
+        await createShelfCounters().collection(shelfWrite, 1);
         provenance = { transactionId: command.transactionId, at };
         await initializeResourceGrants(tx, { resource, type: 'library.collection', creator: actor.accountId });
         await authorization.finalize!(tx, attempt, proof);
@@ -545,7 +549,7 @@ export function createCollectionCommands(config: {
       async (tx, command) => {
         const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
         if (current.curatorAccountId === null) throw new GrantDeniedError();
-        await enterShelfWrite(tx, { route, accountId: current.curatorAccountId });
+        await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
         const failure = failures.get(command.time);
         if (failure) throw failure;
         return body(
@@ -669,10 +673,15 @@ export function createCollectionCommands(config: {
       requestKey,
       { id, revision: expected },
       async (tx, command, route) => {
+        const ownerRow = await readCollection(tx, route, id);
+        if (!ownerRow?.curatorAccountId) throw notFound();
+        const shelfWrite = { client: tx, route, accountId: ownerRow.curatorAccountId };
+        await enterShelfWrite(shelfWrite);
         const current = await activeCollection(tx, route, id);
         if (current.revision !== expected) throw new ProblemError('conflict');
         const value = await tombstoneCollection(tx, route, id, command);
         if (!value) throw notFound();
+        await createShelfCounters().collection(shelfWrite, -1);
         return {
           value: { ...value, deletionId: command.transactionId },
           events: collectionEvents('deleted', id, listed(current)),
@@ -714,6 +723,7 @@ export function createCollectionCommands(config: {
         if (current.expired) throw new ProblemError('collection_restore_expired');
         const value = await restoreCollectionRow(tx, route, id, expected, input.deletionId, command);
         if (!value) throw new ProblemError('collection_restore_stale');
+        await createShelfCounters().collection({ client: tx, route, accountId: value.curatorAccountId! }, 1);
         return { value, events: collectionEvents('updated', id, value.visibility === 'public') };
       },
       undefined,

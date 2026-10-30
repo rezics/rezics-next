@@ -20,6 +20,8 @@ import type { CloudEvent } from '../events/log.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import type { ShelfTypeKeys, ShelfTypeResolution } from './shelf-contract.ts';
+import { createShelfTypeKeys, withShelfDerivedTypePreparation } from './shelf-type-keys.ts';
+import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
 import type { TypePreparationIdentity } from './type-preparation-contract.ts';
 import {
   EMPTY_SHELF_GENERATION,
@@ -305,13 +307,20 @@ async function derivedAuthority(tx: CommandTransaction, page: ShelfDerivedPage) 
   if (!proof.keys) unavailable(proof.owner);
   return { ...proof, keys: proof.keys };
 }
+/** Allocator integration reads actual same-tx/run/build authority; this never mints a page. */
+export async function readShelfDerivedAllocation(tx: CommandTransaction, page: ShelfDerivedPage) {
+  const proof = await derivedAuthority(tx, page);
+  return { owner: proof.owner, runId: proof.run.runId, epoch: BigInt(proof.run.epoch),
+    generationId: proof.run.buildGeneration! };
+}
 /** No public mint operation. Copied/serialized branded objects cannot reach the allocator. */
 export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPorts {
   return {
     async reserve(tx, page, source) {
       const proof = await derivedAuthority(tx, page);
       if (proof.source !== source) throw new TypeError('Shelf source is not bound to this live page');
-      const result = await proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType);
+      const result = await withShelfDerivedTypePreparation(tx, page, null,
+        () => proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType));
       if (!result.done) {
         const rows = await reservationBind.run(tx, {
           ...runArgs(proof.owner, page.runId),
@@ -337,7 +346,8 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
         }))
       )
         throw new TypeError('Reservation is not bound to this live shelf page');
-      return proof.keys.continue({ client: tx, ...proof.owner }, { reservationId });
+      return withShelfDerivedTypePreparation(tx, page, reservationId,
+        () => proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }));
     },
   };
 }
@@ -491,7 +501,14 @@ async function purgePage(
   return { complete: true, cursor: [] };
 }
 
-export function createShelfMaintenanceOps(deps: ShelfMaintenanceDependencies): ShelfMaintenanceOps {
+export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependencies): ShelfMaintenanceOps {
+  const deps: ShelfMaintenanceDependencies = { ...dependencies,
+    derivedKeys: dependencies.derivedKeys ?? createShelfTypeKeys(),
+    sources: dependencies.sources ?? {
+      observe: (id) => observePreparationSource(dependencies, id),
+      observeIdentity: (id) => observePreparationIdentity(dependencies, id),
+    },
+  };
   const { pool, clock, access } = deps;
   let work: Promise<WorkClient> | undefined;
   const workClient = () =>

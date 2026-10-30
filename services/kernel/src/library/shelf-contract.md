@@ -126,7 +126,7 @@ against the account route. No new private directory, holder hint or Library row 
 - `progress_session.last_changed_at timestamptz` becomes NOT NULL after backfill.
 - `progress_head(route, account_id, subject_id)` has nullable `last_changed_at` and `last_completed_at`. `ensure` creates
   and locks an empty head, even without any progress. Deleting an entry retains it.
-- `shelf_count(route, account_id, bucket, type_id)` has nonnegative integer `n`. The reserved nil UUID is the all-types
+- `shelf_count(route, account_id, generation_id, bucket, type_id)` has nonnegative integer `n`. The reserved nil UUID is the all-types
   rollup and the only Collection key; it is never allocated as a type. Buckets are the five states, `all`, `collections`.
   One entry in state s/type y contributes `(s,nil)`, `(s,y)`, `(all,nil)`, `(all,y)`. A Collection contributes
   `(collections,nil)`. Zero counts may remain. Dictionary identities remain even if counters are rebuilt or removed.
@@ -135,7 +135,7 @@ Twelve entry indexes: for each K in `activity_at`, `created_at`, `finished_at`, 
 plus state, plus type_id, plus both state/type_id before K. K is DESC and subject_id ASC; finished is DESC NULLS LAST.
 Backward scans serve the reverse direction. `entry_type_source(type_source_id,route,account_id,subject_id)` seeks holders.
 `progress_session_active(route,account_id,subject_id,last_changed_at DESC,session_id ASC) WHERE state='active'` serves
-one active-session probe. `shelf_count_types(route,account_id,type_id) WHERE bucket='all' AND type_id<>nil AND n>0`
+one active-session probe. `shelf_count_types(route,account_id,generation_id,type_id) WHERE bucket='all' AND type_id<>nil AND n>0`
 excludes historical zero counts before pagination. Existing old-list indexes remain.
 
 ### Exact private dictionary
@@ -406,3 +406,21 @@ tests; they name file and literal test title only. Their geometric scales belong
 - Bound: per-batch R O(batch), S O(batch) where per-owner transitions are needed, with separate O(input bytes) work.
   Whole runs are linear in relevant stored rows/bytes; no growing account is scanned in one transaction.
 - Growth check: `test/library/growth-shelf-writes.test.ts` — `shelf writes and projection pages stay bounded as private populations grow`.
+
+## Installed native writer ports
+
+`createShelfTypeKeys()` is exported by `shelf-type-keys.ts` (also its default export) and the installed contract module.
+Lookup is read-only. Allocation is admitted only through the producer's private same-command preparation closure;
+caller-constructed evidence cannot open it. `createTypePreparationPorts` and `createTypePreparationContinuation` provide
+the public closed helper declarations. The native maintenance runner composes the same dictionary core using its
+private WeakMap page and reloaded same-transaction run/build guard; no boolean fallback exists.
+
+`createShelfCounters()` is exported by `shelf-counters.ts` (also its default export) and the installed contract module.
+Entry creation/state/deletion/restoration and active Collection creation/deletion call these ports in the real command.
+The shared maintenance `enterShelfWrite` holds account share and the maintained generation gate before the
+`shelf_writer_owner` counter serialization point and native placement rows. Only the shared gate owns readiness,
+epoch and active generation. Empty initialization publishes the exact nil generation; existing entry/Collection/session history records a
+pending initial-backfill intent and defers all deltas until the separate maintenance runner publishes completeness.
+Each counter statement targets only the locked active generation and rolls back on missing negative, negative result,
+bigint overflow or values outside the response's safe integer range. Accepted profile states outside the five shelf
+tabs still contribute to both all-entry rollups; their stored state and profile pin are preserved.

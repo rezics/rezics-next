@@ -1,9 +1,11 @@
 # Source type preparation before entry creation
 
-This owns preparation of an exact private type key before an ordinary Library entry create. The ports in
-`type-preparation-contract.ts` throw, except for the pure binding helper. No migration, product implementation,
-HTTP schema, command composition or work registration is installed here. Product outcomes remain red until the real
-driver passes `specs/library-type-preparation-outcomes.test.ts`.
+This owns preparation of an exact private type key before an ordinary Library entry create.
+`createTypePreparationPorts` implements producer, metadata continuation, revalidation and native consumption;
+`createTypePreparationContinuation` exposes only continuation to the existing Library WorkModule without an Actor or
+Access substitute. Default source observation uses the delivered semantic identity reader and same-RR full reader.
+Entry creation consumes these ports; durable pending rows are recovered by the registered bounded metadata workflow.
+Native outcome, physical-cost and final maintenance activation proof remain with the integration checks.
 
 The owning rules are [exact identity, entry writes and source stamps](shelf-contract.md), the account/gate barriers in
 [shelf maintenance](../../../../docs/research/library-shelf-maintenance.md), and the adopted Recommendation in
@@ -30,11 +32,10 @@ and its one-hop redirect. A separately authorized and observed survivor must hav
 further redirect. Missing/nonvisible identity or missing resolved type fails closed, never supplying a default type or
 proof of access. Release all source clients before an account/gate command or wait.
 
-The default source adapter is the proposed `library/preparation-source.ts`: `observePreparationSource({pool, source}, id)`
-returns `{stamp, identity, type}`; `observePreparationIdentity({pool, source}, id)` returns `{stamp, identity}` only.
+The default source adapter is `library/preparation-source.ts`: `observePreparationSource({pool}, id)`
+returns `{stamp, identity, type}`; `observePreparationIdentity({pool}, id)` returns `{stamp, identity}` only.
 Both validate ownership and use caller-coherent RR reads. Final composition binds those dependencies to the structural
-`observe`/`observeIdentity` ports. This contract imports no unfinished adapter or semantic helper and claims no running
-integration. Preserve `observeShelfType` and its existing callers; its full observer is not a continuation port.
+`observe`/`observeIdentity` ports. The native adapter calls `readItemIdentityVersion` and `readPartition` on the same released source client. Preserve `observeShelfType` and its existing callers; its full observer is not a continuation port.
 
 Preserve each initial partition position in the original source binding/stamp for projection ordering. Positions are
 not item versions: new unrelated writes or partition position advancement alone must not cancel or restart a preparation.
@@ -153,6 +154,11 @@ receipt namespace. A transient 503 before user effect writes no successful entry
 ordinary entry, one revision and ordinary head/counter/activity/follow/event changes. Exact receipt replay returns its
 original HTTP status/body without mutation; normal update CAS is unchanged. READ filters never invoke preparation or
 allocate roots, reservations, evidence, receipts or events for an unknown type.
+
+The entry writer first enters its ordinary authorized command and checks its receipt. Only a fresh, valid create
+unwinds that checkout to request preparation; it then retries the same unchanged command input after identity-only
+revalidation. This also keeps replay after deletion from producing new metadata. The original request deadline covers
+both attempts and the intervening preparation; no owner connection remains checked out across preparation.
 
 ## Implementation ownership and acceptance
 

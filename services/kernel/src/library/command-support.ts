@@ -219,6 +219,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     accountId: string,
     request: TrustedAccountCommand,
     body: LibraryCommandBody<T>,
+    prepare?: CommandAuthorization['prepare'],
   ): Promise<CommandOutcome<T>> {
     const route = routeOf(accountId);
     if (route === null) throw new GrantDeniedError();
@@ -239,7 +240,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           key: request.stepKey,
           digest: digest(identity, request.kind, request.input),
         },
-        authorization: activeAccountAuthorization(accountId, route),
+        authorization: { ...activeAccountAuthorization(accountId, route), ...(prepare ? { prepare } : {}) },
       },
       async (tx, command) => {
         await enterShelfWrite(tx, { route, accountId });

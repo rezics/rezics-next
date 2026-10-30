@@ -1,4 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
+import { createShelfTypeKeys as nativeShelfTypeKeys } from './shelf-type-keys.ts';
+import { createShelfCounters as nativeShelfCounters } from './shelf-counters.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Partition } from '../partition/partition.ts';
 import type { CursorResult } from '../tokens/cursor.ts';
@@ -10,8 +12,9 @@ import type { ShelfMaintenanceCheckpoint, ShelfMaintenanceOps } from './shelf-ma
 
 /**
  * Types and independently implementable signatures for the private Library shelf reads. The prose contract is
- * `shelf-contract.md`. Read services and admission are concrete re-exports; uninstalled write/projection factories
- * below remain specification ports. Entry and progress storage layouts stay unchanged; shelf types are additive.
+ * `shelf-contract.md`. Read admission, native type-key and counter factories are concrete re-exports;
+ * remaining projection ports below throw until their owning implementation is composed.
+ * Entry and progress storage layouts stay unchanged; shelf types are additive.
  */
 
 type Client = Pick<PoolClient, 'query'>;
@@ -109,7 +112,7 @@ export type ShelfBucket = LegacyEntryState | 'all' | 'collections';
 export type ShelfCountRow = { accountId: string; bucket: ShelfBucket; typeId: string; count: number };
 
 /** What an entry contributes to the counters. */
-export type ShelfPlacement = { state: LegacyEntryState; typeId: string };
+export type ShelfPlacement = { state: EntryState; typeId: string };
 
 // --- Injected helpers -----------------------------------------------------------------------------------------
 
@@ -144,7 +147,7 @@ export interface ProgressActivity {
   touch(write: ShelfWrite, touch: ProgressTouch): Promise<void>;
 }
 
-/** Entry writer's call point for the counters. One statement; keys are sorted so the account's all-types row locks first. */
+/** Entry writer counter port. Native owner generation locks before sorted counter keys; all-types all locks first. */
 export interface ShelfCounters {
   /** Moves one entry between placements: `from` null on insert, `to` null on delete. */
   transition(write: ShelfWrite, from: ShelfPlacement | null, to: ShelfPlacement | null): Promise<void>;
@@ -220,12 +223,9 @@ export interface ShelfTypeKeys {
   continue(write: ShelfWrite, reservation: ShelfTypeReservation): Promise<ShelfTypeResolution>;
 }
 
+/** Native factory; caller admission remains tied to the live owner transaction. */
 export function createShelfTypeKeys(): ShelfTypeKeys {
-  return {
-    lookup: () => notImplemented('ShelfTypeKeys.lookup'),
-    reserve: () => notImplemented('ShelfTypeKeys.reserve'),
-    continue: () => notImplemented('ShelfTypeKeys.continue'),
-  };
+  return nativeShelfTypeKeys();
 }
 
 // --- Reader ---------------------------------------------------------------------------------------------------
@@ -328,10 +328,7 @@ export function createProgressActivity(): ProgressActivity {
 }
 
 export function createShelfCounters(): ShelfCounters {
-  return {
-    transition: () => notImplemented('ShelfCounters.transition'),
-    collection: () => notImplemented('ShelfCounters.collection'),
-  };
+  return nativeShelfCounters();
 }
 
 /** Maintenance only; the caller holds a writer fence across every batch and the final counter-generation swap. */

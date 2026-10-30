@@ -1,4 +1,4 @@
-/** Proposed native ports only. The binding helper is implemented; all effectful ports throw. */
+/** Native preparation ports; final work registration composes the bounded continuation runner. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { CommandTransaction } from '../command/command.ts';
@@ -131,14 +131,5 @@ export interface TypePreparationDependencies {
   readonly clock?: KernelClock;
 }
 
-export function createTypePreparationPorts(_dependencies: TypePreparationDependencies): TypePreparationPorts {
-  function missing(operation: string): never {
-    throw new Error(`Library type preparation is not implemented: ${operation}`);
-  }
-  return {
-    prepare: async () => missing('prepare'),
-    continue: async () => missing('continue'),
-    revalidate: async () => missing('revalidate'),
-    consume: async () => missing('consume'),
-  };
-}
+export type TypePreparationContinuationDependencies = Pick<TypePreparationDependencies, 'pool' | 'keys' | 'observeIdentity' | 'clock'>;
+export { createTypePreparationPorts, createTypePreparationContinuation } from './shelf-type-keys.ts';

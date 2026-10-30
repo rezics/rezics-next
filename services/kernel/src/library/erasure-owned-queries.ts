@@ -12,6 +12,7 @@ import purgePublishedLog from './erasure-owned-published-log.sql';
 import purgeCollectionPins from './erasure-owned-collection-pins.sql';
 import purgeBuiltinStateReferenceSource from './erasure-owned-builtin-state-reference-source.sql';
 import purgeBuiltinCollectionReference from './erasure-owned-builtin-collection-reference.sql';
+import purgeShelfWriterOwner from './erasure-owned-shelf-writer-owner.sql';
 import purgeShelfCount from './erasure-owned-shelf-count.sql';
 import purgeShelfTypeNode from './erasure-owned-shelf-type-node.sql';
 import purgeShelfTypeReservation from './erasure-owned-shelf-type-reservation.sql';
@@ -41,6 +42,7 @@ export const ownedQueries = {
   collection_pins: purgeCollectionPins,
   builtin_state_reference_source: purgeBuiltinStateReferenceSource,
   builtin_collection_reference: purgeBuiltinCollectionReference,
+  shelf_writer_owner: purgeShelfWriterOwner,
   shelf_count: purgeShelfCount,
   shelf_type_node: purgeShelfTypeNode,
   shelf_type_reservation: purgeShelfTypeReservation,
