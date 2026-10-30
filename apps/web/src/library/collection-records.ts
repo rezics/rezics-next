@@ -177,7 +177,11 @@ export async function updateCollectionRecord(
     );
     const outcome = fromKernel(result, input.collectionId);
     const revision = result.data?.collection.revision;
-    return outcome.ok && includeRevision && Number.isSafeInteger(revision) && revision! > 0
+    return outcome.ok &&
+      includeRevision &&
+      typeof revision === 'number' &&
+      Number.isSafeInteger(revision) &&
+      revision > 0
       ? { ...outcome, revision }
       : outcome;
   } catch (error) {

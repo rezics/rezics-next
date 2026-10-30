@@ -207,7 +207,7 @@ export const ExpiredUndo: Story = {
     const canvas = await openEditor(canvasElement);
     await userEvent.click(within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_remove() }));
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.editor_undo(), exact: true }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.editor_undo() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_restore_expired());
     await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
   },

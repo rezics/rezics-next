@@ -35,6 +35,12 @@ let mode: CollectionStoryMode = 'many';
 let finishPendingCreate: (() => void) | undefined;
 const clone = <T>(value: T): T => structuredClone(value);
 const members = clone(memberPage.members);
+const importedCover: NonNullable<CollectionPresentationData['cover']> = {
+  ...subject.summary.cover,
+  variants: subject.summary.cover.variants.flatMap((variant) =>
+    variant.format === 'avif' || variant.format === 'webp' ? [{ format: variant.format, width: variant.width }] : [],
+  ),
+};
 const baseCollection = clone(collection.collection);
 let editedCollection: typeof baseCollection & CollectionPresentationData & { coverMediaId?: string | null } =
   clone(baseCollection);
@@ -73,7 +79,7 @@ export function setCollectionStoryMode(next: CollectionStoryMode): void {
     editedCollection.presentationKind = 'schema:Book';
     editedCollection.presentationKindSource = 'owner';
     editedCollection.coverMediaId = subject.summary.cover.media;
-    editedCollection.cover = clone(subject.summary.cover);
+    editedCollection.cover = clone(importedCover);
     editedCollection.coverSource = 'owner';
   }
   removed.clear();
@@ -273,7 +279,7 @@ async function writeStory(request: Request) {
       editedCollection.presentationKind = body.presentationKind;
     if (body.coverMediaId === null || body.coverMediaId === subject.summary.cover.media) {
       editedCollection.coverMediaId = body.coverMediaId;
-      if (body.coverMediaId) editedCollection.cover = clone(subject.summary.cover);
+      if (body.coverMediaId) editedCollection.cover = clone(importedCover);
       else delete editedCollection.cover;
     }
     editedCollection.revision += 1;
