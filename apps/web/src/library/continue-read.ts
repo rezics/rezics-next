@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
 import { personalRead } from '../kernel/query';
+import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import type { ProgressLabelInput } from './progress-label';
@@ -10,6 +11,7 @@ import { nativeContinueSource } from './continue-adapter';
 import {
   CONTINUE_LIMIT,
   ContinueReadError,
+  continueFailure,
   type ContinueEntry,
   type ContinueProgress,
   type ContinueResult,
@@ -54,7 +56,9 @@ const readLibraryContinuePage = createServerFn({ method: 'GET' })
   });
 
 /** Shared private result for Library and its reachable Continue destination. */
-export const readContinueEntries = readLibraryContinuePage;
+export function readContinueEntries(input: { data: { cursor?: string } } = { data: {} }) {
+  return readLibraryContinuePage(input);
+}
 
 export function libraryContinueQuery(locale: string, cursor?: string) {
   return queryOptions({
@@ -81,7 +85,10 @@ export async function loadContinueState(
     const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...input });
     return result.state === 'loaded' ? { ...result, entries: result.entries.slice(0, CONTINUE_LIMIT) } : result;
   } catch (error) {
-    return error instanceof ContinueReadError ? error.failure : { state: 'unavailable' };
+    if (error instanceof ContinueReadError) return error.failure;
+    if (error instanceof MediaProblem)
+      return continueFailure(error.problem.status, new Headers(error.headers).get('retry-after'));
+    return { state: 'unavailable' };
   }
 }
 

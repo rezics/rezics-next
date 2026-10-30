@@ -144,7 +144,9 @@ export function useContinuePreparation(
   scope: string,
 ) {
   const attempts = useRef(0);
-  useEffect(() => { attempts.current = 0; }, [scope]);
+  useEffect(() => {
+    attempts.current = 0;
+  }, [scope]);
   useEffect(() => {
     if (!result) return;
     const delay = continueRetryDelay(result, attempts.current);
@@ -166,7 +168,11 @@ export function useContinueRefresh(initial: ContinueView | undefined, read: () =
   const refresh = useCallback(async () => {
     setSnapshot({ initial, scope, result: { state: 'unknown' }, busy: true });
     let result: ContinueResult;
-    try { result = await read(); } catch { result = { state: 'unavailable' }; }
+    try {
+      result = await read();
+    } catch {
+      result = { state: 'unavailable' };
+    }
     setSnapshot({ initial, scope, result, busy: false });
     return result;
   }, [initial, read, scope]);

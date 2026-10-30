@@ -15,6 +15,12 @@ if (!runtime.__rezicsStoryFetchInstalled) {
 
 const session = {
   signedIn: async () => ({ signedIn: true, subject: 'story-viewer', csrfToken: 'story-csrf-token' }),
+  credentialIfFresh: async () => ({
+    status: 'active' as const,
+    accessToken: 'recorded-story-token',
+    subject: 'story-viewer',
+    csrfToken: 'story-csrf-token',
+  }),
   credential: async () => ({
     status: 'active' as const,
     accessToken: 'recorded-story-token',

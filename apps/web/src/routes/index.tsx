@@ -31,7 +31,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const { data: loaded } = useSuspenseQuery(homePageQuery(getLocale()));
   const { state } = useSession();
-  const { data: viewerGroups } = useQuery({
+  const { data: viewerGroups, isError: exposureFailed } = useQuery({
     ...exposureQuery,
     enabled: personalRead.enabled && state === 'signed-in',
   });
@@ -41,10 +41,10 @@ function Home() {
     ...homeContinueQuery(getLocale(), () => readHomeContinue({ data: getLocale() })),
     enabled: personalRead.enabled && state === 'signed-in' && hasContinueList,
   });
-  useContinuePreparation(resume.data, resume.refetch, getLocale());
-  const continueState = resume.isError || (exposureReady && !hasContinueList)
+  const continueState = resume.isError || exposureFailed || (exposureReady && !hasContinueList)
     ? { state: 'unavailable' as const }
-    : resume.data ?? { state: 'unknown' as const };
+    : resume.isFetching ? { state: 'unknown' as const } : resume.data ?? { state: 'unknown' as const };
+  useContinuePreparation(state === 'signed-in' ? continueState : undefined, resume.refetch, getLocale());
   const nonce = useRouter().options.ssr?.nonce;
   if (loaded.kind === 'missing') return <PageHeading>{m.home_heading()}</PageHeading>;
   return (

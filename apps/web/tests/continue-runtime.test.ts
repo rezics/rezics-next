@@ -45,6 +45,9 @@ function makeEnv() {
     async credential() {
       return { status: 'active' as const, subject: 'reader', accessToken: 'fresh-token', csrfToken: csrf };
     },
+    async credentialIfFresh() {
+      return { status: 'active' as const, subject: 'reader', accessToken: 'fresh-token', csrfToken: csrf };
+    },
     async create() {},
     async takeLogin() {},
     async end() {},
