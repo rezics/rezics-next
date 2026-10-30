@@ -13,19 +13,42 @@ type Dependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
 type Context = Readonly<{ deadline: number }>;
 export type RecordPurgeReceivingTarget = Readonly<{ partition: number; receivingId: string }>;
 export type RecordPurgeNativeCustody = Readonly<{
-  prepareRecordPurgeReceivingHold(deps: Dependencies, authority: RecordPurgeAuthority,
-    target: RecordPurgeReceivingTarget, context: Context): Promise<RecordPurgeReceivingHold | null>;
-  readRecordPurgeReceivingHold(deps: Dependencies, reference: NativeRecordPurgeReference,
-    target: RecordPurgeReceivingTarget, context: Context): Promise<RecordPurgeReceivingHold | null>;
-  lockRecordPurgeReceivingHold(tx: CommandTransaction, hold: RecordPurgeReceivingHold): Promise<RecordPurgeSource | null>;
+  prepareRecordPurgeReceivingHold(
+    deps: Dependencies,
+    authority: RecordPurgeAuthority,
+    target: RecordPurgeReceivingTarget,
+    context: Context,
+  ): Promise<RecordPurgeReceivingHold | null>;
+  readRecordPurgeReceivingHold(
+    deps: Dependencies,
+    reference: NativeRecordPurgeReference,
+    target: RecordPurgeReceivingTarget,
+    context: Context,
+  ): Promise<RecordPurgeReceivingHold | null>;
+  lockRecordPurgeReceivingHold(
+    tx: CommandTransaction,
+    hold: RecordPurgeReceivingHold,
+  ): Promise<RecordPurgeSource | null>;
   recordRecordPurgeReceivingCompletion(tx: CommandTransaction, hold: RecordPurgeReceivingHold): void;
-  releaseRecordPurgeReceivingHold(deps: Dependencies, reference: NativeRecordPurgeReference,
-    target: RecordPurgeReceivingTarget, context: Context): Promise<Readonly<{ state: 'pending' | 'released' }>>;
-  sealRecordPurgeSourceInventory(deps: Dependencies, authority: RecordPurgeAuthority, context: Context): Promise<
-    Readonly<{ state: 'pending'; frontier: string | null; examined: number }> |
-    Readonly<{ state: 'sealed'; cut: RecordPurgeInventoryCut; examined: number }>>;
-  verifyRecordPurgeSourceInventory(tx: CommandTransaction, authority: RecordPurgeAuthority,
-    cut: RecordPurgeInventoryCut): Promise<boolean>;
+  releaseRecordPurgeReceivingHold(
+    deps: Dependencies,
+    reference: NativeRecordPurgeReference,
+    target: RecordPurgeReceivingTarget,
+    context: Context,
+  ): Promise<Readonly<{ state: 'pending' | 'released' }>>;
+  sealRecordPurgeSourceInventory(
+    deps: Dependencies,
+    authority: RecordPurgeAuthority,
+    context: Context,
+  ): Promise<
+    | Readonly<{ state: 'pending'; frontier: string | null; examined: number }>
+    | Readonly<{ state: 'sealed'; cut: RecordPurgeInventoryCut; examined: number }>
+  >;
+  verifyRecordPurgeSourceInventory(
+    tx: CommandTransaction,
+    authority: RecordPurgeAuthority,
+    cut: RecordPurgeInventoryCut,
+  ): Promise<boolean>;
 }>;
 
 /** Source's actual module is absent at this base. Never mint a hold/cut or treat that absence
@@ -35,5 +58,5 @@ export async function nativeRecordPurgeCustody(): Promise<RecordPurgeNativeCusto
   if (!(await Bun.file(new URL(path, import.meta.url)).exists())) return null;
   // The native module owns every handle and all durable validation. Import failures propagate;
   // only the genuinely absent dependency is unavailable, never an alternate implementation.
-  return await import(path) as RecordPurgeNativeCustody;
+  return (await import(path)) as RecordPurgeNativeCustody;
 }

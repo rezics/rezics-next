@@ -25,8 +25,9 @@ export async function enrollRecordHistorySourceSets(
   generation: string,
 ): Promise<string | null> {
   let producer;
-  try { producer = await nativeRecordSourceSetProducer(); }
-  catch (error) {
+  try {
+    producer = await nativeRecordSourceSetProducer();
+  } catch (error) {
     if (error instanceof RecordSourceSetUnavailableError) return error.code;
     throw error;
   }
@@ -48,8 +49,15 @@ export async function enrollRecordHistorySourceSets(
       `INSERT INTO core.record_history_purge_set
        (source_key,deletion_generation,source_partition,set_locator,set_revision,original_transaction,member_count)
        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-      [key, generation, set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision),
-        set.originalTransaction, set.memberCount],
+      [
+        key,
+        generation,
+        set.sourcePartition,
+        Buffer.from(set.locator),
+        Buffer.from(set.revision),
+        set.originalTransaction,
+        set.memberCount,
+      ],
     );
   }
   if (page.state !== 'pending')
@@ -64,7 +72,10 @@ export async function enrollRecordHistorySourceSets(
 /** Rotating retained sets keeps late receiving associations visible after native reverse
  * enumeration. Neither that enumeration's EOF nor this copy page seals receiving inventory. */
 export async function readRecordHistorySourceSetCopies(
-  tx: CommandTransaction, key: string, generation: string, limit: number,
+  tx: CommandTransaction,
+  key: string,
+  generation: string,
+  limit: number,
 ): Promise<RecordHistoryCopy[]> {
   if (limit < 1) return [];
   const sets = await tx.query(
@@ -76,8 +87,11 @@ export async function readRecordHistorySourceSetCopies(
   const row = sets.rows[0];
   if (!row) return [];
   const set: RecordSourceSetCommitment = {
-    sourcePartition: row.source_partition, locator: row.set_locator, revision: row.set_revision,
-    originalTransaction: row.original_transaction, memberCount: row.member_count,
+    sourcePartition: row.source_partition,
+    locator: row.set_locator,
+    revision: row.set_revision,
+    originalTransaction: row.original_transaction,
+    memberCount: row.member_count,
   };
   const copies = await tx.query<RecordHistoryCopy>(
     `SELECT partition_no,artifact_type,locator,gap FROM core.record_history_source_set_copy
@@ -95,7 +109,11 @@ export async function readRecordHistorySourceSetCopies(
 
 /** The receiving physical effect, association progress and native completion share this tx. */
 export async function recordRecordHistoryCopyProgress(
-  tx: CommandTransaction, key: string, copy: RecordHistoryCopy, pending: string | null, minimized = pending === null,
+  tx: CommandTransaction,
+  key: string,
+  copy: RecordHistoryCopy,
+  pending: string | null,
+  minimized = pending === null,
 ): Promise<void> {
   if (copy.sourceSet) {
     const set = copy.sourceSet;
@@ -103,8 +121,16 @@ export async function recordRecordHistoryCopyProgress(
       `UPDATE core.record_history_source_set_copy SET state=$7,gap=$8,next_attempt=now()+interval '30 seconds'
        WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3
          AND partition_no=$4 AND artifact_type=$5 AND locator=$6`,
-      [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), copy.partition_no,
-        copy.artifact_type, copy.locator, minimized ? 'minimized' : 'pending', pending],
+      [
+        set.sourcePartition,
+        Buffer.from(set.locator),
+        Buffer.from(set.revision),
+        copy.partition_no,
+        copy.artifact_type,
+        copy.locator,
+        minimized ? 'minimized' : 'pending',
+        pending,
+      ],
     );
   } else {
     await tx.query(

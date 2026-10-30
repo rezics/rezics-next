@@ -26,12 +26,22 @@ export function releaseCommandRecordSourceSet(tx: CommandTransaction): void {
 
 export function validateRecordSourceSetCommitment(set: RecordSourceSetCommitment): void {
   if (
-    !Number.isInteger(set.sourcePartition) || set.sourcePartition < 0 || set.sourcePartition > 4095 ||
-    !(set.locator instanceof Uint8Array) || set.locator.byteLength < 1 || set.locator.byteLength > 256 ||
-    !(set.revision instanceof Uint8Array) || set.revision.byteLength < 1 || set.revision.byteLength > 256 ||
+    Object.keys(set).length !== 5 ||
+    !Number.isInteger(set.sourcePartition) ||
+    set.sourcePartition < 0 ||
+    set.sourcePartition > 4095 ||
+    !(set.locator instanceof Uint8Array) ||
+    set.locator.byteLength < 1 ||
+    set.locator.byteLength > 256 ||
+    !(set.revision instanceof Uint8Array) ||
+    set.revision.byteLength < 1 ||
+    set.revision.byteLength > 256 ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(set.originalTransaction) ||
-    !Number.isInteger(set.memberCount) || set.memberCount < 1 || set.memberCount > MAX_NATIVE_RECORD_SOURCE_SET_MEMBERS
-  ) throw new TypeError('Invalid native record source set commitment');
+    !Number.isInteger(set.memberCount) ||
+    set.memberCount < 1 ||
+    set.memberCount > MAX_NATIVE_RECORD_SOURCE_SET_MEMBERS
+  )
+    throw new TypeError('Invalid native record source set commitment');
 }
 
 /** One native ownership locator per generated artifact. No member expansion enters History,
@@ -48,15 +58,24 @@ export async function recordCommandRecordSourceSetCopy(
   const set = await producer.readCommandRecordSourceSet(tx, sourceSet);
   if (!set) throw new TypeError('Native command record source set is unproven');
   validateRecordSourceSetCommitment(set);
-  if (set.sourcePartition !== command.partition || set.originalTransaction !== command.transactionId ||
-      !(await producer.verifyRecordSourceSet(tx, set)))
+  if (
+    set.sourcePartition !== command.partition ||
+    set.originalTransaction !== command.transactionId ||
+    !(await producer.verifyRecordSourceSet(tx, set))
+  )
     throw new TypeError('Native record source set belongs to another command or revision');
   await tx.query(
     `INSERT INTO core.record_history_source_set
      (source_partition,set_locator,set_revision,original_transaction,original_position,member_count,producer_version)
      VALUES($1,$2,$3,$4,$5,$6,1) ON CONFLICT DO NOTHING`,
-    [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), set.originalTransaction,
-      position?.toString() ?? null, set.memberCount],
+    [
+      set.sourcePartition,
+      Buffer.from(set.locator),
+      Buffer.from(set.revision),
+      set.originalTransaction,
+      position?.toString() ?? null,
+      set.memberCount,
+    ],
   );
   const original = await tx.query(
     `SELECT original_transaction,original_position,member_count FROM core.record_history_source_set
@@ -64,15 +83,27 @@ export async function recordCommandRecordSourceSetCopy(
     [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision)],
   );
   const row = original.rows[0];
-  if (!row || row.original_transaction !== command.transactionId || row.member_count !== set.memberCount ||
-      (row.original_position !== null && position !== null && BigInt(row.original_position) !== position))
+  if (
+    !row ||
+    row.original_transaction !== command.transactionId ||
+    row.member_count !== set.memberCount ||
+    (row.original_position !== null && position !== null && BigInt(row.original_position) !== position)
+  )
     throw new TypeError('Conflicting immutable native record source set');
   await tx.query(
     `INSERT INTO core.record_history_source_set_copy
      (source_partition,set_locator,set_revision,partition_no,artifact_type,locator,original_transaction,original_position,producer_version)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,1) ON CONFLICT DO NOTHING`,
-    [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), command.partition,
-      locator.artifactType, Buffer.from(encodeLocator(locator)), command.transactionId, position?.toString() ?? null],
+    [
+      set.sourcePartition,
+      Buffer.from(set.locator),
+      Buffer.from(set.revision),
+      command.partition,
+      locator.artifactType,
+      Buffer.from(encodeLocator(locator)),
+      command.transactionId,
+      position?.toString() ?? null,
+    ],
   );
   const accepted = await tx.query(
     `SELECT source_partition,set_locator,set_revision,original_transaction,original_position,producer_version
@@ -81,11 +112,15 @@ export async function recordCommandRecordSourceSetCopy(
     [command.partition, locator.artifactType, Buffer.from(encodeLocator(locator))],
   );
   const copy = accepted.rows[0];
-  if (!copy || copy.source_partition !== set.sourcePartition ||
-      !Buffer.from(copy.set_locator).equals(Buffer.from(set.locator)) ||
-      !Buffer.from(copy.set_revision).equals(Buffer.from(set.revision)) ||
-      copy.original_transaction !== command.transactionId || copy.producer_version !== 1 ||
-      (copy.original_position !== null && position !== null && BigInt(copy.original_position) !== position))
+  if (
+    !copy ||
+    copy.source_partition !== set.sourcePartition ||
+    !Buffer.from(copy.set_locator).equals(Buffer.from(set.locator)) ||
+    !Buffer.from(copy.set_revision).equals(Buffer.from(set.revision)) ||
+    copy.original_transaction !== command.transactionId ||
+    copy.producer_version !== 1 ||
+    (copy.original_position !== null && position !== null && BigInt(copy.original_position) !== position)
+  )
     throw new TypeError('Conflicting native record source set copy');
 }
 
@@ -98,8 +133,11 @@ export async function finalizeCommandRecordSourceSet(tx: CommandTransaction, pos
   const set = await producer.readCommandRecordSourceSet(tx, sets.get(tx)!);
   if (!set) throw new TypeError('Native command record source set is unproven');
   validateRecordSourceSetCommitment(set);
-  if (set.sourcePartition !== command.partition || set.originalTransaction !== command.transactionId ||
-      !(await producer.verifyRecordSourceSet(tx, set)))
+  if (
+    set.sourcePartition !== command.partition ||
+    set.originalTransaction !== command.transactionId ||
+    !(await producer.verifyRecordSourceSet(tx, set))
+  )
     throw new TypeError('Native record source set belongs to another command or revision');
   await tx.query(
     `UPDATE core.record_history_source_set SET original_position=$3

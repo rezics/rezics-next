@@ -19,10 +19,15 @@ export type RecordHistoryLocalJob = Readonly<{
 }>;
 
 export function sameRecordPurgeSource(a: RecordPurgeSource, b: RecordPurgeSource): boolean {
-  return a.disposition === b.disposition && a.sourceVersion === b.sourceVersion &&
-    a.deletionTransactionId === b.deletionTransactionId && a.deletionCommittedAt === b.deletionCommittedAt &&
-    a.purgeAfter === b.purgeAfter && a.reference.deletionGeneration === b.reference.deletionGeneration &&
-    purgeSourceKey(a) === purgeSourceKey(b);
+  return (
+    a.disposition === b.disposition &&
+    a.sourceVersion === b.sourceVersion &&
+    a.deletionTransactionId === b.deletionTransactionId &&
+    a.deletionCommittedAt === b.deletionCommittedAt &&
+    a.purgeAfter === b.purgeAfter &&
+    a.reference.deletionGeneration === b.reference.deletionGeneration &&
+    purgeSourceKey(a) === purgeSourceKey(b)
+  );
 }
 
 export function purgeSourceKey(source: RecordPurgeSource): string {
@@ -51,8 +56,12 @@ export async function lockRecordHistoryCopy(
       [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), job.partition_no, type, locator],
     );
     const row = found.rows[0];
-    return !!row && row.producer_version === 1 && row.original_position !== null &&
-      row.original_transaction === set.originalTransaction;
+    return (
+      !!row &&
+      row.producer_version === 1 &&
+      row.original_position !== null &&
+      row.original_transaction === set.originalTransaction
+    );
   }
   const found = await tx.query(
     `SELECT producer_version,original_position FROM core.record_history_locator

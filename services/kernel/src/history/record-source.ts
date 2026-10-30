@@ -55,7 +55,13 @@ export function declareCommandRecordSources(
   sources: readonly RecordHistorySourceReference[],
 ): void {
   currentCommand(tx);
-  if (declarations.has(tx) || hasCommandRecordSourceSet(tx) || serializing.has(tx) || sources.length < 1 || sources.length > MAX_COMMAND_RECORD_SOURCES)
+  if (
+    declarations.has(tx) ||
+    hasCommandRecordSourceSet(tx) ||
+    serializing.has(tx) ||
+    sources.length < 1 ||
+    sources.length > MAX_COMMAND_RECORD_SOURCES
+  )
     throw new TypeError('Invalid or repeated command record source declaration');
   const copied = sources.map((source) => Object.freeze({ ...source }));
   const keys = copied.map(recordHistorySourceKey);

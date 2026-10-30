@@ -10,10 +10,11 @@ export type RecordSourceSetIdentity = Readonly<{
   locator: Uint8Array;
   revision: Uint8Array;
 }>;
-export type RecordSourceSetCommitment = RecordSourceSetIdentity & Readonly<{
-  originalTransaction: string;
-  memberCount: number;
-}>;
+export type RecordSourceSetCommitment = RecordSourceSetIdentity &
+  Readonly<{
+    originalTransaction: string;
+    memberCount: number;
+  }>;
 
 /** Required native adapter surface, not an implementation or an issuer. The producer must
  * verify its immutable row, exact original transaction, complete membership and reverse index.
@@ -29,11 +30,13 @@ export type RecordSourceSetProducer = Readonly<{
     authority: RecordPurgeAuthority,
     frontier: Uint8Array | null,
     limit: number,
-  ): Promise<Readonly<{
-    sets: readonly RecordSourceSetCommitment[];
-    frontier: Uint8Array | null;
-    state: 'pending' | 'more' | 'sealed';
-  }>>;
+  ): Promise<
+    Readonly<{
+      sets: readonly RecordSourceSetCommitment[];
+      frontier: Uint8Array | null;
+      state: 'pending' | 'more' | 'sealed';
+    }>
+  >;
 }>;
 
 export class RecordSourceSetUnavailableError extends Error {
