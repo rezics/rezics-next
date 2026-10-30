@@ -5,6 +5,8 @@ import { withConnection } from '../database/pool.ts';
 import { readHistoryOwnerCoverage } from '../history/receiving.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
+// Load the same permanent kind bindings even when Stripe is unconfigured.
+import './erasure-history.ts';
 import account from './erasure-account.sql';
 import obligation from './erasure-obligation.sql';
 import proof from './erasure-proof.sql';

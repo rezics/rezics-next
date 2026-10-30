@@ -237,7 +237,7 @@ test('the default financial commerce terminal effect acknowledges only native no
       unitAmountMinor: 1200,
       taxCode: 'txcd_10302000',
     })
-  ).offer as { id: string };
+  ).offer as { id: string; revision: number };
   const buyer = personas.alice;
   const initialOffer = (
     await accepted(personas.staff, '/v1/offers', {
@@ -247,7 +247,7 @@ test('the default financial commerce terminal effect acknowledges only native no
       unitAmountMinor: 1200,
       taxCode: 'txcd_10302000',
     })
-  ).offer as { id: string };
+  ).offer as { id: string; revision: number };
   await accepted(personas.staff, '/v1/grants', {
     resource: { route: routeOf(initialOffer.id)!, id: initialOffer.id },
     subject: { kind: 'account', id: buyer.accountId },
@@ -255,13 +255,17 @@ test('the default financial commerce terminal effect acknowledges only native no
     valid: '(,)',
   });
   const typedBuyer = await kernel.testAccess.authenticate(buyer.bearer, { pool, deadline: Date.now() + 90_000 });
-  const first = (await accepted(buyer, '/v1/orders', { offerId: initialOffer.id })).order as { id: string };
+  const first = (
+    await accepted(buyer, '/v1/orders', { offerId: initialOffer.id, expectedOfferRevision: initialOffer.revision })
+  ).order as { id: string };
   const firstNative = (await commands.readOrderForAccount(buyer.accountId, first.id))!;
   provider.fake.pay(firstNative.checkoutSessionId!);
   await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
   await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
   const entitlement = (await entitlementRows(buyer.accountId))[0]!.entitlement_id as string;
-  const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id })).order as { id: string };
+  const second = (
+    await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })
+  ).order as { id: string };
   const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
   provider.fake.pay(secondNative.checkoutSessionId!);
   const held = provider.delayRead();
@@ -293,7 +297,9 @@ test('the default financial commerce terminal effect acknowledges only native no
       (row) => row !== null && row !== undefined,
     );
     await finish(buyerErasureId);
-    await expect(commands.createOrder(typedBuyer, offer.id, crypto.randomUUID())).rejects.toThrow(GrantDeniedError);
+    await expect(commands.createOrder(typedBuyer, offer.id, offer.revision, crypto.randomUUID())).rejects.toThrow(
+      GrantDeniedError,
+    );
     await erase(seller);
     await expect(commands.delistOffer(typedBuyer, initialOffer.id, crypto.randomUUID())).rejects.toThrow(
       GrantDeniedError,

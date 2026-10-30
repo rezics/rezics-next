@@ -31,6 +31,21 @@ prefix or a pending result as full coverage. Commerce command/outbox/durable pro
 operational-intent minimizers, historical foreign-role locators and aggregate routing proof remain incomplete.
 The generic late-item/frontier primitives do not supply that inventory or a Commerce artifact minimizer.
 
+Ordinary offer creation, revision and delisting and order creation now declare their exact receipt and event
+associations through `declareCommandHistory` before mutation. Permanent Commerce kind IDs 1000–1003 are loaded by
+both API callers and the default worker, including the unconfigured-Stripe path. Native captured creator and buyer
+roles are unioned with the actual Access attempt's principal/actor/acting-human/delegate evidence; no account is
+inferred from a subject or edition identifier. The shared sink owns local seal locks and atomic receipt/outbox
+locators, including foreign creator associations on buyer homes. No family coverage or downstream disposition is
+declared: these public graphs and their copied custody remain retained pending real consumer completion proof.
+
+Checkout creation/refresh/apply and royalty/payment reconciliation remain unconverted. The delivered shared sink
+rejects production after its local seal; applying it to those financial commands would prevent required late money
+reconciliation. Their conversion needs the shared producer's exact late-copy custody/settlement protocol and
+trusted service-identity evidence, rather than a reconstructed Actor or a local replacement. Existing named DBOS
+identities also cannot use `stageHistoryWork`'s UUID-only request port without the owning durable migration. This is
+an unavailable binding, not a claim that an unregistered financial copy is absent or minimized.
+
 Before enabling `none`, the actual producer must supply sealed complete role/custody coverage with exact physical
 store/owner locators. Effect-written locators must close their account-home fence before paging; each locator
 transaction locks that fence and records a late item after close, with no ordinary payload recreation. Resolution

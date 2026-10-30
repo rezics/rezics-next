@@ -38,6 +38,7 @@ import type { Access } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
+import { declareCommerceCommandHistory } from './erasure-history.ts';
 import type { CheckoutRequest, CheckoutSession, CheckoutSnapshot, Offer, Order } from './model.ts';
 import { assertCheckoutEvidence, assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
@@ -295,6 +296,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           (input.targetSubjectId !== undefined && input.targetSubjectId !== contentEdition.targetSubjectId)
         )
           throw new GrantDeniedError();
+        await declareCommerceCommandHistory(tx, 'commerce.offer.create', { creatorAccountId: seller.accountId });
         const offer = await store.insertOffer(
           tx,
           r,
@@ -336,6 +338,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       async (tx, command) => {
         const offer = await store.readOffer(tx, r, id);
         if (!offer) throw new GrantDeniedError();
+        await declareCommerceCommandHistory(tx, 'commerce.offer.delist', offer);
         const value = await store.setOfferState(tx, r, id, 'delisted', {
           transactionId: command.transactionId,
           time: authoritativeTimeValue(command.time),
@@ -367,6 +370,9 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         authorization,
       },
       async (tx, command) => {
+        const offer = await store.readOffer(tx, r, id);
+        if (!offer) throw new GrantDeniedError();
+        await declareCommerceCommandHistory(tx, 'commerce.offer.revise', offer);
         const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, {
           transactionId: command.transactionId,
           time: authoritativeTimeValue(command.time),
@@ -425,6 +431,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           offer.targetSubjectId !== contentEdition.targetSubjectId
         )
           throw new GrantDeniedError();
+        await declareCommerceCommandHistory(tx, 'commerce.order.create', {
+          creatorAccountId: offer.creatorAccountId,
+          buyerAccountId: buyer.accountId,
+        });
         const order = await store.insertOrder(
           tx,
           r,
