@@ -386,7 +386,23 @@ export function createApp({
           const colon = path.lastIndexOf(':');
           if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
             url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
-            const rewritten = new Request(url, request);
+            // Passing Request as init tees its stream and pulls before ingress admission.
+            // Forward the body itself so the bounded reader remains its only consumer.
+            const rewritten = new Request(url, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+              signal: request.signal,
+              cache: request.cache,
+              credentials: request.credentials,
+              integrity: request.integrity,
+              keepalive: request.keepalive,
+              mode: request.mode,
+              redirect: request.redirect,
+              referrer: request.referrer,
+              referrerPolicy: request.referrerPolicy,
+              duplex: 'half',
+            } as RequestInit);
             originalRequests.set(rewritten, request);
             return handle(rewritten);
           }

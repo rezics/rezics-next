@@ -349,3 +349,50 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
   const server = await Bun.file(new URL('../../src/server.ts', import.meta.url)).text();
   expect(server).toContain('maxRequestBodySize: MAX_BODY_LIMIT');
 });
+
+test('public custom-method rewriting preserves raw ownership, abort and transport attribution', async () => {
+  const abort = new AbortController();
+  const chunk = new Uint8Array([255, 0, 123]);
+  let reads = 0;
+  let peerRequest: Request | undefined;
+  let handledRequest: Request | undefined;
+  const app = createApp({
+    pool,
+    ratePeer(request) {
+      peerRequest = request;
+      return '192.0.2.1';
+    },
+  }).post('/raw-rewrite/$inspect', { detail: { ...detail, 'x-body-mode': 'raw' } }, ({ body, request }) => {
+    handledRequest = request;
+    expect(body).toBe(bodyBytes(request));
+    expect(bodyWireBytes(request)).toBe(chunk.byteLength);
+    return [...(body as Uint8Array)];
+  });
+  const request = new Request('http://kernel.test/raw-rewrite:inspect?probe=1', {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream' },
+    signal: abort.signal,
+    body: new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          reads++;
+          controller.enqueue(chunk);
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    ),
+    duplex: 'half',
+  } as RequestInit);
+  const response = await app.handle(request);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual([255, 0, 123]);
+  expect(reads).toBe(1);
+  expect(peerRequest).toBe(request);
+  expect(request.url).toBe('http://kernel.test/raw-rewrite:inspect?probe=1');
+  expect(handledRequest!.url).toBe('http://kernel.test/raw-rewrite/$inspect?probe=1');
+  chunk.fill(0);
+  expect([...bodyBytes(handledRequest!)!]).toEqual([255, 0, 123]);
+  abort.abort();
+  expect(handledRequest!.signal.aborted).toBe(true);
+});
