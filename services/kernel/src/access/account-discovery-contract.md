@@ -13,7 +13,9 @@ Search policy. Native Account production does not grant query admission or certi
   current handle claim. Each source call uses one database snapshot, including its foreign-key claim probes.
 - `readAccountDiscoverySummaries(deps, ids, options?)`, using actual Semantic `SummaryReaderDependencies`,
   Content `readAvatarSummaries` and Semantic `readSubjectSummaries`. Account revision and exact claim are
-  revalidated after foreign hydration; an intervening change withholds the whole candidate.
+  revalidated after foreign hydration; an intervening change withholds the whole candidate. Classified
+  unavailability of an optional owner omits that owner's avatar/verification fields. Unexpected errors and
+  the overall request deadline still fail the read, and native Account revalidation must succeed.
 - `readAccountDiscoveryWitness(pool, partitions)` returns native `{revision, claimRevision}` heads for up to
   100 partitions, including empty/excluded populations. Observe all participating Account AND claim partitions
   before query execution and compare after counts and hydration. Never use only returned IDs as the guard.

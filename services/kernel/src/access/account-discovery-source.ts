@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountKind } from './account-data.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { readSubjectSummaries, type SummaryReaderDependencies } from '../semantic/summaries.ts';
+import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
 
 // Search's adopted discovery.ts type home is not delivered in this checkout.
 // Keep the public return shapes inferred from the actual producer until that
@@ -206,6 +206,20 @@ function summary(row: AccountRow, handle: string | null, avatar: AvatarSummary |
     automated: row.operatorId !== null, operatorId: row.operatorId, avatar, verifiedAgent };
 }
 
+/** An unavailable optional owner cannot hide the otherwise eligible Account.
+ * Preserve unexpected failures and the caller's overall deadline; native Account
+ * revalidation below still has to succeed before any summary can be disclosed.
+ */
+async function optionalSummaries<T>(deadline: number, read: () => Promise<Map<string, T | null>>) {
+  try {
+    return await read();
+  } catch (error) {
+    requireAccessDeadline(deadline);
+    if (classifyUnavailability(error) === undefined) throw error;
+    return new Map<string, T | null>();
+  }
+}
+
 /** Current owner hydration; linked Subject disclosure is exclusively Semantic's. */
 export async function readAccountDiscoverySummaries(
   deps: SummaryReaderDependencies,
@@ -228,10 +242,12 @@ export async function readAccountDiscoverySummaries(
   // No Account transaction/custody remains open during foreign owner reads.
   const mediaIds = [...new Set(initial.flatMap(({ row }) => row.avatar ? [row.avatar] : []))];
   const subjectIds = [...new Set(initial.flatMap(({ row }) => row.agent ? [row.agent] : []))];
-  const avatars = mediaIds.length ? await withReadTransaction(deps.pool,
-    (client) => readAvatarSummaries(client, mediaIds)) : new Map<string, AvatarSummary | null>();
+  const avatars = mediaIds.length ? await optionalSummaries(deps.deadline,
+    () => withReadTransaction(deps.pool, (client) => readAvatarSummaries(client, mediaIds)))
+    : new Map<string, AvatarSummary | null>();
   requireAccessDeadline(deps.deadline);
-  const subjects = subjectIds.length ? await readSubjectSummaries(deps, subjectIds, options) : new Map();
+  const subjects = subjectIds.length ? await optionalSummaries(deps.deadline,
+    () => readSubjectSummaries(deps, subjectIds, options)) : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
   // Whole candidates, not just their handle, are withheld on a fence, rename or
   // profile revision during hydration. A bad claim alone leaves a handleless hit.
