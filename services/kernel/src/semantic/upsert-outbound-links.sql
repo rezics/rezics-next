@@ -27,14 +27,11 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
        AND c.target_revision >= old.target_revision)
 ), inactive AS (
   -- The stable-identity probe already found these exact tuples in this statement's snapshot.
-  -- A tuple-id array keeps deactivation independent of the holder's display-key history.
+  -- Join by tuple ID so retirement touches those rows directly, independent of display-key history.
   UPDATE semantic.outbound_link old SET present = false
-  FROM input
-  WHERE old.route = input.route AND old.ctid = ANY(ARRAY(
-    SELECT c.old_tid FROM checked c
-    WHERE c.was_present
-      AND (c.old_order_key, c.old_target_subject_id) IS DISTINCT FROM (c.order_key, c.target_subject_id)
-  ))
+  FROM checked c
+  WHERE old.ctid = c.old_tid AND c.was_present
+    AND (c.old_order_key, c.old_target_subject_id) IS DISTINCT FROM (c.order_key, c.target_subject_id)
   RETURNING old.subject_id
 ), written AS (
   INSERT INTO semantic.outbound_link (

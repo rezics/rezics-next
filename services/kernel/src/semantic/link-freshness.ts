@@ -37,7 +37,6 @@ export async function pendingMergeSources(pool: Pool, members: readonly string[]
   const pending: string[] = [];
   for (const [partition, group] of groups) {
     const found = await withReadTransaction(pool, async (client) => {
-      await client.query('SET LOCAL enable_seqscan = off');
       return readProjectionPending.run(client, { partition_no: partition, members: group });
     });
     pending.push(...found.map((row) => row.member_id));
@@ -56,7 +55,6 @@ export async function linksCaughtUp(
     const covered = await withConnection(pool, async (client) => {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
-        await client.query('SET LOCAL enable_seqscan = off');
         let caughtUp = true;
         for (const component of seen) {
           const row = await readLinkCheckpoint.run(client, {

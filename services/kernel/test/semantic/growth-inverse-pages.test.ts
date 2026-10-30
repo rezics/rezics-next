@@ -5,6 +5,12 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import { listSubjectLinks } from '../../src/semantic/links.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, measure, openGrowthDatabase, settle, type GrowthDatabase } from '../support/growth.ts';
+import {
+  captureUnforcedIndexes,
+  logGrowthSeeding,
+  seedSemanticPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-fixtures.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -48,11 +54,28 @@ afterAll(async () => {
 test("an inverse page examines the same rows whatever the anchor's in-degree", async () => {
   for (const middle of [false, true]) {
     let cursor: string | undefined;
+    const unrelated = unrelatedSemanticPopulation(`inverse-${middle ? 'middle' : 'first'}-unrelated`, route >>> 4);
+    const page = async () => {
+      const result = await listSubjectLinks(db.pool, ring, {
+        routeKey: new Uint8Array(32).fill(1),
+        subject: anchor,
+        property: middle ? 'schema:translator' : 'schema:author',
+        filter: arc,
+        limit: 25,
+        ...(cursor ? { cursor } : {}),
+        seen: [],
+        caughtUp: true,
+        authorize: async () => true,
+      });
+      expect(result.links).toHaveLength(25);
+      expect(result.next).not.toBeNull();
+    };
     const report = await checkGrowth(db, {
       name: `Inverse ${middle ? 'middle' : 'first'} page`,
       scales: [64, 512, 4096],
       bounds: { rows: 'constant' as const, blocks: 'constant' as const, statements: 'constant' as const },
       grow: async (_: GrowthDatabase, scale: number, previous: number) => {
+        await seedSemanticPopulation(db, unrelated.population, { from: previous * 500, to: scale * 500 });
         await db.admin.query(
           `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
           SELECT $1,$2,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:Book',lpad(n::text,8,'0'),filter_value
@@ -98,22 +121,17 @@ test("an inverse page examines the same rows whatever the anchor's in-degree", a
           );
         }
       },
-      operation: async () => {
-        const result = await listSubjectLinks(db.pool, ring, {
-          routeKey: new Uint8Array(32).fill(1),
-          subject: anchor,
-          property: middle ? 'schema:translator' : 'schema:author',
-          filter: arc,
-          limit: 25,
-          ...(cursor ? { cursor } : {}),
-          seen: [],
-          caughtUp: true,
-          authorize: async () => true,
+      prepare: async (_database, scale) => {
+        await captureUnforcedIndexes(db, `Inverse ${middle ? 'middle' : 'first'} page`, scale, page, {
+          'semantic.subject': 'subject_pkey',
+          'semantic.fact': 'fact_pkey',
+          'semantic.outbound_link': 'outbound_link_present',
+          'semantic.inbound_link': 'inbound_link_present',
         });
-        expect(result.links).toHaveLength(25);
-        expect(result.next).not.toBeNull();
       },
+      operation: page,
     });
+    logGrowthSeeding(report);
     expect(report.samples).toHaveLength(3);
     expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
   }

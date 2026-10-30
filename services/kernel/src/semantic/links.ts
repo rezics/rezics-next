@@ -1088,7 +1088,6 @@ export async function listSubjectLinks(
       if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
       const redirect = await redirectOf(client, options.subject);
       if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-      await client.query('SET LOCAL enable_seqscan = off');
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
       const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
@@ -1398,7 +1397,6 @@ export async function listSubjectRelations(
       if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
       const redirect = await redirectOf(client, options.subject);
       if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-      await client.query('SET LOCAL enable_seqscan = off');
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const scanLimit = options.type ? 4 * options.limit : options.limit;
       let rows = (await listOutboundLinksByProperty.run(client, {

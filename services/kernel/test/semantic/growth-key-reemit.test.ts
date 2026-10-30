@@ -4,7 +4,8 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { LINK_KEYS_CHANGED } from '../../src/semantic/events.ts';
+import { LINK_KEYS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { BATCH_ENVELOPES } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import {
   capture,
@@ -16,6 +17,12 @@ import {
   type Capture,
   type GrowthDatabase,
 } from '../support/growth.ts';
+import {
+  assertUnforcedIndexes,
+  logGrowthSeeding,
+  seedSemanticPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-fixtures.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -190,6 +197,7 @@ async function checkDirection(direction: 'holder' | 'target') {
   const holderRoute = direction === 'holder' ? route : mirrorRoute;
   const targetRoute = direction === 'holder' ? mirrorRoute : route;
   const relay = linkProjection(db.pool);
+  const unrelated = unrelatedSemanticPopulation(`${direction}-key-reemit-unrelated`, partitionOf(route));
   const partitions = [partitionOf(route), partitionOf(mirrorRoute)];
   const failures: string[] = [];
   for (const [id, at] of [
@@ -221,6 +229,8 @@ async function checkDirection(direction: 'holder' | 'target') {
   let revision = 1;
   let key = '0initial';
   let degree = 0;
+  let stagedIdentityPosition: bigint | undefined;
+  let identityChange = 0;
   async function verify(expected: number) {
     const result =
       direction === 'holder'
@@ -242,6 +252,61 @@ async function checkDirection(direction: 'holder' | 'target') {
           );
     expect(result.rows[0].n).toBe(expected);
   }
+  async function nativeSnapshot() {
+    const bounds = await db.admin.query<{ checkpoint: string; head: string }>(
+      `SELECT c.position::text AS checkpoint, p.position::text AS head
+       FROM core.consumer_checkpoint c JOIN core.partition p USING (partition_no)
+       WHERE c.partition_no=$1 AND c.consumer=$2`,
+      [partitionOf(route), relay.consumer],
+    );
+    expect(bounds.rows).toHaveLength(1);
+    const checkpoint = BigInt(bounds.rows[0]!.checkpoint);
+    const head = BigInt(bounds.rows[0]!.head);
+    const last = head < checkpoint + BigInt(BATCH_ENVELOPES) ? head : checkpoint + BigInt(BATCH_ENVELOPES);
+    const snapshot = await db.admin.query<{
+      position: string;
+      event_seq: number | null;
+      event_count: number | null;
+      type: string | null;
+      subject: string | null;
+      data: Record<string, unknown> | null;
+    }>(
+      `WITH positions AS (
+         SELECT generated.position
+         FROM generate_series($2::bigint + 1, $3::bigint) AS generated(position)
+       )
+       SELECT positions.position::text AS position, o.event_seq, o.event_count, o.type, o.subject, o.data
+       FROM positions LEFT JOIN core.outbox o
+         ON o.partition_no=$1 AND o.position=positions.position
+       ORDER BY positions.position, o.event_seq`,
+      [partitionOf(route), checkpoint.toString(), last.toString()],
+    );
+    const groups: { position: bigint; rows: typeof snapshot.rows }[] = [];
+    for (const row of snapshot.rows) {
+      const position = BigInt(row.position);
+      let group = groups.at(-1);
+      if (!group || group.position !== position) {
+        group = { position, rows: [] };
+        groups.push(group);
+      }
+      group.rows.push(row);
+    }
+    for (const group of groups) {
+      const count = group.rows[0]?.event_count;
+      expect(typeof count, `native event_count at ${group.position}`).toBe('number');
+      expect(group.rows).toHaveLength(count!);
+      expect(group.rows.map((row) => row.event_seq)).toEqual(Array.from({ length: count! }, (_, index) => index));
+    }
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups.at(-1)?.position).toBe(last);
+    return {
+      checkpoint,
+      head,
+      envelopes: groups.length,
+      position: last,
+      positions: groups.map((group) => group.position),
+    };
+  }
   async function catchUp() {
     try {
       await drain();
@@ -260,7 +325,7 @@ async function checkDirection(direction: 'holder' | 'target') {
     }
   }
   async function prepare(repetition: number) {
-    const label = `Changed ${direction} ${repetition}`;
+    const label = `Changed ${direction} ${repetition} ${++identityChange}`;
     const result = await updateSubjectIdentity(db.pool, {
       subject,
       labels: { en: label },
@@ -269,24 +334,91 @@ async function checkDirection(direction: 'holder' | 'target') {
     });
     revision = result.value.revision;
     key = `0${label.toLowerCase()}`;
+
+    // The writer appends the identity event and both key directions at one native position.
+    const identityGroup = await db.admin.query<{
+      event_seq: number;
+      event_count: number;
+      type: string;
+      subject: string | null;
+      data: Record<string, unknown>;
+    }>(
+      `SELECT event_seq, event_count, type, subject, data FROM core.outbox
+       WHERE partition_no=$1 AND position=$2 ORDER BY event_seq`,
+      [partitionOf(route), result.position.toString()],
+    );
+    expect(identityGroup.rows).toHaveLength(3);
+    expect(identityGroup.rows.map((row) => row.event_seq)).toEqual([0, 1, 2]);
+    expect(identityGroup.rows.map((row) => row.event_count)).toEqual([3, 3, 3]);
+    expect(identityGroup.rows.map((row) => row.type)).toEqual([SUBJECT_REVISED, LINK_KEYS_CHANGED, LINK_KEYS_CHANGED]);
+    expect(identityGroup.rows.map((row) => row.subject)).toEqual([subject, subject, subject]);
+    expect(identityGroup.rows[0]?.data).toMatchObject({ id: subject, revision, kind: 'identity' });
+    expect(identityGroup.rows.slice(1).map((row) => row.data.direction)).toEqual(['holder', 'target']);
+    expect(identityGroup.rows.slice(1).map((row) => row.data.cursor)).toEqual([[], []]);
+    stagedIdentityPosition = result.position;
+    console.info(
+      `Native ${direction} identity event group ${JSON.stringify({
+        identityPosition: result.position.toString(),
+        eventGroup: identityGroup.rows.map(({ event_seq, event_count, type, subject: eventSubject, data }) => ({
+          event_seq,
+          event_count,
+          type,
+          subject: eventSubject,
+          direction: data?.direction ?? null,
+          cursor: data?.cursor ?? null,
+        })),
+      })}`,
+    );
   }
   async function step() {
-    // linkProjection.run uses projectBatch's finite log snapshot. With catch-up complete and one fresh identity
-    // envelope, it executes one 100-link page (the other direction is empty). Continuations written by apply
-    // are beyond that snapshot and require another run. Calling startRelays would instead drain them all.
+    // Inspect the persisted consumer cursor and finite native log snapshot immediately before projectBatch reads it.
+    // This includes any already persisted continuation group and avoids treating a page as an envelope.
+    expect(stagedIdentityPosition).toBeDefined();
+    const snapshot = await nativeSnapshot();
+    expect(snapshot.positions).toContain(stagedIdentityPosition!);
+    console.info(
+      `Native ${direction} consumer snapshot ${JSON.stringify({
+        checkpoint: snapshot.checkpoint.toString(),
+        head: snapshot.head.toString(),
+        identityPosition: stagedIdentityPosition!.toString(),
+        envelopePositions: snapshot.positions.map((position) => position.toString()),
+      })}`,
+    );
     const result = await relay.run(partitionOf(route));
     expect(result.status).toBe('read');
-    if (result.status === 'read') expect(result.envelopes).toBe(1);
+    if (result.status === 'read') {
+      expect(result.envelopes).toBe(snapshot.envelopes);
+      expect(result.position).toBe(snapshot.position);
+    }
     await verify(100);
-    const pending = await db.admin.query(
-      `SELECT data FROM core.outbox
-      WHERE partition_no=$1 AND position>$2 AND type=$3 AND subject=$4`,
-      [partitionOf(route), result.status === 'read' ? String(result.position) : '0', LINK_KEYS_CHANGED, subject],
+    const pending = await db.admin.query<{ data: Record<string, unknown>; event_seq: number; event_count: number }>(
+      `SELECT data, event_seq, event_count FROM core.outbox
+      WHERE partition_no=$1 AND position>$2 AND type=$3 AND subject=$4 AND data->>'revision'=$5`,
+      [
+        partitionOf(route),
+        result.status === 'read' ? String(result.position) : '0',
+        LINK_KEYS_CHANGED,
+        subject,
+        String(revision),
+      ],
+    );
+    const postSnapshot = await db.admin.query<{ position: string }>(
+      'SELECT position::text AS position FROM core.partition WHERE partition_no=$1',
+      [partitionOf(route)],
+    );
+    console.info(
+      `Native ${direction} continuation boundary ${JSON.stringify({
+        snapshotPosition: result.status === 'read' ? result.position.toString() : null,
+        partitionHead: postSnapshot.rows[0]?.position ?? null,
+        pending: pending.rows,
+      })}`,
     );
     expect(pending.rows).toHaveLength(1);
-    expect(pending.rows[0].data.direction).toBe(direction);
-    expect(pending.rows[0].data.cursor).toHaveLength(5);
-    expect(pending.rows[0].data.revision).toBe(revision);
+    const continuation = pending.rows[0]!;
+    expect(continuation).toMatchObject({ event_seq: 0, event_count: 1 });
+    expect(continuation.data.direction).toBe(direction);
+    expect(continuation.data.cursor).toHaveLength(5);
+    expect(continuation.data.revision).toBe(revision);
   }
   await drain();
   try {
@@ -297,7 +429,7 @@ async function checkDirection(direction: 'holder' | 'target') {
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (_, scale, previous) => {
         if (previous) await catchUp();
-        await seed(
+        await seedSemanticPopulation(
           db,
           {
             name: `${direction}-key-degree`,
@@ -320,22 +452,32 @@ async function checkDirection(direction: 'holder' | 'target') {
           },
           { from: previous, to: scale },
         );
+        await seedSemanticPopulation(db, unrelated.population, { from: previous * 500, to: scale * 500 });
         // Two fixed filter rows per link fill a 100-row page even at degree 64. The qualifier fanout
         // stays two and the mirror partition count stays one at every scale; no small-page allowance.
         degree = scale;
-        await prepare(scale);
       },
-      warmup: async (_, scale, repetition) => {
+      // The separate plan capture in prepare consumes this scale's staged envelope and restores it for measurement.
+      warmup: async () => {},
+      prepare: async (_, scale, repetition) => {
+        // Each retry starts with fresh staged work because a discarded cold-backend operation may have consumed it.
+        await prepare(repetition);
         const measured = await capture(db, () => step());
         const cost = costOf(measured.capture);
-        console.log(`${direction} warmup ${scale}: ${JSON.stringify(cost)}`);
+        console.log(`${direction} preparation ${scale}: ${JSON.stringify(cost)}`);
+        assertUnforcedIndexes(`${direction} key re-emission`, scale, measured.capture, {
+          ...(direction === 'holder'
+            ? { 'semantic.outbound_link': 'outbound_link_maintenance' }
+            : { 'semantic.inbound_link': 'inbound_link_key_reemit' }),
+        });
         failures.push(...pageViolations(measured.capture, scale));
         await catchUp();
-        // Consumable work: the measured run gets a new label, revision and envelope after the warmup drained.
+        // Re-stage the action consumed by the captured probe for the measured operation.
         await prepare(repetition);
       },
       operation: async () => step(),
     });
+    logGrowthSeeding(report);
     console.log(`${direction} measured: ${JSON.stringify(report.samples)}`);
   } catch (error) {
     console.error(`${direction} growth failure:`, error);
@@ -355,6 +497,10 @@ async function checkDirection(direction: 'holder' | 'target') {
 test(
   'holder key re-emission processes a bounded page as its out-degree grows',
   () => checkDirection('holder'),
-  120_000,
+  3_600_000,
 );
-test('target key re-emission processes a bounded page as its in-degree grows', () => checkDirection('target'), 120_000);
+test(
+  'target key re-emission processes a bounded page as its in-degree grows',
+  () => checkDirection('target'),
+  3_600_000,
+);

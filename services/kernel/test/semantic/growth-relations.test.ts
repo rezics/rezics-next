@@ -15,6 +15,12 @@ import type { SessionComponent } from '../../src/tokens/session.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { listSubjectRelations } from '../../src/semantic/links.ts';
 import type { AccountActor } from '../../src/request/access.ts';
+import {
+  assertUnforcedIndexes,
+  logGrowthSeeding,
+  seedSemanticPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -89,6 +95,7 @@ let people: string[] = [];
 let peopleLabels: Fact[][] = [];
 let relationFacts: Fact[] = [];
 let population: Population;
+let unrelatedPopulation: Population;
 let historyPositionBase = 1_000;
 let growthHead: SessionComponent | undefined;
 
@@ -335,6 +342,7 @@ function historyPopulation(): Population {
 
 async function grow(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
   await growRelationHistory(database, historyPopulation(), scale, previous);
+  await seedSemanticPopulation(database, unrelatedPopulation, { from: previous * 500, to: scale * 500 });
   await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
   const sizes = await readRelationGrowthCardinalities(database);
   // The history preload must grow indexed neighbours without changing F or any matching filter degree.
@@ -395,7 +403,13 @@ function assertPlans(raw: Capture, scale: number): void {
   const begin = raw.statements.slice(0, initialStatement).findLastIndex((text) => /^BEGIN/.test(text));
   expect(begin).toBeGreaterThanOrEqual(0);
   expect(raw.statements.slice(begin, initialStatement).some((text) => text.includes('enable_seqscan'))).toBe(false);
-  expect(raw.statements.slice(initialStatement + 1).some((text) => text.includes('enable_seqscan'))).toBe(true);
+  assertUnforcedIndexes('A subject read and forward page', scale, raw, {
+    'semantic.subject': 'subject_pkey',
+    'semantic.revision': 'revision_pkey',
+    'semantic.fact': ['fact_terms', 'fact_label'],
+    'semantic.outbound_link': 'outbound_link_present',
+    'semantic.outbound_link_count': 'outbound_link_count_pkey',
+  });
   function requireIndex(plans: unknown, index: string, keys: string[], bound: number): void {
     const matching = nodes(plans).filter((node) => node['Index Name'] === index && Number(node['Actual Loops']) > 0);
     expect(matching.length).toBeGreaterThan(0);
@@ -516,6 +530,7 @@ async function setCheckpoint(database: GrowthDatabase, position: bigint): Promis
 async function initializeGrowthAnchor(label = 'Relation growth anchor'): Promise<void> {
   anchor = newId(BASE_ROUTE);
   anchorRoute = routeOf(anchor)!;
+  unrelatedPopulation = unrelatedSemanticPopulation(`growth-relations-${label}`, partitionOf(anchorRoute)).population;
   await createSubject(db.pool, {
     actor,
     target: { route: anchorRoute, id: anchor },
@@ -576,6 +591,7 @@ test('A subject read examines the same rows whatever the number of relations it 
     operation,
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+  logGrowthSeeding(report);
   mkdirSync(evidenceDirectory, { recursive: true });
   writeFileSync(
     `${evidenceDirectory}/report.json`,
@@ -700,11 +716,12 @@ test('a genuinely waiting link freshness probe has constant work per poll across
       expect(polls).toBeGreaterThan(0);
       expect(polls).toBeLessThanOrEqual(Math.ceil(waitBudget / FRESHNESS_POLL_MS) + 1);
       expect(cost.statements).toBe(polls);
-      expect(cost.controlStatements).toBe(3 * polls);
+      expect(cost.controlStatements).toBe(2 * polls);
       const countedWork = cost.statements + cost.controlStatements;
+      expect(countedWork).toBe(3 * polls);
       expect(countedWork % polls).toBe(0);
       statementsPerPoll.push(countedWork / polls);
     }
   }
-  expect(new Set(statementsPerPoll)).toEqual(new Set([4]));
+  expect(new Set(statementsPerPoll)).toEqual(new Set([3]));
 });

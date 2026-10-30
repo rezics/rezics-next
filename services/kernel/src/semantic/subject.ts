@@ -483,8 +483,6 @@ export async function readSubject(
       const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
       const relationCounts: Record<string, number> = {};
       const properties = release.types[rows[0]!.type]!.properties;
-      if (properties.some((property) => isRelationProperty(release, property)))
-        await client.query('SET LOCAL enable_seqscan = off');
       for (const property of properties) {
         if (!isRelationProperty(release, property)) {
           const view = await slotView(client, id, property, context, defaults);
