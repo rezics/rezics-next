@@ -1394,7 +1394,43 @@ its source command, whose SQL revalidates source owner, subject and captured hea
 Receiving acquire joins only its retained local handoff, local group, owner, attempt and slot; close remains atomic
 with first absence and takes no capacity. Receiving waiters are discovered from local handoff/attempt records.
 
-Default bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
+Default startup first calls `installIdentityEpochBootstrap(pool)` before DBOS resumes work. The one-time
+installation cut drains structural source and custody writers with SHARE ROW EXCLUSIVE relation locks in a
+READ COMMITTED transaction. Its post-lock scan includes subjects, orphan revision/backlink sources, redirects,
+members, uncaptured dirty heads and retained bootstrap work. It excludes a native birth only with actual
+revision-1/self-mapping/self-gate same-transaction custody. A SERIALIZABLE command snapshot minted before those
+locks would miss a drained writer; it is not used for this migration inspection. Under those same locks the
+installation enables the deferred birth guard and commits immutable `identity_epoch_installation_cut`
+custody. An interrupted cut rolls back atomically; a committed cut without native closure remains unavailable.
+
+A separately released home-0 command verifies the committed cut and installed guards and records the actual
+bootstrap native commit plus `identity_epoch_installation` closure. The exported result is
+`{mode: 'absence' | 'legacy', installationXid: string, native: IdentityNativeReceipt}`. It is custody, never an
+Access decision or a caller-supplied completion bit. Restart reuses this exact immutable proof; it does not
+repeat source inspection or reset topology. An absent/moved native receipt or invalid capture/birth guard
+cannot authorize absence readiness. A valid absence cut avoids the universe sweep without fabricating any
+source export, mapping, participant ACK, home closure or topology custody. Actual legacy input still requires
+all 4096 native source-home closures, including empty homes. Standalone native legacy migration fixtures retain
+their original full topology behavior. Default DBOS effects, all registered queues and Community's 30s settle
+remain unchanged.
+
+The installed deferred guard reads only the birth's source-local revision 1, self mapping, gate and native
+owner; all must commit in its actual transaction with a positive epoch and matching native transaction ID.
+There is no ordinary source-command lookup of a global installation row. A late legacy writer, including one
+whose transaction predates the cut, cannot commit an uncustodied birth. Subsequent dirty-source discovery uses
+released indexed pending-dirty points when no bootstrap-home row exists; it never scans the topology to make
+a point mapping ready. Existing exact-head source ACK, owner, receiving and dirty-frontier rules still apply.
+
+Installation retains exactly one home-0 cut row with its primary index and one home-0 closure row with its
+primary index and two local FK checks, plus the native commit/indexes and normal outbox/write-basis copies.
+Neither row contains an account role or duplicates receipt-ledger identity. The native closure command and
+restart verification, migration lock/scan/catalog work, deferred per-birth indexed checks and dirty discovery
+points/bytes are charged to the existing installation/G/A/R budgets; a constant hop grants no allowance.
+No 4096 home receipts are charged or claimed for absence. Legacy exports and ALL retained receiving/source/
+topology copies keep their existing budgets. Full erasure/shared-copy binding and all-nine Cost certification
+remain independent obligations.
+
+Default legacy bootstrap effects execute at most 100 existing bounded native steps. Initial closure uses eight released
 home pipelines and amortizes topology overhead: one local command selects at most 100 unclosed topology slots,
 advances the cursor; one later local command takes at most 100 independently released native closure receipts.
 Four initial native wake events seed bounded chains under the same worker registration. The first actual source ACK

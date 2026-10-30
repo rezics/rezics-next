@@ -143,15 +143,31 @@ their source command, including unnamed account-agent births. `stepIdentityEpoch
 bounded native source pages and installs mappings only when their source transaction receipt is taken into control
 custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
 
-Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; the default Semantic WorkModule batches at most
+Before DBOS launch, the default Semantic WorkModule calls `installIdentityEpochBootstrap(pool)`. A one-time
+READ COMMITTED installation transaction drains structural writers under relation locks, inspects all native
+source relations and installs a deferred source-local birth guard. Its immutable cut survives interruption;
+it is unavailable until a separate home-0 native command commits closure custody. The exported result contains
+`mode`, `installationXid` and the actual committed `native` receipt. Restart verifies that custody and all
+installed capture/birth guards without inspecting the source population again. Every subsequent birth must
+commit revision 1 and exact self mapping/gate custody in the same native transaction, including account-agent
+births. A legacy insert delayed across the cut cannot commit without that custody.
+
+With no historical source, valid absence custody closes installation without exporting empty homes or
+rewriting the legacy topology counter. Native birth mappings remain independently usable. Pending source keys
+discover new dirty homes through the existing indexed dirty frontier, even if no bootstrap-home row exists yet.
+Missing, interrupted or invalid installation custody never supplies absence readiness. Actual legacy sources
+retain the complete 4096-home topology obligation, including empty homes, before structural cutover.
+
+Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; legacy default Semantic work batches at most
 100 of those same bounded steps with eight released native-home pipelines during initial closure. One bounded
 topology-home frontier command advances the cursor; one later local command takes at most 100 separately
 verified native closure receipts. Four initial native wake events seed bounded chains. A batch continuation is
 committed by its first actual source ACK, so successive batches use the existing source-home queue partitions
 rather than serialize at topology home 0. The durable DBOS effect recovers a crash before that ACK. Dirty-home repair retains its
-individual scheduler steps. All 4096 homes, including empty
+individual scheduler steps. Legacy deployments' 4096 homes, including empty
 homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
-`readIdentityEpochCutover(client)` observes retained topology custody; point mappings do not wait for that sweep.
+`readIdentityEpochCutover(client)` observes valid native absence closure or retained full topology custody;
+point mappings do not wait for a legacy sweep.
 The shared relay refills completed worker slots from the current fixed-topology scan. Its normal concurrency and
 poll interval stay unchanged; initial all-home closure no longer waits one poll for each four native homes.
 

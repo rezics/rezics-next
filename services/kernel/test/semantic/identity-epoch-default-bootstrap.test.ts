@@ -4,13 +4,33 @@ import {
   communityFixtureRuntime,
   createCommunityDriver,
   queryCommunityDatabase,
+  restartWorker,
+  worker,
 } from '../community/community-driver.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { identityEpochDatabase, seedLegacyRoot } from './support/identity-epoch.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
 
 afterAll(closeCommunityDrivers);
+const deployments: Awaited<ReturnType<typeof identityEpochDatabase>>[] = [];
+afterAll(async () => {
+  for (const deployment of deployments) await deployment.close();
+});
 
-test('default Community worker closes every native home and then repairs real caller work within its default settle', async () => {
-  const driver = await createCommunityDriver();
+test('default Community worker closes every native legacy home and then repairs real caller work within its default settle', async () => {
+  const deployment = await identityEpochDatabase();
+  deployments.push(deployment);
+  const legacy = await seedLegacyRoot(deployment, 0x6e10);
+  expect((await deployment.admin.query('SELECT * FROM semantic.identity_epoch_installation')).rows).toEqual([]);
+  expect(
+    (await deployment.admin.query('SELECT * FROM semantic.identity_epoch_mapping WHERE original=$1', [legacy])).rows,
+  ).toEqual([]);
+  // The supported databaseUrl template is copied before the actual default worker is constructed.
+  // Close all staging connections first; the production installer sees the historical source itself.
+  await deployment.disconnect();
+  const driver = await createCommunityDriver({ databaseUrl: deployment.url });
   const fixture = await driver.provision();
   await driver.settle();
   const closure = await queryCommunityDatabase<{ homes: number; custody: number; remaining: number }>(`
@@ -27,6 +47,12 @@ test('default Community worker closes every native home and then repairs real ca
   `);
   expect(closure).toEqual([{ homes: 4096, custody: 4096, remaining: 0 }]);
   const { system } = communityFixtureRuntime();
+  expect((await installIdentityEpochBootstrap(system.database.pool)).mode).toBe('legacy');
+  expect(await identityEpochStore.readMapping(system.database.pool, legacy)).toMatchObject({
+    state: 'mapped',
+    original: legacy,
+    terminal: legacy,
+  });
   expect(await identityEpochStore.readMapping(system.database.pool, fixture.subject.id)).toMatchObject({
     state: 'mapped',
     original: fixture.subject.id,
@@ -79,3 +105,182 @@ test('fresh native default startup does not sweep empty homes when no legacy ide
     terminal: fixture.subject.id,
   });
 }, 180_000);
+
+test('committed native absence and birth custody survive default worker restart without a topology sweep', async () => {
+  const driver = await createCommunityDriver();
+  const { system } = communityFixtureRuntime();
+  const installed = await installIdentityEpochBootstrap(system.database.pool);
+  expect(installed.mode).toBe('absence');
+  expect(installed.native.position).toBeGreaterThan(0n);
+  const retained = await queryCommunityDatabase(`
+    SELECT i.*,c.epoch,c.position,k.installation_xid FROM semantic.identity_epoch_installation i
+    JOIN semantic.identity_epoch_installation_cut k USING(partition_no)
+    JOIN semantic.identity_epoch_native_commit c USING(partition_no,transaction_id)
+    JOIN core.partition p USING(partition_no)
+    WHERE c.purpose='bootstrap' AND c.epoch=p.epoch AND c.position<=p.position AND p.write_state='active'
+  `);
+  expect(retained).toHaveLength(1);
+  expect(retained[0]!.transaction_id).toBe(installed.native.transactionId);
+  const before = await queryCommunityDatabase(`
+    SELECT (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_home) homes,
+      (SELECT count(*)::integer FROM semantic.identity_epoch_topology_custody) custody
+  `);
+  await worker.stop();
+  await restartWorker();
+  await driver.settle();
+  expect(await installIdentityEpochBootstrap(system.database.pool)).toEqual(installed);
+  expect(
+    await queryCommunityDatabase(`
+    SELECT (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_home) homes,
+      (SELECT count(*)::integer FROM semantic.identity_epoch_topology_custody) custody
+  `),
+  ).toEqual(before);
+  expect(
+    (
+      await queryCommunityDatabase<{ name: string }>(
+        'SELECT name FROM dbos.queues WHERE name=ANY($1::text[]) ORDER BY name',
+        [Object.keys(WORK_QUEUES)],
+      )
+    ).map((row) => row.name),
+  ).toEqual(Object.keys(WORK_QUEUES).sort());
+  // Real caller-created revision 1 after restart must pass the installed deferred birth guard.
+  const fixture = await driver.provision();
+  await driver.settle();
+  const born = await queryCommunityDatabase(
+    `
+    SELECT m.epoch,m.recorded_transaction_id FROM semantic.revision r
+    JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(r.route,r.subject_id)
+    JOIN semantic.identity_epoch_home_gate g ON (g.route,g.destination,g.original)=(r.route,r.subject_id,r.subject_id)
+    WHERE r.subject_id=$1 AND r.revision=1 AND r.kind='create' AND m.origin='creation'
+      AND m.terminal=r.subject_id AND g.terminal=r.subject_id AND m.epoch=g.epoch
+      AND r.recorded_transaction_id=m.recorded_transaction_id AND r.recorded_transaction_id=g.recorded_transaction_id
+      AND r.xmin=m.xmin AND r.xmin=g.xmin
+  `,
+    [fixture.subject.id],
+  );
+  expect(born).toHaveLength(1);
+  expect(BigInt(born[0]!.epoch)).toBeGreaterThan(0n);
+}, 180_000);
+
+test('missing and rolled-back installation never assert native absence readiness', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    const tx = await db.admin.connect();
+    try {
+      await tx.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      expect((await tx.query('SELECT semantic.prepare_identity_epoch_installation() mode')).rows).toEqual([
+        { mode: 'absence' },
+      ]);
+      expect((await tx.query('SELECT * FROM semantic.identity_epoch_installation_cut')).rowCount).toBe(1);
+      // Neither an uncommitted cut nor the trigger DDL is a native closure receipt.
+      expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+      await tx.query('ROLLBACK');
+    } finally {
+      await tx.query('ROLLBACK');
+      tx.release();
+    }
+    expect((await db.admin.query('SELECT * FROM semantic.identity_epoch_installation_cut')).rows).toEqual([]);
+    expect((await db.admin.query('SELECT semantic.identity_epoch_installation_guards() valid')).rows).toEqual([
+      { valid: false },
+    ]);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    expect((await installIdentityEpochBootstrap(db.pool)).mode).toBe('absence');
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
+  } finally {
+    await db.close();
+  }
+}, 30_000);
+
+test('interrupted installation retains the guarded cut and recovers only through actual native closure', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    // This is the production migration operation. Stop after its commit, before the native command.
+    await db.admin.query('SELECT semantic.prepare_identity_epoch_installation()');
+    const cut = (await db.admin.query('SELECT * FROM semantic.identity_epoch_installation_cut')).rows;
+    expect(cut).toHaveLength(1);
+    expect((await db.admin.query('SELECT * FROM semantic.identity_epoch_installation')).rows).toEqual([]);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    await expect(seedLegacyRoot(db, 0x6e20)).rejects.toThrow('identity_epoch_birth_custody_required');
+    const proof = await installIdentityEpochBootstrap(db.pool);
+    expect(proof.mode).toBe('absence');
+    expect(proof.installationXid).toBe(cut[0]!.installation_xid);
+    expect((await db.admin.query('SELECT * FROM semantic.identity_epoch_installation_cut')).rows).toEqual(cut);
+    expect(await installIdentityEpochBootstrap(db.pool)).toEqual(proof);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
+  } finally {
+    await db.close();
+  }
+}, 30_000);
+
+test('disabled source capture invalidates the native absence proof rather than falling back to readiness', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    const proof = await installIdentityEpochBootstrap(db.pool);
+    await db.admin.query('ALTER TABLE semantic.redirect DISABLE TRIGGER identity_epoch_capture_redirect');
+    expect((await db.admin.query('SELECT valid FROM semantic.read_identity_epoch_installation()')).rows).toEqual([
+      { valid: false },
+    ]);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    await expect(installIdentityEpochBootstrap(db.pool)).rejects.toThrow('identity_epoch_installation_unavailable');
+    await db.admin.query('ALTER TABLE semantic.redirect ENABLE TRIGGER identity_epoch_capture_redirect');
+    expect(await installIdentityEpochBootstrap(db.pool)).toEqual(proof);
+  } finally {
+    await db.close();
+  }
+}, 30_000);
+
+test('installation drains an in-flight historical source writer and selects full legacy closure', async () => {
+  const db = await identityEpochDatabase();
+  const writer = await db.admin.connect();
+  let installing: ReturnType<typeof installIdentityEpochBootstrap> | undefined;
+  try {
+    await writer.query('BEGIN');
+    const legacy = await seedLegacyRoot({ admin: writer }, 0x6e30);
+    installing = installIdentityEpochBootstrap(db.pool);
+    // Observe the real relation-lock wait; release only this test's writer once the cut is waiting.
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      const waiting = await db.admin.query(`SELECT 1 FROM pg_stat_activity
+        WHERE datname=current_database() AND wait_event_type='Lock'
+          AND query LIKE '%prepare_identity_epoch_installation%' AND pid<>pg_backend_pid()`);
+      if (waiting.rowCount) break;
+      if (Date.now() >= deadline) throw new Error('Native installation did not wait for the source writer');
+      await Bun.sleep(10);
+    }
+    await writer.query('COMMIT');
+    const proof = await installing;
+    expect(proof.mode).toBe('legacy');
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'blocked' });
+    expect(
+      (await db.admin.query('SELECT original FROM semantic.identity_epoch_mapping WHERE original=$1', [legacy])).rows,
+    ).toEqual([]);
+    expect((await db.admin.query('SELECT remaining FROM semantic.identity_epoch_bootstrap_topology')).rows).toEqual([
+      { remaining: 4096 },
+    ]);
+  } finally {
+    await writer.query('ROLLBACK');
+    writer.release();
+    await installing?.catch(() => {});
+    await db.close();
+  }
+}, 30_000);
+
+test('a transaction predating the absence cut cannot commit a late historical birth', async () => {
+  const db = await identityEpochDatabase();
+  const writer = await db.admin.connect();
+  try {
+    await writer.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await writer.query('SELECT pg_current_snapshot()');
+    const proof = await installIdentityEpochBootstrap(db.pool);
+    await seedLegacyRoot({ admin: writer }, 0x6e40);
+    await expect(writer.query('COMMIT')).rejects.toThrow('identity_epoch_birth_custody_required');
+    expect((await db.admin.query('SELECT * FROM semantic.subject')).rows).toEqual([]);
+    expect((await db.admin.query('SELECT * FROM semantic.identity_epoch_dirty')).rows).toEqual([]);
+    expect(await installIdentityEpochBootstrap(db.pool)).toEqual(proof);
+  } finally {
+    await writer.query('ROLLBACK');
+    writer.release();
+    await db.close();
+  }
+}, 30_000);

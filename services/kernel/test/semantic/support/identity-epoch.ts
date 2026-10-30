@@ -10,6 +10,7 @@ import { createSubject } from '../../../src/semantic/subject.ts';
 import { mergeSubjects } from '../../../src/semantic/merges.ts';
 import type { IdentityEpochStore, IdentityEpochStep } from '../../../src/semantic/identity-epoch-contract.ts';
 import { createRealAccess } from '../real-access.ts';
+import { dropTestDatabase } from '../../support/drop-test-database.ts';
 
 export const release = { digest: bundledDigest, release: bundledRelease };
 export const globalResource = { route: 0, id: GLOBAL_CONTEXT };
@@ -103,7 +104,7 @@ export async function epochFixture() {
 export type EpochFixture = Awaited<ReturnType<typeof epochFixture>>;
 
 /** A historical revision-1 root predating native creation mapping hooks. */
-export async function seedLegacyRoot(f: EpochFixture, route: number) {
+export async function seedLegacyRoot(f: { admin: Pick<pg.Pool, 'query'> }, route: number) {
   const id = newId(route);
   const transactionId = randomUUID();
   await f.admin.query(
@@ -115,6 +116,37 @@ export async function seedLegacyRoot(f: EpochFixture, route: number) {
     [route, id, transactionId, bundledDigest],
   );
   return id;
+}
+
+/** A private migrated deployment, optionally used as the Community driver's supported template URL.
+ * Historical sources can be staged before native installation, without editing that driver's lifecycle.
+ */
+export async function identityEpochDatabase() {
+  const source = new URL(process.env.DATABASE_URL!);
+  const template = decodeURIComponent(source.pathname.slice(1));
+  const name = `identity_install_${randomUUID().replaceAll('-', '')}`;
+  source.pathname = '/postgres';
+  const owner = new pg.Pool({ connectionString: source.href, max: 1 });
+  await owner.query(`CREATE DATABASE "${name}" TEMPLATE "${template.replaceAll('"', '""')}"`);
+  source.pathname = `/${name}`;
+  const pool = createPool(source.href);
+  const admin = new pg.Pool({ connectionString: source.href, max: 2 });
+  let disconnected: Promise<void> | undefined;
+  const disconnect = () => (disconnected ??= Promise.all([pool.end(), admin.end()]).then(() => {}));
+  return {
+    url: source.href,
+    pool,
+    admin,
+    disconnect,
+    async close() {
+      await disconnect();
+      try {
+        await dropTestDatabase(owner, name);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
 }
 
 /** Native migrated legacy population for admission/bootstrap, not a completion certificate.

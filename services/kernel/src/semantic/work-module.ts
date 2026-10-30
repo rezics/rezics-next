@@ -13,11 +13,14 @@ import {
 import { stepIdentityEpochAdmission, wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
 import { runCommand } from '../command/command.ts';
 import { linkProjection } from './links.ts';
+import { installIdentityEpochBootstrap } from './identity-epoch-bootstrap-install.ts';
 
 /** Native relation projection shares the worker pool and registered service lifecycle. */
 export const semanticWorkModule: WorkModule = {
   name: 'semantic',
-  register(context) {
+  async register(context) {
+    // Establish the writer cut before DBOS can resume an old bootstrap delivery.
+    await installIdentityEpochBootstrap(context.pool);
     context.addEffects([
       {
         name: 'identity_epoch_admission_wake',
