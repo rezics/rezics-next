@@ -724,6 +724,56 @@ Each server render and browser session has its own query cache. Public reads sta
   home story's recorded sessions cover each case. The catalogue rows of the home page are `CoverRow`s of `CoverCard`s
   at every width, with the type under the title.
 
+### Global board directory (`/<locale>/boards`)
+
+Choose Discussions or Reviews, then Open a returned board to reach its existing reading and creation flow.
+The URL retains `purpose` and the opaque `cursor`; changing purpose starts its first page. Listing supplies a
+destination, never permission to create a discussion or review. Creation refusals remain in the existing board flow.
+There is no automatic board creation, Realm-board substitution or additional search field.
+
+`src/threads/board-directory.ts` derives rows from the existing native BoardView. The directory contract is
+`GET /v1/boards?purpose=discussion|reviews&cursor&limit` returning `{ boards, next }`, with limit 1–100, default 20.
+`unavailableBoardDirectoryAdapter` is the isolated default pending delivery of the native API/client. It returns
+unavailable, with Retry, rather than an empty or synthetic directory. Native delivery must replace this one default
+through `board-directory-read.ts`, deduplicate default wiring, and retain the current request's credential and
+existing deadline context. No generated method is guessed here.
+
+The shared `BoardDirectory` region renders initial loading, terminal empty, sparse empty with Next, unavailable
+with Retry, and native denied/closed states separately. Requests hide prior rows while pending or refused; Retry
+retains the query and does not touch drafts. An empty page with continuation remains traversable. Previous remembers
+only one predecessor reached through a returned Next cursor; direct cursor links do not invent a predecessor.
+Only returned current Global names, purpose and visibility appear. There are no counts, snippets or per-row reads.
+
+- **Touches:** One requested directory page per load, retry or explicit continuation; zero board-detail requests.
+  The temporary unavailable adapter performs zero native requests.
+- **Bound:** Client work and response storage O(limit), one remembered predecessor, no automatic refill. The native
+  producer owns the signed range and current disclosure neighborhood: at most 4 × limit candidates,
+  O(limit × log R), R = N + U × t + M. The interface adds no search or permission authority.
+- **Focused outcomes:** `tests/board-directory.test.ts` covers purpose/cursor to a real recorded board destination
+  and unavailable/sparse/current-refusal disclosure. Native bound/privacy proof remains with the existing suites.
+
+Patterns/Community/Board Directory has attached docs and state/interaction stories. Pages/Community/Board Directory
+reuses that region inside AppShell. Review the same IDs with phone390/desktop1280 viewport and locale/theme globals:
+
+| State/action | Pattern story ID | Page story ID |
+| --- | --- | --- |
+| Current | `patterns-community-board-directory--current` | `pages-community-board-directory--current` |
+| Select purpose | `patterns-community-board-directory--select-purpose` | `pages-community-board-directory--select-purpose` |
+| Continue/Previous | `patterns-community-board-directory--continue` | `pages-community-board-directory--continue` |
+| Open board | `patterns-community-board-directory--open` | `pages-community-board-directory--open` |
+| Retry | `patterns-community-board-directory--retry` | `pages-community-board-directory--retry` |
+| Loading | `patterns-community-board-directory--loading` | `pages-community-board-directory--loading` |
+| Empty | `patterns-community-board-directory--empty` | `pages-community-board-directory--empty` |
+| Sparse page | `patterns-community-board-directory--sparse` | `pages-community-board-directory--sparse` |
+| Unavailable | `patterns-community-board-directory--unavailable` | `pages-community-board-directory--unavailable` |
+| Denied | `patterns-community-board-directory--denied` | `pages-community-board-directory--denied` |
+| Closed | `patterns-community-board-directory--closed` | `pages-community-board-directory--closed` |
+
+Story responses are isolated presentation fixtures, using the committed Global discussion-board recording for its
+actual destination. They are not native acceptance or screenshot review. The runtime route remains explicitly
+unavailable until producer wiring lands. Navigation and subject-review owners can link to `/boards?purpose=reviews`
+or `/boards?purpose=discussion` without adding a board-choice implementation.
+
 ### Board page (`/<locale>/boards/<id>`)
 
 - `BoardThreads` in `src/threads/board-continuation/` renders one returned page. An empty page with `next` says
