@@ -11,6 +11,8 @@ WITH input AS NOT MATERIALIZED (
          NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id,
          :assignment_route::nullable(integer) AS assignment_route,
          NULLIF(:assignment_request_id::nullable(text), '')::uuid AS assignment_request_id,
+         NULLIF(:authenticated_resource_id::nullable(text), '')::uuid AS authenticated_resource_id,
+         :authenticated_buyer_ids::nullable(uuid[]) AS authenticated_buyer_ids,
          :anonymous::boolean AS anonymous, COALESCE(:own_account::nullable(boolean), false) AS own_account, COALESCE(:floor::nullable(boolean), false) AS floor, :deadline::timestamptz AS deadline
 ), branches AS MATERIALIZED (
   SELECT false AS explicit, false AS public
@@ -56,7 +58,11 @@ WITH input AS NOT MATERIALIZED (
   FROM input i CROSS JOIN authority t
 ), probes AS MATERIALIZED (
   SELECT target.route, target.resource_id, b.explicit, b.public, k.*,
-    ((i.own_account AND target.resource_id = i.actor_id AND k.subject_kind = 'identity'
+    ((NOT b.explicit AND NOT b.public AND NOT i.batch AND NOT i.anonymous
+       AND cardinality(i.resource_ids) = 1 AND i.action = 'edition:read' AND target.route = i.route
+       AND target.resource_id = i.authenticated_resource_id
+       AND k.subject_kind = 'identity' AND k.subject_role = '' AND k.subject_id = k.account_id
+       AND k.account_id = ANY(i.authenticated_buyer_ids)) OR (i.own_account AND target.resource_id = i.actor_id AND k.subject_kind = 'identity'
        AND k.subject_id = i.actor_id AND k.subject_role = '') OR (CASE WHEN target.route = 0 AND target.resource_id = '00000000-0000-8000-8000-000000000000'::uuid
       THEN (SELECT count(*) FROM (
         SELECT g.valid FROM access.resource_grant g

@@ -18,6 +18,13 @@ export { applyAccountAgentEffect, createAccountAgentEffect } from './account-age
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { throwEvidenceFailure } from './evidence.ts';
 export { AccessUnavailableError } from './unavailable.ts';
+export {
+  createContentEditionBuyerFact,
+  type ContentEditionBenefit,
+  type ContentEditionBuyerFact,
+  type ContentEditionBuyerFactInput,
+  type ContentEditionBuyerFactReader,
+} from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
@@ -175,6 +182,9 @@ export function createAccess(config: AccessConfig): Access {
     standingAccounts,
     accountEvidence: (actor) => standingAccounts.get(actor) ?? authentication.identity(actor)?.account,
     ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
+    ...(config.contentEditionBuyerFactReader
+      ? { contentEditionBuyerFactReader: config.contentEditionBuyerFactReader }
+      : {}),
     ...(config.clock ? { clock: config.clock } : {}),
   });
   async function preparePermission(
@@ -207,6 +217,7 @@ export function createAccess(config: AccessConfig): Access {
         !attempt && identity ? identity.observedAt + 180_000 : Infinity,
       );
       const permissionContext = {
+        ...(context.time ? { time: context.time } : {}),
         pool: deadlineClient(context.pool, deadline) as typeof context.pool,
         deadline,
       };

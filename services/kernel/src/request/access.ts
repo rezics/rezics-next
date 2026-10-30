@@ -1,3 +1,4 @@
+import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
@@ -32,6 +33,8 @@ export type Actor = AccountActor | { kind: 'anonymous' };
 export type Resource = {
   route: number;
   id: string;
+  /** Server-only exact selector, never entitlement evidence. */
+  authenticatedBenefit?: ContentEditionBenefit;
   eligibility?: ResourceEligibility;
   /** Compatibility spelling; uses the same opaque capability and evaluator. */
   anonymousEligibility?: ResourceEligibility;
@@ -48,6 +51,7 @@ export type ResourcePage = Readonly<{
 export function resourcePage(page: ResourcePage): ResourcePage {
   if (
     !page ||
+    'authenticatedBenefit' in page ||
     !Number.isInteger(page.route) ||
     page.route < 0 ||
     page.route > 65535 ||
@@ -98,6 +102,8 @@ export type AccessConfig = {
   actions: ActionCatalogue;
   resourceRoles?: ResourceRoleCatalogue;
   realmRoleReader?: AccessRealmRoleReader;
+  /** Trusted Commerce current native reader; never supplied by HTTP input. */
+  contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
   /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
 };
@@ -105,7 +111,7 @@ export type AccessConfig = {
 /** Builds an access implementation from an application's configuration. */
 export type AccessFactory = (config: AccessConfig) => Access;
 
-export type AccessContext = { pool: Pool; deadline: number };
+export type AccessContext = { pool: Pool; deadline: number; time?: AuthoritativeTime };
 
 export type AccessClient = Pick<PoolClient, 'query'>;
 /** Ordinary permission plus the same formula with public floor and grant roles disabled. */

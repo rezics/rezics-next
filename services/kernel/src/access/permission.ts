@@ -1,3 +1,11 @@
+import {
+  copyContentEditionBenefit,
+  contentEditionBenefitBinding,
+  matchesContentEditionBuyerFact,
+  type ContentEditionBenefit,
+  type ContentEditionBuyerFact,
+  type ContentEditionBuyerFactReader,
+} from './authenticated-benefit.ts';
 import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contracts.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
@@ -75,6 +83,7 @@ export type PermissionConfig = {
    * Following is not membership. Missing verifier or required proof denies.
    */
   realmRoleReader?: RealmRoleReader;
+  contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
   /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
 };
@@ -90,7 +99,29 @@ type RoleEvidence = {
   valid: string;
 };
 
+type BuyerEvidence = Readonly<{
+  benefit: ContentEditionBenefit;
+  time: AuthoritativeTime;
+  deadline: number;
+  buyers: ReadonlyMap<string, ContentEditionBuyerFact>;
+}>;
+
+function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | undefined): boolean {
+  if (proof.time !== time) return false;
+  authoritativeTimeValue(proof.time);
+  requireAccessDeadline(proof.deadline);
+  return [...proof.buyers].every(([buyerAccountId, fact]) =>
+    matchesContentEditionBuyerFact(fact, {
+      benefit: proof.benefit,
+      buyerAccountId,
+      time: proof.time,
+      deadline: proof.deadline,
+    }),
+  );
+}
+
 type Prepared = {
+  buyerEvidence?: BuyerEvidence;
   historyAccounts: readonly import('../history/locator.ts').AccountReference[];
   ownAccount: boolean;
   binding: string;
@@ -182,6 +213,7 @@ const bind = (actor: Actor, action: string, resource: Resource, page?: ResourceP
     action,
     resource.route,
     page ? [page.resourceType, page.ids] : resource.id,
+    resource.authenticatedBenefit === undefined ? null : contentEditionBenefitBinding(resource.authenticatedBenefit),
   ]);
 
 function eligible(account: Account, actor: AccountActor): boolean {
@@ -240,7 +272,8 @@ async function checkPreparedPermission(
     // verification and the permission formula must evaluate exactly this instant.
     const at = time ? authoritativeTimeValue(time) : (await readPermissionTime(client, clock))?.at;
     requireAccessDeadline(facts.deadline);
-    if (!at) return { allowed: false, explicit: false };
+    if (!at || (facts.buyerEvidence && !validBuyerEvidence(facts.buyerEvidence, time)))
+      return { allowed: false, explicit: false };
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
     requireAccessDeadline(facts.deadline);
     const floor = facts.admitsAnonymous && domainEligible;
@@ -252,6 +285,7 @@ async function checkPreparedPermission(
     const stillValid = () => {
       requireAccessDeadline(facts.deadline);
       return (
+        (!facts.buyerEvidence || validBuyerEvidence(facts.buyerEvidence, time)) &&
         facts.binding === bind(actor, action, resource, page) &&
         facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
         !(
@@ -270,6 +304,8 @@ async function checkPreparedPermission(
       include_global: isGlobalReachAction(action),
       action,
       own_account: facts.ownAccount,
+      authenticated_resource_id: facts.buyerEvidence?.benefit.resource.id ?? null,
+      authenticated_buyer_ids: facts.buyerEvidence ? [...facts.buyerEvidence.buyers.keys()] : [],
       actor_id: actor.kind === 'account' ? actor.accountId : '',
       principal_id: facts.principalId ?? '',
       assignment_route: facts.assignmentRoute,
@@ -345,6 +381,26 @@ export function createAccess(config: PermissionConfig): Access {
         return evidence;
       if (metadata.authority === 'own-account' && (actor.kind !== 'account' || resource.id !== actor.accountId || page))
         return evidence;
+      const attempt = accessCommandAttempt(context);
+      if (attempt && context.time !== undefined && context.time !== attempt.time) return evidence;
+      const time = attempt?.time ?? context.time;
+      if (time) authoritativeTimeValue(time);
+      const benefit =
+        resource.authenticatedBenefit === undefined
+          ? undefined
+          : copyContentEditionBenefit(resource.authenticatedBenefit);
+      if (
+        benefit &&
+        (page ||
+          actor.kind !== 'account' ||
+          action !== benefit.action ||
+          resource.route !== benefit.resource.route ||
+          resource.id !== benefit.resource.id)
+      )
+        return evidence;
+      // The native read caller owns mintReadTime/releaseOperationalTime. Access
+      // does not introduce another clock or a hidden time lifetime for benefits.
+      if (benefit && !time) return evidence;
       const ownAccount = metadata.authority === 'own-account';
       const binding = bind(actor, action, resource, page);
       let account: Account | null | undefined;
@@ -370,8 +426,7 @@ export function createAccess(config: PermissionConfig): Access {
       if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
-      const attempt = accessCommandAttempt(context);
-      const at = attempt ? authoritativeTimeValue(attempt.time) : recorded.at;
+      const at = time ? authoritativeTimeValue(time) : recorded.at;
       let principalId: string | null = null;
       let assignmentRoute: number | null = null;
       let assignmentRequestId: string | null = null;
@@ -402,6 +457,30 @@ export function createAccess(config: PermissionConfig): Access {
           if (principal === actor.accountId) members[0]!.automated ||= assignment.operatorAccountId !== null;
           else members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
         }
+      }
+      let buyerEvidence: BuyerEvidence | undefined;
+      if (benefit && time) {
+        const reader = config.contentEditionBuyerFactReader;
+        if (!reader) throw new AccessUnavailableError('overloaded');
+        const buyers = new Map<string, ContentEditionBuyerFact>();
+        // Actual resolved identities only, sequential and bounded to actor plus
+        // one distinct current principal. Null proves absence for that identity.
+        for (const { accountId: buyerAccountId } of members) {
+          const input = Object.freeze({ benefit, buyerAccountId, time, deadline: context.deadline });
+          let fact: ContentEditionBuyerFact | null;
+          try {
+            fact = await within(context.deadline, () => reader(input));
+          } catch (error) {
+            throwAccessUnavailable(error, context.deadline);
+            throw new AccessUnavailableError('overloaded');
+          }
+          requireAccessDeadline(deadline);
+          if (fact !== null) {
+            if (!matchesContentEditionBuyerFact(fact, input)) return evidence;
+            buyers.set(buyerAccountId, fact);
+          }
+        }
+        buyerEvidence = Object.freeze({ benefit, time, deadline: context.deadline, buyers });
       }
       const grantRoles = [...catalogue.roles].filter(([, values]) => values.includes(action)).map(([role]) => role);
       const roles: RoleEvidence[] = [];
@@ -542,6 +621,7 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        ...(buyerEvidence ? { buyerEvidence } : {}),
         historyAccounts:
           actor.kind === 'anonymous'
             ? []
