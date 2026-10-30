@@ -1,12 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
-import {
-  openGrowthDatabase,
-  checkGrowth,
-  GrowthBoundError,
-  GrowthEvidenceError,
-  type GrowthDatabase,
-} from './growth.ts';
+import { openGrowthDatabase, checkGrowth, GrowthBoundError, type GrowthDatabase } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -74,15 +68,9 @@ test('the series rule fails a series no allowed family explains with GrowthBound
   await expect(check('series constant violation', { rule: 'series' })).rejects.toBeInstanceOf(GrowthBoundError);
 });
 
-test('the series rule fails dispersed evidence with GrowthEvidenceError', async () => {
-  try {
-    await check('series uncertain repetitions', { rule: 'series', repetitions: 3, variable: true });
-    throw new Error('expected insufficient evidence');
-  } catch (error) {
-    expect(error).toBeInstanceOf(GrowthEvidenceError);
-    expect((error as Error).message).toContain('Statement attribution:');
-    expect((error as Error).message).toContain('statements differing between lowest and highest repetition');
-  }
+test('the series rule passes dispersed repetitions without throwing an evidence error', async () => {
+  const report = await check('series uncertain repetitions', { rule: 'series', repetitions: 3, variable: true });
+  expect(report.verdicts.rows).toMatchObject({ outcome: 'inconclusive', reason: 'noise' });
 });
 
 test('the step rule stays the default and GROWTH_RULE=series selects the series rule', async () => {

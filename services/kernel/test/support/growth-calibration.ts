@@ -288,7 +288,7 @@ export function detectableSlope(
     for (let iteration = 0; iteration < 256; iteration += 1) {
       const middle = low + (high - low) / 2;
       if (middle === low || middle === high) break;
-      if (outcomeAt(middle) === 'violation') high = middle;
+      if (outcomeAt(middle) !== 'compatible') high = middle;
       else low = middle;
       if (low > 0 && high - low <= Math.abs(high) * 1e-6) break;
     }
@@ -302,8 +302,8 @@ export function detectableSlope(
     const low = boundaries[index]!;
     const high = boundaries[index + 1]!;
     const middle = low + (high - low) / 2;
-    if (outcomeAt(middle) === 'violation') return firstRejectedIn(low, middle);
-    if (outcomeAt(high) === 'violation') return firstRejectedIn(middle, high);
+    if (outcomeAt(middle) !== 'compatible') return firstRejectedIn(low, middle);
+    if (outcomeAt(high) !== 'compatible') return firstRejectedIn(middle, high);
   }
   return Number.POSITIVE_INFINITY;
 }

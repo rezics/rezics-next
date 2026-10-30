@@ -11,6 +11,7 @@ import {
   growthProfileCheckId,
   medianGrowthValue,
   readGrowthProfiles,
+  type GrowthProfileOutcome,
   type GrowthProfileEntry,
   type GrowthProfileMetric,
   type GrowthProfileRead,
@@ -53,7 +54,7 @@ type ReclassifiedCheck = Readonly<{
   occurrence: number;
   owner: string;
   run: string;
-  outcome: string;
+  outcome: GrowthProfileOutcome;
 }>;
 
 function formatNumber(value: number): string {

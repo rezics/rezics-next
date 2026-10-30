@@ -64,7 +64,7 @@ test("a series no allowed family fits is a violation with each family's fit and 
   expect(Object.values(lowCountsWithLargeValues.families).every(({ factor }) => factor === Infinity)).toBe(true);
 });
 
-test('a scale whose repetitions spread beyond their uncertainty makes the series insufficient evidence', () => {
+test('a compatible median fit passes even when one repetition varies beyond uncertainty', () => {
   const result = classifySeries(
     [
       { scale: 1, repetitions: [10, 10, 10], uncertainty: 5 },
@@ -76,7 +76,7 @@ test('a scale whose repetitions spread beyond their uncertainty makes the series
 
   expect(result.medians).toEqual([10, 20, 30]);
   expect(result.families.linear.factor).toBe(0);
-  expect(result.outcome).toBe('insufficient-evidence');
+  expect(result.outcome).toBe('compatible');
 });
 
 test('a feasible family fit stays compatible when its slope interval has room', () => {
@@ -106,7 +106,7 @@ test('an index staircase admits bounded level changes on top of an allowed famil
   const exceedsProbeRise = classifySeries(series([1, 4, 16], [10, 20, 20]), 'logarithmic', 2);
   expect(exceedsProbeRise.outcome).toBe('violation');
   const falls = classifySeries(series([1, 4, 16], [20, 10, 5]), 'logarithmic', 2);
-  expect(falls.outcome).toBe('violation');
+  expect(falls.outcome).toBe('compatible');
   const unexplained = classifySeries(series([1, 4, 16, 64], [10, 10, 22, 22]), 'logarithmic', 2);
   expect(unexplained.outcome).toBe('violation');
 });

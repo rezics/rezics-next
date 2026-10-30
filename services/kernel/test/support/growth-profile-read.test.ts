@@ -9,9 +9,9 @@ type LineOptions = Readonly<{
   relationFirst?: number;
   relationLast?: number;
   outcomes?: readonly [
-    'compatible' | 'violation' | 'insufficient-evidence',
-    'compatible' | 'violation' | 'insufficient-evidence',
-    'compatible' | 'violation' | 'insufficient-evidence',
+    'compatible' | 'violation' | 'inconclusive',
+    'compatible' | 'violation' | 'inconclusive',
+    'compatible' | 'violation' | 'inconclusive',
   ];
 }>;
 
@@ -66,7 +66,7 @@ test('profile lines become per-metric calibration series grouped by check, with 
           offset: 2,
           relationFirst: 100,
           relationLast: 90,
-          outcomes: ['violation', 'compatible', 'insufficient-evidence'],
+          outcomes: ['violation', 'compatible', 'inconclusive'],
         }),
         profileLine({ check: 'missing check', offset: 1 }),
         profileLine({ check: 'different scales', scales: [1, 8, 64] }),
@@ -162,7 +162,7 @@ test('profile lines become per-metric calibration series grouped by check, with 
     check: 'stable check',
     occurrence: 1,
     run: 'run-2',
-    outcomes: { rows: 'violation', blocks: 'compatible', statements: 'insufficient-evidence' },
+    outcomes: { rows: 'violation', blocks: 'compatible', statements: 'inconclusive' },
   });
 });
 

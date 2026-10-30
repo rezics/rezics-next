@@ -192,28 +192,32 @@ test("the growth profile line carries each scale's repetitions, relation sizes a
 }, 60_000);
 
 test('a shadow violation never fails a check that passes the step rule', async () => {
-  const report = await checkGrowth(db!, {
-    name: 'noisy shadow growth',
-    bounds,
-    repetitions: 3,
-    grow: async () => {},
-    warmup: async () => {},
-    operation: (database, scale, repetition) =>
-      withConnection(database.pool, async (client) => {
+  const client = await db!.pool.connect();
+  let report: Awaited<ReturnType<typeof checkGrowth>>;
+  try {
+    report = await checkGrowth(db!, {
+      name: 'noisy shadow growth',
+      bounds,
+      repetitions: 3,
+      grow: async () => {},
+      warmup: () => client.query('SELECT 1'),
+      operation: async (_database, scale, repetition) => {
         await client.query('SELECT 1');
         // With one warmup and three measured runs, the last run at the middle scale is repetition 7.
         if (scale === 8 && repetition === 7) {
           for (let extra = 0; extra < 10; extra++) await client.query('SELECT 2');
         }
-      }),
-  });
-  expect(report.samples.map(({ repetitions }) => repetitions.map(({ statements }) => statements))).toEqual([
-    [1, 1, 1],
-    [1, 1, 11],
-    [1, 1, 1],
-  ]);
+      },
+    });
+  } finally {
+    client.release();
+  }
+  const statementRuns = report.samples.map(({ repetitions }) => repetitions.map(({ statements }) => statements));
+  expect(statementRuns[0]).toEqual([1, 1, 1]);
+  expect(statementRuns[1]).toEqual([1, 1, 11]);
+  expect(statementRuns[2]).toEqual([1, 1, 1]);
   expect(growthViolations(report.samples, bounds)).toEqual([]);
-  expect(['insufficient-evidence', 'violation']).toContain(report.shadow.statements.outcome);
+  expect(report.shadow.statements.outcome).toBe('compatible');
 
   const exact = await checkGrowth(db!, {
     name: 'exact shadow violation',

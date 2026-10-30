@@ -3,7 +3,7 @@ import type { GrowthModelBound } from './growth-model.ts';
 
 export const GROWTH_PROFILE_METRICS = ['rows', 'blocks', 'statements'] as const;
 export type GrowthProfileMetric = (typeof GROWTH_PROFILE_METRICS)[number];
-export type GrowthProfileOutcome = 'compatible' | 'violation' | 'insufficient-evidence';
+export type GrowthProfileOutcome = 'compatible' | 'violation' | 'inconclusive';
 
 export type GrowthProfileRunSource = Readonly<{ name: string; text: string }>;
 export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>>;
@@ -147,7 +147,7 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
   const shadow = {} as Record<GrowthProfileMetric, GrowthProfileOutcome>;
   for (const metric of GROWTH_PROFILE_METRICS) {
     const outcome = record(shadowSource[metric], `${description}.shadow.${metric}`).outcome;
-    if (outcome !== 'compatible' && outcome !== 'violation' && outcome !== 'insufficient-evidence')
+    if (outcome !== 'compatible' && outcome !== 'violation' && outcome !== 'inconclusive')
       throw new TypeError(`${description}.shadow.${metric}.outcome is unknown`);
     shadow[metric] = outcome;
   }

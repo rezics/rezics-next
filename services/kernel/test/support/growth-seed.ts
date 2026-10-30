@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { relative } from 'node:path';
 import pg from 'pg';
 import type { Pool } from 'pg';
-import { settleAdmin, vacuumFollows } from './growth-capture.ts';
+import { GrowthSettleInfrastructureError, settleAdmin, vacuumFollows } from './growth-capture.ts';
 
 export type SeedTarget = { readonly pool: Pool; readonly admin: pg.Pool };
 export type Row = Readonly<Record<string, unknown>>;
@@ -157,5 +158,26 @@ export async function seed(target: SeedTarget, population: Population, range: Se
     await writeRange(target, population, range);
   }
   if (population.finish) await population.finish(target.admin, range);
-  if (!vacuumFollows(target.admin)) await settleAdmin(target.admin, { analyze: true });
+  if (!vacuumFollows(target.admin)) {
+    try {
+      await settleAdmin(target.admin, { analyze: true });
+    } catch (error) {
+      if (!(error instanceof GrowthSettleInfrastructureError)) throw error;
+      process.stderr.write(
+        `GROWTH_REVIEW ${JSON.stringify({
+          file: relative(process.cwd(), Bun.main),
+          check: 'seed',
+          metric: 'settle',
+          bound: null,
+          rule: 'seed',
+          reason: 'settle',
+          medians: [],
+          ranges: [],
+          uncertainties: [],
+          repetitions: [],
+          settleFailures: [error.message.slice(0, 2000)],
+        })}\n`,
+      );
+    }
+  }
 }

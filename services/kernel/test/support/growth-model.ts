@@ -20,9 +20,13 @@ export type FamilyFit = Readonly<{
 }>;
 
 export type SeriesClassification = Readonly<{
-  outcome: 'compatible' | 'violation' | 'insufficient-evidence';
+  outcome: 'compatible' | 'violation' | 'inconclusive';
+  reason?: 'noise';
   bound: GrowthModelBound;
   medians: readonly number[];
+  /** Distribution-free confidence interval for each median, using the repetition minimum and maximum. */
+  ranges: readonly SeriesInterval[];
+  /** Running maximum envelope of the median intervals widened by uncertainty. */
   intervals: readonly SeriesInterval[];
   adjacentDifferences: readonly number[];
   families: Readonly<Record<GrowthFamily, FamilyFit>>;
@@ -140,19 +144,14 @@ function expandedIntervals(
   });
 }
 
-function canFitExactly(
-  coordinates: readonly number[],
-  medians: readonly number[],
-  uncertainties: readonly number[],
-  family: GrowthFamily,
-): boolean {
-  const exactIndexes = uncertainties.flatMap((uncertainty, index) => (uncertainty === 0 ? [index] : []));
-  const intervals = exactIndexes.map((index) => ({ lower: medians[index]!, upper: medians[index]! }));
-  return isFeasible(
-    exactIndexes.map((index) => coordinates[index]!),
-    intervals,
-    family,
-  );
+function runningMaximumEnvelope(intervals: readonly SeriesInterval[]): SeriesInterval[] {
+  let lower = 0;
+  let upper = 0;
+  return intervals.map((interval) => {
+    lower = Math.max(lower, interval.lower);
+    upper = Math.max(upper, interval.upper);
+    return { lower, upper };
+  });
 }
 
 function uncertaintyFactor(
@@ -161,10 +160,8 @@ function uncertaintyFactor(
   uncertainties: readonly number[],
   family: GrowthFamily,
 ): number {
-  if (!canFitExactly(coordinates, medians, uncertainties, family)) return Number.POSITIVE_INFINITY;
-
   const fitsAt = (factor: number): boolean =>
-    isFeasible(coordinates, expandedIntervals(medians, uncertainties, factor), family);
+    isFeasible(coordinates, runningMaximumEnvelope(expandedIntervals(medians, uncertainties, factor)), family);
   if (fitsAt(0)) return 0;
 
   let low = 0;
@@ -246,8 +243,7 @@ type Inequality = Readonly<{ coefficients: readonly number[]; limit: number }>;
 /** Fourier-Motzkin elimination gives exact linear feasibility for the small (at most five scale) model. */
 function staircaseFit(
   points: readonly SeriesPoint[],
-  medians: readonly number[],
-  uncertainties: readonly number[],
+  intervals: readonly SeriesInterval[],
   coordinates: readonly number[],
   family: GrowthFamily,
   probes: number,
@@ -267,8 +263,7 @@ function staircaseFit(
     const staircaseVariable = index + 1;
     const xTerm = family === 'constant' ? [] : ([[1, coordinates[index]!]] as const);
     const sTerm = index === 0 ? [] : ([[staircaseVariable, 1]] as const);
-    const lower = Math.max(0, medians[index]! - uncertainties[index]!);
-    const upper = medians[index]! + uncertainties[index]!;
+    const { lower, upper } = intervals[index]!;
     add([[0, -1], ...xTerm.map(([i, n]) => [i, -n] as const), ...sTerm.map(([i, n]) => [i, -n] as const)], -lower);
     add([[0, 1], ...xTerm, ...sTerm], upper);
     if (index > 0) {
@@ -347,7 +342,11 @@ export function classifySeries(
     throw new TypeError('Index probes must be a non-negative safe integer');
   const medians = points.map(({ repetitions }) => medianCost(repetitions));
   const uncertainties = points.map(({ uncertainty }) => uncertainty);
-  const intervals = expandedIntervals(medians, uncertainties, 1);
+  const ranges = points.map(({ repetitions }) => ({
+    lower: Math.min(...repetitions),
+    upper: Math.max(...repetitions),
+  }));
+  const intervals = runningMaximumEnvelope(expandedIntervals(medians, uncertainties, 1));
   const adjacentDifferences = medians.slice(1).map((median, index) => median - medians[index]!);
   const families = Object.fromEntries(
     FAMILIES.map((family) => {
@@ -356,19 +355,16 @@ export function classifySeries(
     }),
   ) as Record<GrowthFamily, FamilyFit>;
 
-  const insufficient = points.some(({ repetitions, uncertainty }) => {
-    const spread = Math.max(...repetitions) - Math.min(...repetitions);
-    return spread > 2 * uncertainty;
-  });
-  const ordinaryCompatible = allowedFamilies(bound).some((family) => {
-    const coordinates = familyCoordinates(points, family);
-    return isFeasible(coordinates, intervals, family);
-  });
+  const ordinaryCompatible = (candidate: readonly SeriesInterval[]): boolean =>
+    allowedFamilies(bound).some((family) => {
+      const coordinates = familyCoordinates(points, family);
+      return isFeasible(coordinates, candidate, family);
+    });
+  let compatible = ordinaryCompatible(intervals);
   let staircase: readonly number[] = points.map(() => 0);
-  let compatible = ordinaryCompatible;
-  if (!ordinaryCompatible && indexProbes > 0) {
+  if (!compatible && indexProbes > 0) {
     for (const family of allowedFamilies(bound)) {
-      const fit = staircaseFit(points, medians, uncertainties, familyCoordinates(points, family), family, indexProbes);
+      const fit = staircaseFit(points, intervals, familyCoordinates(points, family), family, indexProbes);
       if (fit) {
         staircase = fit;
         compatible = true;
@@ -377,10 +373,26 @@ export function classifySeries(
     }
   }
 
+  const confidenceIntervals = runningMaximumEnvelope(
+    ranges.map(({ lower, upper }, index) => ({
+      lower: Math.max(0, lower - uncertainties[index]!),
+      upper: upper + uncertainties[index]!,
+    })),
+  );
+  let evidenceFits = ordinaryCompatible(confidenceIntervals);
+  if (!evidenceFits && indexProbes > 0)
+    evidenceFits = allowedFamilies(bound).some(
+      (family) =>
+        staircaseFit(points, confidenceIntervals, familyCoordinates(points, family), family, indexProbes) !== undefined,
+    );
+  const outcome = compatible ? 'compatible' : evidenceFits ? 'inconclusive' : 'violation';
+
   return {
-    outcome: insufficient ? 'insufficient-evidence' : compatible ? 'compatible' : 'violation',
+    outcome,
+    ...(outcome === 'inconclusive' ? { reason: 'noise' as const } : {}),
     bound,
     medians,
+    ranges,
     intervals,
     adjacentDifferences,
     families,

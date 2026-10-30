@@ -273,7 +273,7 @@ When a task changes a kernel-wide contract, run the full kernel check and fix ev
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
 A failed test file is rerun alone once under a stack slot when any failed test or unhandled error carries a recognized load
-signal; growth checks remain eligible when every failure is a `GrowthBoundError` or `GrowthEvidenceError`. The alone run
+signal; growth checks remain eligible when every failure is a `GrowthBoundError`. The alone run
 decides the outcome; failures without their own signal in a load-eligible file are marked `(cascade)`, and a passing file is
 reported under load-sensitive tests or growth checks. After reruns, the check prints
 `Load reruns: <files> files, <seconds> s alone (<passed> passed alone)`.
@@ -340,8 +340,17 @@ bytes sum each returned data row's field payload before type parsing: null is ze
 length, and every other text field uses its UTF-8 byte length. Command tags, notices, `auto_explain` output and the
 harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
 Growth checks support `step` and `series` rules: `check.rule` selects a rule, then `GROWTH_RULE=series` selects series,
-and otherwise step remains the default. Series checks report `GrowthBoundError` when no allowed family fits, and
-`GrowthEvidenceError` when repetitions do not provide enough evidence. The series rule and its shadow verdict use
+and otherwise step remains the default. A growth check fails only when it establishes growth above its bound. Each
+metric's series is judged on its running maximum, so a decrease becomes a plateau and a decreasing or flat series
+passes. The check passes as compatible when that envelope of the medians, within their uncertainty, fits the bound's
+family. It fails with `GrowthBoundError` only when the envelope does not fit even when each scale takes any value in its
+median's distribution-free confidence interval (the repetitions' minimum and maximum for five runs), widened by its
+uncertainty. Otherwise the verdict is inconclusive and the check passes. A settle failure inside `checkGrowth` is
+recorded on its sample and makes a blocks violation inconclusive. Failed statements with SQLSTATE 40001 or 40P01 make
+any violation inconclusive. A step-rule violation stands only when the series rule also establishes it. Every
+inconclusive verdict is in the report's `verdicts` and in one `GROWTH_REVIEW` stderr line, which performance reviews;
+it never blocks the change under test. A cost that grows with data the operation does not need still fails. The series
+classifier and shadow verdict use
 calibrated uncertainty from `docs/research/growth-uncertainty-calibration.md`: rows allow max(22, 0% of the median),
 blocks max(9, 3%), and statements are exact. `slack` applies only to the step rule; byte metrics keep their existing
 slack handling.
@@ -370,12 +379,15 @@ its successful retry. `statementRepetitions` and grouped statement attributions 
 they combine matching SQL across runs and must not be split by attempt.
 Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
 inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
-aborted attempts by SQLSTATE for each scale and repetition. With attempts declared, each statement fingerprint's rows
-and blocks per execution must meet the check's growth bounds, using its most expensive measured execution at each
-scale. Missing executions and failures without plans provide no row or block measurement. Committed attempts must have the same statement count
-across scales and repetitions, and aborted attempts may run no more statements. Executed attempts per declared command
-form a separate series: contention may fall as data grows but may not rise. The owner sets any absolute retry-rate
-ceiling. Checks without `attempts` keep their existing bounds.
+aborted attempts by SQLSTATE for each scale and repetition. Attempts add evidence and never replace the universal
+growth verdicts: inclusive rows, blocks, statements and declared byte metrics always use the check's selected rule,
+and recorded `40001` or `40P01` failures make any established violation inconclusive. Per-execution row and block costs
+remain in `occurrenceRepetitions`; when at least three scales have measured executions and no retry SQLSTATE evidence
+applies, the most expensive execution at each scale is judged against the same bound. Missing executions are not zero
+costs, and fewer than three observed scales remain diagnostic evidence rather than an insufficiency failure. Changes
+in retry incidence are retained in the attempt ledger and profile but do not themselves fail a growth check. Committed
+attempts must have the same statement count across scales and repetitions, and aborted attempts may run no more
+statements. Checks without `attempts` keep the same inclusive verdicts without the additional transaction ledger.
 Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
 sets a ceiling at every scale and `bounds` sets a growth rule; reports include each unit's median and measured values.
 The harness provides `connections` as the number of distinct backend processes used by the operation when
@@ -405,7 +417,8 @@ measured run, and seeding is never explained. Each report sample carries `seedin
 `grow` (every pool, `admin` included), the time of `grow`, the ANALYZE settle after it (`vacuumMs`), and total settling
 time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrowth` appends one JSON line per check
 with the test file, check name, scales and each scale's `seeding`.
-The line also carries every repetition, relation sizes and a shadow whole-series verdict that does not yet decide the check.
+The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
+any `settleFailures` recorded on samples.
 Each report sample also carries `repetitions`, the cost of every measured run in order, and `relationSizes`, the
 `reltuples` and `relpages` of every relation the measured plans read at that scale.
 `seed` skips settling inside `grow`, since `checkGrowth` settles right after.
@@ -428,8 +441,9 @@ Injected planner statistics do not replace seeding: they change only a plan's es
 measures executed work (`docs/research/growth-check-plan-stability.md`).
 
 Every scale is measured on backends already seen in a warm-up or earlier measured repetition; a repetition that
-reaches a new backend is discarded as a warm-up (up to four times per scale), because production backends are
-long-lived. Keep the default `warmups`. When the operation uses up the state it measures, pass
+reaches a new backend is discarded as a warm-up up to four times per scale. If later runs still use new backends, their
+actual costs, occurrences and backend IDs are retained as measured repetitions and judged by the same inclusive rule.
+Keep the default `warmups`. When the operation uses up the state it measures, pass
 `warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
 backend's first. `checkGrowth` refuses fewer than one warm-up per scale. After each scale's `grow`, it settles the whole database
 with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. Each settle waits until
@@ -439,10 +453,9 @@ not all-visible, it repeats the horizon wait and vacuums up to two more times; l
 `DISABLE_PAGE_SKIPPING`. The last round uses `VERBOSE` and retains PostgreSQL INFO and WARNING notices. If verification
 still fails, the infrastructure error includes those notices, prepared transactions, replication slot horizons,
 relation owners, and (when the admin role can create `pg_visibility`) non-visible block numbers and
-`pg_check_visible` results. The default horizon wait is 30 seconds. On horizon timeout or failed visibility
-verification, it throws `GrowthSettleInfrastructureError`; this is a test infrastructure failure, not a growth-bound
-failure. Settle also disables autovacuum on every table, including tables created since the database opened. Before
-each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
+`pg_check_visible` results. The default horizon wait is 30 seconds. A direct call to `settle()` still throws
+`GrowthSettleInfrastructureError`. Settle also disables autovacuum on every table, including tables created since the
+database opened. Before each measured repetition, the harness captures each warm-up or preceding run's ModifyTable
 targets, including nested trigger and foreign-key statements, and settles those relations without ANALYZE in every
 database that run measured. It also settles `dbos.workflow_status` when present. The optional `prepare(db, scale,
 repetition)` hook runs outside capture after settling and before every measured repetition, never before warm-ups. A

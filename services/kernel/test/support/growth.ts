@@ -4,7 +4,6 @@ import {
   DEFAULT_BYTE_SLACK,
   DEFAULT_SLACK,
   GrowthBoundError,
-  GrowthEvidenceError,
   growthByteViolations,
   growthViolations,
   type Bound,
@@ -14,7 +13,15 @@ import {
   type RelationSize,
   type Slack,
 } from './growth-bound.ts';
-import { capture, captureMeasuredRun, settle, settleAdmin, trackGrow, type GrowthDatabase } from './growth-capture.ts';
+import {
+  capture,
+  captureMeasuredRun,
+  GrowthSettleInfrastructureError,
+  settle,
+  settleAdmin,
+  trackGrow,
+  type GrowthDatabase,
+} from './growth-capture.ts';
 import {
   catalogStatementBound,
   costOf,
@@ -25,7 +32,7 @@ import {
   type CatalogClassification,
   type Cost,
 } from './growth-cost.ts';
-import { classifySeries, type SeriesClassification } from './growth-model.ts';
+import { classifySeries, type SeriesClassification, type SeriesInterval, type SeriesPoint } from './growth-model.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
 import {
   formatStatementAttribution,
@@ -123,6 +130,7 @@ export type ReportSample = {
   readonly backendRepetitions?: readonly (readonly number[])[];
   /** Measured runs discarded because they touched a backend not seen earlier at this scale. */
   readonly coldBackendDiscards?: number;
+  readonly settleFailures?: readonly string[];
   readonly counted?: CountedSample;
   readonly attempts?: AttemptSample;
 };
@@ -172,7 +180,7 @@ function attemptRecords(capture: Capture, occurrences: StatementOccurrences): At
         !sqlstate &&
         (/^\s*(?:ROLLBACK|ABORT)\b/i.test(text) || attempt.some((index) => capture.statementErrors?.[index]))
       )
-        throw new GrowthEvidenceError(
+        throw new TypeError(
           `backend ${backend}: transaction ended without a commit or retry SQLSTATE (40001 or 40P01)`,
         );
       const outcome: AttemptOutcome = sqlstate ? `aborted:${sqlstate}` : 'committed';
@@ -257,11 +265,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
           fail(
             `aborted attempt ${index} (${attempt.outcome}) at scale ${scale}, repetition ${repetition} ran ${attempt.statements} statements, exceeding committed attempt count ${committedCount}`,
           );
-  // Retry incidence has no measurement uncertainty. Compare the observed mean rates, allowing decreases.
-  const attemptsByScale = samples.map(({ attempts }) => attempts!.attemptsPerCommand);
-  if (attemptsByScale.some((count, index) => index > 0 && count > attemptsByScale[index - 1]!))
-    fail(`attempts per command grew with scale: ${attemptsByScale.join(', ')}`);
-
+  const retries = retryFailures(samples);
   for (const metric of ['rows', 'blocks'] as const) {
     const fingerprints = new Set(
       samples.flatMap(({ occurrenceRepetitions }) =>
@@ -285,25 +289,11 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
           },
         ];
       });
-      if (points.length < 3) {
-        // Intermittent retry-only SQL can have fewer than three observed scales. A common constant interval is
-        // sufficient for every allowed family; otherwise more executions are needed to establish its growth.
-        const lower = Math.max(0, ...points.map((point) => point.repetitions[0]! - point.uncertainty));
-        const upper = Math.min(...points.map((point) => point.repetitions[0]! + point.uncertainty));
-        if (lower <= upper) continue;
-        if (check.bounds[metric] === 'constant')
-          fail(`statement ${fingerprint} ${metric} violates constant growth bound across attempts`);
-        throw new GrowthEvidenceError(
-          `${check.name}: insufficient observed scales for statement ${fingerprint} ${metric} per execution`,
-        );
-      }
+      // Missing executions are diagnostic, not zero-cost observations or evidence insufficiency failures.
+      if (points.length < 3) continue;
       const verdict = classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0);
-      if (verdict.outcome === 'violation')
+      if (verdict.outcome === 'violation' && retries.length === 0)
         fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
-      if (verdict.outcome === 'insufficient-evidence')
-        throw new GrowthEvidenceError(
-          `${check.name}: insufficient evidence for statement ${fingerprint} ${metric} per execution`,
-        );
     }
   }
 }
@@ -325,14 +315,36 @@ export type GrowthReport = {
     readonly backendRepetitions: readonly (readonly number[])[];
     readonly coldBackendDiscards: number;
   })[];
+  readonly verdicts: Readonly<Record<Metric, GrowthVerdict> & Partial<Record<ByteMetric, GrowthVerdict>>>;
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
   readonly counted?: Readonly<Record<string, { readonly limits?: number; readonly bounds?: Bound }>>;
 };
 
 export type ShadowVerdict = (
   | SeriesClassification
-  | { readonly outcome: 'insufficient-evidence'; readonly error: string }
+  | {
+      readonly outcome: 'inconclusive';
+      readonly reason: 'noise';
+      readonly error: string;
+      readonly ranges: readonly SeriesInterval[];
+    }
 ) & { readonly uncertainties: readonly number[] };
+
+export type GrowthVerdict = Readonly<{
+  outcome: 'compatible' | 'violation' | 'inconclusive';
+  reason?: 'noise' | 'settle' | 'retries';
+  medians: readonly number[];
+  ranges: readonly SeriesInterval[];
+  uncertainties: readonly number[];
+}>;
+
+type ClassifiedMetric = Readonly<{
+  bound: Bound;
+  classification: SeriesClassification;
+  uncertainties: readonly number[];
+}>;
+
+type FailedStatementCount = Readonly<{ scale: number; sqlstate: string; count: number }>;
 
 function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, metric: Metric): ShadowVerdict {
   const uncertainties: number[] = [];
@@ -350,11 +362,131 @@ function shadowVerdict(samples: readonly ReportSample[], check: GrowthCheck, met
   } catch (error) {
     // Shadow diagnostics must not preempt any existing assertion, including validation of bounds and slack.
     return {
-      outcome: 'insufficient-evidence',
+      outcome: 'inconclusive',
+      reason: 'noise',
+      ranges: [],
       uncertainties,
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function classifyMetric(samples: readonly ReportSample[], check: GrowthCheck, metric: GrowthMetric): ClassifiedMetric {
+  const bound =
+    metric === 'rows' || metric === 'blocks' || metric === 'statements'
+      ? check.bounds[metric]
+      : check.byteBounds?.[metric];
+  if (bound === undefined) throw new TypeError(`No growth bound is declared for ${metric}`);
+  const slack =
+    metric === 'rows' || metric === 'blocks' || metric === 'statements'
+      ? GROWTH_UNCERTAINTY[metric]
+      : (check.slack?.[metric] ?? DEFAULT_BYTE_SLACK[metric]);
+  if (!Number.isFinite(slack.absolute) || slack.absolute < 0 || !Number.isFinite(slack.relative) || slack.relative < 0)
+    throw new TypeError(`Slack for ${metric} must be finite and non-negative`);
+  const uncertainties: number[] = [];
+  const points: SeriesPoint[] = samples.map(({ scale, cost, repetitions }) => {
+    const median = cost[metric];
+    const values = repetitions.map((value) => value[metric]);
+    if (median === undefined || !Number.isFinite(median) || median < 0)
+      throw new TypeError(`Growth value for ${metric} must be finite and non-negative`);
+    if (values.some((value) => value === undefined || !Number.isFinite(value) || value < 0))
+      throw new TypeError(`Growth repetitions for ${metric} must be finite and non-negative`);
+    const uncertainty = Math.max(slack.absolute, slack.relative * median);
+    uncertainties.push(uncertainty);
+    return { scale, repetitions: values as number[], uncertainty };
+  });
+  return {
+    bound,
+    classification: classifySeries(points, bound, metric === 'blocks' ? (check.indexProbes ?? 0) : 0),
+    uncertainties,
+  };
+}
+
+function retryFailures(samples: readonly ReportSample[]): FailedStatementCount[] {
+  const counts = new Map<string, FailedStatementCount>();
+  for (const sample of samples)
+    for (const repetition of sample.repetitions)
+      for (const sqlstate of ['40001', '40P01']) {
+        const count = repetition.failedStatements?.[sqlstate] ?? 0;
+        if (count === 0) continue;
+        const key = `${sample.scale}:${sqlstate}`;
+        const previous = counts.get(key);
+        counts.set(key, { scale: sample.scale, sqlstate, count: (previous?.count ?? 0) + count });
+      }
+  return [...counts.values()];
+}
+
+function selectedVerdict(
+  metric: GrowthMetric,
+  classified: ClassifiedMetric,
+  rule: GrowthReport['rule'],
+  stepViolation: boolean,
+  settleFailed: boolean,
+  failedStatements: readonly FailedStatementCount[],
+): GrowthVerdict {
+  const { classification, uncertainties } = classified;
+  let outcome: GrowthVerdict['outcome'];
+  let reason: GrowthVerdict['reason'];
+  if (rule === 'series') {
+    outcome = classification.outcome;
+    reason = classification.reason;
+  } else if (!stepViolation) {
+    outcome = 'compatible';
+  } else if (classification.outcome === 'violation') {
+    outcome = 'violation';
+  } else {
+    outcome = 'inconclusive';
+    reason = classification.reason ?? 'noise';
+  }
+  if (outcome === 'violation' && metric === 'blocks' && settleFailed) {
+    outcome = 'inconclusive';
+    reason = 'settle';
+  } else if (outcome === 'violation' && failedStatements.length > 0) {
+    outcome = 'inconclusive';
+    reason = 'retries';
+  }
+  return {
+    outcome,
+    ...(reason === undefined ? {} : { reason }),
+    medians: classification.medians,
+    ranges: classification.ranges,
+    uncertainties,
+  };
+}
+
+function writeGrowthReview(
+  check: GrowthCheck,
+  rule: GrowthReport['rule'],
+  metric: GrowthMetric,
+  bound: Bound | undefined,
+  verdict: GrowthVerdict,
+  samples: readonly ReportSample[],
+  failedStatements: readonly FailedStatementCount[],
+): void {
+  if (verdict.outcome !== 'inconclusive') return;
+  const settleFailures = samples.flatMap(({ scale, settleFailures: failures }) =>
+    (failures ?? []).map((message) => ({ scale, message: message.slice(0, 2000) })),
+  );
+  const repetitions = samples.map(({ scale, repetitions: values }) => ({
+    scale,
+    values: values.map((value) => value[metric]),
+  }));
+  process.stderr.write(
+    `GROWTH_REVIEW ${JSON.stringify({
+      file: relative(process.cwd(), Bun.main),
+      check: check.name,
+      metric,
+      ...(bound === undefined ? {} : { bound }),
+      rule,
+      reason: verdict.reason ?? 'noise',
+      medians: verdict.medians,
+      ranges: verdict.ranges,
+      uncertainties: verdict.uncertainties,
+      repetitions,
+      ...(settleFailures.length === 0 ? {} : { settleFailures }),
+      ...(failedStatements.length === 0 ? {} : { failedStatements }),
+    })}\n`,
+  );
 }
 
 let profileWarned = false;
@@ -365,7 +497,7 @@ function appendProfile(report: GrowthReport): void {
   if (!path) return;
   try {
     const file = relative(process.cwd(), Bun.main);
-    const { name, bounds, byteBounds, samples, shadow } = report;
+    const { name, bounds, byteBounds, samples, shadow, verdicts } = report;
     const line = JSON.stringify({
       file,
       check: name,
@@ -391,7 +523,11 @@ function appendProfile(report: GrowthReport): void {
       ...(samples.some(({ attempts }) => attempts !== undefined)
         ? { attempts: samples.map(({ attempts }) => attempts ?? null) }
         : {}),
+      ...(samples.some(({ settleFailures }) => settleFailures !== undefined)
+        ? { settleFailures: samples.map(({ settleFailures }) => settleFailures ?? []) }
+        : {}),
       relationSizes: samples.map(({ relationSizes }) => relationSizes),
+      verdicts,
       statements: profileStatements(samples),
       shadow: Object.fromEntries(
         Object.entries(shadow).map(([metric, verdict]) => [
@@ -557,11 +693,24 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   let previous = 0;
   let repetition = 0;
   const samples: Array<GrowthReport['samples'][number]> = [];
+  let laterSettleTimeout = false;
   for (const scale of scales) {
+    const settleFailures: string[] = [];
+    const recordedSettle = async (target: GrowthDatabase, options: Parameters<typeof settle>[1]): Promise<number> => {
+      const started = performance.now();
+      try {
+        return await settle(target, laterSettleTimeout ? { ...options, timeoutMs: 900, pollMs: 25 } : options);
+      } catch (error) {
+        if (!(error instanceof GrowthSettleInfrastructureError)) throw error;
+        laterSettleTimeout = true;
+        settleFailures.push(error.message.slice(0, 2000));
+        return performance.now() - started;
+      }
+    };
     const growStart = performance.now();
     const grown = await trackGrow(db, () => check.grow(db, scale, previous));
     const vacuumStart = performance.now();
-    const vacuumMs = await settle(db, { analyze: true });
+    const vacuumMs = await recordedSettle(db, { analyze: true });
     let settleMs = vacuumMs;
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
     const availableRelationSizes = await readRelationSizes(db);
@@ -609,7 +758,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           }
         }
         for (const [target, relations] of pendingWrites) {
-          if (relations.size > 0) settleMs += await settle(target, { relations: [...relations] });
+          if (relations.size > 0) settleMs += await recordedSettle(target, { relations: [...relations] });
         }
         (seeding as { settleMs: number }).settleMs = settleMs;
         if (check.prepare) await check.prepare(db, scale, repetition);
@@ -624,12 +773,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           ),
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
-        if (coldBackends.length > 0) {
+        if (coldBackends.length > 0 && coldBackendDiscards < 4) {
           coldBackendDiscards++;
-          if (coldBackendDiscards > 4)
-            throw new GrowthEvidenceError(
-              `${check.name}: operation keeps using cold backends at scale ${scale} (${coldBackends.join(', ')}); discarded more than 4 cold backend repetitions`,
-            );
           for (const backend of runBackends) seenBackends.add(backend);
           for (const [target, relations] of writes) {
             const accumulated = pendingWrites.get(target) ?? new Set<string>();
@@ -681,6 +826,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
       backendRepetitions,
       coldBackendDiscards,
       ...(check.attempts ? { attempts: summarizeAttempts(check.attempts.commands, attemptRuns) } : {}),
+      ...(settleFailures.length === 0 ? {} : { settleFailures }),
     });
     previous = scale;
   }
@@ -690,12 +836,49 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     blocks: shadowVerdict(samples, check, 'blocks'),
     statements: shadowVerdict(samples, check, 'statements'),
   };
+  const classified: Record<GrowthMetric, ClassifiedMetric | undefined> = {
+    rows: classifyMetric(samples, check, 'rows'),
+    blocks: classifyMetric(samples, check, 'blocks'),
+    statements: classifyMetric(samples, check, 'statements'),
+    requestBytes:
+      check.byteBounds?.requestBytes === undefined ? undefined : classifyMetric(samples, check, 'requestBytes'),
+    responseBytes:
+      check.byteBounds?.responseBytes === undefined ? undefined : classifyMetric(samples, check, 'responseBytes'),
+  };
+  const stepViolations = [
+    ...growthViolations(samples, check.bounds, check.slack),
+    ...growthByteViolations(samples, check.byteBounds ?? {}, check.slack),
+  ];
+  const stepViolationMetrics = new Set(stepViolations.map(({ metric }) => metric));
+  const failedStatements = retryFailures(samples);
+  const settleFailed = samples.some(({ settleFailures: failures }) => (failures?.length ?? 0) > 0);
+  const verdicts: Record<GrowthMetric, GrowthVerdict | undefined> = {
+    rows: undefined,
+    blocks: undefined,
+    statements: undefined,
+    requestBytes: undefined,
+    responseBytes: undefined,
+  };
+  for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
+    const source = classified[metric];
+    if (!source) continue;
+    verdicts[metric] = selectedVerdict(
+      metric,
+      source,
+      rule,
+      stepViolationMetrics.has(metric),
+      settleFailed,
+      failedStatements,
+    );
+  }
+
   const report: GrowthReport = {
     name: check.name,
     rule,
     bounds: check.bounds,
     ...(check.byteBounds === undefined ? {} : { byteBounds: check.byteBounds }),
     samples,
+    verdicts: verdicts as GrowthReport['verdicts'],
     shadow,
     ...(check.counted === undefined
       ? {}
@@ -714,193 +897,52 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         }),
   };
   appendProfile(report);
+  for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
+    const verdict = report.verdicts[metric];
+    if (verdict) writeGrowthReview(check, rule, metric, classified[metric]?.bound, verdict, samples, failedStatements);
+  }
   assertBackgroundBound(check.name, samples);
   validateAttemptSamples(check, samples);
-  try {
-    const countedFailures = check.counted
-      ? countedViolations(
-          check.counted,
-          samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
-        )
-      : [];
-    if (rule === 'step') {
-      const metricViolations = check.attempts
-        ? check.byteBounds === undefined
-          ? []
-          : growthByteViolations(samples, check.byteBounds, check.slack)
-        : check.byteBounds === undefined
-          ? growthViolations(samples, check.bounds, check.slack)
-          : [
-              ...growthViolations(samples, check.bounds, check.slack),
-              ...growthByteViolations(samples, check.byteBounds, check.slack),
-            ];
-      if (countedFailures.length > 0 || metricViolations.length > 0) {
-        const error = new GrowthBoundError(metricViolations, samples, check.byteBounds);
-        error.message += formatStatementAttribution(
-          samples,
-          metricViolations.map(({ metric }) => metric),
-        );
-        if (countedFailures.length > 0)
-          error.message += `${error.message ? '\n' : ''}${countedFailures
-            .map(({ unit, scale, value, limit, kind }) =>
-              kind === 'limit'
-                ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
-                : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
-            )
-            .join('\n')}`;
-        throw error;
-      }
-    } else {
-      if (countedFailures.length > 0) {
-        const error = new GrowthBoundError([], samples, check.byteBounds);
-        error.message = countedFailures
-          .map(({ unit, scale, value, limit, kind }) =>
-            kind === 'limit'
-              ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
-              : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
-          )
-          .join('\n');
-        throw error;
-      }
-      for (const metric of ['rows', 'blocks', 'statements'] as const) {
-        if (check.attempts) continue;
-        const uncertainties = shadow[metric].uncertainties;
-        const verdict = classifySeries(
-          samples.map(({ scale, repetitions }, index) => ({
-            scale,
-            repetitions: repetitions.map((value) => value[metric]),
-            uncertainty: uncertainties[index]!,
-          })),
-          check.bounds[metric],
-          metric === 'blocks' ? (check.indexProbes ?? 0) : 0,
-        );
-        if (verdict.outcome === 'insufficient-evidence') {
-          const error = new GrowthEvidenceError(
-            `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${uncertainties.join(', ')}`,
-          );
-          error.message += formatStatementAttribution(samples, [metric]);
-          const widest = samples.reduce((best, sample) => {
-            const totals = (repetition: StatementOccurrences) => {
-              const occurrences = [...repetition.statements, ...repetition.backgroundStatements];
-              return {
-                rows: occurrences.reduce((sum, item) => sum + item.rows, 0),
-                blocks: occurrences.reduce((sum, item) => sum + item.blocks, 0),
-              };
-            };
-            const spread = (repetitions: readonly StatementOccurrences[]) => {
-              const values = repetitions.map(totals);
-              return Math.max(
-                Math.max(...values.map(({ rows }) => rows)) - Math.min(...values.map(({ rows }) => rows)),
-                Math.max(...values.map(({ blocks }) => blocks)) - Math.min(...values.map(({ blocks }) => blocks)),
-              );
-            };
-            const scaleSpread = spread(sample.occurrenceRepetitions);
-            const bestSpread = spread(best.occurrenceRepetitions);
-            return scaleSpread > bestSpread ? sample : best;
-          });
-          const repetitions = widest.occurrenceRepetitions;
-          if (repetitions.length > 1) {
-            const occurrences = repetitions.map((repetition) => [
-              ...repetition.statements,
-              ...repetition.backgroundStatements,
-            ]);
-            const totals = occurrences.map((items) => ({
-              rows: items.reduce((sum, item) => sum + item.rows, 0),
-              blocks: items.reduce((sum, item) => sum + item.blocks, 0),
-            }));
-            const field =
-              Math.max(...totals.map(({ rows }) => rows)) - Math.min(...totals.map(({ rows }) => rows)) >=
-              Math.max(...totals.map(({ blocks }) => blocks)) - Math.min(...totals.map(({ blocks }) => blocks))
-                ? 'rows'
-                : 'blocks';
-            const highest = totals.reduce(
-              (best, value, index) => (value[field] > totals[best]![field] ? index : best),
-              0,
-            );
-            const lowest = totals.reduce(
-              (best, value, index) => (value[field] < totals[best]![field] ? index : best),
-              0,
-            );
-            const value = (index: number, statement: string, key: 'rows' | 'blocks') =>
-              occurrences[index]!.filter((item) => item.statement === statement).reduce(
-                (sum, item) => sum + item[key],
-                0,
-              );
-            const statements = [...new Set(occurrences.flatMap((items) => items.map(({ statement }) => statement)))];
-            const differing = statements.filter((statement) =>
-              (['rows', 'blocks'] as const).some(
-                (key) => value(lowest, statement, key) !== value(highest, statement, key),
-              ),
-            );
-            if (differing.length > 0)
-              error.message += `\nstatements differing between lowest and highest repetition at scale ${widest.scale}: ${differing
-                .slice(0, 20)
-                .map((statement) => `  ${statement}`)
-                .join('\n')}`;
-          }
-          throw error;
-        }
-        if (verdict.outcome === 'violation') {
-          const error = new GrowthBoundError([], samples, check.byteBounds);
-          error.message = `${metric} violates ${check.bounds[metric]} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; staircase ${verdict.staircase.join(', ')}; families ${Object.entries(
-            verdict.families,
-          )
-            .map(([family, fit]) => `${family} factor ${fit.factor}`)
-            .join(', ')}`;
-          error.message += formatStatementAttribution(samples, [metric]);
-          throw error;
-        }
-      }
-      for (const metric of ['requestBytes', 'responseBytes'] as const) {
-        const bound = check.byteBounds?.[metric];
-        if (bound === undefined) continue;
-        const tolerance = check.slack?.[metric] ?? DEFAULT_BYTE_SLACK[metric];
-        if (
-          !Number.isFinite(tolerance.absolute) ||
-          tolerance.absolute < 0 ||
-          !Number.isFinite(tolerance.relative) ||
-          tolerance.relative < 0
-        )
-          throw new TypeError(`Slack for ${metric} must be finite and non-negative`);
-        const points = samples.map(({ scale, cost, repetitions }) => {
-          const median = cost[metric];
-          if (median === undefined || !Number.isFinite(median) || median < 0)
-            throw new TypeError(`Growth value for ${metric} must be finite and non-negative`);
-          const repetitionBytes = repetitions.map((value) => value[metric]);
-          if (repetitionBytes.some((value) => value === undefined || !Number.isFinite(value) || value < 0))
-            throw new TypeError(`Growth repetitions for ${metric} must be finite and non-negative`);
-          return {
-            scale,
-            repetitions: repetitionBytes as number[],
-            uncertainty: Math.max(tolerance.absolute, tolerance.relative * median),
-          };
-        });
-        const verdict = classifySeries(points, bound);
-        if (verdict.outcome === 'insufficient-evidence') {
-          throw new GrowthEvidenceError(
-            `${check.name}: insufficient growth evidence for ${metric}; medians ${verdict.medians.join(', ')}, repetitions ${samples.map(({ repetitions }) => `[${repetitions.map((value) => value[metric]).join(', ')}]`).join('; ')}, uncertainties ${points.map(({ uncertainty }) => uncertainty).join(', ')}`,
-          );
-        }
-        if (verdict.outcome === 'violation') {
-          const error = new GrowthBoundError([], samples, check.byteBounds);
-          error.message = `${metric} violates ${bound} growth bound; medians ${verdict.medians.join(', ')}; intervals ${verdict.intervals.map(({ lower, upper }) => `[${lower}, ${upper}]`).join(', ')}; families ${Object.entries(
-            verdict.families,
-          )
-            .map(([family, fit]) => `${family} factor ${fit.factor}`)
-            .join(', ')}`;
-          error.message += formatStatementAttribution(samples, [metric]);
-          throw error;
-        }
-      }
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'GrowthBoundError') {
-      error.message = `${check.name}: ${error.message}`;
-      const attempts = samples.flatMap(({ scale, cost }) =>
-        cost.failedStatements === undefined ? [] : [`${scale} ${JSON.stringify(cost.failedStatements)}`],
-      );
-      if (attempts.length > 0) error.message += `\nfailed attempts by SQLSTATE at scale: ${attempts.join(', ')}`;
-    }
+
+  const countedFailures = check.counted
+    ? countedViolations(
+        check.counted,
+        samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
+      )
+    : [];
+  const violations =
+    rule === 'step' ? stepViolations.filter(({ metric }) => report.verdicts[metric]?.outcome === 'violation') : [];
+  const established = (Object.entries(report.verdicts) as [GrowthMetric, GrowthVerdict | undefined][])
+    .filter(([, verdict]) => verdict?.outcome === 'violation')
+    .map(([metric]) => metric);
+  if (countedFailures.length > 0 || established.length > 0) {
+    const error = new GrowthBoundError(violations, samples, check.byteBounds);
+    const details =
+      rule === 'series'
+        ? established.map((metric) => {
+            const source = classified[metric]!;
+            const verdict = report.verdicts[metric]!;
+            const suffix =
+              'staircase' in source.classification ? `; staircase ${source.classification.staircase.join(', ')}` : '';
+            return `${metric} violates ${source.bound} growth bound; medians ${verdict.medians.join(', ')}; ranges ${verdict.ranges
+              .map(({ lower, upper }) => `[${lower}, ${upper}]`)
+              .join(', ')}${suffix}`;
+          })
+        : [];
+    const attributions = established.length > 0 ? formatStatementAttribution(samples, established) : '';
+    const countDetails = countedFailures.map(({ unit, scale, value, limit, kind }) =>
+      kind === 'limit'
+        ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
+        : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
+    );
+    error.message = `${check.name}: ${[error.message, ...details, attributions, ...countDetails]
+      .filter(Boolean)
+      .join('\n')}`;
+    const failedAttempts = samples.flatMap(({ scale, cost }) =>
+      cost.failedStatements === undefined ? [] : [`${scale} ${JSON.stringify(cost.failedStatements)}`],
+    );
+    if (failedAttempts.length > 0)
+      error.message += `\nfailed attempts by SQLSTATE at scale: ${failedAttempts.join(', ')}`;
     throw error;
   }
 

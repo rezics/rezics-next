@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
+  GrowthBoundError,
   openGrowthDatabase,
   readAttemptLedger,
   validateAttemptSamples,
@@ -13,14 +17,44 @@ import {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const retrySchema = 'growth_attempt_verdict_test';
+const retryFunction = `${retrySchema}.fail_retry`;
+const inclusiveTable = `${retrySchema}.inclusive_records`;
 let db: GrowthDatabase;
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  await db.admin.query(`CREATE SCHEMA ${retrySchema}`);
+  await db.admin.query(`CREATE TABLE ${inclusiveTable} (id integer NOT NULL)`);
+  await db.admin.query(`INSERT INTO ${inclusiveTable} SELECT generate_series(1, 78)`);
+  await db.admin.query(`CREATE FUNCTION ${retryFunction}(state text) RETURNS integer LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'retry requested' USING ERRCODE = state; END $$`);
 });
 afterAll(async () => {
+  await db?.admin.query(`DROP SCHEMA IF EXISTS ${retrySchema} CASCADE`);
   await db?.close();
 });
+
+async function captureReviews<T>(run: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
+  const lines: string[] = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    const text = String(chunk);
+    if (text.startsWith('GROWTH_REVIEW ')) lines.push(text.trimEnd());
+    else originalWrite(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { value: await run(), lines };
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+}
+
+function reviewJson(line: string): Record<string, unknown> {
+  expect(line.startsWith('GROWTH_REVIEW ')).toBe(true);
+  return JSON.parse(line.slice('GROWTH_REVIEW '.length));
+}
 
 function attempt(outcome: AttemptRecord['outcome'], statements: number, occurrences: number[] = []): AttemptRecord {
   return { backend: 100, outcome, statements, occurrences };
@@ -130,13 +164,14 @@ test('a committed attempt statement-count change fails with the attempt and coun
   expect(() => validateAttemptSamples(attemptCheck, samples)).toThrow(/committed attempt.*statement counts differ/);
 });
 
-test('attempts per command growing by scale fails with its per-scale series', () => {
+test('attempts per command growth stays visible as diagnostics instead of blocking the check', () => {
   const samples = [1, 4, 16].map((scale, index) =>
     reportSample(scale, [
       [...Array.from({ length: index }, () => attempt('aborted:40001', 1)), attempt('committed', 1)],
     ]),
   );
-  expect(() => validateAttemptSamples(attemptCheck, samples)).toThrow(/attempts per command grew with scale/);
+  expect(() => validateAttemptSamples(attemptCheck, samples)).not.toThrow();
+  expect(samples.map(({ attempts }) => attempts!.attemptsPerCommand)).toEqual([1, 2, 3]);
 });
 
 test('rows per execution of a statement fingerprint are bounded across scales', () => {
@@ -161,6 +196,138 @@ test('a check without attempts keeps the existing inclusive growth rule', async 
     operation: async (growthDb) => growthDb.pool.query('SELECT 1'),
   });
   expect(report.samples.every(({ attempts }) => attempts === undefined)).toBe(true);
+});
+
+test('declared attempts do not bypass an established inclusive rows violation', async () => {
+  await mkdir(join(process.cwd(), '.temp'), { recursive: true });
+  const directory = await mkdtemp(join(process.cwd(), '.temp', 'growth-attempt-inclusive-'));
+  const profilePath = join(directory, 'profile.jsonl');
+  const previousProfile = process.env.GROWTH_PROFILE;
+  process.env.GROWTH_PROFILE = profilePath;
+  try {
+    const error = await checkGrowth(db, {
+      name: 'inclusive rows with attempt ledger',
+      rule: 'series',
+      scales: [1, 4, 16],
+      repetitions: 5,
+      attempts: { commands: 1 },
+      bounds: { rows: 'constant', blocks: 'linear', statements: 'linear' },
+      grow: async () => {},
+      warmup: async (database) => database.pool.query('SELECT 1'),
+      operation: async (database, scale) => {
+        const rowCounts: Record<number, number> = { 1: 11, 4: 78, 16: 11 };
+        await withConnection(database.pool, async (client) => {
+          await client.query('BEGIN');
+          await client.query(`SELECT id FROM ${inclusiveTable} LIMIT $1::integer`, [rowCounts[scale]!]);
+          await client.query('COMMIT');
+        });
+      },
+    }).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(GrowthBoundError);
+    const [line] = (await readFile(profilePath, 'utf8')).trim().split('\n');
+    const profile = JSON.parse(line!) as {
+      verdicts: { rows: { outcome: string } };
+      repetitions: { rows: number }[][];
+    };
+    expect(profile.verdicts.rows.outcome).toBe('violation');
+    expect(profile.repetitions.map((runs) => runs[0]!.rows)).toEqual([11, 78, 11]);
+  } finally {
+    if (previousProfile === undefined) delete process.env.GROWTH_PROFILE;
+    else process.env.GROWTH_PROFILE = previousProfile;
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test('attempted 40001 and 40P01 work retains inclusive costs and uses retries review', async () => {
+  for (const sqlstate of ['40001', '40P01']) {
+    const captured = await captureReviews(() =>
+      checkGrowth(db, {
+        name: `attempt retry evidence ${sqlstate}`,
+        rule: 'series',
+        scales: [1, 4, 16],
+        repetitions: 1,
+        attempts: { commands: 1 },
+        bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
+        grow: async () => {},
+        warmup: async (database) => database.pool.query('SELECT 1'),
+        operation: async (database, scale) => {
+          const statementCounts: Record<number, number> = { 1: 69, 4: 79, 16: 86 };
+          for (let index = 0; index < statementCounts[scale]!; index++)
+            await database.pool.query('SELECT $1::integer AS value', [index]);
+          await withConnection(database.pool, async (client) => {
+            await client.query('BEGIN');
+            try {
+              await client.query(`SELECT ${retryFunction}($1::text)`, [sqlstate]);
+            } catch (error) {
+              if ((error as { code?: string }).code !== sqlstate) throw error;
+            }
+            await client.query('ROLLBACK');
+            await client.query('BEGIN');
+            await client.query('SELECT 1 AS committed');
+            await client.query('COMMIT');
+          });
+        },
+      }),
+    );
+    expect(captured.value.verdicts.statements).toMatchObject({ outcome: 'inconclusive', reason: 'retries' });
+    expect(captured.value.samples.map(({ repetitions }) => repetitions[0]!.statements)).toEqual([71, 81, 88]);
+    expect(captured.value.samples[0]!.attempts?.repetitions[0]!.byOutcome[`aborted:${sqlstate}`]).toBe(1);
+    expect(captured.lines).toHaveLength(1);
+    expect(reviewJson(captured.lines[0]!)).toMatchObject({
+      check: `attempt retry evidence ${sqlstate}`,
+      metric: 'statements',
+      reason: 'retries',
+      failedStatements: [
+        { scale: 1, sqlstate, count: 1 },
+        { scale: 4, sqlstate, count: 1 },
+        { scale: 16, sqlstate, count: 1 },
+      ],
+    });
+  }
+}, 120_000);
+
+test('retry-only SQL missing scale evidence stays in native occurrences without blocking', async () => {
+  const report = await checkGrowth(db, {
+    name: 'intermittent retry-only occurrence',
+    rule: 'series',
+    scales: [1, 4, 16],
+    repetitions: 1,
+    attempts: { commands: 1 },
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    warmup: async (database) => database.pool.query('SELECT 1'),
+    operation: async (database, scale) => {
+      await withConnection(database.pool, async (client) => {
+        if (scale === 1) {
+          await client.query('BEGIN');
+          try {
+            await client.query(`SELECT ${retryFunction}($1::text)`, ['40001']);
+          } catch (error) {
+            if ((error as { code?: string }).code !== '40001') throw error;
+          }
+          await client.query('ROLLBACK');
+        }
+        await client.query('BEGIN');
+        await client.query('SELECT 1 AS committed');
+        await client.query('COMMIT');
+      });
+    },
+  });
+
+  const failed = report.samples[0]!.occurrenceRepetitions[0]!.statements.find(({ error }) => error?.code === '40001');
+  expect(failed?.statement).toContain('fail_retry');
+  expect(report.samples[0]!.attempts?.repetitions[0]!.byOutcome['aborted:40001']).toBe(1);
+  expect(
+    report.samples
+      .slice(1)
+      .every(({ occurrenceRepetitions }) =>
+        occurrenceRepetitions[0]!.statements.every(({ statement }) => !statement.includes('fail_retry')),
+      ),
+  ).toBe(true);
+  expect(report.samples[0]!.repetitions[0]!.failedStatements?.['40001']).toBe(1);
 });
 
 test('capture ledger identifies backend attempts and SQLSTATE outcomes', () => {
