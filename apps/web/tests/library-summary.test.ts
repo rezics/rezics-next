@@ -38,7 +38,14 @@ test('a collection presents localized subject summary labels while hidden subjec
   });
   const page = await loadCollectionPage(client, new Request('https://web.test/collection'), {}, { id: 'collection' });
   expect(page.members.map(({ subject }) => subject)).toEqual([
-    { id: 'localized', type: 'book', types: ['book'], label: 'Localized title', cover: null },
+    {
+      id: 'localized',
+      type: 'book',
+      types: ['book'],
+      label: { value: 'Localized title', language: 'en' },
+      labelLanguage: 'en',
+      cover: null,
+    },
     { id: 'unlabeled', type: 'book', types: ['book'], label: 'unlabeled', cover: null },
     null,
   ]);

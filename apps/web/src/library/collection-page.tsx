@@ -3,6 +3,7 @@ import { readCollectionDestination, type CollectionDestination } from './collect
 import { CollectionMemberDetails } from './collection-member-row';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
+import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { MemberListRow } from '@rezics/ui/list-presentation';
 import { ListRow } from '@rezics/ui/list-row';
@@ -242,12 +243,27 @@ function collectionHref(id: string) {
   return `/${getLocale()}/collections/${encodeURIComponent(id)}`;
 }
 
+function collectionViewAddress(
+  id: string,
+  layout: 'grid' | 'list',
+  cursor: string | undefined,
+  search?: Record<string, string | string[]>,
+) {
+  const [path, query] = collectionPageAddress(getLocale(), id, cursor ?? '', search).split('?');
+  const params = new URLSearchParams(query);
+  if (!cursor) params.delete('cursor');
+  if (layout === 'grid') params.set('layout', 'grid');
+  const suffix = params.toString();
+  return `${path}${suffix ? `?${suffix}` : ''}`;
+}
+
 export function CollectionPage({
   page,
   queryKey,
   refreshPage,
   readEditorPage,
   cursor,
+  layout = 'list',
   search,
 }: {
   page: EditableCollectionPage;
@@ -873,6 +889,24 @@ export function CollectionPage({
             params={page.filterParams}
           />
         ) : null}
+        {!editing ? (
+          <nav aria-label={m.library_layout()} data-slot="collection-layout" className="flex items-center gap-2">
+            <a
+              className={buttonClass}
+              href={collectionViewAddress(page.id, 'list', cursor, search)}
+              aria-current={layout === 'list' ? 'page' : undefined}
+            >
+              {m.library_layout_list()}
+            </a>
+            <a
+              className={buttonClass}
+              href={collectionViewAddress(page.id, 'grid', cursor, search)}
+              aria-current={layout === 'grid' ? 'page' : undefined}
+            >
+              {m.library_layout_grid()}
+            </a>
+          </nav>
+        ) : null}
         <CollectionFilterFeedback
           id={page.id}
           {...(page.filter === undefined ? {} : { filter: page.filter })}
@@ -988,6 +1022,8 @@ export function CollectionPage({
           {!editing ? (
             <CollectionReadMembers
               members={page.memberState === 'preparing' || page.memberState === 'unavailable' ? [] : page.members}
+              layout={layout}
+              presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
               onCopy={(member) => {
@@ -1046,7 +1082,7 @@ export function CollectionPage({
         </section>
         {page.next && !editing ? (
           <nav aria-label={m.library_collection_members()}>
-            <a href={collectionPageAddress(getLocale(), page.id, page.next, search)} className={buttonClass}>
+            <a href={collectionViewAddress(page.id, layout, page.next, search)} className={buttonClass}>
               {m.library_collection_more()}
             </a>
           </nav>
@@ -1102,67 +1138,117 @@ type ReadMember = {
 /** Read presentation is separate from the existing occurrence editor; it performs no enrichment reads. */
 export function CollectionReadMembers<Member extends ReadMember>({
   members,
+  layout = 'list',
+  presentationKind,
   typeRatios,
   listPresentations,
   onCopy,
 }: {
   members: readonly Member[];
+  layout?: 'grid' | 'list';
+  presentationKind?: string | null | undefined;
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
-  return (
-    <ul className="min-w-0 space-y-3" data-collection-members>
-      {members.map((member, index) => {
-        const subject = member.subject;
-        const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
-        if (!subject)
-          return (
-            <ListRow key={key} className="py-4 text-muted-foreground">
-              {m.library_subject_unavailable()}
-            </ListRow>
-          );
-        const title = pageText(libraryTitleValue(subject.label), locale);
-        const presentation = listPresentations?.[subject.type];
-        return (
-          <MemberListRow
-            key={key}
+  const items = members.map((member, index) => {
+    const subject = member.subject;
+    const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
+    if (!subject) {
+      return layout === 'grid' ? (
+        <div key={key} role="listitem" className="py-4 text-sm text-muted-foreground">
+          {m.library_subject_unavailable()}
+        </div>
+      ) : (
+        <ListRow key={key} className="py-4 text-muted-foreground">
+          {m.library_subject_unavailable()}
+        </ListRow>
+      );
+    }
+    const title = pageText(libraryTitleValue(subject.label), locale);
+    const presentation = listPresentations?.[subject.type];
+    const menu = (
+      <Menu
+        title={m.library_collection_actions()}
+        backLabel={m.library_collection_cancel()}
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`${m.library_collection_actions()}: ${title.text}`}
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </Button>
+        }
+        entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => void onCopy(member) }]}
+      />
+    );
+    if (layout === 'grid')
+      return (
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0 space-y-2">
+          <CoverCard
             href={subjectHref({ id: subject.id, label: title.text }, locale).href}
-            subject={{ id: subject.id, title: title.text, types: [subject.type] }}
-            cover={subject.cover}
-            src={coverSrc}
             title={title.text}
             {...(title.lang ? { titleLang: title.lang } : {})}
-            ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
-            {...(presentation ? { listPresentation: presentation } : {})}
-            trailing={
-              <Menu
-                title={m.library_collection_actions()}
-                backLabel={m.library_collection_cancel()}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`${m.library_collection_actions()}: ${title.text}`}
-                  >
-                    <EllipsisIcon aria-hidden="true" />
-                  </Button>
-                }
-                entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => void onCopy(member) }]}
-              />
-            }
-          >
-            <CollectionMemberDetails member={member} listPresentations={listPresentations} />
-            {member.note ? (
-              <p data-slot="collection-member-note" className="whitespace-pre-wrap text-sm text-muted-foreground">
-                {member.note}
-              </p>
-            ) : null}
-          </MemberListRow>
-        );
-      })}
+            cover={{
+              subject: { id: subject.id, title: title.text, types: [subject.type] },
+              cover: subject.cover,
+              src: coverSrc,
+              ratio: collectionMemberRatio(subject, typeRatios, listPresentations),
+              ...(presentation ? { listPresentation: presentation } : {}),
+            }}
+            secondary={<CollectionMemberDetails member={member} listPresentations={listPresentations} />}
+            menuTrigger={menu}
+          />
+          {member.note ? (
+            <p
+              data-slot="collection-member-note"
+              className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground"
+            >
+              {member.note}
+            </p>
+          ) : null}
+        </div>
+      );
+    return (
+      <MemberListRow
+        key={key}
+        href={subjectHref({ id: subject.id, label: title.text }, locale).href}
+        subject={{ id: subject.id, title: title.text, types: [subject.type] }}
+        cover={subject.cover}
+        src={coverSrc}
+        title={title.text}
+        {...(title.lang ? { titleLang: title.lang } : {})}
+        ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+        {...(presentation ? { listPresentation: presentation } : {})}
+        trailing={menu}
+      >
+        <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+        {member.note ? (
+          <p data-slot="collection-member-note" className="whitespace-pre-wrap text-sm text-muted-foreground">
+            {member.note}
+          </p>
+        ) : null}
+      </MemberListRow>
+    );
+  });
+  return layout === 'grid' ? (
+    <div role="list" className="min-w-0" data-collection-members>
+      <CoverGrid
+        ratio={collectionMemberRatio(
+          presentationKind ? { type: presentationKind } : null,
+          typeRatios,
+          listPresentations,
+        )}
+      >
+        {items}
+      </CoverGrid>
+    </div>
+  ) : (
+    <ul className="min-w-0 space-y-3" data-collection-members>
+      {items}
     </ul>
   );
 }

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageStory, libraryCollectionReady, pagePaths, pageReady } from './page';
 import { collectionStoryPaths } from '../kernel/fake/collection-stories';
+import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
@@ -113,7 +114,11 @@ export const CuratorPublicMany: Story = {
 };
 export const GridLayout: Story = {
   name: 'Grid Layout',
-  play: collectionReadyWithHover,
+  play: async (context) => {
+    await collectionReadyWithHover(context);
+    await expect(context.canvasElement.querySelector('[data-slot="cover-grid"]')).toBeVisible();
+    await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
+  },
   render: () => <PageStory visitor="Signed In" path={`/collections/${variants.CuratorPublicMany.id}?layout=grid`} />,
 };
 export const ReaderPublicMany: Story = {
@@ -151,7 +156,7 @@ export const OwnerMenu: Story = {
 };
 
 export const MixedTypes: Story = {
-  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-mixed" />,
+  render: () => <PageStory visitor="Signed In" path={`/collections/${collectionReadStoryIds.mixed}`} />,
   play: async (context) => {
     await variantReady(context, 'A collection across many kinds of work');
     await waitFor(() =>
@@ -171,7 +176,7 @@ export const MixedTypes: Story = {
 
 export const MembersPreparing: Story = {
   name: 'Members preparing',
-  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-preparing" />,
+  render: () => <PageStory visitor="Signed In" path={`/collections/${collectionReadStoryIds.preparing}`} />,
   play: async (context) => {
     await variantReady(context, 'A collection across many kinds of work');
     const canvas = within(context.canvasElement);
@@ -181,7 +186,7 @@ export const MembersPreparing: Story = {
 };
 
 export const Unavailable: Story = {
-  render: () => <PageStory visitor="Signed In" path="/collections/collection-read-unavailable" />,
+  render: () => <PageStory visitor="Signed In" path={`/collections/${collectionReadStoryIds.unavailable}`} />,
   play: async (context) => {
     await variantReady(context, 'A collection across many kinds of work');
     const canvas = within(context.canvasElement);
@@ -193,7 +198,7 @@ export const Unavailable: Story = {
 };
 
 export const Error: Story = {
-  render: () => <PageStory visitor="Signed Out" path="/collections/collection-read-error" />,
+  render: () => <PageStory visitor="Signed Out" path={`/collections/${collectionReadStoryIds.error}`} />,
   play: async (context) => {
     await pageReady(context);
     await expect(await within(context.canvasElement).findByText(m.error_message())).toBeVisible();

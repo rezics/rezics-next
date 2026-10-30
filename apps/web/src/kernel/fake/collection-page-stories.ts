@@ -1,7 +1,7 @@
 import type { KernelRecording } from '../fake';
 import type { FakeRoute } from '../fake-modules.ts';
 import collection from '../recorded/library-collection.json';
-import memberPage from '../recorded/library-collection-members.json';
+import { collectionStoryMembers } from './collection-stories';
 import collections from '../recorded/library-collections.json';
 import subject from '../recorded/subject.json';
 import type { CollectionPresentationData } from '../../library/collection-presentation';
@@ -33,12 +33,12 @@ export type CollectionStoryMode =
 
 export const collectionStoryDestinationId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd0';
 let destinationRevision = 3;
-let destinationMembers: typeof memberPage.members = [];
+let destinationMembers: typeof collectionStoryMembers = [];
 
 let mode: CollectionStoryMode = 'many';
 let finishPendingCreate: (() => void) | undefined;
 const clone = <T>(value: T): T => structuredClone(value);
-const members = clone(memberPage.members);
+const members = clone(collectionStoryMembers);
 const importedCover: NonNullable<CollectionPresentationData['cover']> = {
   ...subject.summary.cover,
   variants: subject.summary.cover.variants.flatMap((variant) =>

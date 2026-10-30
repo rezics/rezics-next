@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import membersRecording from '../src/kernel/recorded/library-collection-members.json';
 import { answerFakeRoute } from '../src/kernel/fake-modules.ts';
+import type { CollectionMember } from '../src/library/reads';
 
 const page = await readFile(new URL('../src/library/collection-page.tsx', import.meta.url), 'utf8');
 const row = await readFile(new URL('../src/library/subject-row.tsx', import.meta.url), 'utf8');
@@ -39,10 +40,15 @@ test('the Collection story gives each covered subject its own media and preserve
     new Request('https://rezics.local/v1/collections/01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2/members'),
     { 'library-collection-members': membersRecording },
   );
-  const members = result?.members as typeof membersRecording.members | undefined;
-  const genji = members?.find((member) => member.subject?.label === 'The Tale of Genji')?.subject?.cover;
-  const kokoro = members?.find((member) => member.subject?.label === 'Kokoro')?.subject?.cover;
-  const prince = members?.find((member) => member.subject?.label === 'The Little Prince')?.subject?.cover;
+  const members = result?.members as CollectionMember[] | undefined;
+  const genji = members?.find((member) => member.subject?.id === '01a17a3b-6bc3-764f-8727-7872d197bd93')?.subject
+    ?.cover;
+  const kokoro = members?.find((member) => member.subject?.id === '01a17a3b-6b89-748f-a486-33c354ef3c9a')?.subject
+    ?.cover;
+  const prince = members?.find((member) => member.subject?.id === '01a17a3b-0884-721b-91ef-d7ffd7bb58e4')?.subject
+    ?.cover;
+  expect(genji?.media).toBe('01a17a3b-0884-7c01-8a3f-c0de00000001');
+  expect(kokoro?.media).toBe('0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003');
   expect(genji?.media).not.toBe(kokoro?.media);
   expect(prince).toBeNull();
 });

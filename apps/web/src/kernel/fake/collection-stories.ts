@@ -1,9 +1,21 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
+import memberPage from '../recorded/library-collection-members.json';
+import subject from '../recorded/subject.json';
+import agentPage from '../recorded/agent-page.json';
 
 const recordedCollectionId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2';
-const distinctKokoroCover = '0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0003';
 const viewerId = 'story-viewer';
+
+// Reuse descriptors with served Storybook media; labels may carry any selected language.
+const memberCovers = new Map([
+  ['01a17a3b-6bc3-764f-8727-7872d197bd93', subject.summary.cover],
+  ['01a17a3b-6b89-748f-a486-33c354ef3c9a', agentPage.reads.r2.body.links[0]!.summary.cover],
+]);
+export const collectionStoryMembers = memberPage.members.map((member) => ({
+  ...member,
+  subject: { ...member.subject, cover: memberCovers.get(member.subject.id) ?? member.subject.cover },
+}));
 
 export const collectionStoryPaths = {
   curatorPublicMany: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba3',
@@ -70,9 +82,10 @@ function distinctCovers(recording: KernelRecording | undefined): KernelRecording
   for (const item of members) {
     if (!item || typeof item !== 'object' || !('subject' in item)) continue;
     const subject = item.subject;
-    if (!subject || typeof subject !== 'object' || !('label' in subject) || !('cover' in subject)) continue;
-    if (subject.label !== 'Kokoro' || !subject.cover || typeof subject.cover !== 'object') continue;
-    subject.cover = { ...subject.cover, media: distinctKokoroCover };
+    if (!subject || typeof subject !== 'object' || !('id' in subject) || !('cover' in subject)) continue;
+    if (typeof subject.id !== 'string' || subject.cover !== null) continue;
+    const cover = memberCovers.get(subject.id);
+    if (cover) subject.cover = structuredClone(cover);
   }
   return copy;
 }

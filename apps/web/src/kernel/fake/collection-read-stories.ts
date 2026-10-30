@@ -2,7 +2,13 @@ import { answerFakeRoute, type FakeRoute } from '../fake-modules';
 import collection from '../recorded/library-collection.json';
 import members from '../recorded/library-collection-members.json';
 
-const scenarios = new Set(['mixed', 'preparing', 'unavailable', 'error', 'hidden']);
+export const collectionReadStoryIds = {
+  mixed: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7be1',
+  preparing: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7be2',
+  unavailable: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7be3',
+  error: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7be4',
+  hidden: '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7be5',
+} as const;
 
 /** Settled read responses only; no added write handlers or successful social-action fixtures. */
 export const routes: FakeRoute[] = [
@@ -44,11 +50,11 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET',
-    path: /^\/v1\/collections\/(collection-read-[a-z]+)(\/members)?$/,
+    path: /^\/v1\/collections\/([^/]+)(\/members)?$/,
     story: ({ match }) => {
       const id = match?.[1];
-      const scenario = id?.replace('collection-read-', '');
-      if (!id || !scenario || !scenarios.has(scenario)) return;
+      const scenario = Object.entries(collectionReadStoryIds).find(([, value]) => value === id)?.[0];
+      if (!id || !scenario) return;
       if (scenario === 'hidden') return { status: 404, code: 'not_found' };
       if (scenario === 'error') return { status: 500, code: 'internal_error' };
       if (!match?.[2])
@@ -80,7 +86,10 @@ export const routes: FakeRoute[] = [
                 cover: null,
                 type: types[index],
                 types: [types[index]],
-                label: `${member.subject.label} — a long title that stays attached to its own image across two lines`,
+                label: {
+                  ...member.subject.label,
+                  value: `${member.subject.label.value} — a long title that stays attached to its own image across two lines`,
+                },
               }
             : null,
         })),
