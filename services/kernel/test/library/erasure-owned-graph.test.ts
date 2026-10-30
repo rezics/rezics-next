@@ -82,6 +82,14 @@ test('default native worker removes private sessions/history, labels, archives, 
     expect((await f.db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND session_id=$2 LIMIT 1`, [owner[0], session.id])).rows).toEqual([]);
   for (const id of privateIds) for (const table of ['collection', 'collection_member', 'canonical_source_fact', 'canonical_source_state'])
     expect((await f.db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`, [owner[0], id])).rows).toEqual([]);
+  for (const id of [...privateIds, publicCollection.id]) {
+    expect((await f.db.admin.query('SELECT 1 FROM library.collection_listing_history WHERE route=$1 AND collection_id=$2 LIMIT 1',
+      [owner[0], id])).rows).toEqual([]);
+    expect((await f.db.admin.query('SELECT 1 FROM library.canonical_source_fact WHERE route=$1 AND collection_id=$2 LIMIT 1',
+      [owner[0], id])).rows).toEqual([]);
+    expect((await f.db.admin.query('SELECT 1 FROM library.canonical_source_state WHERE route=$1 AND collection_id=$2 LIMIT 1',
+      [owner[0], id])).rows).toEqual([]);
+  }
   expect((await f.db.admin.query('SELECT curator_account_id,title,description FROM library.collection WHERE route=$1 AND collection_id=$2',
     [owner[0], publicCollection.id])).rows).toEqual([{ curator_account_id: null, title: publicCollection.title, description: publicCollection.description }]);
   expect((await f.db.admin.query('SELECT subject_id,note FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3',

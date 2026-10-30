@@ -3,7 +3,7 @@ CREATE INDEX bulk_target_erasure_owner ON library.bulk_target (route, account_id
 CREATE INDEX bulk_effect_erasure_owner ON library.bulk_effect (route, account_id, operation_id, ordinal);
 ALTER TABLE library.collection ALTER COLUMN curator_account_id DROP NOT NULL;
 ALTER TABLE library.collection ADD CONSTRAINT collection_deidentified_public CHECK
-  (curator_account_id IS NOT NULL OR (state='active' AND visibility='public' AND membership_kind='curated'));
+  (curator_account_id IS NOT NULL OR (state='active' AND visibility='public'));
 
 CREATE FUNCTION library.guard_retained_collection() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

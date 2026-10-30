@@ -33,7 +33,9 @@ export async function runOwnedGraphSegment(
     }
     const children = phase === 'sessions'
       ? ['units', 'changes', 'sessionDelete'] as const
-      : cursor.retain ? ['collectionRetain'] as const : ['members', 'canonicalFacts', 'canonicalState', 'collectionDelete'] as const;
+      : cursor.retain
+        ? ['canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionRetain'] as const
+        : ['members', 'canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionDelete'] as const;
     const parentPhase = phase === 'sessions' || phase === 'collections';
     const kind = parentPhase && cursor.parent !== null ? children[cursor.child]! : phase;
     const result = await page({ accountId, kind, parent: cursor.parent, after: cursor.after,
