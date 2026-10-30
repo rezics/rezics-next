@@ -47,7 +47,22 @@ test('Contribute and review a relation or qualified credit in its exact slot thr
   const proposed = await fixture.transport.propose(proposal);
   if (!proposed.ok) throw new Error('Expected proposal');
   const write = fixture.calls.find((call) => call.method === 'POST' && call.path.endsWith('/candidates'))!;
-  expect(write.body).toEqual({ statement: proposal.statement });
+  expect(write.body).toEqual({
+    statement: {
+      property: { id: relationProperty },
+      value: { type: 'value', content: relationActor },
+      qualifiers: [
+        { property: { id: 'wdt:P453' }, value: { type: 'value', content: relationRole } },
+        { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Original credit' } },
+        { property: { id: 'schema:position' }, value: { type: 'value', content: '2' } },
+      ],
+      references: [
+        {
+          parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/credits' } }],
+        },
+      ],
+    },
+  });
   expect(write.key).toBe(proposal.key);
   expect(write.authorization).toBe('Bearer fixture');
   expect(write.session).toBe('relation-session');
@@ -59,10 +74,16 @@ test('Contribute and review a relation or qualified credit in its exact slot thr
   const refreshed = await fixture.transport.read(fixture.slot);
   if (!refreshed.ok || !refreshed.page) throw new Error('Expected current candidate heads');
   expect(refreshed.page.candidates.find((item) => item.id === proposed.candidate)?.head).toBe(1);
-  const adopt = confirmation(fixture, proposed.candidate, 'adopt', refreshed.page.adoption!.head);
+  const adopt = {
+    ...confirmation(fixture, proposed.candidate, 'adopt', refreshed.page.adoption!.head),
+    cursor: 'credit-continuation',
+  };
   const result = await fixture.transport.confirm(adopt);
   if (!result.ok || !result.public) throw new Error('Expected public reader');
   expect(result.kind).toBe('selected');
+  expect(
+    fixture.calls.filter((call) => call.method === 'GET' && call.path.endsWith('/candidates')).at(-1)?.query.cursor,
+  ).toBe('credit-continuation');
   expect(result.public.subject.statements[relationProperty]).toEqual([
     fixture.sibling,
     fixture.neighbor,

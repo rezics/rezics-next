@@ -62,6 +62,7 @@ export function RelationEditor({
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
+  const pageCursor = useRef<string | undefined>(undefined);
   const running = useRef(false);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
   const remember = (items: EntityPickerSubject[]) => {
@@ -119,12 +120,14 @@ export function RelationEditor({
   }
   function edit(next: RelationDraft) {
     setDraft(next);
+    setRead((previous) => (previous?.ok ? { ...previous, page: null } : previous));
     setSlot(undefined);
     setCandidate(undefined);
     setResult(undefined);
     setProposed(false);
     setFailure(undefined);
     request.current = undefined;
+    pageCursor.current = undefined;
   }
   async function load(address = slot, cursor?: string) {
     if (running.current || uncertain) return;
@@ -141,6 +144,7 @@ export function RelationEditor({
         return;
       }
       setRead(next);
+      pageCursor.current = cursor;
       setSlot(address);
       setResult(undefined);
       setCandidate((previous) => next.page?.candidates.find((item) => item.id === previous?.id));
@@ -165,6 +169,7 @@ export function RelationEditor({
             operation: confirmation,
             head: confirmation !== 'adopt' ? candidate!.head : (current?.page?.adoption?.head ?? null),
             rank,
+            ...(pageCursor.current ? { cursor: pageCursor.current } : {}),
             key: crypto.randomUUID(),
           };
     running.current = true;
@@ -184,6 +189,7 @@ export function RelationEditor({
         request.current = undefined;
         const refreshed = await transport.read(address);
         if (refreshed.ok) {
+          pageCursor.current = undefined;
           setRead(refreshed);
           setCandidate(refreshed.page?.candidates.find((item) => item.id === next.candidate));
         } else setFailure(refreshed);
@@ -599,7 +605,11 @@ export function RelationEditor({
       )}
       {proposed && <p role="status">{m.relation_proposed({}, options)}</p>}
       {confirmation && !concealed && (
-        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action }, options)}
+          className="space-y-3 rounded-lg border border-border bg-card p-4"
+        >
           <h2 className="font-semibold">{m.candidate_confirm_title({ action }, options)}</h2>
           <p>
             {confirmation === 'adopt'
@@ -621,7 +631,7 @@ export function RelationEditor({
         </div>
       )}
       {current && !uncertain && (
-        <Button variant="outline" disabled={busy} onClick={() => load(slot)}>
+        <Button variant="outline" disabled={busy} onClick={() => load(slot, pageCursor.current)}>
           {m.candidate_reload({}, options)}
         </Button>
       )}

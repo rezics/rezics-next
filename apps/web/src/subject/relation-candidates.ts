@@ -39,10 +39,16 @@ export type RelationRead =
 export type RelationDraft = Pick<Candidate['statement'], 'property' | 'value' | 'qualifiers'> & {
   references: { parts: Candidate['statement']['qualifiers'] }[];
 };
+type InputSnak = { property: { id: string }; value: RelationDraft['value'] };
+export type RelationStatementInput = InputSnak & {
+  qualifiers: InputSnak[];
+  references: { parts: InputSnak[] }[];
+};
 export type RelationProposal = { id: string; slot: RelationSlot; statement: RelationDraft; key: string };
 export type RelationConfirmation = Omit<CandidateCommand, 'property' | 'slot' | 'operation'> & {
   slot: RelationSlot;
   operation: 'accept' | 'reject' | 'adopt';
+  cursor?: string;
 };
 export type RelationResult = CandidateResult | { ok: true; kind: 'rejected'; public: SubjectRead | null };
 export type RelationProposalResult = CandidateFailure | { ok: true; candidate: string };
@@ -131,6 +137,16 @@ export function relationDraft(statement: Candidate['statement']): RelationDraft 
   });
 }
 
+/** Native inputs omit the datatype and reference hashes supplied only by read DTOs. */
+function statementInput(draft: RelationDraft): RelationStatementInput {
+  const snak = ({ property, value }: InputSnak): InputSnak => ({ property: { id: property.id }, value });
+  return {
+    ...snak(draft),
+    qualifiers: draft.qualifiers.map(snak),
+    references: draft.references.map(({ parts }) => ({ parts: parts.map(snak) })),
+  };
+}
+
 export async function readRelationEditor(
   client: KernelClient,
   authorization: string,
@@ -171,14 +187,15 @@ export async function proposeRelation(
     const current = await readRelationEditor(client, authorization, release, input.id, 'en', input.slot);
     if (!current.ok) return current;
     const field = current.fields.find((field) => field.id === input.slot.property);
+    const statement = statementInput(input.statement);
     if (
       !field ||
       !relationSlotMatches(input.statement, input.slot, field) ||
-      checkStatementInput(input.statement, await release).violations.length
+      checkStatementInput(statement, await release).violations.length
     )
       return candidateFailure(400);
     const result = await client.subjects({ id: input.id }).candidates.post(
-      { statement: input.statement },
+      { statement },
       {
         headers: { authorization, 'idempotency-key': input.key } as { 'idempotency-key': string },
       },
@@ -198,7 +215,7 @@ export async function confirmRelation(
   release: Release | Promise<Release>,
   input: RelationConfirmation,
 ): Promise<RelationResult> {
-  const current = await readRelationEditor(client, authorization, release, input.id, 'en', input.slot);
+  const current = await readRelationEditor(client, authorization, release, input.id, 'en', input.slot, input.cursor);
   if (!current.ok) return current;
   const field = current.fields.find((field) => field.id === input.slot.property);
   const candidate = current.page?.candidates.find((candidate) => candidate.id === input.candidate);
@@ -229,7 +246,8 @@ export async function confirmRelation(
       let publicRead: SubjectRead | null = null;
       try {
         const read = await endpoint.get();
-        if (read.status === 200 && read.data) publicRead = read.data;
+        if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
+          publicRead = read.data;
       } catch {
         /* Read remains unavailable. */
       }

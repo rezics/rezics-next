@@ -5,7 +5,7 @@ import {
   proposeRelation,
   confirmRelation,
   relationDraft,
-  type RelationDraft,
+  type RelationStatementInput,
   type RelationSlot,
   type RelationTransport,
 } from '../../subject/relation-candidates';
@@ -159,15 +159,20 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
     if (scenario === 'invalid') return json({ code: 'invalid_request' }, 400);
     if (scenario === 'stale') return json({ code: 'stale_editorial_head' }, 409);
     if (url.pathname.endsWith('/candidates') && body) {
-      const proposed = body.statement as RelationDraft;
+      const proposed = body.statement as RelationStatementInput;
+      const readSnak = (input: RelationStatementInput['qualifiers'][number]) => ({
+        ...input,
+        property: { id: input.property.id, data_type: release.properties[input.property.id]!.datatype },
+      });
       const added: Candidate = {
         ...structuredClone(candidate),
         id: `00000000-0000-8000-8000-000000000${++revision + 400}`,
         statement: {
-          ...structuredClone(proposed),
+          ...readSnak(proposed),
           id: `00000000-0000-8000-8000-000000000${revision + 400}`,
           rank: 'normal',
-          references: proposed.references.map((ref) => ({ ...ref, hash: 'citation' })),
+          qualifiers: proposed.qualifiers.map(readSnak),
+          references: proposed.references.map(({ parts }) => ({ parts: parts.map(readSnak), hash: 'citation' })),
           rezics: { release: publicRead.subject.release, revision },
         },
       };

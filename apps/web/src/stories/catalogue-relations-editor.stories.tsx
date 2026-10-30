@@ -17,6 +17,7 @@ function RelationStory({ scenario = 'ready' }: { scenario?: RelationScenario }) 
   const fixture = useMemo(() => relationFixture(scenario, locale), [scenario, locale]);
   const [reader, setReader] = useState<SubjectPageData>();
   const labels = fixture.publicRead.subject.labels;
+  const title = pickText(labels, locale);
   return (
     <PatternStory visitor="Signed In">
       <article className="mx-auto w-full max-w-4xl space-y-8 p-4 sm:p-8">
@@ -24,7 +25,7 @@ function RelationStory({ scenario = 'ready' }: { scenario?: RelationScenario }) 
           frame={{
             id: fixture.id,
             type: fixture.publicRead.subject.type,
-            title: pickText(labels, locale),
+            title: { text: title.text, ...(title.lang ? { lang: title.lang } : {}) },
             summary: null,
           }}
           locale={locale}
@@ -93,6 +94,11 @@ async function confirm(canvasElement: HTMLElement) {
   await userEvent.click(view.getByRole('button', { name: m.candidate_accept() }));
   return view;
 }
+async function confirmAction(view: ReturnType<typeof within>, action: string) {
+  await userEvent.click(view.getByRole('button', { name: action }));
+  const confirmation = within(view.getByRole('group', { name: m.candidate_confirm_title({ action }) }));
+  await userEvent.click(confirmation.getByRole('button', { name: action }));
+}
 async function adopt(canvasElement: HTMLElement) {
   const view = await confirm(canvasElement);
   await view.findByText(m.candidate_accepted());
@@ -116,8 +122,7 @@ export const Journey: Story = {
     await userEvent.click(await within(document.body).findByRole('option', { name: /The traveler/ }));
     await userEvent.type(view.getByRole('textbox', { name: m.relation_citation() }), 'https://example.org/new-credit');
     await userEvent.click(view.getByRole('button', { name: m.relation_add_citation() }));
-    await userEvent.click(view.getByRole('button', { name: m.relation_propose() }));
-    await userEvent.click(view.getByRole('button', { name: m.relation_propose() }));
+    await confirmAction(view, m.relation_propose());
     await view.findByText(m.relation_proposed());
     await userEvent.click(view.getByRole('button', { name: m.candidate_accept() }));
     await userEvent.click(view.getByRole('button', { name: m.candidate_accept() }));

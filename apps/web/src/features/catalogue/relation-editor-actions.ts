@@ -125,6 +125,7 @@ export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: f
       key: value.key,
       operation: value.operation,
       head: value.head as number | null,
+      ...(checked.cursor ? { cursor: checked.cursor } : {}),
       ...(value.rank ? { rank: value.rank as 'normal' | 'preferred' } : {}),
     };
   })
