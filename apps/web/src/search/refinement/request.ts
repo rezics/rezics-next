@@ -3,6 +3,22 @@ import type { FilterDocument } from '@rezics/filter';
 
 export type RequestedFacet = { property: string; size?: number; cursor?: string };
 export type FacetRequest = { text?: string; filter?: FilterDocument; languages?: string[]; facets: RequestedFacet[] };
+const problem = v.object({
+  type: v.exactOptional(v.string()),
+  title: v.exactOptional(v.string()),
+  status: v.exactOptional(v.number()),
+  code: v.exactOptional(v.string()),
+  detail: v.exactOptional(v.string()),
+  retryable: v.exactOptional(v.boolean()),
+  effect_status: v.exactOptional(v.string()),
+  request_id: v.exactOptional(v.string()),
+  errors: v.exactOptional(v.array(v.object({ pointer: v.string(), code: v.string() }))),
+});
+export function facetProblem(input: unknown): v.InferOutput<typeof problem> | undefined {
+  const body = input && typeof input === 'object' && 'value' in input ? input.value : input;
+  const parsed = v.safeParse(problem, body);
+  return parsed.success ? parsed.output : undefined;
+}
 const value = v.strictObject({ value: v.string(), labels: v.record(v.string(), v.string()) });
 const facet = v.strictObject({ property: v.string(), values: v.array(value), next: v.nullable(v.string()) });
 const page = v.strictObject({ facets: v.array(facet), as_of: v.pipe(v.string(), v.isoTimestamp()) });
@@ -13,7 +29,7 @@ export type FacetState =
       status: 'unavailable' | 'preparing' | 'refused' | 'restart';
       code?: string;
       httpStatus?: number;
-      problem?: unknown;
+      problem?: v.InferOutput<typeof problem> | undefined;
     };
 export type FacetResponse = { status: number; data?: unknown; error?: unknown };
 
@@ -54,7 +70,7 @@ export async function readFacetPage(
               : 'unavailable',
       httpStatus: response.status,
       ...(code ? { code } : {}),
-      problem: response.error ?? response.data,
+      problem: facetProblem(response.error ?? response.data),
     };
   const parsed = v.safeParse(page, response.data);
   if (!parsed.success || parsed.output.facets.length !== request.facets.length)

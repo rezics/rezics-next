@@ -7,21 +7,25 @@ import { requestLanguages } from '../../kernel/languages';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { readRelease } from '../../subject/definitions';
 import { compileRefinement } from './model';
-import { facetRequest, readFacetPage, type FacetState } from './request';
+import { facetRequest, readFacetPage, facetProblem, type FacetState } from './request';
 
 const input = v.strictObject({
   query: v.pipe(v.string(), v.maxLength(256)),
   locale: v.pipe(v.string(), v.maxLength(35)),
   conditions: v.strictObject({
-    type: v.optional(v.string()),
+    type: v.exactOptional(v.string()),
     facetValues: v.record(v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))),
-    ranges: v.optional(
+    ranges: v.exactOptional(
       v.record(
         v.string(),
-        v.strictObject({ gte: v.optional(v.number()), lte: v.optional(v.number()), unit: v.optional(v.string()) }),
+        v.strictObject({
+          gte: v.exactOptional(v.number()),
+          lte: v.exactOptional(v.number()),
+          unit: v.exactOptional(v.string()),
+        }),
       ),
     ),
-    condition: v.optional(
+    condition: v.exactOptional(
       v.pipe(
         v.unknown(),
         v.transform((value) => parseFilter(value)),
@@ -29,7 +33,9 @@ const input = v.strictObject({
     ),
   }),
   facets: v.pipe(
-    v.array(v.strictObject({ property: v.string(), size: v.optional(v.number()), cursor: v.optional(v.string()) })),
+    v.array(
+      v.strictObject({ property: v.string(), size: v.exactOptional(v.number()), cursor: v.exactOptional(v.string()) }),
+    ),
     v.maxLength(8),
   ),
 });
@@ -56,7 +62,12 @@ export const readRefinement = createServerFn({ method: 'POST' })
     } catch (error) {
       if (signal.aborted) throw error;
       if (isPlatformClosedError(error))
-        return { status: 'refused', httpStatus: error.status, code: 'platform_closed', problem: error.problem };
+        return {
+          status: 'refused',
+          httpStatus: error.status,
+          code: 'platform_closed',
+          problem: facetProblem(error.problem),
+        };
       throw error;
     }
   });

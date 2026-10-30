@@ -25,10 +25,16 @@ export type RefinementConditions = {
 };
 
 /** Released own/base order, with no preview allowlist or per-vertical form. */
-export function refinementProperties(release: RefinementRelease, type?: string): RefinementProperty[] {
+export function refinementProperties(
+  release: RefinementRelease,
+  type?: string | readonly string[],
+): RefinementProperty[] {
   return [
     { property: 'type', labels: {}, mode: 'types' as const, datatype: 'type', units: [] },
-    ...facetProperties(release, type ? [type] : Object.keys(release.types)).map((property): RefinementProperty => {
+    ...facetProperties(
+      release,
+      typeof type === 'string' ? [type] : type?.length ? type : Object.keys(release.types),
+    ).map((property): RefinementProperty => {
       const definition = release.properties[property];
       const datatype = definition?.datatype ?? '';
       return {
@@ -65,7 +71,7 @@ export function compileRefinement(
   for (const [property, range] of Object.entries(conditions.ranges ?? {}))
     clauses.push({ statement: { property, range } });
   if (!clauses.length) return;
-  return admitFilter(clauses.length === 1 ? clauses[0] : { and: clauses }, release, { saved: false });
+  return admitFilter(clauses.length === 1 ? clauses[0]! : { and: clauses }, release, { saved: false });
 }
 
 /** Opaque cursors never survive a predicate edit; the untouched condition tree does. */

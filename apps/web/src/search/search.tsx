@@ -19,7 +19,7 @@ import { localizedLabel, ResultList, type Fact, type ResultHit } from './results
 import { SearchSort } from './sort.tsx';
 import { readSearchPage } from './search-request.ts';
 import { compileRefinement, refinementHref, refinementProperties } from './refinement/model';
-import { facetRequest, readFacetPage, refinementKey, type FacetState } from './refinement/request';
+import { facetRequest, readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readDiscovery, type DiscoveryState } from './discovery';
@@ -171,7 +171,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
 
     const type = release && allowedType(release, data.type) ? data.type : undefined;
     if (data.type && !type) throw new Error('Unsupported search type');
-    const filter = release ? compileRefinement(release, { ...data, type }) : undefined;
+    const filter = release ? compileRefinement(release, data) : undefined;
     if (!release && (data.condition || Object.keys(data.facetValues).length || Object.keys(data.ranges ?? {}).length))
       throw new Error('Definitions unavailable');
     const hasSearch = data.query.length > 0 || type !== undefined || filter !== undefined;
@@ -207,7 +207,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         })()
       : Promise.resolve({});
 
-    const roster = release ? refinementProperties(release, type) : [];
+    const roster = release ? refinementProperties(release, type ?? data.facetValues.type) : [];
     const requestedFacets = roster
       .slice(0, 8)
       .filter((entry) => entry.mode === 'values' || entry.mode === 'types')
@@ -222,7 +222,12 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ).catch((error): FacetState => {
           if (signal.aborted) throw error;
           if (isPlatformClosedError(error))
-            return { status: 'refused', code: 'platform_closed', httpStatus: error.status, problem: error.problem };
+            return {
+              status: 'refused',
+              code: 'platform_closed',
+              httpStatus: error.status,
+              problem: facetProblem(error.problem),
+            };
           return { status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' };
         })
       : Promise.resolve(undefined);
