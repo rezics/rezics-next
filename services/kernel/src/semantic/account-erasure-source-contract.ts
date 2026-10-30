@@ -55,6 +55,4 @@ export type SubjectErasureSourcePage =
 export type SubjectErasureSource = Readonly<{
   readPage(input: SubjectErasureSourceRequest): Promise<SubjectErasureSourcePage>;
 }>;
-export type SubjectErasureSourceFactory = (
-  config: Parameters<PublicFilterSourceFactory>[0],
-) => SubjectErasureSource;
+export type SubjectErasureSourceFactory = (config: Parameters<PublicFilterSourceFactory>[0]) => SubjectErasureSource;
