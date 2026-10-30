@@ -88,7 +88,7 @@ Whole binding is blocked by incompatible frozen expectations. In the profile sui
 remain pinned and readable and their owner can clear them without reacceptance” and “removing a profile preserves
 historic state progress and holding pins while permitting own clear and delete” require successful entry DELETE
 to return `200`. The shelf suite's `removeEntry` requires `204`. The [current Library lifecycle
-contract](../../services/kernel/src/library/README.md#entry-retained-deletion-and-undo) explicitly retains `204`
+contract](../../services/kernel/src/library/README.md#entry-deletion-identity-and-restoration) explicitly retains `204`
 with an empty body, including clearing facts whose historical profile is missing. A driver cannot make these
 expectations agree while preserving raw HTTP responses.
 
