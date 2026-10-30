@@ -1,5 +1,6 @@
 import {
   providerFailure,
+  decideProviderCandidate as decideNativeProviderCandidate,
   type ProviderDecisionRow,
   type ProviderFailure,
   type ProviderScope,
@@ -8,7 +9,7 @@ import {
 } from './provider-review-actions';
 import type { KernelClient } from '@rezics/client';
 import type { Release } from '../../subject/definitions';
-import { candidateFailure, type CandidateFailure } from '../../subject/candidates';
+import { candidateFailure } from '../../subject/candidates';
 
 /** Presentation props retained for the existing bounded decision-action component. */
 export type ProviderQueueRow = ProviderDecisionRow;
@@ -160,24 +161,17 @@ export async function decideProviderCandidate(
   authorization: string,
   input: QueueDecision,
 ): Promise<QueueDecisionResult> {
-  try {
-    const endpoint = client.subjects({ id: input.subject }).candidates({ candidate: input.candidate });
-    const options = {
-      headers: {
-        authorization,
-        'idempotency-key': JSON.stringify(input.key),
-        ...(input.session ? { 'rezics-session-token': input.session } : {}),
-      } as { 'idempotency-key': string },
-    };
-    const body = { context: input.context, expected_head: input.head };
-    const result =
-      input.operation === 'accept'
-        ? await endpoint.$accept.post(body, options)
-        : await endpoint.$reject.post(body, options);
-    if (result.status !== 200 || !result.data) return providerFailure(result.status, result.headers);
-    const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
-    return { ok: true, ...(session ? { session } : {}) };
-  } catch {
-    return providerFailure(503);
-  }
+  const result = await decideNativeProviderCandidate(client, authorization, {
+    subject: input.subject,
+    candidate: input.candidate,
+    context: input.context,
+    head: input.head,
+    operation: input.operation,
+    // The private draft retains its UUID; only the native structured header is quoted.
+    key: JSON.stringify(input.key),
+    ...(input.session ? { session: input.session } : {}),
+  });
+  if (!result.ok) return result;
+  const session = result.session ?? input.session;
+  return { ok: true, ...(session ? { session } : {}) };
 }

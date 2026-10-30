@@ -274,7 +274,8 @@ export function ProviderQueue({
             {candidate.statement.qualifiers.map((snak, index) => (
               <div key={index}>
                 <span className="font-medium">
-                  {pageText(page.state === 'ready' ? page.names[snak.property.id] : undefined, locale).text || m.candidate_field()}:{' '}
+                  {pageText(page.state === 'ready' ? page.names[snak.property.id] : undefined, locale).text ||
+                    m.candidate_field()}:{' '}
                 </span>
                 <CandidateValue snak={snak} related={names} locale={locale} />
               </div>
