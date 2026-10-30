@@ -251,15 +251,16 @@ export async function readValueExplanation(
         continuationSession = new Headers(candidates.headers).get('rezics-session-token') ?? continuationSession;
         const candidate = candidates.data.candidates.find((row) => row.id === selected.id);
         // Never serialize unrelated candidates, actors, Source tuples or write heads into this view.
-        page.competition = candidate && candidateHasPayload(candidate)
-          ? {
-              kind: 'returned',
-              decision: candidate.decision,
-              revision: candidate.revision,
-              release: candidate.release,
-              adoption: candidates.data.adoption?.mode ?? null,
-            }
-          : { kind: 'not-returned', next: candidates.data.next };
+        page.competition =
+          candidate && candidateHasPayload(candidate)
+            ? {
+                kind: 'returned',
+                decision: candidate.decision,
+                revision: candidate.revision,
+                release: candidate.release,
+                adoption: candidates.data.adoption?.mode ?? null,
+              }
+            : { kind: 'not-returned', next: candidates.data.next };
       }
     }
     return { kind: 'ready', page, ...(continuationSession ? { session: continuationSession } : {}) };
