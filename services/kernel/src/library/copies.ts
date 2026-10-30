@@ -20,7 +20,13 @@ import {
 } from './command-support.ts';
 import type { Copy, CopyChanges, CopyStatus } from './entry-model.ts';
 import * as store from './entry-store.ts';
-import { hasCopyStatus } from './profile.ts';
+import { hasCopyStatus, resolveLibraryProfilePin } from './profile.ts';
+import { readRelease } from '../semantic/definitions.ts';
+import { admitEntryAttempt } from './entry-lifecycle.ts';
+import { resolveSubject } from './subject-anchor.ts';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
+import retentionRead from './copy-retention-read.sql';
+import retentionRestore from './copy-retention-restore.sql';
 import { readLibraryProfileSource } from './profile-source.ts';
 
 const UPDATED_EVENT = 'com.rezics.library.copy.updated.v1';
@@ -252,8 +258,8 @@ export function createCopyCommands(config: Dependencies) {
         ),
       };
     } catch (error) {
-      if (error instanceof ProblemError && error.code === 'semantic_not_ready') return { error };
-      throw error;
+      // Preparation cannot invalidate an authorized exact receipt.
+      return { error };
     }
   }
 
@@ -267,7 +273,10 @@ export function createCopyCommands(config: Dependencies) {
         kind: 'library.copy.create',
         requestKey,
         input: parsed,
-        prepare: (attempt) => prepareSource(owner, parsed.subjectId, attempt.time),
+        async prepare(attempt) {
+          await admitEntryAttempt(config, owner, 'copy:create', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
+          return prepareSource(owner, parsed.subjectId, attempt.time);
+        },
       },
       async (tx, command, prepared) => {
         if (parsed.kind === undefined) throw new CopyInvalidError('kind');
@@ -308,6 +317,7 @@ export function createCopyCommands(config: Dependencies) {
         requestKey,
         input: { copyId, ...patch },
         async prepare(attempt) {
+          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
           // Release the owner's read checkout before visiting source and Global anchors.
           const current = await readOnly(owner, (client) => store.readCopy(client, route, copyId));
           return current?.accountId === owner.accountId
@@ -352,21 +362,109 @@ export function createCopyCommands(config: Dependencies) {
     const owner = await gate(actor, 'copy:delete');
     const expected = revision === undefined ? undefined : revisionValue(revision);
     const route = sameAccountRoute(owner.accountId, copyId);
-    return runner.ownAccount(
+    return runner.ownAccountPrepared(
       owner,
       {
         action: 'copy:delete',
         kind: 'library.copy.delete',
         requestKey,
         input: { copyId, ...(expected === undefined ? {} : { revision: expected }) },
+        prepare: (attempt) =>
+          admitEntryAttempt(config, owner, 'copy:delete', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
       },
-      async (tx) => {
+      async (tx, command) => {
         const current = await lockOwned(tx, route, owner.accountId, copyId);
-        if (expected !== undefined && current.revision !== expected) throw new CopyConflictError();
-        // HTTP has no revision input. Observe its CAS only after authorized receipt replay.
-        const copy = await store.deleteCopy(tx, route, copyId, expected ?? current.revision);
-        if (!copy) throw new CopyConflictError();
-        return { value: copy, events: [event(DELETED_EVENT, owner.accountId, copy.id)] };
+        if (expected === undefined || current.revision !== expected || expected > 2_147_483_644)
+          throw new CopyConflictError();
+        const deletion = await store.deleteCopy(tx, route, copyId, expected, {
+          transactionId: command.transactionId,
+          time: authoritativeTimeValue(command.time),
+        });
+        if (!deletion) throw new CopyConflictError();
+        // Preserve the existing native result/replay. HTTP returns no payload; its metadata
+        // is the receipt transaction id and this exact original revision plus one.
+        return { value: current, events: [event(DELETED_EVENT, owner.accountId, copyId)] };
+      },
+    );
+  }
+
+  async function restoreCopy(actor: Actor, copyId: string, input: unknown, requestKey: string) {
+    const owner = await gate(actor, 'copy:update');
+    const value = plain(input);
+    const foreign = unexpected(value, ['deletionId', 'revision']);
+    if (foreign !== null) throw new CopyInvalidError(foreign);
+    if (
+      typeof value.deletionId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.deletionId)
+    )
+      throw new CopyInvalidError('deletionId');
+    const selected = { copyId, deletionId: value.deletionId, revision: revisionValue(value.revision) };
+    const route = sameAccountRoute(owner.accountId, copyId);
+    return runner.ownAccountPrepared(
+      owner,
+      {
+        action: 'copy:update',
+        kind: 'library.copy.restore',
+        requestKey,
+        input: selected,
+        async prepare(attempt) {
+          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
+          try {
+            // This exact read owns no checkout while immutable release and original/terminal
+            // disclosure adapters visit their own anchors. Errors are deferred until receipt miss.
+            const row = await readOnly(owner, async (client) => {
+              const result = await client.query<{
+                subject_id: string;
+                kind: string | null;
+                status: string;
+                library_profile_pin: unknown;
+              }>(
+                'SELECT subject_id, kind, status, library_profile_pin FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3',
+                [route, copyId, owner.accountId],
+              );
+              return result.rows[0];
+            });
+            if (!row) throw new LibraryNotFoundError();
+            const pin = decodeLibraryProfilePin(row.library_profile_pin);
+            if (pin) {
+              const release = await readRelease(pool, pin.releaseDigest);
+              const profile = release ? resolveLibraryProfilePin({ digest: pin.releaseDigest, release }, pin) : null;
+              if (!profile || row.kind === null || !hasCopyStatus(profile, row.kind, row.status))
+                throw new Error('Retained copy accepted profile is unavailable');
+            }
+            if (!(await resolveSubject(config, owner, row.subject_id, attempt.time))) throw new LibraryNotFoundError();
+            return { error: null };
+          } catch (error) {
+            return { error };
+          }
+        },
+      },
+      async (tx, command, prepared) => {
+        const row = await retentionRead.run(tx, {
+          route,
+          copy_id: copyId,
+          account_id: owner.accountId,
+          time: authoritativeTimeValue(command.time),
+        });
+        if (!row) throw new LibraryNotFoundError();
+        if (row.deletionId === null) throw new ProblemError('copy_restore_occupied');
+        if (row.deletionId !== selected.deletionId || row.revision !== selected.revision)
+          throw new ProblemError('copy_restore_stale');
+        if (row.expired) throw new ProblemError('copy_restore_expired');
+        if (prepared.error) throw prepared.error;
+        const restored = await retentionRestore.run(tx, {
+          route,
+          account_id: owner.accountId,
+          copy_id: copyId,
+          deletion_id: selected.deletionId,
+          revision: selected.revision,
+          time: authoritativeTimeValue(command.time),
+          transaction_id: command.transactionId,
+        });
+        if (!restored) throw new ProblemError('copy_restore_stale');
+        const copy = await store.readCopy(tx, route, copyId);
+        if (!copy) throw new Error('Restored copy is missing');
+        return { value: copy, events: [event(UPDATED_EVENT, owner.accountId, copyId)] };
       },
     );
   }
@@ -447,5 +545,5 @@ export function createCopyCommands(config: Dependencies) {
     });
   }
 
-  return { createCopy, updateCopy, deleteCopy, readCopy, listCopies };
+  return { createCopy, updateCopy, deleteCopy, restoreCopy, readCopy, listCopies };
 }

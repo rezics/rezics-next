@@ -4,7 +4,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT copy_id, kind
   FROM library.copy
   WHERE route = (SELECT route FROM input) AND account_id = (SELECT account_id FROM input)
-    AND copy_id > :after_id::uuid AND library_profile_pin IS NULL
+    AND deletion_id IS NULL AND copy_id > :after_id::uuid AND library_profile_pin IS NULL
   ORDER BY copy_id
   LIMIT :page_limit::integer
   FOR UPDATE

@@ -538,18 +538,46 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copies/:copyId',
       {
         params: t.Object({ copyId: id }),
+        query: t.Object({ revision: t.Optional(revision) }, closed),
         headers,
         response: { 204: t.Void(), ...failures },
         detail: detail('copy.delete', 'copy:delete', true),
       },
-      async ({ actor, params, headers, admission, job, session, set }) => {
+      async ({ actor, params, query, headers, admission, job, session, set }) => {
         account(actor);
+        point(actor, params.copyId, 'copy:delete');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          command(() => copies().deleteCopy(actor, params.copyId, undefined, key)),
+          command(() => copies().deleteCopy(actor, params.copyId, query.revision, key), 'not_found'),
         );
         session.record(result);
+        set.headers['Library-Copy-Deletion-Id'] = result.transactionId;
+        set.headers['Library-Copy-Deletion-Revision'] = String(result.value.revision + 1);
         set.status = 204;
+      },
+    )
+    .post(
+      customMethod('/v1/copies/:copyId', 'restore'),
+      {
+        params: t.Object({ copyId: id }),
+        headers,
+        body: t.Object({ deletionId: incarnationId, revision }, closed),
+        response: {
+          200: copyResponse,
+          ...failures,
+          409: problemSchema('copy_restore_stale', 'copy_restore_occupied', 'copy_restore_expired'),
+        },
+        detail: detail('copy.restore', 'copy:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        account(actor);
+        point(actor, params.copyId, 'copy:update');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => copies().restoreCopy(actor, params.copyId, body, key), 'not_found'),
+        );
+        session.record(result);
+        return { copy: copyView(result.value) };
       },
     )
     .put(

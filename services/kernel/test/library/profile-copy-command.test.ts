@@ -482,9 +482,29 @@ test('profile retirement allows own delete and exact replay while denying all fr
   expect(await fact(sibling.value.id)).toEqual(savedSibling);
   expect((await native.send(owner.bearer, 'GET', path(created.value.id))).status).toBe(404);
   const httpKey = entryKey();
-  expect((await native.send(owner.bearer, 'DELETE', path(sibling.value.id), undefined, httpKey)).status).toBe(204);
+  expect(
+    (
+      await native.send(
+        owner.bearer,
+        'DELETE',
+        `${path(sibling.value.id)}?revision=${sibling.value.revision}`,
+        undefined,
+        httpKey,
+      )
+    ).status,
+  ).toBe(204);
   const afterHttp = await inspect();
-  expect((await native.send(owner.bearer, 'DELETE', path(sibling.value.id), undefined, httpKey)).status).toBe(204);
+  expect(
+    (
+      await native.send(
+        owner.bearer,
+        'DELETE',
+        `${path(sibling.value.id)}?revision=${sibling.value.revision}`,
+        undefined,
+        httpKey,
+      )
+    ).status,
+  ).toBe(204);
   expect(await inspect()).toEqual(afterHttp);
   expect(afterHttp.receipts).toHaveLength(before.receipts.length + 2);
   const events = afterHttp.events.slice(before.events.length);

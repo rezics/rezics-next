@@ -12,7 +12,7 @@ import { routeOf } from '../route/route.ts';
 export async function admitEntryAttempt(
   deps: { pool: Pool; access: Access; clock?: KernelClock },
   actor: Actor,
-  action: 'library_entry:delete' | 'library_entry:update',
+  action: 'library_entry:delete' | 'library_entry:update' | 'copy:create' | 'copy:update' | 'copy:delete',
   attempt: CommandAttempt,
   deadline: number,
 ): Promise<void> {

@@ -622,13 +622,14 @@ Logs, caches, exports, replicas and backups have no complete Library-specific in
 ### Audit evidence and implementation handoff
 
 The applied delete SQL, not method names, establishes the gaps above: `entry-store-entry-delete.sql`,
-`entry-store-copy-delete.sql` and `collection-store-collection-member-delete.sql` issue DELETE; the member CTE decrements `member_count`. `collection-store-collection-tombstone.sql` only changes
+`collection-store-collection-member-delete.sql` and `published-log-delete.sql` issue DELETE; copy deletion retains its exact episode in place (see Retained independent copies); the member CTE decrements `member_count`. `collection-store-collection-tombstone.sql` only changes
 state, revision, source generation, transaction/update time and deletion/720-hour expiry metadata.
-`personal-routes.ts` pre-reads entries/copies before delete; `published-logs.ts`
-snapshots session values and retains an exact private Undo episode. `collection-reads.ts`, `views.ts`, the member/entry/log page SQL,
+`personal-routes.ts` admits copy deletion without a live-row pre-read before exact receipt lookup; `published-logs.ts`
+snapshots session values and retracts physically. `collection-reads.ts`, `views.ts`, the member/entry/log page SQL,
 `sitemap-page.sql`, `listing-source.sql`, `listing-apply.sql`, `listing.ts` and `work.ts` were inspected: Collection
 reads gate active state, sitemap uses an active/public partial index, listing source/apply is asynchronous and
 unstamped, and the registered terminal consumer only purges entries/copies/follows; no full graph or ordinary restore/purge worker exists. `maintenance-session-page.sql` and
+unstamped, and the registered copy retention worker supplies ordinary copy purge, independently of the incomplete Collection consumer. `maintenance-session-page.sql` and
 `maintenance-history-page.sql` provide indexed page shapes, not deletion. The current label contract already
 defines original-deadline undo and effective reservation capacity; labels have no profile pin. Its native DAOs do
 not establish route/receipt integration or whole-graph cleanup.
@@ -636,8 +637,8 @@ not establish route/receipt integration or whole-graph cleanup.
 `specs/library-deletion-driver.ts` specifies real production HTTP/native seams and persisted inspection/SQL evidence.
 Every case in `specs/library-deletion-outcomes.test.ts` requires the exact absent-driver marker; pure fixture checks
 live separately. The verifier proves only that missing-runtime acceptance is honestly red, never native success.
-The retained-entry table/due DAO and Collection deletion/restore DAOs exist; ordinary lifecycle command/route wiring,
-due-purge runtime, terminal account full-graph cleanup and the public contribution provider remain incomplete.
+The retained-entry table/due DAO and Collection deletion/restore DAOs exist; copy lifecycle command/route wiring and
+default due-purge runtime are present. Terminal account full-graph cleanup and the public contribution provider remain incomplete.
 Measurements use 256/1024/4096 rows, actual examined source keys/SQL plans/shared blocks/statements, fixed P, and
 ordinary retained/future-due/ineligible predecessor rows. Counting only returned/deleted rows is insufficient.
 Native page receipts, child/parent checkpoints and stale-generation guards must remain inspectable after crash/restart.
@@ -1401,3 +1402,50 @@ Cost for existing owner cover:
 - Growth check: the same native suite grows unrelated media variants/source tuples/history/grants, captures actual
   statements/plans/rows/blocks/wire bytes across registered pools, and covers current source-hidden/tuple/media loss,
   viewer scope reduction and a real late Collection visibility change. Shared capture rules and allowances are unchanged.
+
+## Retained independent copies
+
+A copy is an independent owner-local identity, even when several holdings refer to the same edition.
+`copy.deletion_id`, `deleted_at` and `restore_until` retain one exact deletion episode in that existing row;
+`partition_no` is generated from its route. A fresh DELETE requires its numeric revision. Its exact native receipt
+keeps the existing original Copy result; HTTP remains empty `204` and derives `Library-Copy-Deletion-Id` from that
+receipt's transaction ID and `Library-Copy-Deletion-Revision` from its original revision plus one. An omitted guard
+can only replay an already authorized old receipt. The closed `POST /v1/copies/:copyId:restore` body is
+`{ deletionId, revision }`, using `copy:update` and `personal_library`, without a new role or scope. The shared
+caller problem catalogue in `http/problem.ts` defines `copy_restore_stale`, `copy_restore_occupied` and
+`copy_restore_expired`. Missing/foreign identities remain concealed. DTOs expose no retained state or accepted pin.
+
+Delete advances the revision and live fact head once. The live read/list/raw-source SQL excludes retained rows;
+current profile migration excludes them too. Undo restores the same original subject, accepted pin, kind/status,
+user values and creation/update times, with a higher revision and a fresh transaction ID. Current original and
+terminal disclosure still apply, but an absent/retired current profile cannot reject the original accepted pinned
+value. Exact authorized receipt replay precedes deferred source/profile failures and produces no new fact/receipt/event.
+Native current admission and the owning account fence precede receipt lookup. Terminal account deletion cannot be undone.
+
+`copy_retention_episode` enforces the original strict 720-hour deadline; equality is expired, and retries never renew
+it. Live partial indexes lead with `(route, account_id)`; `copy_retention_due` leads with
+`(partition_no, restore_until, route, copy_id)`. The existing all-state owner/created index remains authoritative for
+`purgeAccountFactsPage(kind: 'copy')`, which erases both live and deleted holdings under the existing terminal barrier.
+There are no copy children, a second ownership graph, retained payload table, or permanent private tombstone.
+
+The single Library WorkModule installs `library.copyRetention` and its exact-episode durable consumer on the existing
+maintenance queue. Its real ten-minute DBOS schedule starts a partition-major sweep. Discovery uses an indexed native
+keyset, at most eight raw keys and 4096 serialized bytes. Each physical owning-partition transaction holds the current
+native owner fence and rechecks exact copy/owner/episode/revision/original deadline against native time. Early, stale,
+consumed and restored episodes do nothing. A segment performs at most eight discovery pages, then persists a deterministic
+continuation with its original cutoff and raw-key cursor. SDK checkpoints/recovery provide committed progress; a crash
+after physical commit safely replays to a no-op. Retained physical purge does not raise the live fact head again.
+
+Disposition of all added state: the three episode columns, generated partition and four partial indexes disappear with
+the owning copy row on ordinary due purge or earlier terminal cleanup. The existing account source purger remains the
+owning callsite; this adds no participant or acknowledgement. `fact_source_head` must still be erased last in complete
+terminal orchestration. Shared copies include `core.receipt` results for create/update/delete/restore (original Copy
+values, never pins), ID-only copy updated/deleted outbox envelopes and write basis, plus DBOS inputs/checkpoints for
+partition, cutoff, exact due locators and boolean purge results. Locators for shared receipt/event/work copies and their
+minimizer custody remain explicitly pending under the existing shared-history owner; no fake ACK/NoData or blanket
+account-erasure claim follows from local purge. Existing safe public Collection references contain no copy values.
+
+Native acceptance covers independent identity, authorization, strict JSON/CAS, original pins/times, hidden-source replay,
+strict expiry while parked, stale work after restore/redelete, rollback, commit-before-checkpoint recovery, the default
+scheduler/queue and the terminal owner barrier. The growth fixture uses the shared capture and occurrence APIs at
+64/512/4096 native unrelated live/deleted holdings and histories, including actual default worker/SDK work and bytes.

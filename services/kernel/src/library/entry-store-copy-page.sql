@@ -15,6 +15,7 @@ SELECT copy.route,
        copy.transaction_id AS "transactionId"
 FROM library.copy AS copy
 WHERE copy.route = :route::integer
+  AND copy.deletion_id IS NULL
   AND copy.account_id = :account_id::uuid
   AND (copy.created_at, copy.copy_id) > (
     COALESCE(:after_created_at::nullable(timestamptz), '-infinity'::timestamptz),

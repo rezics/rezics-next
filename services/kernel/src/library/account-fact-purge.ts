@@ -53,6 +53,8 @@ function cursorFor(kind: FactKind, after: Cursor | null): Cursor | null {
 
 /** One native terminal-owner source page, not completion of account erasure.
  * The terminal Access barrier has drained normal writers; this guard is not an Access grant.
+ * Copy selection deliberately includes both live and retained episodes in the existing owner index.
+ * Their deletion metadata/pins/values are erased with the row; the fact head is a later phase.
  * Delivery custody and minimization of receipts/outbox identifiers belong to future orchestration.
  */
 export async function purgeAccountFactsPage(

@@ -15,6 +15,8 @@ export const libraryWorkModule: WorkModule = {
     await registerLabelRetention(context);
     const { registerLibraryPublishedLogRetentionWork } = await import('./published-log-retention.ts');
     await registerLibraryPublishedLogRetentionWork(context);
+    const { registerCopyRetention } = await import('./copy-retention.ts');
+    await registerCopyRetention(context);
   },
 };
 

@@ -4,7 +4,7 @@ SET status = :status, location = :location::nullable(text), source = :source::nu
     note = :note::nullable(text), revision = revision + 1, updated_at = :time, transaction_id = :transaction_id,
     kind = COALESCE(:kind::nullable(text), kind),
     library_profile_pin = COALESCE(:library_profile_pin::nullable(jsonb), library_profile_pin)
-WHERE route = :route AND copy_id = :copy_id AND revision = :revision
+WHERE deletion_id IS NULL AND route = :route AND copy_id = :copy_id AND revision = :revision
 RETURNING route, copy_id AS id, account_id AS "accountId", subject_id AS "subjectId", kind, status, location, source,
           acquired_on::text AS "acquiredOn", disposed_on::text AS "disposedOn", note, revision,
           created_at::text AS "createdAt", updated_at::text AS "updatedAt", transaction_id AS "transactionId";

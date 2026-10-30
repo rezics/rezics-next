@@ -633,12 +633,17 @@ CREATE TABLE library.copy (
     transaction_id uuid NOT NULL,
     library_profile_pin jsonb,
     kind text,
+    deletion_id uuid,
+    deleted_at timestamp with time zone,
+    restore_until timestamp with time zone,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     CONSTRAINT copy_check CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
     CONSTRAINT copy_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT copy_library_profile_kind_check CHECK (((library_profile_pin IS NULL) OR ((kind IS NOT NULL) AND (char_length(kind) > 0)))),
     CONSTRAINT copy_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT copy_location_check CHECK (((location IS NULL) OR (char_length(location) <= 200))),
     CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+    CONSTRAINT copy_retention_episode CHECK ((((deletion_id IS NULL) AND (deleted_at IS NULL) AND (restore_until IS NULL)) OR ((deletion_id IS NOT NULL) AND (deleted_at IS NOT NULL) AND (restore_until IS NOT NULL) AND (restore_until = (deleted_at + '720:00:00'::interval))))),
     CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
     CONSTRAINT copy_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200)))
@@ -1939,6 +1944,27 @@ CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, ac
 
 
 --
+-- Name: copy_live_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_created ON library.copy USING btree (route, account_id, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_live_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_raw_source ON library.copy USING btree (route, account_id, subject_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_live_subject_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
 -- Name: copy_profile_pending; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -1950,6 +1976,13 @@ CREATE INDEX copy_profile_pending ON library.copy USING btree (route, account_id
 --
 
 CREATE INDEX copy_raw_source ON library.copy USING btree (route, account_id, subject_id, copy_id);
+
+
+--
+-- Name: copy_retention_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_retention_due ON library.copy USING btree (partition_no, restore_until, route, copy_id) WHERE (deletion_id IS NOT NULL);
 
 
 --
@@ -2247,10 +2280,17 @@ CREATE TRIGGER collection_retained_immutable BEFORE UPDATE ON library.collection
 
 
 --
+-- Name: copy copy_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_delete AFTER DELETE ON library.copy FOR EACH ROW WHEN ((old.deletion_id IS NULL)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
 -- Name: copy copy_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
 --
 
-CREATE TRIGGER copy_fact_source_rows AFTER INSERT OR DELETE ON library.copy FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER copy_fact_source_rows AFTER INSERT ON library.copy FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --

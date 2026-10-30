@@ -13,7 +13,7 @@ FROM input i CROSS JOIN LATERAL (
    ORDER BY e.subject_id LIMIT i.batch_limit)
   UNION ALL
   (SELECT c.subject_id, c.copy_id FROM library.copy c
-   WHERE i.driver = 'copy' AND c.route = i.route AND c.account_id = i.account_id
+   WHERE i.driver = 'copy' AND c.deletion_id IS NULL AND c.route = i.route AND c.account_id = i.account_id
      AND (c.subject_id, c.copy_id) > (i.after_subject, i.after_fact)
    ORDER BY c.subject_id, c.copy_id LIMIT i.batch_limit)
   UNION ALL

@@ -222,6 +222,7 @@ const typed = [
   'GET /v1/copies/:copyId',
   'PATCH /v1/copies/:copyId',
   'DELETE /v1/copies/:copyId',
+  'POST /v1/copies/:copyId/$restore',
   'PUT /v1/follows/:targetId',
   'DELETE /v1/follows/:targetId',
   'GET /v1/follows/:targetId',
