@@ -272,7 +272,7 @@ async function clockSleep(
   });
 }
 
-function nextWithSignal<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Promise<IteratorResult<T>> {
+function inputWithSignal<T>(operation: () => T | PromiseLike<T>, signal: AbortSignal): Promise<T> {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -281,18 +281,13 @@ function nextWithSignal<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Pro
       if (settled) return;
       settled = true;
       cleanup();
-      try {
-        void Promise.resolve(iterator.return?.()).catch(() => {});
-      } catch {
-        // The original cancellation reason owns the outcome.
-      }
       reject(signal.reason ?? new DOMException('Import interrupted', 'AbortError'));
     };
     signal.addEventListener('abort', aborted, { once: true });
     Promise.resolve()
       .then(() => {
         throwIfAborted(signal);
-        return iterator.next();
+        return operation();
       })
       .then(
         (value) => {
@@ -309,6 +304,19 @@ function nextWithSignal<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Pro
         },
       );
   });
+}
+
+async function closeInput<T>(iterator: AsyncIterator<T>, signal: AbortSignal, localFile = false): Promise<void> {
+  try {
+    // The owning finally requests cleanup exactly once. Source cleanup may be
+    // queued behind a pending next(), or reject after this invocation finishes.
+    const closing = Promise.resolve(iterator.return?.());
+    void closing.catch(() => {});
+    if (localFile) await closing;
+    else if (!signal.aborted) await inputWithSignal(() => closing, signal);
+  } catch {
+    // Preserve the original parser, staging or cancellation failure.
+  }
 }
 
 async function* fileChunks(handle: FileHandle, signal: AbortSignal): AsyncGenerator<Uint8Array> {
@@ -334,13 +342,16 @@ async function* ownedChunks(
   signal: AbortSignal,
   kind: 'dump',
   observer: ImportCliObserver | undefined,
+  localFile = false,
 ): AsyncGenerator<Uint8Array> {
   observer?.onInputPass?.(kind);
   const iterator = input[Symbol.asyncIterator]();
   let ended = false;
   try {
     for (;;) {
-      const next = await nextWithSignal(iterator, signal);
+      // Owned descriptor reads settle before the descriptor is closed. Only
+      // source-controlled operations may be left pending after cancellation.
+      const next = localFile ? await iterator.next() : await inputWithSignal(() => iterator.next(), signal);
       if (next.done) {
         ended = true;
         return;
@@ -357,13 +368,7 @@ async function* ownedChunks(
       }
     }
   } finally {
-    if (!ended) {
-      try {
-        await iterator.return?.();
-      } catch {
-        // Preserve the parser or cancellation failure.
-      }
-    }
+    if (!ended) await closeInput(iterator, signal, localFile);
   }
 }
 
@@ -466,7 +471,7 @@ async function* observedEntries(
   let ended = false;
   try {
     for (;;) {
-      const next = await nextWithSignal(iterator, signal);
+      const next = await inputWithSignal(() => iterator.next(), signal);
       if (next.done) {
         ended = true;
         return;
@@ -477,7 +482,7 @@ async function* observedEntries(
         let byteEnded = false;
         try {
           for (;;) {
-            const item = await nextWithSignal(byteIterator, signal);
+            const item = await inputWithSignal(() => byteIterator.next(), signal);
             if (item.done) {
               byteEnded = true;
               return;
@@ -488,25 +493,13 @@ async function* observedEntries(
             yield chunk;
           }
         } finally {
-          if (!byteEnded) {
-            try {
-              await byteIterator.return?.();
-            } catch {
-              // Preserve the original staging failure.
-            }
-          }
+          if (!byteEnded) await closeInput(byteIterator, signal);
         }
       })();
       yield { ...entry, bytes };
     }
   } finally {
-    if (!ended) {
-      try {
-        await iterator.return?.();
-      } catch {
-        // Preserve the original staging failure.
-      }
-    }
+    if (!ended) await closeInput(iterator, signal);
   }
 }
 
@@ -729,6 +722,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
                 signal,
                 'dump',
                 options.observer,
+                dumpHandle !== undefined,
               ),
               {
                 maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
@@ -805,6 +799,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         signal,
         'dump',
         options.observer,
+        dumpHandle !== undefined,
       );
       const nativeInput = config.source === 'openlibrary' ? openLibraryMetadata(input, signal) : input;
       const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));

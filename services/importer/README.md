@@ -511,6 +511,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: O(input bytes) scan with unchanged record/chunk retention caps, no per-property retained set or durable rows, and unchanged item reconciliation bounds.
 - Growth check: `tests/wikidata-mixed-dump.test.ts` exercises the production coordinator with mixed input, unchanged and changed refresh, property-only mass-stop and invalid acquisition. Its real durable in-memory stores and typed external API fake prove local coordination, not real server authorization, PostgreSQL work or promotion. Existing reader growth/retention cases remain the measured cost evidence; the connected native item/public bulk journeys above supply separate API evidence.
 
+### Interrupted source acquisition cleanup
+
+- Touches: the existing input iterator boundary, exact source lease and owned SQLite/file handles.
+- Bound: one cleanup request per unfinished source iterator, with one abort listener per pending input/cleanup operation. After cancellation, no further input reads or acquisition HTTP/public writes; source-controlled cleanup promises are observed for rejection without waiting for settlement. Owned descriptor reads and already-dispatched import writes still settle before their handles close. Valid input has no lifetime timer cap.
+- Growth check: `tests/cli-upstream-cancellation.test.ts` uses an actual CLI child with a nonsettling source return; `tests/cli-upstream-cleanup.test.ts` covers queued generator return, late rejection, prior-baseline preservation and same-process reacquisition. Existing `tests/concurrent-cli-owners.test.ts` and `tests/cli-file-admission.test.ts` retain ownership and descriptor-admission coverage. These are stack-free acquisition checks, with no native Auth/public success, PostgreSQL budget or wall-time performance claim.
+
 ### Review and resume a bounded partial source reduction
 
 - Touches: the supplied current run, maintained seal counters, exact missing-record pages and their existing native removal commands and receipts.
@@ -745,6 +751,15 @@ The frozen [concurrent native journey](../kernel/test/imports/concurrent-cli-own
 covers held acquisition, same-alias refusal, independent publication, cancellation/reopening, immutable prior
 identities/receipts, and exact-tuple fence visibility. The importer-local companion proves only pre-effect
 ownership and cleanup. Native execution and growth evidence are separate; this caller introduces no growth series.
+
+During incomplete acquisition, interruption requests upstream iterator cleanup once and releases the actual
+source guard even if that cleanup never settles or is queued behind a stalled read. Late read/cleanup rejection
+is observed. Incomplete input cannot seal a successful or empty dump, advance the prior completed baseline,
+or start Auth/public effects. Ordinary EOF and parser-error cleanup retain their existing behavior; cancellation
+can interrupt a pending source cleanup. Owned file reads and already-dispatched writes settle before SQLite
+and descriptor closure. This boundary does not detach ingestion or change post-dispatch authorization cleanup.
+The frozen [CLI child](tests/cli-upstream-cancellation.test.ts) proves the nonsettling-return acquisition case;
+its timeout only bounds a failing test, and establishes no performance or native-stack claim.
 
 ## VNDB durable table materialization
 
