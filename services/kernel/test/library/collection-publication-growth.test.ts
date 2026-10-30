@@ -220,10 +220,17 @@ beforeAll(async () => {
   // Point-lookup plans need a real native baseline at the smallest measured scale.
   // Build both Collection and SDK history through their actual commands/workflows;
   // no fabricated rows, planner switches, harness exceptions or changed bounds.
-  for (let i = 0; i < 1500; i++) {
-    if (i % 50 === 0) await refreshBearer();
-    const c = await collection();
-    await publish(await notification(c.id));
+  // Fill the native queues in bounded batches matching their normal worker capacity.
+  // Awaiting each empty workflow separately would pay the queue's dispatch interval
+  // 1,500 times without exercising any additional product behavior.
+  for (let i = 0; i < 1500; i += 8) {
+    if (i % 200 === 0) await refreshBearer();
+    await Promise.all(
+      Array.from({ length: Math.min(8, 1500 - i) }, async () => {
+        const c = await collection();
+        await publish(await notification(c.id));
+      }),
+    );
   }
   await refreshBearer();
 }, 600_000);
