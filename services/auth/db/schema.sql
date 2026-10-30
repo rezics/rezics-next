@@ -126,6 +126,25 @@ END $$;
 
 
 --
+-- Name: auth_copy_result_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_copy_result_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.retired AND NEW.absent AND NEW.source_key IS NULL AND
+    (NEW.result_digest IS NULL OR NEW.result_digest=decode(repeat('00',32),'hex')) AND
+    NEW.result_finished_at IS NOT DISTINCT FROM OLD.result_finished_at THEN RETURN NEW; END IF;
+  IF NEW.source_key IS DISTINCT FROM OLD.source_key OR (OLD.result_finished_at IS NOT NULL AND
+    (NEW.result_finished_at IS DISTINCT FROM OLD.result_finished_at OR NEW.result_digest IS DISTINCT FROM OLD.result_digest)) THEN
+    RAISE EXCEPTION 'Auth native result commitment is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_copy_role_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1446,37 +1465,22 @@ CREATE TABLE public.auth_copy_work (
     bytes integer DEFAULT 0 NOT NULL,
     parent_workflow_id text,
     source_key text,
-    CONSTRAINT auth_copy_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
     result_digest bytea,
     result_finished_at timestamp with time zone,
-    CONSTRAINT auth_copy_work_result_digest_check CHECK ((octet_length(result_digest) = 32)),
     CONSTRAINT auth_copy_result_source CHECK (((result_digest IS NULL) = (result_finished_at IS NULL))),
     CONSTRAINT auth_copy_work_bytes_check CHECK (((bytes >= 0) AND (bytes <= 10485760))),
     CONSTRAINT auth_copy_work_check CHECK (((NOT absent) OR retired)),
     CONSTRAINT auth_copy_work_digest_check CHECK ((octet_length(digest) = 32)),
     CONSTRAINT auth_copy_work_name_check CHECK ((name = ANY (ARRAY['accounts.registration'::text, 'accounts.operation'::text, 'accounts.client-reduction'::text]))),
+    CONSTRAINT auth_copy_work_result_digest_check CHECK ((octet_length(result_digest) = 32)),
     CONSTRAINT auth_copy_work_rows_check CHECK (((rows >= 0) AND (rows <= 139))),
     CONSTRAINT auth_copy_work_scope_count_check CHECK (((scope_count >= 1) AND (scope_count <= 16))),
+    CONSTRAINT auth_copy_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
     CONSTRAINT auth_copy_work_version_check CHECK ((version = 1)),
     CONSTRAINT auth_copy_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
 );
 
 
-
--- The native result commitment survives removal of all workflow artifacts.
-CREATE FUNCTION public.auth_copy_result_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.retired AND NEW.absent AND NEW.source_key IS NULL AND
-    (NEW.result_digest IS NULL OR NEW.result_digest=decode(repeat('00',32),'hex')) AND
-    NEW.result_finished_at IS NOT DISTINCT FROM OLD.result_finished_at THEN RETURN NEW; END IF;
-  IF NEW.source_key IS DISTINCT FROM OLD.source_key OR (OLD.result_finished_at IS NOT NULL AND
-    (NEW.result_finished_at IS DISTINCT FROM OLD.result_finished_at OR NEW.result_digest IS DISTINCT FROM OLD.result_digest)) THEN
-    RAISE EXCEPTION 'Auth native result commitment is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER auth_copy_result_immutable BEFORE UPDATE ON public.auth_copy_work
-  FOR EACH ROW EXECUTE FUNCTION public.auth_copy_result_immutable();
 
 --
 -- Name: auth_effect_receipt; Type: TABLE; Schema: public; Owner: -
@@ -3418,6 +3422,13 @@ CREATE TRIGGER auth_consent_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON 
 --
 
 CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_consent_revision();
+
+
+--
+-- Name: auth_copy_work auth_copy_result_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_copy_result_immutable BEFORE UPDATE ON public.auth_copy_work FOR EACH ROW EXECUTE FUNCTION public.auth_copy_result_immutable();
 
 
 --
