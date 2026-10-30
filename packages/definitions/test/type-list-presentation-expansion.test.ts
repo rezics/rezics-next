@@ -52,7 +52,12 @@ function inputWith(hint: unknown = selection) {
   return {
     root: 'lists.yaml',
     schemas: { 'lists.yaml': JSON.stringify(schema) },
-    presentation: { 'lists/en': 'types:\n  schema:Book: book\n  schema:Other: other\n' },
+    presentation: {
+      'lists/en': JSON.stringify({
+        types: { 'schema:Book': 'book', 'schema:Other': 'other' },
+        properties: Object.fromEntries(Object.values(schema.slots).map((slot) => [slot.slot_uri, slot.slot_uri])),
+      }),
+    },
   };
 }
 async function errors(input: Parameters<typeof compileCatalogue>[0]) {
