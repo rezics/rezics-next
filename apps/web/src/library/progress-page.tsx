@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { EllipsisIcon } from 'lucide-react';
 import { progressIndexSubjects } from './progress-subjects';
-import { ProgressPicker, pickerSubject } from './progress-picker';
+import { ProgressPicker, pickerSubject, type ProgressPickerSubject } from './progress-picker';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
@@ -19,7 +19,7 @@ import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import type { ProgressIndex, ProgressMode } from './progress-reads';
-import { progressView } from './progress-label';
+import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
 import { finishProgressSession, startProgressSession, readProgressChoices } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
@@ -44,12 +44,14 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const router = useRouter();
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
-    const subject = page.selectedSubject ?? sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
+    const subject = page.selectedSubject;
     return subject ? [pickerSubject(subject)] : [];
   });
-  const [seenSubject, setSeenSubject] = useState(page.subjectId);
+  const [seenPage, setSeenPage] = useState(page);
+  const [version, setVersion] = useState<ProgressPickerSubject[]>([]);
   const subject = chosen[0]?.id ?? '';
   const [choices, setChoices] = useState<ProgressChoices>(page.progressChoices);
+  const [choicesUnavailable, setChoicesUnavailable] = useState(page.choicesUnavailable ?? false);
   const [selectedMode, setMode] = useState<ProgressMode | undefined>(page.progressChoices?.[0]?.mode);
   const [selectedUnit, setUnit] = useState('');
   const mode = choices?.find((choice) => choice.mode === selectedMode)?.mode ?? choices?.[0]?.mode;
@@ -64,10 +66,19 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  if (seenSubject !== page.subjectId) {
-    setSeenSubject(page.subjectId);
+  if (seenPage !== page) {
+    setSeenPage(page);
     setChoices(page.progressChoices);
-    const next = page.selectedSubject ?? sessions.find((session) => session.subject?.id === page.subjectId)?.subject;
+    setChoicesUnavailable(page.choicesUnavailable ?? false);
+    choiceRequest.current++;
+    setChoosing(false);
+    setVersion([]);
+    setTotal('');
+    setUnit('');
+    setMode(page.progressChoices?.[0]?.mode);
+    setKey(page.idempotencyKey);
+    setAlert(null);
+    const next = page.selectedSubject;
     setChosen(next ? [pickerSubject(next)] : []);
   }
 
@@ -81,6 +92,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
       const result = await startProgressSession({
         data: {
           subjectId: subject.trim(),
+          ...(version[0] ? { versionSubjectId: version[0].id } : {}),
           mode,
           unit,
           idempotencyKey: key,
@@ -89,19 +101,13 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         headers: csrfHeaders(),
       });
       if (!result.ok) {
-        setAlert(
-          result.reason === 'unsupported_library_profile'
-            ? m.library_progress_unsupported()
-            : result.reason === 'conflict'
-              ? m.library_progress_conflict()
-              : m.library_progress_invalid(),
-        );
+        setAlert(progressFailureMessage(result.reason));
         return;
       }
       setKey(crypto.randomUUID());
       window.location.assign(router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } }).href);
     } catch {
-      setAlert(m.library_progress_invalid());
+      setAlert(m.library_progress_unavailable());
     } finally {
       setPending(false);
     }
@@ -116,7 +122,7 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
         {sessions.length ? (
           <ol className="space-y-3">
             {sessions.map((session) => (
-              <SessionRow key={`${session.id}:${session.revision}`} session={session} ratio={ratio} />
+              <SessionRow key={`${session.id}:${session.revision}`} session={session} ratio={ratio} sourcePage={page} />
             ))}
           </ol>
         ) : (
@@ -147,7 +153,10 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                 onValueChange={async (value) => {
                   const request = ++choiceRequest.current;
                   setChosen(value);
+                  setVersion([]);
+                  setTotal('');
                   setChoices(undefined);
+                  setChoicesUnavailable(false);
                   setChoosing(true);
                   setAlert(null);
                   try {
@@ -160,14 +169,16 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
                     setUnit('');
                     setTotal('');
                   } catch {
-                    if (request === choiceRequest.current) setAlert(m.library_progress_invalid());
+                    if (request === choiceRequest.current) setAlert(m.library_progress_unavailable());
                   } finally {
                     if (request === choiceRequest.current) setChoosing(false);
                   }
                 }}
               />
             </Field>
-            {chosen.length > 0 && !choosing && !choices?.length && !alert ? (
+            {alert && !choices?.length ? <p role="alert">{alert}</p> : null}
+            {choicesUnavailable ? <p role="status">{m.library_progress_unavailable()}</p> : null}
+            {chosen.length > 0 && !choosing && !choices?.length && !alert && !choicesUnavailable ? (
               <p role="status" className="text-muted-foreground">
                 {m.library_progress_unsupported()}
               </p>
@@ -176,6 +187,28 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
               <form className="max-w-xl space-y-5" onSubmit={onStart}>
                 <input type="hidden" name="idempotencyKey" value={key} />
                 <input type="hidden" name="subjectId" value={subject} />
+                <Field>
+                  <FieldLabel>{m.library_progress_version()}</FieldLabel>
+                  <ProgressPicker
+                    label={m.library_progress_version()}
+                    value={version}
+                    onValueChange={setVersion}
+                  />
+                  <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
+                </Field>
+                <dl className="space-y-2 rounded-lg border border-border p-4 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_subject()}</dt>
+                    <dd className="break-words"><SelectedProgressSubject subject={chosen[0]} /></dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_version()}</dt>
+                    <dd className="break-words">
+                      {version[0] ? <SelectedProgressSubject subject={version[0]} /> : m.library_progress_no_version()}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
                 <fieldset className="space-y-3">
                   <FieldLegend variant="label">{m.library_current_choices()}</FieldLegend>
                   <RadioGroup
@@ -244,13 +277,40 @@ export function ProgressIndexPage({ page }: { page: ProgressIndex }) {
   );
 }
 
-function SessionRow({ session: initial, ratio }: { session: ProgressIndex['sessions'][number]; ratio: CoverRatio }) {
+function SelectedProgressSubject({ subject }: { subject: ProgressPickerSubject | undefined }) {
+  if (!subject) return null;
+  return (
+    <>
+      <a href={subjectHref({ id: subject.id, label: subject.title }, getLocale()).href} className="underline">
+        {subject.title}
+      </a>
+      {subject.typeLabel ? <span className="ml-2 text-muted-foreground">{subject.typeLabel}</span> : null}
+    </>
+  );
+}
+
+function SessionRow({
+  session: initial,
+  ratio,
+  sourcePage,
+}: {
+  session: ProgressIndex['sessions'][number];
+  ratio: CoverRatio;
+  sourcePage: ProgressIndex;
+}) {
   const readable = useOperation('progress_session.read');
   const [session, setSession] = useState(initial);
+  const [seenPage, setSeenPage] = useState(sourcePage);
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const [key, setKey] = useState(() => crypto.randomUUID());
+  if (sourcePage !== seenPage) {
+    setSeenPage(sourcePage);
+    setSession(initial);
+    setConfirming(null);
+    setError(false);
+  }
   const progress = progressView(session, getLocale());
   async function finish(action: 'complete' | 'abandon') {
     if (pending) return;

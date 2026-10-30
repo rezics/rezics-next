@@ -3056,5 +3056,16 @@
   "library_rule_conflict": "条件が別の場所で変更されました。保存前に現在の版を読み込んでください。下書きは保持されています。",
   "library_rule_reloaded": "現在の版を読み込みました。保持された下書きを確認してから保存してください。",
   "library_rule_members": "コレクションのメンバーを見る",
-  "library_rule_hint": "カタログの条件と非公開のライブラリ情報を組み合わせます。保存時にすべての条件が検証されます。"
+  "library_rule_hint": "カタログの条件と非公開のライブラリ情報を組み合わせます。保存時にすべての条件が検証されます。",
+  "library_progress_version": "バージョンの参照先（任意）",
+  "library_progress_version_scope": "任意です。この参照先が同じ作品の別版であることや、内容が同じであることは確認されません。",
+  "library_progress_no_version": "バージョンの参照先は未選択です",
+  "library_progress_new_session": "別のセッションを開始",
+  "library_progress_new_session_scope": "新しいセッションは空の状態で始まり、以前のセッションと履歴は保持されます。複数のセッションを同時に進められます。中断は別の操作であり、その後の開始に失敗しても取り消されません。",
+  "library_progress_unavailable": "進捗を利用できません。再試行する前に、再読み込みして最新のセッションを確認してください。",
+  "library_progress_refused": "この操作は拒否されました。再読み込みして現在のセッションを確認してください。",
+  "library_progress_meaning_unknown": "元の単位の意味は不明です。保存された値を変更せずに表示しています。",
+  "library_progress_structure_unverified": "単位IDと位置のテキストはこのセッションの記録です。現在のコンテンツ構造との対応は確認されていません。",
+  "library_progress_recording_unavailable": "進捗を記録できるか確認できませんでした。このセッションの保存済み履歴は引き続き読めます。",
+  "library_progress_retry": "再試行"
 }

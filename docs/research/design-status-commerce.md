@@ -196,9 +196,25 @@ awaits Root ownership; it does not defer this adopted definition journey.
 
 **Progress / sessions.** [Library module](../../services/kernel/src/library/README.md) owns algorithms; [profile consumers](../library-profile-consumers.md)
 own pin consumption. Delivered [abstraction research](library-abstraction.md) distinguishes rereads and sparse units.
-Owner-route sessions/history/units, `/library/progress` and `/v1/progressSessions` implement start/record/complete/abandon;
-publication is explicit. Cross-profile/structure-change journey design coverage is incomplete. **Handoff:** how should changed
-subject structure preserve sparse completed-unit IDs and reread history without inventing completion or rewriting accepted meaning?
+The adopted [structure/version journey](library-progress-structure-journey.md) preserves manual history: exact scalar
+values and captured totals, opaque cursor text, actual paged sparse IDs/cardinality and separate session identities.
+Accepted profile pins identify original vocabulary and meaning; they do not verify content structure. Another version or reread starts an
+explicitly selected new, empty session; abandoning the old session is separate and is not rolled back by a failed start.
+Web's real start type/validator/form/POST now carries the existing native optional `versionSubjectId`, with selected
+subject/version identities and the reference's limited scope visible before submission. Several sessions may remain active.
+Detail retains lifecycle commands under their native authority, including when recording is unsupported/unavailable;
+publication, entry state, copies and benefits remain independent. Withheld current summaries stay withheld.
+
+The owner-detail presentation seam is adopted as `presentation=FULL` → `progressSession.presentation`, resolving the
+original pinned meaning and advisory current input constraints. The native route's closed query and generated response
+on this base still lack that seam. The consumer derives its aliases from the actual generated declarations and keeps
+that opt-in binding unavailable; it reads existing FULL raw history without sending an unsupported query or resolving
+today's definition as historic meaning. Positive known-meaning/current-pair fixtures and the complete acceptance journey
+therefore await the native producer/declaration. No fake support/grant/pin substitutes for it.
+Constructed native-declared raw-history stories cover scalar preservation at 390/1280, sparse `{1,3,7}` across actual
+pages, opaque cursor text and withheld/unresolved summaries. Web owns their ordinary review; no additional capture
+campaign is claimed. Verified structure, source-change detection, cross-edition conversion and reader resume remain
+absent. Interface source and local typing do not establish native, whole-journey/privacy or promoted-main proof.
 
 **Own published-log entry.** Source now exposes `/library/logs`, the missing personal entry into explicitly published
 reading snapshots, through the existing `loadMyPublishedLogs`/`readMyPublishedLogs` owner reader. The signed-in shared

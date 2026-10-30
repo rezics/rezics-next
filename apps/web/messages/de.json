@@ -3056,5 +3056,16 @@
   "library_rule_conflict": "Die Regel wurde anderswo geändert. Lade die aktuelle Version vor dem Speichern. Dein Entwurf bleibt erhalten.",
   "library_rule_reloaded": "Aktuelle Version geladen. Prüfe deinen beibehaltenen Entwurf vor dem Speichern.",
   "library_rule_members": "Sammlungseinträge ansehen",
-  "library_rule_hint": "Kombiniere Katalogbedingungen und private Bibliotheksdaten. Beim Speichern wird jede Bedingung geprüft."
+  "library_rule_hint": "Kombiniere Katalogbedingungen und private Bibliotheksdaten. Beim Speichern wird jede Bedingung geprüft.",
+  "library_progress_version": "Versionsverweis (optional)",
+  "library_progress_version_scope": "Optional. Dieser Verweis bestätigt weder, dass es sich um eine Ausgabe dieses Eintrags handelt, noch dass der Inhalt übereinstimmt.",
+  "library_progress_no_version": "Kein Versionsverweis ausgewählt",
+  "library_progress_new_session": "Weitere Sitzung beginnen",
+  "library_progress_new_session_scope": "Eine neue Sitzung beginnt leer. Frühere Sitzungen und ihr Verlauf bleiben erhalten. Mehrere Sitzungen können aktiv bleiben. Das Abbrechen ist eine separate Aktion; ein fehlgeschlagener Start macht sie nicht rückgängig.",
+  "library_progress_unavailable": "Der Fortschritt ist nicht verfügbar. Lade die aktuelle Sitzung neu, bevor du es erneut versuchst.",
+  "library_progress_refused": "Diese Aktion wurde abgelehnt. Lade die Seite neu, um die aktuelle Sitzung zu prüfen.",
+  "library_progress_meaning_unknown": "Die ursprüngliche Bedeutung der Einheit ist unbekannt. Gespeicherte Werte werden unverändert angezeigt.",
+  "library_progress_structure_unverified": "Einheiten-IDs und Positionstext gehören zu dieser Sitzung. Ihr Bezug zur aktuellen Inhaltsstruktur wurde nicht überprüft.",
+  "library_progress_recording_unavailable": "Ob weitere Einträge möglich sind, konnte nicht überprüft werden. Der gespeicherte Verlauf dieser Sitzung bleibt lesbar.",
+  "library_progress_retry": "Erneut versuchen"
 }

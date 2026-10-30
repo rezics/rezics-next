@@ -87,3 +87,16 @@ export const UnsupportedProfile: Story = {
     <PageStory visitor="Signed In" path={`/library/progress?subjectId=${encodeURIComponent(unprofiledSubjectId)}`} />
   ),
 };
+
+export const ExplicitVersionChoice: Story = {
+  name: 'Choose a readable version reference for a new session',
+  play: async (context) => {
+    await libraryProgressReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByRole('combobox', { name: m.library_progress_version() });
+    await canvas.findByText(m.library_progress_version_scope());
+    await canvas.findByText(m.library_progress_new_session_scope());
+    await canvas.findByText(m.library_progress_no_version());
+  },
+  render: () => ProgressStory('recorded'),
+};

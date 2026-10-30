@@ -31,7 +31,7 @@ function coverResolver(subjects: readonly (LibrarySubject | null)[]) {
       summaries.set(subject.id, subject);
   return (subject: LibrarySubject | null, id?: string | null) => {
     const summary = summaries.get(subject?.id ?? id ?? '');
-    if (!subject) return summary ?? null;
+    if (!subject) return null;
     const typeLabel = subject?.typeLabel ?? summary?.typeLabel;
     return summary
       ? { ...subject, cover: summary.cover, types: summary.types, ...(typeLabel ? { typeLabel } : {}) }

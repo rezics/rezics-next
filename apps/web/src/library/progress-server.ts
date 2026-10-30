@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import { progressFormChoices, type ProgressChoices } from './progress-profile';
 import { readRelease } from '../subject/definitions';
 import { requestLocale } from '../kernel/client';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { kernelClient } from '../kernel/client';
 import { nameSubjectTypes } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
@@ -59,8 +60,10 @@ function validateStart(input: unknown): ProgressStartInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   const total = value.total === undefined ? undefined : requiredString(value.total, 32);
+  const versionSubjectId = value.versionSubjectId === undefined ? undefined : requiredString(value.versionSubjectId, 128);
   return {
     subjectId: requiredString(value.subjectId, 128),
+    ...(versionSubjectId === undefined ? {} : { versionSubjectId }),
     mode: requiredString(value.mode, 32),
     unit: requiredString(value.unit, 128),
     idempotencyKey: requiredString(value.idempotencyKey, 64),
@@ -113,12 +116,20 @@ export const readProgressIndex = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
-    await nameSubjectTypes([page.selectedSubject, ...page.sessions.map((session) => session.subject)]);
+    await nameSubjectTypes([
+      page.selectedSubject,
+      ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
+    ]);
     if (page.signedIn) {
-      const release = await readRelease();
-      const locale = requestLocale(request) ?? 'en';
-      const subject = page.selectedSubject;
-      page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
+      try {
+        const release = await readRelease();
+        const locale = requestLocale(request) ?? 'en';
+        const subject = page.selectedSubject;
+        page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
+      } catch (error) {
+        if (isPlatformClosedError(error)) throw error;
+        page.choicesUnavailable = true;
+      }
     }
     return page;
   });

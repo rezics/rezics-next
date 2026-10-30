@@ -25,6 +25,61 @@ const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressState = 'active' | 'completed' | 'abandoned';
 
+export type NativeProgressSession = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['get']>>['data']
+>['progressSession'];
+type NativeField<T, K extends PropertyKey> = K extends keyof T ? T[K] : never;
+/** No parallel Web wire contract: this is never until the native declaration is delivered. */
+export type NativeProgressPresentation = NonNullable<NativeField<NativeProgressSession, 'presentation'>>;
+type NativeDetailOptions = NonNullable<Parameters<ReturnType<KernelClient['progressSessions']>['get']>[0]>;
+type NativeDetailQuery = NonNullable<NativeField<NativeDetailOptions, 'query'>>;
+type NativePresentationQuery = Extract<NativeField<NativeDetailQuery, 'presentation'>, 'FULL'>;
+/** The current closed native query rejects presentation. Enable only with its declared producer. */
+export function nativeProgressPresentationQuery(): { presentation: NativePresentationQuery } | undefined {
+  return undefined;
+}
+
+/** Missing native body is unavailable; untyped response additions are not display or recording authority. */
+export function nativeProgressPresentation(_session: NativeProgressSession): NativeProgressPresentation | undefined {
+  return undefined;
+}
+
+const unavailablePresentation = {
+  meaning: 'unavailable',
+  structure: 'unverified',
+  recording: { state: 'unavailable' },
+} as const;
+
+function presentationFields(
+  presentation: Pick<ProgressLabelInput, 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension'> & {
+    meaning: string;
+    structure: 'unverified';
+    recording: { state: string; inputRules?: ProgressInputRules };
+  },
+): Pick<ProgressSessionCore, 'meaning' | 'recordingState' | 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension' | 'inputRules'> {
+  const meaning =
+    presentation.meaning === 'known' || presentation.meaning === 'unknown' ? presentation.meaning : 'unavailable';
+  const recordingState =
+    presentation.recording.state === 'supported' || presentation.recording.state === 'unsupported'
+      ? presentation.recording.state
+      : 'unavailable';
+  return {
+    meaning,
+    recordingState,
+    ...(meaning !== 'known'
+      ? {}
+      : {
+          ...(presentation.unitLabel === undefined ? {} : { unitLabel: presentation.unitLabel }),
+          ...(presentation.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: presentation.unitLabelLanguage }),
+          ...(presentation.unitCountForms === undefined ? {} : { unitCountForms: presentation.unitCountForms }),
+          ...(presentation.dimension === undefined ? {} : { dimension: presentation.dimension }),
+        }),
+    ...(recordingState !== 'supported' || presentation.recording.inputRules === undefined
+      ? {}
+      : { inputRules: presentation.recording.inputRules }),
+  };
+}
+
 export type ProgressChange = {
   id: string;
   revision: number;
@@ -47,6 +102,8 @@ export type ProgressSessionCore = Pick<
   mode: ProgressMode;
   unit: string;
   inputRules?: ProgressInputRules;
+  meaning?: 'known' | 'unknown' | 'unavailable';
+  recordingState?: 'supported' | 'unsupported' | 'unavailable';
   total: string | null;
   amount: string | null;
   locator: string | null;
@@ -65,6 +122,7 @@ export type ProgressIndex = {
   subjectId: string;
   selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
+  choicesUnavailable?: boolean;
   sessions: ProgressSessionCore[];
   next: string | null;
   idempotencyKey: string;
@@ -139,18 +197,24 @@ function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
   return presentSubject(subject);
 }
 
-function presentSession(session: RawSession): ProgressSessionCore {
+function presentSession(
+  session: RawSession,
+  presentation?: NativeProgressPresentation | typeof unavailablePresentation,
+): ProgressSessionCore {
   return {
     id: session.id,
     subjectId: session.subjectId,
     versionSubjectId: session.versionSubjectId,
     mode: session.mode,
     unit: session.unit,
-    ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
-    ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
-    ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
-    ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
-    ...(session.inputRules === undefined ? {} : { inputRules: session.inputRules }),
+    ...(presentation
+      ? presentationFields(presentation)
+      : {
+          ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
+          ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
+          ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
+          ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
+        }),
     total: session.total,
     amount: session.amount,
     locator: session.locator,
@@ -288,11 +352,12 @@ async function readSelectedSubject(client: KernelClient, subjectId: string, auth
 }
 
 async function readOne(client: KernelClient, sessionId: string, authorization: string) {
+  const query = { ...libraryFullQuery(), ...nativeProgressPresentationQuery() };
   const result = await client.progressSessions({ sessionId }).get({
-    query: libraryFullQuery(),
+    query,
     headers: { authorization },
   });
-  return readData<{ progressSession: RawSession }>(result).progressSession;
+  return readLibraryResult(result).progressSession;
 }
 
 async function readChanges(client: KernelClient, sessionId: string, authorization: string, cursor?: string) {
@@ -339,7 +404,7 @@ export async function loadProgressIndex(
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await load();
   }
-  const sessions = page.progressSessions.map(presentSession);
+  const sessions = page.progressSessions.map((session) => presentSession(session));
   const selectedSubject =
     sessions.find((session) => session.subjectId === subjectId)?.subject ??
     (await readSelectedSubject(client, subjectId, authorization));
@@ -388,7 +453,7 @@ export async function loadProgressSession(
     ...(input.changes && !changesResult.stale ? { changesCursor: input.changes } : {}),
     ...(input.units && !unitsResult.stale ? { unitsCursor: input.units } : {}),
     session: {
-      ...presentSession(session),
+      ...presentSession(session, nativeProgressPresentation(session) ?? unavailablePresentation),
       changes: changes.changes.map(presentChange),
       changesNext: changes.next,
       units: units.completedUnits,
@@ -399,6 +464,7 @@ export async function loadProgressSession(
 
 export type ProgressStartInput = {
   subjectId: string;
+  versionSubjectId?: string;
   mode: string;
   unit: string;
   total?: string;
@@ -417,6 +483,7 @@ export async function startProgress(
   const total = input.total?.trim() ?? '';
   if (
     !routeId.test(input.subjectId) ||
+    (input.versionSubjectId !== undefined && !routeId.test(input.versionSubjectId)) ||
     !isMode(input.mode) ||
     !isWritableUnit(input.unit) ||
     !idempotencyKeyPattern.test(input.idempotencyKey) ||
@@ -425,7 +492,13 @@ export async function startProgress(
     return { ok: false, reason: 'invalid' };
   try {
     const result = await client.progressSessions.post(
-      { subjectId: input.subjectId, mode: input.mode, unit: input.unit, ...(total ? { total } : {}) },
+      {
+        subjectId: input.subjectId,
+        ...(input.versionSubjectId === undefined ? {} : { versionSubjectId: input.versionSubjectId }),
+        mode: input.mode,
+        unit: input.unit,
+        ...(total ? { total } : {}),
+      },
       { headers: writeHeaders(authorization, input.idempotencyKey) },
     );
     const status = callStatus(result);

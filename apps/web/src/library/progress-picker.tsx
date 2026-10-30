@@ -44,13 +44,15 @@ async function search(text: string, signal: AbortSignal): Promise<ProgressPicker
 export function ProgressPicker({
   value,
   onValueChange,
+  label = m.library_progress_subject(),
 }: {
   value: readonly ProgressPickerSubject[];
   onValueChange: (value: ProgressPickerSubject[]) => void;
+  label?: string;
 }) {
   return (
     <EntityPicker
-      label={m.library_progress_subject()}
+      label={label}
       search={search}
       src={coverSrc}
       value={value}

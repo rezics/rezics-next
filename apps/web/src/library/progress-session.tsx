@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Link } from '@tanstack/react-router';
+import { isNotFound, Link } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Menu } from '@rezics/ui/menu';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
@@ -16,11 +16,12 @@ import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { parseUnitBatch, type ProgressSessionPage, type ProgressState } from './progress-reads';
+import { parseUnitBatch, type ProgressFailure, type ProgressSessionPage, type ProgressState } from './progress-reads';
 import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
-import { progressView } from './progress-label';
+import { progressFailureMessage, progressView } from './progress-label';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -69,7 +70,8 @@ function SessionEditor({
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
   const [editing, setEditing] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
-  const offered = !unsupported;
+  const [readDenied, setReadDenied] = useState(false);
+  const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
   const [phone, setPhone] = useState(false);
   const pending = useRef(false);
   const addId = useId();
@@ -97,6 +99,7 @@ function SessionEditor({
   if (page !== seenPage) {
     setSeenPage(page);
     setUnsupported(false);
+    setReadDenied(false);
     setSession(page.session);
     setKey(page.idempotencyKey);
     setAmount('');
@@ -104,19 +107,21 @@ function SessionEditor({
     setPosition('');
     setAddText('');
     setRemoveText('');
+    setEditing(false);
     setAlert(null);
     setConfirming(null);
   }
 
-  function explain(reason: string) {
-    setAlert(
-      reason === 'unsupported_library_profile'
-        ? m.library_progress_unsupported()
-        : reason === 'conflict'
-          ? m.library_progress_conflict()
-          : m.library_progress_invalid(),
-    );
-    if (reason === 'unsupported_library_profile') setUnsupported(true);
+  function explain(reason: ProgressFailure['reason'], recording = false) {
+    setAlert(progressFailureMessage(reason));
+    if (reason === 'forbidden' || reason === 'closed') {
+      setSession((current) => ({ ...current, subject: null, versionSubject: null, recordingState: 'unavailable' }));
+      setEditing(false);
+    }
+    if (recording && reason === 'unsupported_library_profile') {
+      setUnsupported(true);
+      setEditing(false);
+    }
   }
 
   async function refreshHistory() {
@@ -128,10 +133,23 @@ function SessionEditor({
           ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
         },
       });
-      if (fresh.signedIn) setSession(fresh.session);
-      else setAlert(m.library_history_unavailable());
-    } catch {
-      setAlert(m.library_history_unavailable());
+      if (fresh.signedIn) {
+        setSession(fresh.session);
+        setReadDenied(false);
+        setAlert(null);
+      } else {
+        setReadDenied(true);
+        setAlert(m.library_progress_refused());
+      }
+    } catch (error) {
+      if (isNotFound(error) || isPlatformClosedError(error)) {
+        setReadDenied(true);
+        setAlert(m.library_progress_refused());
+      } else {
+        setSession((current) => ({ ...current, subject: null, versionSubject: null, recordingState: 'unavailable' }));
+        setAlert(m.library_progress_unavailable());
+      }
+      setEditing(false);
     }
   }
 
@@ -140,7 +158,7 @@ function SessionEditor({
     setAlert(null);
     const intent =
       session.mode === 'cursor_position'
-        ? { locator: locator.trim(), position: position.trim() }
+        ? { locator, position: position.trim() }
         : { amount: amount.trim() };
     pending.current = true;
     try {
@@ -149,7 +167,7 @@ function SessionEditor({
         headers: csrfHeaders(),
       });
       if (!result.ok) {
-        explain(result.reason);
+        explain(result.reason, true);
         return;
       }
       setKey(crypto.randomUUID());
@@ -160,7 +178,7 @@ function SessionEditor({
       await refreshHistory();
       setEditing(false);
     } catch {
-      setAlert(m.library_progress_invalid());
+      setAlert(m.library_progress_unavailable());
     } finally {
       pending.current = false;
     }
@@ -186,7 +204,7 @@ function SessionEditor({
         headers: csrfHeaders(),
       });
       if (!result.ok) {
-        explain(result.reason);
+        explain(result.reason, true);
         return;
       }
       setKey(crypto.randomUUID());
@@ -196,7 +214,7 @@ function SessionEditor({
       await refreshHistory();
       setEditing(false);
     } catch {
-      setAlert(m.library_progress_invalid());
+      setAlert(m.library_progress_unavailable());
     } finally {
       pending.current = false;
     }
@@ -220,10 +238,22 @@ function SessionEditor({
       setSession((current) => ({ ...current, ...result.session }));
       await refreshHistory();
     } catch {
-      setAlert(m.library_progress_invalid());
+      setAlert(m.library_progress_unavailable());
     } finally {
       pending.current = false;
     }
+  }
+
+  if (readDenied) {
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="alert">{m.library_progress_refused()}</p>
+        <Button variant="outline" onClick={() => void refreshHistory()}>
+          {m.library_progress_retry()}
+        </Button>
+      </article>
+    );
   }
 
   const { min, max, step } = session.inputRules ?? {};
@@ -405,15 +435,27 @@ function SessionEditor({
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
-      {!session.unitLabel ? (
+      {session.meaning !== 'known' ? (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.library_history_unavailable()}{' '}
-          <code>
-            {session.mode} / {session.unit}
-          </code>
+          {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
         </p>
       ) : null}
-      {unsupported ? <p role="status">{m.library_progress_no_longer_offered()}</p> : null}
+      <p className="text-sm text-muted-foreground">
+        {m.library_progress_mode()} / {m.library_progress_unit()}: <code>{session.mode} / {session.unit}</code>
+      </p>
+      {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+        <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
+      ) : null}
+      {unsupported || session.recordingState === 'unsupported' ? (
+        <p role="status">{m.library_progress_no_longer_offered()}</p>
+      ) : session.recordingState !== 'supported' ? (
+        <div className="space-y-2">
+          <p role="status">{m.library_progress_recording_unavailable()}</p>
+          <Button variant="outline" onClick={() => void refreshHistory()}>
+            {m.library_progress_retry()}
+          </Button>
+        </div>
+      ) : null}
       {alert && !editing ? <p role="alert">{alert}</p> : null}
       {session.state === 'active' ? (
         <div className="flex items-center gap-2">
@@ -444,6 +486,14 @@ function SessionEditor({
           </Button>
         </div>
       ) : null}
+      <Exposure operation="progress_session.create">
+        <section className="space-y-3">
+          <Link to="/library/progress" search={{ subjectId: session.subjectId }} className={buttonClass}>
+            {m.library_progress_new_session()}
+          </Link>
+          <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
+        </section>
+      </Exposure>
       {editing ? (
         phone ? (
           <BottomSheet open={editing} onOpenChange={setEditing} title={m.library_progress_update()}>

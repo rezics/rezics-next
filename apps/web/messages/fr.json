@@ -3056,5 +3056,16 @@
   "library_rule_conflict": "La règle a changé ailleurs. Chargez la version actuelle avant d’enregistrer. Votre brouillon est conservé.",
   "library_rule_reloaded": "Version actuelle chargée. Vérifiez votre brouillon conservé avant d’enregistrer.",
   "library_rule_members": "Voir les membres de la collection",
-  "library_rule_hint": "Combinez les conditions du catalogue et vos données privées. Chaque condition est vérifiée à l’enregistrement."
+  "library_rule_hint": "Combinez les conditions du catalogue et vos données privées. Chaque condition est vérifiée à l’enregistrement.",
+  "library_progress_version": "Référence de version (facultative)",
+  "library_progress_version_scope": "Facultatif. Cette référence ne confirme ni qu’il s’agit d’une édition de cet élément, ni que le contenu est identique.",
+  "library_progress_no_version": "Aucune référence de version sélectionnée",
+  "library_progress_new_session": "Commencer une autre session",
+  "library_progress_new_session_scope": "Une nouvelle session commence vide et conserve les sessions précédentes et leur historique. Plusieurs sessions peuvent rester actives. L’abandon est une action distincte ; un démarrage échoué ne l’annule pas.",
+  "library_progress_unavailable": "La progression est indisponible. Rechargez pour vérifier la dernière session avant de réessayer.",
+  "library_progress_refused": "Cette action a été refusée. Rechargez la page pour vérifier la session actuelle.",
+  "library_progress_meaning_unknown": "Le sens d’origine de l’unité est inconnu. Les valeurs enregistrées sont affichées sans modification.",
+  "library_progress_structure_unverified": "Les identifiants d’unité et le texte de position appartiennent à cette session. Leur correspondance avec la structure actuelle du contenu n’a pas été vérifiée.",
+  "library_progress_recording_unavailable": "La possibilité d’enregistrer une progression n’a pas pu être vérifiée. L’historique enregistré de cette session reste consultable.",
+  "library_progress_retry": "Réessayer"
 }

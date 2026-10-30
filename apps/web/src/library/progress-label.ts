@@ -1,7 +1,15 @@
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import type { LibraryCountForms } from '@rezics/definitions';
-import type { ProgressMode } from './progress-reads';
+import type { ProgressFailure, ProgressMode } from './progress-reads';
+
+export function progressFailureMessage(reason: ProgressFailure['reason']): string {
+  if (reason === 'unsupported_library_profile') return m.library_progress_unsupported();
+  if (reason === 'conflict') return m.library_progress_conflict();
+  if (reason === 'forbidden' || reason === 'closed') return m.library_progress_refused();
+  if (reason === 'unavailable') return m.library_progress_unavailable();
+  return m.library_progress_invalid();
+}
 
 export type ProgressLabelInput = {
   mode: ProgressMode;
