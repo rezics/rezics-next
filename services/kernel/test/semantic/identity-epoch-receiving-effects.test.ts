@@ -84,3 +84,59 @@ test('an authentic native transaction cannot become receiving proof through the 
   await expect(runCommand(f.pool, { partition: home(input.job.jobId) }, tx => store.publish(tx, input.job)))
     .rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
+
+// Product receiving admission, rather than a fixture-written grant, is the regression boundary.
+test('a committed source-specific receiving record admits only its exact home job owner and effect', async () => {
+  const { prepareIdentityReceivingEffect, lookupIdentityReceivingEffect } =
+    await import('../../src/semantic/identity-receiving-effects.ts');
+  const input = await admittedReceivingJob(f);
+  const effect = await prepareIdentityReceivingEffect(f.pool, {
+    job: input.job, original: input.original, owner: input.library.collection.id,
+    sourceId: input.library.collection.id, scope: input.original,
+    effectKey: 'library-owner-rekey', disposition: 'NEW',
+  });
+  const before = await input.members();
+  await runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
+    const record = await lookupIdentityReceivingEffect(tx, effect);
+    expect(record?.owner).toBe(input.library.collection.id);
+    expect(record?.source.id).toBe(input.library.collection.id);
+    await store.admitHomeEffect(tx, effect);
+    return noEffect(null);
+  });
+  for (const invalid of [
+    { ...effect, effectKey: 'wrong-effect' },
+    { ...effect, original: input.terminal },
+    { ...effect, job: { ...effect.job, epoch: effect.job.epoch + 1n } },
+    { ...effect, job: { ...effect.job, jobId: newId(0x8b30) } },
+    { ...effect, receipt: { ...effect.receipt, epoch: effect.receipt.epoch + 1 } },
+    { ...effect, receipt: { ...effect.receipt, transactionId: randomUUID() } },
+  ]) await expect(runCommand(f.pool, { partition: effect.receipt.partition }, async tx => {
+    await store.admitHomeEffect(tx, invalid);
+    return noEffect(null);
+  })).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  await expect(runCommand(f.pool, { partition: home(input.original) }, async tx => {
+    await store.admitHomeEffect(tx, effect);
+    return noEffect(null);
+  })).rejects.toMatchObject({ code: 'identity_effect_stale' });
+  expect(await input.members()).toEqual(before);
+  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+});
+
+test('receiving source selection cannot be replaced with a different owner source or scope', async () => {
+  const { prepareIdentityReceivingEffect } = await import('../../src/semantic/identity-receiving-effects.ts');
+  const input = await admittedReceivingJob(f);
+  const selected = {
+    job: input.job, original: input.original, owner: input.library.collection.id,
+    sourceId: input.library.collection.id, scope: input.original,
+    effectKey: 'library-owner-rekey', disposition: 'NEW' as const,
+  };
+  for (const invalid of [
+    { ...selected, owner: newId(0xac10) },
+    { ...selected, sourceId: newId(0xac10) },
+    { ...selected, scope: newId(0x8b40) },
+    { ...selected, job: { ...input.job, jobId: newId(0x8b50) } },
+    { ...selected, original: newId(0x8b60) },
+  ]) await expect(prepareIdentityReceivingEffect(f.pool, invalid)).rejects.toMatchObject({
+    code: 'identity_effect_stale',
+  });
+});
