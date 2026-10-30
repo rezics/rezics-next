@@ -64,11 +64,12 @@ export type IdentityReceivingProgress = Readonly<{
   frontier: IdentityFrontier;
 }>;
 /** One bounded native capture call; the caller retains the returned frontier and charges its work. */
-export type IdentityReceivingCaptureInput = NativeSourceCaptureWork & Readonly<{
-  identity: NativeSourceIdentity;
-  frontier: NativeSourceFrontier | null;
-  limit: number;
-}>;
+export type IdentityReceivingCaptureInput = NativeSourceCaptureWork &
+  Readonly<{
+    identity: NativeSourceIdentity;
+    frontier: NativeSourceFrontier | null;
+    limit: number;
+  }>;
 export type IdentityReceivingCaptureResult =
   | Awaited<ReturnType<NativeLibrarySourceCustody['capturePage']>>
   | Awaited<ReturnType<NativeLibrarySourceCustody['finishCapture']>>;
