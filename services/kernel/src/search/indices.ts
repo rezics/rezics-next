@@ -5,6 +5,7 @@ const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
 export const SUBJECT_SORT_FORMAT = 1;
+export const DISCOVERY_INDEX_FORMAT = 1;
 export const MAX_SUBJECT_GENERATIONS = 3;
 
 type SubjectIndexDefinition = Record<string, unknown>;
@@ -42,9 +43,39 @@ export function subjectIndexDefinition(): SubjectIndexDefinition {
 }
 
 export async function createSubjectIndex(search: OpenSearch, prefix: string, generation: number): Promise<void> {
+  return createIndex(search, prefix, generation, subjectIndexDefinition());
+}
+
+/** Successor mapping in the same physical family; legacy Subject generations keep their format. */
+export function discoveryIndexDefinition(): SubjectIndexDefinition {
+  const result = structuredClone(subjectIndexDefinition());
+  if (!record(result.mappings) || !record(result.mappings.properties) || !record(result.mappings._meta))
+    throw new TypeError('Invalid base Search index definition');
+  result.mappings._meta.discovery_format = DISCOVERY_INDEX_FORMAT;
+  Object.assign(result.mappings.properties, {
+    family: { type: 'keyword' },
+    kind: { type: 'keyword' },
+    identity: { type: 'keyword' },
+    account_revision: { type: 'keyword' },
+    active_handle: { type: 'keyword' },
+  });
+  return result;
+}
+
+/** Allocation only; source exhaustion, replay, exact-key reconciliation and custody precede activation. */
+export async function createDiscoveryIndex(search: OpenSearch, prefix: string, generation: number): Promise<void> {
+  return createIndex(search, prefix, generation, discoveryIndexDefinition());
+}
+
+async function createIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  body: SubjectIndexDefinition,
+): Promise<void> {
   const index = subjectIndexName(prefix, generation);
   try {
-    await search.request('PUT', `/${index}`, subjectIndexDefinition());
+    await search.request('PUT', `/${index}`, body);
   } catch (error) {
     if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') return;
     throw error;

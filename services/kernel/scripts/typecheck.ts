@@ -36,15 +36,18 @@ export async function runKernelTypecheck(
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
   if (env.DATABASE_URL) return runCommands(env);
 
-  const placed = await runPlaced(
-    {
-      label: 'kernel typecheck',
-      root: repository,
-      cwd: directory,
-      command: ['bun', 'scripts/typecheck.ts'],
-    },
-    env,
-  );
+  const placed =
+    env.REZICS_STACK_REMOTE === 'off'
+      ? null
+      : await runPlaced(
+          {
+            label: 'kernel typecheck',
+            root: repository,
+            cwd: directory,
+            command: ['bun', 'scripts/typecheck.ts'],
+          },
+          env,
+        );
   if (placed !== null) return placed;
 
   return withDatabase((databaseEnv) => runCommands(databaseEnv));

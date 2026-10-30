@@ -1,4 +1,4 @@
-import { bulkLines, type IndexAction } from './document.ts';
+import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 
 /** A bulk write did not establish its required index visibility guarantee. */
@@ -38,7 +38,11 @@ function completeShards(shards: unknown): boolean {
   );
 }
 
-function validateBulkResponse(response: unknown, target: string, actions: readonly IndexAction[]): boolean {
+function validateBulkResponse(
+  response: unknown,
+  target: string,
+  actions: readonly IndexAction<SearchDocument>[],
+): boolean {
   if (!isRecord(response) || typeof response.errors !== 'boolean' || !Array.isArray(response.items))
     return writeError([response]);
 
@@ -120,10 +124,10 @@ function validateRefreshResponse(status: number, response: unknown): void {
  * Return only after every action is visible to search, including independently winning
  * writes behind accepted external-version conflicts.
  */
-export async function writeIndexActions(
+export async function writeIndexActions<Document extends SearchDocument>(
   search: OpenSearch,
   index: string,
-  actions: readonly IndexAction[],
+  actions: readonly IndexAction<Document>[],
 ): Promise<void> {
   const response = await search.bulk<BulkResponse>(bulkLines(index, actions), {
     query: { refresh: 'wait_for' },

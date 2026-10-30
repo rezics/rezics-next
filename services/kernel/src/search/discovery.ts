@@ -5,10 +5,12 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { SubjectDocument } from './document.ts';
 import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 
 /** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
 export const DISCOVERY_DOCUMENT_FORMAT = 1;
 export const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
+export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
 export type DiscoveryKey =
   | { owner: 'semantic'; kind: string; route: number; id: string }
@@ -25,6 +27,20 @@ export type IndexedAccount = {
 };
 export type AccountSnapshot = { partition: number; position: bigint; accounts: IndexedAccount[] };
 export type AccountPageKey = { route: number; id: string };
+export type AccountFrontier = AccountPageKey;
+export type AccountPage = AccountSnapshot & { next: AccountPageKey | null };
+
+export function discoveryPartition(id: string): number {
+  const route = routeOf(id);
+  if (route === null) throw new TypeError('Discovery id must be a routable UUID');
+  return partitionOf(route);
+}
+
+/** Compatibility for the earlier projection adapter; native mixed writers use discoveryDocumentId. */
+export function discoveryIdentity(owner: DiscoveryKey['owner'], id: string): string {
+  discoveryPartition(id);
+  return `${owner === 'accounts' ? 'account' : 'subject'}:${id}`;
+}
 export interface AccountDiscoverySource {
   /** Deduplicate at most 100 full keys in one partition; omit unknown/ineligible rows. */
   read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;

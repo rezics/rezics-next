@@ -1,6 +1,7 @@
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
+import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
 export const MAX_NAME_SORT_CHARACTERS = 512;
@@ -32,8 +33,28 @@ export type SubjectDocument = {
   rating_prior_epoch?: number | null;
 };
 
-export type IndexAction =
-  | { op: 'index'; id: string; version: bigint; document: SubjectDocument }
+/** Public index allowlist. Live profile/verification/avatar data is always hydrated by Accounts. */
+export type AccountDocument = {
+  family: 'account';
+  kind: 'account';
+  identity: string;
+  id: string;
+  partition: number;
+  account_revision: string;
+  active_handle: string | null;
+  names: string[];
+  name_sort: string | null;
+  descriptions: [];
+  statements: [];
+  facts: [];
+  relation_facet_overflow: [];
+};
+
+export type DiscoverySubjectDocument = SubjectDocument & { family: 'subject'; kind: string; identity: string };
+export type SearchDocument = SubjectDocument | AccountDocument;
+
+export type IndexAction<Document extends SearchDocument = SubjectDocument> =
+  | { op: 'index'; id: string; version: bigint; document: Document }
   | { op: 'delete'; id: string; version: bigint };
 
 function uniqueValues(values: readonly string[]): string[] {
@@ -134,7 +155,72 @@ export function documentActions(
   return actions;
 }
 
-export function bulkLines(index: string, actions: readonly IndexAction[]): unknown[] {
+/** The caller admits the native snapshot before constructing these positioned replacements/deletes. */
+export function accountDocumentActions(
+  snapshot: AccountSnapshot,
+  ids: readonly string[],
+): IndexAction<AccountDocument>[] {
+  const requested = new Set(ids);
+  const seen = new Set<string>();
+  for (const id of requested) {
+    if (subjectPartition(id) !== snapshot.partition) throw new RangeError('Account key is outside its partition');
+  }
+  for (const account of snapshot.accounts) {
+    if (subjectPartition(account.id) !== snapshot.partition || !requested.has(account.id) || seen.has(account.id))
+      throw new TypeError('Account snapshot contains a duplicate, foreign or unrequested key');
+    seen.add(account.id);
+  }
+  const accounts = new Map(snapshot.accounts.map((account) => [account.id, account]));
+  return [...requested].map((id) => {
+    const identity = discoveryIdentity('accounts', id);
+    const account = accounts.get(id);
+    if (!account) return { op: 'delete', id: identity, version: snapshot.position };
+    const names = uniqueValues([account.handle, account.displayName].filter((name) => name !== null));
+    return {
+      op: 'index',
+      id: identity,
+      version: snapshot.position,
+      document: {
+        family: 'account',
+        kind: 'account',
+        identity,
+        id,
+        partition: snapshot.partition,
+        account_revision: account.revision.toString(),
+        active_handle: account.handle,
+        names,
+        name_sort: account.displayName ?? account.handle ?? MISSING_NAME,
+        descriptions: [],
+        statements: [],
+        facts: [],
+        relation_facet_overflow: [],
+      },
+    };
+  });
+}
+
+/** Same Subject projection and native version; only the new generation's identity envelope changes. */
+export function discoverySubjectActions(
+  snapshot: SubjectSnapshot,
+  ids: readonly string[],
+  counts?: ReadonlyMap<string, number>,
+): IndexAction<DiscoverySubjectDocument>[] {
+  return documentActions(snapshot, ids, counts).map((action) => {
+    const id = discoveryIdentity('semantic', action.id);
+    if (action.op === 'delete') return { ...action, id };
+    if (action.document.type === 'account') throw new TypeError('Discovery kind collision');
+    return {
+      ...action,
+      id,
+      document: { ...action.document, family: 'subject', kind: action.document.type, identity: id },
+    };
+  });
+}
+
+export function bulkLines<Document extends SearchDocument>(
+  index: string,
+  actions: readonly IndexAction<Document>[],
+): unknown[] {
   const lines: unknown[] = [];
   for (const action of actions) {
     if (action.version < 0n || action.version > BigInt(Number.MAX_SAFE_INTEGER))
