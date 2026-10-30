@@ -350,9 +350,9 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
-    const publicViews = await readPublicViews(pool, [options.curatorAccountId]);
-    const visible = publicViews.get(options.curatorAccountId)?.collections === true;
-    const curator = (!publicOnly || !visible) && (await seesAll(viewer, options.curatorAccountId));
+    const publicViews = await readPublicViews(pool, [curatorAccountId]);
+    const visible = publicViews.get(curatorAccountId)?.collections === true;
+    const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId));
     const fullView = !publicOnly && curator;
     const binding: CursorBinding = {
       operation: publicOnly ? 'library.account.collections' : 'library.collection.list',
