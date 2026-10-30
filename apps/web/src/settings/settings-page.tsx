@@ -84,10 +84,13 @@ function SettingsSections({
 }) {
   const collectionsAdmitted = useOperation('account.collections');
   const verificationAdmitted = useOperation('agent_verification.request');
-  const { state: sessionState } = useSession();
+  const { state: sessionState, subject: verificationAccountId } = useSession();
   // Observe the same admission and verification reads as the sections, without adding requests.
   const exposure = useQuery({ ...exposureQuery, enabled: false });
-  const verification = useQuery({ queryKey: ['settings', 'verification'], enabled: false });
+  const verification = useQuery({
+    queryKey: ['settings', 'verification', verificationAccountId ?? null],
+    enabled: false,
+  });
   const showVerification = verificationAdmitted && verification.error?.message !== 'rezics-platform-closed';
   const location = useLocation();
   const router = useRouter();

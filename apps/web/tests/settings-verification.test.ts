@@ -169,3 +169,155 @@ test('invalid subject, statement, or link counts are rejected before the command
   ).resolves.toMatchObject({ ok: false, message: expect.any(String) });
   expect(calls).toHaveLength(0);
 });
+
+// Recovery cases are additive: the native status and payload oracles above remain unchanged.
+import { VerificationRecovery, verificationQueryKey } from '../src/settings/verification-recovery';
+import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
+
+test('An uncertain verification request or withdrawal retries the exact original command and key, preserves later draft edits, and never claims native completion from transport failure', async () => {
+  const pending: AgentVerificationRequest = { ...request, links: request.links.map((link) => ({ ...link })) };
+  const approving = { ...pending, state: 'approving' as const };
+  const { client, calls } = fakeClient([
+    { status: 200, data: { verificationRequest: null } },
+    { status: 200, data: { verificationRequest: pending } },
+    { status: 201, data: { verificationRequest: pending } },
+    { status: 200, data: { verificationRequest: approving } },
+  ]);
+  const sent: VerificationInput[] = [];
+  const controller = new VerificationRecovery('alice', {
+    read: async (accountId) => ({
+      accountId,
+      verificationRequest: await readVerification(client as never, accountId, 'Bearer token'),
+      subjectTitle: null,
+    }),
+    request: async (accountId, original) => {
+      sent.push(original);
+      if (sent.length === 1) throw new Error('Response lost after native commit');
+      return requestVerification(client as never, accountId, 'Bearer token', original);
+    },
+    withdraw: async () => {
+      throw new Error('Conflicting withdrawal must not run');
+    },
+  });
+  await controller.reload();
+  const draft = { subject: input.subject, statement: input.statement, links: input.links.map((link) => ({ ...link })) };
+  await controller.submit(draft);
+  expect(controller.snapshot().phase).toBe('uncertain');
+  expect(controller.snapshot().current).toBeNull();
+  const original = controller.snapshot().attempt;
+  expect(Object.isFrozen(original?.input)).toBe(true);
+  expect(Object.isFrozen(sent[0]!.links[0])).toBe(true);
+  draft.subject = 'later-subject';
+  draft.statement = 'Later unsent statement';
+  draft.links[0]!.url = 'https://example.test/later';
+  draft.links.push(
+    ...Array.from({ length: 4 }, (_, index) => ({ label: `Later ${index}`, url: `https://example.test/${index}` })),
+  );
+  await controller.submit(draft);
+  await controller.withdraw(true);
+  await controller.reload();
+  // Matching latest status and evidence cannot identify which command created this request.
+  expect(controller.snapshot().attempt).toBe(original);
+  expect(controller.snapshot().phase).toBe('uncertain');
+  expect(sent).toHaveLength(1);
+  await controller.retry();
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toBe(sent[0]);
+  expect(sent[1]).toEqual({ ...input, idempotencyKey: expect.any(String) });
+  expect(controller.snapshot().attempt).toBeNull();
+  expect(controller.snapshot().current?.verificationRequest?.state).toBe('approving');
+  expect(controller.snapshot().current?.verificationRequest?.state).not.toBe('approved');
+  expect(draft).toMatchObject({ subject: 'later-subject', statement: 'Later unsent statement' });
+  expect(draft.links).toHaveLength(5);
+  expect(draft.links[0]!.url).toBe('https://example.test/later');
+  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'request', 'read']);
+});
+
+test('uncertain withdrawal keeps confirmation, original key and native failures until an identified withdrawn read', async () => {
+  const pending: AgentVerificationRequest = { ...request, links: request.links.map((link) => ({ ...link })) };
+  const withdrawn = { ...pending, state: 'withdrawn' as const };
+  const { client, calls } = fakeClient([
+    { status: 200, data: { verificationRequest: pending } },
+    { status: 200, data: { verificationRequest: null } },
+    { status: 409, error: { value: { detail: 'The verification request is no longer pending' } } },
+    { status: 200, data: { verificationRequest: withdrawn } },
+    { status: 200, data: { verificationRequest: null } },
+    { status: 200, data: { verificationRequest: withdrawn } },
+  ]);
+  const sent: { idempotencyKey: string }[] = [];
+  const controller = new VerificationRecovery('alice', {
+    read: async (accountId) => ({
+      accountId,
+      verificationRequest: await readVerification(client as never, accountId, 'Bearer token'),
+      subjectTitle: null,
+    }),
+    request: async () => {
+      throw new Error('Conflicting request must not run');
+    },
+    withdraw: async (accountId, original) => {
+      sent.push(original);
+      if (sent.length === 1) throw new Error('Withdrawal response lost');
+      return withdrawVerification(client as never, accountId, 'Bearer token', original.idempotencyKey);
+    },
+  });
+  await controller.reload();
+  await controller.withdraw(false);
+  expect(sent).toHaveLength(0);
+  await controller.withdraw(true);
+  await controller.reload();
+  expect(controller.snapshot().phase).toBe('uncertain');
+  expect(controller.snapshot().current?.verificationRequest).toBeNull();
+  expect(controller.snapshot().attempt?.requestId).toBe('request-1');
+  await controller.submit(input);
+  await controller.retry();
+  expect(controller.snapshot().failure).toEqual({
+    status: 409,
+    message: 'The verification request is no longer pending',
+  });
+  expect(controller.snapshot().attempt).not.toBeNull();
+  await controller.retry();
+  // Even an ok command response cannot turn an absent current read into a withdrawal success.
+  expect(controller.snapshot().phase).toBe('uncertain');
+  expect(controller.snapshot().attempt).not.toBeNull();
+  expect(sent).toHaveLength(3);
+  expect(sent[1]).toBe(sent[0]);
+  expect(sent[2]).toBe(sent[0]);
+  await controller.reload();
+  expect(controller.snapshot().attempt).toBeNull();
+  expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
+  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'withdraw', 'withdraw', 'read', 'read']);
+});
+
+test('verification reads reject missing data and other accounts, and late commands cannot cross viewers', async () => {
+  for (const value of [{}, { verificationRequest: { ...request, accountId: 'bob' } }]) {
+    const { client } = fakeClient([{ status: 200, data: value }]);
+    await expect(readVerification(client as never, 'alice', 'Bearer token')).rejects.toThrow();
+  }
+  let complete!: (result: VerificationCommandResult) => void;
+  const reads: string[] = [];
+  const io = {
+    read: async (accountId: string) => {
+      reads.push(accountId);
+      return { accountId, verificationRequest: null, subjectTitle: null };
+    },
+    request: () =>
+      new Promise<VerificationCommandResult>((resolve) => {
+        complete = resolve;
+      }),
+    withdraw: async (): Promise<VerificationCommandResult> => ({ ok: false, status: 403, message: 'Forbidden' }),
+  };
+  const alice = new VerificationRecovery('alice', io);
+  await alice.reload();
+  const sending = alice.submit(input);
+  alice.deactivate();
+  const bob = new VerificationRecovery('bob', io);
+  await bob.reload();
+  complete({ ok: true, verificationRequest: { ...request, links: request.links.map((link) => ({ ...link })) } });
+  await sending;
+  await alice.retry();
+  expect(reads).toEqual(['alice', 'bob']);
+  expect(bob.snapshot().attempt).toBeNull();
+  expect(bob.snapshot().current?.accountId).toBe('bob');
+  expect(bob.snapshot().current?.verificationRequest).toBeNull();
+  expect(verificationQueryKey('alice')).not.toEqual(verificationQueryKey('bob'));
+});

@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -15,6 +15,12 @@ import { csrfHeaders } from '../threads/composer';
 import { useSession } from '../session/query';
 import { type AgentVerificationRequest } from './verification-core';
 import { VerificationSubjectChooser } from './verification-subject-chooser';
+import {
+  VerificationRecovery,
+  canRequestVerification,
+  canWithdrawVerification,
+  verificationQueryKey,
+} from './verification-recovery';
 import { readVerificationState, requestVerificationAction, withdrawVerificationAction } from './verification-actions';
 
 function VerificationState({
@@ -52,82 +58,77 @@ function VerificationState({
 }
 
 export function VerificationSection() {
-  const { csrfToken } = useSession();
+  const { csrfToken, subject } = useSession();
   const admitted = useOperation('agent_verification.request');
-  const queryClient = useQueryClient();
-  const id = useId();
-  const [selected, setSelected] = useState<{ id: string; title: string; type: string } | null>(null);
-  const [statement, setStatement] = useState('');
-  const [links, setLinks] = useState([{ label: '', url: '' }]);
-  const [message, setMessage] = useState('');
-  const [confirmation, setConfirmation] = useState(false);
-  const [pending, setPending] = useState(false);
-  const verificationQuery = useQuery({
-    ...personalRead,
-    enabled: personalRead.enabled && admitted,
-    queryKey: ['settings', 'verification'],
-    queryFn: readVerificationState,
-  });
-  const verification = verificationQuery.data?.verificationRequest ?? null;
-  const subjectTitle = verificationQuery.data?.subjectTitle ?? null;
-  const canRequest =
-    verificationQuery.isSuccess && (!verification || ['withdrawn', 'failed', 'rejected'].includes(verification.state));
-  const canWithdraw = verification && ['pending', 'approving', 'approved'].includes(verification.state);
+  if (!admitted || !subject) return null;
+  return <ViewerVerification key={subject} accountId={subject} csrfToken={csrfToken} />;
+}
 
-  if (!admitted || (verificationQuery.error as Error | null)?.message === 'rezics-platform-closed') return null;
+function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
+  const queryClient = useQueryClient();
+  const [controller] = useState(
+    () =>
+      new VerificationRecovery(accountId, {
+        read: () =>
+          queryClient.fetchQuery({
+            ...personalRead,
+            queryKey: verificationQueryKey(accountId),
+            queryFn: () => readVerificationState({ data: { accountId } }),
+            retry: false,
+          }),
+        request: (_, input) => requestVerificationAction({ data: { ...input, accountId }, headers: csrfHeaders() }),
+        withdraw: (_, input) => withdrawVerificationAction({ data: { ...input, accountId }, headers: csrfHeaders() }),
+      }),
+  );
+  useEffect(() => {
+    controller.activate();
+    void controller.reload();
+    return () => controller.deactivate();
+  }, [controller]);
+  return <VerificationCard controller={controller} csrfToken={csrfToken} />;
+}
+
+type VerificationDraft = {
+  selected: { id: string; title: string; type: string } | null;
+  statement: string;
+  links: { label: string; url: string }[];
+};
+
+/** The production card and recovery stories use the same controller and controls. */
+export function VerificationCard({
+  controller,
+  csrfToken,
+  initialDraft,
+}: {
+  controller: VerificationRecovery;
+  csrfToken: string | null;
+  initialDraft?: VerificationDraft | undefined;
+}) {
+  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const id = useId();
+  const [selected, setSelected] = useState<VerificationDraft['selected']>(initialDraft?.selected ?? null);
+  const [statement, setStatement] = useState(initialDraft?.statement ?? '');
+  const [links, setLinks] = useState(initialDraft?.links ?? [{ label: '', url: '' }]);
+  const [confirmation, setConfirmation] = useState(false);
+  const admitted = useOperation('agent_verification.request');
+  const pending = state.phase === 'sending' || state.phase === 'reading';
+  const verification = state.current?.verificationRequest ?? null;
+  const subjectTitle = state.current?.subjectTitle ?? null;
+  const canRequest = canRequestVerification(state.current) && !state.attempt && !pending;
+  const canWithdraw = canWithdrawVerification(state.current) && !state.attempt && !pending;
+  const hasDraft = !!selected || !!statement || links.some((link) => link.label || link.url);
+
+  if (state.failure?.message === 'rezics-platform-closed') return null;
 
   async function submit() {
-    if (!csrfToken || !selected || pending) return;
-    setPending(true);
-    setMessage('');
-    try {
-      const result = await requestVerificationAction({
-        data: {
-          subject: selected.id,
-          statement,
-          links: links.filter((link) => link.label || link.url),
-          idempotencyKey: crypto.randomUUID(),
-        },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        queryClient.setQueryData(['settings', 'verification'], {
-          verificationRequest: result.verificationRequest,
-          subjectTitle: selected.title,
-        });
-        setStatement('');
-        setLinks([{ label: '', url: '' }]);
-        setSelected(null);
-        setMessage(m.settings_verification_sent());
-      } else setMessage(result.message);
-    } catch {
-      setMessage(m.settings_verification_request_failed());
-    } finally {
-      setPending(false);
-    }
+    if (!csrfToken || !selected || !canRequest) return;
+    await controller.submit({ subject: selected.id, statement, links: links.filter((link) => link.label || link.url) });
   }
 
   async function withdraw() {
-    if (!csrfToken || pending) return;
-    setPending(true);
-    setMessage('');
-    try {
-      const result = await withdrawVerificationAction({
-        data: { idempotencyKey: crypto.randomUUID() },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        queryClient.setQueryData(['settings', 'verification'], {
-          verificationRequest: result.verificationRequest,
-          subjectTitle,
-        });
-        setConfirmation(false);
-      } else setMessage(result.message);
-    } catch {
-      setMessage(m.settings_verification_request_failed());
-    } finally {
-      setPending(false);
-    }
+    if (!csrfToken || !confirmation || !canWithdraw) return;
+    await controller.withdraw(true);
+    setConfirmation(false);
   }
 
   return (
@@ -140,9 +141,10 @@ export function VerificationSection() {
       </CardHeader>
       <CardContent className="space-y-4">
         <VerificationState verification={verification} subjectTitle={subjectTitle} />
-        {verificationQuery.isLoading ? <p>{m.settings_verification_loading()}</p> : null}
-        {verificationQuery.error ? <p role="alert">{m.settings_verification_load_failed()}</p> : null}
-        {canRequest ? (
+        {state.phase === 'loading' || state.phase === 'reading' ? <p>{m.settings_verification_loading()}</p> : null}
+        {state.phase === 'sending' ? <p role="status">{m.settings_saving()}</p> : null}
+        {state.phase === 'unavailable' ? <p role="alert">{m.settings_verification_load_failed()}</p> : null}
+        {canRequest || hasDraft || state.attempt?.kind === 'request' ? (
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -214,6 +216,7 @@ export function VerificationSection() {
               type="submit"
               disabled={
                 !csrfToken ||
+                !canRequest ||
                 pending ||
                 !selected ||
                 !statement.trim() ||
@@ -229,7 +232,12 @@ export function VerificationSection() {
             <Alert>
               <AlertTitle>{m.settings_verification_confirm_title()}</AlertTitle>
               <AlertDescription className="space-x-2">
-                <Button type="button" variant="destructive" disabled={pending} onClick={() => void withdraw()}>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={pending || !csrfToken}
+                  onClick={() => void withdraw()}
+                >
                   {m.settings_verification_confirm_withdraw()}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setConfirmation(false)}>
@@ -243,11 +251,51 @@ export function VerificationSection() {
             </Button>
           )
         ) : null}
-        {message ? (
-          <p role="alert" aria-live="polite">
-            {message}
+        {state.attempt && !pending ? (
+          <Alert>
+            <AlertTitle>
+              {state.attempt.kind === 'request'
+                ? m.settings_verification_uncertain_request()
+                : m.settings_verification_uncertain_withdraw()}
+            </AlertTitle>
+            <AlertDescription className="space-y-3">
+              <details>
+                <summary>{m.settings_verification_original()}</summary>
+                <p className="break-all">{state.attempt.input.idempotencyKey}</p>
+                {'subject' in state.attempt.input ? (
+                  <div className="space-y-2 break-words">
+                    <p>{state.attempt.input.subject}</p>
+                    <p className="whitespace-pre-wrap">{state.attempt.input.statement}</p>
+                    <ul>
+                      {state.attempt.input.links.map((link, index) => (
+                        <li key={index}>
+                          {link.label}: {link.url}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="break-all">{state.attempt.requestId}</p>
+                )}
+              </details>
+              <Button type="button" disabled={pending || !csrfToken} onClick={() => void controller.retry()}>
+                {m.settings_verification_retry_original()}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {state.phase === 'review' ? <p role="status">{m.settings_verification_draft_preserved()}</p> : null}
+        {state.failure ? (
+          <p role="alert">
+            {m.settings_verification_command_error({
+              status: state.failure.status,
+              message: state.failure.message,
+            })}
           </p>
         ) : null}
+        <Button type="button" variant="outline" disabled={pending} onClick={() => void controller.reload()}>
+          {m.settings_verification_read_current()}
+        </Button>
       </CardContent>
     </Card>
   );

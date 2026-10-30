@@ -15,10 +15,42 @@ export type AgentVerificationRequest = NonNullable<VerificationResponse['verific
 
 export type VerificationCommandResult =
   | { ok: true; verificationRequest: AgentVerificationRequest }
-  | { ok: false; status: number; message: string };
+  | { ok: false; status: number; message: string; outcome?: 'refused' };
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
+
+/** Native account response validation; an absent or malformed read is never a completed command. */
+function validRequest(value: unknown, accountId: string): value is AgentVerificationRequest {
+  if (!record(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    !!value.id &&
+    value.accountId === accountId &&
+    (value.accountKind === 'actor' || value.accountKind === 'organization') &&
+    typeof value.requestedBy === 'string' &&
+    typeof value.catalogueSubjectId === 'string' &&
+    typeof value.statement === 'string' &&
+    Array.isArray(value.links) &&
+    value.links.length <= 5 &&
+    value.links.every(
+      (link: unknown) => record(link) && typeof link.label === 'string' && typeof link.url === 'string',
+    ) &&
+    typeof value.state === 'string' &&
+    ['pending', 'approving', 'approved', 'rejected', 'withdrawn', 'failed'].includes(value.state) &&
+    nullableString(value.reason) &&
+    nullableString(value.decisionReceiptId) &&
+    nullableString(value.decidedBy) &&
+    (value.problem === null ||
+      (record(value.problem) && typeof value.problem.type === 'string' && typeof value.problem.detail === 'string')) &&
+    typeof value.createdAt === 'string' &&
+    typeof value.updatedAt === 'string'
+  );
 }
 
 function apiMessage(error: unknown): string {
@@ -29,7 +61,9 @@ function apiMessage(error: unknown): string {
 export async function readVerification(client: KernelClient, accountId: string, authorization: string) {
   const result = await client.accounts({ accountId }).verification.get({ headers: { authorization } });
   if (result.error || !result.data) throw new Error(apiMessage(result.error));
-  return result.data.verificationRequest;
+  const request = result.data.verificationRequest;
+  if (request !== null && !validRequest(request, accountId)) throw new Error(m.settings_verification_load_failed());
+  return request;
 }
 
 export async function requestVerification(
@@ -44,14 +78,15 @@ export async function requestVerification(
     input.statement.length > 2000 ||
     input.links.length > 5 ||
     input.links.some((link) => !link.label.trim() || !link.url.trim());
-  if (invalid) return { ok: false, status: 0, message: m.settings_verification_validation() };
+  if (invalid) return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
   const result = await client
     .accounts({ accountId })
     .$requestVerification.post(
       { subject: input.subject, statement: input.statement, links: input.links },
       { headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string } },
     );
-  if (result.status === 201 && result.data) return { ok: true, verificationRequest: result.data.verificationRequest };
+  if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
+    return { ok: true, verificationRequest: result.data!.verificationRequest };
   return { ok: false, status: result.status, message: apiMessage(result.error) };
 }
 
@@ -67,6 +102,7 @@ export async function withdrawVerification(
       headers: { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string },
     },
   );
-  if (result.status === 200 && result.data) return { ok: true, verificationRequest: result.data.verificationRequest };
+  if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
+    return { ok: true, verificationRequest: result.data!.verificationRequest };
   return { ok: false, status: result.status, message: apiMessage(result.error) };
 }

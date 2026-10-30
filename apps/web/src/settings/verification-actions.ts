@@ -52,6 +52,17 @@ function parseInput(input: unknown): VerificationInput | undefined {
   };
 }
 
+function expectedAccount(input: unknown): string {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    typeof (input as { accountId?: unknown }).accountId !== 'string' ||
+    !(input as { accountId: string }).accountId
+  )
+    throw new Error('Invalid verification account');
+  return (input as { accountId: string }).accountId;
+}
+
 async function viewer() {
   const request = getRequest();
   await prepareSession(request, env as Partial<SessionEnv>);
@@ -61,25 +72,28 @@ async function viewer() {
   return { request, authorization, accountId };
 }
 
-export const readVerificationState = createServerFn({ method: 'GET' }).handler(async () => {
-  setResponseHeader('cache-control', 'private, no-store');
-  const { request, authorization, accountId } = await viewer();
-  const client = kernelClient();
-  const { readVerification } = await import('./verification-core');
-  const verificationRequest = await readVerification(client, accountId, authorization);
-  if (!verificationRequest) return { verificationRequest: null, subjectTitle: null };
-  const subject = await client
-    .subjects({ id: verificationRequest.catalogueSubjectId })
-    .get({ headers: { authorization } });
-  const labels = subject.data?.subject?.labels;
-  const languages = requestLanguages(requestLocale(request) ?? 'en');
-  const subjectTitle = labels
-    ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
-      Object.values(labels)[0] ??
-      verificationRequest.catalogueSubjectId)
-    : verificationRequest.catalogueSubjectId;
-  return { verificationRequest, subjectTitle };
-});
+export const readVerificationState = createServerFn({ method: 'GET' })
+  .validator(expectedAccount)
+  .handler(async ({ data: expectedAccountId }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { request, authorization, accountId } = await viewer();
+    if (accountId !== expectedAccountId) throw new Error(m.settings_verification_identity_changed());
+    const client = kernelClient();
+    const { readVerification } = await import('./verification-core');
+    const verificationRequest = await readVerification(client, accountId, authorization);
+    if (!verificationRequest) return { accountId, verificationRequest: null, subjectTitle: null };
+    const subject = await client
+      .subjects({ id: verificationRequest.catalogueSubjectId })
+      .get({ headers: { authorization } });
+    const labels = subject.data?.subject?.labels;
+    const languages = requestLanguages(requestLocale(request) ?? 'en');
+    const subjectTitle = labels
+      ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
+        Object.values(labels)[0] ??
+        verificationRequest.catalogueSubjectId)
+      : verificationRequest.catalogueSubjectId;
+    return { accountId, verificationRequest, subjectTitle };
+  });
 
 export const searchVerificationSubjects = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
@@ -113,11 +127,13 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
     const parsed = parseInput(input);
     if (!parsed) throw new Error('Invalid verification request');
-    return parsed;
+    return { ...parsed, accountId: expectedAccount(input) };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const { authorization, accountId } = await viewer();
+    if (accountId !== data.accountId)
+      return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
     const { requestVerification } = await import('./verification-core');
     return requestVerification(kernelClient(), accountId, authorization, data);
   });
@@ -126,11 +142,13 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object' || !uuid((input as { idempotencyKey?: unknown }).idempotencyKey))
       throw new Error('Invalid verification withdrawal');
-    return (input as { idempotencyKey: string }).idempotencyKey;
+    return { idempotencyKey: (input as { idempotencyKey: string }).idempotencyKey, accountId: expectedAccount(input) };
   })
-  .handler(async ({ data: idempotencyKey }) => {
+  .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const { authorization, accountId } = await viewer();
+    if (accountId !== data.accountId)
+      return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
     const { withdrawVerification } = await import('./verification-core');
-    return withdrawVerification(kernelClient(), accountId, authorization, idempotencyKey);
+    return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey);
   });
