@@ -661,8 +661,9 @@ malformed stream is admitted and rejected only on the next fresh invocation. A l
 the successor for each source, preserving subject identity, original receipts and independent Context selection.
 VNDB retains its seventh statistic scope and exact statistic receipt identity.
 
-The [evidence and limits](../../docs/research/imports-audit/cli-sealed-source-resume.md) distinguish this new
-binding and local protocol proofs from managed native acceptance and promotion. Source bytes are the pinned
+The managed native acceptance passed at `fc2509fd177143bafb3a4f598bb0db43c55337a8`: one frozen test, two source
+children and 1,686 assertions. The [receipt and limits](../../docs/research/imports-audit/cli-sealed-source-resume.md)
+record exact log, source revision/digest and original receipt anchors; promotion remains separate. Source bytes are the pinned
 VNDB COPY/header files in real ustar and Wikidata `Q571` in streamed JSON-array framing. This connected outcome
 adds no growth series and does not close general source metadata or discovery work.
 

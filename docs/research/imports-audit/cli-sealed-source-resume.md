@@ -9,9 +9,9 @@ staged, approved and applied through Auth credential effects and written mode 06
 the existing `identitySupport`, `openApiObserver` and runtime `mediaBoundary`; it supplies no native reply,
 authority, grant, identifier, receipt or worker result.
 
-The earlier missing-caller gap was a binding gap, not evidence of a production failure. This slice supplies
-the caller and local ordering proofs. A managed native pass and promotion must be recorded separately;
-registration and local doubles do not establish either. The native command is:
+The earlier missing-caller gap was a binding gap, not evidence of a production failure. The connected native
+journey now passes at the revision recorded below. No production defect was reached or manufactured; the existing
+CLI/Importer/materialization contracts supply the required behavior. Promotion remains separate. The native command is:
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts
@@ -51,15 +51,47 @@ fixtures; worker registration and absence of live Internet requests are observed
 
 The raw native log emits one credential-free JSON object tagged `cli-sealed-source-resume`, including both child
 names, source/converter/bundle revisions, requests/responses, pending envelopes, receipt rows and selection
-observations. No private JWK or bearer is included. Until that managed command completes, there is no native
-receipt for this caller and no native success claim. The importer-local companion is a protocol-double proof
-of the two acquisition policies and is explicitly separate from native acceptance.
+observations. No private JWK or bearer is included. The importer-local companion is a protocol-double proof
+of the two acquisition policies and is explicitly separate from the native receipt below.
 
 Local preflight passed on `afcdc8c956`: both importer-local CLI cases, 46 assertions and zero failures;
 the direct importer compiler checked 147 files without type errors. Formatting passed for all six changed
 files. Subsequent caller observations also compare the completed baseline to the original persisted staged
 rows, rather than reconstructing a digest or revision from replacement input. These local results do not
 claim a native pass, a root typecheck or all-workspace regression coverage.
+
+## Native receipt
+
+The managed command above tested `fc2509fd177143bafb3a4f598bb0db43c55337a8` and exited 0. The exact frozen
+outcome passed: one test, two source children (`vndb`, `wikidata`), 1,686 assertions, zero failures and no
+load reruns. The log contains no TypeScript diagnostics. The first native attempt passed; no reached native
+failure remains. This selected result is not a root typecheck, full-kernel or main/promotion claim.
+
+The raw journey object is line 75 of
+`.temp/goal/checks/worker-check-2026-10-30T08-56-05.553Z-0c77eeff.log`; lines 78–81 record the test result and
+assertion count, and line 93 records exit status 0. Its `sources[].originalReceiptRowsBefore/After` retain the
+exact native principal/partition/command/key, transaction and response anchors. All 39 original receipts remained
+identical: 20 VNDB and 19 Wikidata, including both original VNDB statistic receipts. Two committed responses
+were lost before local ACK, leaving one pending envelope per source, with eight VNDB and twelve Wikidata keys.
+Both interrupted calls returned 130; replay and successor calls returned 0; fresh invalid inputs returned 2.
+No duplicate native effect rows appeared and all three native subject IDs and both independent selections survived.
+
+VNDB validated 7,168 replacement archive bytes before draining the original acquisition. Its malformed
+replacement produced no Auth/public effects and left the pending snapshot identical. Wikidata consumed zero
+replacement bytes while resuming; the next invocation rejected that malformed stream without effects.
+VNDB replay ended at captured write ordinal 41 and successor writes began at 57; Wikidata used ordinals 86
+and 99. The registered worker was observed with zero executed jobs and no live Internet requests, consistent
+with these sources' lack of admitted media intents.
+
+The actual definition catalogue version was `1.0.0`, bundle digest
+`sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`.
+Persisted source rows recorded these revisions and digests:
+
+| Source record   | Converter    | Initial revision/digest                                                       | Drained revision/digest                                                       | Successor revision/digest                                                     |
+| --------------- | ------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| VNDB `v123`     | `vndb@7`     | 7 / `be85d221eb60f71db38c70670a8614bad6f93adf7b2f12891255108a50a21a72`        | 8 / `06118c67bfbd388725e25c4f06c844fe32b15169ac585d3398a660d7bd6b11f9`        | 9 / `c61d53e9f684123f74528a46fbf43571dcd6a26ba9a0a7692d864f1d70f2b8e8`        |
+| VNDB `v124`     | `vndb@7`     | 19 / `5a4efb4f3b94872b82121c8b7156187c01b55c2b13b5b81052dd97bc18b14448`       | unchanged                                                                     | unchanged                                                                     |
+| Wikidata `Q571` | `wikidata-4` | 24681012 / `a821066f040241caf607fd52b34fa79c5696588acc39060e9ee183e3d40d58ba` | 24681013 / `46e125c8d55ca14cc76ca273375a6aeb7856769abe955cfdda4c070cd7740282` | 24681014 / `5561bc9e1849ab8e02eb7c133538508b473e20e213ae1ed8db5fe596ff5998b0` |
 
 ## Bounds, sources and limits
 
