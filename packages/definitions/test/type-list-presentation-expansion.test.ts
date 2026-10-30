@@ -165,7 +165,7 @@ function withoutHints(release: Release) {
   return copy;
 }
 function growing(count: number, hints: boolean) {
-  const input = sourcesFor(count, true);
+  const input: Parameters<typeof compileCatalogue>[0] = sourcesFor(count, true);
   for (let i = 0; i < count; i++) {
     const v = verticalProfile(i);
     const schema = Bun.YAML.parse(input.schemas[v.schema]!) as Record<string, any>;
@@ -291,26 +291,25 @@ test('published catalogue and both normal recordings share the new immutable rel
   // Every pre-existing semantic member, label, unit, profile and source role is
   // recovered by removing only the new inert bytes.
   expect(withoutHints(bundledRelease)).toEqual(await compileCatalogue(unhinted));
-  for (const [aspect, types] of Object.entries({
-    portrait: [
-      'schema:Book',
-      'bf:Instance',
-      'schema:ComicSeries',
-      'schema:PublicationVolume',
-      'wd:Q689445',
-      'schema:Person',
-      'wd:Q95074',
+  for (const [aspect, types] of [
+    [
+      'portrait',
+      [
+        'schema:Book',
+        'bf:Instance',
+        'schema:ComicSeries',
+        'schema:PublicationVolume',
+        'wd:Q689445',
+        'schema:Person',
+        'wd:Q95074',
+      ],
     ],
-    landscape: [
-      'schema:Movie',
-      'schema:TVSeries',
-      'schema:TVSeason',
-      'schema:Episode',
-      'rezics:AnimeRelease',
-      'schema:Recipe',
+    [
+      'landscape',
+      ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode', 'rezics:AnimeRelease', 'schema:Recipe'],
     ],
-    square: ['schema:MusicAlbum'],
-  }))
+    ['square', ['schema:MusicAlbum']],
+  ] as const)
     for (const type of types) expect(bundledRelease.types[type]!.listPresentation!.imageAspect).toBe(aspect);
   const active = await Bun.file(
     new URL('../../../apps/web/src/kernel/recorded/definitions-active.json', import.meta.url),
