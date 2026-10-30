@@ -52,36 +52,24 @@ export async function mediaRealmDownloadFixture() {
     secret: 'media-realm-download-native-write-rate-secret',
     overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
   });
-  const catalogue = actionCatalogue(testKernel({ pool: db.pool }));
-  const accessActions = new Map(catalogue);
-  accessActions.set('gate:any', { anonymous: false });
   const kernel = testKernel({
     pool: db.pool,
     auth: authConfig,
     writeRate: rateLimiter,
-    actions: accessActions,
   });
   const mutationPool = db.openPool({ max: 4 });
   const mutationKernel = testKernel({
     pool: mutationPool,
     auth: authConfig,
     writeRate: rateLimiter,
-    actions: accessActions,
   });
-  const actions = [...catalogue.keys()].sort();
+  const actions = [...actionCatalogue(kernel).keys()].sort();
   const ordinaryScopes = actions.filter((action) => action !== 'media:complete');
-  const governanceScopes = [...new Set([...ordinaryScopes, 'gate:any'])];
   const ordinaryClientId = `media_realm_${crypto.randomUUID()}`;
-  const governanceClientId = `media_realm_governance_${crypto.randomUUID()}`;
   await registerTestClient(auth.host.service, {
     clientId: ordinaryClientId,
     firstParty: true,
     scopes: ordinaryScopes,
-  });
-  await registerTestClient(auth.host.service, {
-    clientId: governanceClientId,
-    firstParty: true,
-    scopes: governanceScopes,
   });
 
   const websiteKeyPair = await generateKeyPair('ES256', { extractable: true });
@@ -190,13 +178,11 @@ export async function mediaRealmDownloadFixture() {
   async function person(role: string): Promise<MediaRealmPerson> {
     const name = `media_${role}_${crypto.randomUUID()}`;
     const registered = await auth.person(name);
-    const clientId = role === 'governor' ? governanceClientId : ordinaryClientId;
-    const scopes = role === 'governor' ? governanceScopes : ordinaryScopes;
     const signed = await auth.request('/signin', {
       email: `${name}@ordinary.test`,
       password,
-      client_id: clientId,
-      scope: scopes,
+      client_id: ordinaryClientId,
+      scope: ordinaryScopes,
     });
     expect(signed.status).toBe(200);
     const ordinaryToken = await auth.request('/token', {}, cookies(signed));
@@ -293,8 +279,11 @@ export async function mediaRealmDownloadFixture() {
 
   for (const action of ['subject:create', 'space:create', 'realm:create'])
     await grant(governor.accountId, PLATFORM_RESOURCE.id, [action]);
-  await allowGrantor(GLOBAL_CONTEXT);
-  await grant(governor.accountId, GLOBAL_CONTEXT, ['board:create']);
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES (0,$1,$2,'board:create','(,)'::tstzrange,$2) ON CONFLICT DO NOTHING`,
+    [GLOBAL_CONTEXT, governor.accountId],
+  );
 
   const scheme = (
     await checked('POST', '/v1/subjects', {
