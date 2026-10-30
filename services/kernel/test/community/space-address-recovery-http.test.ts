@@ -154,6 +154,7 @@ test.serial('an ambiguous reservation commit replays the same HTTP intent throug
   const before = await fixture.spaceState(space.spaceId);
   const observer = observeSql(fixture.database.pool);
   const transport = Object.assign(new Error('connection failure after durable COMMIT'), { code: '08006' });
+  // The request's read-only Access decision commits first; hold the native reservation commit next.
   observer.armFault({ match: { statement: 'COMMIT', occurrence: 2 }, boundary: 'after', error: transport });
 
   let first: RecoveryResponse | undefined;
