@@ -295,14 +295,17 @@ export class WorkerStore implements AttemptFence {
   orphanSweepCandidates(): { attempt: Attempt; taskState: string; currentAttempt: number }[] {
     return this.db
       .query(`
-        /* worker_tasks_state bounds work to unsettled tasks; each current attempt is a primary-key lookup. */
+        /* Running tasks and held tasks with a live worker are bounded before each current-attempt lookup. */
         SELECT a.body AS attempt_body,
-               json_extract(t.body, '$.state') AS task_state,
+               CASE WHEN json_extract(t.body, '$.state') = 'held' THEN 'running'
+                    ELSE json_extract(t.body, '$.state') END AS task_state,
                t.current_attempt AS current_attempt
         FROM worker_tasks AS t
         JOIN worker_attempts AS a ON a.task_id = t.id AND a.attempt = t.current_attempt
-        WHERE json_extract(t.body, '$.state') = 'running'
-          AND json_extract(a.body, '$.state') IN ('running', 'waiting', 'exited')
+        WHERE (json_extract(t.body, '$.state') = 'running'
+               AND json_extract(a.body, '$.state') IN ('running', 'waiting', 'exited'))
+           OR (json_extract(t.body, '$.state') = 'held'
+               AND json_extract(a.body, '$.state') = 'running')
       `)
       .all()
       .map((row) => {
@@ -344,6 +347,13 @@ export class WorkerStore implements AttemptFence {
   assertCurrent(ref: AttemptRef): void {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    // A hold advances the task's delivery generation without manufacturing another worker attempt. A request or
+    // outcome already in the train must be acknowledged as stale instead of integrating over that held generation.
+    if (task.state === 'held' && ('branch' in ref || 'stage' in ref))
+      throw new StaleAttemptError(ref, task.currentAttempt);
+    // A pending launcher or check wake belongs to the old contract; only an already-running worker may finish settling.
+    if (task.state === 'held' && ref.attempt > 0 && ['pending', 'waiting'].includes(this.attempt(ref).state))
+      throw new StaleAttemptError(ref, task.currentAttempt);
     if (ref.attempt > 0 && ['superseded', 'stopped', 'cancelled'].includes(this.attempt(ref).state))
       throw new StaleAttemptError(ref, task.currentAttempt);
   }
@@ -624,7 +634,15 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const intent = this.retryIntent(ref);
         if (!intent) throw new Error('unknown retry intent');
+        const wasPending = intent.status === 'pending';
+        const task = this.task(ref.taskId);
         update(intent);
+        // Recovery may observe TaskHeldForDependenciesError just after successfully recording the hold. Keep that
+        // retry pending until the held generation is released and its next attempt can actually start.
+        if (wasPending && intent.status === 'started' && task.state === 'held' && task.currentAttempt === ref.attempt) {
+          intent.status = 'pending';
+          delete intent.nextAttempt;
+        }
         this.db
           .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
           .run(JSON.stringify(intent), ref.taskId, ref.attempt);
@@ -702,6 +720,10 @@ export class WorkerStore implements AttemptFence {
       update(task);
       if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
         throw new Error('task identity cannot be updated');
+      // A held contract is its own delivery generation. A worker or check that was already in flight may settle,
+      // but its old contract cannot move the task out of held and publish a landing request.
+      if (ref.attempt > 0 && previousState === 'held' && task.state !== 'held')
+        throw new StaleAttemptError(ref, task.currentAttempt);
       this.saveTask(task);
       if (previousState !== task.state && task.state === 'running')
         recordFlow(this.db, {
@@ -757,24 +779,44 @@ export class WorkerStore implements AttemptFence {
     this.invalidateSnapshot();
     return task;
   }
-  /** Update a ready or stopped task; abandoning pending is valid only while the caller holds the task lease. */
-  updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void, options: { abandonPending?: boolean } = {}): Task {
+  /** Update a retryable task; abandoning pending is valid only while the caller holds the task lease. */
+  updateHeldRetryTask(
+    ref: AttemptRef,
+    update: (task: Task) => void,
+    options: { abandonPending?: boolean; reshapeHeld?: boolean } = {},
+  ): Task {
     return this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
-        // A held task's pending or waiting attempt is ended by the reshape; the next retry resumes its session from the log.
+        const reshapingHeld = options.reshapeHeld === true && task.state === 'held';
+        if (task.currentAttempt !== ref.attempt)
+          throw new Error(
+            `task cannot be held for retry: ${ref.taskId} attempt ${ref.attempt} (task ${task.state} at attempt ${task.currentAttempt}${attempt ? `, attempt ${attempt.state}` : ''})`,
+          );
+        // A release sweep leaves a live worker in held until that worker settles; it must not touch its worktree.
+        if (options.abandonPending && task.state === 'held' && attempt?.state === 'running') return task;
         const abandonPending =
-          options.abandonPending === true && (attempt?.state === 'pending' || attempt?.state === 'waiting');
+          options.abandonPending === true &&
+          !reshapingHeld &&
+          (attempt?.state === 'pending' || attempt?.state === 'waiting');
+        const abandonHeldTerminal =
+          options.abandonPending === true &&
+          !reshapingHeld &&
+          task.state === 'held' &&
+          ['superseded', 'cancelled'].includes(attempt?.state ?? '');
+        const abandonAttempt = abandonPending || abandonHeldTerminal;
+        const holdableTaskState =
+          ['ready', 'stopped', 'held'].includes(task.state) ||
+          (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
         if (
-          task.currentAttempt !== ref.attempt ||
-          (attempt && !['stopped', 'exited'].includes(attempt.state) && !abandonPending) ||
-          !['ready', 'stopped', 'held'].includes(task.state)
+          (attempt && !reshapingHeld && !['stopped', 'exited'].includes(attempt.state) && !abandonAttempt) ||
+          !holdableTaskState
         )
           throw new Error(
             `task cannot be held for retry: ${ref.taskId} attempt ${ref.attempt} (task ${task.state} at attempt ${task.currentAttempt}${attempt ? `, attempt ${attempt.state}` : ''})`,
           );
-        if (abandonPending && attempt) {
+        if (abandonAttempt && attempt) {
           attempt.state = 'stopped';
           attempt.endedAt ??= new Date().toISOString();
           this.saveAttempt(attempt);
@@ -783,6 +825,16 @@ export class WorkerStore implements AttemptFence {
         if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt)
           throw new Error('task identity cannot be updated');
         this.saveTask(task);
+        if (reshapingHeld) {
+          const intent = this.retryIntent(ref);
+          if (intent) {
+            if (intent.status === 'started') intent.status = 'pending';
+            if (intent.status === 'pending') delete intent.nextAttempt;
+            this.db
+              .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+              .run(JSON.stringify(intent), ref.taskId, ref.attempt);
+          }
+        }
         return task;
       })
       .immediate();

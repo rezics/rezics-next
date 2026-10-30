@@ -470,10 +470,6 @@ export class WorkerTasks {
     if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
-      const attempt = this.store.attempt(ref);
-      // A held task's waiting attempt is never woken (the wake sweep reads running tasks only), so it can be reshaped too.
-      if (!['pending', 'stopped', 'exited', 'waiting'].includes(attempt.state))
-        throw new Error(`task cannot be held for retry: ${taskId} attempt ${task.currentAttempt} (${attempt.state})`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (!reshaped) throw new Error('a held task can only be retried with --brief');
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
@@ -497,13 +493,28 @@ export class WorkerTasks {
               criticalPriority(current.brief, current.taskClass),
               actor,
             );
-            current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
+            current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
             };
+            // With no remaining `after` edge the host has no dependency-release start path. Retain an explicit
+            // retry instead, still held until any live worker settles and the host releases this generation.
+            if (!current.brief.after.length) {
+              const intent = this.store.retryIntent(ref);
+              if (intent) {
+                this.store.updateRetryIntent(ref, (value) => {
+                  value.status = 'pending';
+                  delete value.nextAttempt;
+                });
+              } else {
+                const retryOptions = { ...options };
+                delete retryOptions.brief;
+                this.store.saveRetryIntent(ref, retryOptions);
+              }
+            }
           },
-          { abandonPending: true },
+          { reshapeHeld: true },
         );
       } catch (error) {
         rmSync(briefPath, { force: true });
@@ -782,12 +793,13 @@ export class WorkerTasks {
             current.taskClass = nextTaskClass;
             if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
           },
-          { abandonPending: true },
+          { reshapeHeld: true },
         );
       }
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
       const currentRunning =
         task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'running';
+      if (task.state === 'held' && currentRunning) return null;
       if ((reshaped || task.state === 'held' || !currentRunning) && !this.dependenciesMet({ brief: nextBrief })) {
         if (!heldAmendment) {
           const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
@@ -808,15 +820,19 @@ export class WorkerTasks {
         return null;
       }
       if (heldAmendment) {
-        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
-          current.state = 'ready';
-        });
-        // Leave the amended task available to stop or reshape while it waits for capacity.
+        task = this.store.updateHeldRetryTask(
+          { taskId, attempt: task.currentAttempt },
+          (current) => {
+            current.state = 'ready';
+          },
+          { abandonPending: true },
+        );
+        // Persist the amendment before waiting for capacity, and let a newer amendment or stop take the lease.
         lease?.release();
         lease = undefined;
         const startOptions = { ...options };
         delete startOptions.brief;
-        return this.retryTask(taskId, startOptions);
+        return task.brief.after.length ? this.retryHeld(taskId) : this.retryTask(taskId, startOptions);
       }
       this.ensureWorktree(task);
       const pools = this.poolPolicies.read();
@@ -898,6 +914,7 @@ export class WorkerTasks {
       );
       const oldSession = old ? attemptSession(old) : null;
       const resumeSession =
+        !briefChange &&
         oldSession &&
         agentAdapter(profile.cli).canResume &&
         old!.pool === pool.name &&
