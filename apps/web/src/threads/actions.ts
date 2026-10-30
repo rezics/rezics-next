@@ -10,6 +10,7 @@ import { prepareSession, viewerCredential } from '../session/request.ts';
 import { readDraftMediaStates, type DraftMediaState } from './media-state';
 import {
   erasePostRequest,
+  restorePostRequest,
   revisePostRequest,
   startThreadRequest,
   type StartThreadInput,
@@ -297,4 +298,22 @@ export const erasePost = createServerFn({ method: 'POST' })
     const result = await erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
     if (result.ok && data.openingThreadId) forgetThreadSlug(data.openingThreadId);
     return result;
+  });
+
+export const restorePost = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const { postId } = validatePostId(input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('idempotencyKey' in input) ||
+      typeof input.idempotencyKey !== 'string' ||
+      !uuid.test(input.idempotencyKey)
+    )
+      throw new Error('Invalid post restoration');
+    return { postId, idempotencyKey: input.idempotencyKey };
+  })
+  .handler(async ({ data }): Promise<{ ok: true } | WriteFailure> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return restorePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
   });

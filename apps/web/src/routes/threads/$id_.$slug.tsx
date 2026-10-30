@@ -2,8 +2,9 @@ import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody, type DocumentMentions } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { undoToast } from '@rezics/ui/undo-toast';
 import type { ReactionKind } from '@rezics/ui/reactions';
-import { createFileRoute, redirect, useLocation } from '@tanstack/react-router';
+import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
@@ -29,6 +30,7 @@ import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReactions } from '../../threads/thread-reactions';
 import {
   erasePost,
+  restorePost as restorePostAction,
   replyToThread,
   revisePost,
   type RevisedPost,
@@ -37,6 +39,7 @@ import {
 } from '../../threads/actions';
 import { csrfHeaders, draftFetch, InlinePostEditor, PostComposer, SignInPrompt } from '../../threads/composer';
 import { PageHeading } from '../../shell/page-heading';
+import { RemovedPost } from '../../threads/post-removed';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -81,19 +84,25 @@ function ThreadPage() {
     now,
   } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
+  const [currentMentions, setCurrentMentions] = useState(mentions);
+  const [displayTitle, setDisplayTitle] = useState(thread.title);
   const { state: session } = useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const location = useLocation();
   const id = Route.useParams().id;
+  const cursor = Route.useSearch().cursor;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
   const postIds = posts.posts.map((post) => post.id);
   const personalQuery = useQuery({
-    ...threadPersonalQuery(id, Route.useSearch().cursor, postIds),
+    ...threadPersonalQuery(id, cursor, postIds),
     enabled: session === 'signed-in',
   });
   const personal = session === 'signed-in' ? personalQuery.data : undefined;
 
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
+  useEffect(() => setCurrentMentions(mentions), [mentions]);
+  useEffect(() => setDisplayTitle(thread.title), [thread.id, thread.title]);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -115,11 +124,26 @@ function ThreadPage() {
     ]);
   }
 
+  async function refreshThreadPage() {
+    const page = await queryClient.fetchQuery({
+      ...threadPageQuery(id, cursor, session === 'signed-in' ? 'session' : 'anonymous'),
+      staleTime: 0,
+    });
+    if ('redirect' in page) return;
+    setPosts(page.posts);
+    setCurrentMentions(page.mentions);
+    setDisplayTitle(page.thread.title);
+    rememberThreadSlug(page.thread.id, page.thread.title);
+    const destination = threadLocation(getLocale(), { id: page.thread.id, title: page.thread.title }, cursor);
+    if (new URL(destination, window.location.origin).pathname !== location.pathname)
+      await router.navigate({ to: destination as never });
+  }
+
   return (
     <article className="max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
         <BoardContext realm={realm} board={board} />
-        <PageHeading>{thread.title ?? m.threads_untitled()}</PageHeading>
+        {displayTitle ? <PageHeading>{displayTitle}</PageHeading> : null}
         <ThreadSubjects subjects={subjects} />
       </header>
       <section className="space-y-6" aria-labelledby="thread-posts-heading">
@@ -137,7 +161,7 @@ function ThreadPage() {
                   onChange={updatePost}
                   post={post}
                   authors={authors}
-                  mentions={mentions}
+                  mentions={currentMentions}
                   now={now}
                   counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
                   returnTo={returnTo}
@@ -148,6 +172,12 @@ function ThreadPage() {
                   verification={verification}
                   viewerId={personal?.viewerId ?? undefined}
                   onMutation={refreshThreadQueries}
+                  onPageRefresh={refreshThreadPage}
+                  onOpeningPostChange={(restored) => {
+                    const title = restored ? thread.title : null;
+                    setDisplayTitle(title);
+                    rememberThreadSlug(thread.id, title);
+                  }}
                 />
               );
             })}
@@ -222,6 +252,8 @@ function PostSlot({
   returnTo,
   verification,
   onMutation,
+  onPageRefresh,
+  onOpeningPostChange,
 }: {
   post: ThreadPost;
   authors: PageAuthors;
@@ -238,12 +270,21 @@ function PostSlot({
   returnTo: string;
   verification: VerificationConfig;
   onMutation: () => Promise<void>;
+  onPageRefresh: () => Promise<void>;
+  onOpeningPostChange: (restored: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
+  const [restoreError, setRestoreError] = useState('');
+  const [removedMinHeight, setRemovedMinHeight] = useState<number>();
   const menuButton = useRef<HTMLButtonElement>(null);
+  const itemElement = useRef<HTMLLIElement>(null);
   const deleteKey = useRef<string | undefined>(undefined);
+  const restoreKey = useRef<string | undefined>(undefined);
+  const restoreSnapshot = useRef<ThreadPost | undefined>(undefined);
+  const restorePending = useRef(false);
   const restoreMenuFocus = useRef(false);
+  const restorePostFocus = useRef(false);
   const ownsPost = viewerId !== undefined && post.availability === 'available' && post.authorId === viewerId;
 
   useEffect(() => {
@@ -251,7 +292,11 @@ function PostSlot({
       restoreMenuFocus.current = false;
       menuButton.current?.focus();
     }
-  }, [editing]);
+    if (restorePostFocus.current && !editing && post.availability === 'available') {
+      restorePostFocus.current = false;
+      itemElement.current?.focus();
+    }
+  }, [editing, post.availability]);
 
   const labels = {
     moreActions: m.thread_content_more_actions(),
@@ -274,6 +319,42 @@ function PostSlot({
     setEditing(false);
   }
 
+  async function restoreRemovedPost(snapshot?: ThreadPost) {
+    if (restorePending.current) return;
+    restorePending.current = true;
+    setRestoreError('');
+    restoreKey.current ??= crypto.randomUUID();
+    try {
+      const result = await restorePostAction({
+        data: { postId: post.id, idempotencyKey: restoreKey.current },
+        headers: csrfHeaders(),
+      });
+      if (!result.ok) {
+        if (result.reason === 'conflict') {
+          restoreKey.current = undefined;
+          setRestoreError(m.thread_post_restore_conflict());
+        } else {
+          setRestoreError(m.thread_post_restore_failure());
+        }
+        return;
+      }
+
+      restoreKey.current = undefined;
+      restorePostFocus.current = true;
+      if (snapshot) {
+        onChange(snapshot);
+        if (target.kind === 'thread') onOpeningPostChange(true);
+      } else {
+        // A fresh tombstone has no body by contract. Once restored, reload its readable page entry.
+        await onPageRefresh();
+      }
+    } catch {
+      setRestoreError(m.thread_post_restore_failure());
+    } finally {
+      restorePending.current = false;
+    }
+  }
+
   async function deletePost() {
     deleteKey.current ??= crypto.randomUUID();
     const result = await erasePost({
@@ -285,22 +366,45 @@ function PostSlot({
       headers: csrfHeaders(),
     });
     if (!result.ok) throw new Error(postDeleteFailureText(result));
-    onChange({ ...post, body: null, availability: 'erased', removed: true } as ThreadPost);
-    await onMutation();
+    if (removedMinHeight === undefined) setRemovedMinHeight(itemElement.current?.getBoundingClientRect().height);
+    restoreSnapshot.current = post;
+    restoreMenuFocus.current = true;
+    setRestoreError('');
+    const deleted: ThreadPost = {
+      ...post,
+      body: null,
+      sha256: null,
+      availability: 'erased',
+      removed: true,
+      restorableUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    };
+    onChange(deleted);
+    if (target.kind === 'thread') onOpeningPostChange(false);
+    undoToast(m.thread_post_deleted_toast(), () => void restoreRemovedPost(post), { undo: m.thread_post_undo() });
   }
 
   if (post.availability !== 'available') {
     return (
-      <li id={anchorId} className="scroll-mt-24 py-6 target:bg-muted/50">
-        <p className="text-muted-foreground" role="note">
-          {m.thread_post_erased()}
-        </p>
-      </li>
+      <RemovedPost
+        post={post}
+        authors={authors}
+        now={now}
+        viewerId={viewerId}
+        anchorId={anchorId}
+        itemRef={itemElement}
+        menuButton={menuButton}
+        minHeight={removedMinHeight}
+        restoreError={restoreError}
+        onCopyLink={copyLink}
+        {...(post.availability === 'erased' && viewerId === post.authorId && post.restorableUntil
+          ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) }
+          : {})}
+      />
     );
   }
 
   return (
-    <li id={anchorId} className="scroll-mt-24 py-5 target:bg-muted/50">
+    <li id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
       <div className="mb-3 flex items-start justify-between gap-3">
         <Byline
           author={authors?.[post.authorId]}

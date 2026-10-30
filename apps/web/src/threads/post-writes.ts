@@ -89,6 +89,7 @@ export type RevisePostInput = {
 };
 
 export type ErasePostInput = { postId: string; idempotencyKey: string };
+export type RestorePostInput = { postId: string; idempotencyKey: string };
 
 async function sessionAuthorization(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string> {
   await prepareSession(request, sessionEnv);
@@ -156,6 +157,29 @@ export async function erasePostRequest(
   const authorization = await sessionAuthorization(request, sessionEnv);
   try {
     const result = await client.posts({ id: input.postId }).delete(undefined, {
+      headers: {
+        authorization,
+        'idempotency-key': input.idempotencyKey,
+      } as { 'idempotency-key': string },
+    });
+    if (result.error) return refusal(result.status, result.headers, result.error.value);
+    return { ok: true };
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+export async function restorePostRequest(
+  input: RestorePostInput,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  client: KernelClient,
+  refusal: Refusal,
+): Promise<{ ok: true } | WriteFailure> {
+  const authorization = await sessionAuthorization(request, sessionEnv);
+  try {
+    const result = await client.posts({ id: input.postId }).$restore.post(undefined, {
       headers: {
         authorization,
         'idempotency-key': input.idempotencyKey,
