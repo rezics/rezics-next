@@ -1,3 +1,4 @@
+import provenance from './scope-leaf-selection-provenance.sql';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
@@ -223,35 +224,16 @@ export async function candidateSources(
   const sources = new Map<string, Source | null>();
   if (entries.length > 256) throw new TypeError('A source fence read accepts at most 256 ids');
   if (entries.length === 0) return sources;
-  const result = await client.query<{ subject_id: string; id: string; source: Source | null }>(
-    `SELECT e.subject_id::text AS subject_id, e.candidate_id::text AS id,
-            COALESCE(proposed.source, recorded.source) AS source
-     FROM unnest($1::int[], $2::uuid[], $3::uuid[]) AS e(route, subject_id, candidate_id)
-     LEFT JOIN LATERAL (
-       SELECT r.source FROM semantic.candidate c
-       JOIN semantic.revision r
-         ON r.route = c.route AND r.subject_id = c.subject_id AND r.revision = c.revision
-       WHERE c.route = e.route AND c.subject_id = e.subject_id AND c.candidate_id = e.candidate_id
-       LIMIT 1
-     ) proposed ON true
-     LEFT JOIN LATERAL (
-       SELECT r.source FROM semantic.fact f
-       JOIN semantic.revision r
-         ON r.route = f.route AND r.subject_id = f.subject_id
-        AND r.recorded_transaction_id = f.recorded_transaction_id
-       WHERE proposed.source IS NULL
-         AND f.route = e.route AND f.subject_id = e.subject_id AND f.statement_id = e.candidate_id
-         AND f.kind = 'statement' AND f.operation = 'assert'
-       ORDER BY f.log_seq DESC
-       LIMIT 1
-     ) recorded ON true`,
-    [
-      entries.map((entry) => entry.route),
-      entries.map((entry) => entry.subject_id),
-      entries.map((entry) => entry.candidate_id),
-    ],
+  const parameters = {
+    routes: entries.map((entry) => entry.route),
+    subjects: entries.map((entry) => entry.subject_id),
+    candidates: entries.map((entry) => entry.candidate_id),
+    max_bytes: 2147483647,
+  };
+  const result = await client.query<(typeof provenance)['~reylo']['element']>(
+    provenance.sql, provenance.params.map((name) => parameters[name as keyof typeof parameters]),
   );
-  for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source);
+  for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source as Source | null);
   return sources;
 }
 

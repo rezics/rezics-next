@@ -1,3 +1,5 @@
+import { indexedStatement, selectedCandidate, selectedRank } from './scope-leaf-selection.ts';
+export { indexedStatement } from './scope-leaf-selection.ts';
 import {
   readSubjectKeyPage,
   type SubjectSourceKeyTraversal as SubjectSourceKeyPages,
@@ -96,74 +98,6 @@ function assertPartition(partition: number): void {
     throw new TypeError('Partition must be an integer from 0 through 4095');
 }
 
-function valueText(body: unknown, definition: Release['properties'][string] | undefined): string | null {
-  if (!object(body) || !object(body.value)) return null;
-  const value = body.value;
-  if (value.type !== 'value' || !object(value.content)) {
-    if (value.type !== 'value' || typeof value.content !== 'string') return null;
-    return value.content;
-  }
-  const content = value.content;
-  switch (definition?.datatype) {
-    case 'time':
-      return typeof content.time === 'string' ? content.time : null;
-    case 'quantity':
-      return typeof content.amount === 'string' ? content.amount : null;
-    case 'monolingualtext':
-      return typeof content.text === 'string' ? content.text : null;
-    default:
-      return null;
-  }
-}
-
-function timeYear(time: string): number | null {
-  const match = /^([+-])(\d+)-/.exec(time);
-  if (!match) return null;
-  const year = Number(`${match[1]}${match[2]}`);
-  return Number.isSafeInteger(year) ? year : null;
-}
-
-export function indexedStatement(row: StatementRow, release: Release): IndexedStatement | null {
-  const body = row.body;
-  if (!object(body)) return null;
-  const definition = release.properties[row.property];
-  const value = valueText(body, definition);
-  if (value === null) return null;
-
-  const statement: IndexedStatement = { property: row.property, value };
-  if (definition?.datatype === 'wikibase-item') statement.facet = { kind: 'item' };
-  else if (definition?.datatype === 'time') {
-    const content = object(body.value) && object(body.value.content) ? body.value.content : undefined;
-    const year = content && typeof content.time === 'string' ? timeYear(content.time) : null;
-    if (year !== null) statement.facet = { kind: 'time', year };
-  } else if (definition?.datatype === 'quantity') {
-    const content = object(body.value) && object(body.value.content) ? body.value.content : undefined;
-    const amount = content && typeof content.amount === 'string' ? Number(content.amount) : NaN;
-    if (Number.isFinite(amount) && content && typeof content.unit === 'string')
-      statement.facet = { kind: 'quantity', amount, unit: content.unit };
-  } else if (
-    definition?.datatype === 'string' &&
-    object(definition.value) &&
-    typeof definition.value.pattern === 'string'
-  ) {
-    statement.facet = { kind: 'code' };
-  }
-
-  if (Array.isArray(body.qualifiers)) {
-    const qualifiers = body.qualifiers.flatMap((raw): { property: string; value: string }[] => {
-      if (!object(raw) || typeof raw.property !== 'string' || !object(raw.value) || raw.value.type !== 'value')
-        return [];
-      const qualifierDefinition = release.properties[raw.property];
-      const content = raw.value.content;
-      return (qualifierDefinition?.datatype === 'wikibase-item' || qualifierDefinition?.datatype === 'string') &&
-        typeof content === 'string'
-        ? [{ property: raw.property, value: content }]
-        : [];
-    });
-    if (qualifiers.length > 0) statement.qualifiers = qualifiers;
-  }
-  return statement;
-}
 
 function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
   const current = new Map<string, string>();
@@ -250,8 +184,8 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
         const entries: StatementEntry[] = factRows.flatMap((row) => {
           if (row.entry_kind !== 'compact' || !row.candidate_id || !row.property || !row.release) return [];
           const body = object(row.body) ? row.body : {};
-          const rank = body.rank;
-          if (rank !== 'normal' && rank !== 'preferred') return [];
+          const rank = selectedRank(body.rank);
+          if (rank === null) return [];
           return [
             {
               source: 'compact' as const,
@@ -274,20 +208,16 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
           );
           if (!slot || !slot.property) continue;
           for (const [index, selected] of adoption.selection.entries()) {
-            if (
-              !object(selected) ||
-              typeof selected.candidate !== 'string' ||
-              (selected.rank !== 'normal' && selected.rank !== 'preferred')
-            )
-              continue;
+            const selection = selectedCandidate(selected);
+            if (!selection) continue;
             entries.push({
               source: 'expanded',
               route: adoption.route,
               subject_id: adoption.subject_id,
               slot_id: adoption.slot_id,
               property: slot.property,
-              candidate_id: selected.candidate,
-              rank: selected.rank,
+              candidate_id: selection.candidate,
+              rank: selection.rank,
               ordinal: index + 1,
             });
           }

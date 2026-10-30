@@ -397,6 +397,38 @@ replay all selected facts for every request. Typed parameterized range/qualifier
 same semantics. Samples, witness hints and overflow markers do not establish complete negative coverage. Missing
 essential coverage stays unknown under NOT and produces preparation/readiness until a complete admitted plan exists.
 
+### Selective current native evidence
+
+`readScopeLeafEvidence` reads a known live source and one admitted Search leaf. It prepares viewer Access before
+source checkout, verifies the public floor on the same repeatable-read source observation, and emits only public
+normalized statements with native candidate identities, recording revisions, releases and current Global ranks.
+Its selection and normalization helpers are shared with `subjectSource`; it does not interpret filters. Internal
+public evidence ignores ambient owner and moderator statement overlays.
+
+Descriptive slots use exact native slot keys, at most 33 compact operations and at most 32 expanded selections.
+Relation point leaves seek the canonical fact and candidate possible-pair ranges before current selection,
+moderation, retraction, consent, provenance and target checks. Narrow partial indexes cover canonical writes and
+existing data synchronously, including UUID-valued historical rows without a reliable relation flag. No sampled witness table or asynchronous visibility projection supplies absence.
+Each bounded step consumes one possible witness, including rejected or duplicate keys, and continues strictly
+after its native key. Compact relation progress uses the native fact record sequence; expanded witness progress
+uses the actual UUID. Null and numeric zero remain distinct. Progress binds the source's own revision, security,
+release and admitted leaf, never an unrelated partition position, remembered truth or a permission.
+
+All six caller-reserved work axes include Access's actual producer receipts, pool and transaction operations,
+source/home/slot points, native driver/body/provenance work, definition length guards, rejected data and foreign
+observations. Explicit native plan bounds charge rows independently of returned rows. Driver payloads are guarded
+before transfer and charged in UTF-8 bytes. A source checkout is released before any independent definition,
+source-fence or target read; source authority is checked again afterwards. Exhausted reservations yield readiness,
+while Access/deadline/dependency errors retain their typed unavailable behavior. A foreign work-mode producer
+without a native work receipt refuses before IO rather than manufacturing an Actor or hiding its IO.
+
+Selection coverage requires the complete selected slot in this observation. Partial selections and witness
+revalidation do not prove negatives. Empty-pair coverage requires both complete canonical possible-witness ranges
+to be empty from the beginning for every requested pair in this observation. Historical witnesses rejected by
+current authority, continuation range end and matcher misses never prove empty pairs; they remain unknown even
+when quiescent. Final witness reads repeat native selection and all applicable public checks. Broader relation
+range plans and composed-release work adapters remain typed unavailable until their native bounded ports exist.
+
 ### Complete facet population preparation
 
 `createFacetPopulationSource(config)` in `facet-population.ts`, additively exported by `semantic/index.ts`,
@@ -444,8 +476,8 @@ must be omitted without approximate/as_of, zero or row-length substitutes.
 
 ### Implementation status and retained evidence
 
-`scope-leaf-evidence.ts` and its old whole-slot/one-pending-leaf/final-replay contracts are superseded list
-scaffolding, not an implemented general list evaluator. The universal 256 raw-key proof requirement, ban on derived
+The selective native evidence capability above does not implement a general list evaluator. Its earlier
+whole-slot/one-pending-leaf/final-replay list design is superseded. The universal 256 raw-key proof requirement, ban on derived
 query/index state and ban on range/qualifier SQL no longer govern lists. Existing exported types and frozen tests
 remain in place until reviewed native replacement acceptance permits removal. This prose adoption removes no code
 and proves no native capability. Independent leaf, multi-leaf and integration reports remain evidence, not gates
