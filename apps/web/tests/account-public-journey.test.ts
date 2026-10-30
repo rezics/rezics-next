@@ -1,14 +1,17 @@
-import { expect, test } from 'bun:test';
+import { expect, test, mock } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { accountOf, viewIsPublic } from '../src/features/pages/account-read';
-import { loadPublicAccountJourney, pageProfile } from '../src/accounts/public-profile/page-read';
-import { readPublicRealms } from '../src/accounts/public-profile/read';
-import { PublicRealmsPage } from '../src/accounts/public-profile/view';
-import { PublicProfilePage } from '../src/accounts/public-profile/page';
-import { profilePage } from '../src/stories/pages/accounts-public-profile/fixtures';
+// Render-only tests do not invoke Worker bindings. API assertions below use the actual generated client.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { accountOf, viewIsPublic } = await import('../src/features/pages/account-read');
+const { loadPublicAccountJourney, pageProfile } = await import('../src/accounts/public-profile/page-read');
+const { readPublicRealms } = await import('../src/accounts/public-profile/read');
+const { PublicRealmsPage } = await import('../src/accounts/public-profile/view');
+const { PublicProfilePage } = await import('../src/accounts/public-profile/page');
+const { profilePage } = await import('../src/stories/pages/accounts-public-profile/fixtures');
 
 const accountId = '0192f3a0-6c1e-7b2a-8000-000000000001';
 const realmId = '0192f3a0-6c1e-7b2a-8000-000000000002';
@@ -155,7 +158,9 @@ test('composed public pages keep automation visible when operator hydration is u
 });
 
 test('the real generated page client retains source view privacy and canonical forwarding without listing accounts', async () => {
-  const page = profilePage({ profile: { movedTo: 'current-reader', publicViews: { realms: false } } });
+  const page = profilePage({
+    profile: { movedTo: 'current-reader', handle: 'current-reader', publicViews: { realms: false } },
+  });
   const calls: string[] = [];
   const client = clientWith(async (request) => {
     const url = new URL(request.url);
