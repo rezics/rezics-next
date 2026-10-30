@@ -143,14 +143,16 @@ const registration = {
   publicJwks: { keys: [websitePublicJwk] },
   redirectUris: ['https://rezics.com/auth/callback'],
   postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: [...new Set([
-    'openid',
-    'offline_access',
-    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-    'organization:create',
-    'account:manage',
-    'account:delete',
-  ])],
+  scopes: [
+    ...new Set([
+      'openid',
+      'offline_access',
+      ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
+      'organization:create',
+      'account:manage',
+      'account:delete',
+    ]),
+  ],
 };
 await auth.internal.registerWebsiteClient(registration);
 // Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
