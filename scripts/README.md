@@ -136,6 +136,30 @@ Auth's standalone typecheck reuses its check's compiler database preparation: on
 both the kernel and Auth migrations, since Auth's imports also reach kernel SQL. It removes that database after
 tsc exits or fails to start. An existing `DATABASE_URL` bypasses placement and database preparation entirely.
 
+### Controller-reserved proof binding
+
+`startControllerWorkerCheck(binding)` in `worker-check.ts` and
+`bun scripts/worker-check.ts --controller-proof <token> -- <exact original argv...>` consume the same
+`ControllerProofBindingV1` declared in `check-custody.ts`. The controller publishes the closed
+`ControllerProofReservationV1` at `controllerProofReservationPath(GOAL_CHECK_REGISTRY, token)` after its own durable
+reservation, and serializes publication/revocation with `withCheckFence(cwd, checkId, ...)`. The wrapper never allocates
+a controller token or logical UUID. It verifies the reservation, exact task attempt environment, canonical initiating
+Git root, full HEAD commit/tree and clean captured tracked blobs. Argument boundaries, empty arguments and literal
+characters are retained; arguments are limited to 1,024 entries, 4,096 characters each and 16 KiB of encoded JSON.
+Untracked logs and generated returns are outside the captured tracked source; tracked gitlinks are unsupported.
+
+Exclusive registry token/check claims and monotonic custody under the existing logical check fence prevent duplicate
+execution and revival. Exact replay returns the existing result path. `refused-never-started` requires a durable
+pre-intent refusal that prevents every physical incarnation; loss of registry, claims, intent, registration or result
+returns `unavailable` with unknown custody and retains controller capacity. Intent is retained before detached launch,
+including native preparation. Binding metadata accompanies the existing logical record, physical histories and
+registration; `validControllerProofRegistration` checks it against actual custody records. It is additional metadata,
+not admission, cancellation authorization, a terminal proof or controller settlement. Existing bounded physical reruns
+keep the token, logical UUID and original source/argv, while recording their own IDs and physical argv; an overload
+subset is derived only from the actual failure log and captured tracked test files. Ordinary unbound API/CLI behavior
+is unchanged and cannot satisfy the bound registration predicate. The CLI prints `ControllerProofStartV1` JSON and
+exits 0 for started/replayed, 1 for durable refusal and 2 for unknown custody.
+
 ### Hosts file
 
 `KERNEL_CHECK_REMOTE` names local JSON configuration. It must contain a nonempty `hosts` array:

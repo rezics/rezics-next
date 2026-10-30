@@ -5,6 +5,8 @@ import {
   closeSync,
   existsSync,
   fstatSync,
+  fsyncSync,
+  readlinkSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -35,6 +37,15 @@ import { hostsLocation } from './stack-run.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
+  controllerProofReservationPath,
+  controllerProofStatePath,
+  sameControllerProofBinding,
+  validateControllerProofBinding,
+  validateControllerProofReservation,
+  validControllerProofRegistration,
+  type ControllerProofBindingV1,
+  type ControllerProofStartV1,
+  type ControllerProofState,
   cancellationPath,
   cleanupReceiptEventPath,
   cleanupReceiptHistoryDirectory,
@@ -132,6 +143,7 @@ export function requestWorkerCheckCancellation(id: string, cwd = process.cwd(), 
 
 export type CheckRecord = {
   custodyVersion?: typeof CHECK_RECORD_CUSTODY_VERSION;
+  controllerProof?: ControllerProofBindingV1;
   id: string;
   cwd: string;
   argv: string[];
@@ -176,6 +188,7 @@ export type CheckTerminalProof = { local: true; remote: boolean | null; resultKn
 
 export type CheckPhysicalRecord = {
   version: 1;
+  controllerProof?: ControllerProofBindingV1;
   id: string;
   cwd: string;
   argv: string[];
@@ -353,7 +366,8 @@ function writePhysicalRecord(record: CheckPhysicalRecord): void {
       previous.runnerHost !== record.runnerHost ||
       !sameOwnership(previous.ownership, record.ownership) ||
       !sameRunnerIdentity(previous.runnerIdentity, record.runnerIdentity) ||
-      JSON.stringify(previous.argv) !== JSON.stringify(record.argv)
+      JSON.stringify(previous.argv) !== JSON.stringify(record.argv) ||
+      JSON.stringify(previous.controllerProof) !== JSON.stringify(record.controllerProof)
     ) {
       throw new Error('worker-check: physical check identity is immutable');
     }
@@ -396,6 +410,7 @@ function physicalRecordFor(
     id: record.id,
     cwd: record.cwd,
     argv: [...argv],
+    ...(record.controllerProof === undefined ? {} : { controllerProof: record.controllerProof }),
     ...(record.ownership === undefined ? {} : { ownership: validateOwnership(record.ownership) }),
     physicalRunId: record.physicalRunId,
     runnerHost: host,
@@ -416,6 +431,307 @@ function registryForStart(env: NodeJS.ProcessEnv, ownership: CheckOwnership | un
   if (registry && !ownership)
     throw new Error('worker-check: GOAL_CHECK_REGISTRY requires a valid task attempt identity');
   return registry;
+}
+
+function proofRegistryIdentity(registry: string): { dev: string; ino: string } {
+  if (validatedRegistryDirectory(registry) !== registry) throw new Error('worker-check: proof registry changed');
+  const stats = lstatSync(registry, { bigint: true });
+  return { dev: String(stats.dev), ino: String(stats.ino) };
+}
+
+function proofFile<T>(file: string): T {
+  if (!lstatSync(file).isFile() || realpathSync(file) !== file) {
+    throw new Error('worker-check: controller proof file is not a canonical regular file');
+  }
+  const value = readJsonFile<T>(file);
+  if (!value) throw new Error('worker-check: controller proof file is missing or malformed');
+  return value;
+}
+
+function syncProofFile(file: string): void {
+  for (const path of [file, resolve(file, '..')]) {
+    const descriptor = openSync(path, 'r');
+    try {
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+  }
+}
+
+function saveProofState(state: ControllerProofState): void {
+  const file = controllerProofStatePath(state.binding.cwd, state.binding.checkId);
+  writeAtomicJson(file, state);
+  syncProofFile(file);
+}
+
+function proofClaimPath(registry: string, token: string): string {
+  return join(registry, 'proof-claims', `${token.toLowerCase()}.json`);
+}
+
+function proofCheckClaimPath(registry: string, checkId: string): string {
+  return join(registry, 'proof-claims', `check-${checkId.toLowerCase()}.json`);
+}
+
+function readProofState(binding: ControllerProofBindingV1, registry: string): ControllerProofState {
+  const claim = proofFile<ControllerProofBindingV1>(proofClaimPath(registry, binding.token));
+  if (!sameControllerProofBinding(claim, binding)) throw new Error('worker-check: proof token is already bound');
+  const check = proofFile<{ version: number; token: string }>(proofCheckClaimPath(registry, binding.checkId));
+  if (check.version !== 1 || check.token !== binding.token)
+    throw new Error('worker-check: proof check is already bound');
+  const state = proofFile<ControllerProofState>(controllerProofStatePath(binding.cwd, binding.checkId));
+  if (
+    state.version !== 1 ||
+    !sameControllerProofBinding(state.binding, binding) ||
+    state.registry !== registry ||
+    JSON.stringify(state.registryIdentity) !== JSON.stringify(proofRegistryIdentity(registry)) ||
+    !['prepared', 'intent', 'refused'].includes(state.phase) ||
+    !Array.isArray(state.physical) ||
+    state.physical.length > 2 ||
+    (state.phase === 'intent' ? state.physical.length === 0 : state.physical.length !== 0) ||
+    state.physical.some(
+      (physical) =>
+        !isPhysicalRunId(physical.physicalRunId) ||
+        !Array.isArray(physical.argv) ||
+        physical.argv.length === 0 ||
+        physical.argv.some((arg) => typeof arg !== 'string' || arg.includes('\0')),
+    )
+  ) {
+    throw new Error('worker-check: controller proof custody is missing or changed');
+  }
+  return state;
+}
+
+function proofReservation(registry: string, token: string) {
+  return validateControllerProofReservation(proofFile(controllerProofReservationPath(registry, token)));
+}
+
+/** Git's environment cannot redirect this check to a different index, object store or worktree. */
+function proofGit(root: string, args: string[]): string {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const result = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-C', root, ...args], {
+    env,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.error || result.status !== 0) {
+    throw result.error ?? new Error(`worker-check: proof source Git validation failed: ${result.stderr.trim()}`);
+  }
+  return result.stdout;
+}
+
+function validateProofSource(binding: ControllerProofBindingV1, initiating = false): void {
+  if (
+    (initiating && realpathSync(process.cwd()) !== binding.cwd) ||
+    realpathSync(binding.cwd) !== binding.cwd ||
+    proofGit(binding.cwd, ['rev-parse', '--show-toplevel']).trim() !== binding.cwd ||
+    proofGit(binding.cwd, ['rev-parse', '--verify', 'HEAD^{commit}']).trim() !== binding.sourceCommit ||
+    proofGit(binding.cwd, ['rev-parse', '--verify', 'HEAD^{tree}']).trim() !== binding.sourceTree ||
+    proofGit(binding.cwd, ['status', '--porcelain=v1', '--untracked-files=no', '--ignore-submodules=none']).length
+  ) {
+    throw new Error('worker-check: proof requires its initiating canonical cwd and clean captured HEAD commit/tree');
+  }
+  // Hash only captured tracked blobs. Untracked logs/returns do not change source; assume-unchanged and
+  // skip-worktree flags cannot hide a changed tracked file. Do not rewrite the index or caller source.
+  const algorithm = binding.sourceTree.length === 40 ? 'sha1' : 'sha256';
+  for (const entry of proofGit(binding.cwd, ['ls-tree', '-rz', '--full-tree', binding.sourceTree]).split('\0')) {
+    if (!entry) continue;
+    const match = /^(100644|100755|120000) blob ([0-9a-f]+)\t([\s\S]+)$/.exec(entry);
+    if (!match) throw new Error('worker-check: proof source contains an unsupported tracked object');
+    const path = resolve(binding.cwd, match[3]!);
+    if (!path.startsWith(`${binding.cwd}/`)) throw new Error('worker-check: proof source path escapes its root');
+    const stats = lstatSync(path);
+    const hash = createHash(algorithm);
+    if (match[1] === '120000') {
+      if (!stats.isSymbolicLink()) throw new Error('worker-check: proof tracked symlink changed');
+      const bytes = Buffer.from(readlinkSync(path));
+      hash.update(`blob ${bytes.length}\0`).update(bytes);
+    } else {
+      if (!stats.isFile() || realpathSync(path) !== path || Boolean(stats.mode & 0o111) !== (match[1] === '100755')) {
+        throw new Error('worker-check: proof tracked file mode changed');
+      }
+      hash.update(`blob ${stats.size}\0`);
+      const descriptor = openSync(path, 'r');
+      try {
+        const buffer = Buffer.alloc(64 * 1024);
+        let length: number;
+        while ((length = readSync(descriptor, buffer)) > 0) hash.update(buffer.subarray(0, length));
+      } finally {
+        closeSync(descriptor);
+      }
+    }
+    if (hash.digest('hex') !== match[2]) throw new Error('worker-check: proof tracked source changed');
+  }
+}
+
+function validateProofOwner(binding: ControllerProofBindingV1): void {
+  if (!sameOwnership(binding, ownershipFromEnvironment(process.env))) {
+    throw new Error('worker-check: controller proof task attempt does not match the initiating environment');
+  }
+}
+
+/** Must be called under the logical fence before every physical incarnation can execute. */
+function validateProofRecord(record: CheckRecord): ControllerProofState | undefined {
+  if (record.controllerProof === undefined) return undefined;
+  const binding = validateControllerProofBinding(record.controllerProof);
+  validateProofOwner(binding);
+  const registry = registryForStart(process.env, record.ownership);
+  if (!registry) throw new Error('worker-check: controller proof registry is unavailable');
+  const reservation = proofReservation(registry, binding.token);
+  const state = readProofState(binding, registry);
+  if (
+    reservation.state !== 'reserved' ||
+    !sameControllerProofBinding(reservation.binding, binding) ||
+    record.id !== binding.checkId ||
+    record.cwd !== binding.cwd ||
+    !sameOwnership(record.ownership, binding) ||
+    JSON.stringify(record.argv) !== JSON.stringify(binding.argv) ||
+    state.phase !== 'intent' ||
+    !state.physical.some(
+      (physical) =>
+        physical.physicalRunId === record.physicalRunId &&
+        JSON.stringify(physical.argv) === JSON.stringify(record.physicalArgv ?? record.argv),
+    )
+  ) {
+    throw new Error('worker-check: controller proof physical binding changed or was revoked');
+  }
+  validateProofSource(binding);
+  return state;
+}
+
+function addProofPhysicalIntent(record: CheckRecord): void {
+  if (!record.controllerProof) return;
+  const registry = registryForStart(process.env, record.ownership);
+  if (!registry) throw new Error('worker-check: controller proof registry is unavailable');
+  const state = readProofState(record.controllerProof, registry);
+  if (
+    state.phase === 'refused' ||
+    state.physical.length >= 2 ||
+    !isPhysicalRunId(record.physicalRunId) ||
+    state.physical.some((physical) => physical.physicalRunId === record.physicalRunId)
+  ) {
+    throw new Error('worker-check: controller proof physical intent cannot be revived or duplicated');
+  }
+  state.phase = 'intent';
+  state.physical.push({ physicalRunId: record.physicalRunId, argv: [...(record.physicalArgv ?? record.argv)] });
+  saveProofState(state);
+  validateProofRecord(record);
+}
+
+/** Consume only a controller-published reservation. This is the existing runner, not a second admission lane. */
+export async function startControllerWorkerCheck(value: ControllerProofBindingV1): Promise<ControllerProofStartV1> {
+  const binding = validateControllerProofBinding(value);
+  const unknown = (reason: string): ControllerProofStartV1 => ({
+    version: 1,
+    outcome: 'unavailable',
+    binding,
+    custody: 'unknown',
+    reason,
+  });
+  let launch: CheckRecord | undefined;
+  try {
+    const registry = registryForStart(process.env, ownershipFromEnvironment(process.env));
+    if (!registry) return unknown('worker-check: controller proof registry is unavailable');
+    const published = proofReservation(registry, binding.token);
+    const answer = await withCheckFence(
+      published.binding.cwd,
+      published.binding.checkId,
+      (): ControllerProofStartV1 => {
+        const reservation = proofReservation(registry, binding.token);
+        const reserved = reservation.binding;
+        if (!sameControllerProofBinding(reserved, published.binding) || reserved.token !== binding.token) {
+          return unknown('worker-check: controller reservation changed while acquiring its fence');
+        }
+        const claimPath = proofClaimPath(registry, binding.token);
+        const checkClaimPath = proofCheckClaimPath(registry, reserved.checkId);
+        const statePath = controllerProofStatePath(reserved.cwd, reserved.checkId);
+        if (!existsSync(claimPath)) {
+          // An old result or proof state is never evidence of a fresh, never-started reservation.
+          if (
+            existsSync(statePath) ||
+            existsSync(checkClaimPath) ||
+            existsSync(recordPath(reserved.cwd, reserved.checkId))
+          ) {
+            return unknown('worker-check: controller proof has prior custody without its token claim');
+          }
+          const directory = resolve(claimPath, '..');
+          mkdirSync(directory, { recursive: true });
+          if (realpathSync(directory) !== directory) throw new Error('worker-check: proof claim directory changed');
+          // Exclusive creation also prevents token reuse across different check fences/worktrees.
+          writeFileSync(checkClaimPath, `${JSON.stringify({ version: 1, token: reserved.token })}\n`, {
+            flag: 'wx',
+            mode: 0o600,
+          });
+          syncProofFile(checkClaimPath);
+          writeFileSync(claimPath, `${JSON.stringify(reserved)}\n`, { flag: 'wx', mode: 0o600 });
+          syncProofFile(claimPath);
+          saveProofState({
+            version: 1,
+            binding: reserved,
+            registry,
+            registryIdentity: proofRegistryIdentity(registry),
+            phase: 'prepared',
+            physical: [],
+          });
+        }
+        const state = readProofState(reserved, registry);
+        const refuse = (reason: string): ControllerProofStartV1 => {
+          if (state.phase === 'intent') return unknown(reason);
+          // This positive monotonic refusal prevents every future physical incarnation under this fence.
+          state.phase = 'refused';
+          state.reason ??= reason;
+          saveProofState(state);
+          readProofState(reserved, registry);
+          return { version: 1, outcome: 'refused-never-started', binding: reserved, reason: state.reason };
+        };
+        if (!sameControllerProofBinding(binding, reserved))
+          return refuse('worker-check: controller proof binding mismatch');
+        if (reservation.state === 'revoked') return refuse('worker-check: controller proof reservation was revoked');
+        if (state.phase === 'refused')
+          return refuse(state.reason ?? 'worker-check: controller proof was already refused');
+        try {
+          validateProofOwner(binding);
+          validateProofSource(binding, true);
+        } catch (error) {
+          return refuse(String(error));
+        }
+        if (state.phase === 'intent') {
+          const record = readRecord(binding.cwd, binding.checkId);
+          validateProofRecord(record);
+          if (!record.physicalRunId) return unknown('worker-check: proof physical custody is missing');
+          const registration = readJsonFile(join(registry, `${binding.checkId}.${record.physicalRunId}.json`));
+          if (
+            !validControllerProofRegistration(registration, binding) ||
+            (record.status === 'running' && (!record.runnerIdentity || !sameProcess(record.runnerIdentity)))
+          ) {
+            return unknown('worker-check: proof runner custody is unknown');
+          }
+          return { version: 1, outcome: 'replayed', binding, resultPath: recordPath(binding.cwd, binding.checkId) };
+        }
+        const record: CheckRecord = {
+          custodyVersion: CHECK_RECORD_CUSTODY_VERSION,
+          controllerProof: binding,
+          id: binding.checkId,
+          cwd: binding.cwd,
+          argv: [...binding.argv],
+          status: 'running',
+          log: relative(binding.cwd, logPath(binding.cwd)),
+          physicalRunId: randomUUID(),
+          ownership: { taskId: binding.taskId, attempt: binding.attempt },
+        };
+        writeRecord(record);
+        // Conservatively cross intent before launching the wrapper, including its native preparation.
+        addProofPhysicalIntent(record);
+        launch = record;
+        return { version: 1, outcome: 'started', binding, resultPath: recordPath(binding.cwd, binding.checkId) };
+      },
+    );
+    if (launch) launchDetachedRunner(launch, process.env);
+    return answer;
+  } catch (error) {
+    // Missing records, sockets, PIDs and launch receipts cannot undo durable execution intent.
+    return unknown(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function readyReceipt(root: string, id: string, physicalRunId: string): RunnerReadyReceipt | undefined {
@@ -642,6 +958,31 @@ function overloadRerunCommand(argv: readonly string[], files: string[], cwd: str
   else if (isTest) command.push(...files);
   else command.push(...files.map((file) => resolve(testRoot, file)));
   return command;
+}
+
+/** Derive a bound overload rerun from original argv and its real failure log, retaining wrapper options. */
+function controllerOverloadArgv(record: CheckRecord): string[] {
+  const binding = validateControllerProofBinding(record.controllerProof);
+  let index = 0;
+  while (binding.argv[index] === '--local' || binding.argv[index] === '--returns') {
+    index += binding.argv[index] === '--returns' ? 2 : 1;
+  }
+  if (binding.argv[index] === '--') index += 1;
+  const command = binding.argv.slice(index);
+  const failure = overloadFailure(checkLogContents(join(binding.cwd, record.log)));
+  if (!failure?.files.length) return [...binding.argv];
+  let testRoot = binding.cwd;
+  for (let position = 1; position < command.length; position += 1) {
+    if (command[position] === '--cwd' && command[position + 1]) testRoot = resolve(binding.cwd, command[position + 1]!);
+    else if (command[position]!.startsWith('--cwd=')) testRoot = resolve(binding.cwd, command[position]!.slice(6));
+  }
+  const tracked = new Set(proofGit(binding.cwd, ['ls-tree', '-rz', '--name-only', binding.sourceTree]).split('\0'));
+  if (failure.files.some((file) => !tracked.has(relative(binding.cwd, resolve(testRoot, file))))) {
+    return [...binding.argv];
+  }
+  const subset = overloadRerunCommand(command, failure.files, binding.cwd);
+  if (!subset) return [...binding.argv];
+  return [...validateControllerProofBinding({ ...binding, argv: [...binding.argv.slice(0, index), ...subset] }).argv];
 }
 
 function checkLogContents(file: string): string {
@@ -1224,41 +1565,43 @@ export async function runWorkerCheck(
       : remoteCommand;
     let remote: ReturnType<typeof spawn>;
     try {
-      remote = spawn(
-        resolveRepositoryBun(['bun'], root)[0]!,
-        [
-          join(root, 'scripts/remote-check.ts'),
-          '--memory-gib',
-          String(weight),
-          ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
-          ...(artifactPrepared ? ['--returns', artifactRelative] : []),
-          ...returnPaths.flatMap((path) => ['--returns', path]),
-          root,
-          '--',
-          ...handedOffCommand,
-        ],
-        {
-          cwd: root,
-          env: {
-            ...env,
-            KERNEL_CHECK_REMOTE: remoteHostsFile,
-            REZICS_CHECK_PHYSICAL_RUN_ID: physicalRunId,
-            REZICS_CHECK_REMOTE_CUSTODY_FILE: remoteRunCustodyPath(root, physicalRunId),
-            REMOTE_CHECK_RECEIPT_FD: '3',
-            REMOTE_CHECK_RECEIPT_NONCE: receiptNonce,
-            ...(logicalCheckId === undefined
-              ? {}
-              : {
-                  REZICS_CHECK_ID: logicalCheckId,
-                  REZICS_CHECK_CANCEL_FILE: cancellationPath(root, logicalCheckId),
-                  REZICS_CHECK_STOP_FILE: stopIntentPath(root, logicalCheckId, physicalRunId),
-                }),
-            REZICS_CHECK_MEMORY: 'off',
-            REZICS_STACK_LEASE: 'off',
+      const spawnRemote = () =>
+        spawn(
+          resolveRepositoryBun(['bun'], root)[0]!,
+          [
+            join(root, 'scripts/remote-check.ts'),
+            '--memory-gib',
+            String(weight),
+            ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
+            ...(artifactPrepared ? ['--returns', artifactRelative] : []),
+            ...returnPaths.flatMap((path) => ['--returns', path]),
+            root,
+            '--',
+            ...handedOffCommand,
+          ],
+          {
+            cwd: root,
+            env: {
+              ...env,
+              KERNEL_CHECK_REMOTE: remoteHostsFile,
+              REZICS_CHECK_PHYSICAL_RUN_ID: physicalRunId,
+              REZICS_CHECK_REMOTE_CUSTODY_FILE: remoteRunCustodyPath(root, physicalRunId),
+              REMOTE_CHECK_RECEIPT_FD: '3',
+              REMOTE_CHECK_RECEIPT_NONCE: receiptNonce,
+              ...(logicalCheckId === undefined
+                ? {}
+                : {
+                    REZICS_CHECK_ID: logicalCheckId,
+                    REZICS_CHECK_CANCEL_FILE: cancellationPath(root, logicalCheckId),
+                    REZICS_CHECK_STOP_FILE: stopIntentPath(root, logicalCheckId, physicalRunId),
+                  }),
+              REZICS_CHECK_MEMORY: 'off',
+              REZICS_STACK_LEASE: 'off',
+            },
+            stdio: ['inherit', 'pipe', 'pipe', 'pipe'],
           },
-          stdio: ['inherit', 'pipe', 'pipe', 'pipe'],
-        },
-      );
+        );
+      remote = startPhysical ? await startPhysical(spawnRemote) : spawnRemote();
     } catch (error) {
       finishRemoteText();
       wait.stop();
@@ -2029,6 +2372,7 @@ async function scheduleOverloadRerun(
     )
       throw new CheckCancelled();
     const current = readRecord(root, id);
+    validateProofRecord(current);
     if (current.physicalRunId !== priorPhysicalRunId || current.status !== 'running' || (current.reruns ?? 0) >= 1) {
       throw new Error('worker-check: overload rerun lost its logical generation');
     }
@@ -2050,11 +2394,12 @@ async function scheduleOverloadRerun(
       status: 'running',
       reruns: 1,
       physicalRunId,
-      physicalArgv: [...argv],
+      physicalArgv: current.controllerProof ? controllerOverloadArgv(current) : [...argv],
       waitForPhysicalRunId: priorPhysicalRunId,
       log: relative(root, file),
       infrastructureFailure: `worker-check: overload rerun; prior physical run ${priorPhysicalRunId}; log ${relative(root, current.log)}`,
     };
+    addProofPhysicalIntent(updated);
     writeRecord(updated);
     return updated;
   });
@@ -2920,6 +3265,7 @@ async function rerunInterruptedCheck(
       (current.status !== 'running' && !(reason.startsWith('log did not grow') && current.status === 'finished'))
     )
       return current;
+    validateProofRecord(current);
     if (current.physicalRunId) {
       const physical = readPhysicalRecord(root, id, current.physicalRunId);
       const terminal =
@@ -2935,6 +3281,7 @@ async function rerunInterruptedCheck(
       physicalRunId: newPhysicalRunId,
       infrastructureFailure: `worker-check: infrastructure failure (${reason}) on ${host}; rerunning once; old log ${oldLog}`,
     };
+    addProofPhysicalIntent(updated);
     writeRecord(updated);
     return updated;
   });
@@ -2997,6 +3344,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
     if (current.runnerPid !== process.pid) {
       throw new Error('worker-check: detached runner PID does not match the published head');
     }
+    validateProofRecord(current);
     const updated: CheckRecord = {
       ...current,
       custodyVersion: CHECK_RECORD_CUSTODY_VERSION,
@@ -3018,6 +3366,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
         runnerHost: hostname(),
         runnerIdentity: identity,
         registeredAt: new Date().toISOString(),
+        ...(updated.controllerProof === undefined ? {} : { controllerProof: updated.controllerProof }),
       };
       publishCheckRegistration(registry, registration);
       if (!registrationIsPresent(registry, registration))
@@ -3091,6 +3440,7 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
           if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
             throw new Error('worker-check: physical run changed before local command start');
           }
+          validateProofRecord(current);
           return start();
         });
       },
@@ -3113,7 +3463,17 @@ function parse(argv: string[]): string[] {
 if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
-    if (args[0] === '--wait') {
+    if (args[0] === '--controller-proof') {
+      if (!isCheckId(args[1]) || args[2] !== '--' || args.length < 4) {
+        throw new Error('worker-check: --controller-proof requires a UUID token and -- <exact original argv...>');
+      }
+      const registry = registryForStart(process.env, ownershipFromEnvironment(process.env));
+      if (!registry) throw new Error('worker-check: controller proof registry is unavailable');
+      const reservation = proofReservation(registry, args[1]);
+      const answer = await startControllerWorkerCheck({ ...reservation.binding, token: args[1], argv: args.slice(3) });
+      process.stdout.write(`${JSON.stringify(answer)}\n`);
+      process.exitCode = answer.outcome === 'unavailable' ? 2 : answer.outcome === 'refused-never-started' ? 1 : 0;
+    } else if (args[0] === '--wait') {
       if (!args[1]) throw new Error('worker-check: --wait requires a check id');
       process.exitCode = await waitWorkerCheck(args[1]);
     } else if (args[0] === '--run') {

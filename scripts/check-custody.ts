@@ -38,7 +38,24 @@ export type ControllerProofReservationV1 = Readonly<{
 export type ControllerProofStartV1 =
   | Readonly<{ version: 1; outcome: 'started' | 'replayed'; binding: ControllerProofBindingV1; resultPath: string }>
   | Readonly<{ version: 1; outcome: 'refused-never-started'; binding: ControllerProofBindingV1; reason: string }>
-  | Readonly<{ version: 1; outcome: 'unavailable'; binding: ControllerProofBindingV1; custody: 'unknown'; reason: string }>;
+  | Readonly<{
+      version: 1;
+      outcome: 'unavailable';
+      binding: ControllerProofBindingV1;
+      custody: 'unknown';
+      reason: string;
+    }>;
+
+/** Monotonic producer custody, retained independently of runner PIDs and cleanup receipts. */
+export type ControllerProofState = {
+  version: 1;
+  binding: ControllerProofBindingV1;
+  registry: string;
+  registryIdentity: { dev: string; ino: string };
+  phase: 'prepared' | 'intent' | 'refused';
+  physical: Array<{ physicalRunId: string; argv: string[] }>;
+  reason?: string;
+};
 
 export type CheckOwnership = { taskId: string; attempt: number };
 export type RunnerIdentity = { pid: number; start: string; boot: string; group: number };
@@ -107,9 +124,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Closed JSON wire objects: no partial records or extra fields are accepted. */
 function closedObject(value: unknown, keys: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
-      Reflect.ownKeys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+    Reflect.ownKeys(value).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(value, key))
+  ) {
     throw new Error('worker-check: invalid controller proof wire object');
   }
   return value as Record<string, unknown>;
@@ -117,25 +139,54 @@ function closedObject(value: unknown, keys: readonly string[]): Record<string, u
 
 export function validateControllerProofBinding(value: unknown): ControllerProofBindingV1 {
   const item = closedObject(value, [
-    'version', 'token', 'checkId', 'goal', 'taskId', 'attempt', 'sourceCommit', 'sourceTree', 'argv', 'cwd',
+    'version',
+    'token',
+    'checkId',
+    'goal',
+    'taskId',
+    'attempt',
+    'sourceCommit',
+    'sourceTree',
+    'argv',
+    'cwd',
   ]);
   const ownership = validateOwnership({ taskId: item.taskId, attempt: item.attempt });
-  if (item.version !== 1 || !isCheckId(item.token) || !isCheckId(item.checkId) ||
-      typeof item.goal !== 'string' || !/^[a-z][a-z0-9-]{0,127}$/.test(item.goal) ||
-      typeof item.sourceCommit !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceCommit) ||
-      typeof item.sourceTree !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceTree) ||
-      item.sourceCommit.length !== item.sourceTree.length ||
-      typeof item.cwd !== 'string' || !isAbsolute(item.cwd) || resolve(item.cwd) !== item.cwd ||
-      item.cwd.includes('\0') || item.cwd.length > 4096 ||
-      !Array.isArray(item.argv) || item.argv.length === 0 || item.argv.length > 1024 ||
-      Array.from(item.argv).some((arg) => typeof arg !== 'string' || arg.length > 4096 || arg.includes('\0')) ||
-      item.argv[0].length === 0 || Buffer.byteLength(JSON.stringify(item.argv)) > 48 * 1024) {
+  if (
+    item.version !== 1 ||
+    !isCheckId(item.token) ||
+    !isCheckId(item.checkId) ||
+    typeof item.goal !== 'string' ||
+    !/^[a-z][a-z0-9-]{0,127}$/.test(item.goal) ||
+    typeof item.sourceCommit !== 'string' ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceCommit) ||
+    typeof item.sourceTree !== 'string' ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(item.sourceTree) ||
+    item.sourceCommit.length !== item.sourceTree.length ||
+    typeof item.cwd !== 'string' ||
+    !isAbsolute(item.cwd) ||
+    resolve(item.cwd) !== item.cwd ||
+    item.cwd.includes('\0') ||
+    item.cwd.length > 4096 ||
+    !Array.isArray(item.argv) ||
+    item.argv.length === 0 ||
+    item.argv.length > 1024 ||
+    Reflect.ownKeys(item.argv).length !== item.argv.length + 1 ||
+    Array.from(item.argv).some((arg) => typeof arg !== 'string' || arg.length > 4096 || arg.includes('\0')) ||
+    item.argv[0].length === 0 ||
+    Buffer.byteLength(JSON.stringify(item.argv)) > 16 * 1024
+  ) {
     throw new Error('worker-check: invalid controller proof binding');
   }
   return Object.freeze({
-    version: 1, token: item.token, checkId: item.checkId, goal: item.goal, ...ownership,
-    sourceCommit: item.sourceCommit, sourceTree: item.sourceTree,
-    argv: Object.freeze([...item.argv] as string[]), cwd: item.cwd,
+    version: 1,
+    token: item.token,
+    checkId: item.checkId,
+    goal: item.goal,
+    ...ownership,
+    sourceCommit: item.sourceCommit,
+    sourceTree: item.sourceTree,
+    argv: Object.freeze([...item.argv] as string[]),
+    cwd: item.cwd,
   });
 }
 
@@ -149,10 +200,17 @@ export function validateControllerProofReservation(value: unknown): ControllerPr
 
 export function sameControllerProofBinding(left: unknown, right: ControllerProofBindingV1): boolean {
   try {
-    return JSON.stringify(validateControllerProofBinding(left)) === JSON.stringify(validateControllerProofBinding(right));
+    return (
+      JSON.stringify(validateControllerProofBinding(left)) === JSON.stringify(validateControllerProofBinding(right))
+    );
   } catch {
     return false;
   }
+}
+
+export function controllerProofStatePath(root: string, checkId: string): string {
+  if (!isCheckId(checkId)) throw new Error('worker-check: invalid controller proof check id');
+  return join(custodyDirectory(root), 'proofs', `${checkId.toLowerCase()}.json`);
 }
 
 export function controllerProofReservationPath(registry: string, token: string): string {
@@ -167,19 +225,110 @@ export function validControllerProofRegistration(value: unknown, binding: Contro
   try {
     const expected = validateControllerProofBinding(binding);
     const item = closedObject(value, [
-      'version', 'checkId', 'resultPath', 'ownership', 'physicalRunId', 'runnerHost',
-      'runnerIdentity', 'registeredAt', 'controllerProof',
+      'version',
+      'checkId',
+      'resultPath',
+      'ownership',
+      'physicalRunId',
+      'runnerHost',
+      'runnerIdentity',
+      'registeredAt',
+      'controllerProof',
     ]);
     closedObject(item.ownership, ['taskId', 'attempt']);
     closedObject(item.runnerIdentity, ['pid', 'start', 'boot', 'group']);
     const owner = validateOwnership(item.ownership);
     validateRunnerIdentity(item.runnerIdentity);
-    return item.version === 1 && item.checkId === expected.checkId &&
-      item.resultPath === join(expected.cwd, '.temp/goal/checks/results', `${expected.checkId}.json`) &&
-      isPhysicalRunId(item.physicalRunId) && typeof item.runnerHost === 'string' && item.runnerHost.length > 0 &&
-      typeof item.registeredAt === 'string' && Number.isFinite(Date.parse(item.registeredAt)) &&
-      owner.taskId === expected.taskId && owner.attempt === expected.attempt &&
-      sameControllerProofBinding(item.controllerProof, expected);
+    if (
+      !(
+        item.version === 1 &&
+        item.checkId === expected.checkId &&
+        item.resultPath === join(expected.cwd, '.temp/goal/checks/results', `${expected.checkId}.json`) &&
+        isPhysicalRunId(item.physicalRunId) &&
+        typeof item.runnerHost === 'string' &&
+        item.runnerHost.length > 0 &&
+        typeof item.registeredAt === 'string' &&
+        Number.isFinite(Date.parse(item.registeredAt)) &&
+        owner.taskId === expected.taskId &&
+        owner.attempt === expected.attempt &&
+        sameControllerProofBinding(item.controllerProof, expected)
+      )
+    )
+      return false;
+    type Custody = {
+      id: string;
+      cwd: string;
+      argv: string[];
+      ownership: CheckOwnership;
+      controllerProof: unknown;
+      physicalRunId: string;
+      runnerHost: string;
+      runnerIdentity: RunnerIdentity;
+      runnerPid?: number;
+      version?: number;
+      custodyVersion?: number;
+      status: string;
+    };
+    const read = <T>(path: string): T | undefined =>
+      lstatSync(path).isFile() && realpathSync(path) === path ? readJsonFile<T>(path) : undefined;
+    const head = read<Custody>(String(item.resultPath));
+    const physical = read<Custody>(physicalHistoryPath(expected.cwd, expected.checkId, item.physicalRunId));
+    const state = read<ControllerProofState>(controllerProofStatePath(expected.cwd, expected.checkId));
+    if (
+      !head ||
+      !physical ||
+      !state ||
+      head.custodyVersion !== 1 ||
+      physical.version !== 1 ||
+      !['running', 'finished'].includes(head.status) ||
+      !['running', 'finished', 'unknown'].includes(physical.status) ||
+      state.version !== 1 ||
+      state.phase !== 'intent' ||
+      !sameControllerProofBinding(state.binding, expected) ||
+      !Array.isArray(state.physical) ||
+      state.physical.length === 0 ||
+      state.physical.length > 2 ||
+      !state.physical.some(
+        (run) => run.physicalRunId === item.physicalRunId && JSON.stringify(run.argv) === JSON.stringify(physical.argv),
+      )
+    )
+      return false;
+    for (const record of [head, physical]) {
+      if (
+        record.id !== expected.checkId ||
+        record.cwd !== expected.cwd ||
+        !sameControllerProofBinding(record.controllerProof, expected) ||
+        JSON.stringify(validateOwnership(record.ownership)) !== JSON.stringify(owner)
+      )
+        return false;
+    }
+    if (
+      JSON.stringify(head.argv) !== JSON.stringify(expected.argv) ||
+      physical.physicalRunId !== item.physicalRunId ||
+      physical.runnerHost !== item.runnerHost ||
+      JSON.stringify(validateRunnerIdentity(physical.runnerIdentity)) !==
+        JSON.stringify(validateRunnerIdentity(item.runnerIdentity)) ||
+      (head.physicalRunId === item.physicalRunId &&
+        (head.runnerHost !== item.runnerHost ||
+          head.runnerPid !== physical.runnerIdentity.pid ||
+          JSON.stringify(validateRunnerIdentity(head.runnerIdentity)) !==
+            JSON.stringify(validateRunnerIdentity(item.runnerIdentity))))
+    )
+      return false;
+    const registry = validatedRegistryDirectory(state.registry);
+    if (!registry) return false;
+    const stats = lstatSync(registry, { bigint: true });
+    const claim = read(join(registry, 'proof-claims', `${expected.token.toLowerCase()}.json`));
+    const check = read<{ version: number; token: string }>(
+      join(registry, 'proof-claims', `check-${expected.checkId.toLowerCase()}.json`),
+    );
+    return (
+      state.registryIdentity?.dev === String(stats.dev) &&
+      state.registryIdentity.ino === String(stats.ino) &&
+      sameControllerProofBinding(claim, expected) &&
+      check?.version === 1 &&
+      check.token === expected.token
+    );
   } catch {
     return false;
   }
@@ -466,9 +615,10 @@ export function readJsonFile<T>(file: string): T | undefined {
 
 /** Use the kernel flock primitive as the publication fence for one logical check ID. */
 export async function withCheckFence<T>(root: string, checkId: string, operation: () => Promise<T> | T): Promise<T> {
+  if (!isCheckId(checkId)) throw new Error('worker-check: invalid check publication fence id');
   const directory = join(custodyDirectory(root), 'locks');
   mkdirSync(directory, { recursive: true });
-  const lock = join(directory, `${checkId}.lock`);
+  const lock = join(directory, `${checkId.toLowerCase()}.lock`);
   const child: ChildProcess = spawn('flock', ['-x', lock, 'sh', '-c', 'printf "LOCKED\\n"; cat >/dev/null'], {
     stdio: ['pipe', 'pipe', 'ignore'],
   });
@@ -533,6 +683,12 @@ export function publishCheckRegistration(registry: string, registration: CheckRe
   if (validatedRegistryDirectory(registry) !== registry) {
     throw new Error('worker-check: check registry changed before registration');
   }
+  if (
+    registration.controllerProof !== undefined &&
+    !validControllerProofRegistration(registration, registration.controllerProof)
+  ) {
+    throw new Error('worker-check: invalid controller proof registration');
+  }
   validateOwnership(registration.ownership);
   validateRunnerIdentity(registration.runnerIdentity);
   const file = join(registry, `${registration.checkId}.${registration.physicalRunId}.json`);
@@ -560,6 +716,9 @@ export function validRegistration(
       value.resultPath === expected.resultPath &&
       value.physicalRunId === expected.physicalRunId &&
       value.runnerHost === expected.runnerHost &&
+      (expected.controllerProof === undefined
+        ? value.controllerProof === undefined
+        : validControllerProofRegistration(value, expected.controllerProof)) &&
       JSON.stringify(validateOwnership(value.ownership)) === JSON.stringify(expected.ownership) &&
       JSON.stringify(validateRunnerIdentity(value.runnerIdentity)) === JSON.stringify(expected.runnerIdentity)
     );

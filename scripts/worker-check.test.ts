@@ -24,11 +24,21 @@ import {
   resolveRepositoryBun,
   scopeRootTypecheck,
   startWorkerCheck,
+  startControllerWorkerCheck,
   waitWorkerCheck,
   requestWorkerCheckCancellation,
   workerCheckCancellation,
 } from './worker-check.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
+import {
+  controllerProofReservationPath,
+  controllerProofStatePath,
+  registrationPath,
+  validControllerProofRegistration,
+  withCheckFence,
+  writeAtomicJson,
+  type ControllerProofBindingV1,
+} from './check-custody.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -2746,5 +2756,394 @@ test('a worker already on a check host runs its command locally without relaying
       if (old[key] === undefined) delete process.env[key];
       else process.env[key] = old[key]!;
     }
+  }
+});
+
+function reserveControllerProof(root: string, argv: string[]): ControllerProofBindingV1 {
+  if (!existsSync(join(root, '.git'))) {
+    writeFileSync(join(root, '.gitignore'), '.temp/\n');
+    writeFileSync(join(root, 'source.txt'), 'captured source\n');
+    git(root, 'init', '-b', 'worker');
+    git(root, 'config', 'user.email', 'worker-check@example.test');
+    git(root, 'config', 'user.name', 'Worker Check');
+    git(root, 'add', '.');
+    git(root, 'commit', '-m', 'fixture source');
+  }
+  const registry = join(root, '.temp/registry');
+  mkdirSync(registry, { recursive: true });
+  const binding: ControllerProofBindingV1 = {
+    version: 1,
+    token: randomUUID(),
+    checkId: randomUUID(),
+    goal: 'performance',
+    taskId: randomUUID(),
+    attempt: 4,
+    sourceCommit: git(root, 'rev-parse', 'HEAD'),
+    sourceTree: git(root, 'rev-parse', 'HEAD^{tree}'),
+    cwd: root,
+    argv,
+  };
+  writeAtomicJson(controllerProofReservationPath(registry, binding.token), { version: 1, state: 'reserved', binding });
+  return binding;
+}
+
+async function withControllerProofEnvironment(
+  binding: ControllerProofBindingV1,
+  work: () => Promise<void>,
+): Promise<void> {
+  const old = { ...process.env };
+  const cwd = process.cwd();
+  const keys = [
+    'GOAL_TASK_ID',
+    'GOAL_ATTEMPT',
+    'GOAL_CHECK_REGISTRY',
+    'REZICS_CHECK_MEMORY',
+    'REZICS_CHECK_SCOPE',
+    'KERNEL_CHECK_REMOTE',
+    'KERNEL_CHECK_ON_REMOTE',
+    'REZICS_CHECK_MEMORY_LEASE',
+  ];
+  try {
+    process.chdir(binding.cwd);
+    process.env.GOAL_TASK_ID = binding.taskId;
+    process.env.GOAL_ATTEMPT = String(binding.attempt);
+    process.env.GOAL_CHECK_REGISTRY = join(binding.cwd, '.temp/registry');
+    process.env.REZICS_CHECK_MEMORY = 'off';
+    process.env.REZICS_CHECK_SCOPE = 'off';
+    delete process.env.KERNEL_CHECK_REMOTE;
+    delete process.env.KERNEL_CHECK_ON_REMOTE;
+    delete process.env.REZICS_CHECK_MEMORY_LEASE;
+    await work();
+  } finally {
+    stopOwnedWorkerCheck(binding.checkId, binding.cwd);
+    process.chdir(cwd);
+    for (const key of keys) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key];
+    }
+  }
+}
+
+test('controller proof exact API and CLI replay uses the preallocated logical UUID and executes original argv once', async () => {
+  const root = overloadFixture();
+  const counter = join(root, '.temp/counter');
+  const binding = reserveControllerProof(root, [
+    '--local',
+    process.execPath,
+    '-e',
+    `require('node:fs').appendFileSync(${JSON.stringify(counter)},JSON.stringify(process.argv.slice(1))+'\\n')`,
+    '',
+    'two words',
+    '$literal; `text`',
+  ]);
+  await withControllerProofEnvironment(binding, async () => {
+    const first = await startControllerWorkerCheck(binding);
+    expect(first).toMatchObject({ version: 1, outcome: 'started', binding });
+    expect(await waitWorkerCheck(binding.checkId, root, 5_000)).toBe(0);
+    const before = readWorkerCheckRecord(binding.checkId, root);
+    const replay = await startControllerWorkerCheck(binding);
+    expect(replay).toMatchObject({ outcome: 'replayed', binding });
+    expect(replay).toHaveProperty('resultPath', join(root, '.temp/goal/checks/results', binding.checkId + '.json'));
+    const cli = spawnSync(
+      process.execPath,
+      [join(repository, 'scripts/worker-check.ts'), '--controller-proof', binding.token, '--', ...binding.argv],
+      { cwd: root, env: process.env, encoding: 'utf8', timeout: 5_000 },
+    );
+    expect(cli.status, cli.stderr).toBe(0);
+    expect(JSON.parse(cli.stdout)).toMatchObject({ outcome: 'replayed', binding });
+    expect(readWorkerCheckRecord(binding.checkId, root).physicalRunId).toBe(before.physicalRunId);
+    expect(readFileSync(counter, 'utf8').trim().split('\n')).toEqual([
+      JSON.stringify(['', 'two words', '$literal; `text`']),
+    ]);
+    const registration = JSON.parse(
+      readFileSync(registrationPath(process.env.GOAL_CHECK_REGISTRY!, binding.checkId, before.physicalRunId!), 'utf8'),
+    );
+    expect(validControllerProofRegistration(registration, binding)).toBe(true);
+    for (const changed of [
+      { ...registration, checkId: randomUUID() },
+      { ...registration, physicalRunId: randomUUID() },
+      { ...registration, runnerHost: 'other-host' },
+      { ...registration, ownership: { taskId: binding.taskId, attempt: binding.attempt + 1 } },
+      { ...registration, runnerIdentity: { ...registration.runnerIdentity, start: '0' } },
+      { ...registration, controllerProof: { ...binding, goal: 'web' } },
+      { ...registration, extra: true },
+      { ...registration, controllerProof: undefined },
+    ])
+      expect(validControllerProofRegistration(changed, binding)).toBe(false);
+  });
+});
+
+test('controller proof concurrent exact starts cannot create a duplicate physical incarnation', async () => {
+  const root = overloadFixture();
+  const marker = join(root, '.temp/once');
+  const binding = reserveControllerProof(root, [
+    '--local',
+    process.execPath,
+    '-e',
+    `require('node:fs').appendFileSync(${JSON.stringify(marker)},'x')`,
+  ]);
+  await withControllerProofEnvironment(binding, async () => {
+    const answers = await Promise.all([startControllerWorkerCheck(binding), startControllerWorkerCheck(binding)]);
+    expect(answers.filter((answer) => answer.outcome === 'started')).toHaveLength(1);
+    expect(answers.every((answer) => ['started', 'replayed', 'unavailable'].includes(answer.outcome))).toBe(true);
+    expect(await waitWorkerCheck(binding.checkId, root, 5_000)).toBe(0);
+    expect(readFileSync(marker, 'utf8')).toBe('x');
+  });
+});
+
+test('controller proof source, argv, cwd, task, attempt, Goal and logical ID mismatches are durable pre-intent refusals', async () => {
+  const root = overloadFixture();
+  const mutations: Array<(binding: ControllerProofBindingV1) => ControllerProofBindingV1> = [
+    (binding) => ({ ...binding, sourceCommit: '0'.repeat(40) }),
+    (binding) => ({ ...binding, sourceTree: '0'.repeat(40) }),
+    (binding) => ({ ...binding, argv: [...binding.argv, 'changed'] }),
+    (binding) => ({ ...binding, cwd: repository }),
+    (binding) => ({ ...binding, taskId: randomUUID() }),
+    (binding) => ({ ...binding, attempt: binding.attempt + 1 }),
+    (binding) => ({ ...binding, goal: 'web' }),
+    (binding) => ({ ...binding, checkId: randomUUID() }),
+  ];
+  for (const mutate of mutations) {
+    const binding = reserveControllerProof(root, ['--local', process.execPath, '-e', 'process.exit(99)']);
+    await withControllerProofEnvironment(binding, async () => {
+      expect(await startControllerWorkerCheck(mutate(binding))).toMatchObject({
+        outcome: 'refused-never-started',
+        binding,
+      });
+      expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'refused-never-started', binding });
+      const state = JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8'));
+      expect(state).toMatchObject({ phase: 'refused', physical: [], binding });
+      expect(existsSync(join(root, '.temp/goal/checks/results', binding.checkId + '.json'))).toBe(false);
+    });
+  }
+});
+
+test('controller proof validates actual HEAD, tracked contents and initiating ownership rather than caller metadata', async () => {
+  const root = overloadFixture();
+  for (const fault of ['tracked', 'hidden-tracked', 'staged', 'head', 'tree', 'task', 'attempt', 'cwd']) {
+    const binding = reserveControllerProof(root, ['--local', process.execPath, '-e', 'process.exit(99)']);
+    await withControllerProofEnvironment(binding, async () => {
+      const reservation = controllerProofReservationPath(process.env.GOAL_CHECK_REGISTRY!, binding.token);
+      if (fault === 'tracked' || fault === 'hidden-tracked' || fault === 'staged') {
+        if (fault === 'hidden-tracked') git(root, 'update-index', '--assume-unchanged', 'source.txt');
+        writeFileSync(join(root, 'source.txt'), 'changed source\n');
+        if (fault === 'staged') git(root, 'add', 'source.txt');
+      } else if (fault === 'head' || fault === 'tree') {
+        const changed = { ...binding, [fault === 'head' ? 'sourceCommit' : 'sourceTree']: '0'.repeat(40) };
+        writeAtomicJson(reservation, { version: 1, state: 'reserved', binding: changed });
+        expect(await startControllerWorkerCheck(changed)).toHaveProperty('outcome', 'refused-never-started');
+        return;
+      } else if (fault === 'task') process.env.GOAL_TASK_ID = randomUUID();
+      else if (fault === 'attempt') process.env.GOAL_ATTEMPT = String(binding.attempt + 1);
+      else process.chdir(repository);
+      try {
+        expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'refused-never-started');
+      } finally {
+        if (fault === 'hidden-tracked') git(root, 'update-index', '--no-assume-unchanged', 'source.txt');
+        if (['tracked', 'hidden-tracked', 'staged'].includes(fault))
+          git(root, 'restore', '--staged', '--worktree', 'source.txt');
+        process.chdir(root);
+      }
+    });
+  }
+});
+
+test('controller proof revoked pre-intent reservations stay refused, while absent or changed tokens cannot borrow custody', async () => {
+  const root = overloadFixture();
+  const binding = reserveControllerProof(root, ['--local', process.execPath, '-e', 'process.exit(99)']);
+  await withControllerProofEnvironment(binding, async () => {
+    const path = controllerProofReservationPath(process.env.GOAL_CHECK_REGISTRY!, binding.token);
+    writeAtomicJson(path, { version: 1, state: 'revoked', binding });
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'refused-never-started');
+    writeAtomicJson(path, { version: 1, state: 'reserved', binding });
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'refused-never-started');
+    expect(await startControllerWorkerCheck({ ...binding, token: randomUUID() })).toMatchObject({
+      outcome: 'unavailable',
+      custody: 'unknown',
+    });
+    rmSync(path);
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+  });
+});
+
+test('controller proof post-intent input changes and missing registration, result or registry retain unknown custody', async () => {
+  const root = overloadFixture();
+  const marker = join(root, '.temp/once');
+  const binding = reserveControllerProof(root, [
+    '--local',
+    process.execPath,
+    '-e',
+    `require('node:fs').appendFileSync(${JSON.stringify(marker)},'x')`,
+  ]);
+  await withControllerProofEnvironment(binding, async () => {
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'started');
+    expect(await waitWorkerCheck(binding.checkId, root, 5_000)).toBe(0);
+    const record = readWorkerCheckRecord(binding.checkId, root);
+    for (const changed of [
+      { ...binding, argv: [...binding.argv, 'changed'] },
+      { ...binding, sourceCommit: '0'.repeat(40) },
+      { ...binding, goal: 'web' },
+    ]) {
+      expect(await startControllerWorkerCheck(changed)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    }
+    const reservation = controllerProofReservationPath(process.env.GOAL_CHECK_REGISTRY!, binding.token);
+    const reused = { ...binding, checkId: randomUUID() };
+    await withCheckFence(root, binding.checkId, () =>
+      writeAtomicJson(reservation, { version: 1, state: 'reserved', binding: reused }),
+    );
+    expect(await startControllerWorkerCheck(reused)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    expect(existsSync(join(root, '.temp/goal/checks/results', reused.checkId + '.json'))).toBe(false);
+    writeAtomicJson(reservation, { version: 1, state: 'reserved', binding });
+    rmSync(registrationPath(process.env.GOAL_CHECK_REGISTRY!, binding.checkId, record.physicalRunId!));
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    rmSync(join(root, '.temp/goal/checks/results', binding.checkId + '.json'));
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    rmSync(process.env.GOAL_CHECK_REGISTRY!, { recursive: true });
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    mkdirSync(process.env.GOAL_CHECK_REGISTRY!);
+    writeAtomicJson(reservation, { version: 1, state: 'reserved', binding });
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    expect(readFileSync(marker, 'utf8')).toBe('x');
+  });
+});
+
+test('controller proof watchdog physical reruns preserve the same token, logical UUID, source and original argv', async () => {
+  const root = recoveryFixture();
+  const marker = join(root, '.temp/runs');
+  const binding = reserveControllerProof(root, [
+    '--local',
+    process.execPath,
+    '-e',
+    `const fs=require('node:fs');if(fs.existsSync(${JSON.stringify(marker)})){fs.appendFileSync(${JSON.stringify(marker)},'x');process.exit(0)};fs.writeFileSync(${JSON.stringify(marker)},'x');setInterval(()=>{},1000)`,
+  ]);
+  await withControllerProofEnvironment(binding, async () => {
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'started');
+    await untilRecorded(() => existsSync(marker));
+    const first = readWorkerCheckRecord(binding.checkId, root);
+    const stale = new Date(Date.now() - 100);
+    utimesSync(join(root, first.log), stale, stale);
+    expect(await waitWorkerCheck(binding.checkId, root, 10_000, { stallMs: 100, rerunStallMs: 2_000, pollMs: 5 })).toBe(
+      0,
+    );
+    const next = readWorkerCheckRecord(binding.checkId, root);
+    expect(next).toMatchObject({ controllerProof: binding, id: binding.checkId, argv: binding.argv, reruns: 1 });
+    expect(next.physicalRunId).not.toBe(first.physicalRunId);
+    expect(readWorkerCheckHistory(binding.checkId, first.physicalRunId!, root)).toMatchObject({
+      controllerProof: binding,
+      argv: binding.argv,
+    });
+    expect(readWorkerCheckHistory(binding.checkId, next.physicalRunId!, root)).toMatchObject({
+      controllerProof: binding,
+      argv: binding.argv,
+    });
+    const state = JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8'));
+    expect(state).toMatchObject({ phase: 'intent', binding });
+    expect(state.physical.map((run: { physicalRunId: string }) => run.physicalRunId)).toEqual([
+      first.physicalRunId,
+      next.physicalRunId,
+    ]);
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'replayed');
+    expect(readFileSync(marker, 'utf8')).toBe('xx');
+  });
+});
+
+test('controller proof overload subset keeps original argv and distinct physical command histories', async () => {
+  const root = overloadFixture();
+  const healthy = join(root, '.temp/healthy');
+  const failed = join(root, '.temp/failed');
+  writeFileSync(
+    join(root, 'healthy.test.ts'),
+    `import {test} from 'bun:test';
+import {appendFileSync} from 'node:fs';
+test('healthy',()=>appendFileSync(${JSON.stringify(healthy)},'x'));`,
+  );
+  writeFileSync(
+    join(root, 'overloaded.test.ts'),
+    `import {test} from 'bun:test';
+import {existsSync,appendFileSync} from 'node:fs';
+test('transient',()=>{const first=!existsSync(${JSON.stringify(failed)});appendFileSync(${JSON.stringify(failed)},'x');if(first)throw new Error('HTTP 503 deadline_exceeded')});`,
+  );
+  const binding = reserveControllerProof(root, ['--local', 'bun', 'test', 'healthy.test.ts', 'overloaded.test.ts']);
+  await withControllerProofEnvironment(binding, async () => {
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'started');
+    expect(await waitWorkerCheck(binding.checkId, root, 10_000)).toBe(0);
+    const record = readWorkerCheckRecord(binding.checkId, root);
+    const state = JSON.parse(readFileSync(controllerProofStatePath(root, binding.checkId), 'utf8'));
+    const firstId: string = state.physical[0].physicalRunId;
+    expect(state.physical).toHaveLength(2);
+    expect(record).toMatchObject({
+      controllerProof: binding,
+      argv: binding.argv,
+      reruns: 1,
+      physicalArgv: ['--local', 'bun', 'test', 'overloaded.test.ts'],
+    });
+    expect(readWorkerCheckHistory(binding.checkId, firstId, root)).toMatchObject({
+      controllerProof: binding,
+      argv: binding.argv,
+      exitCode: 1,
+    });
+    expect(readWorkerCheckHistory(binding.checkId, record.physicalRunId!, root)).toMatchObject({
+      controllerProof: binding,
+      argv: ['--local', 'bun', 'test', 'overloaded.test.ts'],
+      exitCode: 0,
+    });
+    expect(readFileSync(healthy, 'utf8')).toBe('x');
+    expect(readFileSync(failed, 'utf8')).toBe('xx');
+    expect(await startControllerWorkerCheck({ ...binding, argv: record.physicalArgv! })).toMatchObject({
+      outcome: 'unavailable',
+      custody: 'unknown',
+    });
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'replayed');
+  });
+});
+
+test('controller proof lost durable intent cannot use an old cleanup receipt to claim never-started refusal', async () => {
+  const root = recoveryFixture();
+  const binding = reserveControllerProof(root, ['--local', process.execPath, '-e', 'process.exit(0)']);
+  await withControllerProofEnvironment(binding, async () => {
+    expect(await startControllerWorkerCheck(binding)).toHaveProperty('outcome', 'started');
+    expect(await waitWorkerCheck(binding.checkId, root, 5_000)).toBe(0);
+    const record = readWorkerCheckRecord(binding.checkId, root);
+    writeAtomicJson(
+      join(root, '.temp/goal/checks/custody/receipts', `${binding.checkId}.${record.physicalRunId}.json`),
+      {
+        version: 1,
+        checkId: binding.checkId,
+        physicalRunId: record.physicalRunId,
+        disposition: 'stopped',
+        localTerminal: true,
+        remoteTerminal: null,
+        resultTerminal: true,
+      },
+    );
+    rmSync(controllerProofStatePath(root, binding.checkId));
+    rmSync(join(root, '.temp/goal/checks/results', binding.checkId + '.json'));
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+  });
+});
+
+test('controller proof CLI rejects malformed tokens and missing separators without starting a command', () => {
+  const root = overloadFixture();
+  const marker = join(root, 'must-not-run');
+  for (const args of [
+    [
+      '--controller-proof',
+      '../token',
+      '--',
+      process.execPath,
+      '-e',
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)},'x')`,
+    ],
+    ['--controller-proof', randomUUID(), process.execPath, '-e', 'process.exit(99)'],
+    ['--controller-proof', randomUUID(), '--'],
+  ]) {
+    const result = spawnSync(process.execPath, [join(repository, 'scripts/worker-check.ts'), ...args], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 5_000,
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('--controller-proof requires');
+    expect(existsSync(marker)).toBe(false);
   }
 });

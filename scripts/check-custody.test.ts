@@ -5,6 +5,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join, resolve } from 'node:path';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
+  controllerProofReservationPath,
+  validateControllerProofBinding,
+  validateControllerProofReservation,
+  validControllerProofRegistration,
+  type ControllerProofBindingV1,
   ownershipFromEnvironment,
   processIdentity,
   type CheckCustodyExpectation,
@@ -349,4 +354,102 @@ test('verified watchdog rerun keeps old physical custody and stale cleanup canno
       });
     }
   }
+});
+
+test('controller proof wire validation is closed, bounded and preserves exact original argument boundaries', () => {
+  const root = rootFixture();
+  const binding: ControllerProofBindingV1 = {
+    version: 1,
+    token: randomUUID(),
+    checkId: randomUUID(),
+    goal: 'performance',
+    taskId: randomUUID(),
+    attempt: 3,
+    sourceCommit: 'a'.repeat(40),
+    sourceTree: 'b'.repeat(40),
+    cwd: root,
+    argv: ['bun', '-e', '', '$literal; `text`', 'two words'],
+  };
+  const validated = validateControllerProofBinding(binding);
+  expect(validated).toEqual(binding);
+  expect(validated.argv).not.toBe(binding.argv);
+  expect(Object.isFrozen(validated)).toBe(true);
+  expect(Object.isFrozen(validated.argv)).toBe(true);
+  const invalid: unknown[] = [
+    null,
+    [],
+    { ...binding, extra: true },
+    { ...binding, version: 2 },
+    { ...binding, token: '../token' },
+    { ...binding, checkId: 'prefix' },
+    { ...binding, goal: '' },
+    { ...binding, goal: 'a'.repeat(129) },
+    { ...binding, taskId: 'task' },
+    { ...binding, attempt: '3' },
+    { ...binding, attempt: 0 },
+    { ...binding, attempt: Number.MAX_SAFE_INTEGER + 1 },
+    { ...binding, sourceCommit: 'HEAD' },
+    { ...binding, sourceCommit: 'a'.repeat(39) },
+    { ...binding, sourceTree: 'HEAD^{tree}' },
+    { ...binding, sourceTree: 'b'.repeat(64) },
+    { ...binding, cwd: '.' },
+    { ...binding, cwd: root + '/..' },
+    { ...binding, argv: [] },
+    { ...binding, argv: [''] },
+    { ...binding, argv: ['bun', 7] },
+    { ...binding, argv: ['bun', 'x\0y'] },
+    { ...binding, argv: ['bun', 'x'.repeat(4097)] },
+    { ...binding, argv: new Array(2) },
+    { ...binding, argv: Array(1025).fill('x') },
+  ];
+  for (const candidate of invalid) expect(() => validateControllerProofBinding(candidate)).toThrow();
+  const partial = { ...binding } as Partial<ControllerProofBindingV1>;
+  delete partial.sourceTree;
+  expect(() => validateControllerProofBinding(partial)).toThrow();
+  const reservation = { version: 1, state: 'reserved', binding };
+  expect(validateControllerProofReservation(reservation)).toEqual(reservation);
+  for (const candidate of [
+    { ...reservation, state: 'consumed' },
+    { ...reservation, ignored: true },
+    { ...reservation, version: '1' },
+    { version: 1, binding },
+  ])
+    expect(() => validateControllerProofReservation(candidate)).toThrow();
+  const registry = join(root, 'registry');
+  mkdirSync(registry);
+  expect(controllerProofReservationPath(registry, binding.token)).toBe(
+    join(registry, 'proof-reservations', binding.token + '.json'),
+  );
+  expect(() => controllerProofReservationPath(registry, '../escape')).toThrow();
+  expect(() => controllerProofReservationPath(join(root, 'missing'), binding.token)).toThrow();
+});
+
+test('controller proof registration requires actual bound runner and physical custody, beyond a type assertion', () => {
+  const root = rootFixture();
+  const binding: ControllerProofBindingV1 = {
+    version: 1,
+    token: randomUUID(),
+    checkId: randomUUID(),
+    goal: 'performance',
+    taskId: randomUUID(),
+    attempt: 1,
+    sourceCommit: 'a'.repeat(40),
+    sourceTree: 'b'.repeat(40),
+    cwd: root,
+    argv: ['bun', 'test'],
+  };
+  const registration = {
+    version: 1,
+    checkId: binding.checkId,
+    resultPath: join(root, '.temp/goal/checks/results', binding.checkId + '.json'),
+    ownership: { taskId: binding.taskId, attempt: binding.attempt },
+    physicalRunId: randomUUID(),
+    runnerHost: 'fixture',
+    runnerIdentity: processIdentity(),
+    registeredAt: new Date().toISOString(),
+    controllerProof: binding,
+  };
+  expect(validControllerProofRegistration(registration, binding)).toBe(false);
+  expect(validControllerProofRegistration({ ...registration, controllerProof: undefined }, binding)).toBe(false);
+  expect(validControllerProofRegistration({ ...registration, extra: true }, binding)).toBe(false);
 });
