@@ -585,6 +585,10 @@ snapshots therefore use the Space stories below.
 
 ## apps/web/src/routes/zones/$id.tsx
 
+Zone page stories currently use the explicitly contract-shaped `src/zones/static-fakes.ts` pages, with the existing
+`subject.json` recording for their global subject link. They preserve the static/source exposure boundary and do not
+certify native authorization. The native fixture retains its real response capture for subsequent recording adoption.
+
 | Route                             | State                   | Viewer | Desktop                                            | Phone                                              |
 | --------------------------------- | ----------------------- | ------ | -------------------------------------------------- | -------------------------------------------------- |
 | apps/web/src/routes/zones/$id.tsx | Zone home               | reader | apps/web/src/stories/zone.stories.tsx#Home         | apps/web/src/stories/zone.stories.tsx#Home         |

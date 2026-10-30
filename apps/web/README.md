@@ -1294,6 +1294,10 @@ Full subject views page through their owner list read with the first page's para
   the subject link uses the existing `subject.json` recording. These fakes do not establish native authorization.
   The native fixture preserves its real response capture in `.temp/native-static-zones-recording.json` for later
   recording adoption. A fresh loader result replaces retained page content, including after a concealed read.
+- **Focused regression:** `bun test apps/web/tests/zone-static-component.test.ts` renders the shared composition
+  through the fake route-loader boundary in all eight locales without starting a service. It checks static content,
+  localized links, the current navigation item, appearance overrides and concealed/unavailable states. Existing browser
+  and native suites retain their scenarios for the promotion gate; this regression supplies no native or visual proof.
 
 ### Sitemap export
 
