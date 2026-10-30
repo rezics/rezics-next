@@ -50,6 +50,13 @@ test('Personal Library and Collection discovery use one useful navigation row an
     [
       { id: 'pinned', title: 'A long personal reading list' },
       { id: 'everything', title: null, membershipKind: 'dynamic', builtinKind: 'everything' },
+      {
+        id: 'reading',
+        title: null,
+        membershipKind: 'dynamic',
+        builtinKind: 'state',
+        builtinLabels: { en: 'Reading a particularly long collection of books' },
+      },
       { id: 'other', title: 'Another Collection' },
     ],
     'en',
@@ -58,6 +65,7 @@ test('Personal Library and Collection discovery use one useful navigation row an
     'pinned',
     'hidden',
     'everything',
+    'reading',
     'tracked',
     'continue',
     'collections',

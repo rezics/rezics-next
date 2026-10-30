@@ -309,17 +309,19 @@ export const PinAtCapacity: Story = {
 
 export const PhoneSelectorOpen: Story = {
   render: () =>
-    render('many', pagePaths['library-entries'], { pinCount: 3, builtins: 'everything-liked', collectionCount: 3 }),
+    render('many', pagePaths['library-entries'], { pinCount: 1, builtins: 'everything-liked', collectionCount: 2 }),
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.library_nav_selector() }));
-    const sheet = document.querySelector('[data-slot="drawer-content"]');
-    await expect(sheet).toBeVisible();
-    await expect(
-      within(sheet as HTMLElement).getByRole('link', { name: m.library_dynamic_everything() }),
-    ).toBeVisible();
-    await expect(within(sheet as HTMLElement).getByRole('link', { name: m.library_dynamic_liked() })).toBeVisible();
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    if (sheet) {
+      const menu = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+      await expect(within(menu).getByRole('link', { name: m.library_dynamic_everything() })).toBeVisible();
+      await expect(within(menu).getByRole('link', { name: m.library_dynamic_liked() })).toBeVisible();
+    } else {
+      await expect(await within(document.body).findByRole('menuitem', { name: 'Books I come back to' })).toBeVisible();
+    }
   },
 };
 

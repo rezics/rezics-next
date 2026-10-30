@@ -25,7 +25,7 @@ export function builtinCollectionDestinations(
       (collection.builtinKind !== 'everything' && collection.builtinKind !== 'liked')
     )
       return [];
-    const kind = collection.builtinKind;
+    const kind = collection.builtinKind === 'everything' ? 'everything' : 'liked';
     return [
       {
         id: collection.id,

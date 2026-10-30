@@ -62,6 +62,12 @@ export function libraryNavigationEntries(
       current: typeof current === 'object' && current.collectionId === builtin.id,
     });
   }
+  for (const collection of collections) {
+    if (seen.has(collection.id) || collection.membershipKind !== 'dynamic' || collection.builtinKind !== 'state')
+      continue;
+    seen.add(collection.id);
+    tabs.push(collectionEntry(collection));
+  }
   tabs.push(
     {
       id: 'tracked',
@@ -115,7 +121,13 @@ function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
   );
 }
 
-function DestinationMenu({ entries, current }: { entries: readonly LibraryNavigationEntry[]; current?: string }) {
+function DestinationMenu({
+  entries,
+  current,
+}: {
+  entries: readonly LibraryNavigationEntry[];
+  current?: string | undefined;
+}) {
   const menuEntries: MenuEntry[] = entries.map((entry) =>
     entry.href
       ? { type: 'link', label: entry.label, href: entry.href, current: entry.current }
