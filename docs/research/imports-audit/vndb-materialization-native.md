@@ -62,7 +62,7 @@ and bundle digest
 The ordinary case checked the licensed mean/count, zero native votes, unchanged
 reopen, invalid replacement, original receipts and absence of unlicensed markers.
 
-The remaining portable case reaches ordinary publication after measured staging
+That historical run's remaining portable case reached ordinary publication after measured staging
 and paging, then stops in the ownership transaction with
 `SQLiteError: cannot commit transaction - SQL statements in progress`.
 The local measured-publication unit again reproduces this without native
@@ -113,3 +113,14 @@ The exact fourteen child cases and their latest outcomes are:
 | keyset enumeration enforces the fixed page cap and emits each VN exactly once                                    | pass                                         |
 | one grouped record uses indexed seeks and constant returned rows and statements at 32 128 and 512 unrelated keys | pass                                         |
 | supported child cardinality grows only with supplied rows through the hard cap and rejects above it              | blocked at SQLite commit after measured page |
+
+## Subsequent verified completion
+
+The subsequent accepted producer repair at `0710aa933993b00c3c3fa63d6d55006447b68fe7` finalizes observed query-plan
+statements before publication. The supplied completion receipt reports all fourteen portable VNDB cases passing
+and both native materialization cases passing, including the ordinary account-key CLI publication/reopen case.
+This supersedes the incomplete outcome above; the failed attempts and their first reached SQLite error remain
+historical evidence. The completion receipt's raw log path and assertion counts were not supplied with the
+sealed-recovery contract, so none are inferred here. No extra native check was run for this prose update.
+This receipt belongs to the materialization suite, not the new sealed-source CLI recovery caller or native PG
+growth. The latter still requires its own named managed command and receipt.

@@ -41,6 +41,18 @@ binding the existing production primitives sufficed. The
 source inputs, raw receipt/log anchors and limits. This pass closes this scoped operator outcome; discovery,
 common-cover web, growth and promotion cells remain open.
 
+The Provider imports and bridges In scope also includes the frozen connected outcome
+[`VNDB and Wikidata CLI recover the original sealed generation without mixing a replacement acquisition into pending native writes`](../../services/kernel/test/imports/cli-sealed-source-resume.test.ts).
+Its [ordinary caller and evidence limits](../research/imports-audit/cli-sealed-source-resume.md) bind actual
+`runImportCli`, native account-key Auth/Access/public APIs, reopened RunStore/RecordBindings, exact receipts and
+independent Context selection in one registered-worker world. VNDB preserves archive-first validation and its
+seventh statistic scope; Wikidata preserves sealed-first recovery without consuming replacement stdin. Pinned
+VNDB `v123`/`v124` COPY/header fixtures and Wikidata `Q571` supply native revisions and source digests. The earlier
+missing-caller gap remains qualified as a binding gap; this registration and the importer-local protocol proofs
+do not claim a native pass or promotion. The scoped command is
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts`.
+This ordinary CLI journey adds no browser surface or PG growth series; existing Cost, rights, metadata and
+six-surface discovery obligations retain their current limits.
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
 production code, a pass requires actual named-revision execution with all exact scenarios and zero skips/todos,
 and promotion requires separate integration evidence. Helper, converter and SQLite tests support these jobs;

@@ -649,3 +649,23 @@ The native materialization acceptance binds all fourteen portable table outcomes
 and the account-key CLI publication/reopen/late-invalid journey. Its local SQLite
 row, byte, execution and EQP evidence does not add canonical server growth claims.
 See [the materialization evidence](../../docs/research/imports-audit/vndb-materialization-native.md).
+
+## VNDB and Wikidata sealed CLI recovery
+
+The [connected operator journey](../kernel/test/imports/cli-sealed-source-resume.test.ts) captures a committed
+response lost before local ACK, closes all CLI handles and reopens the same private state/key paths. VNDB
+validates every supplied archive before recovery: malformed replacement input rejects with status 2 and no Auth
+or public effects; valid replacement input permits the original sealed generation to drain with its original
+acquisition and native revisions. Wikidata drains sealed work without reading replacement stdin; the same
+malformed stream is admitted and rejected only on the next fresh invocation. A later valid invocation publishes
+the successor for each source, preserving subject identity, original receipts and independent Context selection.
+VNDB retains its seventh statistic scope and exact statistic receipt identity.
+
+The [evidence and limits](../../docs/research/imports-audit/cli-sealed-source-resume.md) distinguish this new
+binding and local protocol proofs from managed native acceptance and promotion. Source bytes are the pinned
+VNDB COPY/header files in real ustar and Wikidata `Q571` in streamed JSON-array framing. This connected outcome
+adds no growth series and does not close general source metadata or discovery work.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts
+```
