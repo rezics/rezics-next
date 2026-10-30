@@ -291,8 +291,11 @@ test('native Realm media download cost stays bounded with unrelated Realm, ban, 
     'community.realm_ban',
     'access.resource_grant',
     'content.media',
-  ])
-    expect(report.samples.at(-1)?.relationSizes[relation]?.relpages).toBeGreaterThan(8);
+  ]) {
+    const pages = report.samples.at(-1)?.relationSizes[relation]?.relpages;
+    if (typeof pages !== 'number') throw new Error(`Missing post-grow page count for ${relation}`);
+    expect(pages).toBeGreaterThan(8);
+  }
   assertGrowthAccessPaths('Native Realm media download stays within its bound with same-home history', report.samples, [
     'community.realm',
     'community.realm_revision',
