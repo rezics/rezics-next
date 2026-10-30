@@ -1,4 +1,4 @@
-import { useId, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { MediaImage } from '@rezics/ui/media-image';
 import { Button } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../../media/cover-src';
@@ -15,24 +15,20 @@ export function RealmDiscoverySection({
   onNext,
   onRetry,
 }: RealmDiscoverySectionProps): ReactElement {
-  const heading = useId();
-  const help = useId();
   const language = locales.find((value) => value === locale) ?? 'en';
   const options = { locale: language };
+  const title = sort === 'popular' ? m.realm_discovery_popular({}, options) : m.realm_discovery_trending({}, options);
   return (
     <section
       data-slot="realm-discovery"
       data-sort={sort}
-      aria-labelledby={heading}
-      aria-describedby={help}
+      aria-label={title}
       aria-busy={state.kind === 'loading'}
       className="min-w-0 space-y-3 text-foreground"
     >
       <header className="space-y-1">
-        <h2 id={heading} className="text-base font-semibold">
-          {sort === 'popular' ? m.realm_discovery_popular({}, options) : m.realm_discovery_trending({}, options)}
-        </h2>
-        <p id={help} className="text-xs leading-relaxed text-muted-foreground">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="text-xs leading-relaxed text-muted-foreground">
           {sort === 'popular'
             ? m.realm_discovery_popular_window({}, options)
             : m.realm_discovery_trending_window({}, options)}

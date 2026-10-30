@@ -2176,8 +2176,8 @@ The section consumes only public state, locale and optional continue/retry callb
 `loadRealmDiscovery(client, { sort, cursor?, limit? })` calls the installed generated
 `client.realms.discovery.get` once for each valid page request. Its strict closed response is `realms` plus `next`.
 It validates the native card shape and the selected image summary from `threads/board-community-source`, including
-the exact Realm/container binding and at most twelve published derivatives. The installed native response currently
-has `avatar: null`; the agreed selected-image enrichment is accepted without extra lookups. Rows use the existing
+the exact Realm/container binding and at most twelve published derivatives. The installed native response supplies
+the selected same-Realm image summary or `null`; both are accepted without extra lookups. Rows use the existing
 guarded `MediaImage` and derivative site route, or initials. No account avatar, external image, count, score or
 identity tracking is introduced. Empty authored descriptions stay empty; links use localized `/realms/{realmId}`.
 
