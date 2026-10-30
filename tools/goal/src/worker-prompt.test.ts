@@ -89,6 +89,9 @@ test('the worker prompt forbids touching resources the attempt did not start', (
   // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
   expect(prompt).toContain('Check slots are the scarce shared resource');
   expect(prompt).toContain('run your acceptance command once after your last relevant edit');
+  expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
+  expect(prompt).toContain('Run the acceptance command in the foreground from the worktree root and let it finish');
+  expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
   expect(prompt).toContain('Do not run the root typecheck, affected checks or other regression checks yourself');
   expect(prompt).toContain(
     'The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests',
@@ -139,6 +142,34 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   expect(prompt).toContain('Write every acceptance test the contract names that does not exist yet');
   expect(prompt).toContain('never weaken or edit an existing acceptance test');
   expect(prompt).toContain('queued, not stuck');
+});
+
+test('a resumed prompt supersedes a saved legacy check wait and states the bare UUID handoff', async () => {
+  const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const worktree = mkdtempSync(join(tmpdir(), 'goal-current-check-protocol-'));
+  try {
+    mkdirSync(join(worktree, 'scripts'), { recursive: true });
+    writeFileSync(join(worktree, 'scripts/worker-check.ts'), '');
+    const task = {
+      worktree,
+      branch: 'worker/protocol',
+      brief: { markdown: 'Do the thing.', kind: 'implementation' },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+    expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
+    expect(prompt).toContain('`{"status":"waiting","checks":["<bare UUID>"]}`');
+    expect(prompt).toContain('bare UUID string printed by the wrapper');
+    expect(prompt).toContain('"checks":["00000000-0000-4000-8000-000000000000"]');
+    expect(prompt).toContain('superseded instruction to wait on that same check');
+    expect(prompt).toContain('do not follow it or invoke `--wait`');
+    expect(prompt).toContain('The controller waits for the terminal result');
+    expect(prompt).toContain('use the supplied result records exactly');
+    expect(prompt).toContain('Do not return another waiting result for those same check ids');
+    expect(prompt).toContain('one automatic infrastructure rerun');
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+  }
 });
 
 test('a worker reports persistent tool and infrastructure failures as a tool blocker with the exact error', () => {
