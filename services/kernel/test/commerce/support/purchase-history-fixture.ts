@@ -141,7 +141,8 @@ export async function purchaseHistoryFixture() {
   // Include an older, unrelated native history in this route before measuring growing
   // buyer histories. A nearly empty partition otherwise makes a sequential scan cheaper
   // than any B-tree seek, and cannot exercise the production buyer-leading access path.
-  const otherBuyer = await actor(await sameRoutePerson('background'));
+  const background = await sameRoutePerson('background');
+  const otherBuyer = await actor(background);
   for (let i = 0; i < 4096; i++) await commands.createOrder(otherBuyer, offer.id, Bun.randomUUIDv7());
   const worker = Bun.spawn([process.execPath, `${import.meta.dir}/purchase-history-runtime.ts`], {
     env: { ...process.env, ...workerTestEnv({ DATABASE_URL: db.url, WORK_STRIPE_PORT: String(fake.port) }) },
@@ -192,6 +193,14 @@ export async function purchaseHistoryFixture() {
       (row) => row?.status === 'SUCCESS' || row?.status === 'ERROR',
     );
     await workClient.retrieveWorkflow(id).getResult();
+  }
+  // Exercise entitlement point probes among unrelated real grants, rather than a
+  // tiny entitlement table where repeated sequential scans can win the cost estimate.
+  // Each payment still crosses the official Stripe port and signed native webhook.
+  for (let offset = 0; offset < 512; offset += 8) {
+    const orders = await Promise.all(Array.from({ length: 8 }, () => checkout(background)));
+    for (const order of orders) fake.pay(order.checkoutSessionId!);
+    await Promise.all(orders.map((order) => event('checkout.session.completed', order.checkoutSessionId!)));
   }
   return {
     db,
