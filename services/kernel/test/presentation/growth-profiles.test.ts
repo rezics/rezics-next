@@ -267,3 +267,32 @@ test('Profile bootstrap stays within its bound as P grows', async () => {
     operation: (d) => bootstrapProfile(d.pool, anchor),
   });
 }, 90_000);
+
+test('cold hot evicted and cross-pool profile reads stay bounded at 1x 8x and 64x history', async () => {
+  const database = db;
+  const anchor = profile('retention-growth-anchor');
+  await bootstrapProfile(database.pool, anchor);
+  const digest = profileDigest(anchor);
+  const other = database.openPool({ max: 1 });
+  const population = growthPopulation('retention-growth', { activations: false });
+  const report = await checkGrowth(database, {
+    name: 'Profile retention lifecycle',
+    scales: [1, 8, 64],
+    bounds,
+    grow: (d, scale, previous) => grow(d, population, scale, previous),
+    operation: async (d) => {
+      const first = await readProfile(d.pool, digest);
+      expect(await readProfile(other, digest)).toBe(first);
+      for (let n = 0; n < 4; n++) {
+        const body = seededProfile(n);
+        expect(await readProfile(d.pool, profileDigest(body))).toEqual(body);
+      }
+      const reloaded = await activeProfile(other);
+      expect(reloaded).toEqual({ digest, head: 1, profile: anchor });
+      expect(reloaded!.profile).not.toBe(first);
+      expect(Object.isFrozen(reloaded!.profile)).toBe(true);
+      expect(await readProfile(other, `sha256:${'f'.repeat(64)}`)).toBeNull();
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+}, 90_000);

@@ -1,13 +1,8 @@
-import {
-  platformRegistry,
-  profileDigest,
-  validateProfile,
-  type CompositionViolation,
-  type PresentationProfile,
-} from '@rezics/composition';
+import { profileDigest, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
+import { ProfileCache, profileSnapshot } from './profile-cache.ts';
 import activate from './profiles-activate.sql';
 import pointer from './profiles-active.sql';
 import publish from './profiles-publish.sql';
@@ -16,28 +11,12 @@ import read from './profiles-read.sql';
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const profiles = new Map<string, PresentationProfile>();
+const profiles = new ProfileCache();
 
-export class ProfileInputError extends Error {
-  constructor(readonly violations: CompositionViolation[]) {
-    super('Invalid presentation profile');
-  }
-}
+export { ProfileInputError } from './profile-cache.ts';
 export class ProfileAccessDeniedError extends Error {}
 export class ProfileNotFoundError extends Error {}
 export class StaleProfileHeadError extends Error {}
-
-function validated(value: unknown): PresentationProfile {
-  const violations = validateProfile(platformRegistry, value);
-  if (violations.length) throw new ProfileInputError(violations);
-  return value as PresentationProfile;
-}
-
-function freeze(value: unknown): void {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return;
-  for (const child of Object.values(value)) freeze(child);
-  Object.freeze(value);
-}
 
 /** Read existence from this database; only immutable, validated bodies are shared across pools. */
 export async function readProfile(
@@ -47,14 +26,7 @@ export async function readProfile(
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const row = await read.run(pool, { route: resource.route, digest });
   if (!row) return null;
-  let profile = profiles.get(digest);
-  if (!profile) {
-    profile = validated(row.body);
-    if (profileDigest(profile) !== digest) throw new Error('Stored presentation profile digest mismatch');
-    freeze(profile);
-    profiles.set(digest, profile);
-  }
-  return profile;
+  return profiles.read(digest, row.body);
 }
 
 export async function activeProfile(
@@ -62,7 +34,7 @@ export async function activeProfile(
 ): Promise<{ digest: string; head: number; profile: PresentationProfile } | null> {
   const active = await pointer.run(pool, { route: resource.route });
   if (!active) return null;
-  const profile = profiles.get(active.digest) ?? (await readProfile(pool, active.digest));
+  const profile = await readProfile(pool, active.digest);
   if (!profile) throw new Error('Active presentation profile is missing');
   return { ...active, profile };
 }
@@ -107,7 +79,7 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
 
 export async function publishProfile(pool: Pool, options: WriteOptions & { profile: unknown }) {
   // Validate before runCommand can check out a connection, including for a replay.
-  const profile = validated(options.profile);
+  const profile = profileSnapshot(options.profile);
   const digest = profileDigest(profile);
   const command = await runCommand(
     pool,
@@ -177,7 +149,7 @@ class AlreadyActive extends Error {
 export async function bootstrapProfile(pool: Pool, profile: PresentationProfile): Promise<string> {
   const existing = await pointer.run(pool, { route: resource.route });
   if (existing) return existing.digest;
-  const body = validated(profile);
+  const body = profileSnapshot(profile);
   const digest = profileDigest(body);
   try {
     const command = await runCommand(pool, { partition: 0 }, async (tx, { transactionId }) => {
