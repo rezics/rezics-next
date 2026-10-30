@@ -137,8 +137,9 @@ test('default scheduled exact label and assignment purge is child-first replacem
   tick(origin);
   const owner = (await f.identity(['library_entry:update'], 4095)).actor;
   const other = (await f.identity(['library_entry:update'], 4095)).actor;
-  const target = await label(f, owner, clock, 'Private shared normalized name');
-  const untouched = await label(f, other, clock, 'Private shared normalized name');
+  const sharedName = crypto.randomUUID();
+  const target = await label(f, owner, clock, sharedName);
+  const untouched = await label(f, other, clock, sharedName);
   const subject = await f.createSubject('game');
   const subjects = [subject];
   for (let n = 0; n < 101; n++) subjects.push(await f.createSubject('game'));
@@ -147,7 +148,7 @@ test('default scheduled exact label and assignment purge is child-first replacem
   await assignment(f, owner, individual.id, subject, clock);
   await assignment(f, owner, individual.id, subject, clock, 'unassign');
   const deleted = await target.commands.deleteLabel(owner, target.id, target.revision, entryKey());
-  const replacement = await label(f, owner, clock, 'Private shared normalized name');
+  const replacement = await label(f, owner, clock, sharedName);
   await assignment(f, owner, replacement.id, subject, clock);
   const liveBefore = await rows(owner.accountId, replacement.id),
     otherBefore = await rows(other.accountId, untouched.id);
