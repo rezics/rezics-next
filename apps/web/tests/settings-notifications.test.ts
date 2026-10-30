@@ -488,3 +488,80 @@ test(
   },
   timeout,
 );
+
+test(
+  'Every notification preference has a shared keyboard-operable switch and comfortable labelled row while its real no-JavaScript form and original recovery command remain intact',
+  async () => {
+    for (const javascriptEnabled of [false, true]) {
+      reset({ reply: true, mention: true, weekly_digest_with_a_long_optional_notification_name_for_wrapping: true });
+      const first = await readPage('/en/settings');
+      const page = await open('/en/settings', first.cookie!, javascriptEnabled);
+      try {
+        const group = page.getByRole('group', { name: 'Notifications' });
+        const switches = group.getByRole('switch');
+        expect(await switches.count()).toBe(3);
+        expect(await group.getByRole('button', { name: 'Save', exact: true }).count()).toBe(javascriptEnabled ? 0 : 3);
+        for (const width of [390, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const control of await switches.all()) {
+            const form = control.locator('xpath=ancestor::form');
+            const label = form.locator('label');
+            const bounds = await label.boundingBox();
+            expect(bounds).not.toBeNull();
+            expect(bounds!.height).toBeGreaterThanOrEqual(44);
+            expect(bounds!.x).toBeGreaterThanOrEqual(0);
+            expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+            expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+            expect(await form.locator('input[name="enabled"]').count()).toBe(1);
+            expect(await form.getByRole('switch').count()).toBe(1);
+            expect(await control.getAttribute('data-slot')).toBe(javascriptEnabled ? 'switch' : null);
+          }
+        }
+
+        const replies = group.getByRole('switch', { name: 'Replies to your posts' });
+        const form = replies.locator('xpath=ancestor::form');
+        expect(await form.getAttribute('method')).toBe('post');
+        expect(await form.getAttribute('action')).toBe('/en/settings');
+        expect(await form.locator('input[name="csrf_token"]').inputValue()).not.toBe('');
+        expect(await form.locator('input[name="expectedVersion"]').inputValue()).toBe('3');
+        expect(await form.locator('input[name="notificationKind"]').inputValue()).toBe('reply');
+        expect(await form.locator('input[name="action"]').inputValue()).toBe('save');
+        expect(await form.evaluate((node) => new FormData(node as HTMLFormElement).getAll('enabled'))).toEqual(['true']);
+
+        if (javascriptEnabled) {
+          await replies.focus();
+          await replies.press('Space');
+          await group.getByText('Saved', { exact: true }).waitFor();
+          expect(await replies.isChecked()).toBe(false);
+          expect(patches()).toHaveLength(1);
+          expect(patches()[0]?.body).toEqual({ expectedVersion: 3, notifications: { reply: false } });
+          expect(await form.evaluate((node) => new FormData(node as HTMLFormElement).getAll('enabled'))).toEqual([]);
+          await replies.press('Enter');
+          await group.getByText('Saved', { exact: true }).waitFor();
+          expect(await replies.isChecked()).toBe(true);
+          expect(patches()).toHaveLength(2);
+          expect(patches()[1]?.body).toEqual({ expectedVersion: 4, notifications: { reply: true } });
+        }
+
+        await form.locator('label').click({ position: { x: 12, y: 12 } });
+        if (javascriptEnabled) {
+          await group.getByText('Saved', { exact: true }).waitFor();
+        } else {
+          expect(patches()).toHaveLength(0);
+          expect(await form.evaluate((node) => new FormData(node as HTMLFormElement).getAll('enabled'))).toEqual([]);
+          await form.getByRole('button', { name: 'Save', exact: true }).click();
+          await replies.waitFor();
+        }
+        expect(await replies.isChecked()).toBe(false);
+        expect(patches()).toHaveLength(javascriptEnabled ? 3 : 1);
+        expect(patches().at(-1)?.body).toEqual({
+          expectedVersion: javascriptEnabled ? 5 : 3,
+          notifications: { reply: false },
+        });
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);

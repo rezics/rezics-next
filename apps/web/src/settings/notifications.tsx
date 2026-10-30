@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldContent, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
+import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, saveNotifications } from './actions';
@@ -88,29 +89,35 @@ export function NotificationsCard({
                     <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
                     <input type="hidden" name="expectedVersion" value={version} />
                     <input type="hidden" name="notificationKind" value={kind} />
-                    <FieldLabel htmlFor={id}>
-                      <Field orientation="horizontal">
-                        <FieldContent>
-                          <FieldTitle>{name}</FieldTitle>
+                    <FieldLabel htmlFor={id} className="min-h-11 cursor-pointer has-data-disabled:cursor-not-allowed">
+                      <Field orientation="horizontal" className="min-h-11">
+                        <FieldContent className="min-w-0">
+                          <FieldTitle className="max-w-full wrap-anywhere">{name}</FieldTitle>
                         </FieldContent>
-                        <span className="relative h-5 w-8 shrink-0">
+                        {/* Only one control is mounted; the shared Switch owns its form input after hydration. */}
+                        {hydrated ? (
+                          <Switch
+                            id={id}
+                            name="enabled"
+                            value="true"
+                            checked={checked}
+                            disabled={disabled}
+                            aria-label={name}
+                            onCheckedChange={(next) => void editor.edit(kind, next, version)}
+                          />
+                        ) : (
                           <input
                             id={id}
                             type="checkbox"
                             role="switch"
                             name="enabled"
                             value="true"
-                            checked={checked}
+                            defaultChecked={checked}
                             disabled={disabled}
                             aria-label={name}
-                            onChange={(event) => void editor.edit(kind, event.currentTarget.checked, version)}
-                            className="peer absolute inset-0 h-5 w-8 cursor-pointer appearance-none rounded-2xl border-2 border-transparent bg-input/90 transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="size-5 shrink-0 cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                           />
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-background shadow-sm transition-transform peer-checked:translate-x-3 dark:peer-checked:bg-primary-foreground"
-                          />
-                        </span>
+                        )}
                       </Field>
                     </FieldLabel>
                     <Button type="submit" size="sm" variant="outline" hidden={hydrated} disabled={!csrfToken}>

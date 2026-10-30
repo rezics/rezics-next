@@ -11,12 +11,6 @@ const meta = {
   component: NotificationsCard,
   parameters: {
     layout: 'padded',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof NotificationsCard>;
 export default meta;
@@ -94,15 +88,26 @@ async function toggle(canvasElement: HTMLElement) {
   return view;
 }
 export const OptionalNotices: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(await view.findByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
     await view.findByText(m.settings_notifications_mandatory());
     await view.findByText(m.settings_notifications_text());
+    const replies = view.getByRole('switch', { name: m.settings_notification_reply() });
+    await expect(replies).toHaveAttribute('data-slot', 'switch');
+    replies.focus();
+    await userEvent.keyboard('[Space]');
+    await view.findByText(m.settings_saved());
+    await expect(replies).not.toBeChecked();
+    await userEvent.keyboard('[Enter]');
+    await view.findByText(m.settings_saved());
+    await expect(replies).toBeChecked();
   },
 };
 export const SavedAndRestored: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const view = await toggle(canvasElement);
