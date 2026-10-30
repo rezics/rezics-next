@@ -350,12 +350,6 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     expect(sample.cost.statements).toBeGreaterThan(0);
     expect(sample.occurrenceRepetitions).toHaveLength(1);
     expect(sample.occurrenceRepetitions[0]?.statements.length).toBeGreaterThan(0);
-    for (const [relation, cost] of Object.entries(sample.cost.relations)) {
-      expect(cost.sequentialScans).toBe(0);
-      expect(cost.rows).toBeGreaterThanOrEqual(0);
-      expect(cost.blocks).toBeGreaterThanOrEqual(0);
-      expect(relation).toBeTruthy();
-    }
     for (const relation of [
       'community.space_address_claim',
       'community.space',

@@ -228,15 +228,15 @@ test.serial('stale Space head recovery preserves a pending reservation until its
     barrier.release();
     await observer.close();
   }
-  expect(stale!.response.status).toBe(409);
-  expect(errorCode(stale!.value)).toBe('conflict');
+  expect(stale!.response.status).toBe(412);
+  expect(errorCode(stale!.value)).toBe('precondition_failed');
   const editedSpace = stale!.value;
   const editEtag = JSON.stringify((await fixture.spaceState(space.spaceId)).head?.head_revision_id);
   expect(editEtag).not.toBe(space.etag);
 
   const replay = await addressIntent(actor, space, address, key);
-  expect(replay.response.status).toBe(409);
-  expect(errorCode(replay.value)).toBe('conflict');
+  expect(replay.response.status).toBe(412);
+  expect(errorCode(replay.value)).toBe('precondition_failed');
   const expiryClaim = await fixture.addressClaim(address);
   expect(expiryClaim?.state).toBe('pending');
   const expiry = new Date(String(expiryClaim?.expires_at)).getTime();
@@ -293,7 +293,7 @@ test.serial('revoking Space management after reservation blocks replay without a
       normalized_address: address,
       space_id: space.spaceId,
     });
-    const revoked = await fixture.revokeOwner(governance, space.spaceId, actor);
+    const revoked = await fixture.revokeOwner(actor, space.spaceId, actor);
     expect(revoked.response.status).toBe(200);
     barrier.release();
     first = await intent;
