@@ -79,6 +79,31 @@ export const ManyCollections: Story = {
   },
 };
 
+const longTitles = [
+  'Books to read through the long winter evenings and return to with friends',
+  'Places, films and stories to explore together on our next journey',
+];
+
+export const LongCollectionTitles: Story = {
+  render: () =>
+    render('many', pagePaths['library-collections'], {
+      pinCount: 1,
+      builtins: 'everything-liked',
+      collectionCount: 2,
+      collectionTitles: longTitles,
+    }),
+  play: async (context) => {
+    await collectionsReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_nav_selector() }));
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    const menu = await within(document.body).findByRole(sheet ? 'dialog' : 'menu');
+    await expect(within(menu).getByRole(sheet ? 'link' : 'menuitem', { name: longTitles[1] })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect(within(document.body).queryByRole(sheet ? 'dialog' : 'menu')).toBeNull();
+  },
+};
+
 export const Unavailable: Story = {
   render: () =>
     render('many', pagePaths['library-collections'], {

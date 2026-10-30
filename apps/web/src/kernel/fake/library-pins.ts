@@ -10,6 +10,7 @@ export type LibraryNavigationStoryState = {
   collectionsError?: boolean;
   builtins: 'none' | 'everything' | 'everything-liked';
   collectionCount: number;
+  collectionTitles?: readonly string[];
   conflict?: boolean;
 };
 
@@ -55,11 +56,14 @@ function ownerCollections(): KernelRecording {
     return { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' };
   if (state.collectionsError)
     return { status: 500, type: 'https://rezics.com/problems/internal_error', code: 'internal_error' };
-  const recorded = collectionsRecording.collections.slice(0, Math.max(0, state.collectionCount)).map((collection) => ({
-    ...collection,
-    curatorAccountId: 'story-viewer',
-    curator: { ...collection.curator, id: 'story-viewer' },
-  }));
+  const recorded = collectionsRecording.collections
+    .slice(0, Math.max(0, state.collectionCount))
+    .map((collection, index) => ({
+      ...collection,
+      title: state.collectionTitles?.[index] ?? collection.title,
+      curatorAccountId: 'story-viewer',
+      curator: { ...collection.curator, id: 'story-viewer' },
+    }));
   return { status: 200, collections: [...builtins(), ...recorded], next: null };
 }
 
@@ -82,9 +86,13 @@ function openApi(): KernelRecording {
 function pinTarget(collectionId: string, index: number): unknown {
   if (state.unavailableTarget && index === 0) return null;
   const recorded = collectionsRecording.collections.find((collection) => collection.id === collectionId);
+  const recordedIndex = collectionsRecording.collections.findIndex((collection) => collection.id === collectionId);
   return {
     id: collectionId,
-    title: recorded?.title ?? (index === 2 ? 'Weekend reading' : `Reading list ${index + 1}`),
+    title:
+      state.collectionTitles?.[recordedIndex] ??
+      recorded?.title ??
+      (index === 2 ? 'Weekend reading' : `Reading list ${index + 1}`),
     membershipKind: 'curated',
     description: null,
     curatorAccountId: 'story-viewer',
