@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createNavigation, resolveNavigation, type NavigationContribution } from '../src/shell/navigation';
 import { NavigationLinks, NavigationProvider } from '../src/shell/navigation-view';
 import { FeatureSlotsProvider } from '../src/shell/feature-slots';
 import { useSubjectPurchaseContext, type SubjectPurchaseContext } from '../src/features/pages/subject-slots';
 import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
+import { exposureQuery, sessionQuery } from '../src/session/query';
 
 const context = { locale: 'ja' as const, pathname: '/ja/catalogue/items' };
 const leaf: NavigationContribution = {
@@ -87,29 +89,37 @@ test('navigation accepts local leaf links and plain labels, with exact matching 
 });
 
 test('public leaves and existing defaults render usable SSR anchors while private and gated entries remain closed', () => {
-  const html = renderToString(
-    createElement(NavigationProvider, {
-      contributions: [
-        leaf,
-        creation,
-        {
-          ...leaf,
-          id: 'catalogue.private',
-          group: 'personal',
-          href: '/private',
-          label: 'Private entry',
-          signedIn: true,
-        },
-        { ...leaf, id: 'catalogue.gated', href: '/restore', label: 'Gated entry', operation: 'library_entry.restore' },
-      ],
-      children: createElement(NavigationLinks, { context, session: 'signed-in', label: 'Navigation' }),
-    }),
-  );
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: 'private-csrf' });
+  client.setQueryData(exposureQuery.queryKey, [
+    'personal_library',
+    'purchases',
+    'collections',
+    'library_entry.restore',
+  ]);
+  const navigation = createElement(NavigationProvider, {
+    contributions: [
+      leaf,
+      creation,
+      {
+        ...leaf,
+        id: 'catalogue.private',
+        group: 'personal',
+        href: '/private',
+        label: 'Private entry',
+        signedIn: true,
+      },
+      { ...leaf, id: 'catalogue.gated', href: '/restore', label: 'Gated entry', operation: 'library_entry.restore' },
+    ],
+    children: createElement(NavigationLinks, { context, session: 'signed-in', label: 'Navigation' }),
+  });
+  const html = renderToString(createElement(QueryClientProvider, { client, children: navigation }));
   expect(html).toContain('href="/ja"');
   expect(html).toContain('href="/ja/search"');
   expect(html).toContain('href="/ja/catalogue" aria-current="page"');
   for (const hidden of ['/collections/new', '/private', '/restore', '/library', '/orders'])
     expect(html).not.toContain(`href="/ja${hidden}"`);
+  expect(html).not.toContain('private-csrf');
   // A nested provider is an isolated configuration, never a mutable process registry.
   const separate = renderToString(createElement(NavigationLinks, { context, session: 'unknown', label: 'Navigation' }));
   expect(separate).not.toContain('/catalogue');
