@@ -683,6 +683,35 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
     .map((file) => file.path);
 }
 
+function frozenFilesModifiedAtCommit(
+  cwd: string,
+  commit: string,
+  frozen: readonly { path: string; hash: string }[],
+): string[] {
+  const verified = spawnSync('git', ['rev-parse', '--verify', `${commit}^{commit}`], {
+    cwd,
+    encoding: 'utf8',
+  });
+  if (verified.error || verified.status !== 0)
+    throw new Error(verified.stderr?.trim() || verified.error?.message || `Cannot read target commit ${commit}`);
+
+  return frozen
+    .filter((file) => {
+      const exists = spawnSync('git', ['cat-file', '-e', `${commit}:${file.path}`], { cwd });
+      if (exists.error) throw new Error(exists.error.message);
+      // A missing frozen path is a worker-only addition for legacy diagnostics, not a target edit.
+      if (exists.status !== 0) return false;
+      const blob = spawnSync('git', ['cat-file', 'blob', `${commit}:${file.path}`], {
+        cwd,
+        encoding: 'buffer',
+      });
+      if (blob.error || blob.status !== 0)
+        throw new Error(blob.stderr?.toString().trim() || blob.error?.message || `Cannot read frozen path ${file.path}`);
+      return createHash('sha256').update(blob.stdout).digest('hex') !== file.hash;
+    })
+    .map((file) => file.path);
+}
+
 /**
  * Resolve import-only hunks in code and union Markdown conflicts for review after the ordinary landing checks.
  * Returns false, leaving every file for a person, when any file holds another kind of conflict.
@@ -1336,7 +1365,12 @@ export class MergeTrain {
           const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
           const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
           if (changedFrozenAtSource.length) {
+            const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart));
             refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+            if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -2083,7 +2117,12 @@ export class MergeTrain {
           : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
         if (changedFrozenAtSource.length) {
+          const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart));
           refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+          // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+          // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+          const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+          if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
           if (workspace) {
             const owners = sharedTasks.filter((task) =>
               taskChangedPaths(task, tip).some((path) => changedFrozenAtSource.includes(path)),
