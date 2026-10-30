@@ -678,6 +678,12 @@ declare const productEventTypes: {
         expiresAt: Type.TString;
         receiptId: Type.TString;
     }>;
+    readonly 'com.rezics.access.account-discovery-changed.v1': Type.TObject<{
+        route: Type.TInteger;
+        accountId: Type.TString;
+        revision: Type.TString;
+        source: Type.TUnion<[Type.TLiteral<"account">, Type.TLiteral<"claim">]>;
+    }>;
     readonly 'com.rezics.commerce.payout_statement.updated.v1': Type.TObject<{
         statementId: Type.TString;
     }>;

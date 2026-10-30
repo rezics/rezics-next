@@ -10,4 +10,5 @@ export type Partition = {
 };
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 export declare function readPartition(client: Queryable, partitionNo: number): Promise<Partition | null>;
+export declare function readPartitions(client: Queryable, partitionNos: readonly number[]): Promise<readonly Partition[]>;
 export {};

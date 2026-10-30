@@ -461,26 +461,36 @@ test(
       [0x3456, grantedReader, bannedReader],
     );
     const realmRoute = [boardRoute, spaceId, spaceRevisionId, at, author, realmId, GLOBAL_CONTEXT, realmRevisionId];
-    await db.admin.query(
-      `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
-       VALUES ($1, $2, 'active', $3, $4, $5)`,
-      realmRoute.slice(0, 5),
-    );
-    await db.admin.query(
-      `INSERT INTO community.space_revision(route, space_id, revision_id, title, summary, created_at, author)
-       VALUES ($1, $2, $3, 'Protected host', '', $4, $5)`,
-      realmRoute.slice(0, 5),
-    );
-    await db.admin.query(
-      `INSERT INTO community.realm(route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
-       VALUES ($1, $6, $2, 'active', 'protected', $7, $8, $4, $5)`,
-      realmRoute,
-    );
-    await db.admin.query(
-      `INSERT INTO community.realm_revision(route, realm_id, revision_id, predecessor, title, summary, visibility, context_id, created_at, author)
-       VALUES ($1, $6, $8, NULL, 'Protected realm', '', 'protected', $7, $4, $5)`,
-      realmRoute,
-    );
+    const fixture = await db.admin.connect();
+    try {
+      await fixture.query('BEGIN');
+      await fixture.query(
+        `INSERT INTO community.space(route, space_id, state, head_revision_id, created_at, creator)
+         VALUES ($1, $2, 'active', $3, $4, $5)`,
+        realmRoute.slice(0, 5),
+      );
+      await fixture.query(
+        `INSERT INTO community.space_revision(route, space_id, revision_id, title, summary, created_at, author)
+         VALUES ($1, $2, $3, 'Protected host', '', $4, $5)`,
+        realmRoute.slice(0, 5),
+      );
+      await fixture.query(
+        `INSERT INTO community.realm(route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
+         VALUES ($1, $6, $2, 'active', 'protected', $7, $8, $4, $5)`,
+        realmRoute,
+      );
+      await fixture.query(
+        `INSERT INTO community.realm_revision(route, realm_id, revision_id, predecessor, title, summary, visibility, context_id, created_at, author)
+         VALUES ($1, $6, $8, NULL, 'Protected realm', '', 'protected', $7, $4, $5)`,
+        realmRoute,
+      );
+      await fixture.query('COMMIT');
+    } catch (error) {
+      await fixture.query('ROLLBACK');
+      throw error;
+    } finally {
+      fixture.release();
+    }
     const contentRoute = [
       boardRoute,
       protectedBoardId,

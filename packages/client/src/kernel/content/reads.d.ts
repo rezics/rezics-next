@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
-import { type Access, type Actor, type Resource } from '../request/access.ts';
+import { type Partition } from '../partition/partition.ts';
+import { type Access, type AccessClient, type Actor, type ReadDecisions, type Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+import type { Anchored, AnchoredPosition, BoardId, BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
 declare const subjectReactionKinds: readonly ['like', 'love', 'laugh', 'insightful', 'sad'];
 export type RealmDisclosureScope = {
@@ -59,7 +60,37 @@ export type { Actor };
 export declare class ContentNotFoundError extends Error {
     constructor();
 }
+type BoardDisclosureFinal = Readonly<{
+    boardAnchor: AnchoredPosition;
+    parentAllowed: boolean;
+}>;
+type BoardDisclosureHint = Readonly<{
+    boardId: BoardId;
+    board: BoardView;
+    decisions?: ReadDecisions;
+    query?: string;
+    expectedRevisions?: ReadonlyMap<string, string>;
+    onFinal?: (final: BoardDisclosureFinal) => void;
+}>;
+export declare function withBoardDisclosure<T>(boardId: BoardId, board: BoardView, work: () => Promise<T>, decisions?: ReadDecisions, options?: Pick<BoardDisclosureHint, 'query' | 'expectedRevisions' | 'onFinal'>): Promise<T>;
+export declare function prepareBoardPageDecisions(dependencies: ContentReadDependencies, context: ReadContext): Promise<ReadDecisions>;
 export declare function readBoard(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext): Promise<Anchored<BoardView | null>>;
+export declare function readBoardPageCandidateSnapshot<T>(dependencies: ContentReadDependencies, boardId: BoardId, context: ReadContext, decisions: ReadDecisions, candidatePage: (client: AccessClient, partition: Partition) => Promise<T>): Promise<Readonly<{
+    board: BoardView;
+    anchor: Anchored<BoardView>;
+    candidate: T;
+}> | null>;
+type SelectionRound = Readonly<{
+    survivors: readonly string[];
+    revisions: ReadonlyMap<string, string>;
+    anchors: readonly AnchoredPosition[];
+}>;
+export declare function selectBoardThreadCandidates(dependencies: ContentReadDependencies, boardId: BoardId, threadIds: readonly string[], context: ReadContext, decisions: ReadDecisions, query?: string): Promise<SelectionRound>;
+export declare function discloseBoardPageThreads(dependencies: ContentReadDependencies, boardId: BoardId, baseline: BoardView, threadIds: readonly string[], expectedRevisions: ReadonlyMap<string, string>, context: ReadContext, decisions: ReadDecisions, query?: string): Promise<Readonly<{
+    items: readonly Anchored<ThreadView | null>[];
+    boardAnchor: AnchoredPosition;
+    parentAllowed: boolean;
+}>>;
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
 export declare function withViewerReactions<T extends {
     readonly id: string;
