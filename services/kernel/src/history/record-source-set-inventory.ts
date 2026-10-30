@@ -1,11 +1,15 @@
-import type { CommandTransaction } from '../command/command.ts';
-import type { RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
+import { noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import type { Pool } from 'pg';
+import type { RecordPurgeAuthority, RecordPurgeSource } from '../semantic/record-purge-authority.ts';
+import { lockRecordPurgeAuthoritySource } from '../semantic/record-purge-authority.ts';
 import {
   nativeRecordSourceSetProducer,
   RecordSourceSetUnavailableError,
   type RecordSourceSetCommitment,
 } from './record-source-set-native.ts';
-import { validateRecordSourceSetCommitment } from './record-source-set.ts';
+import { recordSourceSetStorageKey, validateNativeRecordSourceSetSnapshot } from './record-source-set.ts';
+import { recordHistoryPurgeSourceReference } from './record-resource-adapter.ts';
+import { sameRecordPurgeSource } from './record-source-lock.ts';
 import type { HistoryArtifactType } from './contracts.ts';
 
 export type RecordHistoryCopy = Readonly<{
@@ -15,67 +19,103 @@ export type RecordHistoryCopy = Readonly<{
   gap?: string | null;
   sourceSet?: RecordSourceSetCommitment;
 }>;
+type NativePage = Awaited<ReturnType<import('./record-source-set-native.ts').RecordSourceSetProducer['pageSemanticRecordSourceSets']>>;
+type PreparedPage = Readonly<{ frontier: string | null; page: NativePage | null; gap: string | null }>;
 
-/** Discover one native reverse-index page and retain its exact immutable locators. Later
- * revisions cannot replace membership in an original set. No membership is inferred locally. */
-export async function enrollRecordHistorySourceSets(
-  tx: CommandTransaction,
+/** All producer pool reads finish before the live source verification/History transaction.
+ * This never opens another checkout while an original building set is uncommitted. */
+export async function prepareRecordHistorySourceSetPage(
+  deps: Readonly<{ pool: Pool; clock?: () => Date }>,
   authority: RecordPurgeAuthority,
+  source: RecordPurgeSource,
   key: string,
-  generation: string,
-): Promise<string | null> {
+  partition: number,
+  context: Readonly<{ deadline: number }>,
+): Promise<PreparedPage> {
   let producer;
-  try {
-    producer = await nativeRecordSourceSetProducer();
-  } catch (error) {
-    if (error instanceof RecordSourceSetUnavailableError) return error.code;
+  try { producer = nativeRecordSourceSetProducer(); }
+  catch (error) {
+    if (error instanceof RecordSourceSetUnavailableError) return { frontier: null, page: null, gap: error.code };
     throw error;
   }
+  const progress = await runCommand(deps.pool, { partition, deadline: context.deadline, clock: deps.clock }, async (tx) => {
+    const current = await lockRecordPurgeAuthoritySource(tx, authority);
+    if (!current || !sameRecordPurgeSource(current, source)) return noEffect(null);
+    const found = await tx.query<{ native_set_frontier: string | null; native_set_index_complete: boolean }>(
+      `SELECT native_set_frontier,native_set_index_complete FROM core.record_history_purge
+       WHERE source_key=$1 AND deletion_generation=$2`, [key, source.reference.deletionGeneration],
+    );
+    return noEffect(found.rows[0] ?? null);
+  });
+  const row = progress.value;
+  if (!row) return { frontier: null, page: null, gap: 'record-native-source-set-inventory-unavailable' };
+  if (row.native_set_index_complete) return { frontier: row.native_set_frontier, page: null, gap: null };
+  const page = await producer.pageSemanticRecordSourceSets(deps, recordHistoryPurgeSourceReference(source.reference), {
+    frontier: row.native_set_frontier, limit: 1, deadline: context.deadline,
+  });
+  if (page.sets.length > 1 || (page.state !== 'progress' && page.state !== 'complete') ||
+      (page.frontier !== null && typeof page.frontier !== 'string') ||
+      !Number.isSafeInteger(page.examined) || page.examined < 0)
+    throw new TypeError('Invalid native source-set reverse page');
+  for (const set of page.sets) {
+    validateNativeRecordSourceSetSnapshot(set);
+    // The reverse index points to a sealed immutable native row, never a building digest.
+    const snapshot = await producer.readSemanticRecordSourceSet(deps, set.locator, context);
+    if (!snapshot) return { frontier: row.native_set_frontier, page: null, gap: 'record-native-source-set-snapshot-unavailable' };
+    validateNativeRecordSourceSetSnapshot(snapshot);
+    if (snapshot.locator.partition !== set.locator.partition ||
+        snapshot.locator.transactionId !== set.locator.transactionId ||
+        snapshot.locator.revision !== set.locator.revision || snapshot.digest !== set.digest || snapshot.members !== set.members)
+      throw new TypeError('Conflicting native record source set snapshot');
+  }
+  return { frontier: row.native_set_frontier, page, gap: null };
+}
+
+/** Native reverse-index EOF is only index progress, never historical/copy/source-cut proof. */
+export async function enrollRecordHistorySourceSets(
+  tx: CommandTransaction,
+  key: string,
+  generation: string,
+  prepared: PreparedPage,
+): Promise<string | null> {
+  if (prepared.gap) return prepared.gap;
   const progress = await tx.query(
-    `SELECT set_frontier,set_inventory_sealed FROM core.record_history_purge
-     WHERE source_key=$1 AND deletion_generation=$2 FOR UPDATE`,
-    [key, generation],
+    `SELECT native_set_frontier,native_set_index_complete FROM core.record_history_purge
+     WHERE source_key=$1 AND deletion_generation=$2 FOR UPDATE`, [key, generation],
   );
   const row = progress.rows[0];
   if (!row) throw new TypeError('Record history source-set progress missing');
-  if (row.set_inventory_sealed) return null;
-  const page = await producer.readRecordSourceSetMembership(tx, authority, row.set_frontier, 1);
-  if (page.sets.length > 1) throw new TypeError('Native source-set reverse page exceeded bound');
-  if (
-    page.frontier !== null &&
-    (!(page.frontier instanceof Uint8Array) || page.frontier.byteLength < 1 || page.frontier.byteLength > 256)
-  )
-    throw new TypeError('Native source-set reverse frontier exceeded metadata bound');
-  for (const set of page.sets) {
-    validateRecordSourceSetCommitment(set);
-    if (!(await producer.verifyRecordSourceSet(tx, set)))
+  if (row.native_set_index_complete) return null;
+  if (!prepared.page || row.native_set_frontier !== prepared.frontier)
+    return 'record-native-source-set-inventory-unsealed';
+  const producer = nativeRecordSourceSetProducer();
+  for (const set of prepared.page.sets) {
+    if (!(await producer.verifySemanticRecordSourceSet(tx, set.locator, set.digest)))
       throw new TypeError('Native source-set reverse membership is unproven');
+    const storageKey = recordSourceSetStorageKey(set.locator);
     await tx.query(
       `INSERT INTO core.record_history_purge_set
-       (source_key,deletion_generation,source_partition,set_locator,set_revision,original_transaction,member_count)
-       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-      [
-        key,
-        generation,
-        set.sourcePartition,
-        Buffer.from(set.locator),
-        Buffer.from(set.revision),
-        set.originalTransaction,
-        set.memberCount,
-      ],
+       (source_key,deletion_generation,source_partition,set_locator,set_revision,original_transaction,member_count,native_revision,snapshot_digest)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+      [key, generation, ...storageKey, set.locator.transactionId, set.members, set.locator.revision, set.digest],
+    );
+    // Exact native verification is the only path from unresolved metadata to snapshot.
+    await tx.query(
+      `UPDATE core.record_history_source_set SET metadata_state='native-snapshot',snapshot_digest=$4,member_count=$5
+       WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 AND metadata_state='building'
+       AND native_revision=$6 AND original_transaction=$7`,
+      [...storageKey, set.digest, set.members, set.locator.revision, set.locator.transactionId],
     );
   }
-  if (page.state !== 'pending')
-    await tx.query(
-      `UPDATE core.record_history_purge SET set_frontier=$3,set_inventory_sealed=$4
-       WHERE source_key=$1 AND deletion_generation=$2`,
-      [key, generation, page.frontier === null ? null : Buffer.from(page.frontier), page.state === 'sealed'],
-    );
-  return page.state === 'sealed' ? null : 'record-native-source-set-inventory-unsealed';
+  await tx.query(
+    `UPDATE core.record_history_purge SET native_set_frontier=$3,native_set_index_complete=$4
+     WHERE source_key=$1 AND deletion_generation=$2`,
+    [key, generation, prepared.page.frontier, prepared.page.state === 'complete'],
+  );
+  return prepared.page.state === 'complete' ? null : 'record-native-source-set-inventory-unsealed';
 }
 
-/** Rotating retained sets keeps late receiving associations visible after native reverse
- * enumeration. Neither that enumeration's EOF nor this copy page seals receiving inventory. */
+/** Rotation keeps late receiving copies visible; only real immutable snapshots are eligible. */
 export async function readRecordHistorySourceSetCopies(
   tx: CommandTransaction,
   key: string,
@@ -84,30 +124,32 @@ export async function readRecordHistorySourceSetCopies(
 ): Promise<RecordHistoryCopy[]> {
   if (limit < 1) return [];
   const sets = await tx.query(
-    `SELECT source_partition,set_locator,set_revision,original_transaction,member_count
+    `SELECT source_partition,set_locator,set_revision,original_transaction,member_count,native_revision,snapshot_digest
      FROM core.record_history_purge_set WHERE source_key=$1 AND deletion_generation=$2
+     AND native_revision IS NOT NULL AND snapshot_digest IS NOT NULL
      AND next_attempt<=now() ORDER BY next_attempt,source_partition,set_locator,set_revision LIMIT 1 FOR UPDATE`,
     [key, generation],
   );
   const row = sets.rows[0];
   if (!row) return [];
   const set: RecordSourceSetCommitment = {
-    sourcePartition: row.source_partition,
-    locator: row.set_locator,
-    revision: row.set_revision,
-    originalTransaction: row.original_transaction,
-    memberCount: row.member_count,
+    locator: { partition: row.source_partition, transactionId: row.original_transaction, revision: row.native_revision },
+    digest: row.snapshot_digest,
+    members: row.member_count,
   };
+  validateNativeRecordSourceSetSnapshot(set);
+  const storageKey = recordSourceSetStorageKey(set.locator);
+  if (!storageKey[1].equals(row.set_locator) || !storageKey[2].equals(row.set_revision))
+    throw new TypeError('Conflicting native source set storage key');
   const copies = await tx.query<RecordHistoryCopy>(
     `SELECT partition_no,artifact_type,locator,gap FROM core.record_history_source_set_copy
      WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 AND (state='pending' OR gap='record-source-native-release-pending') AND next_attempt<=now()
-     ORDER BY next_attempt,partition_no,artifact_type,locator LIMIT $4`,
-    [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), limit],
+     ORDER BY next_attempt,partition_no,artifact_type,locator LIMIT $4`, [...storageKey, limit],
   );
   await tx.query(
     `UPDATE core.record_history_purge_set SET next_attempt=now()+interval '30 seconds'
      WHERE source_key=$1 AND deletion_generation=$2 AND source_partition=$3 AND set_locator=$4 AND set_revision=$5`,
-    [key, generation, set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision)],
+    [key, generation, ...storageKey],
   );
   return copies.rows.map((copy) => ({ ...copy, sourceSet: set }));
 }
@@ -127,9 +169,7 @@ export async function recordRecordHistoryCopyProgress(
        WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3
          AND partition_no=$4 AND artifact_type=$5 AND locator=$6`,
       [
-        set.sourcePartition,
-        Buffer.from(set.locator),
-        Buffer.from(set.revision),
+        ...recordSourceSetStorageKey(set.locator),
         copy.partition_no,
         copy.artifact_type,
         copy.locator,

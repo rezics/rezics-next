@@ -69,8 +69,8 @@ export function declareCommandRecordSources(
   declarations.set(tx, Object.freeze(copied));
 }
 
-/** Mutually exclusive alternative for one native immutable complete set, not a larger small
- * reference cap. Semantic owns issuance and exact term/old/current membership. */
+/** Mutually exclusive alternative for one native set, including its same-command building phase.
+ * Semantic owns issuance, exact term/old/current membership and the seal-before-commit guard. */
 export function declareCommandRecordSourceSet(tx: CommandTransaction, sourceSet: SemanticRecordSourceSet): void {
   currentCommand(tx);
   if (declarations.has(tx) || hasCommandRecordSourceSet(tx) || serializing.has(tx))

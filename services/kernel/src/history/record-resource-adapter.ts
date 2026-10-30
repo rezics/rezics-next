@@ -3,15 +3,12 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import {
   prepareRecordPurgeAuthority,
   type RecordPurgeAuthority,
-  type RecordPurgeReference,
+  type NativeRecordPurgeReference,
+  type ResourceRecordPurgeReference,
 } from '../semantic/record-purge-authority.ts';
 import { recordHistorySourceKey, type RecordHistorySourceReference } from './record-source.ts';
 
-/** Adapter input only. Semantic has not yet extended its native opaque authority to resources. */
-export type ResourceRecordPurgeReference =
-  | Readonly<{ kind: 'context'; contextId: string; deletionGeneration: string }>
-  | Readonly<{ kind: 'zone'; zoneId: string; deletionGeneration: string }>;
-export type NativeRecordPurgeReference = RecordPurgeReference | ResourceRecordPurgeReference;
+export type { NativeRecordPurgeReference, ResourceRecordPurgeReference } from '../semantic/record-purge-authority.ts';
 
 export type RecordHistoryPurgeLocator = Readonly<{
   source_key: string;
@@ -24,15 +21,6 @@ export type RecordHistoryPurgeLocator = Readonly<{
   revision: number | null;
   document_id: string | null;
 }>;
-
-export class NativeResourceRecordPurgeUnavailableError extends Error {
-  readonly code = 'record_history_native_resource_reference_unavailable';
-
-  constructor(readonly kind: ResourceRecordPurgeReference['kind']) {
-    super('record_history_native_resource_reference_unavailable');
-    this.name = 'NativeResourceRecordPurgeUnavailableError';
-  }
-}
 
 /** Original producer identity, without the later deletion generation or contribution placeholders. */
 export function recordHistoryPurgeSourceReference(ref: NativeRecordPurgeReference): RecordHistorySourceReference {
@@ -111,6 +99,5 @@ export async function prepareNativeRecordPurgeAuthority(
   ref: NativeRecordPurgeReference,
   context: Readonly<{ deadline: number }>,
 ): Promise<RecordPurgeAuthority | null> {
-  if (!('subjectId' in ref)) throw new NativeResourceRecordPurgeUnavailableError(ref.kind);
   return prepareRecordPurgeAuthority(deps, ref, context);
 }

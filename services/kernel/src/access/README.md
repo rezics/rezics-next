@@ -2942,11 +2942,9 @@ context: Readonly<{deadline: number}>): Promise<RecordPurgeAuthority | null>`, t
 `RecordPurgeSource.reference: NativeRecordPurgeReference`. Its existing `readRecordPurgeAuthoritySource` and
 `lockRecordPurgeAuthoritySource` must retain the SAME opaque authority, native lifecycle/version/generation,
 original committed deletion, expiry, hold/restore locks and current home epoch checks for each variant.
-Until that native extension is delivered, `prepareNativeRecordPurgeAuthority` delegates contribution references to
-the actual issuer and throws `NativeResourceRecordPurgeUnavailableError` with code
-`record_history_native_resource_reference_unavailable` for Context/Zone, including after restart. It never casts the
-contribution issuer to a resource signature or creates an authority. Native resource preparation remains unavailable;
-the adapter/storage path adds no source inventory seal, receiving closure, account-erasure coverage or completion.
+`prepareNativeRecordPurgeAuthority` delegates contribution, Context and Zone references to the delivered
+Semantic issuer through its exact `NativeRecordPurgeReference` union. History has no resource authority shim;
+native lifecycle ineligibility remains the issuer's decision.
 
 Original source writers enroll with the exact export
 `declareCommandRecordSources(tx: CommandTransaction, sources: readonly RecordHistorySourceReference[]): void`
@@ -2974,20 +2972,34 @@ actually copied and native terms without candidate IDs. No array, truncation, re
 candidate or per-fact callback supplies this set. The set is an ownership locator, never purge authority or a
 claim about older writers.
 
-History stores one owner-issued binary set locator and revision commitment per generated artifact, with the real
-original command transaction, fence position and producer version. Immutable source-set/copy rows and indexed
-receiving associations retain this commitment without expanding members into receipt, outbox or DBOS bytes.
-Native member-to-set discovery and History set-to-copy discovery are distinct bounded indexes; receiving copies
-retain the original commitment. Later native revisions must still resolve sets containing the original revision.
+History aliases the original opaque `SemanticRecordSourceSet` from `semantic/record-source-set.ts`.
+Its source-owned `semanticRecordSourceSetLocator(tx,set)` validates the same command synchronously at declaration,
+before nested serialization. The actual locator is `{partition,transactionId,revision:number}`. History stores
+that identity and each actual codec/SDK-generated artifact in the same command transaction. The existing byte
+copy keys encode the transaction UUID and decimal revision for History indexing only; they are not Source APIs.
+The original transaction, fence position, copy keys and native serialization ordering remain intact.
 
-The exact original-module dependency absent at this base is Semantic's native Source-set producer, expected in
-`semantic/record-source-set.ts`. `history/record-source-set-native.ts` publishes the provisional opaque
-`SemanticRecordSourceSet` and required `RecordSourceSetProducer` consumer boundary: native command read, immutable
-revision verification and bounded reverse membership lookup. These are required producer declarations, not a
-Semantic implementation or agreed native locator format. Until Semantic publishes its actual type/adapter,
-`record_history_native_source_set_unavailable` refuses serialization of purported sets. History mints no sets,
-queries no foreign Source SQL and never substitutes a WeakMap for durable membership. Genuine 512-fact and
-term-without-candidate native positive coverage remains producer/integration debt.
+A declared set may still be building. History persists `metadata_state='building'` with null member count and
+digest, then finalizes the generated command position before COMMIT in the existing order. This is unresolved
+technical metadata, never immutable membership or completeness. Semantic's native seal-before-COMMIT guard must
+seal the source set or roll back the entire transaction, including generated artifacts and History associations.
+History neither seals Source nor registers a substitute guard. Source owns begin/append/seal and actual
+old/current/contribution/document/native-term membership with the unchanged 512 cap.
+
+After commit, the real `readSemanticRecordSourceSet` resolves `{locator,digest,members}`. Native reverse lookup
+uses `pageSemanticRecordSourceSets` with the actual narrowed original reference (including document/revision),
+a string frontier and `progress|complete`. All producer pool reads finish before History opens the live native
+source transaction for exact `verifySemanticRecordSourceSet(tx,locator,digest)` and enrollment. Only verified
+native snapshots enrich building metadata. Immutable digest and count then stay fixed; no member vector enters
+receipt, outbox or DBOS bytes. Reverse-index EOF does not certify older writers, a Source cut, receiving-copy
+closure or term purge authority.
+
+The native Source-set implementation is absent in this base. The exact agreed owner declaration lives in
+`semantic/record-source-set.d.ts`; it supplies typing only. The History adapter imports the real original module
+when available and otherwise throws `record_history_native_source_set_unavailable` at declaration. It defines
+no independent brand, provisional producer methods, Source SQL or issuer. Actual compact512/term writer binding
+and native whole retention/copy closure remain integration debt. The legacy metadata validator remains solely
+for compatibility with the unchanged existing tests and persisted provisional format, never native evidence.
 
 Each segment reads at most eight exact locator keys and applies one physical minimizer. Known co-located receipt
 responses with native no-consumer dispositions, the closed Library entry-purged outbox event after actual effect
@@ -2997,9 +3009,9 @@ request digest and the existing minimized-result 410/no-reexecution behavior sur
 payload/retirement seals still apply, and living accounts acquire no fabricated erasure barrier or receipt proof.
 Active work requires source-bound native retirement before SDK payload changes; this port does not treat a DBOS
 status as authority. Foreign copies consume the unchanged Source-owned prepare/read/lock/completion/release
-receiving-hold declarations from `semantic/record-purge-custody.ts`. That module is absent at this base;
-`history/record-native-custody.ts` is a typed unavailable dependency adapter, never a hold/cut issuer. Missing
-custody retains `record-source-bound-foreign-custody-unavailable` and cannot mutate foreign bytes. When supplied,
+receiving-hold exports and original opaque types from the delivered `semantic/record-purge-custody.ts`.
+`history/record-native-custody.ts` imports that native module directly, without a structural cast or issuer.
+The deterministic receiving identity uses its native UUID target codec.
 Source preparation/read ends before receiving checkout; native receiving lock, physical minimization, copy progress
 and native completion commit together. The existing empty `history.minimized` event gives completion callbacks a
 real command position. Restart rereads the native hold at the deterministic receiving locator. A minimized copy

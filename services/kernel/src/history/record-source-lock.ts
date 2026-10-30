@@ -1,5 +1,6 @@
 import { nativeRecordPurgeCustody, type RecordPurgeReceivingHold } from './record-native-custody.ts';
-import type { RecordSourceSetCommitment } from './record-source-set-native.ts';
+import { nativeRecordSourceSetProducer, type RecordSourceSetCommitment } from './record-source-set-native.ts';
+import { recordSourceSetStorageKey } from './record-source-set.ts';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import {
   lockRecordPurgeAuthoritySource,
@@ -54,34 +55,36 @@ export async function lockRecordHistoryCopy(
     // This is History's own exact metadata point, never foreign Source SQL. A receiving
     // database lacking that enrollment must remain unavailable, not infer membership.
     const enrolled = await tx.query(
-      `SELECT original_transaction,member_count FROM core.record_history_purge_set
+      `SELECT original_transaction,member_count,native_revision,snapshot_digest FROM core.record_history_purge_set
        WHERE source_key=$1 AND deletion_generation=$2 AND source_partition=$3
          AND set_locator=$4 AND set_revision=$5 FOR SHARE`,
       [
         purgeSourceKey(source),
         source.reference.deletionGeneration,
-        set.sourcePartition,
-        Buffer.from(set.locator),
-        Buffer.from(set.revision),
+        ...recordSourceSetStorageKey(set.locator),
       ],
     );
     if (
-      enrolled.rows[0]?.original_transaction !== set.originalTransaction ||
-      enrolled.rows[0]?.member_count !== set.memberCount
+      enrolled.rows[0]?.original_transaction !== set.locator.transactionId ||
+      enrolled.rows[0]?.member_count !== set.members ||
+      enrolled.rows[0]?.native_revision !== set.locator.revision ||
+      enrolled.rows[0]?.snapshot_digest !== set.digest
     )
+      return false;
+    if (!job.receivingHold && !(await nativeRecordSourceSetProducer().verifySemanticRecordSourceSet(tx, set.locator, set.digest)))
       return false;
     const found = await tx.query(
       `SELECT producer_version,original_transaction,original_position FROM core.record_history_source_set_copy
        WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3
          AND partition_no=$4 AND artifact_type=$5 AND locator=$6 FOR UPDATE`,
-      [set.sourcePartition, Buffer.from(set.locator), Buffer.from(set.revision), job.partition_no, type, locator],
+      [...recordSourceSetStorageKey(set.locator), job.partition_no, type, locator],
     );
     const row = found.rows[0];
     return (
       !!row &&
       row.producer_version === 1 &&
       row.original_position !== null &&
-      row.original_transaction === set.originalTransaction
+      row.original_transaction === set.locator.transactionId
     );
   }
   const found = await tx.query(
