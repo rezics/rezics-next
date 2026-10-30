@@ -65,7 +65,8 @@ export function nativeProgressUnit(
   const unit = progressUnit(profile, session.mode, session.unit);
   return unit?.structure.kind === 'none' &&
     unit.identity.kind === (session.mode === 'completed_units' ? 'session_local' : 'none')
-    ? unit : null;
+    ? unit
+    : null;
 }
 
 /** Bounds may change admission, but a dimension/identity change cannot reinterpret a session. */
@@ -73,6 +74,10 @@ export function compatibleProgressUnits(
   original: LibraryProgressUnitDescriptor,
   current: LibraryProgressUnitDescriptor,
 ): boolean {
-  return original.id === current.id && original.dimension === current.dimension &&
-    original.identity.kind === current.identity.kind && original.structure.kind === current.structure.kind;
+  return (
+    original.id === current.id &&
+    original.dimension === current.dimension &&
+    original.identity.kind === current.identity.kind &&
+    original.structure.kind === current.structure.kind
+  );
 }

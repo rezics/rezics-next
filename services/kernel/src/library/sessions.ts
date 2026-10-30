@@ -2,7 +2,13 @@ import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, mintReadTime, releaseOperationalTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  type AuthoritativeTime,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -23,7 +29,12 @@ import {
 import type { ProgressPresentation, ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
 import * as store from './progress-store.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
-import { compatibleProgressUnits, nativeProgressUnit, resolveLibraryProfilePin, type LibraryProfileDescriptor } from './profile.ts';
+import {
+  compatibleProgressUnits,
+  nativeProgressUnit,
+  resolveLibraryProfilePin,
+  type LibraryProfileDescriptor,
+} from './profile.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
@@ -324,48 +335,58 @@ export function createSessionCommands(config: Dependencies) {
   async function readPresentedSession<T>(
     actor: Actor,
     sessionId: string,
-    render: (session: ProgressSession, presentation: ProgressPresentation,
-      disclosure: { subject: boolean; versionSubject: boolean }) => Promise<T>,
+    render: (
+      session: ProgressSession,
+      presentation: ProgressPresentation,
+      disclosure: { subject: boolean; versionSubject: boolean },
+    ) => Promise<T>,
   ): Promise<T> {
     const owner = account(actor, 'progress_session:read');
     const route = sameAccountRoute(owner.accountId, sessionId);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
-    return withRequestDeadline(deadline, () => within(deadline, async () => {
-      async function time() {
-        return withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
-      }
-      async function observed(at: AuthoritativeTime) {
-        // Preparation may visit principal/denial homes; finish it before taking the owner snapshot.
-        const check = await accessCheck(access, owner, 'progress_session:read',
-          { route, id: owner.accountId }, { pool, deadline, time: at });
-        return snapshot(owner, 'progress_session:read', async (client) => {
-          const bounded = deadlineClient(client, deadline);
-          if (!(await check(bounded, at))) throw new GrantDeniedError();
-          const partition = await readPartition(bounded, partitionOf(route));
-          const fact = await store.readSessionFact(bounded, route, sessionId);
-          if (!partition || !fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
-          return { fact, epoch: partition.epoch };
-        });
-      }
-      const at = await time();
-      try {
-        const before = await observed(at);
-        const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
-        const result = await render(before.fact.session, prepared.presentation, prepared.disclosure);
-        const finalTime = await time();
-        try {
-          await prepared.verify(finalTime);
-          const after = await observed(finalTime);
-          if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
-            throw new ProgressConflictError();
-        } finally {
-          releaseOperationalTime(finalTime);
+    return withRequestDeadline(deadline, () =>
+      within(deadline, async () => {
+        async function time() {
+          return withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
         }
-        return result;
-      } finally {
-        releaseOperationalTime(at);
-      }
-    }));
+        async function observed(at: AuthoritativeTime) {
+          // Preparation may visit principal/denial homes; finish it before taking the owner snapshot.
+          const check = await accessCheck(
+            access,
+            owner,
+            'progress_session:read',
+            { route, id: owner.accountId },
+            { pool, deadline, time: at },
+          );
+          return snapshot(owner, 'progress_session:read', async (client) => {
+            const bounded = deadlineClient(client, deadline);
+            if (!(await check(bounded, at))) throw new GrantDeniedError();
+            const partition = await readPartition(bounded, partitionOf(route));
+            const fact = await store.readSessionFact(bounded, route, sessionId);
+            if (!partition || !fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
+            return { fact, epoch: partition.epoch };
+          });
+        }
+        const at = await time();
+        try {
+          const before = await observed(at);
+          const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
+          const result = await render(before.fact.session, prepared.presentation, prepared.disclosure);
+          const finalTime = await time();
+          try {
+            await prepared.verify(finalTime);
+            const after = await observed(finalTime);
+            if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
+              throw new ProgressConflictError();
+          } finally {
+            releaseOperationalTime(finalTime);
+          }
+          return result;
+        } finally {
+          releaseOperationalTime(at);
+        }
+      }),
+    );
   }
 
   async function page<T>(

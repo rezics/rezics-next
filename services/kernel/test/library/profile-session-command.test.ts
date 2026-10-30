@@ -552,10 +552,19 @@ test('native guards conceal sessions and source failures and fence old receipts 
 // Additional opt-in owner-detail cases; the existing BASIC/privacy oracles above remain unchanged.
 async function presentationHead(dimension?: string) {
   const profile = libraryProfile('fixture.presentation');
-  profile.progress.allowed = [{ mode: 'scalar_amount', units: [{
-    ...unitData('page'), maximum: '10', precision: 0,
-    ...(dimension === undefined ? {} : { dimension }),
-  }] }];
+  profile.progress.allowed = [
+    {
+      mode: 'scalar_amount',
+      units: [
+        {
+          ...unitData('page'),
+          maximum: '10',
+          precision: 0,
+          ...(dimension === undefined ? {} : { dimension }),
+        },
+      ],
+    },
+  ];
   const input = fixture(profile);
   const schema = JSON.parse(input.schemas['fixture.yaml']!);
   schema.version = dimension ?? 'presentation-rename';
@@ -586,31 +595,49 @@ test('Owner session detail exposes exact resolved historic display and advisory 
     const { presentation, ...raw } = detail;
     expect(raw).toEqual(basic);
     expect(presentation).toMatchObject({
-      meaning: 'known', unitLabel: 'page', unitLabelLanguage: 'en', structure: 'unverified',
+      meaning: 'known',
+      unitLabel: 'page',
+      unitLabelLanguage: 'en',
+      structure: 'unverified',
       recording: { state: 'supported', inputRules: { min: '0', max: '10', step: '1', total: 'optional' } },
     });
     expect(presentation.unitLabel).not.toBe('new sheet');
     expect(presentation.unitCountForms).toHaveProperty('other');
   });
-  await problem(await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '11' }), 422, 'unsupported_library_profile');
+  await problem(
+    await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '11' }),
+    422,
+    'unsupported_library_profile',
+  );
   expect(await fact(s.id)).toEqual(original);
   expect(await contents(s.id)).toEqual(history);
   await native.activate(await presentationHead('duration'));
   await noSessionEffects(s.id)(async () => {
     const p = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession.presentation;
     expect(p).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unsupported' } });
-    await problem(await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '1' }), 422, 'unsupported_library_profile');
+    await problem(
+      await send('POST', `${path(s.id)}:record`, { revision: 2, amount: '1' }),
+      422,
+      'unsupported_library_profile',
+    );
   });
   await native.activate(removed);
   await noSessionEffects(s.id)(async () => {
     const p = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession.presentation;
     expect(p).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unsupported' } });
   });
-  await json(await native.send('steward', 'POST', `/v1/subjects/${subject}:hide`, { reason: 'Presentation source concealment' }), 200);
+  await json(
+    await native.send('steward', 'POST', `/v1/subjects/${subject}:hide`, { reason: 'Presentation source concealment' }),
+    200,
+  );
   await noSessionEffects(s.id)(async () => {
     const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL&view=FULL`), 200)).progressSession;
     expect(detail.subject).toBeNull();
-    expect(detail.presentation).toMatchObject({ meaning: 'known', unitLabel: 'page', recording: { state: 'unavailable' } });
+    expect(detail.presentation).toMatchObject({
+      meaning: 'known',
+      unitLabel: 'page',
+      recording: { state: 'unavailable' },
+    });
     expect(detail.amount).toBe('950');
     expect(detail.total).toBe('999');
   });
@@ -621,19 +648,28 @@ test('opt-in owner presentation conceals foreign anonymous reduced-scope suspend
   const subject = await native.createSubject('game');
   const s = await start(subject);
   const url = `${path(s.id)}?presentation=FULL&view=FULL`;
-  await noSessionEffects(s.id, other.actor.accountId)(async () => {
+  await noSessionEffects(
+    s.id,
+    other.actor.accountId,
+  )(async () => {
     await problem(await send('GET', url, undefined, entryKey(), other.bearer), 404, 'not_found', 'not_applicable');
     const anonymous = await native.send('anonymous', 'GET', url);
     expect([401, 404]).toContain(anonymous.status);
     privateFree(await anonymous.json());
   });
-  const limited = await accountToken({ accountId: owner.actor.accountId, clientId: owner.actor.clientId, scopes: ['subject:read'] });
+  const limited = await accountToken({
+    accountId: owner.actor.accountId,
+    clientId: owner.actor.clientId,
+    scopes: ['subject:read'],
+  });
   await noSessionEffects(s.id)(async () => {
     await problem(await send('GET', url, undefined, entryKey(), limited), 404, 'not_found', 'not_applicable');
   });
   for (const fence of ['suspension', 'authn'] as const) {
     const identity = await native.identity(scopes);
-    const own = (await json(await send('POST', '/v1/progressSessions', create(subject), entryKey(), identity.bearer), 201)).progressSession;
+    const own = (
+      await json(await send('POST', '/v1/progressSessions', create(subject), entryKey(), identity.bearer), 201)
+    ).progressSession;
     if (fence === 'suspension') await native.suspend(identity.actor.accountId);
     else await native.revokeIdentity(identity.actor.accountId);
     await noEffects(async () => {
@@ -653,14 +689,18 @@ test('native opt-in missing immutable release and transient current source remai
   const query = native.pool.query;
   // Read-only persistence fault at the native exact-release lookup, including its cache-existence probe.
   native.pool.query = function (...args: unknown[]) {
-    const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
+    const text = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
     if (/definitions-(?:read|exists)\.sql/.test(text)) return Promise.resolve({ rows: [], rowCount: 0 });
     return Reflect.apply(query, native.pool, args);
   } as typeof query;
   try {
     await noSessionEffects(s.id)(async () => {
       const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL`), 200)).progressSession;
-      expect(detail.presentation).toEqual({ meaning: 'unavailable', structure: 'unverified', recording: { state: 'unavailable' } });
+      expect(detail.presentation).toEqual({
+        meaning: 'unavailable',
+        structure: 'unverified',
+        recording: { state: 'unavailable' },
+      });
       expect(detail.completedUnitCount).toBe(3);
     });
   } finally {
@@ -683,15 +723,17 @@ test('native opt-in missing immutable release and transient current source remai
   });
 });
 
-
 test('native current pair removal and hidden version summary preserve the original session meaning independently', async () => {
   const subject = await native.createSubject('game');
   const version = await native.createSubject('game');
   const s = await start(subject, 'scalar_amount', 'seed-tray.v2', { total: '5', versionSubjectId: version });
   await native.activate(replacement);
-  await json(await native.send('steward', 'POST', `/v1/subjects/${version}:hide`, {
-    reason: 'Independent version disclosure',
-  }), 200);
+  await json(
+    await native.send('steward', 'POST', `/v1/subjects/${version}:hide`, {
+      reason: 'Independent version disclosure',
+    }),
+    200,
+  );
   await noSessionEffects(s.id)(async () => {
     const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL&view=FULL`), 200)).progressSession;
     expect(detail.subject).not.toBeNull();
@@ -700,7 +742,10 @@ test('native current pair removal and hidden version summary preserve the origin
     expect(detail.total).toBe('5');
     expect(detail.amount).toBeNull();
     expect(detail.presentation).toMatchObject({
-      meaning: 'known', unitLabel: 'seed-tray.v2', structure: 'unverified', recording: { state: 'unsupported' },
+      meaning: 'known',
+      unitLabel: 'seed-tray.v2',
+      structure: 'unverified',
+      recording: { state: 'unsupported' },
     });
   });
 });

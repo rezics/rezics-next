@@ -32,18 +32,23 @@ export function progressInputRules(unit: LibraryProgressUnitDescriptor): Progres
 }
 
 /** Exact accepted meaning and independently observed current admission; values never enter this projection. */
-export function presentProgressSession(fact: Fact, snapshot: Snapshot, source: LibraryProfileSource): ProgressPresentation {
+export function presentProgressSession(
+  fact: Fact,
+  snapshot: Snapshot,
+  source: LibraryProfileSource,
+): ProgressPresentation {
   const base = { structure: 'unverified', recording: { state: 'unavailable' } } as const;
   if (!fact.pin) return { ...base, meaning: 'unknown' };
   const profile = snapshot && resolveLibraryProfilePin(snapshot, fact.pin);
   if (!profile) return { ...base, meaning: 'unavailable' };
   const original = nativeProgressUnit(profile, fact.session);
   const current = source?.kind === 'supported' ? nativeProgressUnit(source.profile, fact.session) : null;
-  const recording: ProgressPresentation['recording'] = source === null
-    ? { state: 'unavailable' }
-    : original && current && compatibleProgressUnits(original, current)
-      ? { state: 'supported', inputRules: progressInputRules(current) }
-      : { state: 'unsupported' };
+  const recording: ProgressPresentation['recording'] =
+    source === null
+      ? { state: 'unavailable' }
+      : original && current && compatibleProgressUnits(original, current)
+        ? { state: 'supported', inputRules: progressInputRules(current) }
+        : { state: 'unsupported' };
   if (!original) return { ...base, meaning: 'unknown', recording };
   // English is the native default, from the exact release; no label from a current head or fixed dictionary.
   const forms = original.countForms?.en;
@@ -97,8 +102,11 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
       const current = { ...deps, at };
       if (anchor && !sameLibraryProfileAnchor(anchor, await readLibraryProfileAnchor(current, session.subjectId)))
         throw new ProblemError('semantic_not_ready');
-      if (version && session.versionSubjectId !== session.subjectId &&
-        !sameLibraryProfileAnchor(version, await readLibraryProfileAnchor(current, session.versionSubjectId!)))
+      if (
+        version &&
+        session.versionSubjectId !== session.subjectId &&
+        !sameLibraryProfileAnchor(version, await readLibraryProfileAnchor(current, session.versionSubjectId!))
+      )
         throw new ProblemError('semantic_not_ready');
     },
   };

@@ -45,24 +45,49 @@ export const sessionSchema = t.Object(
   },
   closed,
 );
-export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(t.Object({
-  meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
-  unitLabel: t.Optional(t.String()),
-  unitLabelLanguage: t.Optional(t.String()),
-  unitCountForms: t.Optional(t.Object({
-    other: t.String(), zero: t.Optional(t.String()), one: t.Optional(t.String()),
-    two: t.Optional(t.String()), few: t.Optional(t.String()), many: t.Optional(t.String()),
-  }, closed)),
-  dimension: t.Optional(t.String()),
-  structure: t.Literal('unverified'),
-  recording: t.Union([
-    t.Object({ state: t.Literal('supported'), inputRules: t.Object({
-      min: t.Optional(t.String()), max: t.Optional(t.String()), step: t.String(),
-      total: t.Union([t.Literal('optional'), t.Literal('required'), t.Literal('forbidden')]),
-    }, closed) }, closed),
-    t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
-  ]),
-}, closed));
+export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
+  t.Object(
+    {
+      meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
+      unitLabel: t.Optional(t.String()),
+      unitLabelLanguage: t.Optional(t.String()),
+      unitCountForms: t.Optional(
+        t.Object(
+          {
+            other: t.String(),
+            zero: t.Optional(t.String()),
+            one: t.Optional(t.String()),
+            two: t.Optional(t.String()),
+            few: t.Optional(t.String()),
+            many: t.Optional(t.String()),
+          },
+          closed,
+        ),
+      ),
+      dimension: t.Optional(t.String()),
+      structure: t.Literal('unverified'),
+      recording: t.Union([
+        t.Object(
+          {
+            state: t.Literal('supported'),
+            inputRules: t.Object(
+              {
+                min: t.Optional(t.String()),
+                max: t.Optional(t.String()),
+                step: t.String(),
+                total: t.Union([t.Literal('optional'), t.Literal('required'), t.Literal('forbidden')]),
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
+      ]),
+    },
+    closed,
+  ),
+);
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const changeIntent = t.Union([
@@ -317,18 +342,27 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           mapped(async () => {
             set.headers['cache-control'] = 'private, no-store';
             if (query.presentation === 'FULL') {
-              return sessionCommands().readPresentedSession(actor, params.sessionId, async (session, presentation, disclosure) => {
-                const value = { ...sessionView(session), presentation };
-                if (query.view !== 'FULL') return { progressSession: value };
-                const summary = async (id: string | null, disclosed: boolean) => {
-                  if (!id || !disclosed) return null;
-                  return (await fullView(config(), actor, 'FULL', { reference: { subjectId: id } })).reference.subject ?? null;
-                };
-                const subject = await summary(session.subjectId, disclosure.subject);
-                const versionSubject = session.versionSubjectId === session.subjectId
-                  ? subject : await summary(session.versionSubjectId, disclosure.versionSubject);
-                return { progressSession: { ...value, subject, versionSubject } };
-              });
+              return sessionCommands().readPresentedSession(
+                actor,
+                params.sessionId,
+                async (session, presentation, disclosure) => {
+                  const value = { ...sessionView(session), presentation };
+                  if (query.view !== 'FULL') return { progressSession: value };
+                  const summary = async (id: string | null, disclosed: boolean) => {
+                    if (!id || !disclosed) return null;
+                    return (
+                      (await fullView(config(), actor, 'FULL', { reference: { subjectId: id } })).reference.subject ??
+                      null
+                    );
+                  };
+                  const subject = await summary(session.subjectId, disclosure.subject);
+                  const versionSubject =
+                    session.versionSubjectId === session.subjectId
+                      ? subject
+                      : await summary(session.versionSubjectId, disclosure.versionSubject);
+                  return { progressSession: { ...value, subject, versionSubject } };
+                },
+              );
             }
             return fullView(config(), actor, query.view, {
               progressSession: sessionView(await sessionCommands().readSession(actor, params.sessionId)),

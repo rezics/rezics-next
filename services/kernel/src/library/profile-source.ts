@@ -17,7 +17,13 @@ import { readItemTypes, type SubjectComponent } from '../semantic/subject.ts';
 import { selectLibraryProfile, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { resolveSubject } from './subject-anchor.ts';
 
-export type LibraryProfileSourceDependencies = { pool: Pool; access: Access; actor: Actor; at: AuthoritativeTime; deadline: number };
+export type LibraryProfileSourceDependencies = {
+  pool: Pool;
+  access: Access;
+  actor: Actor;
+  at: AuthoritativeTime;
+  deadline: number;
+};
 type Source = { subjectId: string; requestedSubjectId: string | null; component: SubjectComponent };
 export type LibraryProfileAnchor = Source & { acceptingType: string; identityEpoch: bigint };
 export type LibraryProfileSource =
@@ -30,7 +36,10 @@ export type LibraryProfileSource =
   | null;
 
 /** Private, current observations only: native T binds Access, not historical SQL snapshots. */
-export async function readLibraryProfileSource(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<LibraryProfileSource> {
+export async function readLibraryProfileSource(
+  deps: LibraryProfileSourceDependencies,
+  subjectId: string,
+): Promise<LibraryProfileSource> {
   return (await readLibraryProfileSourceObservation(deps, subjectId))?.source ?? null;
 }
 
@@ -39,8 +48,12 @@ export function readLibraryProfileSourceObservation(deps: LibraryProfileSourceDe
   return withRequestDeadline(deps.deadline, () => readSource(deps, subjectId));
 }
 
-async function readSource(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<{
-  source: NonNullable<LibraryProfileSource>; anchor: LibraryProfileAnchor;
+async function readSource(
+  deps: LibraryProfileSourceDependencies,
+  subjectId: string,
+): Promise<{
+  source: NonNullable<LibraryProfileSource>;
+  anchor: LibraryProfileAnchor;
 } | null> {
   const anchor = await readLibraryProfileAnchor(deps, subjectId);
   if (!anchor) return null;
@@ -53,12 +66,15 @@ async function readSource(deps: LibraryProfileSourceDependencies, subjectId: str
   const profile = selectLibraryProfile(active.release, acceptingType);
   if (!profile) return { anchor, source: { ...source, kind: 'unsupported', acceptingType } };
   const profileId = active.release.types[acceptingType]!.library!.profileId;
-  return { anchor, source: {
-    ...source,
-    kind: 'supported',
-    profile,
-    pin: { provenance: 'profile', releaseDigest: active.digest, acceptingType, profileId },
-  } };
+  return {
+    anchor,
+    source: {
+      ...source,
+      kind: 'supported',
+      profile,
+      pin: { provenance: 'profile', releaseDigest: active.digest, acceptingType, profileId },
+    },
+  };
 }
 
 /** Current source/type/disclosure only. No profile or release lookup; each foreign home is released. */
@@ -73,25 +89,41 @@ export async function readLibraryProfileAnchor(
     const accountRoute = routeOf(actor.accountId);
     if (accountRoute === null) return null;
     const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId);
-    if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
-      !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
-      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch) return null;
+    if (
+      !account ||
+      account.kind !== 'actor' ||
+      account.state !== 'active' ||
+      account.fenced ||
+      !Number.isSafeInteger(actor.authnEpoch) ||
+      actor.authnEpoch < 1 ||
+      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+    )
+      return null;
   }
   const before = await identityEpochStore.readMapping(pool, subjectId);
   if (before.state !== 'mapped') return null;
   const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, { pool, deadline, time: at });
   if (!resolved || resolved.subjectId !== before.terminal) return null;
   const route = routeOf(resolved.subjectId)!;
-  const check = await accessCheck(access, actor, 'subject:read', {
-    route, id: resolved.subjectId,
-    eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
-  }, { pool, deadline, time: at });
+  const check = await accessCheck(
+    access,
+    actor,
+    'subject:read',
+    {
+      route,
+      id: resolved.subjectId,
+      eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
+    },
+    { pool, deadline, time: at },
+  );
   let acceptingType: string | undefined;
   try {
     const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
       requireAccessDeadline(deadline);
       if (!(await check(client, at))) return false;
-      acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(resolved.subjectId);
+      acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(
+        resolved.subjectId,
+      );
       return acceptingType !== undefined;
     });
     if (!reference || acceptingType === undefined) return null;
@@ -106,10 +138,16 @@ export async function readLibraryProfileAnchor(
 }
 
 export function sameLibraryProfileAnchor(before: LibraryProfileAnchor, after: LibraryProfileAnchor | null): boolean {
-  return after !== null && before.subjectId === after.subjectId &&
-    before.requestedSubjectId === after.requestedSubjectId && before.acceptingType === after.acceptingType &&
-    before.identityEpoch === after.identityEpoch && before.component.partition === after.component.partition &&
-    before.component.epoch === after.component.epoch && before.component.position === after.component.position;
+  return (
+    after !== null &&
+    before.subjectId === after.subjectId &&
+    before.requestedSubjectId === after.requestedSubjectId &&
+    before.acceptingType === after.acceptingType &&
+    before.identityEpoch === after.identityEpoch &&
+    before.component.partition === after.component.partition &&
+    before.component.epoch === after.component.epoch &&
+    before.component.position === after.component.position
+  );
 }
 
 /** Read-only rollout boundary. Existing fixed-contract DTOs can expose an unpinned

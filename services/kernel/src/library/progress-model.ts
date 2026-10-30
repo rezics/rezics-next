@@ -109,7 +109,6 @@ export type ProgressPresentation = Readonly<{
   dimension?: string;
   structure: 'unverified';
   recording: Readonly<
-    | { state: 'supported'; inputRules: ProgressInputRules }
-    | { state: 'unsupported' | 'unavailable' }
+    { state: 'supported'; inputRules: ProgressInputRules } | { state: 'unsupported' | 'unavailable' }
   >;
 }>;
