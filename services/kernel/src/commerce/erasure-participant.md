@@ -24,9 +24,12 @@ Known local use records `FINANCIAL_ERASURE_BLOCKER`. Neither result acknowledges
 Seller/creator copies on buyer homes cannot be disproved by these local probes. Commerce does not add creator-leading
 cross-home indexes or query all Core receipts, Access operator slots, workflow inputs or JSON payloads. Accounts owns
 shared-history evidence for admission/apply receipts, outbox, write-basis, operational intents and DBOS copies,
-including acting-human/operator attribution. Its README explicitly describes complete locator coverage/minimization
-and final shared-history acknowledgement as open runtime gaps. The existing generic late-item/frontier primitives
-are not an owner-home inventory or a Commerce artifact minimizer. There is no delivered port to call for that proof.
+including acting-human/operator attribution. The delivered `history/receiving.ts` owner-coverage port is consulted
+after local cleanup commits and releases its connection. Its actual Commerce registry/progress gaps are persisted
+for accounts without observed local data. This consumes the shared runtime without treating registration, an empty
+prefix or a pending result as full coverage. Commerce command/outbox/durable producer conversion, write-basis and
+operational-intent minimizers, historical foreign-role locators and aggregate routing proof remain incomplete.
+The generic late-item/frontier primitives do not supply that inventory or a Commerce artifact minimizer.
 
 Before enabling `none`, the actual producer must supply sealed complete role/custody coverage with exact physical
 store/owner locators. Effect-written locators must close their account-home fence before paging; each locator

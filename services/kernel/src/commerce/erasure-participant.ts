@@ -1,6 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
+import { withConnection } from '../database/pool.ts';
+import { readHistoryOwnerCoverage } from '../history/receiving.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import account from './erasure-account.sql';
@@ -19,9 +21,8 @@ export const FINANCIAL_ERASURE_BLOCKER =
   'delegation/operator historical locators; Stripe Session/PaymentIntent/Charge/Product/refund custody and backup expiry unresolved';
 
 export const COMMERCE_CUSTODY_BLOCKER =
-  'UNKNOWN: Accounts shared-history owner-home locators/minimizers for commerce admission/apply receipts, ' +
-  'outbox, write-basis, DBOS and operational intents, acting-human/operator attribution; ' +
-  'Commerce foreign seller/creator copy locators and sealed effect-written coverage are not delivered';
+  'UNKNOWN: Commerce command/outbox/durable producer conversion and receiving custody; ' +
+  'write-basis/operational intent minimizers; foreign seller/creator locators and sealed coverage';
 
 /** One committed, bounded page. No initiator, provider call, callback proof or fabricated Actor. */
 export async function advanceCommerceErasure(pool: Pool, accountId: string): Promise<'none' | 'more' | 'pending'> {
@@ -68,6 +69,47 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
       };
     },
   );
+  // Local cleanup commits and releases its home before asking the real receiving
+  // runtime. Its registry/progress gaps are evidence of unavailability, never none.
+  if (result.value === 'pending') {
+    const barrier = await withConnection(pool, (client) => obligation.run(client, key));
+    if (!barrier || barrier.version !== 1)
+      throw new Error('Commerce erasure requires the committed native version 1 tombstone');
+    const coverage = await readHistoryOwnerCoverage(
+      { pool },
+      { accountId, accountRoute: route, version: barrier.version, at: barrier.at },
+      'commerce',
+      { deadline: Date.now() + 5_000 },
+    );
+    // Even complete shared coverage would not discharge Commerce's foreign
+    // financial-role inventory or its undecided lawful field/expiry policy.
+    const blocker =
+      COMMERCE_CUSTODY_BLOCKER +
+      (coverage.state === 'pending' ? `; shared-history: ${coverage.gaps.join(',')}` : '');
+    await runCommand(
+      pool,
+      {
+        partition: partitionOf(route),
+        basis: {
+          actorAccountId: '00000000-0000-8000-8000-000000000001',
+          clientId: 'internal-commerce-erasure',
+          requestedBy: null,
+        },
+      },
+      async (tx) => {
+        const current = await account.run(tx, key);
+        if (current?.state !== 'deleted') throw new Error('Commerce erasure requires the committed native tombstone');
+        const progress = await read.run(tx, key);
+        if (!progress) throw new Error('Commerce erasure progress unavailable');
+        if (progress.hadData || progress.phase !== 'pending' || progress.blocker === blocker) return noEffect(null);
+        await checkpoint.run(tx, { ...key, cursor: progress.cursor, phase: 'pending', blocker });
+        return {
+          value: null,
+          events: [{ type: 'com.rezics.access.account-updated.v1', subject: accountId, data: { accountId } }],
+        };
+      },
+    );
+  }
   return result.value;
 }
 
