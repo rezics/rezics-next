@@ -150,7 +150,7 @@ test('real membership step wrapper keeps failure, compensation, denial and retry
     );
     expect(calls).toEqual([]);
     expect(log.mock.calls.at(-1)).toEqual([
-      [{ code: 'membership_reserve_failed', operation: 'membership.reserve', severity: 'error' }],
+      { code: 'membership_reserve_failed', operation: 'membership.reserve', severity: 'error' },
     ]);
   } finally {
     step.mockRestore();
