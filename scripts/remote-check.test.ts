@@ -2911,7 +2911,7 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
   for (const event of rsyncEvents) {
     expect(event.rsh as string).toContain('ControlMaster=auto');
     expect(event.rsh as string).toContain('ControlPersist=10m');
-    expect(event.rsh as string).toContain(selectedControlPath);
+    expect(event.rsh as string).toContain(selectedControlPath!);
   }
 
   const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
@@ -3406,13 +3406,9 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
       ['sh', '-c', 'echo blocked-single'],
     );
     singles.push(blockedSingle);
-    // A head that cannot fit yields residual capacity under the bounded opportunity policy.
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single')),
-    );
-    expect(await blockedSingle.child.exited).toBe(0);
+    await waitFor(() => existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')));
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
-      true,
+      false,
     );
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
       false,
@@ -3429,6 +3425,11 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
     expect(events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script)))).toHaveLength(
       4,
     );
+    // Once the multi-slot command is terminal its slots are free, independently of returns/cleanup.
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single')),
+    );
+    expect(await blockedSingle.child.exited).toBe(0);
     expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
       true,
     );

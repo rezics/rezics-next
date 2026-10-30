@@ -665,19 +665,20 @@ export async function runWorkerCheck(
   const checkout = mainCheckout(root);
   let ledger: CheckLedgerEntry | undefined;
   const beginLedger = (host: string, slotWaitSeconds = 0): void => {
+    const revision = (() => {
+      try {
+        return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+      } catch {
+        return undefined;
+      }
+    })();
     ledger = {
       runId: randomUUID(),
       ...(logicalCheckId ? { logicalCheckId } : {}),
       rerunNumber,
       host,
       argv: [...argv],
-      revision: (() => {
-        try {
-          return spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
-        } catch {
-          return undefined;
-        }
-      })(),
+      ...(revision === undefined ? {} : { revision }),
       start: new Date().toISOString(),
       terminalStatus: 'running',
       slotWaitSeconds,
@@ -1224,7 +1225,7 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
     stdio: ['ignore', descriptor, descriptor],
   });
   closeSync(descriptor);
-  record.runnerPid = child.pid;
+  if (child.pid !== undefined) record.runnerPid = child.pid;
   record.runnerHost = hostname();
   writeRecord(record);
   child.once('error', (error) => {
@@ -1392,7 +1393,7 @@ async function rerunInterruptedCheck(
   const rerunLog = logPath(root);
   record.reruns = 1;
   record.log = relative(root, rerunLog);
-  record.runnerPid = undefined;
+  delete record.runnerPid;
   record.runnerHost = hostname();
   record.infrastructureFailure = `worker-check: infrastructure failure (${reason}) on ${host}; rerunning once; old log ${oldLog}`;
   writeRecord(record);
@@ -1404,7 +1405,7 @@ async function rerunInterruptedCheck(
     stdio: ['ignore', descriptor, descriptor],
   });
   closeSync(descriptor);
-  record.runnerPid = child.pid;
+  if (child.pid !== undefined) record.runnerPid = child.pid;
   writeRecord(record);
   child.once('error', (error) => {
     record.status = 'finished';
