@@ -37,7 +37,8 @@ test('writer requires its native allocation alias and rejects legacy, ambiguous 
 test('physical allocation installs a new write alias atomically on every creation attempt', async () => {
   const aliases: string[] = [];
   const search: OpenSearch = {
-    async request<T>(method, path, body) {
+    async request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, body] = args;
       expect(method).toBe('PUT');
       expect(path).toBe(`/${index}`);
       const allocation = body as { aliases: Record<string, unknown>; mappings: unknown };
@@ -60,7 +61,7 @@ test('physical allocation installs a new write alias atomically on every creatio
 
 test('guarded bulk requires its allocation alias while validating the physical receipt and all shards', async () => {
   const search: OpenSearch = {
-    async bulk<T>(lines, options) {
+    async bulk<T>(lines: readonly unknown[], options?: Parameters<OpenSearch['bulk']>[1]) {
       expect(lines).toEqual([{ delete: { _index: alias, _id: 'key', version: 2, version_type: 'external' } }]);
       expect(options?.query).toEqual({ require_alias: true, wait_for_active_shards: 'all', refresh: 'wait_for' });
       return {
