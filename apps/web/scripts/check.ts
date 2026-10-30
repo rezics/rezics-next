@@ -548,6 +548,18 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
+  if (args[0] === '--personal-host') {
+    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --personal-host');
+    // Explicit integration gate: keep ordinary host discovery/placement and its
+    // parent ownership rules unchanged. The frozen suite owns each factory.
+    await runCommand(
+      'personal host outcomes',
+      'bun',
+      ['test', './tests/native/web-personal-driver.host.test.ts'],
+      process.env,
+    );
+    return;
+  }
   if (args[0] === '--auth-binding-host') {
     if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --auth-binding-host');
     await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env);

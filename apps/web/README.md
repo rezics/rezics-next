@@ -30,6 +30,43 @@ Tests needing the host network, such as a container's published port, are named 
 The host command routes `auth-binding.host.test.ts` through Auth's existing placed database lane. From the repository root,
 run only that fixture with `bun apps/web/scripts/check.ts --auth-binding-host`.
 
+The original personal outcome suite binds to
+`tests/native/web-personal-driver.ts#createWebPersonalDriver`. Its explicit later integration gate is
+`bun apps/web/scripts/check.ts --personal-host`, which loads
+`tests/native/web-personal-driver.host.test.ts` and the unchanged `specs/web-personal-outcomes.test.ts`.
+The wrapper retains all 23 cases, each independent `beforeEach` factory, the original 180-second case bounds,
+and per-case owned cleanup. Ordinary host discovery and Auth database placement are unchanged.
+For the original root command, set `WEB_PERSONAL_DRIVER` to the absolute path of that driver and run
+`bun test specs/web-personal-outcomes.test.ts` in the normal native integration environment.
+
+The adapter composes `startNativeWebStack`, `startAuthStack`, the existing Auth TLS/WebAuthn setup,
+the integrated discussion fixture and the verified Stripe provider fixture. Browser contexts begin with no login;
+served forms create their cookies. Setup uses native HTTP, profile choices come from the activated bundled release,
+and bounded read-only database snapshots observe personal facts independently. The stack's optional Access observer
+records actual authentication and permission results on its installed Access object, preserving its registrations;
+direct fixture requests are marked and excluded from BFF transport observations. The production worker owns queued
+work; settlement only waits for this fixture's delivered orders. No exposure group is opened by this adapter.
+
+This binding is not a claim that the original outcomes pass. Current source gaps stay visible in native problem
+responses or missing rendered controls: the proposed `rezics:characterCount` is not in the bundled release;
+advanced member filters and mounted Zone membership/page execution need their genuine native owner ports;
+the existing Book Zone starter supplies no invented mounted-members renderer. The original character-only fixture
+still requests its distinct count and never substitutes a word count. The shell exposes no rendered account UUID;
+the subject slot exposes no copy count or scalar progress summary; the progress form/native intent has no note
+contract; there is no Web `/security` return route or emitted Auth return link to that target; sign-out currently
+registers only the Web root return. The driver does not navigate back to repair either lost security/sign-out return.
+Commerce has a rendered receipt heading but no financial receipt ID/download link or independent visible entitlement
+marker. Those observations remain absent rather than borrowing a command receipt or inferring a grant from payment.
+Unavailable controls fail with their served URL/body and any native HTTP refusal. Frozen expectations remain intact.
+
+Fixture wire decisions follow `packages/definitions/src/released-discovery-fixtures.md` and
+`services/kernel/test/support/released-discovery.ts`: signed integer quantities, expanded native minute units,
+source-labelled controlled assertions, monolingual ingredients and licensed authored instruction documents.
+The protected discussion helper runs on the same stack with the moderator as setup owner and Alice as an ordinary
+member, so the ban does not target a protected owner. No reference-project source is used for this binding.
+Minimal verification typechecks the Web workspace only; native, browser, database and outcome proof is deferred
+to integration.
+
 `bun run check` runs each non-host test file in its own `bun test` process. Browser and dev-server tests run through
 `scripts/isolated.ts`, which takes a host-wide stack slot for each file. Their separate pool has six lanes by default,
 matching the check host's memory limit; set `WEB_BROWSER_CHECK_CONCURRENCY` to change that upper bound. The host lease

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Access, AccessConfig } from '../../../../services/kernel/src/request/access.ts';
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { request as httpsRequest } from 'node:https';
@@ -30,8 +32,12 @@ export type NativeKernelRequest = {
   authorization: string | null;
   idempotencyKey: string | null;
   body?: string;
+  /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
+  fixtureRequest?: boolean;
   failure?: { status: number; body: string };
   authorizationDecision?: { status: number; body: string };
+  /** Observed at the installed production Access methods, never inferred from HTTP success. */
+  access?: { actorId: string | null; authenticated: boolean; authorized: boolean };
 };
 export type NativeKernelFailureInjection = {
   method: string;
@@ -44,6 +50,8 @@ export type NativeAccountOperationActor = {
   scopes: readonly string[];
 };
 export type NativeWebStackOptions = {
+  /** Observe actual Access results for the frozen personal boundary contract. */
+  observePersonalAccess?: boolean;
   /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
   writeRateOverrides?: string;
   /** Enable the production Commerce composition against an owned Stripe API fixture. */
@@ -61,6 +69,9 @@ export type NativeWebStackOptions = {
   authClockOffsetSeconds?: number;
 };
 export type NativeWebStack = {
+  /** Read-only observation clients must use these owned database addresses. */
+  databaseUrl: string;
+  authDatabaseUrl: string;
   kernelOrigin: string;
   authIssuer: string;
   /** The canonical issuer advertised by discovery, before the optional proxy listener. */
@@ -695,6 +706,60 @@ async function startStack(): Promise<
     const { createSearchService } = await import('../../../../services/kernel/src/search/service.ts');
     const { subjectSource } = await import('../../../../services/kernel/src/semantic/search-source.ts');
     if (searchConfig) search = createOpenSearch(searchConfig.url);
+    const accessRequest = new AsyncLocalStorage<NativeKernelRequest>();
+    const observeAccess = (base: Access): Access => {
+      if (process.env.NATIVE_WEB_OBSERVE_PERSONAL_ACCESS !== '1') return base;
+      const overrides: Partial<Access> = {};
+      // Decorate the installed object, keeping all root registrations and ports.
+      // A derived adapter would bypass observation of root-only read decisions.
+      // No authority input, decision, clock or registration changes here.
+      for (const name of [
+        'authenticate',
+        'prepare',
+        'preparePage',
+        'authorize',
+        'authorizePage',
+        'authorizeExplicit',
+        'prepareReadDecisions',
+        'replayAuthorization',
+      ] as const) {
+        const operation = base[name];
+        if (!operation) continue;
+        Object.assign(overrides, {
+          [name]: (...args: unknown[]) => {
+            const observed = accessRequest.getStore();
+            const record = (value: unknown): unknown => {
+              if (!observed) return value;
+              const proof = (observed.access ??= { actorId: null, authenticated: false, authorized: false });
+              if (name === 'authenticate') {
+                const actor = value as { accountId: string };
+                proof.actorId = actor.accountId;
+                proof.authenticated = true;
+              }
+              if (name === 'authorize' || name === 'authorizePage') proof.authorized ||= value === true;
+              if (name === 'authorizeExplicit') proof.authorized ||= (value as { allowed: boolean }).allowed;
+              if (name === 'prepareReadDecisions') {
+                const decisions = value as {
+                  decide: (...input: unknown[]) => Promise<Record<string, { allowed: boolean }>>;
+                };
+                return {
+                  ...decisions,
+                  async decide(...input: unknown[]) {
+                    const result = await decisions.decide(...input);
+                    proof.authorized ||= Object.values(result).some((decision) => decision.allowed);
+                    return result;
+                  },
+                };
+              }
+              return value;
+            };
+            const result = Reflect.apply(operation, base, args);
+            return result instanceof Promise ? result.then(record) : record(result);
+          },
+        });
+      }
+      return Object.assign(base, overrides);
+    };
     let kernel: ReturnType<typeof createKernel> | undefined;
     reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
@@ -706,8 +771,18 @@ async function startStack(): Promise<
           commerceWorkClient = createWorkClient(databaseUrl);
           void commerceWorkClient.catch(() => {});
         }
+        const factory = dependencies.access;
+        const observedDependencies = factory
+          ? {
+              ...dependencies,
+              access:
+                typeof factory === 'function'
+                  ? (config: AccessConfig) => observeAccess(factory(config))
+                  : observeAccess(factory),
+            }
+          : dependencies;
         kernel = createKernel({
-          ...dependencies,
+          ...observedDependencies,
           ...(commerce
             ? {
                 commerce: {
@@ -794,6 +869,7 @@ async function startStack(): Promise<
           url: `${url.pathname}${url.search}`,
           authorization: request.headers.get('authorization'),
           idempotencyKey: request.headers.get('idempotency-key'),
+          fixtureRequest: request.headers.get('x-native-fixture-request') === '1',
           ...(request.method === 'POST' && url.pathname === '/v1/copies' ? { body: await request.clone().text() } : {}),
         };
         requests.push(observed);
@@ -809,7 +885,7 @@ async function startStack(): Promise<
           });
         }
         const handling = (async () => {
-          const response = await sourceApp.handle(request);
+          const response = await accessRequest.run(observed, () => sourceApp.handle(request));
           if (!response.ok)
             observed.failure = {
               status: response.status,
@@ -919,6 +995,8 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: production web Worker ready');
 
     return {
+      databaseUrl: driver.fixtures.runtime.databaseUrl,
+      authDatabaseUrl: auth.database.options.connectionString!,
       kernelOrigin,
       authIssuer: authServer.url.origin,
       issuerOrigin: auth.issuer,
@@ -1105,6 +1183,7 @@ type HostReply =
         issuerOrigin: string;
         web: string;
         databaseUrl: string;
+        authDatabaseUrl: string;
       };
       observation: Observation;
     }
@@ -1186,6 +1265,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     ...process.env,
     NATIVE_WEB_STACK_HOST: '1',
     NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
+    NATIVE_WEB_OBSERVE_PERSONAL_ACCESS: options.observePersonalAccess ? '1' : '0',
     ...(options.commerce
       ? {
           STRIPE_SECRET_KEY: 'sk_test_native_purchases',
@@ -1327,6 +1407,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     issuerOrigin: string;
     web: string;
     databaseUrl: string;
+    authDatabaseUrl: string;
   }) => void;
   let failed!: (error: Error) => void;
   const startup = new Promise<{
@@ -1335,6 +1416,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     issuerOrigin: string;
     web: string;
     databaseUrl: string;
+    authDatabaseUrl: string;
   }>((resolve, reject) => {
     ready = resolve;
     failed = reject;
@@ -1400,7 +1482,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
     });
   };
   try {
-    const { kernelOrigin, authIssuer, issuerOrigin, web, databaseUrl } = await startup;
+    const { kernelOrigin, authIssuer, issuerOrigin, web, databaseUrl, authDatabaseUrl } = await startup;
     lifecycle.assertOpen('finish native web stack startup');
     // Retain the existing fixture's observable setup environment. The host has
     // its own environment, including Reylo config and pool timeout overrides.
@@ -1432,6 +1514,8 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
       return response;
     };
     const api: NativeWebStack = {
+      databaseUrl,
+      authDatabaseUrl,
       kernelOrigin,
       authIssuer,
       issuerOrigin,
@@ -1512,6 +1596,7 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         const url = new URL(path, kernelOrigin);
         if (url.origin !== kernelOrigin) throw new Error('Kernel request must use the owned listener');
         const headers = await authenticatedHeaders(init.headers, persona);
+        headers.set('x-native-fixture-request', '1');
         return observe(await fetch(url, { ...init, headers, redirect: 'manual' }));
       },
       async request(url, persona, suppliedHeaders) {
@@ -1661,7 +1746,8 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         authIssuer: stack.authIssuer,
         issuerOrigin: stack.issuerOrigin,
         web: stack.web,
-        databaseUrl: process.env.DATABASE_URL!,
+        databaseUrl: stack.databaseUrl,
+        authDatabaseUrl: stack.authDatabaseUrl,
       },
       observation: observation(),
     } satisfies HostReply);
