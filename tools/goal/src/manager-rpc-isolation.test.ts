@@ -60,7 +60,11 @@ function hostFixture(extra: NodeJS.ProcessEnv = {}) {
     ...extra,
   };
   const command = async (withEnv: NodeJS.ProcessEnv, ...args: string[]) => {
-    const child = Bun.spawn([process.execPath, runtimeScript, ...args], { env: withEnv, stdout: 'pipe', stderr: 'pipe' });
+    const child = Bun.spawn([process.execPath, runtimeScript, ...args], {
+      env: withEnv,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
     const [code, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
@@ -158,7 +162,15 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     writeFileSync(stallFile, JSON.stringify({ method: 'thread/goal/set', threadId: 'thread-1' }));
     stoppingA = f.command(f.env, 'manager', 'stop', 'manager-a');
     await waitFor(
-      () => f.rpc().some((request) => request.method === 'thread/goal/set' && request.params.threadId === 'thread-1' && request.params.status === 'paused'),
+      () =>
+        f
+          .rpc()
+          .some(
+            (request) =>
+              request.method === 'thread/goal/set' &&
+              request.params.threadId === 'thread-1' &&
+              request.params.status === 'paused',
+          ),
       'manager A pause to reach the stalled provider',
     );
 
@@ -198,10 +210,7 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
     writeFileSync(blockerBrief, scopedBrief);
     const blocker = tasks.dispatch(blockerBrief);
     const blockedBrief = join(h.settings.stateDirectory, 'blocked.md');
-    writeFileSync(
-      blockedBrief,
-      scopedBrief.replace('waiting: []', `waiting: []\nafter: ["${blocker.id}"]`),
-    );
+    writeFileSync(blockedBrief, scopedBrief.replace('waiting: []', `waiting: []\nafter: ["${blocker.id}"]`));
     const oldManager = process.env.GOAL_MANAGER;
     const output: string[] = [];
     const oldLog = console.log;
@@ -240,7 +249,11 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
       const db = openDb(join(f.path, 'state.sqlite'));
       try {
         const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('manager-a') as { state: string };
-        const state = JSON.parse(row.state) as { activeTurnId: string | null; turnsWithoutDecision: number; decision: boolean };
+        const state = JSON.parse(row.state) as {
+          activeTurnId: string | null;
+          turnsWithoutDecision: number;
+          decision: boolean;
+        };
         return state.activeTurnId === null && state.turnsWithoutDecision === 0 && state.decision;
       } finally {
         db.close();
@@ -249,7 +262,9 @@ test('durable decisions and public inbox and dispatch commands bypass a stalled 
 
     const verifyDb = openDb(join(f.path, 'state.sqlite'));
     try {
-      const decisions = verifyDb.query('SELECT thread_id, turn_id FROM manager_turn_decisions WHERE manager = ?').all('manager-a') as { thread_id: string | null; turn_id: string | null }[];
+      const decisions = verifyDb
+        .query('SELECT thread_id, turn_id FROM manager_turn_decisions WHERE manager = ?')
+        .all('manager-a') as { thread_id: string | null; turn_id: string | null }[];
       expect(decisions).toEqual([{ thread_id: 'thread-1', turn_id: 'turn-1' }]);
       const verifyStore = new WorkerStore(verifyDb);
       expect(verifyStore.taskIds()).toHaveLength(2);
@@ -289,7 +304,9 @@ test('the manager socket accepts another manager while recovery waits on a provi
     recovering = startHost({ ...f.env, FAKE_RPC_STALL_FILE: stallFile });
     await Promise.race([
       recovering.ready,
-      delay(800).then(() => { throw new Error('host waited for manager recovery before listening'); }),
+      delay(800).then(() => {
+        throw new Error('host waited for manager recovery before listening');
+      }),
     ]);
     await waitFor(
       () => f.rpc().some((request) => request.method === 'thread/resume' && request.params.threadId === 'thread-1'),
@@ -332,7 +349,9 @@ test('the public completion command reports the completed verification result', 
     try {
       const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('manager-a') as { state: string };
       expect(JSON.parse(row.state).status).toBe('running');
-      expect(new SqliteManagerInbox(db, f.path).pending('manager-a').map((entry) => entry.event.kind)).toEqual(['goal-unmet']);
+      expect(new SqliteManagerInbox(db, f.path).pending('manager-a').map((entry) => entry.event.kind)).toEqual([
+        'goal-unmet',
+      ]);
     } finally {
       db.close();
     }
@@ -384,7 +403,12 @@ test('manager host requests retry absent sockets only during setup and clean up 
       timeoutError = error;
     }
     expect((timeoutError as Error).message).toBe('Manager host request timed out after 80ms');
-    await Promise.race([timeoutClientClosed, delay(500).then(() => { throw new Error('timed-out client stayed open'); })]);
+    await Promise.race([
+      timeoutClientClosed,
+      delay(500).then(() => {
+        throw new Error('timed-out client stayed open');
+      }),
+    ]);
     expect(timeoutRequests).toBe(1);
     await closeServer(timeoutServer);
     timeoutServer = undefined;
@@ -460,7 +484,9 @@ test('a client disconnect during a mutating host request never replays the mutat
     await waitFor(() => {
       const db = openDb(join(f.path, 'state.sqlite'));
       try {
-        const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('uncertain-manager') as { state: string } | null;
+        const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get('uncertain-manager') as {
+          state: string;
+        } | null;
         return Boolean(row && JSON.parse(row.state).status === 'running');
       } finally {
         db.close();

@@ -78,12 +78,17 @@ function respond(message: any): void {
 
 function accept(message: any): void {
   const requiredStoppedPid = Number(process.env.FAKE_APP_SERVER_MUST_STOP_PID);
-  const oldProcessAlive = Number.isSafeInteger(requiredStoppedPid) && requiredStoppedPid > 0
-    ? processIdentity(requiredStoppedPid) !== null
-    : undefined;
-  appendFileSync(log, `${JSON.stringify({ ...message,
-    ...(message.method === 'thread/resume' && oldProcessAlive !== undefined ? { oldProcessAlive } : {}),
-  })}\n`);
+  const oldProcessAlive =
+    Number.isSafeInteger(requiredStoppedPid) && requiredStoppedPid > 0
+      ? processIdentity(requiredStoppedPid) !== null
+      : undefined;
+  appendFileSync(
+    log,
+    `${JSON.stringify({
+      ...message,
+      ...(message.method === 'thread/resume' && oldProcessAlive !== undefined ? { oldProcessAlive } : {}),
+    })}\n`,
+  );
   if (message.id === undefined) return;
   if (stalled(message.method, message.params)) {
     delayed.set(message.id, message);
@@ -105,4 +110,4 @@ setInterval(() => {
   }
 }, 10).unref();
 
-createInterface({ input: process.stdin }).on('line', line => accept(JSON.parse(line)));
+createInterface({ input: process.stdin }).on('line', (line) => accept(JSON.parse(line)));

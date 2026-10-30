@@ -87,21 +87,26 @@ const managerDecisionMigration = {
 export function recordManagerDecision(db: Database, id: string, at = Date.now()): void {
   migrate(db, [managerDecisionMigration]);
   db.transaction(() => {
-    const hasSessions = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get();
+    const hasSessions = db
+      .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'")
+      .get();
     const row = hasSessions
       ? (db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null)
       : null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
     const state = row ? (JSON.parse(row.state) as ManagerState) : null;
     const threadId = state?.threadId ?? null;
-    db.query('INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at) VALUES (?, ?, ?, ?)')
-      .run(id, threadId, threadId ? (state?.activeTurnId ?? null) : null, at);
+    db.query(
+      'INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at) VALUES (?, ?, ?, ?)',
+    ).run(id, threadId, threadId ? (state?.activeTurnId ?? null) : null, at);
   }).immediate();
 }
 
 function managerHasDecision(db: Database, id: string, threadId: string, turnId: string): boolean {
   return Boolean(
-    db.query('SELECT 1 FROM manager_turn_decisions WHERE manager = ? AND thread_id = ? AND turn_id = ?').get(id, threadId, turnId),
+    db
+      .query('SELECT 1 FROM manager_turn_decisions WHERE manager = ? AND thread_id = ? AND turn_id = ?')
+      .get(id, threadId, turnId),
   );
 }
 
@@ -144,18 +149,29 @@ export class ManagerSessions {
     const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
     const state = JSON.parse(row.state) as ManagerState;
-    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, id, state.threadId, state.activeTurnId)) state.decision = true;
+    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, id, state.threadId, state.activeTurnId))
+      state.decision = true;
     return state;
   }
   list(): ManagerState[] {
     return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map((row) => {
       const state = JSON.parse(row.state) as ManagerState;
-      if (state.threadId && state.activeTurnId && managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)) state.decision = true;
+      if (
+        state.threadId &&
+        state.activeTurnId &&
+        managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)
+      )
+        state.decision = true;
       return state;
     });
   }
   private save(state: ManagerState): void {
-    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)) state.decision = true;
+    if (
+      state.threadId &&
+      state.activeTurnId &&
+      managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)
+    )
+      state.decision = true;
     this.db
       .query(
         'INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',
@@ -566,25 +582,31 @@ export class ManagerSessions {
       state.countedTurn = turn;
     }
     state.activeTurnId = turn;
-    this.db.transaction(() => {
-      this.db.query(`INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at)
+    this.db
+      .transaction(() => {
+        this.db
+          .query(`INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at)
         SELECT manager, COALESCE(thread_id, ?), ?, decided_at FROM manager_turn_decisions
         WHERE manager = ? AND turn_id IS NULL AND (thread_id = ? OR thread_id IS NULL)`)
-        .run(state.threadId, turn, state.id, state.threadId);
-      this.db.query(`DELETE FROM manager_turn_decisions WHERE manager = ? AND turn_id IS NULL
+          .run(state.threadId, turn, state.id, state.threadId);
+        this.db
+          .query(`DELETE FROM manager_turn_decisions WHERE manager = ? AND turn_id IS NULL
         AND (thread_id = ? OR thread_id IS NULL)`)
-        .run(state.id, state.threadId);
-      this.save(state);
-    }).immediate();
+          .run(state.id, state.threadId);
+        this.save(state);
+      })
+      .immediate();
   }
   private turnEnded(state: ManagerState, turn: string): void {
-    this.db.transaction(() => {
-      if (state.activeTurnId !== turn) return;
-      if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
-      if (!state.decision) state.turnsWithoutDecision++;
-      state.activeTurnId = null;
-      this.save(state);
-    }).immediate();
+    this.db
+      .transaction(() => {
+        if (state.activeTurnId !== turn) return;
+        if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
+        if (!state.decision) state.turnsWithoutDecision++;
+        state.activeTurnId = null;
+        this.save(state);
+      })
+      .immediate();
   }
   async noteCommand(id: string): Promise<void> {
     this.get(id);
