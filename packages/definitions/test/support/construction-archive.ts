@@ -171,16 +171,17 @@ function installArchiveGuard() {
   Bun.plugin({
     name: 'construction-archive-boundary',
     setup(build) {
-      build.onLoad({ filter: /\.(?:[cm]?[jt]s|json)$/ }, ({ path }) => {
-        const actual = realpathSync(path);
+      // Check custody during resolution, leaving historical onLoad hooks free
+      // to supply their verified original bytes at the same module paths.
+      build.onResolve({ filter: /.*/ }, ({ path, importer, resolveDir }) => {
+        const resolved = Bun.resolveSync(path, resolveDir || (importer ? dirname(importer) : process.cwd()));
+        if (!isAbsolute(resolved)) return { path: resolved };
+        const actual = realpathSync(resolved);
         if (!inside(root, actual) && !external.some((directory) => inside(directory, actual)))
           throw new Error(`Module escaped construction archive: ${path} -> ${actual}`);
         if (inside(root, actual))
           appendFileSync(join(root, 'loaded.jsonl'), `${JSON.stringify(relative(root, actual))}\n`);
-        return {
-          contents: readFileSync(actual),
-          loader: path.endsWith('.json') ? 'json' : /\.[cm]?ts$/.test(path) ? 'ts' : 'js',
-        };
+        return { path: actual };
       });
     },
   });

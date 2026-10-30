@@ -44,7 +44,8 @@
     {
       "path": "services/kernel/src/semantic/extensions.ts",
       "gitBlob": "e4b0ec6186f5dfd40e80a774426558fa6f8da9ce",
-      "sha256": "4b26524a52d3b387ea5dcc4231a3610b302e8b6511b74b88625e025a8a105244"
+      "sha256": "4b26524a52d3b387ea5dcc4231a3610b302e8b6511b74b88625e025a8a105244",
+      "snapshot": "packages/definitions/test/fixtures/extensions-historical-construction.source"
     },
     {
       "path": "services/kernel/src/semantic/definitions-activate.sql",

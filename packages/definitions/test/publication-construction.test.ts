@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '../src/bundled.ts';
 import { RELEASE_LIMITS, validateRelease } from '../src/index.ts';
 import { analyzePattern } from '../src/pattern-safety.ts';
+import historicalBundle from './fixtures/bundled-historical-construction.json';
 import {
   candidateAnalysisMax,
   constructionEvidence,
@@ -83,8 +84,10 @@ for (const member of ['bases', 'mappings', 'qualifiers']) {
 
 test('ordinary native outcomes retain catalogue, one-level facets and cheap limits before patterns', () => {
   const release = constructionFixture(64, 64);
-  for (const [key, value] of Object.entries(bundledRelease.types)) expect(release.types[key]).toEqual(value);
-  for (const [key, value] of Object.entries(bundledRelease.properties)) expect(release.properties[key]).toEqual(value);
+  for (const [key, value] of Object.entries(historicalBundle.types)) expect(release.types[key]).toEqual(value);
+  for (const [key, value] of Object.entries(historicalBundle.properties))
+    expect(release.properties[key]).toEqual(value);
+  expect(validateRelease(bundledRelease)).toEqual([]);
   expect(validateRelease(release)).toEqual([]);
   for (const [key, saved] of Object.entries(release.filters ?? {})) {
     if (!key.startsWith('construction')) continue;

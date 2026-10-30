@@ -95,8 +95,12 @@ export function mountHistoricalConstruction() {
   Bun.plugin({
     name: 'pinned-historical-construction',
     setup(build) {
+      // Retained dependencies stay separate from the three core module identities.
       build.onLoad(
-        { filter: /\/packages\/definitions\/(?:src\/library-profile\.ts|schema\/release\.json)$/ },
+        {
+          filter:
+            /\/(?:packages\/definitions\/(?:src\/library-profile\.ts|schema\/release\.json)|services\/kernel\/src\/semantic\/extensions\.ts)$/,
+        },
         ({ path }) => {
           const contents = pinned.get(path);
           if (contents === undefined) throw new Error(`Unexpected historical dependency: ${path}`);
