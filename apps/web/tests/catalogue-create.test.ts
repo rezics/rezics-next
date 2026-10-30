@@ -16,7 +16,7 @@ const draft = () =>
   ]);
 const command = (): CreateSubjectCommand => ({ item: draft().item, key: crypto.randomUUID() });
 
-function sessionRequest(csrf = 'current-csrf') {
+function sessionRequest(csrf = 'AAAAAAAAAAAAAAAAAAAAAA') {
   return new Request('https://site.invalid/api', {
     method: 'POST',
     headers: {
@@ -39,7 +39,7 @@ const sessionEnv = {
         status: 'active',
         accessToken: 'server-only',
         subject: 'viewer',
-        csrfToken: 'current-csrf',
+        csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
       }),
     }),
   },
