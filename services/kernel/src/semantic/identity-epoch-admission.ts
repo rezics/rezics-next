@@ -180,7 +180,7 @@ export async function prepareIdentityEpochAdmission(
     ).rows;
     if (locked.some((r) => r.pending_job))
       throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-    if (!state || state.pending_job) throw unavailable();
+    if (!state || state.pending_job || state.retained_preparation) throw unavailable();
     if (
       locked.some((r) => !groups.some((g) => g.generation === r.generation && BigInt(g.version) === BigInt(r.version)))
     )

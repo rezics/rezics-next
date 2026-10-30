@@ -291,7 +291,7 @@ export const identityEpochStore: IdentityEpochStore = {
       throw unavailable();
     if (locked.some((g) => g.pending_job))
       throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-    if (!state || state.pending_job)
+    if (!state || state.pending_job || state.retained_preparation)
       throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native identity home capacity is occupied');
     const job = { jobId: newId(command.partition * 16), epoch: BigInt(state.allocated_epoch) + 1n };
     const scope = createHash('sha256')

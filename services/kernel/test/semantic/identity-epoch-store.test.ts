@@ -516,8 +516,15 @@ test('ordered PREPARING recovery and cancellation keep P=1 local, including unce
     unrelated,
   ]);
   // Cancellation closes acquired AND never-acquired homes without taking another slot.
+  const closingPeer = await create('Closing home new group', 0x6320);
   await cancelIdentityEpochAdmission(f.pool, high.job);
-  for (let i = 0; i < 3; i++) await stepIdentityEpochAdmission(f.pool, high.job);
+  await stepIdentityEpochAdmission(f.pool, high.job);
+  // Job-home history remains CANCELLING until every uncertain home has real close custody.
+  // Its unique physical reservation refuses a new local job through the public error contract.
+  const closingSnapshot = await storeSnapshot([highA, closingPeer]);
+  await expect(prepare(closingPeer, highA)).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
+  expect(await storeSnapshot([highA, closingPeer])).toEqual(closingSnapshot);
+  for (let i = 0; i < 2; i++) await stepIdentityEpochAdmission(f.pool, high.job);
   expect((await store.readJob(f.pool, high.job))?.state).toBe('cancelled');
   expect((await store.readJob(f.pool, occupied))?.state).toBe('pending');
   expect(await store.readMapping(f.pool, highA)).toMatchObject({ state: 'mapped', terminal: highA });
