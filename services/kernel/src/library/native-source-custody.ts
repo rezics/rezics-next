@@ -243,11 +243,12 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
     const admitted = work.reserve(footprint(query.sql, args, rows, points, keys));
     admitted.dispatch();
     try {
-      const result = await client.query<R>({
+      const config = {
         text: query.sql,
         values: args,
         query_timeout: Math.max(1, deadline - Date.now()),
-      });
+      };
+      const result = await client.query<R>(config);
       admitted.settle({ emptySeeks: keys && result.rows.length === 0 ? 1 : 0 });
       return result.rows;
     } catch (error) {
