@@ -110,7 +110,9 @@ async function createIndex(
 ): Promise<void> {
   const index = subjectIndexName(prefix, generation);
   try {
-    await search.request('PUT', `/${index}`, body);
+    // Allocated atomically with the physical index; never recreate this alias on another incarnation.
+    const writeAlias = `${index}-writer-${crypto.randomUUID().replaceAll('-', '')}`;
+    await search.request('PUT', `/${index}`, { ...body, aliases: { [writeAlias]: { is_write_index: true } } });
   } catch (error) {
     if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') return;
     throw error;

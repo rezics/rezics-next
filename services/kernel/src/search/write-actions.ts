@@ -190,10 +190,10 @@ export async function writeIndexActions<Document extends SearchDocument>(
   search: OpenSearch,
   index: string,
   actions: readonly IndexAction<Document>[],
-  options: { rejectConflicts?: boolean } = {},
+  options: { rejectConflicts?: boolean; writeAlias?: string } = {},
 ): Promise<void> {
-  const response = await search.bulk<BulkResponse>(bulkLines(index, actions), {
-    query: { refresh: 'wait_for' },
+  const response = await search.bulk<BulkResponse>(bulkLines(options.writeAlias ?? index, actions), {
+    query: { ...(options.writeAlias ? { require_alias: true, wait_for_active_shards: 'all' } : {}), refresh: 'wait_for' },
   });
   const hasConflict = validateBulkResponse(response, index, actions);
 

@@ -1,86 +1,94 @@
 # Search identity writer custody
 
-[The native identity contract](../semantic/identity-epoch-contract.md) owns publication. This module delivers
-ordinary writer enrollment and a native structural close. **Canonical participant completion remains unavailable.**
-No Search step/ACK, Library ACK, prepared coverage or whole-identity publication is manufactured here.
+[The native identity contract](../semantic/identity-epoch-contract.md) owns publication. Search owns the sole
+ordinary writer guard in `writer-guard.ts`. Canonical participant completion remains unavailable until the actual
+Semantic support and receiving producers deliver their Search bindings. No Search or Library ACK is manufactured.
 
-## Callables and composition
+## Closed callables
 
-`identity-epoch-participant.ts` exports:
+`createSearchWriterGuard({pool,search,index,consumer,source,listing}): SearchWriterGuard` is trusted native
+composition. The runner installs it for each live or rebuilding Subject generation. The indexer's historical
+controlled-provider entry point remains for its existing provider-boundary acceptance; native runner/work writes
+use this guard. The separate public-filter privacy-reduction continuation keeps its own owner protocol.
 
-- `createSearchIdentityWriter({pool,search,index,source,listing}): SearchIdentityWriter`, whose
-  `write(partition,ids,obligation): Promise<void>` reads fresh Source and actual listing counts and performs the
-  existing normalized, external-versioned sink write. This is trusted ordinary projection composition. It accepts
-  no document, saved version, permission flag or engine callback. `startSearchIndexing` installs it for every live
-  generation, including rebuild generations. The lower-level indexer retains its existing controlled-provider
-  entry point; production runner writes go through this writer. The public-filter continuation remains separate.
-- `fenceSearchIdentityWriter(pool,{job,original,index,search}): Promise<SearchIdentityWriterFence>` installs the
-  source-home close under `admitHomeEffect`'s actual structural admission. Its result describes the local gate,
-  enrollment and settlement receipts with transaction ID **and** native component. `closed` means this operational
-  key rejects enrollment; it is not complete support, old-deployment handoff, permission or participant completion.
-- `createSearchIdentityEpochParticipant({search,prefix,routeKey}): IdentityEpochStep` has the exact adopted
-  `(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>` callable. It validates trusted deployment inputs
-  and refuses unknown, nonpending or mapping-incomplete native jobs before engine work. Even with mapping custody,
-  the missing owner boundary below keeps it unavailable. This is a prerequisite refusal, **not delivery of the
-  complete canonical participant**. No coordinator, Accounts caller or default identity worker is bound.
+The guard exposes these operations (the exact exported types live beside the factory):
 
-## Ordinary writer ordering
+- `write(partition,ids,obligation): Promise<void>` enrolls one through 100 raw unique original keys, then reads
+  fresh Source and actual Library listing counts. No saved document, permission bit or caller version is accepted.
+- `fenceOriginal(job,original): Promise<SearchIdentityWriterFence>` uses real structural `admitHomeEffect` and
+  serializes first absence with enrollment on the same native key. Its native gate, writer and settlement receipts
+  bind transaction ID, partition, owner epoch and component. The lower-level `fenceSearchIdentityWriter` export is
+  this same operation, with explicit trusted pool/index/search composition; it is not a second guard.
+- `closeGeneration(partition): Promise<SearchWriterBarrier>` irreversibly closes the home-local generation gate,
+  including first absence. It returns the retained token, consumer, physical name/UUID/allocation alias, physical
+  generation, fence/enrollment generations and exact native close receipt. It does not establish population.
+- `adoptGenerationPublicationBarrier({partition,token}): Promise<SearchWriterBarrier>` resolves that locator from
+  retained native state and verifies current owner, consumer, generation gate, actual physical UUID/alias and
+  indexed ordinary drain. The token is not a certificate, and caller diagnostic fields are never adopted.
+- `readRetainedCopies(locator,after)` pages at most 100 native operational key/copy rows in primary-key order.
+  The returned `next` is a single original or null. Exact last-visible and active enrollment native receipts and
+  source component remain available across later cancelled attempts. No Source body or support fact is mirrored.
+- `recoverInterrupted(locator,after)` examines at most 100 pending keys through a partition-leading partial index.
+  It revokes only still-enrolled attempts under the same locks as native dispatch. A delayed continuation then
+  loses its dispatch CAS before any mutation. Dispatched or ambiguous requests remain counted as uncertain.
 
-Enrollment commits before Source reads and releases its native home before Source, normalization or engine work.
-The Search schema contains only active operational keys `(partition,physical target,original)`, a random attempt
-token, native owner/transaction/component, actual physical UUID and an optional admitted structural close.
-There is no copied Source, identity membership, account fact, support registry or permission certificate.
+The publication producer must consume the adoption callable, close every relevant home, and retain/revalidate
+those native receipts with its complete Source/physical/prepared population evidence. `ordinary: drained` covers
+only guard admissions. `firstApply: unavailable` and `prepared: unavailable` explicitly prevent treating this
+partial integration as canonical completion, retained prepared closure or generation-publication permission.
+No method returns a ready Boolean or substitutes `readStatus` for native adoption.
 
-Enrollment and first-absent structural close use the same native unique key. An existing enrollment prevents a
-competing writer from reading a body; a close prevents subsequent enrollment. A close racing an enrolled writer
-retains that exact writer until settlement. The writer validates Source against both the captured event obligation
-and its enrollment component. Hidden, absent and redirected originals use the existing delete path. Counts come
-from the supplied owner listing Source, with its existing absence semantics.
+## Native ordering and non-resurrection
 
-The physical UUID is resolved from exact native settings before enrollment, before mutation and after the sink
-response. A different UUID or owner cannot overwrite an unresolved enrollment. The shared sink still validates
-exact operation/key/version and complete shard receipts with refresh visibility. A guarded 409 rejects; refresh
-alone is not a current native winner/source check.
+The existing Search schema holds operational writer keys and one consumer/incarnation gate per native home and
+physical name. Enrollment increments the native generation under that gate's lock. Close cannot race first
+absence. Native dispatch commits before the transport call, and recovery cannot revoke a dispatched attempt.
+Each home is released before Source or engine work; no connection spans external I/O.
 
-Failure before any mutation invocation releases enrollment in a separate native command. Once mutation is invoked,
-any transport, shard, conflict, incarnation or local-settlement uncertainty retains the enrollment. A crash after
-engine work cannot let a newer delete pass an unaccounted old positive, including after delete-version pruning.
-There is no lease expiry, force release, version synthesized from privacy state or permanent engine tombstone.
-Confirmed ordinary completion removes the operational row unless a structural close retains it and the exact
-settlement receipt. A lost local settlement response cannot resubmit a saved body: replay enters fresh Source
-reads only after native enrollment allows it. An unresolved engine response remains a barrier; a later GET or
-successful function return is not a drain certificate.
+Each newly created physical Subject index receives a fresh opaque write alias in the same engine creation request.
+The guard never installs or repairs an alias on an existing index. Missing legacy allocation metadata is unavailable.
+Guarded bulk uses that alias with `require_alias`, all active shards, external versions and refresh visibility,
+while validating the physical keyed receipt. A deleted name cannot be auto-created by a delayed guard request;
+a replacement creation has a different allocation alias. UUID/alias are checked before and after mutation, and
+an owner/incarnation mismatch cannot overwrite retained enrollment or copy custody.
 
-## Required owner boundary
+A guarded 409 rejects. Refresh alone is not native current-winner/source proof. Any lost transport/shard/UUID or
+local-settlement response after dispatch retains enrollment. No timeout, lease, GET of current hits or successful
+function return drains it. Quiescent uncertain dispatched work still requires the actual receiving recovery/handoff
+producer; this delivery does not claim that missing reconciliation. Native confirmed settlement retains the copy
+locator and visible native receipt; a later pre-dispatch cancellation preserves them. Copy minimization/reopening
+requires actual receiving custody and is deliberately unavailable here. Retained keys and closes are charged
+operational copies, not free history, identity membership or an alternate authority.
 
-The integrated `IdentityEpochStore` has no planned/accepted producer enrollment or effect-receiving methods.
-`SubjectSource.read` hides redirected originals, and `count` cannot enumerate original support or distinguish
-original privacy from terminal visibility under an admitted, unpublished mapping. The public-filter prepared
-registry retains encoded input arrays; those arrays cannot certify canonical support or first-apply closure.
+## Exact foreign delivery boundary
 
-The precise coowner input/output needed is: given **only the native admitted job reference and a bounded retained
-frontier**, resolve its immutable scope and supply current pre-publication original/terminal Source observations
-(independent original privacy, terminal suitability and source-account fencing), plus the real planned/accepted
-producer and OLD/NEW/first-apply handoff records with exact native receipts. The receiving producer must take those
-records into job/step/version/full-scope custody, preserve prior effects across pages, and expose bounded recovery
-for uncertain enrolled engine work. Search can then consume that bridge to cover physical/prepared incarnations,
-retain finite progress and reconcile its actual completion receipt. Missing code here is not an empty population.
-The current constructor therefore refuses instead of inventing those declarations, foreign-owner SQL or ACKs.
+`semantic/identity-source-support.ts:createIdentitySourceSupportReader` is absent in this checkout. Its owner must
+supply its closed `readPage` types with exactly the `PublicFilterSourceFactory` configuration. Search does not guess
+that declaration or derive support from `SubjectSource.read`, which omits redirected originals.
 
-Operational closed rows cannot be reclaimed/reopened until that receiving lifecycle has actual custody. Existing
-unregistered deployments, owner moves, retained prepared observations and ambiguous writer recovery remain part
-of that integration requirement. The new guard alone does not certify them. Publication still needs the real
-mapping, complete Search and ALL-Library native receipts through the unchanged Store.
+The delivered `semantic/identity-receiving-effects-types.ts:IdentityReceivingBinding.step` currently accepts only
+`library-private-follow-counts`. Search needs the actual planned/accepted-producer and OLD/NEW/first-apply/handoff
+bindings for `search-canonical-index`, including exact native source incarnation/generation/scope and retained
+receipts, plus bounded uncertain-writer reconciliation. The existing Library Source bridge is also absent. These
+owner inputs must provide complete original/terminal support and independent original privacy, terminal suitability
+and source-account fences at the pending mapping. Encoded public-filter prepared arrays cannot replace them.
 
-## Cost and evidence
+`createSearchIdentityEpochParticipant({search,prefix,routeKey}): IdentityEpochStep` preserves exactly
+`(pool,job: IdentityJobRef) => Promise<IdentityStepProgress>`. It validates trusted deployment inputs and reads the
+actual admitted job, rejecting unknown, nonpending and mapping-incomplete locators before engine work. It then
+refuses the missing owner evidence. No coordinator/default identity worker/Accounts binding is installed, no
+receipt claims completion, and unchanged Store publication still requires real mapping, Search and ALL-Library
+custody. Existing `subject-coverage-v1` storage is never consumed as support or an ACK.
 
-An ordinary chunk accepts at most 100 raw unique keys in one source home; the Source's existing 256-call ceiling
-is unchanged. Native enrollment and settlement are separate one-home commands with indexed key operations; neither
-holds a connection over Source or engine I/O. SQL input, rejected/conflicting keys, Source work, normalization,
-metadata, engine responses and native command/event overhead all remain chargeable under the owning budgets.
-The operational row is removed after confirmed completion; retained closes belong to the finite pending job and
-cannot be called free history. No identity-step allowance or measured nine-operation Cost result is claimed.
+## Cost and proof boundary
 
-Focused transport controls cover exact UUID receipt shape/recreation and guarded conflict refusal. Native guard,
-recovery, canonical/prepared support and 64/512/4096 growth acceptance remain deferred integration proof, including
-the existing native unknown-job and mapping-incomplete cases. No existing acceptance was edited.
+Writer input and recovery/copy pages retain raw100; the owner Source's existing 256-call ceiling is unchanged.
+Enrollment, dispatch, settlement, close and recovery are separate native home transactions. Pending discovery uses
+the partial writer index; copy discovery uses its partition/target/original primary key. Frontiers are scalar and
+replays do not scan unrelated history. All metadata, rejected inputs, Source/listing reads, normalization, shards,
+refresh, events, retained copies and transaction work remain charged to the original budgets; no numeric Cost
+allowance or all-nine proof is claimed.
+
+Focused database-free controls cover exact UUID/allocation alias metadata, atomic allocation and alias-required
+bulk receipts. Native canonical/prepared/growth/custody acceptance remains deferred under the current minimal
+verification policy. No existing acceptance test was changed.

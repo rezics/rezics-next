@@ -250,6 +250,7 @@ export function validateIndexObservation(
   partition: number,
   ids: readonly string[],
   obligation: bigint,
+  native = false,
 ): Map<string, IndexedSubject> {
   if (!record(snapshot) || snapshot.partition !== partition)
     throw new TypeError('Source snapshot does not observe the requested partition');
@@ -257,7 +258,7 @@ export function validateIndexObservation(
     typeof snapshot.position !== 'bigint' ||
     snapshot.position < obligation ||
     snapshot.position < 0n ||
-    snapshot.position > BigInt(Number.MAX_SAFE_INTEGER)
+    snapshot.position > (native ? 9_223_372_036_854_775_807n : BigInt(Number.MAX_SAFE_INTEGER))
   )
     throw new TypeError('Source snapshot position must be a valid bigint version covering the captured batch');
   if (!Array.isArray(snapshot.subjects) || snapshot.subjects.length > ids.length)

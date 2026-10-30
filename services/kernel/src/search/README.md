@@ -1031,7 +1031,8 @@ Search hits, item facts, facet values and suggestions use the same label choice.
 ## Producer integrity and remaining native delivery
 
 [Identity writer custody](identity-epoch-participant.md) documents the native ordinary-writer enrollment installed
-by the runner, its structural close exports and exact remaining owner support/receiving dependency. The fixed
+by the runner, its structural close, generation-publication barrier and bounded copy/recovery exports, and the exact remaining
+owner support/receiving dependency. The fixed
 canonical participant still refuses completion at that boundary; this guard is not canonical/prepared coverage,
 privacy-reduction acknowledgement or whole-identity publication.
 
