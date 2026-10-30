@@ -984,6 +984,21 @@ does not establish either outcome.
 
 ### Reply
 
+The thread page follows the adopted [targeted reply slice](../../docs/research/content-threads-boards-design.md).
+Reply to this post selects its identity and focuses the existing composer. Cancel clears the target and keeps the
+draft. Selecting a different target, cancelling, or changing an attempted draft starts a new command intent; retrying
+an unchanged draft preserves its parent, body, media and idempotency key. Controls cannot change a pending intent.
+The returned post identity is rendered once, with neutral reply context. A loaded parent links to its local slot,
+including its tombstone; an unloaded parent has no link or copied text. Deleted and withheld parents never supply
+preview text. Removed replies retain their own parent context too.
+
+Target selection adds no reads: one O(page limit) identity map serves all reply contexts. The existing reply command
+sends the optional `parentId` through `replyToThread` to `POST /v1/threads/{id}/posts`; native current authorization,
+same-thread validation and the 32-parent ancestry bound remain authoritative. No ancestry fetch is introduced.
+The focused outcomes are in `tests/thread-replies.test.ts`. The reusable `Patterns/Community/Thread replies` folder
+documents selection, cancellation, retry, refusal and unloaded/deleted/withheld context. Review the same story IDs
+at phone390 and desktop1280 through viewport, locale and theme globals.
+
 - **Touches:** One `POST /v1/threads/<id>/posts`/K after the session read; render the post returned by the kernel
   without rereading the thread
 - **Bound:** ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB

@@ -6,7 +6,7 @@ import { ListRow } from '@rezics/ui/list-row';
 import { undoToast } from '@rezics/ui/undo-toast';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
@@ -37,9 +37,10 @@ import {
   revisePost,
   type RevisedPost,
   type WriteFailure,
-  type CreatedPost,
 } from '../../threads/actions';
-import { csrfHeaders, draftFetch, InlinePostEditor, PostComposer, SignInPrompt } from '../../threads/composer';
+import { csrfHeaders, draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
+import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { ThreadReplyComposer } from '../../threads/reply-context-composer';
 import { PageHeading } from '../../shell/page-heading';
 import { RemovedPost } from '../../threads/post-removed';
 
@@ -89,6 +90,12 @@ function ThreadPage() {
   const [posts, setPosts] = useState(loadedPosts);
   const [currentMentions, setCurrentMentions] = useState(mentions);
   const [displayTitle, setDisplayTitle] = useState(thread.title);
+  const [replyTarget, setReplyTarget] = useState<{ parentId: string | null; focusRequest: number }>({
+    parentId: null,
+    focusRequest: 0,
+  });
+  const [replyPending, setReplyPending] = useState(false);
+  const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -106,6 +113,12 @@ function ThreadPage() {
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
   useEffect(() => setCurrentMentions(mentions), [mentions]);
   useEffect(() => setDisplayTitle(thread.title), [thread.id, thread.title]);
+  useEffect(() => setReplyTarget({ parentId: null, focusRequest: 0 }), [id]);
+
+  function selectReplyParent(parentId: string | null) {
+    if (replyPending) return;
+    setReplyTarget((current) => ({ parentId, focusRequest: current.focusRequest + 1 }));
+  }
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -162,6 +175,9 @@ function ThreadPage() {
                   key={post.id}
                   anchorId={`post-${post.id}`}
                   onChange={updatePost}
+                  replyParents={replyParents}
+                  replyPending={replyPending}
+                  onReply={() => selectReplyParent(post.id)}
                   post={post}
                   authors={authors}
                   mentions={currentMentions}
@@ -201,15 +217,23 @@ function ThreadPage() {
       </section>
       <div className="min-h-[22rem]">
         {session === 'signed-in' && personal ? (
-          <PostComposer<CreatedPost>
+          <ThreadReplyComposer
+            key={id}
             initialKey={personal.idempotencyKey}
             containerId={id}
-            onSubmit={async ({ body, idempotencyKey: key, mediaIds }) => {
+            parentId={replyTarget.parentId}
+            parents={replyParents}
+            focusRequest={replyTarget.focusRequest}
+            pending={replyPending}
+            onPendingChange={setReplyPending}
+            onCancel={() => selectReplyParent(null)}
+            onSubmit={async ({ body, idempotencyKey: key, mediaIds, parentId }) => {
               const result = await replyToThread({
                 data: {
                   threadId: id,
                   body,
                   idempotencyKey: key,
+                  ...(parentId === undefined ? {} : { parentId }),
                   ...(mediaIds.length > 0 ? { mediaIds } : {}),
                 },
                 headers: csrfHeaders(),
@@ -218,7 +242,13 @@ function ThreadPage() {
               return result.ok ? { ok: true as const, value: result.post } : result;
             }}
             onSuccess={(post) => {
-              setPosts((current) => ({ ...current, posts: [...current.posts, post] }));
+              setPosts((current) => ({
+                ...current,
+                posts: current.posts.some((item) => item.id === post.id)
+                  ? current.posts.map((item) => (item.id === post.id ? post : item))
+                  : [...current.posts, post],
+              }));
+              setReplyTarget((current) => ({ ...current, parentId: null }));
               void refreshThreadQueries();
             }}
           />
@@ -257,6 +287,9 @@ function PostSlot({
   onMutation,
   onPageRefresh,
   onOpeningPostChange,
+  replyParents,
+  replyPending,
+  onReply,
 }: {
   post: ThreadPost;
   authors: PageAuthors;
@@ -275,6 +308,9 @@ function PostSlot({
   onMutation: () => Promise<void>;
   onPageRefresh: () => Promise<void>;
   onOpeningPostChange: (restored: boolean) => void;
+  replyParents: ReplyParents;
+  replyPending: boolean;
+  onReply: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
@@ -406,7 +442,9 @@ function PostSlot({
         restoreError={restoreError}
         onCopyLink={copyLink}
         {...(canRestore ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) } : {})}
-      />
+      >
+        <ReplyContext parentId={post.parentId} parents={replyParents} />
+      </RemovedPost>
     );
   }
 
@@ -458,6 +496,7 @@ function PostSlot({
           )}
         </ThreadPostActions>
       </div>
+      <ReplyContext parentId={post.parentId} parents={replyParents} />
       {editing ? (
         <InlinePostEditor
           initialBody={post.body}
@@ -490,6 +529,11 @@ function PostSlot({
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
           />
           {post.revisionId ? <PostHistory postId={post.id} /> : null}
+          {signedIn && personalReady ? (
+            <div className="mt-3 flex justify-end">
+              <ReplyButton disabled={replyPending} onReply={onReply} />
+            </div>
+          ) : null}
         </>
       )}
     </ListRow>

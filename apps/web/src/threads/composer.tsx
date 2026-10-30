@@ -5,7 +5,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { Spinner } from '@rezics/ui/shadcn/spinner';
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { lookupPostMention } from './mentions';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -13,6 +13,7 @@ import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './acti
 import type { DraftMediaState } from './media-state';
 import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
 import { ExistingReviewNotice } from './write-prompts';
+import { ReplyIntent } from './reply-context-intent';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -265,6 +266,10 @@ export function PostComposer<T>({
   canSubmit = true,
   containerId,
   boardId,
+  replyTargetId,
+  replyContext,
+  focusRequest = 0,
+  onPendingChange,
   onSubmit,
   onSuccess,
 }: {
@@ -274,11 +279,16 @@ export function PostComposer<T>({
   canSubmit?: boolean;
   containerId?: string;
   boardId?: string;
+  replyTargetId?: string | null;
+  replyContext?: ReactNode;
+  focusRequest?: number;
+  onPendingChange?: (pending: boolean) => void;
   onSubmit: (input: {
     title: string;
     body: DocumentSnapshot;
     idempotencyKey: string;
     mediaIds: string[];
+    parentId?: string;
   }) => Promise<WriteResult<T>>;
   onSuccess: (value: T) => void;
 }) {
@@ -302,6 +312,7 @@ export function PostComposer<T>({
   const [editorReady, setEditorReady] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
   const idempotencyRef = useRef(initialKey);
+  const replyIntent = useRef(new ReplyIntent(initialKey));
   idempotencyRef.current = idempotencyKey;
   const [failure, setFailure] = useState<WriteFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(() =>
@@ -316,6 +327,7 @@ export function PostComposer<T>({
   const initialUploadsStarted = useRef(false);
   const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const ready = canSubmit && bodyCanSend && (!titleRequired || Boolean(title.trim()));
   const upload =
     containerId || boardId
@@ -360,6 +372,21 @@ export function PostComposer<T>({
     return () => observer.disconnect();
   }, []);
   const plainEditorVisible = !editorReady;
+
+  useEffect(() => {
+    if (replyTargetId === undefined) return;
+    const key = replyIntent.current.selectParent(replyTargetId);
+    idempotencyRef.current = key;
+    setIdempotencyKey(key);
+    setFailure(null);
+  }, [replyTargetId]);
+
+  useEffect(() => {
+    if (focusRequest === 0) return;
+    const editor = editorHost.current?.querySelector<HTMLElement>('[contenteditable="true"]');
+    editor?.focus({ preventScroll: true });
+    editor?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focusRequest, editorReady]);
 
   function updateBody(next: DocumentSnapshot) {
     bodyRef.current = next;
@@ -462,17 +489,24 @@ export function PostComposer<T>({
   async function submit(event?: FormEvent) {
     if (event && event.target !== event.currentTarget) return;
     event?.preventDefault();
-    if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || !ready || submitting) return;
+    if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || !ready || submittingRef.current) return;
     const sources = imageSources(bodyRef.current);
     if (sources.length > replyImageLimit) {
       setUploadNotice(m.thread_image_limit());
       return;
     }
     const mediaIds = mediaIdsFromSources(sources);
+    const draft = { title, body: bodyRef.current, mediaIds };
+    const command =
+      replyTargetId === undefined ? { ...draft, idempotencyKey } : replyIntent.current.prepare(draft, replyTargetId);
+    idempotencyRef.current = command.idempotencyKey;
+    setIdempotencyKey(command.idempotencyKey);
+    submittingRef.current = true;
     setSubmitting(true);
+    onPendingChange?.(true);
     setFailure(null);
     try {
-      const result = await onSubmit({ title, body: bodyRef.current, idempotencyKey, mediaIds });
+      const result = await onSubmit(command);
       if (!result.ok) {
         setFailure({
           ...result,
@@ -492,12 +526,15 @@ export function PostComposer<T>({
         const nextKey = crypto.randomUUID();
         idempotencyRef.current = nextKey;
         setIdempotencyKey(nextKey);
+        replyIntent.current.reset(nextKey);
       }
       onSuccess(result.value);
     } catch {
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
+      onPendingChange?.(false);
     }
   }
 
@@ -506,6 +543,7 @@ export function PostComposer<T>({
   const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
   return (
     <div className="rounded-xl border border-border/70 bg-card p-5">
+      {replyContext}
       <form id={formId} onSubmit={submit}>
         {titleRequired ? (
           <div className="mb-5 space-y-2">
@@ -531,13 +569,14 @@ export function PostComposer<T>({
               aria-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
               data-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
               className={`${fallbackSize} rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] sm:px-6`}
-              contentEditable
+              contentEditable={!submitting}
               role="textbox"
               suppressContentEditableWarning
             />
           ) : null}
           <RichTextEditor
             value={body}
+            disabled={submitting}
             onChange={updateBody}
             label={bodyLabel}
             {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}

@@ -1,0 +1,42 @@
+import { Button } from '@rezics/ui/shadcn/button';
+import { m } from '../paraglide/messages.js';
+import type { CreatedPost, WriteFailure } from './actions';
+import { PostComposer } from './composer';
+import { ReplyContext, type ReplyParents } from './reply-context';
+import type { ReplyCommand } from './reply-context-intent';
+
+export function ThreadReplyComposer({
+  parentId,
+  parents,
+  pending,
+  onCancel,
+  ...composer
+}: {
+  parentId: string | null;
+  parents: ReplyParents;
+  pending: boolean;
+  onCancel: () => void;
+  initialKey: string;
+  containerId: string;
+  focusRequest: number;
+  onPendingChange: (pending: boolean) => void;
+  onSubmit: (input: ReplyCommand) => Promise<{ ok: true; value: CreatedPost } | WriteFailure>;
+  onSuccess: (post: CreatedPost) => void;
+}) {
+  return (
+    <PostComposer<CreatedPost>
+      {...composer}
+      replyTargetId={parentId}
+      replyContext={
+        parentId === null ? null : (
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2" role="status" aria-atomic="true">
+            <ReplyContext parentId={parentId} parents={parents} />
+            <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onCancel}>
+              {m.thread_reply_cancel_target()}
+            </Button>
+          </div>
+        )
+      }
+    />
+  );
+}

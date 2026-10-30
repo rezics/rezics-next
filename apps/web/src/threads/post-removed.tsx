@@ -4,7 +4,7 @@ import { ListRow } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { PageAuthors } from '../identity/read';
 import { Byline } from './byline';
@@ -22,6 +22,7 @@ export function RemovedPost({
   restoreError,
   onCopyLink,
   onRestore,
+  children,
 }: {
   post: ThreadPost;
   authors: PageAuthors;
@@ -34,6 +35,7 @@ export function RemovedPost({
   restoreError?: string | undefined;
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;
+  children?: ReactNode;
 }) {
   const authorId = 'authorId' in post ? post.authorId : undefined;
   const author = authorId === undefined ? undefined : authors?.[authorId];
@@ -61,6 +63,7 @@ export function RemovedPost({
             className="min-h-8 flex-1"
           />
         </div>
+        {children}
         <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
         {owner && 'decisionId' in post && post.decisionId ? (
           <a
@@ -78,6 +81,7 @@ export function RemovedPost({
   const ownedRestorableUntil = owner && deleted ? restorableUntil : undefined;
   return (
     <ListRow {...common}>
+      {children}
       <div className="relative">
         <Tombstone
           shape="post"

@@ -4,10 +4,12 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
+import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
-import { readDraftMediaStates, type DraftMediaState } from './media-state';
+import type { DraftMediaState } from './media-state';
+import { replyParentId } from './reply-context-intent';
+import { replyToThreadRequest } from './reply-context-request';
 import {
   erasePostRequest,
   restorePostRequest,
@@ -18,7 +20,6 @@ import {
 } from './post-writes';
 import { forgetThreadSlug, rememberThreadSlug } from './thread-href';
 
-const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type FailureReason =
@@ -201,38 +202,13 @@ export const replyToThread = createServerFn({ method: 'POST' })
       input.threadId.length > 128
     )
       throw new Error('Invalid thread id');
-    return { ...draft, threadId: input.threadId };
+    const parentId = replyParentId(input);
+    return { ...draft, threadId: input.threadId, ...(parentId === undefined ? {} : { parentId }) };
   })
   .handler(async ({ data }): Promise<{ ok: true; post: CreatedPost } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
     const authorization = await sessionBearer();
-    try {
-      const result = await kernelClient()
-        .threads({ id: data.threadId })
-        .posts.post(
-          {
-            body: data.body,
-            licence,
-            ...(data.mediaIds === undefined || data.mediaIds.length === 0 ? {} : { mediaIds: data.mediaIds }),
-          },
-          {
-            headers: { authorization, 'idempotency-key': JSON.stringify(data.idempotencyKey) } as {
-              'idempotency-key': string;
-            },
-          },
-        );
-      if (result.error) {
-        const failure = refusal(result.status, result.headers, result.error.value);
-        if (failure.reason === 'media-unavailable') {
-          failure.media = await readDraftMediaStates(kernelClient(), authorization, data.mediaIds ?? []);
-        }
-        return failure;
-      }
-      return { ok: true, post: result.data.post };
-    } catch (error) {
-      if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-      return { ok: false, reason: 'unavailable' };
-    }
+    return replyToThreadRequest(data, kernelClient(), authorization, refusal);
   });
 
 function validatePostId(input: unknown): { postId: string } {
