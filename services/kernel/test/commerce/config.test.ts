@@ -96,9 +96,7 @@ test('server configuration carries configured commerce and leaves it absent when
 
 test('webhook configuration accepts exactly four distinct rotation secrets', () => {
   const secrets = ['whsec_one', 'whsec_two', 'whsec_three', 'whsec_four'];
-  expect(readCommerceConfig({ ...env, STRIPE_WEBHOOK_SECRETS: secrets.join(', ') })!.webhookSecrets).toEqual(
-    secrets,
-  );
+  expect(readCommerceConfig({ ...env, STRIPE_WEBHOOK_SECRETS: secrets.join(', ') })!.webhookSecrets).toEqual(secrets);
 });
 
 test('duplicate, excessive and empty rotation entries fail configuration without exposing values', () => {
