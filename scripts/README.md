@@ -169,7 +169,7 @@ One slot is express capacity. Only a non-gate, one-slot run with an explicit est
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.
 Long and unestimated runs cannot take express. Estimates classify runs; they do not stop overruns.
 When its memory reservation fits, express lets short work proceed while ordinary work is full.
-There is no FIFO queue or enforced 120-second deadline for remote runs; `--estimate-ms` classifies slot eligibility only.
+There is no enforced 120-second command deadline; `--estimate-ms` classifies slot eligibility only. A live landing/critical waiter gets one configured admission poll of first opportunity on its chosen host. If it has not taken capacity by then, native slot admission and client ranking backfill capacity that fits later eligible requests while preserving actual slot, memory, gate and express limits. Abandoned marker files are removed only after the marker lock proves the holder has exited.
 
 A waiting gate holds a host's `gate-wait.lock` over SSH. While that marker is held, non-gates may occupy
 at most `O - G` ordinary slots (one when `O` is positive). Short runs may still take express.
@@ -198,27 +198,92 @@ Admission retries races against other callers. The default probe interval is fiv
 
 ### A run's life and measurements
 
-1. Acquire the slot locks and hold their SSH session for the run's lifetime.
-2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>`.
+1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
+   using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and
+   probe once more; the second failure is `RemoteTransportError` for the host and `control probe` stage. A check never
+   closes another run's control path.
+2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
+   slot.
    Omit Git metadata, `node_modules` and root `.temp` files.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
    After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;
    older runs can keep reading the previous tree. Bases older than two hours are removed during host cleanup, except
-   for the current base.
-3. Run `bun install --frozen-lockfile` at the copied checkout root, then the command in its requested directory.
-   `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` shares downloaded packages across runs.
+   for the current base. The configured hosts file is re-read on every admission wait round. A valid update takes
+   effect immediately; a removed or unresponsive upload host is discarded and the workspace is selected and uploaded
+   again on an eligible current host. While the uploaded host still answers, the wait stays on that host even if it is
+   busy. Its admission probe refreshes the uploaded directory's liveness marker, preventing stale-run cleanup during
+   long queues. A missing directory forces re-upload before execution. A missing or malformed rewrite keeps the last valid list for that round and logs once. An answering but busy
+   host never triggers local fallback.
+3. Acquire the requested slot locks on the uploaded host immediately before starting the remote run. Its generated
+   entry point runs through the host's SSH shell and explicitly execs the provisioned Bash interpreter, so multi-digit
+   slot descriptors work when `/bin/sh` is dash. Provisioning installs Bash on both supported package families. The
+   slot holder remains live until the command is terminal. If the command connection is lost, its recorded exit status is checked;
+   an unverified live run is stopped through the run-specific systemd slice or the slot holder's orphan cleanup before
+   capacity is released. Abort follows that same stop-before-release path.
+4. Every admitted physical run starts an independent host monitor before base refresh or dependency work. Its absolute
+   monotonic lifetime is `min(2 hours, explicit maxMs, max(1 second, 3 * estimateMs))`; missing/zero estimates use a
+   40 minute estimate. An explicit positive maximum can shorten this limit and cannot raise the two-hour cap. Safe
+   integer validation and saturating multiplication apply to ordinary, multi-slot, gate, standalone and try-once runs.
+   Nested commands inherit the enclosing physical run rather than acquiring another lifetime. Queue and upload time
+   precede this deadline; returns retain their separate transfer bound. No environment setting raises the cap.
+   The host monitor uses a detached session, Linux subreaper adoption and identity-checked pidfds. It forwards no
+   command output, so an unread/backpressured SSH pipe cannot block its deadline. Neither output, CPU progress nor
+   heartbeats renew it. On expiration it sends TERM, escalates after 200 ms, reaps all owned descendants (including
+   fork/setsid children), removes only exactly labelled run containers, and verifies the run cgroup is empty before
+   publishing terminal admission state. Abort/orphan stop also waits for the recorded monitor to stop its tree.
+   A timeout exits 124 and durably writes `run-lifetime-status.json` in the run and
+   `/srv/rezics-check/receipts/<run-id>/`, which run-directory cleanup never removes. Its versioned infrastructure
+   receipt names the host, run, `phase=run-lifetime`, effective limit, elapsed time and a bounded executable/subcommand
+   identity with argument count; argument values and shell source are omitted. The marker is
+   `remote-check: infrastructure failure: remote run timed out ` followed by that JSON receipt (`schema=1`).
+   The controller retrieves it independently of command output before returns, saves it under
+   `.temp/remote-check/receipts/<run-id>/`, and retains the timeout cause if returns fail. Worker-check records the same
+   reason in its physical ledger and terminal result, without local fallback or a timeout retry. A command's own exit
+   124 or test timeout is not this infrastructure classification. The later controller timer is only a recovery guard.
+   Prepare dependencies at the copied checkout root, then run the command in its requested directory. A Python 3
+   supervisor inside the run's systemd scope applies an absolute **180,000 ms** preparation deadline, starting before
+   pinned-runtime verification/download and including cache lock waits, installation, lifecycle children, artifact
+   verification, publication and restore. Output and CPU activity never extend it. Override it with
+   `RemoteCheck.preparationTimeoutMs` or `REMOTE_CHECK_PREPARATION_TIMEOUT_MS` for finite fixtures.
+   A cold artifact miss runs `bun install --frozen-lockfile`, preserving every lifecycle script. The shared
+   `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` remains a download cache; it does not substitute for lifecycle outputs.
+   Verified installation artifacts live in `/srv/rezics-check/dependency-artifacts`. The key includes the complete uploaded
+   workspace inputs (including manifests, lockfile, patch and lifecycle sources), Linux platform/architecture/libc,
+   runtime build and exact pinned Bun revision. Successful installation's changed/generated files, symlinks and deletions
+   are recorded, including native binaries and workspace lifecycle outputs. Disposable compile caches are excluded.
+   Cold publication also verifies each installed workerd binary's exact dated version and each Bun package binary's
+   pinned revision, since workerd's own installer can swallow binary execution errors. These subprocesses remain under
+   the same absolute bound. Every cache use verifies file hashes, modes and symlink targets. Each run gets private copies, never shared mutable
+   `node_modules` inodes. A per-key kernel lock serializes publishers; its wait is part of the deadline. Publication is
+   a verified atomic directory rename. Failed/aborted publishers leave no consumable partial entry, and a timed-out waiter
+   cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
+   Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
+   bounded diagnostic receipt with host, run, phase, elapsed time and actual active package names/versions from owned
+   process working directories and package metadata. Unknown package identity stays unknown; previously observed packages
+   are separately identified. No command or successful-install marker is produced on failure, and installation failure
+   cannot trigger local fallback. Signal/transport teardown retains systemd custody and stops/reaps the owned installer
+   descendants (including detached grandchildren) before releasing capacity. Successful cache reuse writes
+   `preparation-install.json` with its key, hit/miss and package versions. These files can be declared as return paths.
+   The existing transfer timeout does not apply to preparation or a quiet command.
    Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
    The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
    Remove `/srv/rezics-check/pinned-bun` only when no run is active on the host and the host can download the pinned
    runtime from the npm registry; the next run needs that download to recreate the cache.
    `BUN_RUNTIME_TRANSPILER_CACHE_PATH=<run-directory>/bun-runtime-transpiler-cache` isolates runtime transpilation.
    Chromium uses the shared `/srv/rezics-check/browsers` installation.
-4. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.
+5. Execute inside a transient `rezics-check-<run-id>.scope` in a nested per-run slice under `rezics-check.slice`.
    The slice name replaces run-ID hyphens with underscores. `REZICS_CHECK_SLICE` names that slice.
    Remote runs set `REZICS_STACK_LEASE=off`; remote admission has already reserved their slots.
-5. Copy declared return paths back before cleanup, including after command failure. Missing paths are logged and skipped.
-   Output streams to the caller. The command's exit code becomes the caller's exit code.
+6. Once the remote run is terminal, release its execution slots before checking or copying declared return paths and
+   before removing the run directory. Return paths are copied after success or command failure; missing paths are logged
+   and skipped. Output streams to the caller. The command's exit code becomes the caller's exit code.
+
+Workspace upload, the returns probe, returns copy and slot take each stop with a `RemoteTransportError` after 120 seconds
+without measured I/O progress. Rsync progress comes from bytes actually transferred. Tests can inject shorter bounds
+through `RemoteCheck.transferTimeoutMs` and `RemoteCheck.controlProbeTimeoutMs`, or through
+`REMOTE_CHECK_TRANSFER_TIMEOUT_MS` and `REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS`. These transfer limits do not apply to a
+quiet live remote command; command deadline and liveness rules remain in force.
 
 The run puts its Docker wrapper first on `PATH`. It adds `--cgroup-parent=$REZICS_CHECK_SLICE` to
 `docker run`, `docker create`, `docker container run` and `docker container create`.
@@ -237,8 +302,8 @@ Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, 
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 `.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.
 The `rsync` line also includes the bytes sent from rsync statistics. If zstd is unavailable, the run reports that it
-uses rsync's default compression. Returned outputs add `rsync back`. Slot wait includes probing and acquisition;
-rsync measures the upload.
+uses rsync's default compression. Returned outputs add `rsync back`. Slot wait measures admission after upload; the
+`rsync` line measures upload separately.
 Rsync exit code 24 is accepted for uploads and returned outputs, with the number of vanished files logged.
 When cgroup counters are readable, the run also prints:
 
@@ -251,7 +316,7 @@ from install start through command completion. Peak memory comes from `memory.pe
 These include the run's containers and installation, but exclude upload and admission wait.
 
 Finally, cleanup stops that run's scope, removes only its labelled containers with their associated volumes,
-stops its slice and deletes its directory. It then releases the slot locks.
+stops its slice and deletes its directory. Slot locks are already released before this output and cleanup phase.
 Signals also take this cleanup path. A failed cleanup connection leaves a warning.
 Before taking a slot, the stale-run sweep also removes directories older than 60 minutes
 whose corresponding scope is inactive and whose `.alive` file is absent or older than 10 minutes; a run without
@@ -279,7 +344,9 @@ scripts/provision-check-host.sh root@check.example .secrets/server/check-small/o
 ```
 
 The script detects Debian-family or Fedora/RHEL-family systems from `/etc/os-release`.
-It installs missing Git, rsync, archive, download, certificate and locking tools with apt or dnf.
+It installs missing Git, rsync, archive, download, certificate, locking, Bash and Python 3 tools with apt or dnf.
+Python 3 must provide `os.pidfd_open` and `signal.pidfd_send_signal` (3.9 or newer), and Linux must support pidfds
+and `PR_SET_CHILD_SUBREAPER`. Provisioning validates those primitives before admitting the host.
 It installs pinned Bun and Node versions under `/usr/local` when their versions differ.
 It installs the pinned Playwright Chromium once per version in the shared browser directory.
 Debian uses Playwright's `--with-deps`; Fedora installs Chromium without that apt-based dependency step.

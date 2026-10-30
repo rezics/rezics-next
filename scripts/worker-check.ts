@@ -21,7 +21,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { checkWaitRecorder } from './remote-check.ts';
+import { checkWaitRecorder, parseRunLifetimeFailure, RUN_LIFETIME_FAILURE_MARKER } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
@@ -40,6 +40,12 @@ const SIGNALS = {
   SIGINT: 2,
   SIGTERM: 15,
 } as const;
+
+/** The host receipt, rather than exit 124 or test output, establishes a terminal infrastructure timeout. */
+export function remoteLifetimeInfrastructureCause(output: string): string | undefined {
+  const receipt = parseRunLifetimeFailure(output);
+  return receipt ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt) : undefined;
+}
 
 type CheckRecord = {
   id: string;
@@ -757,6 +763,7 @@ export async function runWorkerCheck(
     const transportReason = remoteOutput.includes('remote-check: transport failure marker')
       ? remoteOutput.match(/remote-check: connection to .+ failed during .+ before a result/)?.[0]
       : undefined;
+    const lifetimeReason = remoteLifetimeInfrastructureCause(remoteOutput);
     if (growthProfilePath !== undefined && previousGrowthProfile !== '' && existsSync(growthProfilePath)) {
       const returnedProfile = readFileSync(growthProfilePath, 'utf8');
       if (returnedProfile !== previousGrowthProfile) {
@@ -778,7 +785,7 @@ export async function runWorkerCheck(
         );
       }
       wait.stop();
-      endLedger(remoteSignal === undefined ? remoteCode : 128 + remoteSignal, transportReason);
+      endLedger(remoteSignal === undefined ? remoteCode : 128 + remoteSignal, lifetimeReason ?? transportReason);
       closeSync(descriptor);
       return report(remoteSignal === undefined ? remoteCode : 128 + remoteSignal);
     }
@@ -1294,6 +1301,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
     if (current.log !== record.log || current.status !== 'running') return;
     current.status = 'finished';
     current.exitCode = exitCode;
+    const lifetimeReason = remoteLifetimeInfrastructureCause(readFileSync(join(root, current.log), 'utf8').slice(-16_000));
+    if (lifetimeReason) current.infrastructureFailure = lifetimeReason;
     writeRecord(current);
   };
   try {

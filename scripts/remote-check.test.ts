@@ -9,15 +9,22 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 import { onCheckHost } from './stack-run.ts';
+import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
 import {
+  DEFAULT_PREPARATION_TIMEOUT_MS,
+  dependencyPreparationProgram,
+  effectiveRunLifetimeMs,
+  RUN_LIFETIME_FAILURE_MARKER,
+  parseRunLifetimeFailure,
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
   CHECK_HOST_MIN_TMP_BYTES,
@@ -264,9 +271,33 @@ const fakeSsh = `#!/usr/bin/env bun
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
-const script = args.at(-1)!;
-const address = args.at(-2)!;
-const options = args.slice(0, -2);
+const positionals: string[] = [];
+const options: string[] = [];
+const reject = (detail: string): never => {
+  process.stderr.write('fake ssh: ' + detail + '\\n');
+  process.exit(2);
+};
+for (let index = 0; index < args.length;) {
+  const argument = args[index]!;
+  if (argument === '-o' || argument === '-i' || argument === '-O') {
+    const value = args[index + 1];
+    if (!value || value.startsWith('-')) reject('option ' + argument + ' must have one value');
+    if (argument === '-o' && !/^[A-Za-z][A-Za-z0-9]*=.+$/.test(value)) reject('invalid -o configuration');
+    if (argument === '-O' && value !== 'exit') reject('unsupported -O operation');
+    options.push(argument, value);
+    index += 2;
+  } else if (argument.startsWith('-')) reject('unexpected option ' + argument);
+  else {
+    positionals.push(argument);
+    index += 1;
+  }
+}
+const controlExit = options.includes('-O');
+if (options.filter((argument) => argument === '-O').length > 1) reject('duplicate -O operation');
+if (positionals.length !== (controlExit ? 1 : 2)) reject('expected host and optional command positionals');
+const address = positionals[0]!;
+if (!/^ops@[^:]+\.test$/.test(address)) reject('invalid host position');
+const script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
 const hostConfigs = JSON.parse(readFileSync(dir + '/config.json', 'utf8'));
 const knownHost = Object.hasOwn(hostConfigs, address);
 const config = hostConfigs[address] ?? {};
@@ -288,7 +319,7 @@ const readMultiMarkers = () => readdirSync(dir)
   .sort((left, right) => left.beganAt - right.beganAt || left.sequence - right.sequence);
 const readLandingMarkers = () => readdirSync(dir)
   .filter((name) => name.startsWith(landingMarkerPrefix))
-  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; estimateMs: number | null; memoryBytes: number; sequence: number })
+  .map((name) => JSON.parse(readFileSync(dir + '/' + name, 'utf8')) as { id: string; slots: number; beganAt: number; arrivalOrder: string; estimateMs: number | null; memoryBytes: number; sequence: number; opportunityDeadline?: number })
   .sort((left, right) => Number(left.sequence) - Number(right.sequence));
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
@@ -299,8 +330,27 @@ const count = (name: string) => {
 const connectionNumber = count('connection');
 const refusedControlSession = Boolean(config.refuseControlSession && controlPath && connectionNumber > 0);
 // OpenSSH 10.2 retries a refused multiplexed session over a new connection in the same ssh process.
-const transport = refusedControlSession ? 'standalone-fallback' : controlPath ? 'control-master' : 'standalone';
-const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, options, transport, ...event }) + '\\n');
+const transport = refusedControlSession ? 'standalone-fallback' : controlPath && controlPath !== 'ControlPath=none' ? 'control-master' : 'standalone';
+const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, transport, ...event }) + '\\n');
+const slotHeld = () => readdirSync(dir).some((name) => name.startsWith(hostKey + '.slot.'));
+if (controlExit) {
+  log({ kind: 'control-close' });
+  process.exit(0);
+}
+if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
+  const attempt = count('control-probe');
+  log({ kind: 'control-probe', attempt, script, controlPath, slotHeld: slotHeld() });
+  if (attempt < (config.stalledControlProbes ?? 0)) {
+    process.on('SIGTERM', () => {
+      log({ kind: 'control-probe-stopped', attempt });
+      process.exit(143);
+    });
+    await new Promise<void>(() => setInterval(() => {}, 1000));
+  }
+  if (attempt < (config.failedControlProbes ?? 0)) process.exit(255);
+  console.log('REMOTE_CHECK_CONTROL_OK');
+  process.exit(0);
+}
 if (refusedControlSession) {
   log({ kind: 'master-session-refused' });
   log({ kind: 'standalone-fallback' });
@@ -339,6 +389,10 @@ if (script.includes('/proc/loadavg')) {
   const landingWaitingStarted = landingMarkers[0]?.arrivalOrder ?? '-';
   const landingWaitingEstimate = landingMarkers[0]?.estimateMs ?? -1;
   const landingWaitingMemory = landingMarkers[0]?.memoryBytes ?? Math.round(2.5 * 2 ** 30);
+  const landingPollMs = Number(process.env.REMOTE_CHECK_POLL_MS ?? 5000);
+  const landingEstimate = landingMarkers[0]?.estimateMs ?? null;
+  const landingOpportunityMs = Math.max(1, Math.min(landingPollMs, landingEstimate ?? 3 * 60 * 60 * 1000));
+  const landingOpportunityActive = Boolean(landingMarkers[0] && Date.now() - Number(landingMarkers[0].arrivalOrder) < landingOpportunityMs);
   const probeScriptFile = dir + '/' + hostKey + '.probe-script-recorded';
   const probeEvent = {
     kind: 'probe',
@@ -362,6 +416,8 @@ if (script.includes('/proc/loadavg')) {
     landingWaitingStarted,
     landingWaitingEstimate,
     landingWaitingMemory,
+
+    landingOpportunityActive,
     landingMarkers,
     landingMarkerFiles: readdirSync(dir).filter((name) => name.startsWith(landingMarkerPrefix)),
   };
@@ -387,6 +443,8 @@ if (script.includes('/proc/loadavg')) {
   console.log('LANDING_WAITING_STARTED ' + landingWaitingStarted);
   console.log('LANDING_WAITING_ESTIMATE_MS ' + landingWaitingEstimate);
   console.log('LANDING_WAITING_MEMORY_BYTES ' + landingWaitingMemory);
+
+  console.log('LANDING_OPPORTUNITY_ACTIVE ' + (landingOpportunityActive ? 1 : 0));
 } else if (script.includes('REMOTE_CHECK_GATE_MARKER')) {
   const lock = dir + '/' + hostKey + '.gate-marker';
   if (existsSync(lock)) process.exit(75);
@@ -434,6 +492,7 @@ if (script.includes('/proc/loadavg')) {
   const estimateValue = script.match(/# REMOTE_CHECK_LANDING_ESTIMATE_MS (none|\\d+)/)?.[1] ?? 'none';
   const estimateMs = estimateValue === 'none' ? null : Number(estimateValue);
   const memoryBytes = Number(script.match(/# REMOTE_CHECK_LANDING_MEMORY_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
+
   const marker = dir + '/' + landingMarkerPrefix + id;
   if (existsSync(marker)) process.exit(75);
   const sequence = count('landing-marker-sequence');
@@ -459,8 +518,16 @@ if (script.includes('/proc/loadavg')) {
   const reservationBytes = Number(script.match(/# REMOTE_CHECK_MEMORY_RESERVATION_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
+  if (call < (config.stallSlotTakes ?? 0)) {
+    log({ kind: 'slot-take-stalled', call, slotHeld: slotHeld(), script });
+    process.on('SIGTERM', () => {
+      log({ kind: 'slot-take-stopped', call });
+      process.exit(143);
+    });
+    await new Promise<void>(() => setInterval(() => {}, 1000));
+  }
   if (call < (config.busy ?? 0)) {
-    log({ kind: 'slot', granted: false, reason: 'busy', requested, call, slotClass, script });
+    log({ kind: 'slot', granted: false, reason: 'busy', requested, call, slotClass, slotHeld: slotHeld(), script });
     process.exit(75);
   }
   const grants = existsSync(dir + '/' + hostKey + '.granted')
@@ -572,13 +639,13 @@ if (script.includes('/proc/loadavg')) {
   }
   writeFileSync(dir + '/' + hostKey + '.granted', String(grants + selected.length));
   rmSync(taking, { recursive: true, force: true });
-  for (const slot of selected) log({ kind: 'slot', granted: true, requested, slotClass, script, call, slot, actualAdmissionLimit, landingMarkerIds: landingMarkers.map(({ id }) => id) });
+  for (const slot of selected) log({ kind: 'slot', granted: true, requested, slotClass, script, call, slot, slotHeld: slotHeld(), actualAdmissionLimit, landingMarkerIds: landingMarkers.map(({ id }) => id) });
   console.log('SLOTS ' + requested);
   const release = () => {
     for (const slot of selected) {
       rmSync(dir + '/' + hostKey + '.slot.' + slot, { recursive: true, force: true });
       rmSync(dir + '/' + hostKey + '.slot.' + slot + '.memory', { force: true });
-      log({ kind: 'release', slot });
+      log({ kind: 'release', slot, slotHeld: slotHeld() });
     }
     process.exit(0);
   };
@@ -587,6 +654,9 @@ if (script.includes('/proc/loadavg')) {
   process.on('SIGTERM', release);
   process.on('SIGHUP', release);
   process.stdin.resume();
+} else if (script.includes("printf 'STOPPED")) {
+  log({ kind: 'stop', slotHeld: slotHeld(), script });
+  console.log('STOPPED');
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
   log({ kind: 'status' });
   const statusFile = dir + '/' + hostKey + '.status';
@@ -595,12 +665,24 @@ if (script.includes('/proc/loadavg')) {
     const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
     console.log(runCount > 0 && runCount <= (config.preCommandFailures ?? 0) ? 'NOT_STARTED' : 'STARTED');
   }
+} else if (script.includes('REMOTE_CHECK_RUN_LIFETIME_STATUS')) {
+  log({ kind: 'lifetime-status', slotHeld: slotHeld() });
+  const receipt = dir + '/' + hostKey + '.lifetime';
+  if (existsSync(receipt)) console.log('remote-check: infrastructure failure: remote run timed out ' + readFileSync(receipt, 'utf8'));
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
-  log({ kind: 'returns', paths });
+  log({ kind: 'returns', paths, slotHeld: slotHeld() });
+  if (config.stallReturnsProbe) {
+    process.on('SIGTERM', () => {
+      log({ kind: 'returns-probe-stopped' });
+      process.exit(143);
+    });
+    await new Promise<void>(() => setInterval(() => {}, 1000));
+  }
   const present = new Set(config.present ?? []);
   for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
+  log({ kind: 'base', slotHeld: slotHeld() });
   console.log('BASE ' + (config.base ?? '-'));
   console.log('AGE ' + (config.baseAgeSeconds === undefined ? '-' : String(config.baseAgeSeconds)));
   console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
@@ -613,7 +695,7 @@ if (script.includes('/proc/loadavg')) {
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
   if (hang && config.memoryHeadroomOnHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomOnHang });
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
-  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt });
+  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld() });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
   if (runNumber < (config.transportFailures ?? 0)) {
@@ -621,6 +703,10 @@ if (script.includes('/proc/loadavg')) {
     process.exit(255);
   }
   const result = config.exit ?? 0;
+  if (config.lifetimeFailure) {
+    const limitMs = Number(script.match(/# REMOTE_CHECK_RUN_LIFETIME_MS (\\d+)/)![1]);
+    writeFileSync(dir + '/' + hostKey + '.lifetime', JSON.stringify({ schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host, run: script.match(/--unit=rezics-check-([a-z0-9-]+)/)![1], limitMs, elapsedMs: limitMs + 200, command: 'bun test [2 arguments]' }));
+  }
   writeFileSync(statusFile, String(result));
   if (script.includes('remote-check: bun install') && script.includes('remote-check: command')) {
     console.error('remote-check: bun install 0.125 s on ' + host);
@@ -629,7 +715,7 @@ if (script.includes('/proc/loadavg')) {
   if (config.stdout) console.log(config.stdout);
   if (config.stderr) console.error(config.stderr);
   if (hang) {
-    console.log('started');
+    if (!config.silentHang) console.log('started');
     process.on('SIGTERM', () => {
       if (config.memoryHeadroomAfterHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomAfterHang });
       process.exit(143);
@@ -642,12 +728,12 @@ if (script.includes('/proc/loadavg')) {
     process.exit(result);
   } else process.exit(result);
 } else {
-  log({ kind: 'cleanup', script });
+  log({ kind: 'cleanup', script, slotHeld: slotHeld() });
 }
 `;
 
 const fakeRsync = `#!/usr/bin/env bun
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args.includes('--version')) {
   console.log('rsync version 3.3.0\\nCapabilities: zstd zlib');
@@ -671,12 +757,35 @@ const code = isBack
     : (config.rsyncExit ?? 0);
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
+  step: isBack ? 'returns copy' : 'workspace upload',
   args,
   destination: args.at(-1),
   rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
   files: input.split('\\0').filter(Boolean),
   code,
+  slotHeld: readdirSync(process.env.FAKE_DIR!).some((name) => name.startsWith(hostKey + '.slot.')),
 }) + '\\n');
+const stalled = isBack ? config.stallReturnsCopy : config.stallUpload;
+if (stalled) {
+  process.on('SIGTERM', () => {
+    appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
+      kind: 'rsync-stopped',
+      step: isBack ? 'returns copy' : 'workspace upload',
+      pid: process.pid,
+    }) + '\\n');
+    process.exit(143);
+  });
+  await new Promise<void>(() => setInterval(() => {}, 1000));
+}
+const slowFor = isBack ? (config.slowReturnsMs ?? 0) : (config.slowUploadMs ?? 0);
+const started = Date.now();
+let bytes = 0;
+while (Date.now() - started < slowFor) {
+  bytes += 1024;
+  console.error(bytes + ' 10%');
+  await Bun.sleep(10);
+}
+console.error('10000 100%');
 console.error('sent 1,234 bytes 10,000 bytes/sec');
 for (const file of config.vanishedFiles ?? []) console.error('rsync: [sender] file has vanished: ' + file);
 process.exit(code);
@@ -687,6 +796,28 @@ import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({ kind: 'docker', args: process.argv.slice(2) }) + '\\n');
 process.exit(99);
 `;
+
+function nodeFixture(source: string): string {
+  // The 100-client queue cases launch hundreds of fake transports; Node avoids a Bun startup for each one.
+  const javascript = new Bun.Transpiler({ loader: 'ts', target: 'node' })
+    .transformSync(source.replace(/^#![^\r\n]*(?:\r?\n|$)/, ''))
+    .replace(/^import (\{[^\r\n]*\}) from "([^"]+)";$/gm, 'const $1 = require("$2");')
+    .replace(/await import\("([^"]+)"\)/g, 'require("$1")')
+    .replaceAll('Bun.stdin.text()', 'readStdin()')
+    .replaceAll('Bun.sleep(', 'sleep(');
+  if (/\bBun\./.test(javascript)) throw new Error('Node fake transport still contains a Bun runtime call');
+  return `#!/usr/bin/env node
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const readStdin = async () => {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString();
+};
+(async () => {
+${javascript}
+})().catch((error) => { console.error(error); process.exit(1); });
+`;
+}
 
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
@@ -718,9 +849,18 @@ type HostConfig = {
   holdLandingGrant?: boolean;
   down?: boolean;
   exit?: number;
+  lifetimeFailure?: boolean;
   transportFailures?: number;
   rsyncExit?: number;
   rsyncBackExit?: number;
+  slowUploadMs?: number;
+  slowReturnsMs?: number;
+  stallUpload?: boolean;
+  stallReturnsCopy?: boolean;
+  stallReturnsProbe?: boolean;
+  stallSlotTakes?: number;
+  stalledControlProbes?: number;
+  failedControlProbes?: number;
   vanishedFiles?: string[];
   rsyncFailures?: number;
   rsyncFailureCode?: number;
@@ -728,6 +868,7 @@ type HostConfig = {
   stdout?: string;
   stderr?: string;
   hang?: boolean;
+  silentHang?: boolean;
   hangRuns?: number;
   runDurationMs?: number;
   present?: string[];
@@ -770,13 +911,14 @@ beforeAll(() => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   root = mkdtempSync(join(repository, '.temp/remote-check-test-'));
   mkdirSync(join(root, 'bin'));
+  writeFileSync(join(root, 'bin/package.json'), JSON.stringify({ type: 'commonjs' }));
   for (const [name, source] of [
     ['ssh', fakeSsh],
     ['rsync', fakeRsync],
     ['docker', fakeDocker],
   ] as const) {
     const file = join(root, 'bin', name);
-    writeFileSync(file, source);
+    writeFileSync(file, nodeFixture(source));
     chmodSync(file, 0o755);
   }
 });
@@ -876,13 +1018,59 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
   };
 }
 
-function slotScriptFor(rootPath: string, slots: number, shortRun = false, gate = false, count = 1): string {
+function hostKey(name: string): string {
+  return `ops@${name}.test`.replace(/[^a-z0-9]/gi, '_');
+}
+
+function slotMarkers(environment: Record<string, string>, name: string): string[] {
+  return readdirSync(environment.FAKE_DIR!).filter((entry) =>
+    new RegExp(`^${hostKey(name)}\\.slot\\.(?:\\d+|express)$`).test(entry),
+  );
+}
+
+function rewriteHosts(
+  environment: Record<string, string>,
+  hosts: Array<{ name: string; slots: number; fallback?: boolean }>,
+): void {
+  writeFileSync(
+    environment.KERNEL_CHECK_REMOTE!,
+    JSON.stringify({
+      hosts: hosts.map(({ name, slots, fallback }) => ({
+        name,
+        address: `ops@${name}.test`,
+        identity: `/keys/${name}`,
+        memoryMaxGiB: 16,
+        cpuQuotaPercent: 800,
+        slots,
+        ...(fallback ? { fallback: true } : {}),
+      })),
+    }),
+  );
+}
+
+function rewriteHostConfig(environment: Record<string, string>, name: string, update: Partial<HostConfig>): void {
+  const file = join(environment.FAKE_DIR!, 'config.json');
+  const config = JSON.parse(readFileSync(file, 'utf8')) as Record<string, HostConfig>;
+  const key = `ops@${name}.test`;
+  config[key] = { ...config[key], ...update };
+  writeFileSync(file, JSON.stringify(config));
+}
+
+function slotScriptFor(
+  rootPath: string,
+  slots: number,
+  shortRun = false,
+  gate = false,
+  count = 1,
+  memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
+  memoryMaxGiB = 16,
+): string {
   return slotScript(
     {
       name: 'test',
       address: 'test',
       identity: 'test',
-      memoryMaxGiB: 16,
+      memoryMaxGiB,
       cpuQuotaPercent: 800,
       slots,
       processorsPerSlot: 2,
@@ -894,6 +1082,9 @@ function slotScriptFor(rootPath: string, slots: number, shortRun = false, gate =
     shortRun,
     shortRun ? 40 : undefined,
     gate,
+    undefined,
+    undefined,
+    memoryReservationBytes,
     undefined,
   ).replaceAll('/srv/rezics-check', rootPath);
 }
@@ -972,6 +1163,29 @@ async function waitForOutput(holder: ReturnType<typeof Bun.spawn>, token: string
   reader.releaseLock();
 }
 
+async function stopBlockingProcess(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.pid === undefined) return;
+  // flock's child inherits its lock descriptor. End that owned command before ending/reaping flock itself.
+  const descendants: number[] = [];
+  const collect = (pid: number) => {
+    try {
+      const children = readFileSync(`/proc/${pid}/task/${pid}/children`, 'utf8').trim().split(/\s+/).filter(Boolean).map(Number);
+      for (const owned of children) { collect(owned); descendants.push(owned); }
+    } catch {}
+  };
+  collect(child.pid);
+  for (const owned of descendants) {
+    try { process.kill(owned, 'SIGTERM'); } catch {}
+  }
+  for (let attempt = 0; attempt < 100 && descendants.some((pid) => {
+    try { return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0] !== 'Z'; } catch { return false; }
+  }); attempt += 1) await Bun.sleep(10);
+  if (child.exitCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  child.kill();
+  if (child.exitCode === null) await exited;
+}
+
 test('generated slot scripts use only slot locks in their reserved descriptor range', () => {
   for (const slots of [1, 3, 5]) {
     for (const [shortRun, gate] of [
@@ -1011,7 +1225,7 @@ test('ordinary and express slot locks stay held until the slot holder input clos
         expect(blocker.exitCode).toBeNull();
       }
       const script = slotScriptFor(hostRoot, slots);
-      const holder = Bun.spawn(['sh', '-c', script], {
+      const holder = Bun.spawn(['/bin/sh', '-c', script], {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
@@ -1022,7 +1236,9 @@ test('ordinary and express slot locks stay held until the slot holder input clos
         await holder.stdin.flush();
         await waitForSlotToken(holder, 1);
         const selectedLock = join(hostRoot, 'slots', `${target}.lock`);
-        expect(existsSync(join(hostRoot, 'runs', `ordinary-${slots}-${target}`, 'slots'))).toBe(true);
+        const runSlots = join(hostRoot, 'runs', `ordinary-${slots}-${target}`, '.remote-check-slot-count');
+        await waitFor(() => existsSync(runSlots));
+        expect(readFileSync(runSlots, 'utf8')).toBe('1\n');
         expect(spawnSync('flock', ['-n', selectedLock, '-c', 'true']).status).not.toBe(0);
         await holder.stdin.end();
         expect(await holder.exited).toBe(0);
@@ -1031,7 +1247,7 @@ test('ordinary and express slot locks stay held until the slot holder input clos
         try {
           await holder.stdin.end();
         } catch {}
-        for (const blocker of blockers) blocker.kill();
+        await Promise.all(blockers.map(stopBlockingProcess));
       }
     }
 
@@ -1044,7 +1260,7 @@ test('ordinary and express slot locks stay held until the slot holder input clos
       await Bun.sleep(25);
       expect(blocker.exitCode).toBeNull();
     }
-    const holder = Bun.spawn(['sh', '-c', slotScriptFor(hostRoot, slots, true)], {
+    const holder = Bun.spawn(['/bin/sh', '-c', slotScriptFor(hostRoot, slots, true)], {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -1063,8 +1279,46 @@ test('ordinary and express slot locks stay held until the slot holder input clos
       try {
         await holder.stdin.end();
       } catch {}
-      for (const blocker of blockers) blocker.kill();
+      await Promise.all(blockers.map(stopBlockingProcess));
     }
+  }
+});
+
+test('the /bin/sh slot entry delegates multi-digit descriptors to provisioned Bash and holds its lease until stdin ends', async () => {
+  const testRoot = mkdtempSync(join(root, 'sh-slot-entry-'));
+  const hostRoot = join(testRoot, 'host');
+  const environment = slotScriptEnvironment(testRoot);
+  const provision = readFileSync(join(repository, 'scripts/provision-check-host.sh'), 'utf8');
+  expect(provision).toContain('for package in git rsync unzip xz curl ca-certificates util-linux bash; do');
+  expect(provision).toContain('for package in git rsync unzip xz-utils curl ca-certificates util-linux bash; do');
+  expect(slotScriptFor(hostRoot, 2)).toMatch(/^exec bash -c /);
+
+  const shellFamily = realpathSync('/bin/sh').split('/').at(-1);
+  expect(['bash', 'dash']).toContain(shellFamily);
+  if (shellFamily === 'dash') {
+    const rawMultiDigitRedirection = spawnSync('/bin/sh', ['-c', 'exec 10>/dev/null'], { encoding: 'utf8' });
+    expect(rawMultiDigitRedirection.status).toBe(127);
+    expect(rawMultiDigitRedirection.stderr).toContain('exec: 10: not found');
+  }
+  const holder = Bun.spawn(['/bin/sh', '-c', slotScriptFor(hostRoot, 2)], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  const lock = join(hostRoot, 'slots', '0.lock');
+  try {
+    holder.stdin.write('sh-entry-holder\n');
+    await holder.stdin.flush();
+    await waitForSlotToken(holder, 1);
+    expect(spawnSync('flock', ['-n', lock, '-c', 'true']).status).not.toBe(0);
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+    expect(spawnSync('flock', ['-n', lock, '-c', 'true']).status).toBe(0);
+  } finally {
+    try {
+      await holder.stdin.end();
+    } catch {}
   }
 });
 
@@ -1074,7 +1328,7 @@ test('live runs with recorded slots bound admission when all slot locks are free
   const liveRun = join(hostRoot, 'runs', 'live-run');
   mkdirSync(liveRun, { recursive: true });
   writeFileSync(join(liveRun, '.remote-check-slot-count'), '2\n');
-  const run = Bun.spawn(['sh', '-c', slotScriptFor(hostRoot, 3, false, false, 2)], {
+  const run = Bun.spawn(['/bin/sh', '-c', slotScriptFor(hostRoot, 3, false, false, 2)], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -1083,6 +1337,61 @@ test('live runs with recorded slots bound admission when all slot locks are free
   expect(await run.exited).toBe(75);
   expect(existsSync(join(hostRoot, 'slots', '0.lock'))).toBe(false);
   expect(existsSync(join(hostRoot, 'slots', '1.lock'))).toBe(false);
+});
+
+test('a live landing head gets one bounded fitting opportunity, then native admission backfills all eligible capacity', async () => {
+  const testRoot = mkdtempSync(join(root, 'landing-backfill-'));
+  const hostRoot = join(testRoot, 'host');
+  const marker = join(hostRoot, 'slots', 'landing-wait-head.lock');
+  mkdirSync(dirname(marker), { recursive: true });
+  for (const [headSlots, requestSlots] of [[1, 3], [2, 2]] as const) {
+   for (const [deadline, expected] of [[Date.now() + 30_000, 75], [Date.now() - 1_000, 0]] as const) {
+    const markerHolder = spawn('python3', ['-c', 'import fcntl,os,time; f=open(os.environ["MARKER_PATH"],"w"); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB); f.write(os.environ["MARKER_RECORD"]+"\\n"); f.flush(); time.sleep(20)'], {
+      env: { ...process.env, MARKER_PATH: marker, MARKER_RECORD: `${headSlots} 1 1 ${deadline}` },
+      stdio: 'ignore',
+    });
+    await Bun.sleep(30);
+    expect(markerHolder.exitCode).toBeNull();
+    const script = slotScript({
+      name: 'test', address: 'test', identity: 'test', memoryMaxGiB: 16, cpuQuotaPercent: 800,
+      slots: 4, processorsPerSlot: 2,
+    }, requestSlots, 3, 3, 3, false, undefined, false, undefined, undefined, CHECK_SLOT_MEMORY_BYTES, undefined, 20)
+      .replaceAll('/srv/rezics-check', hostRoot);
+    const take = Bun.spawn(['/bin/sh', '-c', script], {
+      stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: slotScriptEnvironment(testRoot),
+    });
+    try {
+      take.stdin.write(`backfill-${deadline}\n`);
+      await take.stdin.flush();
+      if (expected === 75) {
+        expect(await take.exited).toBe(expected);
+      } else {
+        await waitForSlotToken(take, requestSlots);
+        const heldLocks = Array.from({ length: requestSlots }, (_, slot) => join(hostRoot, 'slots', `${slot}.lock`));
+        expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status !== 0)).toBe(true);
+        await take.stdin.end();
+        expect(await take.exited).toBe(expected);
+        expect(heldLocks.every((lock) => spawnSync('flock', ['-n', lock, '-c', 'true']).status === 0)).toBe(true);
+      }
+    } finally {
+      try { await take.stdin.end(); } catch {}
+      if (markerHolder.exitCode === null) {
+        markerHolder.kill('SIGTERM');
+        await new Promise<void>((resolve) => markerHolder.once('exit', () => resolve()));
+      }
+    }
+   }
+  }
+  writeFileSync(marker, '1 1 1 0\n');
+  const staleTake = Bun.spawn(['/bin/sh', '-c', slotScript({
+    name: 'test', address: 'test', identity: 'test', memoryMaxGiB: 16, cpuQuotaPercent: 800,
+    slots: 4, processorsPerSlot: 2,
+  }, 1, 3, 3, 3, false, undefined, false, undefined, undefined, CHECK_SLOT_MEMORY_BYTES, undefined).replaceAll('/srv/rezics-check', hostRoot)], {
+    stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: slotScriptEnvironment(testRoot),
+  });
+  staleTake.stdin.end('stale-marker-reap\n');
+  expect(await staleTake.exited).toBe(0);
+  expect(existsSync(marker)).toBe(false);
 });
 
 function workspace(): string {
@@ -1476,9 +1785,13 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(script.indexOf('"$bun" install --frozen-lockfile')).toBeLessThan(script.indexOf('scripts/check.ts'));
   expect(script.indexOf('curl -fsSL')).toBeLessThan(script.indexOf('Bun.revision'));
   expect(script.indexOf('Bun.revision')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
-  // The slot is released and the run directory removed.
+  // The command completes, the slot is released, then the run directory is removed.
   const kinds = seen.filter((event) => event.address === 'ops@b.test').map((event) => event.kind);
-  expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
+  const runAt = kinds.indexOf('run');
+  const releaseAt = kinds.indexOf('release');
+  const cleanupAt = kinds.indexOf('cleanup');
+  expect(runAt).toBeLessThan(releaseAt);
+  expect(releaseAt).toBeLessThan(cleanupAt);
 });
 
 test('among hosts that pass load and available-memory admission, free slots and memory headroom choose the host', async () => {
@@ -1651,33 +1964,33 @@ test('a caller without a memory request keeps the 2.5 GiB reservation', async ()
 });
 
 test('real slot locks enforce reservations, ignore stale files and free memory on release', async () => {
-  const scripts = new Map<number, string>();
-  for (const memoryGiB of [4, 6]) {
-    const { env, events } = scenario({ a: { slots: 3, memoryMaxGiB: 8 } });
-    expect((await remote(env, workspace(), ['true'], ['--memory-gib', String(memoryGiB)])).code).toBe(0);
-    const script = String(events().find((event) => event.kind === 'slot')!.script);
-    // Exercise the generated admission and holder with real flock, without running host-wide stale-run cleanup.
-    scripts.set(memoryGiB, script.slice(script.indexOf('REMOTE_CHECK_SLOT_TAKE=1')));
-  }
   for (const heldGiB of [4, 6]) {
     const directory = mkdtempSync(join(root, 'memory-locks-'));
     mkdirSync(join(directory, 'slots'));
     mkdirSync(join(directory, 'bases'));
+    const environment = slotScriptEnvironment(directory);
     // An unlocked slot's old reservation must not count, even when it exceeds the entire host limit.
     writeFileSync(join(directory, 'slots/0.memory'), String(100 * 2 ** 30));
-    const localScript = (memoryGiB: number) => scripts.get(memoryGiB)!.replaceAll('/srv/rezics-check', directory);
+    const localScript = (memoryGiB: number) => slotScriptFor(directory, 3, false, false, 1, memoryGiB * 2 ** 30, 8);
     const output = join(directory, 'holder-output');
-    const holder = Bun.spawn(['bash', '-c', localScript(heldGiB)], {
+    const holder = Bun.spawn(['/bin/sh', '-c', localScript(heldGiB)], {
       stdin: 'pipe',
       stdout: Bun.file(output),
       stderr: 'pipe',
+      env: environment,
     });
     const stderr = new Response(holder.stderr).text();
     holder.stdin.write('\n');
+    await holder.stdin.flush();
     try {
       await waitFor(() => existsSync(output) && readFileSync(output, 'utf8').includes('SLOTS 1'));
       expect(readFileSync(join(directory, 'slots/0.memory'), 'utf8').trim()).toBe(String(heldGiB * 2 ** 30));
-      const contender = spawnSync('bash', ['-c', localScript(4)], { input: '\n', encoding: 'utf8', timeout: 5_000 });
+      const contender = spawnSync('/bin/sh', ['-c', localScript(4)], {
+        input: '\n',
+        encoding: 'utf8',
+        timeout: 5_000,
+        env: environment,
+      });
       expect(contender.status, contender.stderr).toBe(heldGiB === 4 ? 0 : 75);
       if (heldGiB === 4) expect(contender.stdout).toContain('SLOTS 1');
     } finally {
@@ -1685,7 +1998,12 @@ test('real slot locks enforce reservations, ignore stale files and free memory o
       expect(await holder.exited, await stderr).toBe(0);
     }
     expect(existsSync(join(directory, 'slots/0.memory'))).toBe(false);
-    const next = spawnSync('bash', ['-c', localScript(4)], { input: '\n', encoding: 'utf8', timeout: 5_000 });
+    const next = spawnSync('/bin/sh', ['-c', localScript(4)], {
+      input: '\n',
+      encoding: 'utf8',
+      timeout: 5_000,
+      env: environment,
+    });
     expect(next.status, next.stderr).toBe(0);
     expect(next.stdout).toContain('SLOTS 1');
   }
@@ -1845,7 +2163,10 @@ test('acquisition prefers the host with the most free capacity', async () => {
 
   expect(result.code).toBe(0);
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
-  expect(events().filter((event) => event.kind === 'probe')).toHaveLength(2);
+  const probes = events().filter((event) => event.kind === 'probe');
+  expect(probes).toHaveLength(4);
+  expect(probes.slice(0, 2).every((event) => event.transport === 'standalone')).toBe(true);
+  expect(probes.slice(2).every((event) => event.transport === 'control-master')).toBe(true);
   const granted = events().filter((event) => event.kind === 'slot' && event.address === 'ops@b.test' && event.granted);
   expect(granted).toHaveLength(2);
   expect(new Set(granted.map((event) => event.call)).size).toBe(1);
@@ -1968,7 +2289,9 @@ test('when every host is skipped for load or memory the check waits and names bo
   run.child.kill('SIGTERM');
   const [, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
 
-  expect(stderr).toContain('every check slot is busy; waiting for a free one');
+  expect(stderr).toContain(
+    'waiting for an eligible check host (no responding hosts); configured loaded 2 slots, low 2 slots',
+  );
   expect(stderr).toContain('loaded: load 13 exceeds limit 12');
   expect(stderr).toContain(`low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
   expect(events().some((event) => event.kind === 'slot')).toBe(false);
@@ -1998,7 +2321,7 @@ test('a fallback host starts a non-gate run only when every non-fallback host is
   }
 });
 
-test('when no host can start a non-gate run, fallback entries do not change the existing soonest-start choice', async () => {
+test('when every host is busy, the uploaded placement stays on the selected non-fallback host', async () => {
   const { env, events } = scenario({
     a: { available: 8e9, slots: 4, ordinaryBusySlots: [0, 1] },
     c: { available: 16e9, slots: 4, ordinaryBusySlots: [0, 1], fallback: true },
@@ -2011,11 +2334,14 @@ test('when no host can start a non-gate run, fallback entries do not change the 
     await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
     await waitFor(() => existsSync(waitFile));
     expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
-    expect(events().find((event) => event.kind === 'multi-marker')?.address).toBe('ops@c.test');
+    const selectedHost = events().find((event) => event.kind === 'multi-marker')?.address;
+    expect(selectedHost).toBe('ops@a.test');
+    expect(events().find((event) => event.kind === 'rsync')?.destination).toStartWith(`${selectedHost}:`);
 
-    rmSync(join(env.FAKE_DIR!, 'ops_c_test.slot.1'), { recursive: true });
+    const selectedKey = selectedHost!.replace(/[^a-z0-9]/gi, '_');
+    rmSync(join(env.FAKE_DIR!, `${selectedKey}.slot.1`), { recursive: true });
     await waitFor(() => events().some((event) => event.kind === 'run'));
-    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@c.test');
+    expect(events().find((event) => event.kind === 'run')?.address).toBe(selectedHost);
     expect(await run.child.exited).toBe(0);
   } finally {
     try {
@@ -2352,26 +2678,31 @@ test('pre-command SSH and rsync transport failures retry with backoff on another
   expect(exhausted.events().filter((event) => event.kind === 'run')).toHaveLength(0);
 });
 
-test('a host with no free slot is skipped and with none free the check waits', async () => {
-  const skipped = scenario({ a: { available: 4.5e9 }, b: { available: 30e9, busy: 1000 } });
-  const first = await remote(skipped.env, workspace());
+test('a busy selected host is retained until it frees, without falling back to another answering host', async () => {
+  const selected = scenario({ a: { available: 4.5e9 }, b: { available: 30e9, busy: 1 } });
+  selected.env.REMOTE_CHECK_POLL_MS = '1';
+  const first = await remote(selected.env, workspace());
   expect(first.code).toBe(0);
-  expect(first.stderr).not.toContain('waiting');
-  const seen = skipped.events();
-  expect(seen.find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
+  expect(first.stderr).toContain('waiting for a free one');
+  const seen = selected.events();
+  expect(seen.find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
   expect(
     seen
       .filter((event) => event.kind === 'slot' && event.address === 'ops@b.test')
       .map(({ kind, granted }) => ({ kind, granted })),
-  ).toEqual([{ kind: 'slot', granted: false }]);
+  ).toEqual([{ kind: 'slot', granted: false }, { kind: 'slot', granted: true }]);
+  expect(seen.find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
 
-  const waiting = scenario({ a: { available: 4.5e9, busy: 3 }, b: { available: 30e9, busy: 3 } });
+  const waiting = scenario({ a: { available: 4.5e9, busy: 2 }, b: { available: 30e9, busy: 2 } });
+  waiting.env.REMOTE_CHECK_POLL_MS = '1';
   const second = await remote(waiting.env, workspace());
   expect(second.code).toBe(0);
   expect(second.stderr.match(/waiting/gi)?.length).toBe(1);
   const waited = waiting.events();
-  expect(waited.filter((event) => event.kind === 'slot' && event.granted === false).length).toBe(6);
-  expect(waited.filter((event) => event.kind === 'run').length).toBe(1);
+  expect(waited.filter((event) => event.kind === 'slot' && event.granted === false).length).toBe(2);
+  expect(waited.find((event) => event.kind === 'rsync')?.destination).toStartWith('ops@b.test:');
+  expect(waited.filter((event) => event.kind === 'slot').every((event) => event.address === 'ops@b.test')).toBe(true);
+  expect(waited.find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
 });
 
 test('a host that cannot be reached is skipped', async () => {
@@ -2381,49 +2712,95 @@ test('a host that cannot be reached is skipped', async () => {
   expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@a.test:');
 });
 
-test('all ssh and rsync connections to a host share one control master', async () => {
+test('standalone and multiplexed ssh calls use paired options and one run-private control master', async () => {
   const { env, events } = scenario({ a: { available: 4.5e9, exit: 255, present: ['result.txt'] } });
   expect(controlSocketDirectoryPath(undefined, 124)).toBe('/tmp/rezics-ssh-124');
   expect(controlSocketDirectoryPath(undefined, undefined, 124)).toBe('/tmp/rezics-ssh-124');
   expect(controlSocketDirectoryPath(env.XDG_RUNTIME_DIR, 124)).toBe(join(env.XDG_RUNTIME_DIR!, 'rezics-ssh'));
+  const rejected = spawnSync(
+    'ssh',
+    ['-i', '/keys/a', '-o', '-o', 'ControlMaster=no', 'ops@a.test', 'REMOTE_CHECK_MUST_NOT_RUN'],
+    { env, encoding: 'utf8' },
+  );
+  expect(rejected.status).toBe(2);
+  expect(rejected.stderr).toContain('fake ssh: option -o must have one value');
+  expect(events()).toEqual([]);
+
   const result = await remote(env, workspace(), ['true'], ['--returns', 'result.txt']);
   expect(result.code).toBe(255);
 
   const sshEvents = events().filter((event) => event.kind !== 'rsync');
-  const expectedControlPath = `ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/%C`;
   expect(sshEvents.map((event) => event.kind)).toEqual([
+    'probe',
+    'control-probe',
+    'base',
     'probe',
     'slot',
     'run',
     'status',
+    'release',
     'returns',
     'cleanup',
-    'release',
   ]);
   for (const event of sshEvents) {
     const options = event.options as string[];
-    expect(options).toContain('ControlMaster=auto');
-    expect(options).toContain('ControlPersist=10m');
-    expect(options.filter((option) => option.startsWith('ControlPath='))).toEqual([expectedControlPath]);
+    const argv = event.argv as string[];
+    const positionals: string[] = [];
+    for (let index = 0; index < argv.length; index += 1) {
+      const argument = argv[index]!;
+      if (argument === '-i' || argument === '-o' || argument === '-O') {
+        const value = argv[index + 1];
+        expect(value, `${event.kind}: ${argument} must have one value`).toBeDefined();
+        expect(value, `${event.kind}: ${argument} must not consume another option`).not.toStartWith('-');
+        if (argument === '-o') expect(value).toMatch(/^[A-Za-z][A-Za-z0-9]*=.+$/);
+        if (argument === '-O') expect(value).toBe('exit');
+        index += 1;
+      } else {
+        expect(argument, `${event.kind}: unexpected option`).not.toStartWith('-');
+        positionals.push(argument);
+      }
+    }
+    expect(positionals[0]).toBe(event.address);
+    if (event.kind === 'control-close') expect(positionals).toHaveLength(1);
+    else {
+      expect(positionals).toHaveLength(2);
+      expect(positionals[1]).toBe(argv.at(-1));
+    }
+
+    if (event.transport === 'standalone') {
+      expect(options).toContain('ControlMaster=no');
+      expect(options).toContain('ControlPath=none');
+      expect(options.filter((option) => option.startsWith('ControlPath='))).toEqual(['ControlPath=none']);
+    } else {
+      expect(options).toContain('ControlMaster=auto');
+      expect(options).toContain('ControlPersist=10m');
+      expect(options.filter((option) => option.startsWith('ControlPath='))).toHaveLength(1);
+      expect(options.find((option) => option.startsWith('ControlPath='))).toMatch(
+        new RegExp(`^ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/[a-z0-9]{8}-%C$`),
+      );
+    }
   }
+
+  const multiplexed = sshEvents.filter((event) => event.transport === 'control-master');
+  expect(multiplexed.length).toBeGreaterThan(0);
+  const selectedControlPath = (multiplexed[0]!.options as string[]).find((option) => option.startsWith('ControlPath='));
+  expect(new Set(multiplexed.map((event) => (event.options as string[]).find((option) => option.startsWith('ControlPath=')))).size).toBe(1);
 
   const rsyncEvents = events().filter((event) => event.kind === 'rsync');
   expect(rsyncEvents).toHaveLength(2);
   for (const event of rsyncEvents) {
     expect(event.rsh as string).toContain('ControlMaster=auto');
     expect(event.rsh as string).toContain('ControlPersist=10m');
-    expect(event.rsh as string).toContain(expectedControlPath);
+    expect(event.rsh as string).toContain(selectedControlPath);
   }
 
   const controlDirectory = join(env.XDG_RUNTIME_DIR!, 'rezics-ssh');
   expect(statSync(controlDirectory).mode & 0o777).toBe(0o700);
   await remote(env, workspace(), ['true']);
-  const repeated = events()
-    .filter((event) => event.kind === 'probe')
-    .at(-1)!;
-  expect((repeated.options as string[]).filter((option) => option.startsWith('ControlPath='))).toEqual([
-    expectedControlPath,
-  ]);
+  const repeated = events().filter((event) => event.kind === 'control-probe').at(-1)!;
+  const repeatedPath = (repeated.options as string[]).find((option) => option.startsWith('ControlPath='));
+  expect(repeatedPath).toMatch(new RegExp(`^ControlPath=${env.XDG_RUNTIME_DIR}/rezics-ssh/[a-z0-9]{8}-%C$`));
+  expect(repeatedPath).not.toBe(selectedControlPath);
 });
 
 test('a control master session refusal falls back to its own connection', async () => {
@@ -2433,10 +2810,12 @@ test('a control master session refusal falls back to its own connection', async 
   expect(result.code).toBe(0);
   const seen = events();
   const probe = seen.find((event) => event.kind === 'probe')!;
+  const controlProbe = seen.find((event) => event.kind === 'control-probe')!;
   const refusedAt = seen.findIndex((event) => event.kind === 'master-session-refused');
   const fallbackAt = seen.findIndex((event) => event.kind === 'standalone-fallback');
-  expect(probe.transport).toBe('control-master');
-  expect(refusedAt).toBeGreaterThan(seen.indexOf(probe));
+  expect(probe.transport).toBe('standalone');
+  expect(controlProbe.transport).toBe('standalone-fallback');
+  expect(refusedAt).toBeGreaterThan(seen.indexOf(controlProbe));
   expect(fallbackAt).toBeGreaterThan(refusedAt);
   expect(seen.find((event) => event.kind === 'run')!.transport).toBe('standalone-fallback');
   expect(seen.find((event) => event.kind === 'cleanup')!.transport).toBe('standalone-fallback');
@@ -2542,6 +2921,7 @@ test('provision-check-host installs and validates the sshd limits before reloadi
   const bin = join(root, 'provision-bin');
   const received = join(root, 'provision-remote-script');
   mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'package.json'), JSON.stringify({ type: 'commonjs' }));
   writeFileSync(identity, 'fake identity');
   const ssh = join(bin, 'ssh');
   writeFileSync(
@@ -2729,7 +3109,11 @@ test('SIGTERM stops the run, removes its directory and releases the slot', async
   const kinds = events()
     .filter((event) => event.address === 'ops@a.test')
     .map((event) => event.kind);
-  expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
+  const runAt = kinds.indexOf('run');
+  const releaseAt = kinds.indexOf('release');
+  const cleanupAt = kinds.indexOf('cleanup');
+  expect(runAt).toBeLessThan(releaseAt);
+  expect(releaseAt).toBeLessThan(cleanupAt);
   expect(events().find((event) => event.kind === 'cleanup')!.script as string).toContain('systemctl stop');
 });
 
@@ -2784,7 +3168,7 @@ test('a remote run takes all requested slots in one session on one host and rele
   expect(on('c').filter((event) => event.kind === 'reservation')).toHaveLength(0);
   expect(on('c').filter((event) => event.kind === 'slot' && event.granted === false)).toHaveLength(3);
   expect(on('c').filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(2);
-  // c holds both slots for the whole run and drops them after the run directory is removed.
+  // c holds both slots through the command, then drops them before the run directory is removed.
   const kinds = on('c').map((event) => event.kind);
   expect(
     on('c')
@@ -2794,7 +3178,16 @@ test('a remote run takes all requested slots in one session on one host and rele
   const successfulTakes = on('c').filter((event) => event.kind === 'slot' && event.granted);
   expect(new Set(successfulTakes.map((event) => event.call)).size).toBe(1);
   expect(kinds.indexOf('run')).toBeGreaterThan(kinds.lastIndexOf('slot'));
-  expect(kinds.slice(-3)).toEqual(['cleanup', 'release', 'release']);
+  expect(on('c').find((event) => event.kind === 'run')!.slotHeld).toBe(true);
+  const releases = on('c').filter((event) => event.kind === 'release');
+  expect(releases).toHaveLength(2);
+  expect(releases[0]!.slotHeld).toBe(true);
+  expect(releases[1]!.slotHeld).toBe(false);
+  const runAt = kinds.indexOf('run');
+  const releaseAt = kinds.indexOf('release');
+  const cleanupAt = kinds.indexOf('cleanup');
+  expect(runAt).toBeLessThan(releaseAt);
+  expect(kinds.lastIndexOf('release')).toBeLessThan(cleanupAt);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
 
   // Without the flag a run holds one slot, and a count no host can serve is refused rather than waited for.
@@ -3146,10 +3539,19 @@ test('gates waiting on every host still drain their hosts', async () => {
     b: { available: 20e9, slots: 4, hang: true, hangRuns: 1 },
   });
   for (const host of ['a', 'b']) mkdirSync(join(env.FAKE_DIR!, `ops_${host}_test.gate-marker`));
-  const runs = Array.from({ length: 4 }, () => startRemote(env, workspace(), ['true']));
+  const hostEnvironments = ['a', 'b'].map((host) => {
+    const configured = JSON.parse(readFileSync(env.KERNEL_CHECK_REMOTE!, 'utf8')) as { hosts: Array<{ name: string }> };
+    const hostConfig = configured.hosts.find((entry) => entry.name === host)!;
+    const file = join(env.FAKE_DIR!, `hosts-${host}.json`);
+    writeFileSync(file, JSON.stringify({ hosts: [hostConfig] }));
+    return { ...env, KERNEL_CHECK_REMOTE: file };
+  });
+  const runs = hostEnvironments.flatMap((hostEnv) =>
+    Array.from({ length: 2 }, () => startRemote(hostEnv, workspace(), ['true'])),
+  );
   try {
     await waitFor(() => events().filter((event) => event.kind === 'run').length === 2);
-    await waitFor(() => events().filter((event) => event.kind === 'probe').length >= 12);
+    await waitFor(() => events().filter((event) => event.kind === 'slot' && event.granted === false).length >= 2);
     const started = events().filter((event) => event.kind === 'run');
     expect(started.map((event) => event.address).sort()).toEqual(['ops@a.test', 'ops@b.test']);
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(2);
@@ -3540,6 +3942,20 @@ test('systemd 259 keeps the run script parameter expansions intact', async () =>
   const result = fixture.execute(run);
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain('suffix');
+});
+
+test('the generated shell invocation preserves spaces, quotes and dollar text in every command argument', () => {
+  const fixture = runFixture();
+  const output = '/srv/rezics-check/runs/literal-arguments/command-arguments.bin';
+  const marker = 'should-not-exist';
+  const argumentsToPreserve = ['two words', "single'quote", '"double quotes"', '$HOME', `$(touch ${marker})`];
+  const command = ['sh', '-c', `printf '%s\\n' "$@" > ${output}`, 'sh', ...argumentsToPreserve];
+  const script = runScript('literal-arguments', '/srv/rezics-check/runs/literal-arguments', '.', command, 'check-a');
+  const result = fixture.execute(script);
+
+  expect(result.status, result.stderr).toBe(0);
+  expect(readFileSync(join(fixture.directory, 'runs/literal-arguments/command-arguments.bin'), 'utf8').split('\n').slice(0, -1)).toEqual(argumentsToPreserve);
+  expect(existsSync(join(fixture.directory, 'runs/literal-arguments/should-not-exist'))).toBe(false);
 });
 
 test('older systemd starts the command without --expand-environment support', async () => {
@@ -3993,6 +4409,301 @@ test('every container a check host run starts is in its run slice', () => {
   ]);
 });
 
+test('slow upload and slow returns run without a slot while the remote command owns it', async () => {
+  const cases = [
+    { name: 'upload', config: { slowUploadMs: 130 }, options: [] },
+    {
+      name: 'returns',
+      config: { slowReturnsMs: 130, present: ['.temp/output'] },
+      options: ['--returns', '.temp/output'],
+    },
+  ];
+  for (const item of cases) {
+    const { env, events } = scenario({ a: { available: 8e9, ...item.config } });
+    env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+    const result = await remote(env, workspace(), ['true'], item.options);
+    expect(result.code, item.name).toBe(0);
+
+    const seen = events();
+    const transfers = seen.filter((event) => event.kind === 'rsync');
+    expect(transfers.length, item.name).toBe(item.name === 'upload' ? 1 : 2);
+    expect(transfers.every((event) => event.slotHeld === false), item.name).toBe(true);
+    const runAt = seen.findIndex((event) => event.kind === 'run');
+    const releaseAt = seen.findIndex((event) => event.kind === 'release');
+    const transferAt = seen.findIndex((event) => event.kind === 'rsync');
+    const takeAt = seen.findIndex((event) => event.kind === 'slot' && event.granted === true);
+    expect(runAt, item.name).toBeGreaterThanOrEqual(0);
+    expect(seen[runAt]!.slotHeld, item.name).toBe(true);
+    expect(takeAt, item.name).toBeGreaterThan(transferAt);
+    expect(releaseAt, item.name).toBeGreaterThan(runAt);
+    if (item.name === 'returns') {
+      const returnProbeAt = seen.findIndex((event) => event.kind === 'returns');
+      expect(seen[returnProbeAt]!.slotHeld).toBe(false);
+      expect(releaseAt).toBeLessThan(returnProbeAt);
+    }
+    expect(slotMarkers(env, 'a'), item.name).toEqual([]);
+  }
+});
+
+test('success, command failure, verified transport loss and abort release the remote slot in terminal order', async () => {
+  for (const [label, config, expectedCode] of [
+    ['success', { available: 8e9, present: ['.temp/output'] }, 0],
+    ['command failure', { available: 8e9, exit: 7, present: ['.temp/output'] }, 7],
+    ['transport loss', { available: 8e9, transportFailures: 1 }, 75],
+  ] as const) {
+    const { env, events } = scenario({ a: config });
+    const result = await remote(env, workspace(), ['true'], ['--returns', '.temp/output']);
+    expect(result.code, label).toBe(expectedCode);
+
+    const seen = events();
+    const runAt = seen.findIndex((event) => event.kind === 'run');
+    const releaseAt = seen.findIndex((event) => event.kind === 'release');
+    expect(seen[runAt]!.slotHeld, label).toBe(true);
+    expect(releaseAt, label).toBeGreaterThan(runAt);
+    expect(seen[releaseAt]!.slotHeld, label).toBe(false);
+    if (label === 'transport loss') {
+      const stopAt = seen.findIndex((event) => event.kind === 'stop');
+      expect(stopAt, label).toBeGreaterThan(runAt);
+      expect(stopAt, label).toBeLessThan(releaseAt);
+      expect(seen[stopAt]!.slotHeld, label).toBe(true);
+      expect(seen.some((event) => event.kind === 'returns'), label).toBe(false);
+    } else {
+      const returnAt = seen.findIndex((event) => event.kind === 'returns');
+      expect(returnAt, label).toBeGreaterThan(releaseAt);
+      expect(seen[returnAt]!.slotHeld, label).toBe(false);
+    }
+    expect(seen.find((event) => event.kind === 'cleanup')!.slotHeld, label).toBe(false);
+    expect(slotMarkers(env, 'a'), label).toEqual([]);
+  }
+
+  const aborted = scenario({ a: { available: 8e9, hang: true, silentHang: true } });
+  const run = startRemote(aborted.env, workspace(), ['true'], ['--returns', '.temp/output']);
+  try {
+    await waitFor(() => aborted.events().some((event) => event.kind === 'run'));
+    expect(slotMarkers(aborted.env, 'a')).toHaveLength(1);
+    run.child.kill('SIGTERM');
+    expect(await run.child.exited).toBe(143);
+    await Promise.all([run.stdout, run.stderr]);
+    const seen = aborted.events();
+    const runAt = seen.findIndex((event) => event.kind === 'run');
+    const releaseAt = seen.findIndex((event) => event.kind === 'release');
+    expect(seen[runAt]!.slotHeld).toBe(true);
+    expect(releaseAt).toBeGreaterThan(runAt);
+    expect(seen[releaseAt]!.slotHeld).toBe(false);
+    expect(seen.some((event) => event.kind === 'returns')).toBe(false);
+    expect(slotMarkers(aborted.env, 'a')).toEqual([]);
+  } finally {
+    if (run.child.exitCode === null) run.child.kill('SIGTERM');
+  }
+});
+
+test('stalled upload and return transfers fail as transport, reap rsync and leave no execution slot', async () => {
+  const upload = scenario({ a: { available: 8e9, stallUpload: true } });
+  upload.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  upload.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const uploadResult = await remote(upload.env, workspace(), ['true']);
+  expect(uploadResult.code).toBe(75);
+  expect(uploadResult.stderr).toContain('connection to a failed during workspace upload');
+  expect(upload.events().filter((event) => event.kind === 'rsync')).toHaveLength(3);
+  expect(upload.events().filter((event) => event.kind === 'rsync-stopped')).toHaveLength(3);
+  expect(upload.events().filter((event) => event.kind === 'rsync').every((event) => event.slotHeld === false)).toBe(true);
+  expect(
+    upload.events().filter((event) => event.kind === 'rsync').every((event) =>
+      upload.events()
+        .filter((probe) => probe.kind === 'control-probe')
+        .some((probe) => String(event.rsh).includes(`ControlPath=${String(probe.controlPath)}`)),
+    ),
+  ).toBe(true);
+  expect(upload.events().some((event) => event.kind === 'run')).toBe(false);
+  expect(slotMarkers(upload.env, 'a')).toEqual([]);
+
+  const returns = scenario({ a: { available: 8e9, present: ['.temp/output'], stallReturnsCopy: true } });
+  returns.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  const returnsResult = await remote(returns.env, workspace(), ['true'], ['--returns', '.temp/output']);
+  expect(returnsResult.code).toBe(75);
+  expect(returnsResult.stderr).toContain('connection to a failed during returns copy');
+  const returnedEvents = returns.events();
+  expect(returnedEvents.filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(returnedEvents.filter((event) => event.kind === 'rsync')).toHaveLength(2);
+  expect(returnedEvents.filter((event) => event.kind === 'rsync-stopped')).toHaveLength(1);
+  const releaseAt = returnedEvents.findIndex((event) => event.kind === 'release');
+  const returnAt = returnedEvents.findIndex((event) => event.kind === 'returns');
+  expect(releaseAt).toBeGreaterThan(returnedEvents.findIndex((event) => event.kind === 'run'));
+  expect(releaseAt).toBeLessThan(returnAt);
+  expect(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.slotHeld).toBe(false);
+  expect(
+    String(returnedEvents.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!.rsh),
+  ).toContain(
+    `ControlPath=${String(returnedEvents.find((event) => event.kind === 'control-probe')!.controlPath)}`,
+  );
+  expect(returnedEvents.filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(slotMarkers(returns.env, 'a')).toEqual([]);
+
+  const returnsProbe = scenario({ a: { available: 8e9, present: ['.temp/output'], stallReturnsProbe: true } });
+  returnsProbe.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  const probeResult = await remote(returnsProbe.env, workspace(), ['true'], ['--returns', '.temp/output']);
+  expect(probeResult.code).toBe(75);
+  expect(probeResult.stderr).toContain('connection to a failed during returns probe');
+  expect(returnsProbe.events().filter((event) => event.kind === 'returns-probe-stopped')).toHaveLength(1);
+  expect(returnsProbe.events().filter((event) => event.kind === 'rsync')).toHaveLength(1);
+  expect(slotMarkers(returnsProbe.env, 'a')).toEqual([]);
+});
+
+test('slot take is stopped and reaped when its control session makes no progress', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, stallSlotTakes: 3 } });
+  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(75);
+  expect(result.stderr).toContain('connection to a failed during slot take');
+  expect(events().filter((event) => event.kind === 'slot-take-stalled')).toHaveLength(3);
+  expect(events().filter((event) => event.kind === 'slot-take-stopped')).toHaveLength(3);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+  expect(slotMarkers(env, 'a')).toEqual([]);
+});
+
+test('a silent live remote command remains governed by its command deadline, not transfer progress limits', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, hang: true, silentHang: true } });
+  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '30';
+  const result = await remote(env, workspace(), ['true'], ['--max-ms', '250']);
+  expect(result.code).toBe(124);
+  expect(result.stderr).toContain('deadline reached after 250 ms');
+  expect(result.stderr).not.toContain('connection to a failed during');
+  const seen = events();
+  const runAt = seen.findIndex((event) => event.kind === 'run');
+  const stopAt = seen.findIndex((event) => event.kind === 'stop');
+  const releaseAt = seen.findIndex((event) => event.kind === 'release');
+  expect(runAt).toBeGreaterThanOrEqual(0);
+  expect(stopAt).toBeGreaterThan(runAt);
+  expect(releaseAt).toBeGreaterThan(stopAt);
+  expect(seen[stopAt]!.slotHeld).toBe(true);
+  expect(seen[releaseAt]!.slotHeld).toBe(false);
+  expect(slotMarkers(env, 'a')).toEqual([]);
+});
+
+test('a stalled control master is closed and replaced before upload and command startup', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, stalledControlProbes: 1 } });
+  env.REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS = '50';
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+
+  const seen = events();
+  const probes = seen.filter((event) => event.kind === 'control-probe');
+  const closed = seen.find((event) => event.kind === 'control-close')!;
+  expect(probes).toHaveLength(2);
+  const controlPath = (event: Event): string | undefined =>
+    (event.controlPath as string | undefined) ??
+    (event.options as string[] | undefined)?.find((option) => option.startsWith('ControlPath='));
+  const firstPath = controlPath(probes[0]!);
+  const secondPath = controlPath(probes[1]!);
+  expect(firstPath).toBeDefined();
+  expect(secondPath).not.toBe(firstPath);
+  expect(controlPath(closed)).toBe(firstPath);
+  const firstAt = seen.indexOf(probes[0]!);
+  const closeAt = seen.indexOf(closed);
+  const secondAt = seen.indexOf(probes[1]!);
+  const uploadAt = seen.findIndex((event) => event.kind === 'rsync');
+  const runAt = seen.findIndex((event) => event.kind === 'run');
+  expect(firstAt).toBeLessThan(closeAt);
+  expect(closeAt).toBeLessThan(secondAt);
+  expect(secondAt).toBeLessThan(uploadAt);
+  expect(uploadAt).toBeLessThan(runAt);
+  for (const event of seen.filter((entry) => ['base', 'slot', 'run'].includes(entry.kind))) {
+    expect(controlPath(event)).toBe(secondPath);
+  }
+  expect(slotMarkers(env, 'a')).toEqual([]);
+});
+
+test('a failed replacement control probe is a host-scoped transport failure before slot admission', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, failedControlProbes: 2 } });
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(75);
+  expect(result.stderr).toContain('connection to a failed during control probe');
+  const seen = events();
+  expect(seen.filter((event) => event.kind === 'control-probe')).toHaveLength(2);
+  expect(seen.filter((event) => event.kind === 'control-close')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'rsync')).toHaveLength(0);
+  expect(seen.filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(0);
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(0);
+  expect(slotMarkers(env, 'a')).toEqual([]);
+});
+
+test('an admission wait re-reads slot capacity and stays on its uploaded host until that host is removed', async () => {
+  const raised = scenario({ a: { available: 8e9, slots: 2, ordinaryBusySlots: [0] } });
+  raised.env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
+  const raisedRun = startRemote(raised.env, workspace(), ['true']);
+  try {
+    await waitFor(() => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    const additionalSlot = join(raised.env.FAKE_DIR!, `${hostKey('a')}.slot.1`);
+    mkdirSync(additionalSlot);
+    writeFileSync(additionalSlot + '.memory', String(2.5 * 2 ** 30));
+    rewriteHosts(raised.env, [{ name: 'a', slots: 3 }]);
+    rewriteHostConfig(raised.env, 'a', { slots: 3 });
+    await waitFor(() => raised.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4);
+    await Bun.sleep(20);
+    rmSync(additionalSlot, { recursive: true, force: true });
+    rmSync(additionalSlot + '.memory', { force: true });
+    const [code, stderr] = await Promise.all([raisedRun.child.exited, raisedRun.stderr]);
+    await raisedRun.stdout;
+    expect(code, stderr).toBe(0);
+    expect(stderr).toContain('configured a 3 slots');
+    expect(raised.events().filter((event) => event.kind === 'rsync')).toHaveLength(1);
+    expect(raised.events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
+    expect(slotMarkers(raised.env, 'a')).toEqual([`${hostKey('a')}.slot.0`]);
+  } finally {
+    if (raisedRun.child.exitCode === null) raisedRun.child.kill('SIGTERM');
+  }
+
+  const moved = scenario({ a: { available: 8e9, slots: 2, ordinaryBusySlots: [0] } });
+  const movedRun = startRemote(moved.env, workspace(), ['true']);
+  try {
+    await waitFor(() => moved.events().some((event) => event.kind === 'rsync'));
+    await waitFor(() => moved.events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    rewriteHostConfig(moved.env, 'b', { slots: 2 });
+    rewriteHosts(moved.env, [{ name: 'b', slots: 2 }]);
+    const [code, stderr] = await Promise.all([movedRun.child.exited, movedRun.stderr]);
+    await movedRun.stdout;
+    expect(code, stderr).toBe(0);
+    const seen = moved.events();
+    const uploads = seen.filter((event) => event.kind === 'rsync');
+    expect(uploads.map((event) => String(event.destination).slice(0, String(event.destination).indexOf(':')))).toEqual([
+      'ops@a.test',
+      'ops@b.test',
+    ]);
+    const run = seen.find((event) => event.kind === 'run')!;
+    expect(run.address).toBe('ops@b.test');
+    expect(seen.some((event) => event.kind === 'slot' && event.address === 'ops@a.test')).toBe(false);
+    expect(slotMarkers(moved.env, 'a')).toEqual([`${hostKey('a')}.slot.0`]);
+    expect(slotMarkers(moved.env, 'b')).toEqual([]);
+  } finally {
+    if (movedRun.child.exitCode === null) movedRun.child.kill('SIGTERM');
+  }
+});
+
+test('a malformed host-file rewrite keeps the last valid host list through the admission wait', async () => {
+  const { env, events } = scenario({ a: { available: 8e9, ordinaryBusySlots: [0] } });
+  env.REMOTE_CHECK_WAIT_REPEAT_MS = '5';
+  const run = startRemote(env, workspace(), ['true']);
+  try {
+    await waitFor(() => events().some((event) => event.kind === 'rsync'));
+    await waitFor(() => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 2);
+    writeFileSync(env.KERNEL_CHECK_REMOTE!, '{ "hosts": [');
+    await waitFor(() => events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test').length >= 4);
+    const busySlot = join(env.FAKE_DIR!, `${hostKey('a')}.slot.0`);
+    rmSync(busySlot, { recursive: true, force: true });
+    rmSync(busySlot + '.memory', { force: true });
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    await run.stdout;
+    expect(code, stderr).toBe(0);
+    expect(stderr.match(/could not reload hosts file .* retaining last valid list/g)).toHaveLength(1);
+    expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
+    expect(events().filter((event) => event.kind === 'rsync')).toHaveLength(1);
+    expect(slotMarkers(env, 'a')).toEqual([]);
+  } finally {
+    if (run.child.exitCode === null) run.child.kill('SIGTERM');
+  }
+});
+
 test('a remote run copies the declared output paths back after it ends, also when it fails', async () => {
   const failed = scenario({ a: { available: 8e9, exit: 7, present: ['.temp/screenshots'] } });
   const failedWorkspace = workspace();
@@ -4015,8 +4726,14 @@ test('a remote run copies the declared output paths back after it ends, also whe
   expect(syncs[1]!.files).toEqual(['.temp/screenshots']);
   const kinds = failedEvents.map((event) => event.kind);
   const runAt = kinds.indexOf('run');
+  const releaseAt = kinds.indexOf('release');
+  const returnsAt = kinds.indexOf('returns');
   expect(runAt).toBeGreaterThanOrEqual(0);
-  expect(kinds.indexOf('returns')).toBeGreaterThan(runAt);
+  expect(failedEvents[runAt]!.slotHeld).toBe(true);
+  expect(failedEvents[releaseAt]!.slotHeld).toBe(false);
+  expect(releaseAt).toBeGreaterThan(runAt);
+  expect(returnsAt).toBeGreaterThan(releaseAt);
+  expect(failedEvents[returnsAt]!.slotHeld).toBe(false);
   expect(kinds.lastIndexOf('rsync')).toBeGreaterThan(kinds.indexOf('returns'));
   expect(kinds.indexOf('cleanup')).toBeGreaterThan(kinds.lastIndexOf('rsync'));
 
@@ -4953,4 +5670,484 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     expect(await express.exited).toBe(0);
     for (const blocker of blockers) blocker.kill();
   }
+
+/** Native production entry, with only systemd/runtime/download endpoints replaced; Python owns real child processes. */
+function preparationFixture() {
+  const directory = mkdtempSync(join(root, 'preparation-'));
+  const bin = join(directory, 'bin');
+  const events = join(directory, 'installer-events');
+  mkdirSync(bin);
+  writeFileSync(events, '');
+  writeFileSync(join(bin, 'systemd-run'), `#!/bin/sh
+if [ "$1" = --help ]; then echo --expand-environment; exit 0; fi
+while [ "$#" -gt 0 ] && [ "$1" != python3 ]; do shift; done
+exec "$@"
+`);
+  writeFileSync(join(bin, 'systemctl'), '#!/bin/sh\nexit 0\n');
+  writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+  for (const name of ['systemd-run', 'systemctl', 'docker']) chmodSync(join(bin, name), 0o755);
+  const bun = join(bin, 'pinned-bun');
+  writeFileSync(bun, `#!/usr/bin/env python3
+import json, os, pathlib, subprocess, sys, time
+if sys.argv[1] == '--eval':
+    if os.environ.get('PREPARATION_MODE') == 'runtime-stall':
+        time.sleep(60)
+    sys.exit(0)
+assert sys.argv[1:] == ['install', '--frozen-lockfile'], sys.argv
+root = pathlib.Path.cwd()
+version = json.loads((root / 'package.json').read_text())['nativeVersion']
+package = root / 'node_modules/native-installer'
+package.mkdir(parents=True)
+(package / 'package.json').write_text(json.dumps({'name': 'workerd' if os.environ.get('PREPARATION_MODE') in ['native', 'invalid-native'] else '@fixture/native-installer', 'version': version}))
+with open(os.environ['PREPARATION_EVENTS'], 'a') as events:
+    events.write('install:' + version + '\\n')
+child = subprocess.Popen([sys.executable, '-c', r"""
+import json, os, pathlib, signal, subprocess, sys, time
+package = pathlib.Path.cwd()
+version = json.loads((package / 'package.json').read_text())['version']
+with open(os.environ['PREPARATION_EVENTS'], 'a') as events:
+    events.write('postinstall:' + version + '\\n')
+mode = os.environ.get('PREPARATION_MODE', 'normal')
+if mode in ['spinner', 'signal']:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    # Detached grandchildren must be adopted/reaped too; killing just a process group is insufficient.
+    child = subprocess.Popen([sys.executable, '-c', 'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'], start_new_session=True)
+    with open(os.environ['PREPARATION_PIDS'], 'w') as pids:
+        pids.write(str(os.getpid()) + '\\n' + str(child.pid) + '\\n')
+    pathlib.Path(os.environ['PREPARATION_READY']).touch()
+    while True:
+        print('installer still producing output ' + '*' * 512, flush=True)
+        time.sleep(0.01)
+if mode == 'failure':
+    sys.exit(19)
+time.sleep(float(os.environ.get('PREPARATION_INSTALL_DELAY', '0')))
+with open(os.environ['PREPARATION_EVENTS'], 'a') as events:
+    events.write('download:' + version + '\\n')
+(package / 'bin').mkdir()
+binary = package / 'bin/native'
+binary.write_text('#!/bin/sh\\nprintf %s ' + version + '\\n')
+binary.chmod(0o755)
+if mode == 'invalid-native':
+    stale = package / 'bin/workerd'
+    stale.write_text('#!/bin/sh\\necho workerd 1999-01-01\\n')
+    stale.chmod(0o755)
+if mode == 'native':
+    date = version.split('.')[1]
+    workerd = package / 'bin/workerd'
+    workerd.write_text('#!/bin/sh\\necho workerd ' + date[:4] + '-' + date[4:6] + '-' + date[6:] + '\\n')
+    workerd.chmod(0o755)
+    bun = package.parent / 'bun'
+    (bun / 'bin').mkdir(parents=True)
+    bun_version = os.environ['REMOTE_CHECK_PREPARATION_VERSION'] + '+fixture'
+    (bun / 'package.json').write_text(json.dumps({'name': 'bun', 'version': bun_version, 'bin': {'bun': 'bin/bun'}}))
+    (bun / 'bin/bun').write_text('#!/usr/bin/env python3\\nimport sys\\nsys.exit(0 if sys.argv[1] == "--eval" and sys.argv[3] == ' + repr(os.environ['REMOTE_CHECK_PREPARATION_REVISION']) + ' else 1)\\n')
+    (bun / 'bin/bun').chmod(0o755)
+    with open(os.environ['PREPARATION_EVENTS'], 'a') as events:
+        events.write('download:bun@' + bun_version + '\\n')
+root = package.parent.parent
+(root / 'generated').mkdir()
+(root / 'generated/lifecycle.txt').write_text(version)
+(root / 'node_modules/.bin').mkdir()
+(root / 'node_modules/.bin/native').symlink_to('../native-installer/bin/native')
+"""], cwd=package)
+sys.exit(child.wait())
+`);
+  chmodSync(bun, 0o755);
+  let count = 0;
+  const create = (settings: { mode?: string; bound?: number; lifetime?: number; version?: string; lock?: string; delay?: string; program?: string; revision?: string; command?: string[] } = {}) => {
+    const id = `preparation-${count++}`;
+    const run = join(directory, 'runs', id);
+    mkdirSync(run, { recursive: true });
+    writeFileSync(join(run, 'package.json'), JSON.stringify({ name: 'fixture', nativeVersion: settings.version ?? '1.2.3' }));
+    writeFileSync(join(run, 'bun.lock'), settings.lock ?? 'frozen-native-1');
+    const pids = join(directory, id + '-pids');
+    const ready = join(directory, id + '-ready');
+    const command = settings.command ?? ['sh', '-c', 'test "$(node_modules/.bin/native)" = "$(cat generated/lifecycle.txt)" && touch command-invoked'];
+    let script = runScript(id, `/srv/rezics-check/runs/${id}`, '.', command, 'native-host', 60_000, 'ordinary', settings.bound ?? 5_000, undefined, settings.lifetime)
+      .replaceAll('/srv/rezics-check', directory)
+      .replaceAll(':/usr/local/bin:', ':');
+    if (settings.program) script = script.replaceAll(Buffer.from(dependencyPreparationProgram).toString('base64'), Buffer.from(settings.program).toString('base64'));
+    if (settings.revision) script = script.replace(/expected_revision=[a-f0-9]+/, `expected_revision=${settings.revision}`);
+    const environment = {
+      ...cleanTestEnvironment(process.env),
+      PATH: `${bin}:${process.env.PATH}`,
+      REMOTE_CHECK_PINNED_BUN_PATH: bun,
+      PREPARATION_MODE: settings.mode ?? 'normal',
+      PREPARATION_EVENTS: events,
+      PREPARATION_PIDS: pids,
+      PREPARATION_READY: ready,
+      PREPARATION_INSTALL_DELAY: settings.delay ?? '0',
+    };
+    return {
+      run, ready, pids, script,
+      environment,
+      execute: () => spawnSync('sh', ['-c', script], { env: environment, cwd: repository, encoding: 'utf8', timeout: 10_000 }),
+      start: () => {
+        const child = Bun.spawn(['sh', '-c', script], { env: environment, cwd: repository, stdout: 'pipe', stderr: 'pipe' });
+        return { child, stdout: new Response(child.stdout).text(), stderr: new Response(child.stderr).text() };
+      },
+      receipt: () => JSON.parse(readFileSync(join(run, 'preparation-status.json'), 'utf8')),
+      artifacts: () => JSON.parse(readFileSync(join(run, 'preparation-install.json'), 'utf8')),
+      reaped: () => {
+        const owned = readFileSync(pids, 'utf8').trim().split('\n').map(Number);
+        expect(owned).toHaveLength(2);
+        expect(owned.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
+      },
+    };
+  };
+  return {
+    directory, create,
+    events: () => readFileSync(events, 'utf8').trim().split('\n').filter(Boolean),
+  };
+}
+
+test('remote dependency preparation has an absolute three-minute default and reaps an active named installer without starting the command', () => {
+  expect(DEFAULT_PREPARATION_TIMEOUT_MS).toBe(180_000);
+  expect(generatedHostRun()).toContain('supervise 180000 check-a cache-test');
+  const fixture = preparationFixture();
+  const run = fixture.create({ mode: 'spinner', bound: 1_200 });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(70);
+  const receipt = run.receipt();
+  expect(receipt).toMatchObject({ status: 'infrastructure-failure', host: 'native-host', phase: 'install/preparation', reason: 'absolute preparation deadline exceeded', activePackages: [{ name: '@fixture/native-installer', version: '1.2.3' }], packageClassification: 'active' });
+  expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_200);
+  expect(receipt.elapsedMs).toBeLessThan(5_000);
+  expect(Buffer.byteLength(receipt.logTail)).toBeLessThanOrEqual(8_192);
+  expect(result.stderr).toContain('installer still producing output');
+  expect(result.stderr).toContain('infrastructure failure');
+  expect(existsSync(join(run.run, '.bun-install-complete'))).toBe(false);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('70\n');
+  run.reaped();
+  console.info('preparation timeout evidence', JSON.stringify({ boundMs: 1_200, elapsedMs: receipt.elapsedMs, phase: receipt.phase, activePackages: receipt.activePackages, descendantsReaped: true, commandStarted: false }));
+});
+
+test('the preparation bound includes runtime verification and honestly reports unknown before any package starts', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({ mode: 'runtime-stall', bound: 500 });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(70);
+  expect(run.receipt()).toMatchObject({ phase: 'install/preparation', activePackages: [], packageClassification: 'unknown' });
+  expect(fixture.events()).toEqual([]);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+});
+
+test('failed installation is infrastructure, never command failure or a successful dependency cache publication', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({ mode: 'failure' });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(70);
+  expect(run.receipt()).toMatchObject({ status: 'infrastructure-failure', phase: 'install/preparation' });
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  expect(existsSync(join(run.run, '.bun-install-complete'))).toBe(false);
+  expect(readdirSync(join(fixture.directory, 'dependency-artifacts')).every((name) => name.endsWith('.lock'))).toBe(true);
+});
+
+for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
+  test(`preparation ${signal} teardown reaps owned detached descendants and preserves an unrelated installer`, async () => {
+    const fixture = preparationFixture();
+    const run = fixture.create({ mode: 'signal' });
+    const unrelated = Bun.spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' });
+    const running = run.start();
+    try {
+      for (let attempt = 0; attempt < 250 && !existsSync(run.ready) && running.child.exitCode === null; attempt += 1) await Bun.sleep(10);
+      expect(existsSync(run.ready), await (running.child.exitCode === null ? Promise.resolve('installer startup') : running.stderr)).toBe(true);
+      // Both shell entries exec, so this is the production supervisor's PID.
+      running.child.kill(signal);
+      expect(await running.child.exited, await running.stderr).toBe(signal === 'SIGTERM' ? 143 : 129);
+      run.reaped();
+      expect(existsSync(`/proc/${unrelated.pid}`)).toBe(true);
+      expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+    } finally {
+      unrelated.kill('SIGTERM');
+      await unrelated.exited;
+      if (running.child.exitCode === null) running.child.kill('SIGTERM');
+      await running.child.exited;
+      await Promise.all([running.stdout, running.stderr]);
+    }
+  });
+}
+
+test('cold then warm native preparation reuses verified exact-platform lifecycle outputs with private writable copies', () => {
+  const fixture = preparationFixture();
+  const cold = fixture.create();
+  expect(cold.execute().status).toBe(0);
+  expect(cold.artifacts().cache).toBe('miss');
+  const warm = fixture.create();
+  const result = warm.execute();
+  expect(result.status, result.stderr).toBe(0);
+  expect(warm.artifacts()).toMatchObject({ cache: 'hit', key: cold.artifacts().key, packages: [{ name: '@fixture/native-installer', version: '1.2.3' }] });
+  expect(fixture.events()).toEqual(['install:1.2.3', 'postinstall:1.2.3', 'download:1.2.3']);
+  expect(existsSync(join(warm.run, 'command-invoked'))).toBe(true);
+  const binary = 'node_modules/native-installer/bin/native';
+  expect(statSync(join(warm.run, binary)).ino).not.toBe(statSync(join(cold.run, binary)).ino);
+  writeFileSync(join(warm.run, binary), 'mutated by command');
+  const third = fixture.create();
+  expect(third.execute().status).toBe(0);
+  expect(third.artifacts().cache).toBe('hit');
+  expect(fixture.events()).toHaveLength(3);
+  console.info('preparation cache evidence', JSON.stringify({ packages: warm.artifacts().packages, runs: 3, installs: 1, postinstalls: 1, downloads: 1, privateCopies: true }));
+});
+
+test('native preparation invalidates changed package version, lock, platform, runtime revision and corrupt or partial artifacts', () => {
+  const fixture = preparationFixture();
+  const first = fixture.create();
+  expect(first.execute().status).toBe(0);
+  const originalKey = first.artifacts().key;
+  for (const settings of [
+    { version: '2.0.0' }, { lock: 'changed-frozen-lock' },
+    { program: dependencyPreparationProgram.replace('platform.machine()', "'other-platform'") },
+    { revision: 'abcdef1234' },
+  ]) {
+    const changed = fixture.create(settings);
+    const result = changed.execute();
+    expect(result.status, result.stderr).toBe(0);
+    expect(changed.artifacts().cache).toBe('miss');
+    expect(changed.artifacts().key).not.toBe(originalKey);
+  }
+  const entry = join(fixture.directory, 'dependency-artifacts', originalKey);
+  writeFileSync(join(entry, 'payload/node_modules/native-installer/bin/native'), 'corrupt');
+  const corrupt = fixture.create();
+  expect(corrupt.execute().status).toBe(0);
+  expect(corrupt.artifacts().cache).toBe('miss');
+  rmSync(join(entry, 'manifest.json'));
+  const partial = fixture.create();
+  expect(partial.execute().status).toBe(0);
+  expect(partial.artifacts().cache).toBe('miss');
+  expect(fixture.events().filter((event) => event.startsWith('download:'))).toHaveLength(7);
+});
+
+test('concurrent native preparation publishes once atomically and a bounded cache waiter cannot remove the publisher', async () => {
+  const fixture = preparationFixture();
+  const first = fixture.create({ delay: '1.0' });
+  const running = first.start();
+  for (let attempt = 0; attempt < 250 && !fixture.events().includes('postinstall:1.2.3') && running.child.exitCode === null; attempt += 1) await Bun.sleep(10);
+  expect(fixture.events()).toContain('postinstall:1.2.3');
+  const waiter = fixture.create({ bound: 400 });
+  const waiting = waiter.start();
+  const second = fixture.create();
+  const concurrent = second.start();
+  expect(await waiting.child.exited, await waiting.stderr).toBe(70);
+  expect(existsSync(join(waiter.run, 'command-invoked'))).toBe(false);
+  expect(await running.child.exited, await running.stderr).toBe(0);
+  expect(await concurrent.child.exited, await concurrent.stderr).toBe(0);
+  await Promise.all([running.stdout, waiting.stdout, concurrent.stdout]);
+  expect(first.artifacts().cache).toBe('miss');
+  expect(second.artifacts()).toMatchObject({ cache: 'hit', key: first.artifacts().key });
+  expect(fixture.events()).toEqual(['install:1.2.3', 'postinstall:1.2.3', 'download:1.2.3']);
+  const final = fixture.create();
+  expect(final.execute().status).toBe(0);
+  expect(final.artifacts().cache).toBe('hit');
+});
+
+test('admission probes refresh only the uploaded placement so queued work cannot be swept before execution', async () => {
+  const fixture = scenario({ a: { available: 20e9 } });
+  const result = await remote(fixture.env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+  const upload = fixture.events().find((event) => event.kind === 'rsync')!;
+  const directory = String(upload.destination).slice(String(upload.destination).indexOf(':') + 1).replace(/\/$/, '');
+  const probes = fixture.events().filter((event) => event.kind === 'probe');
+  expect(probes.some((event) => String((event.argv as string[]).at(-1)).includes(`touch ${directory}/.alive`))).toBe(true);
+});
+
+
+test('successful preparation leaves a quiet live command outside the preparation bound and preserves native failure status', () => {
+  const fixture = preparationFixture();
+  const quiet = fixture.create({ bound: 800, command: ['/bin/sleep', '1.2'] });
+  const result = quiet.execute();
+  expect(result.status, result.stderr).toBe(0);
+  expect(existsSync(join(quiet.run, 'preparation-status.json'))).toBe(false);
+  expect(existsSync(join(quiet.run, 'command-started'))).toBe(true);
+  expect(readFileSync(join(quiet.run, 'exit-status'), 'utf8')).toBe('0\n');
+  const failed = fixture.create({ command: ['sh', '-c', 'exit 70'] });
+  expect(failed.execute().status).toBe(70);
+  expect(failed.artifacts().cache).toBe('hit');
+  expect(existsSync(join(failed.run, 'preparation-status.json'))).toBe(false);
+  expect(existsSync(join(failed.run, 'command-started'))).toBe(true);
+  expect(fixture.events().filter((event) => event.startsWith('download:'))).toHaveLength(1);
+});
+
+
+test('native preparation rejects a stale workerd binary even when its installer returned success', () => {
+  const fixture = preparationFixture();
+  const run = fixture.create({ mode: 'invalid-native', version: '1.20261019.1' });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(70);
+  expect(run.receipt()).toMatchObject({ status: 'infrastructure-failure', phase: 'install/preparation' });
+  expect(result.stderr).toContain('workerd@1.20261019.1 binary version mismatch');
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
+  expect(existsSync(join(run.run, '.bun-install-complete'))).toBe(false);
+});
+
+test('native preparation certifies both workerd versions and pinned Bun revision before warm reuse', () => {
+  const fixture = preparationFixture();
+  const bunVersion = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager.slice(4) + '+fixture';
+  const evidence = [];
+  for (const version of ['1.20261019.1', '1.20261023.1']) {
+    const cold = fixture.create({ mode: 'native', version });
+    const installed = cold.execute();
+    expect(installed.status, installed.stderr).toBe(0);
+    expect(cold.artifacts().cache).toBe('miss');
+    const warm = fixture.create({ mode: 'native', version });
+    const reused = warm.execute();
+    expect(reused.status, reused.stderr).toBe(0);
+    expect(warm.artifacts()).toMatchObject({ cache: 'hit', key: cold.artifacts().key });
+    expect(warm.artifacts().nativeChecks).toContainEqual({ name: 'workerd', version, binaryVersion: `workerd ${version.slice(2, 6)}-${version.slice(6, 8)}-${version.slice(8, 10)}` });
+    expect(warm.artifacts().nativeChecks).toContainEqual({ name: 'bun', version: bunVersion, revision: expect.any(String) });
+    expect(fixture.events().filter((event) => event === `download:${version}`)).toHaveLength(1);
+    evidence.push(warm.artifacts().nativeChecks);
+  }
+  expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(2);
+  console.info('native version cache evidence', JSON.stringify({ runs: 4, workerdDownloads: 2, bunDownloads: 2, verifiedPackages: evidence }));
+});
+
+test('physical run lifetime uses safe estimate arithmetic, a finite fallback and an unraisable two-hour cap', () => {
+  for (const [estimate, maximum, expected] of [
+    [undefined, undefined, 7_200_000], [0, undefined, 7_200_000], [1, undefined, 1_000],
+    [400, undefined, 1_200], [120_000, undefined, 360_000], [3_000_000, undefined, 7_200_000],
+    [Number.MAX_SAFE_INTEGER, undefined, 7_200_000], [120_000, 123, 123],
+    [120_000, 9_000_000, 360_000], [undefined, Number.MAX_SAFE_INTEGER, 7_200_000],
+  ] as const) expect(effectiveRunLifetimeMs(estimate, maximum)).toBe(expected);
+  for (const invalid of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => effectiveRunLifetimeMs(invalid)).toThrow('estimate-ms');
+    expect(() => effectiveRunLifetimeMs(1, invalid)).toThrow('max-ms');
+  }
+  expect(() => effectiveRunLifetimeMs(1, 0)).toThrow('max-ms');
+  expect(generatedHostRun()).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 7200000');
+});
+
+test('ordinary, multi-slot, gate and try-once callers pass the same lifetime policy to the actual host entry', async () => {
+  for (const flags of [[], ['--slots', '2'], ['--gate']]) {
+    const fixture = scenario({ a: { available: 40e9, slots: 4 } });
+    expect((await remote(fixture.env, workspace(), ['true'], [...flags, '--estimate-ms', '3000', '--max-ms', '8000'])).code).toBe(0);
+    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 8000');
+  }
+  const fixture = scenario({ a: { available: 40e9, slots: 4 } });
+  const directory = workspace();
+  const child = Bun.spawn([process.execPath, '--eval', `
+    const { tryRemoteCheck, readHosts } = await import(${JSON.stringify(remoteCheck)});
+    const result = await tryRemoteCheck({hosts:readHosts(process.env.KERNEL_CHECK_REMOTE),workspace:${JSON.stringify(directory)},command:['true'],estimateMs:3000},new AbortController().signal);
+    if (result.status !== 'ran' || result.code !== 0) process.exit(1);
+  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(await child.exited, (await output).join('')).toBe(0);
+  expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 9000');
+});
+
+test('run-lifetime classification requires the named schema, never a native exit 124 or test-own timeout', () => {
+  const receipt = { schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host: 'native-host', run: 'native-run', limitMs: 900, elapsedMs: 1100, command: 'bun test [2 arguments]' };
+  expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toEqual(receipt);
+  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toBe(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
+  expect(remoteLifetimeInfrastructureCause('test timed out; native exit 124')).toBeUndefined();
+  expect(parseRunLifetimeFailure('test timed out after 5000 ms; exit 124')).toBeNull();
+  expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + '{"phase":"install/preparation"}')).toBeNull();
+  expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify({ ...receipt, schema: 2 }))).toBeNull();
+});
+
+for (const noisy of [false, true]) {
+  test(`host lifetime survives caller loss and ${noisy ? 'unread saturated output' : 'a quiet command'} while reaping a TERM-resistant fork/setsid CPU tree`, async () => {
+    const fixture = preparationFixture();
+    const command = `import os,pathlib,signal,subprocess,sys,time
+root=pathlib.Path.cwd()
+with open(root/'command-count','a') as f: f.write('run\\n')
+signal.signal(signal.SIGTERM,signal.SIG_IGN)
+child=os.fork()
+if child == 0:
+ os.setsid()
+ grandchild=os.fork()
+ with open(root/'command-pids','a') as f: f.write(str(os.getpid())+'\\n')
+ while True: pass
+with open(root/'command-pids','a') as f: f.write(str(os.getpid())+'\\n')
+(root/'command-ready').touch()
+while True:
+ ${noisy ? "os.write(1,b'x'*65536); os.write(2,b'y'*65536)" : 'time.sleep(.02)'}
+`;
+    const run = fixture.create({ lifetime: 1_500, command: ['python3', '-c', command, '--token=never-record-this-secret'] });
+    const script = join(fixture.directory, 'host-entry.sh');
+    writeFileSync(script, run.script);
+    // This native caller disappears immediately. Its detached host supervisor is adopted by a fixture subreaper;
+    // nobody reads either output pipe. A real lock stays held until that physical supervisor has exited.
+    const driver = `import ctypes,fcntl,json,os,pathlib,subprocess,sys,time
+ctypes.CDLL(None).prctl(36,1,0,0,0)
+root=pathlib.Path(sys.argv[2]); lock=open(root/'capacity.lock','w'); fcntl.flock(lock,fcntl.LOCK_EX)
+out=os.pipe(); err=os.pipe(); launcher=os.fork()
+if launcher == 0:
+ subprocess.Popen(['sh',sys.argv[1]],start_new_session=True,stdout=out[1],stderr=err[1])
+ os._exit(0)
+os.close(out[1]); os.close(err[1]); os.waitpid(launcher,0)
+(root/'caller-lost').touch()
+end=time.monotonic()+8
+while True:
+ try:
+  pid,status=os.waitpid(-1,os.WNOHANG)
+  if pid: continue
+ except ChildProcessError: break
+ if time.monotonic()>end: raise RuntimeError('host supervisor survived its bound')
+ time.sleep(.01)
+(root/'physical-finished').touch()
+fcntl.flock(lock,fcntl.LOCK_UN)
+`;
+    const sentinel = Bun.spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' });
+    const caller = Bun.spawn(['python3', '-c', driver, script, run.run], { env: run.environment, stdout: 'pipe', stderr: 'pipe' });
+    const output = Promise.all([new Response(caller.stdout).text(), new Response(caller.stderr).text()]);
+    try {
+      for (let attempt = 0; attempt < 250 && !existsSync(join(run.run, 'command-ready')) && caller.exitCode === null; attempt++) await Bun.sleep(10);
+      expect(existsSync(join(run.run, 'command-ready'))).toBe(true);
+      expect(existsSync(join(run.run, 'caller-lost'))).toBe(true);
+      expect(existsSync(join(run.run, 'exit-status'))).toBe(false);
+      expect(spawnSync('flock', ['-n', join(run.run, 'capacity.lock'), 'true']).status).toBe(1);
+      expect(await caller.exited, (await output).join('')).toBe(0);
+      const receipt = JSON.parse(readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'));
+      expect(receipt).toMatchObject({ schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host: 'native-host', limitMs: 1_500 });
+      expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_500);
+      expect(receipt.elapsedMs).toBeLessThan(6_000);
+      expect(receipt.command).toContain('python3');
+      expect(JSON.stringify(receipt)).not.toContain('never-record-this-secret');
+      expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('124\n');
+      const owned = readFileSync(join(run.run, 'command-pids'), 'utf8').trim().split('\n').map(Number);
+      expect(owned).toHaveLength(3);
+      expect(owned.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
+      expect(readFileSync(join(run.run, 'command-count'), 'utf8')).toBe('run\n');
+      expect(existsSync(`/proc/${sentinel.pid}`)).toBe(true);
+      expect(spawnSync('flock', ['-n', join(run.run, 'capacity.lock'), 'true']).status).toBe(0);
+      expect(readFileSync(join(fixture.directory, 'receipts', receipt.run, 'run-lifetime-status.json'), 'utf8')).toBe(readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'));
+      console.info('host lifetime evidence', JSON.stringify({ noisy, limitMs: receipt.limitMs, elapsedMs: receipt.elapsedMs, command: receipt.command, ownedReaped: owned.length, callerLost: true, commands: 1 }));
+    } finally {
+      sentinel.kill('SIGTERM');
+      await sentinel.exited;
+      if (caller.exitCode === null) caller.kill('SIGTERM');
+      await caller.exited;
+      await output;
+    }
+  });
+}
+
+test('host lifetime preserves successful output and a native command exit 124 without a lifetime infrastructure receipt', () => {
+  const fixture = preparationFixture();
+  const success = fixture.create({ lifetime: 2_000, command: ['sh', '-c', 'printf exact-output; printf returned > returned-artifact'] });
+  const completed = success.execute();
+  expect(completed.status, completed.stderr).toBe(0);
+  expect(completed.stdout).toBe('exact-output');
+  expect(readFileSync(join(success.run, 'returned-artifact'), 'utf8')).toBe('returned');
+  expect(existsSync(join(success.run, 'run-lifetime-status.json'))).toBe(false);
+  const native = fixture.create({ lifetime: 2_000, command: ['sh', '-c', 'echo test-own-timeout >&2; exit 124'] });
+  const failed = native.execute();
+  expect(failed.status).toBe(124);
+  expect(failed.stderr).toContain('test-own-timeout');
+  expect(existsSync(join(native.run, 'run-lifetime-status.json'))).toBe(false);
+});
+
+test('a failed returns transfer cannot erase a named lifetime failure or repeat its command locally', async () => {
+  const fixture = scenario({ a: { available: 20e9, exit: 124, lifetimeFailure: true, present: ['artifact'], rsyncBackExit: 12 } });
+  const directory = workspace();
+  const completed = await remote(fixture.env, directory, ['bun', 'test', 'named.test.ts'], ['--estimate-ms', '3000', '--returns', 'artifact']);
+  expect(completed.code).toBe(124);
+  expect(completed.stderr).toContain(RUN_LIFETIME_FAILURE_MARKER);
+  expect(completed.stderr).toContain('returns failed after recorded run-lifetime infrastructure failure');
+  const receipt = parseRunLifetimeFailure(completed.stderr)!;
+  expect(receipt).toMatchObject({ phase: 'run-lifetime', limitMs: 9000 });
+  expect(JSON.parse(readFileSync(join(directory, '.temp/remote-check/receipts', receipt.run, 'run-lifetime-status.json'), 'utf8'))).toEqual(receipt);
+  expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
+  expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);
 });

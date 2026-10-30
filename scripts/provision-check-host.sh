@@ -127,21 +127,26 @@ trap 'rm -rf "$work"' EXIT
 
 missing=()
 if [ "$package_manager" = fedora ]; then
-  for package in git rsync unzip xz curl ca-certificates util-linux; do
+  for package in git rsync unzip xz curl ca-certificates util-linux bash; do
     rpm -q "$package" >/dev/null 2>&1 || missing+=("$package")
   done
+  rpm -q python3 >/dev/null 2>&1 || missing+=(python3)
   if [ "${#missing[@]}" -gt 0 ]; then
     dnf install -y "${missing[@]}"
   fi
 else
-  for package in git rsync unzip xz-utils curl ca-certificates util-linux; do
+  for package in git rsync unzip xz-utils curl ca-certificates util-linux bash; do
     dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
   done
+  dpkg -s python3 >/dev/null 2>&1 || missing+=(python3)
   if [ "${#missing[@]}" -gt 0 ]; then
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends "${missing[@]}" >/dev/null
   fi
 fi
+
+# Dependency preparation uses Linux subreaper custody and pidfds to stop only its owned installer tree.
+python3 -c 'import ctypes, os, signal; assert hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"); assert ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) == 0; fd = os.pidfd_open(os.getpid()); os.close(fd)'
 
 # Canary --version omits the prerelease; compare the immutable build revision.
 if ! /usr/local/bin/bun --eval 'process.exit(Bun.revision === process.argv[1] ? 0 : 1)' "$bun_revision" 2>/dev/null; then

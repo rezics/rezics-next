@@ -206,6 +206,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     const outcome = await remoteCheckUnlessUnreachable(
       {
         hosts: readHosts(reason.hostsFile),
+        hostsFile: reason.hostsFile,
         workspace: run.root,
         cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
         command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,

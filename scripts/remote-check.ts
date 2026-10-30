@@ -9,6 +9,10 @@
 // Gates retain their reserved capacity. A fitting landing waiter gets its requested slots first for one configured
 // poll; ordinary work can use the remaining capacity, and a stale or ineligible landing waiter cannot hold it back.
 // Multi-slot waiters reserve their requested capacity after landing's opportunity. Short runs may still use express.
+
+// Waiter order is gate, landing, multi-slot, ordinary. While a gate waits, non-gate runs leave its reserved slots
+// free; a landing waiter gets one admission poll of first opportunity, then eligible work can backfill. Short runs may
+// still use the express slot. A waiter starts once the runs holding its slots when it began waiting have ended.
 // A non-gate run requesting more than one slot reserves its slot count on the host where it can start soonest: among
 // hosts with enough ordinary capacity and measured resource headroom to reach its request, it chooses the one with
 // the fewest busy ordinary slots; if none can reach it yet, it chooses the least busy eligible host. Other non-gate
@@ -20,12 +24,12 @@
 //
 // The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
-// host's capped systemd slice, and its exit code is this script's exit code. A run holds <n> slots (default 1) on one
-// host for as long as it lasts, which is how a heavy run keeps lighter ones from sharing its share of the host.
+// host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
+// <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
 // Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type Host = {
@@ -60,6 +64,14 @@ export type RemoteCheck = {
   pollMs?: number;
   /** Test seam for retry backoff; defaults to 100 ms. */
   retryBackoffMs?: number;
+  /** Maximum time without transferred bytes before an upload or return copy is stopped. */
+  transferTimeoutMs?: number;
+  /** Bound for the selected host's control-connection probe. */
+  controlProbeTimeoutMs?: number;
+  /** Absolute bound for runtime selection, cache wait and dependency lifecycle work. */
+  preparationTimeoutMs?: number;
+  /** Hosts file to re-read on each admission wait round. */
+  hostsFile?: string;
   /** Test seam for the queued slot status heartbeat. */
   waitRepeatMs?: number;
   /** Called for each probe round that finds at least one responding host. */
@@ -128,8 +140,39 @@ const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
 const REMOTE_TRANSPORT_FAILURE = 75;
 export const REMOTE_DEADLINE_EXIT = 124;
-const DEFAULT_MAX_MS = 3 * 60 * 60 * 1000;
+export const HARD_RUN_LIFETIME_MS = 2 * 60 * 60 * 1000;
+const FALLBACK_ESTIMATE_MS = 40 * 60 * 1000;
+export const RUN_LIFETIME_FAILURE_MARKER = 'remote-check: infrastructure failure: remote run timed out ';
+export type RunLifetimeFailure = {
+  schema: 1;
+  status: 'infrastructure-failure';
+  phase: 'run-lifetime';
+  host: string;
+  run: string;
+  limitMs: number;
+  elapsedMs: number;
+  command: string;
+};
+
+export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | null {
+  for (const line of output.split(/\r?\n/).reverse()) {
+    const start = line.indexOf(RUN_LIFETIME_FAILURE_MARKER);
+    if (start < 0) continue;
+    try {
+      const value = JSON.parse(line.slice(start + RUN_LIFETIME_FAILURE_MARKER.length));
+      if (value.schema === 1 && value.status === 'infrastructure-failure' && value.phase === 'run-lifetime' &&
+          typeof value.host === 'string' && typeof value.run === 'string' && typeof value.command === 'string' &&
+          value.command.length <= 256 && /^[a-zA-Z0-9-]+$/.test(value.run) &&
+          Number.isSafeInteger(value.limitMs) && value.limitMs > 0 && value.limitMs <= HARD_RUN_LIFETIME_MS &&
+          Number.isSafeInteger(value.elapsedMs) && value.elapsedMs >= value.limitMs) return value;
+    } catch { /* A native command's output is not an infrastructure receipt. */ }
+  }
+  return null;
+}
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
+export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
+export const DEFAULT_PREPARATION_TIMEOUT_MS = 180_000;
+const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 5_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
 export const CHECK_SLOT_MEMORY_BYTES = 2.5 * 2 ** 30;
@@ -142,6 +185,26 @@ const MAX_WAIT_RECORD_MS = 60_000;
 export const BASE_REFRESH_INTERVAL_SECONDS = 30 * 60;
 export const BASE_RETENTION_SECONDS = 2 * 60 * 60;
 const RSYNC_COMPRESS_LEVEL = 3;
+
+function configuredTimeout(value: number | undefined, envName: string, fallback: number): number {
+  const fromEnvironment = process.env[envName];
+  const timeout = value ?? (fromEnvironment === undefined ? fallback : Number(fromEnvironment));
+  if (!Number.isSafeInteger(timeout) || timeout < 1)
+    throw new Error(`${envName} must be a positive safe integer`);
+  return timeout;
+}
+
+function transferTimeout(options: RemoteCheck): number {
+  return configuredTimeout(options.transferTimeoutMs, 'REMOTE_CHECK_TRANSFER_TIMEOUT_MS', DEFAULT_TRANSFER_TIMEOUT_MS);
+}
+
+function controlProbeTimeout(options: RemoteCheck): number {
+  return configuredTimeout(
+    options.controlProbeTimeoutMs,
+    'REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS',
+    DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
+  );
+}
 
 /** Shell guard for installed package files changed in place after installation. */
 export function installedPackageCacheCheck(
@@ -229,6 +292,15 @@ function validateMaxMs(maxMs: number | undefined): void {
   }
 }
 
+/** Saturate before multiplying: every accepted safe estimate, including MAX_SAFE_INTEGER, stays finite. */
+export function effectiveRunLifetimeMs(estimateMs?: number, maxMs?: number): number {
+  validateEstimateMs(estimateMs);
+  validateMaxMs(maxMs);
+  const estimate = estimateMs || FALLBACK_ESTIMATE_MS;
+  const derived = estimate >= HARD_RUN_LIFETIME_MS / 3 ? HARD_RUN_LIFETIME_MS : Math.max(1_000, estimate * 3);
+  return Math.min(HARD_RUN_LIFETIME_MS, maxMs ?? HARD_RUN_LIFETIME_MS, derived);
+}
+
 function validateMemoryGiB(memoryGiB: number | undefined): void {
   if (memoryGiB !== undefined && (!Number.isSafeInteger(memoryGiB) || memoryGiB < 1)) {
     throw new Error(`--memory-gib must be a positive integer, received ${memoryGiB}`);
@@ -301,7 +373,7 @@ function controlSocketDirectory(): string {
   return directory;
 }
 
-const sshOptions = (host: Host): string[] => [
+const sshOptions = (host: Host, connectionId?: string, standalone = false): string[] => [
   '-i',
   host.identity,
   '-o',
@@ -314,12 +386,16 @@ const sshOptions = (host: Host): string[] => [
   'ServerAliveInterval=15',
   '-o',
   'ServerAliveCountMax=4',
-  '-o',
-  'ControlMaster=auto',
-  '-o',
-  'ControlPersist=10m',
-  '-o',
-  `ControlPath=${join(controlSocketDirectory(), '%C')}`,
+  ...(standalone
+    ? ['-o', 'ControlMaster=no', '-o', 'ControlPath=none']
+    : [
+        '-o',
+        'ControlMaster=auto',
+        '-o',
+        'ControlPersist=10m',
+        '-o',
+        `ControlPath=${join(controlSocketDirectory(), connectionId ? `${connectionId}-%C` : '%C')}`,
+      ]),
 ];
 
 /** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */
@@ -462,6 +538,7 @@ landing_waiting_started=
 landing_waiting_estimate_ms=-1
 landing_waiting_memory_bytes=${CHECK_SLOT_MEMORY_BYTES}
 landing_waiting_sequence=
+landing_opportunity_deadline=0
 exec 6>"${ROOT}/slots/landing-queue.lock"
 flock -x 6
 for landing_marker in ${ROOT}/slots/landing-wait-*.lock; do
@@ -743,7 +820,7 @@ if [ ${gate ? 0 : 1} -eq 1 ] && [ "$gate_waiting" -eq 0 ] && [ "$landing_priorit
     if [ ${count > 1 && multiWaiterId ? 1 : 0} -eq 1 ]; then wait_behind_older_multi=1; fi
   fi
 fi`;
-  return `mkdir -p ${ROOT}/slots ${ROOT}/runs
+  const body = `mkdir -p ${ROOT}/slots ${ROOT}/runs
 # Stop runs abandoned by a dead client before taking any slot.
 now=$(date +%s)
 for run in ${ROOT}/runs/*; do
@@ -884,6 +961,9 @@ cleanup_orphan() {
 }
 trap cleanup_orphan EXIT
 cat >/dev/null`;
+  // dash treats exec 10>file as a command named "10"; Bash is provisioned on every supported check host and
+  // preserves the inherited stdin, signals, exit code and multi-digit lock descriptors here.
+  return `exec bash -c ${quote(body)}`;
 }
 
 const dockerWrapper = readFileSync(join(import.meta.dir, 'check-host/docker'), 'utf8');
@@ -892,15 +972,581 @@ function runSlice(id: string): string {
   return `rezics-check-${id.replaceAll('-', '_')}.slice`;
 }
 
+// A run can still be refreshing its base before entering systemd. Stop its identity-recorded host monitor first;
+// that monitor reaps its tree before any lease/orphan cleanup advertises free capacity.
+const supervisorStopProgram = String.raw`import json,os,signal,sys,time
+from pathlib import Path
+try:
+    record=json.loads((Path(sys.argv[1])/'.remote-check-supervisor').read_text())
+except FileNotFoundError:
+    sys.exit(0)
+def current(pid,started):
+    try:
+        fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+        return fields[19]==started and fields[0] not in ['Z','X']
+    except FileNotFoundError:
+        return False
+pid=record['pid']; started=record['started']
+if not current(pid,started): sys.exit(0)
+try:
+    descriptor=os.pidfd_open(pid)
+    if current(pid,started): signal.pidfd_send_signal(descriptor,signal.SIGTERM)
+    os.close(descriptor)
+except ProcessLookupError:
+    sys.exit(0)
+end=time.monotonic()+12
+while current(pid,started):
+    if time.monotonic()>=end:
+        raise RuntimeError('owned host supervisor did not stop and reap its run')
+    time.sleep(.02)
+`;
+
+function stopSupervisor(directory: string): string {
+  return `python3 -c ${quote(supervisorStopProgram)} ${directory}`;
+}
+
 /** Both normal cleanup and the stale-directory sweep remove only containers labelled for this run. */
 function cleanupCommands(removeDirectory = true): string {
-  return `systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
+  return `${stopSupervisor('"$run_directory"')} || exit 1
+systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
 docker ps -aq --filter "label=rezics.check.run=$run_id" | while IFS= read -r container; do
   [ -z "$container" ] || docker rm -f -v "$container" >/dev/null 2>&1
 done
 systemctl stop "$run_slice" >/dev/null 2>&1
 ${removeDirectory ? 'rm -rf -- "$run_directory"' : ''}`;
 }
+
+/** Executed by the host Python 3 prerequisite, before selecting or downloading pinned Bun. */
+export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
+import ctypes
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import selectors
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+
+def digest(path):
+    value = hashlib.sha256()
+    with open(path, 'rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            value.update(block)
+    return value.hexdigest()
+
+
+def inventory(root):
+    result = {}
+    # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
+    excluded = {'.git', '.alive', '.bun-install-complete', 'exit-status', 'command-started',
+                'preparation-status.json', 'preparation-install.json', '.preparation-started',
+                '.remote-check-supervisor', '.command-result', 'run-lifetime-status.json', 'bun-runtime-transpiler-cache',
+                '.temp/check-host', '.temp/node-compile-cache'}
+    for parent, directories, files in os.walk(root, followlinks=False):
+        for name in sorted(directories + files):
+            path = Path(parent) / name
+            relative = path.relative_to(root).as_posix()
+            if relative in excluded:
+                if name in directories:
+                    directories.remove(name)
+                continue
+            info = path.lstat()
+            mode = stat.S_IMODE(info.st_mode)
+            if path.is_symlink():
+                target = os.readlink(path)
+                if os.path.isabs(target) and target.startswith(str(root) + '/'):
+                    target = os.path.relpath(target, path.parent)
+                result[relative] = ['link', target]
+                if name in directories:
+                    directories.remove(name)
+            elif path.is_dir():
+                result[relative] = ['directory', mode]
+            elif path.is_file():
+                result[relative] = ['file', mode, digest(path)]
+            else:
+                raise RuntimeError('unsupported preparation output: ' + relative)
+    return result
+
+
+def remove(path):
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def copy_entries(source, destination, entries):
+    for name, entry in sorted(entries.items(), key=lambda pair: (pair[0].count('/'), pair[0])):
+        target = destination / name
+        kind = entry[0]
+        if kind == 'directory':
+            if target.is_symlink() or (target.exists() and not target.is_dir()):
+                remove(target)
+            target.mkdir(parents=True, exist_ok=True)
+            target.chmod(entry[1])
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            remove(target)
+            if kind == 'link':
+                target.symlink_to(entry[1])
+            else:
+                # Never share mutable package inodes between runs, the artifact cache or Bun's tarball cache.
+                shutil.copy2(source / name, target)
+
+
+def verified(entry, key):
+    try:
+        manifest = json.loads((entry / 'manifest.json').read_text())
+        if manifest['key'] != key or manifest['schema'] != 2:
+            return None
+        if not isinstance(manifest['entries'], dict) or not isinstance(manifest['removed'], list) or not isinstance(manifest['nativeChecks'], list):
+            return None
+        if any(Path(name).is_absolute() or '..' in Path(name).parts
+               for name in [*manifest['entries'], *manifest['removed']]):
+            return None
+        if inventory(entry / 'payload') != manifest['entries']:
+            return None
+        return manifest
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def verify_native_packages(root, entries):
+    checks = []
+    for name in entries:
+        parts = Path(name).parts
+        if not name.endswith('/package.json') or 'node_modules' not in parts:
+            continue
+        # Package fixtures and example manifests are not installed package identities.
+        last_node_modules = len(parts) - 1 - tuple(reversed(parts)).index('node_modules')
+        package_parts = parts[last_node_modules + 1:]
+        if not (len(package_parts) == 2 or (len(package_parts) == 3 and package_parts[0].startswith('@'))):
+            continue
+        package = json.loads((root / name).read_text())
+        package_root = (root / name).parent
+        version = package.get('version', '')
+        if package.get('name') == 'workerd':
+            match = re.fullmatch(r'1\.(\d{4})(\d{2})(\d{2})\.\d+', version)
+            if match is None:
+                raise RuntimeError('unrecognized workerd version: ' + version)
+            expected = 'workerd ' + '-'.join(match.groups())
+            # workerd's own installer catches execution failures and can still exit successfully.
+            actual = subprocess.check_output([str(package_root / 'bin/workerd'), '--version'], text=True, cwd=package_root).strip()
+            if actual != expected:
+                raise RuntimeError('workerd@' + version + ' binary version mismatch: ' + actual)
+            checks.append({'name': 'workerd', 'version': version, 'binaryVersion': actual})
+        elif package.get('name') == 'bun':
+            if version.split('+')[0] != os.environ['REMOTE_CHECK_PREPARATION_VERSION']:
+                raise RuntimeError('bun@' + version + ' does not match the pinned runtime')
+            binary = package_root / package['bin']['bun']
+            subprocess.run([str(binary), '--eval',
+                            'process.exit(Bun.revision === process.argv[1] ? 0 : 1)',
+                            os.environ['REMOTE_CHECK_PREPARATION_REVISION']], check=True, cwd=package_root)
+            checks.append({'name': 'bun', 'version': version,
+                           'revision': os.environ['REMOTE_CHECK_PREPARATION_REVISION']})
+    return checks
+
+
+def install():
+    root = Path.cwd()
+    if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
+        raise RuntimeError('installer subreaper unavailable')
+    deadline = float(os.environ['REMOTE_CHECK_PREPARATION_DEADLINE'])
+    if time.monotonic() >= deadline:
+        raise RuntimeError('absolute preparation deadline exceeded')
+    before = inventory(root)
+    identity = {'schema': 2, 'inputs': before,
+                'platform': [sys.platform, platform.machine(), platform.libc_ver()],
+                'revision': os.environ['REMOTE_CHECK_PREPARATION_REVISION'],
+                'build': os.environ['REMOTE_CHECK_PREPARATION_BUILD']}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
+    cache.mkdir(parents=True, exist_ok=True)
+    entry = cache / key
+    # The parent supervisor's absolute deadline includes lock wait, hashing, restore and publication.
+    with open(cache / (key + '.lock'), 'a') as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                time.sleep(0.02)
+        manifest = verified(entry, key)
+        hit = manifest is not None
+        stage = None
+        try:
+            if not hit:
+                completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
+                if completed.returncode:
+                    return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
+                if owned_processes():
+                    raise RuntimeError('installer left owned descendants')
+                after = inventory(root)
+                native_checks = verify_native_packages(root, after)
+                outputs = {name: value for name, value in after.items() if before.get(name) != value}
+                # Include parent directories so the payload has a complete independently verifiable inventory.
+                for name in list(outputs):
+                    for parent in Path(name).parents:
+                        if parent.as_posix() != '.':
+                            outputs[parent.as_posix()] = after[parent.as_posix()]
+                removed = sorted(set(before) - set(after), key=lambda name: -name.count('/'))
+                stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
+                (stage / 'payload').mkdir()
+                copy_entries(root, stage / 'payload', outputs)
+                manifest = {'schema': 2, 'key': key, 'entries': outputs, 'removed': removed, 'nativeChecks': native_checks}
+                (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
+                if verified(stage, key) is None:
+                    raise RuntimeError('prepared artifact verification failed')
+                # Only this key's lock owner can replace an invalid entry. Valid publications remain immutable.
+                if entry.exists():
+                    remove(entry)
+                stage.rename(entry)
+                stage = None
+            for name in manifest['removed']:
+                remove(root / name)
+            copy_entries(entry / 'payload', root, manifest['entries'])
+            packages = []
+            for name in manifest['entries']:
+                if name.endswith('/package.json'):
+                    try:
+                        package = json.loads((root / name).read_text())
+                        if package.get('name') and package.get('version'):
+                            packages.append({'name': package['name'], 'version': package['version']})
+                    except (OSError, ValueError):
+                        pass
+            receipt = {'cache': 'hit' if hit else 'miss', 'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks']}
+            (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
+            if time.monotonic() >= deadline:
+                raise RuntimeError('absolute preparation deadline exceeded')
+            (root / '.bun-install-complete').touch()
+            print('remote-check: dependency artifacts ' + receipt['cache'] + ' ' + key, file=sys.stderr, flush=True)
+            return 0
+        finally:
+            if stage is not None:
+                remove(stage)
+
+
+def owned_processes():
+    # Walk only this physical run's children/threads, independent of other hosts' run history or process count.
+    pending = [os.getpid()]
+    seen = set()
+    owned = {}
+    while pending:
+        pid = pending.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        try:
+            path = Path('/proc/' + str(pid))
+            fields = (path / 'stat').read_text().rsplit(')', 1)[1].split()
+            if pid != os.getpid():
+                owned[pid] = fields[19]
+            for task in (path / 'task').iterdir():
+                try:
+                    pending.extend(int(value) for value in (task / 'children').read_text().split())
+                except (FileNotFoundError, ProcessLookupError):
+                    pass
+        except (FileNotFoundError, ProcessLookupError):
+            pass
+    return owned
+
+
+def stop_owned(number):
+    # pidfds plus a start-identity recheck prevent a PID reuse from signalling an unrelated process.
+    for pid, started in owned_processes().items():
+        descriptor = None
+        try:
+            descriptor = os.pidfd_open(pid)
+            fields = Path('/proc/' + str(pid) + '/stat').read_text().rsplit(')', 1)[1].split()
+            if fields[19] == started:
+                signal.pidfd_send_signal(descriptor, number)
+        except (ProcessLookupError, FileNotFoundError):
+            pass
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+
+
+def active_packages(root):
+    packages = {}
+    for pid in owned_processes():
+        try:
+            cwd = Path(os.readlink('/proc/' + str(pid) + '/cwd'))
+            cwd.relative_to(root)
+            for path in [cwd, *cwd.parents]:
+                if path == root:
+                    break
+                metadata = path / 'package.json'
+                if metadata.is_file():
+                    package = json.loads(metadata.read_text())
+                    if package.get('name') and package.get('version'):
+                        packages[(package['name'], package['version'])] = {
+                            'name': package['name'], 'version': package['version']}
+                    break
+        except (OSError, ValueError):
+            pass
+    return list(packages.values())
+
+
+def supervise():
+    limit_ms, host, run, directory = sys.argv[2:6]
+    root = Path(directory)
+    started = time.monotonic()
+    (root / '.preparation-started').write_text(json.dumps({'deadline': started + int(limit_ms) / 1000, 'limitMs': int(limit_ms)}))
+    wall_started_ns = time.time_ns()
+    # Without adoption and waitpid, double-forked installer children can survive their launcher or become zombies.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER, supported Linux check-host prerequisite.
+        raise OSError(ctypes.get_errno(), 'PR_SET_CHILD_SUBREAPER')
+    shim = root / '.temp/check-host/bun-prepare'
+    shim.write_text('#!/bin/sh\nexec python3 ' + "'" + __file__.replace("'", "'\\''") + "' install \"$@\"\n")
+    shim.chmod(0o755)
+    env = dict(os.environ, REMOTE_CHECK_PREPARER_BIN=str(shim),
+               REMOTE_CHECK_PREPARATION_CACHE=str(root.parent.parent / 'dependency-artifacts'),
+               REMOTE_CHECK_PREPARATION_DEADLINE=str(started + int(limit_ms) / 1000))
+    child = subprocess.Popen(sys.argv[6:], env=env, start_new_session=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    selected = selectors.DefaultSelector()
+    for stream, output in [(child.stdout, sys.stdout.buffer), (child.stderr, sys.stderr.buffer)]:
+        selected.register(stream, selectors.EVENT_READ, output)
+    interrupted = []
+    for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, lambda number, frame: interrupted.append(number))
+    tail = bytearray()
+    packages = []
+    observed = []
+    failure = None
+    preparation_done = False
+    code = None
+    stopped_at = None
+    while True:
+        if not preparation_done and stopped_at is None:
+            marker = root / '.bun-install-complete'
+            preparation_done = marker.exists() and marker.stat().st_mtime_ns <= wall_started_ns + int(limit_ms) * 1000000
+            packages = active_packages(root)
+            if packages:
+                observed = packages
+            if not preparation_done and (time.monotonic() - started) * 1000 >= int(limit_ms):
+                failure = 'absolute preparation deadline exceeded'
+        if interrupted:
+            failure = 'signal ' + str(interrupted[0])
+        if failure and stopped_at is None:
+            stopped_at = time.monotonic()
+            stop_owned(signal.SIGTERM)
+        if stopped_at is not None and time.monotonic() - stopped_at >= 0.2:
+            stop_owned(signal.SIGKILL)
+        for event, unused in selected.select(0.02):
+            block = os.read(event.fileobj.fileno(), 65536)
+            if block:
+                event.data.write(block)
+                event.data.flush()
+                if not preparation_done:
+                    tail.extend(block)
+                    del tail[:-8192]
+            else:
+                selected.unregister(event.fileobj)
+                event.fileobj.close()
+        code = child.poll()
+        # Reap descendants adopted after their parents exit. Do not reap Popen's direct child before poll().
+        if code is not None:
+            while True:
+                try:
+                    adopted, status = os.waitpid(-1, os.WNOHANG)
+                    if adopted == 0:
+                        break
+                except ChildProcessError:
+                    break
+            remaining = owned_processes()
+            if remaining and stopped_at is None:
+                failure = failure or 'installer left owned descendants'
+                stopped_at = time.monotonic()
+                stop_owned(signal.SIGTERM)
+            if not remaining and not selected.get_map():
+                if stopped_at is None:
+                    marker = root / '.bun-install-complete'
+                    preparation_done = marker.exists() and marker.stat().st_mtime_ns <= wall_started_ns + int(limit_ms) * 1000000
+                break
+    if not preparation_done or failure:
+        code = 128 + interrupted[0] if interrupted else 70
+        receipt = {'status': 'infrastructure-failure', 'host': host, 'run': run, 'phase': 'command' if preparation_done else 'install/preparation',
+                   'elapsedMs': round((time.monotonic() - started) * 1000),
+                   'reason': failure or 'preparation exited ' + str(child.returncode),
+                   'activePackages': packages, 'lastObservedPackages': observed,
+                   'packageClassification': 'active' if packages else 'unknown',
+                   'logTail': tail.decode(errors='replace')}
+        (root / 'preparation-status.json').write_text(json.dumps(receipt, sort_keys=True))
+        terminal_status(root).write_text(str(code) + '\n')
+        print('remote-check: infrastructure failure ' + json.dumps(receipt, sort_keys=True), file=sys.stderr, flush=True)
+    else:
+        code = code if code >= 0 else 128 - code
+    return code
+
+
+def terminal_status(root):
+    return root / ('.command-result' if os.environ.get('REMOTE_CHECK_HOST_LIFETIME') == '1' else 'exit-status')
+
+
+def durable(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.pending')
+    with open(temporary, 'w') as output:
+        output.write(value)
+        output.flush()
+        os.fsync(output.fileno())
+    temporary.replace(path)
+    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def emit_nonblocking(message):
+    # Receipt delivery must never prevent killing/reaping a run with an unread SSH pipe.
+    try:
+        os.set_blocking(2, False)
+        os.write(2, (message + '\n').encode()[:4096])
+    except (BlockingIOError, BrokenPipeError, OSError):
+        pass
+
+
+def clean_run_resources(run):
+    scope = 'rezics-check-' + run + '.scope'
+    slice_name = 'rezics-check-' + run.replace('-', '_') + '.slice'
+    def call(arguments):
+        return subprocess.run(arguments, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=3, text=True)
+    call(['systemctl', 'stop', scope])
+    containers = call(['docker', 'ps', '-aq', '--filter', 'label=rezics.check.run=' + run])
+    for container in containers.stdout.split():
+        if not re.fullmatch(r'[a-f0-9]{12,64}', container):
+            raise RuntimeError('invalid owned container identity')
+        call(['docker', 'rm', '-f', '-v', container])
+    call(['systemctl', 'stop', slice_name])
+    group = call(['systemctl', 'show', '--property=ControlGroup', '--value', slice_name]).stdout.strip()
+    if group:
+        path = Path('/sys/fs/cgroup') / group.lstrip('/') / 'cgroup.events'
+        try:
+            if 'populated 1' in path.read_text().splitlines():
+                raise RuntimeError('owned run cgroup is still populated')
+        except FileNotFoundError:
+            pass  # systemd removed the empty cgroup.
+
+
+def lifetime():
+    # This independent host monitor does no stream forwarding. Child stdout/stderr can block indefinitely without
+    # blocking this monotonic deadline. Its detached session survives a caller/session group disappearing;
+    # directly addressed abort signals still stop and reap the owned run.
+    started = time.monotonic()
+    limit_ms, host, run, directory, command = sys.argv[2:7]
+    limit_ms = int(limit_ms)
+    if not 0 < limit_ms <= 7200000:
+        raise RuntimeError('invalid host lifetime')
+    root = Path(directory)
+    if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
+        raise RuntimeError('host lifetime subreaper unavailable')
+    try:
+        os.setsid()
+    except PermissionError:
+        if os.getsid(0) != os.getpid():
+            raise
+    interrupted = []
+    for sig in [signal.SIGHUP, signal.SIGTERM, signal.SIGINT]:
+        signal.signal(sig, lambda number, frame: interrupted.append(number))
+    fields = Path('/proc/' + str(os.getpid()) + '/stat').read_text().rsplit(')', 1)[1].split()
+    durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19]}))
+    with os.fdopen(3) as source:
+        script = source.read()
+    child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1'), start_new_session=True)
+    reason = None
+    stopped_at = None
+    packages = []
+    while True:
+        now = time.monotonic()
+        if reason is None:
+            if (now - started) * 1000 >= limit_ms:
+                reason = 'run-lifetime'
+            elif interrupted:
+                reason = 'abort'
+            elif not (root / '.bun-install-complete').exists():
+                try:
+                    preparation = json.loads((root / '.preparation-started').read_text())
+                    if now >= preparation['deadline']:
+                        reason = 'install/preparation'
+                        packages = active_packages(root)
+                except FileNotFoundError:
+                    pass
+        if reason is not None and stopped_at is None:
+            stopped_at = now
+            stop_owned(signal.SIGTERM)
+        if stopped_at is not None and now - stopped_at >= 0.2:
+            stop_owned(signal.SIGKILL)
+        code = child.poll()
+        if code is not None:
+            while True:
+                try:
+                    if os.waitpid(-1, os.WNOHANG)[0] == 0:
+                        break
+                except ChildProcessError:
+                    break
+            remaining = owned_processes()
+            if not remaining:
+                break
+            if reason is None:
+                reason = 'owned-descendants'
+        time.sleep(0.01)
+    if reason:
+        # Containers started by a daemon are outside this process tree, but retain exact run labels and cgroup custody.
+        clean_run_resources(run)
+        elapsed = round((time.monotonic() - started) * 1000)
+        receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
+                   'limitMs': limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
+        code = 124 if reason == 'run-lifetime' else 128 + interrupted[0] if interrupted else 70
+        if reason == 'install/preparation':
+            receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
+                            'packageClassification': 'active' if packages else 'unknown', 'logTail': ''})
+        name = 'run-lifetime-status.json' if reason == 'run-lifetime' else 'preparation-status.json'
+        contents = json.dumps(receipt, sort_keys=True)
+        durable(root / name, contents)
+        durable(root.parent.parent / 'receipts' / run / name, contents)
+        emit_nonblocking(('remote-check: infrastructure failure: remote run timed out ' if reason == 'run-lifetime'
+                          else 'remote-check: infrastructure failure ') + contents)
+    else:
+        code = code if code >= 0 else 128 - code
+    # Terminal admission state is published only after the entire owned tree is reaped and timeout cgroups are empty.
+    durable(root / 'exit-status', str(code) + '\n')
+    return code
+
+
+attempt_started = time.monotonic()
+try:
+    sys.exit(install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else supervise())
+except Exception as error:
+    stop_owned(signal.SIGKILL)
+    while True:
+        try:
+            os.waitpid(-1, 0)
+        except ChildProcessError:
+            break
+    if sys.argv[1] == 'supervise':
+        root = Path(sys.argv[5])
+        receipt = {'status': 'infrastructure-failure', 'host': sys.argv[3], 'run': sys.argv[4],
+                   'phase': 'install/preparation', 'reason': str(error), 'activePackages': [],
+                   'elapsedMs': round((time.monotonic() - attempt_started) * 1000),
+                   'packageClassification': 'unknown'}
+        (root / 'preparation-status.json').write_text(json.dumps(receipt))
+        terminal_status(root).write_text('70\n')
+    print('remote-check: infrastructure failure install/preparation: ' + str(error), file=sys.stderr, flush=True)
+    sys.exit(70)
+`;
 
 /**
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
@@ -914,7 +1560,11 @@ export function runScript(
   hostName: string,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
   priorityClass = 'ordinary',
+  preparationTimeoutMs = configuredTimeout(undefined, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+  estimateMs?: number,
+  maxMs?: number,
 ): string {
+  const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
@@ -966,9 +1616,16 @@ export function runScript(
     fi
     mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
     export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
+    real_bun=$bun
+    if [ -n "\${REMOTE_CHECK_PREPARER_BIN:-}" ]; then
+      export REMOTE_CHECK_REAL_BUN="$bun" REMOTE_CHECK_PREPARATION_REVISION="$expected_revision" REMOTE_CHECK_PREPARATION_BUILD="$build" REMOTE_CHECK_PREPARATION_VERSION="$expected_bun"
+      bun=$REMOTE_CHECK_PREPARER_BIN
+    fi
     "$bun" install --frozen-lockfile
     code=$?
-    if [ "$code" -eq 0 ]; then touch ${quote(`${directory}/.bun-install-complete`)}; fi
+    bun=$real_bun
+    unset REMOTE_CHECK_PREPARER_BIN REMOTE_CHECK_REAL_BUN REMOTE_CHECK_PREPARATION_REVISION REMOTE_CHECK_PREPARATION_BUILD REMOTE_CHECK_PREPARATION_VERSION REMOTE_CHECK_PREPARATION_CACHE REMOTE_CHECK_PREPARATION_DEADLINE
+    if [ "$code" -eq 0 ]; then [ -f ${quote(`${directory}/.bun-install-complete`)} ] || touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then
@@ -1049,11 +1706,14 @@ export function runScript(
       fi
       ;;
     esac
-    printf '%s\\n' "$code" > ${quote(statusFile)}
+    terminal_status=${quote(statusFile)}
+    if [ "\${REMOTE_CHECK_HOST_LIFETIME:-}" = 1 ]; then terminal_status=${quote(`${directory}/.command-result`)}; fi
+    printf '%s\\n' "$code" > "$terminal_status"
     exit $code`;
-  return `${refreshBaseScript(id, directory)}
+  const script = `${refreshBaseScript(id, directory)}
 mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
+printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
@@ -1064,7 +1724,17 @@ touch ${quote(`${directory}/.alive`)}
 expand_environment=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
 exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=rezics-check-${id} \\
+  python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
   sh -c ${quote(systemdScript)} sh ${[cwd, ...command].map(quote).join(' ')}`;
+  const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
+  const subcommand = ['test', 'run', 'check', 'build', 'typecheck', 'verify', 'lint'].includes(command[1] ?? '') ? ` ${command[1]}` : '';
+  const identity = `${executable}${subcommand} [${Math.max(0, command.length - 1)} arguments]`;
+  // fd 3 carries the literal original script independently of command stdin. No second shell quoting pass touches argv.
+  const delimiter = `REMOTE_CHECK_HOST_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  return `# REMOTE_CHECK_RUN_LIFETIME_MS ${lifetimeMs}
+exec python3 -c ${quote(`import base64; exec(base64.b64decode(${JSON.stringify(Buffer.from(dependencyPreparationProgram).toString('base64'))}))`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} 3<<'${delimiter}'
+${script}
+${delimiter}`;
 }
 
 function cleanupScript(id: string, directory: string): string {
@@ -1079,7 +1749,11 @@ function heartbeatScript(directory: string): string {
 }
 
 function stopRunScript(id: string): string {
-  return `systemctl stop ${quote(runSlice(id))} >/dev/null 2>&1 || true`;
+  const slice = quote(runSlice(id));
+  return `systemctl stop ${slice} >/dev/null 2>&1 || true
+${stopSupervisor(quote(`${ROOT}/runs/${id}`))} || exit 1
+if systemctl is-active --quiet ${slice}; then exit 1; fi
+printf 'STOPPED\\n'`;
 }
 
 /** Serializes stale-base cleanup and reports the immutable current base used by this upload. */
@@ -1268,6 +1942,7 @@ type HostProbe = {
   landingWaitingStarted: number | null;
   landingWaitingEstimateMs: number | null;
   landingWaitingMemoryBytes: number;
+
 };
 type RankedHost = {
   host: Host;
@@ -1534,8 +2209,14 @@ function parseProbe(output: string): HostProbe | null {
   };
 }
 
-async function probeHost(host: Host): Promise<HostProbe | null> {
-  const child = Bun.spawn(['ssh', ...sshOptions(host), host.address, probeScript(host)], {
+async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostProbe | null> {
+  const placementHeartbeat = uploadedDirectory
+    ? `# Keep this uploaded placement alive while admission waits; a missing workspace must be uploaded again.
+[ -d ${quote(uploadedDirectory)} ] || exit 75
+touch ${quote(`${uploadedDirectory}/.alive`)} || exit 75
+`
+    : '';
+  const child = Bun.spawn(['ssh', ...sshOptions(host, undefined, true), host.address, placementHeartbeat + probeScript(host)], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -1588,9 +2269,12 @@ async function takeSession(
   script: string,
   token: RegExp,
   signal: AbortSignal,
+  connectionId?: string,
+  noProgressTimeoutMs?: number,
+  step = 'slot take',
 ): Promise<SessionLease | null> {
   if (signal.aborted) throw new Aborted();
-  const holder = Bun.spawn(['ssh', ...sshOptions(host), host.address, script], {
+  const holder = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -1606,19 +2290,35 @@ async function takeSession(
     }
   };
   signal.addEventListener('abort', stop, { once: true });
+  let progressTimer: ReturnType<typeof setTimeout> | undefined;
+  let progressExpired = false;
+  const armProgressTimer = () => {
+    if (noProgressTimeoutMs === undefined) return;
+    clearTimeout(progressTimer);
+    progressTimer = setTimeout(() => {
+      progressExpired = true;
+      stop();
+    }, noProgressTimeoutMs);
+  };
+  armProgressTimer();
   try {
     let seen = '';
     while (!token.test(seen)) {
       if (signal.aborted) throw new Aborted();
       const chunk = await reader.read();
       if (chunk.done) {
-        await lease.exited;
+        const code = await lease.exited;
         if (signal.aborted) throw new Aborted();
+        if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
+        if (code === SLOT_BUSY) return null;
+        if (code !== 0) throw new RemoteTransportError(host.name, step, code);
         return null;
       }
+      armProgressTimer();
       seen += new TextDecoder().decode(chunk.value);
     }
     if (signal.aborted) throw new Aborted();
+    if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
     accepted = true;
     // Keep the session's input pipe live while the remote script holds its marker and reads until EOF.
     holder.stdin.write('\n');
@@ -1630,8 +2330,10 @@ async function takeSession(
       await lease.exited;
     }
     if (signal.aborted) throw new Aborted();
+    if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
     throw error;
   } finally {
+    clearTimeout(progressTimer);
     signal.removeEventListener('abort', stop);
   }
 }
@@ -1652,6 +2354,8 @@ async function takeSlots(
   landingWaiterId: string | undefined,
   signal: AbortSignal,
   pollMs = 5000,
+  connectionId?: string,
+  transferTimeoutMs = DEFAULT_TRANSFER_TIMEOUT_MS,
 ): Promise<Lease | null> {
   return takeSession(
     host,
@@ -1672,11 +2376,14 @@ async function takeSlots(
     ),
     /^SLOTS? \d+$/m,
     signal,
+    connectionId,
+    transferTimeoutMs,
+    'slot take',
   );
 }
 
-async function takeGateMarker(host: Host, signal: AbortSignal): Promise<SessionLease | null> {
-  return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal);
+async function takeGateMarker(host: Host, signal: AbortSignal, connectionId?: string): Promise<SessionLease | null> {
+  return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal, connectionId);
 }
 
 async function takeMultiSlotMarker(
@@ -1684,8 +2391,9 @@ async function takeMultiSlotMarker(
   id: string,
   slots: number,
   signal: AbortSignal,
+  connectionId?: string,
 ): Promise<SessionLease | null> {
-  return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal);
+  return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal, connectionId);
 }
 
 async function takeLandingMarker(
@@ -1696,12 +2404,14 @@ async function takeLandingMarker(
   estimateMs: number | undefined,
   memoryReservationBytes: number,
   signal: AbortSignal,
+  connectionId?: string,
 ): Promise<SessionLease | null> {
   return takeSession(
     host,
     landingMarkerScript(id, slots, arrivalOrder, estimateMs, memoryReservationBytes),
     /^LANDING_MARKER$/m,
     signal,
+    connectionId,
   );
 }
 
@@ -1720,8 +2430,13 @@ async function rankedHosts(
   priority: 'landing' | 'critical' | undefined = undefined,
   landingWaiterId?: string,
   pollMs = 5000,
+
+  uploadedPlacement?: { host: Placement; directory: string },
 ): Promise<RankedHost[]> {
-  const probes = await Promise.all(hosts.map(async (host) => ({ host, probe: await probeHost(host) })));
+  const probes = await Promise.all(hosts.map(async (host) => ({
+    host,
+    probe: await probeHost(host, uploadedPlacement?.host.address === host.address ? uploadedPlacement.directory : undefined),
+  })));
   if (signal.aborted) throw new Aborted();
   const skipped: Array<{ host: Host; probe: HostProbe }> = [];
   for (const entry of probes) {
@@ -1774,6 +2489,125 @@ async function rankedHosts(
   );
 }
 
+type HostProvider = () => Host[];
+type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
+
+/** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
+function liveHosts(initial: Host[], file?: string): HostProvider {
+  let lastValid = initial;
+  let reportedInvalidRewrite = false;
+  return () => {
+    if (!file) return lastValid;
+    try {
+      lastValid = readHosts(file);
+    } catch (error) {
+      if (!reportedInvalidRewrite) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`remote-check: could not reload hosts file ${file}; retaining last valid list: ${detail}`);
+        reportedInvalidRewrite = true;
+      }
+    }
+    return lastValid;
+  };
+}
+
+function placementConfig(hosts: Host[]): string {
+  return hosts.map(({ name, slots }) => `${name} ${slots} slots`).join(', ') || 'no configured hosts';
+}
+
+/** Chooses a responding upload target without taking an execution slot. */
+async function selectPlacement(
+  hosts: HostProvider,
+  requestedSlots: number,
+  estimateMs: number | undefined,
+  gate: boolean,
+  memoryReservationBytes: number,
+  priority: 'landing' | 'critical' | undefined,
+  signal: AbortSignal,
+  pollMs: number,
+  giveUpIfUnanswered: boolean,
+  onAnswered?: () => void,
+  excluded = new Set<string>(),
+): Promise<Host | null> {
+  let answered = false;
+  const wait = checkWaitRecorder();
+  let waiting = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let waitingState = 'no responding hosts';
+  let waitingConfiguration = 'no configured hosts';
+  const printWaiting = () => {
+    console.error(`remote-check: waiting for an eligible check host (${waitingState}); configured ${waitingConfiguration}`);
+  };
+  try {
+    while (true) {
+      if (signal.aborted) throw new Aborted();
+      const current = hosts();
+      const available = current.filter(({ name }) => !excluded.has(name));
+      const ranked = await rankedHosts(
+        available,
+        signal,
+        requestedSlots,
+        estimateMs,
+        gate,
+        false,
+        undefined,
+        new Map(),
+        new Set(),
+        memoryReservationBytes,
+        priority,
+      );
+      if (ranked.length > 0) {
+        answered = true;
+        onAnswered?.();
+        if (gate) {
+          const largest = Math.max(...ranked.map(({ gateCapacity }) => gateCapacity));
+          if (largest < 1) throw new Error('remote-check: no check host can run the gate while leaving one slot free');
+          if (requestedSlots > largest) {
+            throw new SlotRequestTooLarge(largest, requestedSlots);
+          }
+        } else {
+          const cap = requestedSlotCap(
+            ranked,
+            priority === undefined && isShortRun(requestedSlots, estimateMs, gate),
+            requestedSlots,
+          );
+          if (requestedSlots > cap) throw new SlotRequestTooLarge(cap, requestedSlots);
+        }
+        const shortRun = priority === undefined && isShortRun(requestedSlots, estimateMs, gate);
+        const viable = ranked.filter(({ ordinaryCapacity, gateCapacity, capacity }) =>
+          gate ? gateCapacity >= requestedSlots : shortRun ? capacity >= requestedSlots : ordinaryCapacity >= requestedSlots,
+        );
+        if (viable.length > 0) {
+          const immediatelyStartable = viable.filter(({ freeSlots }) => freeSlots >= requestedSlots);
+          const startableOrdinary = immediatelyStartable.filter(({ host }) => !host.fallback);
+          if (immediatelyStartable.length > 0)
+            return (startableOrdinary.length ? startableOrdinary : immediatelyStartable)[0]!.host;
+          const ordinary = viable.filter(({ host }) => !host.fallback);
+          return (ordinary.length ? ordinary : viable)[0]!.host;
+        }
+      } else if (!answered && giveUpIfUnanswered) {
+        return null;
+      }
+      if (!answered && ranked.length === 0 && giveUpIfUnanswered) return null;
+      waiting = true;
+      wait.begin();
+      waitingState = ranked.length
+        ? ranked.map(({ host, freeSlots, slotLimit }) => `${host.name} ${freeSlots}/${slotLimit} free`).join(', ')
+        : 'no responding hosts';
+      waitingConfiguration = placementConfig(current);
+      if (!heartbeat) {
+        printWaiting();
+        heartbeat = setInterval(printWaiting, 60_000);
+      }
+      wait.record();
+      await sleep(pollMs, signal);
+    }
+  } finally {
+    clearInterval(heartbeat);
+    if (waiting) wait.stop();
+  }
+}
+
 /** One probe round. Responding hosts are ranked by resource-backed free slots. */
 export async function answeringHosts(hosts: Host[]): Promise<Host[]> {
   return (await rankedHosts(hosts, new AbortController().signal, 1, undefined, false)).map(({ host }) => host);
@@ -1789,6 +2623,9 @@ async function acquireOnce(
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   priority: 'landing' | 'critical' | undefined = undefined,
   pollMs = 5000,
+
+  connectionId?: string,
+  transferTimeoutMs = DEFAULT_TRANSFER_TIMEOUT_MS,
 ): Promise<Lease | null> {
   const landingWaiterId = priority !== undefined ? randomUUID() : undefined;
   const ranked = await rankedHosts(
@@ -1845,6 +2682,9 @@ async function acquireOnce(
       landingWaiterId,
       signal,
       pollMs,
+
+      connectionId,
+      transferTimeoutMs,
     );
     if (lease && signal.aborted) {
       await lease.release();
@@ -1875,6 +2715,11 @@ async function acquire(
   waitRepeatMs = 60_000,
   memoryReservationBytes = CHECK_SLOT_MEMORY_BYTES,
   priority: 'landing' | 'critical' | undefined = undefined,
+  hostsForRound: HostProvider = () => hosts,
+  placement?: Placement,
+  connectionId?: string,
+  transferTimeoutMs = DEFAULT_TRANSFER_TIMEOUT_MS,
+  uploadedDirectory?: string,
 ): Promise<Lease | null> {
   let answered = false;
   let slots = requestedSlots;
@@ -1893,6 +2738,7 @@ async function acquire(
   const skippedHosts = new Map<string, string>();
   const loggedSkipLines = new Set<string>();
   let waitingHosts: RankedHost[] = [];
+  let waitingConfiguration = placementConfig(hosts);
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   const printWaiting = (): void => {
     const state = waitingHosts.length
@@ -1905,7 +2751,7 @@ async function acquire(
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
     console.error(
-      `remote-check: every check slot is busy; waiting for a free one (${state}); priority ${priorityClass}${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
+      `remote-check: every check slot is busy; waiting for a free one (${state}); configured ${waitingConfiguration}; priority ${priorityClass}${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
     );
   };
   const announceWait = (ranked: RankedHost[]): void => {
@@ -1927,9 +2773,18 @@ async function acquire(
         landingMarker = undefined;
         landingMarkerHost = undefined;
       }
+      const currentHosts = hostsForRound();
+      waitingConfiguration = placementConfig(currentHosts);
+      const placementHost = placement
+        ? currentHosts.find(
+            ({ name, address, identity }) =>
+              name === placement.name && address === placement.address && identity === placement.identity,
+          )
+        : undefined;
+      if (placement && !placementHost) return null;
       const currentSkippedHosts = new Map<string, string>();
-      const ranked = await rankedHosts(
-        hosts,
+      const allRanked = await rankedHosts(
+        currentHosts,
         signal,
         slots,
         estimateMs,
@@ -1942,9 +2797,23 @@ async function acquire(
         priority,
         landingWaiterId,
         pollMs,
+        placement && uploadedDirectory ? { host: placement, directory: uploadedDirectory } : undefined,
       );
       skippedHosts.clear();
       for (const [hostName, reason] of currentSkippedHosts) skippedHosts.set(hostName, reason);
+      const ranked = placement
+        ? allRanked.filter(
+            ({ host }) =>
+              host.name === placement.name && host.address === placement.address && host.identity === placement.identity,
+          )
+        : allRanked;
+      if (placement && ranked.length === 0) return null;
+      if (placement) {
+        const target = ranked[0]!;
+        const shortRun = priority === undefined && isShortRun(slots, estimateMs, gate);
+        if (gate ? target.gateCapacity < slots : shortRun ? target.capacity < slots : target.ordinaryCapacity < slots)
+          return null;
+      }
       if (multiWaiterId && markerHost && !ranked.some(({ host }) => host.name === markerHost)) {
         if (marker) await marker.release();
         marker = undefined;
@@ -2018,6 +2887,8 @@ async function acquire(
           memoryReservationBytes,
           landingWaiterId,
           signal,
+          connectionId,
+          transferTimeoutMs,
           pollMs,
         );
         if (lease && signal.aborted) {
@@ -2037,7 +2908,7 @@ async function acquire(
           if (marker) await marker.release();
           marker = undefined;
           markerHost = target.host.name;
-          marker = (await takeGateMarker(target.host, signal)) ?? undefined;
+          marker = (await takeGateMarker(target.host, signal, connectionId)) ?? undefined;
         }
       }
       if (landingWaiterId && ranked.length > 0 && !gate) {
@@ -2094,12 +2965,12 @@ async function acquire(
         if (target && target.host.name !== markerHost) {
           if (marker) await marker.release();
           markerHost = target.host.name;
-          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal)) ?? undefined;
+          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal, connectionId)) ?? undefined;
         } else if (target && !marker) {
-          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal)) ?? undefined;
+          marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal, connectionId)) ?? undefined;
         }
       }
-      announceWait(ranked);
+      announceWait(allRanked);
       wait.record();
       await sleep(pollMs, signal);
     }
@@ -2122,12 +2993,170 @@ async function finished(child: ReturnType<typeof Bun.spawn>, signal: AbortSignal
   }
 }
 
+async function stopAndReap(child: ReturnType<typeof Bun.spawn>): Promise<void> {
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    // It may have exited between the timeout and the signal.
+  }
+  if ((await within(1_000, child.exited)) === null) {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // The process may have exited while the signal was being sent.
+    }
+    await child.exited;
+  }
+}
+
+async function boundedTextChild(
+  child: ReturnType<typeof Bun.spawn>,
+  signal: AbortSignal,
+  noProgressMs: number,
+  host: Host,
+  step: string,
+  retryable = true,
+): Promise<[number, string]> {
+  let output = '';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expired = false;
+  let expire!: () => void;
+  const timedOut = new Promise<void>((resolve) => {
+    expire = resolve;
+  });
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      expired = true;
+      expire();
+    }, noProgressMs);
+  };
+  const read = async (stream: ReadableStream<Uint8Array> | null): Promise<void> => {
+    if (!(stream instanceof ReadableStream)) return;
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      output += decoder.decode(value, { stream: true });
+      arm();
+    }
+    output += decoder.decode();
+  };
+  arm();
+  const completion = Promise.all([finished(child, signal), read(child.stdout), read(child.stderr)]).then(
+    ([code]) => code,
+  );
+  try {
+    const result = await Promise.race([completion, timedOut.then(() => null)]);
+    if (result === null) {
+      await stopAndReap(child);
+      await completion;
+      if (signal.aborted) throw new Aborted();
+      throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE, retryable);
+    }
+    return [result, output];
+  } finally {
+    clearTimeout(timer);
+    if (expired && !child.killed) await stopAndReap(child);
+  }
+}
+
+async function boundedSsh(
+  host: Host,
+  connectionId: string,
+  script: string,
+  step: string,
+  timeoutMs: number,
+): Promise<{ code: number; output: string }> {
+  const child = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, script], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const output = Promise.all([
+    new Response(child.stdout).text(),
+    child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
+  ]).then(([stdout, stderr]) => stdout + stderr);
+  const code = await within(timeoutMs, child.exited);
+  if (code === null) {
+    await stopAndReap(child);
+    await output;
+    throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
+  }
+  return { code, output: await output };
+}
+
+async function closeControlMaster(host: Host, connectionId: string): Promise<void> {
+  const child = Bun.spawn(['ssh', '-O', 'exit', ...sshOptions(host, connectionId), host.address], {
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  if ((await within(1_000, child.exited)) === null) await stopAndReap(child);
+}
+
+/** Verifies a selected host's own master before any upload or run work uses it. */
+async function probeControl(host: Host, initialId: string, timeoutMs: number): Promise<string> {
+  let connectionId = initialId;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await boundedSsh(
+        host,
+        connectionId,
+        `# REMOTE_CHECK_CONTROL_PROBE\nprintf 'REMOTE_CHECK_CONTROL_OK\\n'`,
+        'control probe',
+        timeoutMs,
+      );
+      if (result.code === 0 && result.output.includes('REMOTE_CHECK_CONTROL_OK')) return connectionId;
+      throw new RemoteTransportError(host.name, 'control probe', result.code || REMOTE_TRANSPORT_FAILURE);
+    } catch (error) {
+      if (attempt === 1) {
+        const code = error instanceof RemoteTransportError ? error.code : REMOTE_TRANSPORT_FAILURE;
+        throw new RemoteTransportError(host.name, 'control probe', code, false);
+      }
+      await closeControlMaster(host, connectionId);
+      connectionId = randomUUID().slice(0, 8);
+    }
+  }
+  throw new RemoteTransportError(host.name, 'control probe', REMOTE_TRANSPORT_FAILURE);
+}
+
 async function finishedRsync(
   child: ReturnType<typeof Bun.spawn>,
   signal: AbortSignal,
+  host: Host,
+  step: string,
+  noProgressMs: number,
+  retryable = true,
 ): Promise<{ code: number; stderr: string }> {
   const stderrStream = child.stderr;
   let stderr = '';
+  let progress = 0;
+  let partial = '';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expire!: () => void;
+  const timedOut = new Promise<void>((resolve) => {
+    expire = resolve;
+  });
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(expire, noProgressMs);
+  };
+  const observe = (chunk: string) => {
+    partial += chunk;
+    const lines = partial.split(/[\r\n]/);
+    partial = lines.pop() ?? '';
+    for (const line of [...lines, partial]) {
+      const match = line.match(/^\s*([\d,]+)\s+\d{1,3}%/);
+      if (!match) continue;
+      const amount = Number(match[1]!.replaceAll(',', ''));
+      if (Number.isFinite(amount) && amount > progress) {
+        progress = amount;
+        arm();
+      }
+    }
+  };
   const forwardStderr = async (): Promise<void> => {
     if (!(stderrStream instanceof ReadableStream)) return;
     const reader = stderrStream.getReader();
@@ -2136,12 +3165,26 @@ async function finishedRsync(
       const { done, value } = await reader.read();
       if (done) break;
       process.stderr.write(value);
-      stderr += decoder.decode(value, { stream: true });
+      const decoded = decoder.decode(value, { stream: true });
+      stderr += decoded;
+      observe(decoded);
     }
     stderr += decoder.decode();
   };
-  const [code] = await Promise.all([finished(child, signal), forwardStderr()]);
-  return { code, stderr };
+  arm();
+  const completion = Promise.all([finished(child, signal), forwardStderr()]).then(([code]) => code);
+  try {
+    const code = await Promise.race([completion, timedOut.then(() => null)]);
+    if (code === null) {
+      await stopAndReap(child);
+      await completion;
+      if (signal.aborted) throw new Aborted();
+      throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE, retryable);
+    }
+    return { code, stderr };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function vanishedFileCount(stderr: string): number {
@@ -2162,14 +3205,13 @@ function rsyncBytesSent(stderr: string): number | undefined {
   return match ? Number(match[1]!.replaceAll(',', '')) : undefined;
 }
 
-async function baseState(host: Host): Promise<{ base: string | null; zstd: boolean }> {
-  const probe = Bun.spawn(['ssh', ...sshOptions(host), host.address, baseStateScript()], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'ignore',
-  });
-  const [code, output] = await Promise.all([probe.exited, new Response(probe.stdout).text()]);
-  if (code !== 0) throw new RemoteTransportError(host.name, 'base lookup', 255);
+async function baseState(
+  host: Host,
+  connectionId: string,
+  timeoutMs: number,
+): Promise<{ base: string | null; zstd: boolean }> {
+  const { code, output } = await boundedSsh(host, connectionId, baseStateScript(), 'base lookup', timeoutMs);
+  if (code !== 0) throw new RemoteTransportError(host.name, 'base lookup', code);
   const base = output.match(/^BASE (.+)$/m)?.[1];
   const age = output.match(/^AGE (.+)$/m)?.[1];
   const zstd = output.match(/^ZSTD ([01])$/m)?.[1];
@@ -2204,18 +3246,32 @@ ${body}`;
 }
 
 /** Copies declared outputs back in one rsync. Missing paths log one stderr line and are left out of that rsync. */
-async function copyReturns(host: Host, directory: string, options: RemoteCheck, signal: AbortSignal): Promise<void> {
+async function copyReturns(
+  host: Host,
+  directory: string,
+  connectionId: string,
+  options: RemoteCheck,
+  signal: AbortSignal,
+): Promise<void> {
   const paths = options.returns ?? [];
   if (paths.length === 0) return;
   for (const path of paths) assertReturnPath(path);
-  const probe = Bun.spawn(['ssh', ...sshOptions(host), host.address, returnsProbe(directory, paths)], {
+  const probe = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths)], {
     stdin: 'ignore',
     stdout: 'pipe',
-    stderr: 'inherit',
+    stderr: 'pipe',
   });
-  const [probed, output] = await Promise.all([finished(probe, signal), new Response(probe.stdout).text()]);
+  const transferLimit = transferTimeout(options);
+  const [probed, output] = await boundedTextChild(
+    probe,
+    signal,
+    transferLimit,
+    host,
+    'returns probe',
+    false,
+  );
   if (signal.aborted) throw new Aborted();
-  if (probed !== 0) throw new Error(`could not read outputs on ${host.name}`);
+  if (probed !== 0) throw new RemoteTransportError(host.name, 'returns probe', probed, false);
   const present: string[] = [];
   const seen = new Set<string>();
   for (const line of output.split('\n')) {
@@ -2238,80 +3294,149 @@ async function copyReturns(host: Host, directory: string, options: RemoteCheck, 
     [
       'rsync',
       '-rlpt',
+      '--info=progress2',
       '--mkpath',
       '--from0',
       '--files-from=-',
       '-e',
-      ['ssh', ...sshOptions(host)].map(quote).join(' '),
+      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
       `${host.address}:${directory}/`,
       `${resolve(options.workspace)}/`,
     ],
     { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
   );
-  const { code: synced, stderr } = await finishedRsync(sync, signal);
+  const { code: synced, stderr } = await finishedRsync(
+    sync,
+    signal,
+    host,
+    'returns copy',
+    transferLimit,
+    false,
+  );
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFileCount(stderr));
-  else if (synced !== 0) throw new Error(`rsync from ${host.name} failed with exit code ${synced}`);
+  else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
 }
 
-/** Runs the command on the lease's host and always removes the run's directory and releases the lease. */
-async function runLeased(
-  lease: Lease,
+type PreparedRun = { host: Host; id: string; directory: string; connectionId: string };
+
+/** Transfers the workspace before admission so upload work never owns execution capacity. */
+async function uploadRun(
+  host: Host,
+  connectionId: string,
+  id: string,
   options: RemoteCheck,
   files: string[],
+  signal: AbortSignal,
+): Promise<PreparedRun> {
+  const directory = `${ROOT}/runs/${id}`;
+  const transferLimit = transferTimeout(options);
+  const base = await baseState(host, connectionId, transferLimit);
+  if (signal.aborted) throw new Aborted();
+  const useZstd = base.zstd && localRsyncSupportsZstd();
+  if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
+  const rsyncStarted = performance.now();
+  const compression = useZstd
+    ? ['--compress', '--compress-choice=zstd', `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
+    : ['--compress'];
+  const sync = Bun.spawn(
+    [
+      'rsync',
+      '-lpt',
+      ...compression,
+      '--stats',
+      '--info=progress2',
+      '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
+      ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
+      '--mkpath',
+      '--from0',
+      '--files-from=-',
+      '-e',
+      ['ssh', ...sshOptions(host, connectionId)].map(quote).join(' '),
+      `${resolve(options.workspace)}/`,
+      `${host.address}:${directory}/`,
+    ],
+    { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
+  );
+  const { code: synced, stderr } = await finishedRsync(
+    sync,
+    signal,
+    host,
+    'workspace upload',
+    transferLimit,
+  );
+  reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
+  if (signal.aborted) throw new Aborted();
+  if ([10, 12, 30, 35, 255].includes(synced))
+    throw new RemoteTransportError(host.name, 'workspace upload', synced);
+  if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
+  else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
+  return { host, id, directory, connectionId };
+}
+
+async function cleanupPreparedRun(prepared: PreparedRun): Promise<void> {
+  const cleanup = Bun.spawn(
+    [
+      'ssh',
+      ...sshOptions(prepared.host, prepared.connectionId),
+      prepared.host.address,
+      cleanupScript(prepared.id, prepared.directory),
+    ],
+    { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+  );
+  const cleaned = await within(60_000, cleanup.exited);
+  if (cleaned !== 0) {
+    await stopAndReap(cleanup);
+    console.error(`remote-check: could not remove ${prepared.directory} on ${prepared.host.name}`);
+  }
+}
+
+async function recoverRunLifetimeFailure(prepared: PreparedRun, workspace: string): Promise<RunLifetimeFailure | null> {
+  const script = `# REMOTE_CHECK_RUN_LIFETIME_STATUS
+file=${quote(`${ROOT}/receipts/${prepared.id}/run-lifetime-status.json`)}
+[ -r "$file" ] || file=${quote(`${prepared.directory}/run-lifetime-status.json`)}
+if [ -r "$file" ]; then printf '%s' ${quote(RUN_LIFETIME_FAILURE_MARKER)}; head -c 4096 "$file"; printf '\\n'; fi`;
+  const result = await boundedSsh(prepared.host, prepared.connectionId, script, 'run lifetime receipt', 5_000);
+  const receipt = result.code === 0 ? parseRunLifetimeFailure(result.output) : null;
+  if (receipt && receipt.host === prepared.host.name && receipt.run === prepared.id) {
+    const path = join(workspace, '.temp/remote-check/receipts', prepared.id);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'run-lifetime-status.json'), JSON.stringify(receipt) + '\n');
+    // This recovery path is independent of the command's possibly blocked/lost output stream and returns copy.
+    console.error(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
+    return receipt;
+  }
+  return null;
+}
+
+/** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
+async function runLeased(
+  lease: Lease,
+  prepared: PreparedRun,
+  options: RemoteCheck,
   slotWaitStarted: number,
   signal: AbortSignal,
 ): Promise<number> {
-  const { host } = lease;
+  const { host, id, directory, connectionId } = prepared;
+  let leaseReleased = false;
+  let commandTerminal = false;
+  let run: ReturnType<typeof Bun.spawn> | undefined;
+  const releaseLease = async () => {
+    if (leaseReleased) return;
+    leaseReleased = true;
+    await lease.release();
+  };
   reportDuration('slot wait', slotWaitStarted, host.name);
-  const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-  const directory = `${ROOT}/runs/${id}`;
   try {
     await lease.registerRun?.(id);
-    const base = await baseState(host);
     if (signal.aborted) throw new Aborted();
-    const useZstd = base.zstd && localRsyncSupportsZstd();
-    if (!useZstd) {
-      console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
-    }
-    const rsyncStarted = performance.now();
-    const compression = useZstd
-      ? ['--compress', `--compress-choice=zstd`, `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
-      : ['--compress'];
-    const sync = Bun.spawn(
-      [
-        'rsync',
-        '-lpt',
-        ...compression,
-        '--stats',
-        '--rsync-path=flock -s /srv/rezics-check/bases/.lock rsync',
-        ...(base.base ? ['--checksum', `--copy-dest=${ROOT}/bases/current`] : []),
-        '--mkpath',
-        '--from0',
-        '--files-from=-',
-        '-e',
-        ['ssh', ...sshOptions(host)].map(quote).join(' '),
-        `${resolve(options.workspace)}/`,
-        `${host.address}:${directory}/`,
-      ],
-      { stdin: new Blob([`${files.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
-    );
-    const { code: synced, stderr } = await finishedRsync(sync, signal);
-    reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
-    if (signal.aborted) throw new Aborted();
-    if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
-    if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
-    // rsync documents 24 as a vanished source file; generated outputs are excluded above, and remaining races
-    // should not fail a check because the source snapshot is already best-effort.
-    else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
-
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);
-    const run = Bun.spawn(
+    run = Bun.spawn(
       [
         'ssh',
-        ...sshOptions(host),
+        ...sshOptions(host, connectionId),
         host.address,
         runScript(
           id,
@@ -2321,98 +3446,133 @@ async function runLeased(
           host.name,
           options.progressIntervalMs,
           options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
+          configuredTimeout(options.preparationTimeoutMs, 'REMOTE_CHECK_PREPARATION_TIMEOUT_MS', DEFAULT_PREPARATION_TIMEOUT_MS),
+          options.estimateMs,
+          options.maxMs,
         ),
       ],
       { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
     );
-    const maxMs = options.maxMs ?? DEFAULT_MAX_MS;
+    const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     let heartbeatStopped = false;
     const heartbeat = setInterval(() => {
       if (!heartbeatStopped) {
-        const renew = Bun.spawn(['ssh', ...sshOptions(host), host.address, heartbeatScript(directory)], {
+        Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)], {
           stdin: 'ignore',
           stdout: 'ignore',
           stderr: 'ignore',
         });
       }
     }, heartbeatMs);
-    let deadline = false;
     const commandResult = finished(run, signal);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
-      deadlineTimer = setTimeout(() => resolve(null), maxMs);
+      // The host owns the deadline and receipt. This later controller guard only recovers a broken host monitor.
+      deadlineTimer = setTimeout(() => resolve(null), maxMs + 1_000);
     });
     let code: number;
     try {
       const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
       if (completed === null) {
-        deadline = true;
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
-        const stop = Bun.spawn(['ssh', ...sshOptions(host), host.address, stopRunScript(id)], {
-          stdin: 'ignore',
-          stdout: 'ignore',
-          stderr: 'ignore',
-        });
-        await within(15_000, stop.exited);
+        const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
+        if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
+          throw new RemoteTransportError(
+            host.name,
+            'remote command stop',
+            stopped.code || REMOTE_TRANSPORT_FAILURE,
+            false,
+          );
         run.kill('SIGTERM');
         await run.exited;
+        commandTerminal = true;
         code = REMOTE_DEADLINE_EXIT;
-      } else code = completed;
+      } else {
+        code = completed;
+        commandTerminal = completed !== 255;
+      }
     } finally {
       heartbeatStopped = true;
       clearInterval(heartbeat);
       if (deadlineTimer) clearTimeout(deadlineTimer);
     }
     if (signal.aborted) throw new Aborted();
-    if (deadline) return REMOTE_DEADLINE_EXIT;
     if (code === 255) {
-      const status = Bun.spawn(['ssh', ...sshOptions(host), host.address, statusScript(directory)], {
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'ignore',
-      });
-      const [statusCode, output] = await Promise.all([finished(status, signal), new Response(status.stdout).text()]);
+      const status = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', 15_000);
       if (signal.aborted) throw new Aborted();
-      const recorded = output.trim();
+      const recorded = status.output.trim();
       const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
       if (
-        statusCode !== 0 ||
+        status.code !== 0 ||
         (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
         parsed > 255
       ) {
+        throw new RemoteTransportError(
+          host.name,
+          'remote command',
+          status.code || REMOTE_TRANSPORT_FAILURE,
+          false,
+        );
+      }
+      if (recorded === 'NOT_STARTED') {
+        commandTerminal = true;
+        throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
+      }
+      if (recorded === 'STARTED') {
+        const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
+        if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
+          throw new RemoteTransportError(
+            host.name,
+            'remote command stop',
+            stopped.code || REMOTE_TRANSPORT_FAILURE,
+            false,
+          );
+        commandTerminal = true;
         throw new RemoteTransportError(host.name, 'remote command', 255, false);
       }
-      if (recorded === 'NOT_STARTED') throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
-      if (recorded === 'STARTED') throw new RemoteTransportError(host.name, 'remote command', 255, false);
       code = parsed;
+      commandTerminal = true;
     }
-    await copyReturns(host, directory, options, signal);
+    if (signal.aborted) throw new Aborted();
+    await releaseLease();
+    let lifetimeFailure: RunLifetimeFailure | null = null;
+    if (code === REMOTE_DEADLINE_EXIT) {
+      try {
+        lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
+      } catch (error) {
+        console.error(`remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    try {
+      await copyReturns(host, directory, connectionId, options, signal);
+    } catch (error) {
+      if (!lifetimeFailure || signal.aborted) throw error;
+      console.error(`remote-check: returns failed after recorded run-lifetime infrastructure failure: ${error instanceof Error ? error.message : error}`);
+    }
     if (signal.aborted) throw new Aborted();
     return code;
   } finally {
-    // The cleanup connection is not tied to the abort signal: it is what undoes an aborted run.
-    const cleanup = Bun.spawn(['ssh', ...sshOptions(host), host.address, cleanupScript(id, directory)], {
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'inherit',
-    });
-    const cleaned = await within(60_000, cleanup.exited);
-    if (cleaned !== 0) {
-      cleanup.kill();
-      console.error(`remote-check: could not remove ${directory} on ${host.name}`);
+    if (!commandTerminal && run) {
+      try {
+        run.kill('SIGTERM');
+      } catch {
+        // The SSH client may already have exited; releasing the lease runs the host-side orphan stop first.
+      }
+      await run.exited;
     }
-    await lease.release();
+    try {
+      await releaseLease();
+    } finally {
+      await cleanupPreparedRun(prepared);
+    }
   }
 }
 
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
-  validateEstimateMs(options.estimateMs);
-  const slots = options.slots ?? 1;
-  const hosts = options.hosts;
+  effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  const slotWaitStarted = performance.now();
-  const result = await runWithTransportRetries(options, hosts, files, slotWaitStarted, signal, false);
+  const result = await runWithTransportRetries(options, options.hosts, files, signal, false);
   if (result === null) throw new Error('remote-check: no check host answered');
   return result;
 }
@@ -2420,9 +3580,8 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
 /** Retries only failures known to have happened before a remote command produced a result. */
 async function runWithTransportRetries(
   options: RemoteCheck,
-  hosts: Host[],
+  initialHosts: Host[],
   files: string[],
-  slotWaitStarted: number,
   signal: AbortSignal,
   giveUpIfUnanswered: boolean,
   onAnswered?: () => void,
@@ -2431,106 +3590,166 @@ async function runWithTransportRetries(
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
+  const hostsForRound = liveHosts(initialHosts, options.hostsFile);
   const failedHosts = new Set<string>();
+  let transportAttempts = 0;
   let lastFailure: RemoteTransportError | undefined;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (attempt > 0) {
-      const delay = (options.retryBackoffMs ?? 100) * 2 ** (attempt - 1);
-      console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
+  let answered = false;
+  while (transportAttempts < 3) {
+    if (transportAttempts > 0) {
+      const delay = (options.retryBackoffMs ?? 100) * 2 ** (transportAttempts - 1);
+      console.error(
+        `remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`,
+      );
       await sleep(delay, signal);
     }
-    const preferred = hosts.filter((host) => !failedHosts.has(host.name));
-    const retryHosts = attempt > 0 && preferred.length > 0 ? preferred : hosts;
-    let lease: Lease | null;
-    if (attempt === 0) {
-      lease = await acquire(
-        retryHosts,
+    const hostProvider: HostProvider = () => {
+      const current = hostsForRound();
+      const preferred = current.filter(({ name }) => !failedHosts.has(name));
+      return preferred.length > 0 ? preferred : current;
+    };
+    const host = await selectPlacement(
+      hostProvider,
+      slots,
+      options.estimateMs,
+      options.gate ?? false,
+      memoryReservationBytes,
+      options.priority,
+      signal,
+      options.pollMs ?? 5000,
+      giveUpIfUnanswered && !answered,
+      () => {
+        answered = true;
+        onAnswered?.();
+      },
+    );
+    if (!host) return null;
+    const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    const prepared: PreparedRun = {
+      host,
+      id,
+      directory: `${ROOT}/runs/${id}`,
+      connectionId: randomUUID().slice(0, 8),
+    };
+    let managedByRun = false;
+    try {
+      prepared.connectionId = await probeControl(
+        host,
+        prepared.connectionId,
+        controlProbeTimeout(options),
+      );
+      await uploadRun(host, prepared.connectionId, id, options, files, signal);
+      const slotWaitStarted = performance.now();
+      const lease = await acquire(
+        [host],
         slots,
         options.estimateMs,
         options.pollMs ?? 5000,
         signal,
-        giveUpIfUnanswered,
-        onAnswered,
+        false,
+        () => {
+          answered = true;
+          onAnswered?.();
+        },
         options.gate ?? false,
         options.waitRepeatMs,
         memoryReservationBytes,
         options.priority,
+        hostsForRound,
+        host,
+        prepared.connectionId,
+        transferTimeout(options),
+        prepared.directory,
       );
-    } else {
-      lease = await acquireOnce(
-        retryHosts,
-        slots,
-        options.estimateMs,
-        signal,
-        options.gate ?? false,
-        memoryReservationBytes,
-        options.priority,
-        options.pollMs ?? 5000,
-      );
-      if (!lease && (!giveUpIfUnanswered || lastFailure !== undefined)) {
-        lease = await acquire(
-          hosts,
-          slots,
-          options.estimateMs,
-          options.pollMs ?? 5000,
-          signal,
-          false,
-          onAnswered,
-          options.gate ?? false,
-          options.waitRepeatMs,
-          memoryReservationBytes,
-          options.priority,
-        );
+      if (!lease) {
+        await cleanupPreparedRun(prepared);
+        continue;
       }
-    }
-    if (!lease) return null;
-    try {
-      return await runLeased(lease, options, files, slotWaitStarted, signal);
+      prepared.host = lease.host;
+      managedByRun = true;
+      return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!(error instanceof RemoteTransportError) || !error.retryable || attempt === 2 || signal.aborted) throw error;
+      if (!managedByRun) await cleanupPreparedRun(prepared);
+      if (
+        !(error instanceof RemoteTransportError) ||
+        !error.retryable ||
+        transportAttempts === 2 ||
+        signal.aborted
+      )
+        throw error;
       lastFailure = error;
       failedHosts.add(error.host);
+      transportAttempts += 1;
     }
   }
   throw lastFailure;
 }
 
-/**
- * Like `remoteCheck`, but the first probe round that finds no host returns null instead of waiting. Once a host has
- * answered, a later silence keeps waiting for a slot. A run no host has enough slots for is still an error.
- */
-export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
-  validateEstimateMs(options.estimateMs);
-  const slots = options.slots ?? 1;
-  const hosts = options.hosts;
+/** The first unresponsive-host round may hand local work to its caller; later loss keeps waiting. */
+export async function remoteCheckUnlessUnreachable(
+  options: RemoteCheck,
+  signal: AbortSignal,
+): Promise<number | null> {
+  effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  const slotWaitStarted = performance.now();
-  return await runWithTransportRetries(options, hosts, files, slotWaitStarted, signal, true, options.answered);
+  return await runWithTransportRetries(options, options.hosts, files, signal, true, options.answered);
 }
 
-/**
- * Like `remoteCheck`, but each host's slot is tried once and a busy host is not waited for. The result says whether
- * the command ran, so a caller never reads "no slot" as an exit code. A run no host has enough slots for is "no-slot".
- */
+/** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
-  validateEstimateMs(options.estimateMs);
+  effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
     options.memoryGiB === undefined ? CHECK_SLOT_MEMORY_BYTES : options.memoryGiB * 2 ** 30;
-  const hosts = options.hosts;
   const files = workspaceFiles(options.workspace);
-  const slotWaitStarted = performance.now();
-  const failedHosts = new Set<string>();
-  let lastFailure: RemoteTransportError | undefined;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (attempt > 0) {
-      console.error(`remote-check: retrying transport failure on ${lastFailure!.host} with code ${lastFailure!.code}`);
-      await sleep((options.retryBackoffMs ?? 100) * 2 ** (attempt - 1), signal);
+  const hostsForRound = liveHosts(options.hosts, options.hostsFile);
+  const initial = hostsForRound();
+  const ranked = await rankedHosts(
+    initial,
+    signal,
+    slots,
+    options.estimateMs,
+    options.gate ?? false,
+    false,
+    undefined,
+    new Map(),
+    new Set(),
+    memoryReservationBytes,
+    options.priority,
+  );
+  if (ranked.length === 0) return { status: 'no-slot' };
+  const cap = requestedSlotCap(
+    ranked,
+    options.priority === undefined && isShortRun(slots, options.estimateMs, options.gate ?? false),
+    slots,
+  );
+  if (slots > cap) throw new SlotRequestTooLarge(cap, slots);
+  const candidates = ranked.filter(({ host }) => !host.fallback);
+  const host = (candidates.length ? candidates : ranked)[0]!.host;
+  const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  const prepared: PreparedRun = {
+    host,
+    id,
+    directory: `${ROOT}/runs/${id}`,
+    connectionId: randomUUID().slice(0, 8),
+  };
+  try {
+    prepared.connectionId = await probeControl(
+      host,
+      prepared.connectionId,
+      controlProbeTimeout(options),
+    );
+    await uploadRun(host, prepared.connectionId, id, options, files, signal);
+    const current = hostsForRound().find(
+      ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,
+    );
+    if (!current) {
+      await cleanupPreparedRun(prepared);
+      return { status: 'no-slot' };
     }
-    const preferred = hosts.filter((host) => !failedHosts.has(host.name));
     const lease = await acquireOnce(
-      attempt > 0 && preferred.length > 0 ? preferred : hosts,
+      [current],
       slots,
       options.estimateMs,
       signal,
@@ -2538,21 +3757,20 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       memoryReservationBytes,
       options.priority,
       options.pollMs ?? 5000,
+
+      prepared.connectionId,
+      transferTimeout(options),
     );
-    if (!lease) return { status: 'no-slot' };
-    try {
-      return {
-        status: 'ran',
-        host: lease.host.name,
-        code: await runLeased(lease, options, files, slotWaitStarted, signal),
-      };
-    } catch (error) {
-      if (!(error instanceof RemoteTransportError) || !error.retryable || attempt === 2 || signal.aborted) throw error;
-      lastFailure = error;
-      failedHosts.add(error.host);
+    if (!lease) {
+      await cleanupPreparedRun(prepared);
+      return { status: 'no-slot' };
     }
+    prepared.host = lease.host;
+    return { status: 'ran', host: lease.host.name, code: await runLeased(lease, prepared, options, performance.now(), signal) };
+  } catch (error) {
+    await cleanupPreparedRun(prepared);
+    throw error;
   }
-  throw lastFailure;
 }
 
 function parse(argv: string[]): RemoteCheck {
@@ -2642,6 +3860,7 @@ function parse(argv: string[]): RemoteCheck {
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
     ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
+    hostsFile,
   };
 }
 

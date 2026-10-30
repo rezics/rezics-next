@@ -22,20 +22,56 @@ const searchScript = join(repository, 'services/kernel/scripts/search.ts');
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
 const fakeSsh = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
-const script = args.at(-1)!;
-const address = args.at(-2)!;
+const positionals: string[] = [];
+const options: string[] = [];
+const reject = (detail: string): never => {
+  process.stderr.write('fake ssh: ' + detail + '\\n');
+  process.exit(2);
+};
+for (let index = 0; index < args.length;) {
+  const argument = args[index]!;
+  if (argument === '-o' || argument === '-i' || argument === '-O') {
+    const value = args[index + 1];
+    if (!value || value.startsWith('-')) reject('option ' + argument + ' must have one value');
+    if (argument === '-o' && (!value.includes('=') || value.startsWith('='))) reject('invalid -o configuration');
+    if (argument === '-O' && value !== 'exit') reject('unsupported -O operation');
+    options.push(argument, value);
+    index += 2;
+  } else if (argument.startsWith('-')) reject('unexpected option ' + argument);
+  else {
+    positionals.push(argument);
+    index += 1;
+  }
+}
+const controlExit = options.includes('-O');
+if (options.filter((argument) => argument === '-O').length > 1) reject('duplicate -O operation');
+if (positionals.length !== (controlExit ? 1 : 2)) reject('expected host and optional command positionals');
+const address = positionals[0]!;
+if (!address.startsWith('ops@') || !address.endsWith('.test')) reject('invalid host position');
+const script = controlExit ? 'REMOTE_CHECK_CONTROL_CLOSE' : positionals[1]!;
 const config = JSON.parse(readFileSync(dir + '/config.json', 'utf8'))[address] ?? {};
-const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, ...event }) + '\\n');
+const controlPath = options.find((option) => option.startsWith('ControlPath='));
+const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, ...event }) + '\\n');
 const hostKey = address.replace(/[^a-z0-9]/gi, '_');
+const slotHeld = () => readdirSync(dir).some((name) => name.startsWith(hostKey + '.slot.') && !name.endsWith('.memory'));
 const count = (name: string) => {
   const file = dir + '/' + hostKey + '.' + name;
   const seen = existsSync(file) ? Number(readFileSync(file, 'utf8')) : 0;
   writeFileSync(file, String(seen + 1));
   return seen;
 };
+if (controlExit) {
+  log({ kind: 'control-close', controlPath });
+  process.exit(0);
+}
+if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) {
+  log({ kind: 'control-probe', controlPath, slotHeld: slotHeld() });
+  console.log('REMOTE_CHECK_CONTROL_OK');
+  process.exit(0);
+}
 if (script.includes('MemAvailable')) {
   const slots = config.slots ?? 2;
   const ordinarySlotsUsed = Array.from({ length: Math.max(0, slots - 1) }, (_, index) => existsSync(dir + '/' + hostKey + '.slot.' + index)).filter(Boolean).length;
@@ -81,7 +117,7 @@ if (script.includes('MemAvailable')) {
   process.on('SIGHUP', release);
   process.stdin.resume();
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
-  log({ kind: 'base' });
+  log({ kind: 'base', slotHeld: slotHeld() });
   console.log('BASE -\\nAGE -\\nZSTD 0');
 } else if (script.includes('REMOTE_CHECK_BASE_REFRESH') && !script.includes('systemd-run')) {
   log({ kind: 'base-refresh' });
@@ -90,14 +126,14 @@ if (script.includes('MemAvailable')) {
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
   if (call < (config.busy ?? 0)) {
-    log({ kind: 'slot', granted: false, reason: 'busy', slotClass, script });
+  log({ kind: 'slot', granted: false, reason: 'busy', slotClass, slotHeld: slotHeld(), script });
     process.exit(75);
   }
   const grants = existsSync(dir + '/' + hostKey + '.granted')
     ? Number(readFileSync(dir + '/' + hostKey + '.granted', 'utf8'))
     : 0;
   if (config.grantOnly !== undefined && grants >= config.grantOnly) {
-    log({ kind: 'slot', granted: false, reason: 'grant-limit', slotClass, script });
+    log({ kind: 'slot', granted: false, reason: 'grant-limit', slotClass, slotHeld: slotHeld(), script });
     process.exit(75);
   }
   const capacity = config.slots ?? 2;
@@ -111,18 +147,18 @@ if (script.includes('MemAvailable')) {
   const free = slotClass === 'short' ? [...freeOrdinary, ...(expressOccupied ? [] : ['express' as const])] : freeOrdinary;
   const limitedOccupied = occupied.length + (slotClass === 'short' && expressOccupied ? 1 : 0);
   if (limitedOccupied + requested > slotLimit || free.length < requested) {
-    log({ kind: 'slot', granted: false, reason: 'occupied', slotClass, script });
+    log({ kind: 'slot', granted: false, reason: 'occupied', slotClass, slotHeld: slotHeld(), script });
     process.exit(75);
   }
   const selected = free.slice(0, requested);
   for (const slot of selected) mkdirSync(dir + '/' + hostKey + '.slot.' + slot);
   writeFileSync(dir + '/' + hostKey + '.granted', String(grants + selected.length));
-  for (const slot of selected) log({ kind: 'slot', granted: true, slotClass, script, slot });
+  for (const slot of selected) log({ kind: 'slot', granted: true, slotClass, script, slot, slotHeld: slotHeld() });
   console.log('SLOTS ' + requested);
   const release = () => {
     for (const slot of selected) {
       rmSync(dir + '/' + hostKey + '.slot.' + slot, { recursive: true, force: true });
-      log({ kind: 'release', slot });
+      log({ kind: 'release', slot, slotHeld: slotHeld() });
     }
     process.exit(0);
   };
@@ -131,7 +167,7 @@ if (script.includes('MemAvailable')) {
   process.on('SIGHUP', release);
   process.stdin.resume();
 } else if (script.includes('systemd-run')) {
-  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1] });
+  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], slotHeld: slotHeld() });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   if (script.includes('remote-check: bun install') && script.includes('remote-check: command')) {
     console.error('remote-check: bun install 0.125 s on ' + host);
@@ -145,21 +181,26 @@ if (script.includes('MemAvailable')) {
     setInterval(() => {}, 1000);
   } else process.exit(config.exit ?? 0);
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
-  log({ kind: 'returns', script });
+  log({ kind: 'returns', script, slotHeld: slotHeld() });
   for (const path of [...script.matchAll(/^# PATH (.+)$/gm)]) console.log('PRESENT ' + path[1]);
 } else {
-  log({ kind: 'cleanup', script });
+  log({ kind: 'cleanup', script, slotHeld: slotHeld() });
 }
 `;
 
 const fakeRsync = `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readdirSync } from 'node:fs';
 const args = process.argv.slice(2);
 const input = await Bun.stdin.text();
+const remote = args.find((argument) => /ops@[^:]+\\.test:/.test(argument));
+const hostKey = (remote ?? '').slice(0, (remote ?? '').indexOf(':')).replace(/[^a-z0-9]/gi, '_');
+const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
+  step: isBack ? 'returns copy' : 'workspace upload',
   destination: args.at(-1),
   files: input.split('\\0').filter(Boolean),
+  slotHeld: readdirSync(process.env.FAKE_DIR!).some((name) => name.startsWith(hostKey + '.slot.') && !name.endsWith('.memory')),
 }) + '\\n');
 if (process.env.FAKE_RSYNC_FAIL === '1') process.exit(12);
 `;
@@ -169,6 +210,28 @@ import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({ kind: 'docker', args: process.argv.slice(2) }) + '\\n');
 process.exit(99);
 `;
+
+function nodeFixture(source: string): string {
+  // Keep fake SSH and rsync startup cheap while these fixtures exercise remote placement.
+  const javascript = new Bun.Transpiler({ loader: 'ts', target: 'node' })
+    .transformSync(source.replace(/^#![^\r\n]*(?:\r?\n|$)/, ''))
+    .replace(/^import (\{[^\r\n]*\}) from "([^"]+)";$/gm, 'const $1 = require("$2");')
+    .replace(/await import\("([^"]+)"\)/g, 'require("$1")')
+    .replaceAll('Bun.stdin.text()', 'readStdin()')
+    .replaceAll('Bun.sleep(', 'sleep(');
+  if (/\bBun\./.test(javascript)) throw new Error('Node fake transport still contains a Bun runtime call');
+  return `#!/usr/bin/env node
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const readStdin = async () => {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString();
+};
+(async () => {
+${javascript}
+})().catch((error) => { console.error(error); process.exit(1); });
+`;
+}
 
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
@@ -195,7 +258,7 @@ beforeAll(() => {
     ['docker', fakeDocker],
   ] as const) {
     const file = join(root, 'bin', name);
-    writeFileSync(file, source);
+    writeFileSync(file, nodeFixture(source));
     chmodSync(file, 0o755);
   }
 });
@@ -313,9 +376,15 @@ test("a stack run goes to a free check host and returns the command's exit code"
   expect(script).toContain('KERNEL_CHECK_ON_REMOTE=1');
   expect(script).toContain('REZICS_STACK_LEASE=off');
   expect(script).toContain('echo "local slot=$REZICS_STACK_SLOT"; exit 3');
-  // The run held a host slot and no local one.
-  const kinds = seen.filter((event) => event.address === 'ops@b.test').map((event) => event.kind);
-  expect(kinds.slice(-2)).toEqual(['cleanup', 'release']);
+  const hostEvents = seen.filter((event) => event.address === 'ops@b.test');
+  const kinds = hostEvents.map((event) => event.kind);
+  const runAt = kinds.indexOf('run');
+  const releaseAt = kinds.indexOf('release');
+  const cleanupAt = kinds.indexOf('cleanup');
+  expect(hostEvents[runAt]!.slotHeld).toBe(true);
+  expect(hostEvents[releaseAt]!.slotHeld).toBe(false);
+  expect(runAt).toBeLessThan(releaseAt);
+  expect(releaseAt).toBeLessThan(cleanupAt);
   expect(existsSync(lease)).toBe(false);
 }, 30_000);
 
@@ -346,6 +415,18 @@ test('stack-run passes --estimate-ms through to remote placement and refuses inv
   expect(missing.events()).toEqual([]);
 });
 
+test('stack-run shares the estimate-derived host lifetime for ordinary, multi-slot and nested callers', async () => {
+  for (const flags of [[], ['--slots', '2']]) {
+    const fixture = scenario({ a: { available: 40e9, slots: 4 } });
+    expect((await stack(fixture.env, ['true'], [...flags, '--estimate-ms', '3000'])).code).toBe(0);
+    expect(fixture.events().find((event) => event.kind === 'run')?.script).toContain('# REMOTE_CHECK_RUN_LIFETIME_MS 9000');
+  }
+  const fixture = scenario({ a: { available: 40e9, slots: 4 } });
+  const result = await runOnCheckHost({ label: 'nested', root: `${ROOT}/runs/outer`, cwd: `${ROOT}/runs/outer`, command: ['true'], estimateMs: 10 }, fixture.env);
+  expect(result).toBeNull();
+  expect(fixture.events()).toEqual([]);
+});
+
 test('growth profile: a root-relative profile is forwarded and returned with the run', async () => {
   const { env, events } = scenario({ host: { available: 30e9 } });
   const directory = workspace();
@@ -358,6 +439,17 @@ test('growth profile: a root-relative profile is forwarded and returned with the
   expect(run.script).toContain(profile);
   const returns = events().find((event) => event.kind === 'returns')!;
   expect(returns.script).toContain(`# PATH ${profile}`);
+  const seen = events();
+  const releaseAt = seen.findIndex((event) => event.kind === 'release');
+  const returnsAt = seen.findIndex((event) => event.kind === 'returns');
+  const copiedAt = seen.findIndex((event) => event.kind === 'rsync' && event.step === 'returns copy');
+  const cleanupAt = seen.findIndex((event) => event.kind === 'cleanup');
+  expect(seen.find((event) => event.kind === 'run')!.slotHeld).toBe(true);
+  expect(returns.slotHeld).toBe(false);
+  expect(seen[copiedAt]!.slotHeld).toBe(false);
+  expect(releaseAt).toBeLessThan(returnsAt);
+  expect(returnsAt).toBeLessThan(copiedAt);
+  expect(copiedAt).toBeLessThan(cleanupAt);
   expect(readFileSync(join(directory, profile), 'utf8')).toBe('{"earlier":true}\n');
 });
 
@@ -390,6 +482,9 @@ test('a stack run runs locally when no check host answers, and when no host has 
   const seen = down.events();
   expect(seen.filter((event) => event.kind === 'probe')).toHaveLength(2);
   expect(seen.filter((event) => event.kind === 'slot' || event.kind === 'rsync' || event.kind === 'run')).toEqual([]);
+  expect(existsSync(join(down.lease, 'slot-1.lock'))).toBe(true);
+  expect(spawnSync('flock', ['-n', join(down.lease, 'slot-1.lock'), '-c', 'true']).status).toBe(0);
+  expect(readdirSync(down.env.FAKE_DIR!).filter((entry) => entry.includes('.slot.'))).toEqual([]);
 
   // No host has two slots, so the run never asks one.
   const small = scenario({ a: { available: 5 * 2 ** 30, slots: 1 } });
@@ -476,11 +571,14 @@ test('landing priority: stackRun carries landing to admission and check entry po
 
   const kernel = readFileSync(join(repository, 'services/kernel/scripts/check.ts'), 'utf8');
   const auth = readFileSync(join(repository, 'services/auth/scripts/check.ts'), 'utf8');
+  const authDatabase = readFileSync(join(repository, 'services/auth/scripts/database.ts'), 'utf8');
   const web = readFileSync(join(repository, 'apps/web/scripts/check.ts'), 'utf8');
   const placement = readFileSync(join(repository, 'scripts/stack-run.ts'), 'utf8');
   expect(kernel).toContain('    env,\n  );');
-  expect(auth).toContain('process.exitCode = await stackRun(');
-  expect(auth).toContain("command: ['bun', 'scripts/check.ts', ...args],\n    },\n    async () => {");
+  expect(auth).toContain("process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', ...args], async () => {");
+  expect(authDatabase).toContain(
+    "return stackRun({ label: 'auth check', root: resolve(directory, '../..'), cwd: directory, command }, async () => {",
+  );
   expect(web).toContain('      options.env ?? process.env,');
   expect(web).toContain('export async function runHostTests(\n  env: NodeJS.ProcessEnv = process.env');
   expect(placement).toContain('env: Environment = process.env');
@@ -515,9 +613,11 @@ test('critical priority: worker environments preserve critical through stackRun 
   );
   const kernel = readFileSync(join(repository, 'services/kernel/scripts/check.ts'), 'utf8');
   const auth = readFileSync(join(repository, 'services/auth/scripts/check.ts'), 'utf8');
+  const authDatabase = readFileSync(join(repository, 'services/auth/scripts/database.ts'), 'utf8');
   const web = readFileSync(join(repository, 'apps/web/scripts/check.ts'), 'utf8');
   expect(kernel).toContain('    env,\n  );');
-  expect(auth).toContain('process.exitCode = await stackRun(');
+  expect(auth).toContain("process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', ...args], async () => {");
+  expect(authDatabase).toContain("return stackRun({ label: 'auth check'");
   expect(web).toContain('options.env ?? process.env');
 });
 
