@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import {
+  createNativeEditionApi,
   nativeEditionApi,
   type EditionApi,
   type EditionMetadata,
@@ -221,4 +223,98 @@ test('current denial, missing producer, withdrawal, malformed wire and mismatche
     `/v1/contentEditions/${id}/revision`,
   ]);
   concealed({ state: 'loading' });
+});
+
+test('the assigned real current-authorized journey binds its native source while privacy retry and request bounds remain meaningful', async () => {
+  const { metadata, revision } = await fixture();
+  const requests: Request[] = [];
+  let denied = false;
+  let current = metadata;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      expect(request.headers.get('authorization')).toBe('Bearer actual-buyer');
+      expect(request.redirect).toBe('manual');
+      expect(request.cache).toBe('no-store');
+      expect(request.method).toBe('GET');
+      if (new URL(request.url).pathname === `/v1/contentEditions/${id}`)
+        return Response.json(current, {
+          headers: { [SESSION_HEADER]: 'native-metadata', 'cache-control': 'private, no-store' },
+        });
+      expect(new URL(request.url).pathname).toBe(`/v1/contentEditions/${id}/revision`);
+      expect(request.headers.get(SESSION_HEADER)).toBe('native-metadata');
+      return denied
+        ? Response.json({ code: 'forbidden' }, { status: 403 })
+        : Response.json(revision, { headers: { 'cache-control': 'private, no-store' } });
+    }) as typeof fetch,
+  });
+  const api = createNativeEditionApi(client);
+  const context = {
+    subject: async (point: string) => ({ id: point, label: 'Current selected subject' }),
+    creator: async (point: string) => ({ id: point, name: 'Visible creator' }),
+  };
+  expect(await loadContentEdition(api, id, null, context)).toEqual({ state: 'refused', status: 401 });
+  expect(requests).toHaveLength(0);
+  const ready = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(ready.state).toBe('published');
+  expect(html(ready)).toContain(fixedText);
+  expect(requests).toHaveLength(2);
+
+  denied = true;
+  const refused = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(refused).toEqual({ state: 'refused', status: 403 });
+  for (const value of [fixedText, metadata.sha256, metadata.licence, revisionId, '/subjects/'])
+    expect(html(refused)).not.toContain(value);
+  expect(requests).toHaveLength(4);
+
+  denied = false;
+  current = { ...metadata, editionRevision: '3', targetSubjectId: creatorId };
+  const retried = await loadContentEdition(api, id, 'Bearer actual-buyer', context);
+  expect(retried.state).toBe('published');
+  expect(html(retried)).toContain(`/subjects/${creatorId}/`);
+  expect(html(retried)).not.toContain(`/subjects/${subjectId}/`);
+  expect(requests.map((request) => new URL(request.url).pathname)).toEqual(
+    Array.from({ length: 3 }, () => [`/v1/contentEditions/${id}`, `/v1/contentEditions/${id}/revision`]).flat(),
+  );
+  const binding = await Bun.file(new URL('../src/content-editions/edition-read.ts', import.meta.url)).text();
+  expect(binding).toContain('createNativeEditionApi(client)');
+  expect(binding).toContain('await prepareSession(request');
+  expect(binding).toContain('viewerCredential(request)');
+});
+
+test('native transport decodes closed owner responses and conceals malformed, changed, unavailable and unpublished sources without extra requests', async () => {
+  const { metadata, revision } = await fixture();
+  for (const scenario of [
+    { metadata: { ...metadata, extra: true }, revision, state: 'version-mismatch', reads: 1 },
+    { metadata: { ...metadata, state: 'draft' }, revision, state: 'unavailable', reads: 1 },
+    { metadata: { ...metadata, state: 'withdrawn' }, revision, state: 'withdrawn', reads: 1 },
+    {
+      metadata,
+      revision: { ...revision, body: fromPlainText('A newer current post') },
+      state: 'version-mismatch',
+      reads: 2,
+    },
+    { metadata, revision: { ...revision, extra: true }, state: 'version-mismatch', reads: 2 },
+    { metadata, revision, status: 404, state: 'unavailable', reads: 2 },
+    { metadata, revision, status: 503, state: 'unavailable', reads: 2 },
+    { metadata, revision, status: 307, state: 'unavailable', reads: 2 },
+  ]) {
+    let reads = 0;
+    const api = createNativeEditionApi(
+      createKernelClient('https://kernel.test', {
+        fetch: (async () => {
+          reads++;
+          return reads === 1
+            ? Response.json(scenario.metadata)
+            : Response.json(scenario.revision, { status: scenario.status ?? 200 });
+        }) as typeof fetch,
+      }),
+    );
+    const page = await loadContentEdition(api, id, 'Bearer actual-buyer');
+    expect(page.state).toBe(scenario.state);
+    expect(reads).toBe(scenario.reads);
+    for (const value of [fixedText, metadata.sha256, metadata.licence, revisionId, 'data-slot="document-body"'])
+      expect(html(page)).not.toContain(value);
+  }
 });

@@ -135,10 +135,20 @@ serialization used by native Content. Only published metadata can proceed to the
 refusal, missing source and dependency failure discard document bytes and attribution; retry starts with metadata
 again. There is no alternate revision, current-post, cached-body or seller-preview fallback.
 
-**Native delivery pending:** `content-editions/edition-api.ts` explicitly returns `native-pending`; the generated
-client has neither assigned endpoint in this checkout. Replace that adapter with the generated protected producer
-when delivered. There is no successful production stub or fabricated request against a cast client. Native Content
-and Access own entitlement, stored seller restoration, current source/ancestry/subject/version and final disclosure.
+The runtime edge is `content-editions/edition-read.ts` → `createNativeEditionApi(client)` in `edition-api.ts` → the
+installed first-party `kernelClient()` Eden transport → Content's two exact protected endpoints. The same client
+carries native session headers between reads, uses the server-resolved buyer credential and refuses redirects.
+Requests and page responses use no-store. Delivery requires `KERNEL_ORIGIN`; development fixture transport is never
+used for edition bytes. Without a configured native transport, the explicit unbound `nativeEditionApi` remains a
+typed `native-pending` result, not the served default.
+
+The isolated adapter follows the original `content/edition-routes.ts` path/parameter declarations and the closed
+`ContentEditionView` / `ContentEditionRevisionView` field sets declared in `content/edition-model.ts`. It retains
+the existing strict Web decoders without importing database-backed Kernel source into the Web compiler. The native route implementation
+and regenerated client declarations are not yet in this checkout. Eden's installed runtime proxy already transports
+these declared paths without casting an undelivered client type; a deployed missing route returns unavailable.
+The same default will reach the native producer when it lands, without a mock success or empty document.
+Native Content and Access own entitlement, stored seller restoration, current source/ancestry/subject/version and final disclosure.
 Web never turns Commerce capture, an ownership badge or an opaque benefit into permission or a licence grant.
 This interface alone proves no real buyer use, native integration or reviewed visual result.
 
@@ -148,12 +158,12 @@ are omitted. Optional identity failure leaves a neutral Edition heading and the 
 No profile, avatar, history or unrelated edition read enriches the page. Licence and fixed revision attribution follow
 the canonical shared DocumentBody. The wire has no native derivative summaries, so images explicitly remain unavailable
 through the shared renderer's image hook; no original, hotlink or guessed paid media URL is emitted. Native derivative
-summary/transport integration remains pending with the source adapter. Other document references keep the shared
+summary/transport integration remains pending. Other document references keep the shared
 renderer behavior; unresolved mentions reveal no inferred identity.
 
 Cost per visit or manual retry: at most two exact protected edition reads, followed by at most one exact subject point
-and one creator identity point. Draft/withdrawn metadata stops after the first read; pending production issues no
-native edition requests. Identity calls cannot authorize bytes. Native bounds remain owned by the source producer;
+and one creator identity point. Draft/withdrawn or malformed metadata stops after the first read; unconfigured
+delivery issues no native edition requests. Identity calls cannot authorize bytes. Native bounds remain owned by the source producer;
 there are no lists, page walks or per-reference fanouts. Local validation/rendering is linear in the one document.
 
 The reusable `stories/patterns/content-edition` folder and Page stories use the same served reading component and
