@@ -71,6 +71,44 @@ Connect entry/offer/return/history/owned-benefit/use and creator views to actual
 Web review and screenshots under [verification](../development/verification.md). Native storage, bounded execution,
 reviewed interface and promoted-main evidence remain required. Docs-only adoption is not that test campaign.
 
+### Native Library outcome binding readiness
+
+The kernel runner entry points import the original outcome specifications through their expected environment
+variables. They do not rewrite assertions, normalize responses, or treat a missing driver as a successful check.
+
+| Specification | Kernel entry point | Native source status |
+| --- | --- | --- |
+| [Library](../../specs/library-outcomes.test.ts) | [outcomes](../../services/kernel/test/library/outcomes.test.ts) | Existing [driver](../../services/kernel/test/library/support/outcome-driver.ts); whole-suite acceptance unverified. |
+| [Labels](../../specs/library-labels-outcomes.test.ts) | [labels-outcomes](../../services/kernel/test/library/labels-outcomes.test.ts) | Entry point added; `support/native-labels-driver.ts` is absent. |
+| [Profiles](../../specs/library-profiles-outcomes.test.ts) | [profiles-outcomes](../../services/kernel/test/library/profiles-outcomes.test.ts) | Entry point added; `support/native-profiles-driver.ts` is absent. |
+| [Dynamic Collections](../../specs/dynamic-collections-outcomes.test.ts) | [dynamic-outcomes](../../services/kernel/test/library/dynamic-outcomes.test.ts) | Entry point added; `support/native-dynamic-driver.ts` is absent. |
+| [Shelves](../../specs/library-shelves-outcomes.test.ts) | [shelves-outcomes](../../services/kernel/test/library/shelves-outcomes.test.ts) | Entry point added; `support/native-shelves-driver.ts` is absent. |
+
+Whole binding is blocked by incompatible frozen expectations. In the profile suite, both “removed profile values
+remain pinned and readable and their owner can clear them without reacceptance” and “removing a profile preserves
+historic state progress and holding pins while permitting own clear and delete” require successful entry DELETE
+to return `200`. The shelf suite's `removeEntry` requires `204`. The [current Library lifecycle
+contract](../../services/kernel/src/library/README.md#entry-retained-deletion-and-undo) explicitly retains `204`
+with an empty body, including clearing facts whose historical profile is missing. A driver cannot make these
+expectations agree while preserving raw HTTP responses.
+
+The same contract requires `incarnationId` with fresh revisioned PUT and DELETE after cutover. The frozen Library
+and shelf helpers send only `revision` and expect successful updates/deletes; the shelf's exact response-key checks
+also exclude `incarnationId`, which the current route emits for new entries. Resolving these frozen expectations
+belongs to the acceptance owner before completing adapters; weakening native preconditions or adding transport
+pre-reads would conceal the conflict.
+
+The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
+first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
+closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
+skipping these frozen cases. No suite is skipped here. The new entry points currently fail at missing native driver
+modules, before any claim of backend behavior. Provider and fixture implementations, native acceptance, regression
+evidence and promotion remain outstanding.
+
+No native or database checks were run for these entry points. Local workspace typing requires Reylo's migrated
+compiler database. Without a supplied `DATABASE_URL`, the kernel typecheck script places a remote check or starts
+a throwaway database; neither is allowed in minimal verification mode. That prerequisite remains unverified.
+
 ## External conditions
 
 Actual direct-seller rights, Managed Payments eligibility/activation, supported production configuration,
