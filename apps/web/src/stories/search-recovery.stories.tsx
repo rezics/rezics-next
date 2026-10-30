@@ -79,7 +79,9 @@ function Journey({
   const { conditionMetadata: _metadata, ...withoutMetadata } = base;
   async function retry() {
     setOutcome({ recovery: { status: 'loading' } });
-    const client = createKernelClient('http://search-story.local', { fetch: async () => Response.json(ready) });
+    const client = createKernelClient('http://search-story.local', {
+      fetch: (async () => Response.json(ready)) as typeof fetch,
+    });
     setOutcome(await readSearchOutcome(discoveryRequest(state, ['en']), (body) => client.subjects.$search.post(body)));
   }
   return (

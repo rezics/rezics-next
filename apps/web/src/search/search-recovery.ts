@@ -5,7 +5,7 @@ import { facetProblem, type FacetState } from './refinement/request';
 import type { SearchPageData } from './search';
 import type { SearchLoaderDeps } from './search-params';
 
-type Request = Parameters<KernelClient['subjects']['$search']['post']>[0];
+type Request = NonNullable<Parameters<KernelClient['subjects']['$search']['post']>[0]>;
 export type SearchWireResponse = {
   status: number;
   data?: unknown;

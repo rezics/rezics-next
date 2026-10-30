@@ -317,10 +317,11 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const [outcome, facetResult] = await Promise.all([searchPromise, facetsPromise]);
     const result = outcome && 'result' in outcome ? outcome.result : undefined;
     const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
-    const recovery =
-      outcome && ['session', 'closed', 'denied'].includes(outcome.recovery.status)
+    const recovery = !outcome
+      ? undefined
+      : ['session', 'closed', 'denied'].includes(outcome.recovery.status)
         ? outcome.recovery
-        : (facetSearchInvalidation(facetResult) ?? outcome?.recovery);
+        : (facetSearchInvalidation(facetResult) ?? outcome.recovery);
     const problem = recovery && recovery.status !== 'ready' ? recovery.problem : undefined;
     const typeChoices = discovery?.status === 'ready' ? discovery.page.kinds.values : [];
     const hitTypes: Record<string, Record<string, string>> = {};
