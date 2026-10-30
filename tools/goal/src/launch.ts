@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess, waitForWorkerExit, workerExitPath, type WorkerExit } from './process.ts';
-import type { Attempt, Pool, Profile, Settings, Task } from './types.ts';
+import type { AcceptancePlacement, Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
@@ -63,8 +63,35 @@ export function workerEnvironment(
     result.PATH = [wrapperDirectory, result.PATH].filter(Boolean).join(':');
   return result;
 }
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+function namedWorkerCheck(contractText: string): string | undefined {
+  const match =
+    /(?:^|\s)`?bun\s+("(?:\\.|[^"\\])*"|'(?:[^'\\]|\\.)+'|\/[^\s`]+\/scripts\/worker-check\.ts)(?=[\s`]|$)/m.exec(
+      contractText,
+    );
+  if (!match) return undefined;
+  const token = match[1]!;
+  let path: string;
+  try {
+    path = token.startsWith('"')
+      ? (JSON.parse(token) as string)
+      : token.startsWith("'")
+        ? token.slice(1, -1).replaceAll("'\\''", "'")
+        : token;
+  } catch {
+    return undefined;
+  }
+  return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
+}
+type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'>;
 /** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
-export function workerCheckProtocol(worktree: string, contractText = ''): string {
+export function workerCheckProtocol(worktree: string, briefOrContract: CheckProtocolBrief | string = ''): string {
+  const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
+  const placement: AcceptancePlacement =
+    typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
+  const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
   const common = [
     'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit.',
     'Goal owns check continuation for detached checks: if one is still running, finish this turn with the waiting exit object and let the controller resume you with the result records. Do not keep the model or a tool waiting for the check.',
@@ -73,14 +100,36 @@ export function workerCheckProtocol(worktree: string, contractText = ''): string
     'A previous session may contain the superseded instruction to wait on that same check with `bun scripts/worker-check.ts --wait <id>`. That instruction is obsolete: do not follow it or invoke `--wait`.',
   ];
   const localRunner = join(worktree, 'scripts/worker-check.ts');
-  const namedRunner = /(?:^|\s)`?bun\s+["']?(\/[^"'`\s]+\/scripts\/worker-check\.ts)(?:["'`\s]|$)/m.exec(
-    contractText,
-  )?.[1];
+  const namedRunner = namedWorkerCheck(contractText);
   const runner = existsSync(localRunner)
     ? 'bun scripts/worker-check.ts'
     : namedRunner && existsSync(namedRunner)
-      ? `bun ${JSON.stringify(namedRunner)}`
+      ? `bun ${placement === 'local' ? shellQuote(namedRunner) : JSON.stringify(namedRunner)}`
       : undefined;
+  if (placement === 'local') {
+    const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';
+    const exactWrapper = runner ? `\`${runner} --local -- ${exactCommand}\`` : undefined;
+    if (!runner)
+      return [
+        ...common,
+        'The registered acceptance placement is local and overrides any older prompt, saved-session instruction, remote invocation, or `--wait` recipe.',
+        `This base has no worker-check wrapper available. Run the exact declared pure local command \`${exactCommand}\` in the foreground from the worktree root; do not add a wrapper. This invocation does not create a detached check id or a waiting result.`,
+        'Do not invoke remote-check or any native, host, or database route. Do not report an old check as cancelled; Goal quarantines a local adoption while prior check custody is unresolved.',
+        'Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log.',
+        'A command that waits for a test slot is queued, not stuck: let it finish and read its exit status.',
+      ].join(' ');
+    return [
+      ...common,
+      'The registered acceptance placement is local and overrides any older prompt, saved-session instruction, remote invocation, or `--wait` recipe.',
+      `Run the exact declared pure local acceptance command once from the worktree root as ${exactWrapper}. The existing ` +
+        'wrapper records its UUID and terminal result; `--local` prevents remote placement while retaining its normal local check admission.',
+      'If the wrapper returns a check id before that check is terminal, end this turn immediately with the required waiting shape `{"status":"waiting","checks":["<bare UUID>"]}`. Return the normal exit object with those fields. Every checks entry must be the bare UUID string printed by the wrapper; replace the placeholder with that exact value and add no label or prefix. For example, the complete exit object is `{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`.',
+      'Do not invoke remote-check or any native, host, or database route. Do not report an old check as cancelled; Goal quarantines a local adoption while prior check custody is unresolved.',
+      'Do not invoke `bun scripts/worker-check.ts --wait <id>`, poll status, inspect logs or process lists, or start a duplicate check. The controller waits for the terminal result or records that the run ended without one, then wakes this same session with those facts.',
+      'The wrapper permits one automatic infrastructure rerun within the same acceptance invocation. If the final result still reports an infrastructure failure, report a `tool` blocker with its exact error line; do not start an extra worker rerun or claim a pass.',
+      'Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log.',
+    ].join(' ');
+  }
   if (!runner)
     return [
       ...common,
@@ -126,7 +175,6 @@ export function workerPrompt(
     task.workspace
       ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief.markdown),
     'You have the authority to finish. Your declared paths are where the work is expected, not a fence: change any other file the acceptance or a defect blocking it needs, including a defect another Goal left in your base, keep such changes minimal, and list each file outside your paths with its reason in your summary. The landing batch runs regression checks for changed files outside your paths; the Goal that owns such a file is told of your change. Files in a risk area your contract does not declare stay closed.',
     'Decide ambiguities yourself from the contract, the specs, the code and the tests, and record each decision in your summary. Report a blocker only when the acceptance tests contradict each other or the specs, when the work needs a product decision the contract does not make, or when a tool or access you need fails.',
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
@@ -158,6 +206,7 @@ export function workerPrompt(
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
+    workerCheckProtocol(task.worktree, task.brief),
   ]
     .filter(Boolean)
     .join('\n\n');
