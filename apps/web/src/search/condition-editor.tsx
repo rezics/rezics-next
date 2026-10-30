@@ -319,6 +319,7 @@ function NodeEditor({
       {'type' in value && (
         <ValueFields
           context={context}
+          closed
           pointer={`${pointer}/type/in`}
           values={value.type.in}
           choices={Object.entries(context.metadata.types).map(([value, definition]) => ({
@@ -525,15 +526,27 @@ function ValueFields({
   onChange,
   pointer,
   context,
+  closed = false,
 }: {
   values: readonly string[];
   choices?: Choice[] | undefined;
   onChange(values: string[]): void;
   pointer: string;
   context: EditorContext;
+  closed?: boolean;
 }) {
+  const choicesId = useId();
   return (
     <div className="min-w-0 space-y-2">
+      {!closed && !!choices?.length && (
+        <datalist id={choicesId}>
+          {choices.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {localizedLabel(entry.labels, context.locale).text || entry.value}
+            </option>
+          ))}
+        </datalist>
+      )}
       {values.map((value, index) => (
         <div key={index} className="flex items-end gap-1">
           <EditorField
@@ -542,7 +555,7 @@ function ValueFields({
             label={m.condition_value({ number: index + 1 })}
           >
             {(props) =>
-              choices?.length ? (
+              closed && choices?.length ? (
                 <NativeSelect
                   {...props}
                   value={value}
@@ -564,6 +577,7 @@ function ValueFields({
                 <Input
                   {...props}
                   value={value}
+                  list={choices?.length ? choicesId : undefined}
                   onChange={(event) =>
                     onChange(values.map((entry, at) => (at === index ? event.currentTarget.value : entry)))
                   }
