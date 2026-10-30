@@ -2934,5 +2934,10 @@
   "subject_context_fallback": "Diese Auswahl hat die aktuelle globale Ansicht zurückgegeben.",
   "subject_context_return": "Zurück zu {title}",
   "subject_context_switch_global": "Globale Ansicht öffnen",
-  "subject_context_retry": "Auswahl erneut versuchen"
+  "subject_context_retry": "Auswahl erneut versuchen",
+  "access_transfer_owner": "Eigentum übertragen",
+  "access_transfer_source": "Aktueller Eigentümer: {name}",
+  "access_transfer_responsibility": "Der Empfänger wird Eigentümer und übernimmt die Verantwortung für diesen Realm. Die bisherige Eigentumsberechtigung wird im selben Vorgang entfernt. Die Mitgliedschaft wird separat verwaltet.",
+  "access_transfer_confirm": "Eigentum von {source} an {recipient} übertragen?",
+  "access_transfer_lookup_failed": "Suche ein anderes aktives Konto als das bisherige Eigentümerkonto und bestätige seine Identität."
 }

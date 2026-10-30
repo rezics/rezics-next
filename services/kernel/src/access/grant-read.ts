@@ -1,3 +1,4 @@
+import { hasNativeRealmGrantCommands, type createGrantCommands } from './grant-commands.ts';
 import type { Pool } from 'pg';
 import { realmReadEligibility } from '../community/realm.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
@@ -32,7 +33,7 @@ export type GrantReadPage = {
   grants: ManagedGrant[];
   identities: PublicIdentity[];
   next: string | null;
-  /** Content has not yet supplied the native Realm ownership transition guard. */
+  /** Realm mutation requires the genuine native command composition. */
   mutationState: 'ready' | 'realm_guard_unavailable';
 };
 
@@ -51,7 +52,14 @@ type Row = {
 
 /** Exact-resource management read. No caller-supplied type, authority or policy is accepted. */
 export async function readResourceGrants(
-  deps: { pool: Pool; access: Access; tokens: KeyRing; resources: ViewerActionResources; clock: () => Date },
+  deps: {
+    pool: Pool;
+    access: Access;
+    tokens: KeyRing;
+    resources: ViewerActionResources;
+    clock: () => Date;
+    commands?: ReturnType<typeof createGrantCommands>;
+  },
   actor: Actor,
   input: { resourceId: string; cursor?: string },
   deadline: number,
@@ -147,7 +155,8 @@ export async function readResourceGrants(
         )
       ).rows;
       const page = rows.slice(0, 20);
-      const realmGuardMissing = type === 'community.realm';
+      const realmGuardMissing =
+        type === 'community.realm' && !hasNativeRealmGrantCommands(deps.commands, deps.pool, deps.access);
       const groupIds = [...new Set(page.filter((row) => row.subject_role !== '').map((row) => row.subject_id))];
       // Resolve only the bounded, explicitly granted group anchors. Never expand their members or read a title.
       const realmGroups = new Set(

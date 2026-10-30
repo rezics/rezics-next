@@ -1,3 +1,5 @@
+import { OwnerTransferForm } from './owner-transfer.tsx';
+import { transferableOwner } from './owner-transfer.ts';
 import { Menu } from '@rezics/ui/menu';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { ListRow, ListRowControl } from '@rezics/ui/list-row';
@@ -340,6 +342,7 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [form, setForm] = useState<Grant | 'new' | null>(null);
   const [revoke, setRevoke] = useState<Grant | null>(null);
+  const [transfer, setTransfer] = useState<Grant | null>(null);
   const page = state.page.status === 'ready' ? state.page.page : null;
   const notice =
     state.phase === 'saved'
@@ -431,6 +434,7 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
                 disabled={state.busy}
                 onClick={() => {
                   setForm(null);
+                  setTransfer(null);
                   void controller.reload();
                 }}
               >
@@ -438,12 +442,41 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
               </Button>
               {page.mutationState === 'ready' &&
               (page.actions.length > 0 || page.roles.some((item) => item.delegable)) ? (
-                <Button type="button" disabled={state.busy || !!state.pending} onClick={() => setForm('new')}>
+                <Button
+                  type="button"
+                  disabled={state.busy || !!state.pending}
+                  onClick={() => {
+                    setTransfer(null);
+                    setForm('new');
+                  }}
+                >
                   {m.access_add_grant()}
                 </Button>
               ) : null}
             </div>
           </div>
+          {transfer &&
+          !state.busy &&
+          !state.pending &&
+          page.grants.some(
+            (grant) =>
+              grant.subject.kind === 'account' &&
+              transfer.subject.kind === 'account' &&
+              grant.subject.id === transfer.subject.id &&
+              grant.role === transfer.role &&
+              grant.valid === transfer.valid,
+          ) ? (
+            <OwnerTransferForm
+              page={page}
+              grant={transfer}
+              io={io}
+              onCancel={() => setTransfer(null)}
+              onConfirm={(input) => {
+                setTransfer(null);
+                void controller.submitTransfer(input);
+              }}
+            />
+          ) : null}
           {form !== null && !state.busy && !state.pending ? (
             <GrantForm
               key={form === 'new' ? 'new' : `${form.valid}:${form.role}:${form.actions.join()}`}
@@ -498,7 +531,26 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
                           </Button>
                         }
                         entries={[
-                          { type: 'item', label: m.access_edit_grant(), onSelect: () => setForm(grant) },
+                          {
+                            type: 'item',
+                            label: m.access_edit_grant(),
+                            onSelect: () => {
+                              setTransfer(null);
+                              setForm(grant);
+                            },
+                          },
+                          ...(io.transfer && transferableOwner(page, grant)
+                            ? [
+                                {
+                                  type: 'item' as const,
+                                  label: m.access_transfer_owner(),
+                                  onSelect: () => {
+                                    setForm(null);
+                                    setTransfer(grant);
+                                  },
+                                },
+                              ]
+                            : []),
                           { type: 'destructive', label: m.access_revoke(), onSelect: () => setRevoke(grant) },
                         ]}
                       />
@@ -515,6 +567,7 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
               disabled={state.busy || !!state.pending}
               onClick={() => {
                 setForm(null);
+                setTransfer(null);
                 void controller.reload(page.next!);
               }}
             >
@@ -543,6 +596,7 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
                 if (subject.kind === 'realm') return;
                 setRevoke(null);
                 setForm(null);
+                setTransfer(null);
                 void controller.submit({
                   resourceId: page.resource.id,
                   operation: 'revoke',

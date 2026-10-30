@@ -3255,5 +3255,10 @@
   "subject_context_fallback": "This selection returned the current Global reading.",
   "subject_context_return": "Return to {title}",
   "subject_context_switch_global": "Read Global",
-  "subject_context_retry": "Retry this selection"
+  "subject_context_retry": "Retry this selection",
+  "access_transfer_owner": "Transfer ownership",
+  "access_transfer_source": "Current owner: {name}",
+  "access_transfer_responsibility": "The recipient becomes an owner responsible for this Realm. The source ownership grant is removed in the same operation. Membership is managed separately.",
+  "access_transfer_confirm": "Transfer ownership from {source} to {recipient}?",
+  "access_transfer_lookup_failed": "Find an active account other than the source owner and confirm its identity."
 }

@@ -2934,5 +2934,10 @@
   "subject_context_fallback": "この選択では、現在の Global の内容が返されました。",
   "subject_context_return": "{title} に戻る",
   "subject_context_switch_global": "Global を読む",
-  "subject_context_retry": "この選択で再試行"
+  "subject_context_retry": "この選択で再試行",
+  "access_transfer_owner": "所有権を移譲",
+  "access_transfer_source": "現在の所有者：{name}",
+  "access_transfer_responsibility": "移譲先はこのRealmに責任を持つ所有者になります。同じ操作で移譲元の所有権付与が削除されます。メンバー資格は別に管理されます。",
+  "access_transfer_confirm": "{source} から {recipient} に所有権を移譲しますか？",
+  "access_transfer_lookup_failed": "移譲元の所有者以外の有効なアカウントを検索し、本人を確認してください。"
 }

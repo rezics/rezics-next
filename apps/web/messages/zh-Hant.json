@@ -2934,5 +2934,10 @@
   "subject_context_fallback": "目前的選擇傳回了最新的 Global 內容。",
   "subject_context_return": "返回「{title}」",
   "subject_context_switch_global": "閱讀 Global",
-  "subject_context_retry": "重試目前的選擇"
+  "subject_context_retry": "重試目前的選擇",
+  "access_transfer_owner": "轉移擁有權",
+  "access_transfer_source": "目前擁有者：{name}",
+  "access_transfer_responsibility": "接收者將成為擁有者，負責管理此領域。原擁有權授權會在同一次操作中移除。成員身分另行管理。",
+  "access_transfer_confirm": "要將擁有權從 {source} 轉移給 {recipient} 嗎？",
+  "access_transfer_lookup_failed": "請尋找原擁有者以外的有效帳號，並確認其身分。"
 }

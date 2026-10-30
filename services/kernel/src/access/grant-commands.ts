@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandOutcome } from '../command/command.ts';
 import type { Access, Resource } from '../request/access.ts';
+import { accessRoot } from './derived-access.ts';
 import { grantSubject, type PublicGrantSubject } from './grant-subject.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import roleStatement from './role-grant-mutate.sql';
@@ -62,6 +63,15 @@ function recipient(input: GrantRecipient) {
       ? { kind: 'account', id: input.subjectId }
       : { kind: 'organization', id: input.subjectId, role: input.subjectRole },
   );
+}
+
+// Only the actual native command object can open Realm mutation presentation.
+// Keep its pool and Access root bound; copied methods and caller flags convey nothing.
+const nativeRealmCommands = new WeakMap<object, { pool: Pool; access: Access }>();
+export function hasNativeRealmGrantCommands(value: unknown, pool: Pool, access: Access): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const native = nativeRealmCommands.get(value);
+  return native?.pool === pool && native.access === accessRoot(access);
 }
 
 /** The composition root supplies the mounted catalogue's colon-form management
@@ -329,7 +339,7 @@ export function createGrantCommands(config: {
       },
     );
   }
-  return {
+  const commands = {
     transferRealmOwner,
     createRole: (context: GrantCommandContext, input: RoleGrantInput) => executeRole(context, 'create', input),
     changeRole: (context: GrantCommandContext, input: RoleGrantChangeInput) => executeRole(context, 'change', input),
@@ -341,4 +351,7 @@ export function createGrantCommands(config: {
     revoke: <Input extends GrantInput>(context: GrantCommandContext, input: Input) =>
       execute(context, 'revoke', input) as Promise<CommandOutcome<GrantValue<Input>>>,
   };
+  if (config.managementAction === 'access:grant')
+    nativeRealmCommands.set(commands, { pool: config.pool, access: accessRoot(config.access) });
+  return commands;
 }

@@ -862,6 +862,30 @@ principal admission and authorization before receipt replay. The native command 
 `{resource, subject: {kind: 'account', id}, role, valid}` and the ordinary command outcome version fields.
 
 Content owns integration of the leave guard in its existing native membership writer. The separate native
+The protected public `POST /v1/roleGrants:transferRealmOwner` custom method declares
+`role_grant.transfer_realm_owner`, `access:grant`, normal admission and the ordinary write rate limit.
+Its closed body is `{resource: {route,id}, fromAccountId, toAccountId, previousValid}`; only the existing
+structured-string `Idempotency-Key` header supplies the key. It calls that same constructed native helper,
+records its ordinary session outcome and returns `{roleGrant: {resource,subject,role,valid}}`.
+It does not publish a second effect or replace the native error mapping.
+
+`GET /v1/grants` binds the actual native command object to its own pool and Access root before enabling
+Realm mutation presentation. A missing or copied port remains `realm_guard_unavailable`; a role row or
+caller flag cannot open it. Existing current before/final management reads, all-action delegation checks,
+signed 20-row keyset pages and bounded public identity batches still apply. Realm subject groups stay read-only.
+
+The authenticated Web BFF consumer is `/access/{resourceId}` via `transferResourceOwner` and the local typed
+`owner-transfer` transport. It uses the server's current credential, shared Origin/session CSRF protection and
+private no-store responses. Only a current manageable direct account owner grant plus a delegable native owner
+role offers the control. Exact authorized identity lookup selects the recipient. Confirmation names both
+accounts and their owner responsibility; selection itself conveys no authority. The existing access recovery
+flow keeps one key, body and reference interval across unknown responses and refuses changed-input writes
+while pending. A native receipt is historical: the page displays only a fresh private management read, carrying
+the native response session token. Unavailable readback shows no current ownership or leave claim; authority
+loss clears private grant observations. Content's leave link remains labelled grant management and has no
+second transfer control. Native ownership/leave outcome acceptance and interface review remain owed.
+
+Content integrates the leave guard in its existing native membership writer. The separate native
 `createRealmOwnershipCommands({pool,access,clock?})` constructor exposes:
 
 ```ts

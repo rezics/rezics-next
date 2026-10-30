@@ -559,7 +559,12 @@ export function accessRoutes(
       async ({ query, actor, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return readResourceGrants(
-          { ...dependencies, access: dependencies.access(), resources: dependencies.grantResources?.() ?? new Map() },
+          {
+            ...dependencies,
+            access: dependencies.access(),
+            resources: dependencies.grantResources?.() ?? new Map(),
+            commands: commands(),
+          },
           actor,
           query,
           job.deadline,
@@ -1501,6 +1506,31 @@ export function accessRoutes(
           );
           session.record(result);
           return status(201, { grant: publicRoleGrant(result.value) });
+        } catch (error) {
+          denied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/roleGrants', 'transferRealmOwner'),
+      {
+        headers,
+        body: strict(t.Object({ resource, fromAccountId: id, toAccountId: id, previousValid: valid }, closed)),
+        response: {
+          200: withHeaders(t.Object({ roleGrant }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures,
+        },
+        detail: detail('role_grant.transfer_realm_owner'),
+      },
+      async ({ body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            commands().transferRealmOwner({ pool: dependencies.pool, actor, deadline: job.deadline }, { ...body, key }),
+          );
+          session.record(result);
+          return { roleGrant: publicRoleGrant(result.value) };
         } catch (error) {
           denied(error);
         }

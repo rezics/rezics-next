@@ -1,3 +1,4 @@
+import { parseOwnerTransfer, transferOwner, type TransferResult } from './owner-transfer';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -56,4 +57,15 @@ export const findAccessIdentity = createServerFn({ method: 'GET' })
     const client = kernelClient();
     const current = await loadAccess(client, authorization, data.resourceId);
     return current.status === 'ready' ? lookupIdentity(client, authorization, data.handle) : null;
+  });
+
+export const transferResourceOwner = createServerFn({ method: 'POST' })
+  .validator(parseOwnerTransfer)
+  .handler(async ({ data }): Promise<TransferResult> => {
+    const authorization = await viewer();
+    if (!authorization) return { status: 'denied', current: { status: 'denied' } };
+    const client = kernelClient();
+    return transferOwner((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN, authorization, data, (session) =>
+      loadAccess(client, authorization, data.resource.id, undefined, session),
+    );
   });

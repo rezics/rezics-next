@@ -2934,5 +2934,10 @@
   "subject_context_fallback": "Esta selección devolvió la lectura global actual.",
   "subject_context_return": "Volver a {title}",
   "subject_context_switch_global": "Leer la versión global",
-  "subject_context_retry": "Reintentar esta selección"
+  "subject_context_retry": "Reintentar esta selección",
+  "access_transfer_owner": "Transferir propiedad",
+  "access_transfer_source": "Propietario actual: {name}",
+  "access_transfer_responsibility": "El destinatario será propietario y responsable de este Realm. El permiso de propiedad de origen se elimina en la misma operación. La pertenencia se gestiona por separado.",
+  "access_transfer_confirm": "¿Transferir la propiedad de {source} a {recipient}?",
+  "access_transfer_lookup_failed": "Busca una cuenta activa distinta del propietario de origen y confirma su identidad."
 }

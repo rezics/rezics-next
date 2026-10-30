@@ -2935,5 +2935,10 @@
   "subject_context_fallback": "当前的选择返回了最新的 Global 内容。",
   "subject_context_return": "返回“{title}”",
   "subject_context_switch_global": "阅读 Global",
-  "subject_context_retry": "重试当前的选择"
+  "subject_context_retry": "重试当前的选择",
+  "access_transfer_owner": "转移所有权",
+  "access_transfer_source": "当前所有者：{name}",
+  "access_transfer_responsibility": "接收者将成为所有者，负责管理此领域。原所有权授权会在同一次操作中移除。成员身份另行管理。",
+  "access_transfer_confirm": "要将所有权从 {source} 转移给 {recipient} 吗？",
+  "access_transfer_lookup_failed": "请查找原所有者以外的有效账号，并确认其身份。"
 }

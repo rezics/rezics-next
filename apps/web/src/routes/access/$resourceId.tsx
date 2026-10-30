@@ -1,5 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { readResourceAccess, findAccessIdentity, saveResourceAccess } from '../../accounts/resource-access/actions';
+import {
+  readResourceAccess,
+  findAccessIdentity,
+  saveResourceAccess,
+  transferResourceOwner,
+} from '../../accounts/resource-access/actions';
 import { ResourceAccessPage } from '../../accounts/resource-access/page';
 import { routedId } from '../../accounts/resource-access/data';
 import { m } from '../../paraglide/messages.js';
@@ -28,6 +33,7 @@ function AccessRoute() {
       initial={initial}
       io={{
         read: (cursor) => readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) } }),
+        transfer: (data) => transferResourceOwner({ data, headers: csrfHeaders() }),
         save: (data) => saveResourceAccess({ data, headers: csrfHeaders() }),
         lookup: (handle) => findAccessIdentity({ data: { resourceId, handle } }),
       }}

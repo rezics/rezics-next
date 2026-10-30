@@ -2934,5 +2934,10 @@
   "subject_context_fallback": "현재 선택에서 최신 Global 내용이 반환되었습니다.",
   "subject_context_return": "{title}(으)로 돌아가기",
   "subject_context_switch_global": "Global 읽기",
-  "subject_context_retry": "현재 선택으로 다시 시도"
+  "subject_context_retry": "현재 선택으로 다시 시도",
+  "access_transfer_owner": "소유권 이전",
+  "access_transfer_source": "현재 소유자: {name}",
+  "access_transfer_responsibility": "받는 계정은 이 Realm을 책임지는 소유자가 됩니다. 같은 작업에서 기존 소유권 부여가 제거됩니다. 멤버 자격은 별도로 관리됩니다.",
+  "access_transfer_confirm": "{source}에서 {recipient}(으)로 소유권을 이전할까요?",
+  "access_transfer_lookup_failed": "기존 소유자 외의 활성 계정을 찾아 신원을 확인하세요."
 }

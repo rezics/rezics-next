@@ -1,10 +1,11 @@
+import { parseOwnerTransfer, type OwnerTransfer, type TransferResult } from './owner-transfer';
 import type { AccessIO, AccessState, Change, WriteResult } from './data';
 
 export type EditorState = {
   page: AccessState;
   phase: 'idle' | WriteResult['status'];
   busy: boolean;
-  pending: Change | null;
+  pending: Change | OwnerTransfer | null;
 };
 
 /** One immutable operation survives transport loss. A receipt never replaces a current read. */
@@ -46,15 +47,24 @@ export class AccessRecovery {
     this.update({ pending });
     await this.attempt(pending);
   }
+  async submitTransfer(input: Omit<OwnerTransfer, 'key' | 'kind'>) {
+    if (this.state.busy || this.state.pending || !this.io.transfer) return;
+    const pending = parseOwnerTransfer({ ...input, kind: 'realm-owner-transfer', key: crypto.randomUUID() });
+    this.update({ pending });
+    await this.attempt(pending);
+  }
   async retry() {
     if (this.state.busy || !this.state.pending) return;
     await this.attempt(this.state.pending);
   }
-  private async attempt(pending: Change) {
+  private async attempt(pending: Change | OwnerTransfer) {
     this.update({ busy: true });
-    let result: WriteResult;
+    let result: WriteResult | TransferResult;
     try {
-      result = await this.io.save(structuredClone(pending));
+      result =
+        pending.kind === 'realm-owner-transfer'
+          ? await this.io.transfer!(structuredClone(pending))
+          : await this.io.save(structuredClone(pending));
     } catch {
       result = { status: 'uncertain' };
     }
@@ -64,6 +74,6 @@ export class AccessRecovery {
       phase: result.status,
       pending: result.status === 'uncertain' || result.status === 'preparing' ? pending : null,
     });
-    this.update({ page: await this.current(), busy: false });
+    this.update({ page: 'current' in result ? result.current : await this.current(), busy: false });
   }
 }

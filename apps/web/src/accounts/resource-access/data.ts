@@ -1,3 +1,4 @@
+import type { OwnerTransfer, TransferResult } from './owner-transfer';
 import type { KernelClient } from '@rezics/client';
 
 export type AccessSnapshot = NonNullable<Awaited<ReturnType<KernelClient['grants']['get']>>['data']>;
@@ -25,6 +26,7 @@ export type AccessIO = {
   read(cursor?: string): Promise<AccessState>;
   save(change: Change): Promise<WriteResult>;
   lookup(handle: string): Promise<Identity | null>;
+  transfer?(input: OwnerTransfer): Promise<TransferResult>;
 };
 
 export function routedId(value: unknown): value is string {
@@ -117,11 +119,12 @@ export async function loadAccess(
   authorization: string,
   resourceId: string,
   cursor?: string,
+  session?: string,
 ): Promise<AccessState> {
   try {
     const result = await client.grants.get({
       query: { resourceId, ...(cursor ? { cursor } : {}) },
-      headers: { authorization },
+      headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
     });
     if (!result.error && result.data) return { status: 'ready', page: result.data };
     if ([400, 401, 403, 404].includes(result.status)) return { status: 'denied' };
