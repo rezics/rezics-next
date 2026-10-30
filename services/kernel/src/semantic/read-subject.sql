@@ -23,7 +23,7 @@ LEFT JOIN LATERAL (
   WHERE revision_row.route = input.route AND revision_row.subject_id = input.subject_id
   ORDER BY revision_row.revision DESC LIMIT 1
 ) AS latest ON true
-LEFT JOIN semantic.fact AS f
+LEFT JOIN semantic.current_term_fact AS f
   ON f.route = input.route AND f.subject_id = input.subject_id AND f.kind <> 'statement'
 LEFT JOIN LATERAL (
   SELECT revision_row.revision, revision_row.release FROM semantic.revision AS revision_row

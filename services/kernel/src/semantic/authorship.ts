@@ -42,7 +42,7 @@ export async function initializeRevisionAuthorship(
 
   const provenance = await tx.query<{ recorded_transaction_id: string }>(
     `SELECT recorded_transaction_id::text FROM semantic.revision
-     WHERE route=$1 AND subject_id=$2 AND revision=$3 AND kind IN ('create','propose')
+     WHERE route=$1 AND subject_id=$2 AND revision=$3 AND kind IN ('create','propose','terms')
        AND recorded_transaction_id=$4::uuid`,
     [route, input.subject, input.revision, transactionId],
   );

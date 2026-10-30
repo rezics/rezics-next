@@ -5,7 +5,8 @@ This module owns subject facts and their item projections, partition paging, and
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
 The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
-minimal current-disclosure revision explanations, including their deferred native integration qualifications.
+minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
+`TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
 
 ## Public exposure boundary
 
@@ -736,9 +737,53 @@ derived-account-agent name clearing, and the indexed local account erasure runti
 the default local continuation minimizes actual located source records and preserves pending shared custody. Native takedown retains
 data, but its free-text scope does not implement least-field/passage/image withholding.
 
-Required remaining work: contribution soft deletion with immediate tombstones and suppression, current-owner restore
-within 30 days without rewinding current adoption/visibility, separate platform early/legal purge, legal holds,
-automatic minimal personal/private payload purge and account-erasure de-identification. Account confirmation
+Native account-authored birth writes initialize one `semantic.revision` resource per original write revision with
+the `semantic.revision.author` role (`statement:delete` and `statement:restore`). Compact creation declares its
+subject and revision-1 resources; proposals and ordinary term corrections declare only their exact next revision. Slot expansion keeps the
+original assertion's revision anchor. Imported and agent/source writes receive no synthetic author grant, and
+historic rows are not backfilled. The Global formula remains the create/propose authority; authored document
+custody records the declared revision UUID while imported summary and cover custody retains the actual Global
+anchor. `MAX_CREATION_RESOURCES` remains 16.
+
+The contribution lifecycle authority is the existing retention-owned `semantic.record_lifecycle`, keyed by
+`(route, subject, candidate)`. Both current readers and ordinary commands use that same row; `purging` is
+withheld and projects as deleted through the unchanged lifecycle evidence shape. The obsolete
+`contribution_lifecycle` schema definition is retained without a runtime reader or writer; no historic data is
+backfilled or silently reinterpreted. Delete retains the payload through
+its original strict 720-hour restore window, makes normal current slot, disclosure, summary, relation and Source
+reads withhold it, and allows candidate pages to return only `{id, deleted:true}` after existing audience privacy
+and source-fence checks. Restore retains the first deletion window and does not change adoption, moderation,
+subject visibility or source custody. Both routes authorize the original write-revision resource at fresh native T;
+restore also prepares current Global `statement:propose` on its own released connection for every attempt and replay.
+The native publication producer records the affected public selected slot before and after the mutation at the
+original command T. The subject security revision and existing bounded link-delta producer invalidate current
+Source/graph evidence; Search recognizes the registered candidate lifecycle events as reindexing hints.
+Repeated deletion uses the native no-effect result without a duplicate domain event or a new deadline.
+
+`revisionResource` and `initializeRevisionAuthorship` retain their selected exported signatures. Initialization
+validates the actual same-command revision and principal, then calls the existing role initializer and native
+Semantic producer-role/Source-commit hooks. It does not attest shared history completeness. Proposal preflight
+reads the indexed latest revision and declares exactly its successor. A stale body restarts the whole manifest
+and authorization within the original deadline. Trusted legacy callback writes retain their ungranted behavior.
+
+Writer audit: `subject.ts:writeSubject` and `candidates.ts:writeProposal` initialize native account-authored
+creation/proposal revisions when their manifest declares the anchor. Physical slot expansion retains the original
+revision; accept/reject/adopt revisions are editorial decisions. Source/import/agent bulk writers get no synthetic
+human grant. `subject.ts:updateSubjectIdentity` remains a separate identity-revision writer without an author grant;
+its identity facts are communal and require the identity owner contract before any grant coverage is expanded.
+`terms.ts:correctTerms` initializes the actual new `terms` revision after insertion in its native transaction.
+Its current terms, field/language explanation, receipt and canonical publication commit together. There is no backfill.
+
+| Operation                       | Touches                                                                                                                                                                                                                                     | Bound                                                                                                                                                                                                                                                                                                                                                                                                    | Growth check                                                                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision author initialization  | One exact new revision anchor and, for native subject birth only, its exact subject resource; existing creation manifest and role initializer.                                                                                              | One resource and grant per account-authored write revision; compact facts do not multiply grants and 512 facts retain the existing 16-entry manifest cap.                                                                                                                                                                                                                                                | `test/semantic/contribution-authorship.test.ts` and `test/semantic/contribution-lifecycle.test.ts` inspect native creation/grant rows; 64/512/4096 full growth evidence remains post-integration.                                             |
+| Owned contribution availability | One indexed original-candidate locator, one retention lifecycle PK mutation and security revision update, current author Access and (restore only) fresh Global proposal Access; before/after native slot/publication and link-delta reads. | Each selected/expanded slot retains its existing 32-entry cap. Relation maintenance uses the existing exact affected-slot Context registry (C entries) and at most 32 selected facts per Context, O((1 + C) × 32), independent of unrelated subject history/population. No new Context cap, history walk, subject-degree scan or live aggregate recount. Payload purge and account cleanup are separate. | `test/semantic/contribution-authorship.test.ts` adds collision, rollback, replay, window, Content and single-connection cases. Existing `contribution-lifecycle.test.ts` and all 64/512/4096 growth acceptance remain post-integration proof. |
+
+Required remaining work: run the original native acceptance and regenerate the API artifacts through the official
+integration producer. The native shared-history source-set producer is still unavailable at
+`history/record-source-set-native.ts:nativeRecordSourceSetProducer`; local producer custody does not replace that
+producer or prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
+account-erasure de-identification remain outside this slice. Account confirmation
 is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
 account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
 purge can remove retained takedown fields, subject to legal holds. Content owns source fences. Account cleanup uses the bounded local runtime described in the account-erasure contract; individual record
@@ -754,15 +799,42 @@ state and owner-evidence reader defined in the contract. Native author/write-bas
 grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
 Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
 
-| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
-| Owned lifecycle and retention | Community Context DELETE/restore is implemented; contribution DELETE/restore, purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.             |
-| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
+| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                                                                                                                                            |
+| Owned lifecycle and retention | Community Context DELETE/restore and keyed contribution availability are implemented; contribution mutation uses the real publication producer, while native proof, purge/hold, scoped withholding and account cleanup remain separate work. `contribution-lifecycle.test.ts` and `growth-contribution-lifecycle.test.ts` remain full post-integration proof. |
+| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters.                                                                                                                                    |
+
+### Native Context historical-party enrollment
+
+`enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
+the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
+`semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
+`route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
+sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
+strings in TypeScript. Access validates and locks its genuine occurrence and binds its original deferred trigger
+and pending redrive to this entrypoint; the sink neither reads nor mutates Access grants or provenance.
+
+The sink locks the exact Context erasure key in its active home and enrolls the original creator as `author`
+and the actual new or former owner as `owner` in the existing locator inventory. Creator-only occurrences use
+`author`; a former occurrence needs no current grant. Unknown roles, missing/purged keys and unavailable native
+command provenance remain pending. Only the actual Global Context row's native no-personal-payload policy yields
+`not-applicable`. A deferred constraint binds every new occurrence receipt to the real same-home write basis,
+epoch and position; a setting or supplied transaction UUID cannot establish enrollment.
+
+Occurrence receipts retain native technical coordinates, side and separate grant/source/receiving transactions,
+without another party payload. Their Context foreign key joins the existing erasure inventory and cascades on
+physical Context removal. An identical occurrence does not dirty its locator again. A distinct late occurrence
+reopens that exact Source seal/home and records the current native delivery generation. The existing durable
+locator relay registers the account-home late item, invalidates both Source page cursors and restarts local work
+under the account fence. Pending redrive must emit the existing locator-scheduled event for its actual enrollment
+position. The TypeScript port uses the current command with no additional checkout; another Context home stays
+pending and requires a real durable receiver. Enrollment changes no Context payload, lifecycle or ownership and
+establishes no history receiving, account, family or participant completion.
+
+Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native execution follows integration.
 
 ### Community Context lifecycle
-
-The bounded lifecycle derivation and evidence qualifications are in the [Cost table](#cost).
 
 `DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
 receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
@@ -795,9 +867,50 @@ defaults, current extension head and adoption history, and respects current subj
 
 Only real transitions emit the registered `com.rezics.semantic.record.deleted.v1` or `.restored.v1` identity event,
 with Context kind, ID and monotonic version. Receipts, basis and outbox commit atomically; no subject revision or
-counter is rewound. Ordinary DELETE retains native rows and payload. This capability adds no automatic purge,
-account-terminal cleanup, legal hold commands or takedown deadline. Future retention must remove minimal personal
-or private fields and preserve the nonpersonal identity skeleton unless that skeleton is itself private.
+counter is rewound. Ordinary DELETE retains native rows and payload. Ordinary retention below removes local personal/private fragments at the original expiry; it creates no
+account erasure acknowledgement, legal-hold service or destructive takedown deadline.
+
+The bounded lifecycle derivation and evidence qualifications are recorded in the Community Context deletion,
+restoration and current disclosure row of the [Cost table](#cost).
+
+### Ordinary record retention
+
+`semanticRetention(pool,{clock}).step({partition,limit,key})` is the native ordinary-record adapter.
+A page accepts a limit through 100 and selects at most `min(limit, 4)` raw source keys (the scheduler uses two), then removes at most four physical
+payload fragments. Its rotating partition cursor revisits held and future-due keys. The original native
+720-hour window survives restart, and restoration remains exclusive at that deadline. Payload mutation,
+fragment progress and the exact page result share a native transaction. Reusing a page key with another
+limit is refused. Native Content and shared-history closure are required before a key counts as purged.
+
+`record-purge-authority.ts` owns the unchanged contribution `RecordPurgeReference`, the closed
+`NativeRecordPurgeReference` union with Context/Zone keys, `RecordPurgeSource`, and the original opaque
+`RecordPurgeAuthority` prepare/read/lock exports. Native resource deletion records its actual generation,
+transaction and original 720-hour deadline with deferred same-command commit provenance. Issuance and effect
+locks verify current native versions, home epoch, hold and restore disposition. Zone withholding prevents
+ordinary purge. No resource becomes a candidate, revision or authored document.
+
+Context creation/lifecycle/extension and Zone commands declare actual source roots before history serialization.
+Mounted/referenced resources acquire no ownership association. Source enrollment records original command
+positions without a deletion generation at birth; historical unconverted writers keep inventory pending.
+`record-purge-custody.ts` implements durable source holds, committed released-home receiving acceptance,
+receiver locks and native callback completion, and bounded source inventory cuts. Its opaque handles are lookup
+hints; native retained rows provide the proof. Source eligibility writers serialize against outstanding holds,
+and release requires exact committed target completion. See the [deletion contract](deletion-contract.md#ordinary-owner-issued-purge-authority).
+
+Resource retention now uses the same issuer and Accounts history prepare/minimize port as contributions,
+releasing checkouts between homes. Content's authored-field hook remains contribution-only. Accounts owns
+native resource history storage/mapping and its copy minimizers; unsupported integration remains unavailable,
+with no shared completion from local payload cleanup or a source inventory cut. This implementation stage
+runs Kernel typing only; original native physical absence, custody, growth and rollback acceptance remains later.
+
+- Touches: only selected native source identities, their exact indexed fragments, owning source locks,
+  partition cursor and page result. Shared physical minimizers retain their existing immutable field guards.
+- Bound: source-key limits apply before eligibility/hold filtering; four payload rows per page, fixed store
+  prefixes and the existing command deadline. Discovery seeks by partition/key, and fragment lookup seeks
+  by source prefix/physical key. No unrelated revision, account, payload or outbox scan.
+- Growth check: the original `growth-deletion.test.ts` retains its 64/512/4096 native proof after integration.
+  Focused source/body, held revisit, rollback and restart cases are in `record-retention.test.ts` and
+  `test/zones/record-retention.test.ts`. These outcomes are unexecuted in the current typecheck-only stage.
 
 ## Native command record sources
 
@@ -832,7 +945,7 @@ ownership survive, with no account attribution or copied content body in the nat
 ## Cost
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
-Let N be total subjects, P subjects in the anchor partition, F stored fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
+Let N be total subjects, P subjects in the anchor partition, F current descriptive fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
 For several subjects, F denotes their maximum; logarithms mean `log(2 + size)`.
 Rows means rows examined, including filtered rows, not just returned rows; blocks means shared blocks accessed, including index, heap, and payload blocks, rather than cache misses or elapsed time.
 A B-tree point probe examines O(1) rows and O(log size) blocks; range retrieval adds its visited rows and blocks, and inserts add logarithmic index work per row.
@@ -840,7 +953,9 @@ The table gives the supported indexed access shape, not a promise that PostgreSQ
 Fact indexes have size up to N times F, so write `L = log(N(1 + F))`; with bounded F this is O(log N).
 Command history can grow without new subjects: let H count receipts/outbox/write-basis rows and `C = log(2 + H)`; it cannot honestly be bounded by N alone.
 For variable-size subject payloads add B shared blocks, where B is the total payload blocks read or written (including the receipt); growth checks hold B fixed. Structural validation caps decimal strings at 127 characters and time years at 16 digits, so every value has a fixed maximum size. Bounds assume fixed payload sizes; definition validation enforces a 4 MiB release limit before publishing, with 1,024 types, 4,096 properties and 64 properties per type, and validates cold reads too. A cold read is linear in the release's canonical bytes and happens once per digest per process. A warm cache, keyed by digest, serves later requests from the validated body. Those requests touch the subject's type and the properties on its facts; they do not iterate the release. Their rows, blocks and statements are constant in M.
-Each write command refuses more than 512 submitted facts before SQL. The subject's `current_facts` cap counts descriptive facts only. Each slot's `log_seq` stops at 33, and only an expand row may use 33.
+Each write command refuses more than 512 submitted facts before SQL. The subject's `current_facts` cap counts descriptive facts only. Each slot's `log_seq` stops at 33, and only an expand row may use 33. Term corrections allocate fresh immutable
+slots and use indexed current heads, so current reads do not fold old term history. Head pointers and revision
+field/language support locators contain no text; term text retains the existing fact producer/minimizer plumbing.
 `pageSubjects` enforces 1 <= s <= 100 at read entry (default 25) and fetches s + 1 subjects by primary key. A batched read refuses more than 256 ids before SQL.
 For batches, g is the number of nonempty partitions, at most min(i, 4096), and P is the largest touched partition; for authorization, G is resource permission rows, U membership-history rows examined, q candidate organizations, and A total Access rows.
 A sourced batch has at most 100 commands. T is the number of distinct source tuples among the candidates a read would show, bounded by the statements on that page. Source-fence reads use content's `readFences`: one statement per tuple partition, at most 100 tuples, so a larger page takes `ceil(T / 100)` statements in that partition.
@@ -1337,195 +1452,6 @@ See [the runtime contract](#current-list-presentation-facts).
   `list-presentation-privacy.test.ts`; released book/film/recipe and withholding cases remain in
   the frozen `list-presentation-facts.test.ts`. Native execution and quantitative fit receipts are
   deferred to post-integration acceptance under the current minimal verification instruction.
-
-## Deletion and retention
-
-The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,
-retention adapter and independent implementation briefs against [the deletion policy](../../../../docs/deletion.md).
-Communal subjects and immutable definition releases are not automatically private records owned by their creator.
-Contribution attribution and current community Context resource ownership must establish owner deletion authority.
-
-Implemented behavior includes community Context owner deletion and restoration below, native subject/candidate
-hide, takedown and moderation restore, terminal consent-statement retraction, source-fence disclosure, immediate
-derived-account-agent name clearing, and the indexed local account erasure runtime in
-[account-erasure-contract.md](account-erasure-contract.md). Agent synchronization alone remains a field clear;
-the default local continuation minimizes actual located source records and preserves pending shared custody. Native takedown retains
-data, but its free-text scope does not implement least-field/passage/image withholding.
-
-Native account-authored birth writes initialize one `semantic.revision` resource per original write revision with
-the `semantic.revision.author` role (`statement:delete` and `statement:restore`). Compact creation declares its
-subject and revision-1 resources; proposals declare only their exact next revision. Slot expansion keeps the
-original assertion's revision anchor. Imported and agent/source writes receive no synthetic author grant, and
-historic rows are not backfilled. The Global formula remains the create/propose authority; authored document
-custody records the declared revision UUID while imported summary and cover custody retains the actual Global
-anchor. `MAX_CREATION_RESOURCES` remains 16.
-
-The contribution lifecycle authority is the existing retention-owned `semantic.record_lifecycle`, keyed by
-`(route, subject, candidate)`. Both current readers and ordinary commands use that same row; `purging` is
-withheld and projects as deleted through the unchanged lifecycle evidence shape. The obsolete
-`contribution_lifecycle` schema definition is retained without a runtime reader or writer; no historic data is
-backfilled or silently reinterpreted. Delete retains the payload through
-its original strict 720-hour restore window, makes normal current slot, disclosure, summary, relation and Source
-reads withhold it, and allows candidate pages to return only `{id, deleted:true}` after existing audience privacy
-and source-fence checks. Restore retains the first deletion window and does not change adoption, moderation,
-subject visibility or source custody. Both routes authorize the original write-revision resource at fresh native T;
-restore also prepares current Global `statement:propose` on its own released connection for every attempt and replay.
-The native publication producer records the affected public selected slot before and after the mutation at the
-original command T. The subject security revision and existing bounded link-delta producer invalidate current
-Source/graph evidence; Search recognizes the registered candidate lifecycle events as reindexing hints.
-Repeated deletion uses the native no-effect result without a duplicate domain event or a new deadline.
-
-`revisionResource` and `initializeRevisionAuthorship` retain their selected exported signatures. Initialization
-validates the actual same-command revision and principal, then calls the existing role initializer and native
-Semantic producer-role/Source-commit hooks. It does not attest shared history completeness. Proposal preflight
-reads the indexed latest revision and declares exactly its successor. A stale body restarts the whole manifest
-and authorization within the original deadline. Trusted legacy callback writes retain their ungranted behavior.
-
-Writer audit: `subject.ts:writeSubject` and `candidates.ts:writeProposal` initialize native account-authored
-creation/proposal revisions when their manifest declares the anchor. Physical slot expansion retains the original
-revision; accept/reject/adopt revisions are editorial decisions. Source/import/agent bulk writers get no synthetic
-human grant. `subject.ts:updateSubjectIdentity` remains a separate identity-revision writer without an author grant;
-its identity facts are communal and require the identity owner contract before any grant coverage is expanded.
-Term writers can bind the selected helper after their native revision insertion; this base contains no independent
-term writer using it. There is no backfill.
-
-| Operation                       | Touches                                                                                                                                                                                                                                     | Bound                                                                                                                                                                                                                                                                                                                                                                                                    | Growth check                                                                                                                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Revision author initialization  | One exact new revision anchor and, for native subject birth only, its exact subject resource; existing creation manifest and role initializer.                                                                                              | One resource and grant per account-authored write revision; compact facts do not multiply grants and 512 facts retain the existing 16-entry manifest cap.                                                                                                                                                                                                                                                | `test/semantic/contribution-authorship.test.ts` and `test/semantic/contribution-lifecycle.test.ts` inspect native creation/grant rows; 64/512/4096 full growth evidence remains post-integration.                                             |
-| Owned contribution availability | One indexed original-candidate locator, one retention lifecycle PK mutation and security revision update, current author Access and (restore only) fresh Global proposal Access; before/after native slot/publication and link-delta reads. | Each selected/expanded slot retains its existing 32-entry cap. Relation maintenance uses the existing exact affected-slot Context registry (C entries) and at most 32 selected facts per Context, O((1 + C) × 32), independent of unrelated subject history/population. No new Context cap, history walk, subject-degree scan or live aggregate recount. Payload purge and account cleanup are separate. | `test/semantic/contribution-authorship.test.ts` adds collision, rollback, replay, window, Content and single-connection cases. Existing `contribution-lifecycle.test.ts` and all 64/512/4096 growth acceptance remain post-integration proof. |
-
-Required remaining work: run the original native acceptance and regenerate the API artifacts through the official
-integration producer. The native shared-history source-set producer is still unavailable at
-`history/record-source-set-native.ts:nativeRecordSourceSetProducer`; local producer custody does not replace that
-producer or prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
-account-erasure de-identification remain outside this slice. Account confirmation
-is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
-account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
-purge can remove retained takedown fields, subject to legal holds. Content owns source fences. Account cleanup uses the bounded local runtime described in the account-erasure contract; individual record
-retention and legal-order purge remain separate work. Its pages cap raw keys before filtering, commit native
-checkpoints with owning mutations, and retain only eligible communal/progress skeletons. Takedown alone never
-creates its deadline. Workflow-history retention does not establish semantic erasure. Public aggregate disclosure follows
-[aggregate-disclosure.md](aggregate-disclosure.md) and its separately owned backend in `links.ts`, `subject.ts` and
-`graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
-links and absent count after source revocation with consumers paused.
-
-The shared state and attribution boundary is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
-state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
-grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
-Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
-
-| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                                                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                                                                                                                                            |
-| Owned lifecycle and retention | Community Context DELETE/restore and keyed contribution availability are implemented; contribution mutation uses the real publication producer, while native proof, purge/hold, scoped withholding and account cleanup remain separate work. `contribution-lifecycle.test.ts` and `growth-contribution-lifecycle.test.ts` remain full post-integration proof. |
-| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters.                                                                                                                                    |
-
-### Native Context historical-party enrollment
-
-`enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
-the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
-`semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
-`route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
-sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
-strings in TypeScript. Access validates and locks its genuine occurrence and binds its original deferred trigger
-and pending redrive to this entrypoint; the sink neither reads nor mutates Access grants or provenance.
-
-The sink locks the exact Context erasure key in its active home and enrolls the original creator as `author`
-and the actual new or former owner as `owner` in the existing locator inventory. Creator-only occurrences use
-`author`; a former occurrence needs no current grant. Unknown roles, missing/purged keys and unavailable native
-command provenance remain pending. Only the actual Global Context row's native no-personal-payload policy yields
-`not-applicable`. A deferred constraint binds every new occurrence receipt to the real same-home write basis,
-epoch and position; a setting or supplied transaction UUID cannot establish enrollment.
-
-Occurrence receipts retain native technical coordinates, side and separate grant/source/receiving transactions,
-without another party payload. Their Context foreign key joins the existing erasure inventory and cascades on
-physical Context removal. An identical occurrence does not dirty its locator again. A distinct late occurrence
-reopens that exact Source seal/home and records the current native delivery generation. The existing durable
-locator relay registers the account-home late item, invalidates both Source page cursors and restarts local work
-under the account fence. Pending redrive must emit the existing locator-scheduled event for its actual enrollment
-position. The TypeScript port uses the current command with no additional checkout; another Context home stays
-pending and requires a real durable receiver. Enrollment changes no Context payload, lifecycle or ownership and
-establishes no history receiving, account, family or participant completion.
-
-Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native execution follows integration.
-
-### Community Context lifecycle
-
-`DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
-receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
-object. Neither route has an If-Match contract. Successful responses contain only
-`{context:{id,state:'deleted'|'active'}}`. A replay returns the original receipt after fresh authorization;
-a fresh request already in the requested state is a genuine noEffect and emits no event.
-
-The existing `semantic.context.owner` role includes `context:delete` and `context:restore` alongside
-`context:accept`, `context:adopt` and `access:grant`. The moderator role remains acceptance-only. Both lifecycle
-actions require real Access authorization on the stable Context anchor and the exact direct current owner grant,
-read through the shared lifecycle reader on the same prepared client at native command T. Creation history and
-individual action grants do not establish ownership. Transferred owners can act; revoked owners cannot execute
-or replay receipts. Global has no personal lifecycle and both actions return 403.
-
-The existing Context row stores `active`, `deleted` or the reserved terminal `purged` state, a monotonic
-`security_revision`, and an independent `held` flag. Each actual active-to-deleted transition installs its deletion
-time and strict 720-hour deadline at command T. Retries and fresh deleted no-ops preserve that original window.
-Restore succeeds only before the deadline; exactly thirty days returns 409. Restore retains the completed window
-for evidence; a later actual deletion starts a new window. SQL compares exact native timestamptz values without
-rounding through JavaScript dates. The internal evidence renders canonical UTC timestamps with microsecond precision.
-
-Deletion immediately excludes the Context from normal point reads and public eligibility, editorial anchors,
-settings/default selection, subject overlays, candidates, relations, links and current extensions. Extension caches
-are consulted only after a current Context point check; a direct Context definition read checks current identity
-even for an explicit read grant. Retained source Context extension heads remain trusted immutable term-birth
-evidence for Global adoption validation; that evidence grants no current Context read or write eligibility. Extension publication/activation checks the active native anchor before receipt
-lookup. Immutable release meanings and adopted Global definitions remain intact for retained historical facts;
-private extension/composed digests do not become public release routes. Restore keeps the same ID, labels, settings,
-defaults, current extension head and adoption history, and respects current subject visibility and candidate moderation.
-
-Only real transitions emit the registered `com.rezics.semantic.record.deleted.v1` or `.restored.v1` identity event,
-with Context kind, ID and monotonic version. Receipts, basis and outbox commit atomically; no subject revision or
-counter is rewound. Ordinary DELETE retains native rows and payload. Ordinary retention below removes local personal/private fragments at the original expiry; it creates no
-account erasure acknowledgement, legal-hold service or destructive takedown deadline.
-
-The bounded lifecycle derivation and evidence qualifications are recorded in the Community Context deletion,
-restoration and current disclosure row of the [Cost table](#cost).
-
-### Ordinary record retention
-
-`semanticRetention(pool,{clock}).step({partition,limit,key})` is the native ordinary-record adapter.
-A page accepts a limit through 100 and selects at most `min(limit, 4)` raw source keys (the scheduler uses two), then removes at most four physical
-payload fragments. Its rotating partition cursor revisits held and future-due keys. The original native
-720-hour window survives restart, and restoration remains exclusive at that deadline. Payload mutation,
-fragment progress and the exact page result share a native transaction. Reusing a page key with another
-limit is refused. Native Content and shared-history closure are required before a key counts as purged.
-
-`record-purge-authority.ts` owns the unchanged contribution `RecordPurgeReference`, the closed
-`NativeRecordPurgeReference` union with Context/Zone keys, `RecordPurgeSource`, and the original opaque
-`RecordPurgeAuthority` prepare/read/lock exports. Native resource deletion records its actual generation,
-transaction and original 720-hour deadline with deferred same-command commit provenance. Issuance and effect
-locks verify current native versions, home epoch, hold and restore disposition. Zone withholding prevents
-ordinary purge. No resource becomes a candidate, revision or authored document.
-
-Context creation/lifecycle/extension and Zone commands declare actual source roots before history serialization.
-Mounted/referenced resources acquire no ownership association. Source enrollment records original command
-positions without a deletion generation at birth; historical unconverted writers keep inventory pending.
-`record-purge-custody.ts` implements durable source holds, committed released-home receiving acceptance,
-receiver locks and native callback completion, and bounded source inventory cuts. Its opaque handles are lookup
-hints; native retained rows provide the proof. Source eligibility writers serialize against outstanding holds,
-and release requires exact committed target completion. See the [deletion contract](deletion-contract.md#ordinary-owner-issued-purge-authority).
-
-Resource retention now uses the same issuer and Accounts history prepare/minimize port as contributions,
-releasing checkouts between homes. Content's authored-field hook remains contribution-only. Accounts owns
-native resource history storage/mapping and its copy minimizers; unsupported integration remains unavailable,
-with no shared completion from local payload cleanup or a source inventory cut. This implementation stage
-runs Kernel typing only; original native physical absence, custody, growth and rollback acceptance remains later.
-
-- Touches: only selected native source identities, their exact indexed fragments, owning source locks,
-  partition cursor and page result. Shared physical minimizers retain their existing immutable field guards.
-- Bound: source-key limits apply before eligibility/hold filtering; four payload rows per page, fixed store
-  prefixes and the existing command deadline. Discovery seeks by partition/key, and fragment lookup seeks
-  by source prefix/physical key. No unrelated revision, account, payload or outbox scan.
-- Growth check: the original `growth-deletion.test.ts` retains its 64/512/4096 native proof after integration.
-  Focused source/body, held revisit, rollback and restart cases are in `record-retention.test.ts` and
-  `test/zones/record-retention.test.ts`. These outcomes are unexecuted in the current typecheck-only stage.
 
 ## Native subject page publication
 

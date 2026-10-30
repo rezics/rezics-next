@@ -11,7 +11,7 @@ requested AS MATERIALIZED (
   CROSS JOIN LATERAL (
     SELECT f.slot_id, f.log_seq, f.operation, f.kind, f.language, f.property,
            f.statement_id, f.body, f.release
-    FROM semantic.fact f
+    FROM semantic.current_term_fact f
     CROSS JOIN input
     WHERE f.route = requested.route AND f.subject_id = requested.subject_id AND f.kind <> 'statement'
       AND f.route >= input.partition_no * 16

@@ -16,7 +16,7 @@ JOIN LATERAL (
 LEFT JOIN LATERAL (
   SELECT jsonb_object_agg(language, body) AS body FROM (
     SELECT DISTINCT ON (language) language, body, operation
-    FROM semantic.fact
+    FROM semantic.current_term_fact
     WHERE route = requested.route AND subject_id = requested.id AND kind = 'label'
       AND route >= input.partition_no * 16 AND route < (input.partition_no + 1) * 16
     ORDER BY language, log_seq DESC

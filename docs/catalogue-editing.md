@@ -258,9 +258,11 @@ type TermsResult = { subject: string; revision: number };
 
 Omitted fields and languages remain unchanged. Null removes that language entry. An alias array replaces that
 language's complete alias set. Native language, text, count and request byte limits apply; at least one valid
-label must remain. Type, release semantics and derived Account-agent terms cannot be edited here. The native
-validation exports are `TermsPatch`, `TermsResult`, `TermChange`, `patchTerms` and `termRevision` in
-`services/kernel/src/semantic/terms.ts`. These are validation and DTO declarations, not a delivered write adapter. The selected native authorship
+label must remain. Type, release semantics and derived Account-agent terms cannot be edited here. The native command is `correctTerms(pool, input)` in `services/kernel/src/semantic/terms.ts`; its
+input binds the Subject, expected revision, patch, Actor, receipt key/digest, exact creation authorization,
+ordinary no-effect authorization, current Subject read preparation, route key and deadline. Its validation exports are `TermsPatch`, `TermsResult`, `TermChange`, `patchTerms` and `termRevision` in
+`services/kernel/src/semantic/terms.ts`. The mounted closed HTTP schemas are `TermsPatchSchema` and `TermsResultSchema` in
+`semantic/http/subjects.ts`. Imports can bind the mounted PATCH and this small result directly. The native authorship
 inputs are `revisionResource(subject, revision): Resource`, `REVISION_NS: string`, and
 `initializeRevisionAuthorship(tx, {subject, revision}): Promise<void>` from `semantic/authorship.ts`.
 The command must predeclare the exact revision resource through the existing creation manifest and parent
@@ -288,13 +290,19 @@ use bounded authoritative term heads, without scanning the Subject's complete hi
 cache. Existing personal-payload locators and minimizers must cover every new persisted payload and receipt/event
 role while preserving communal identity, the nonpersonal change skeleton, account time T and legal holds.
 
-The mutation is not mounted yet. Native authorship initialization and the actual `recordSubjectPageTransition`
-publication hook remain required write-adapter obligations; delivery of the safe revision read does not deliver
-those mutation effects. A throwing authorship adapter can support independent implementation,
-but cannot satisfy release, and a replacement publication or authority writer is not authorized here.
-Existing Subject reads resolve final terms through their exact original revision Source; a correction must
-preserve those locators when adding bounded current heads. Focused acceptance cases retain the complete
-correction, CAS, replay, current-reader and denial obligations.
+`correctTerms` now composes the actual native authorship and publication producers. Each changed
+field/language switches an indexed `semantic.term_head` pointer to a fresh immutable fact slot. Text stays
+in `semantic.fact`, using its existing Source-role capture and minimization; the head stores only technical
+coordinates. A head retains its original support transaction even across deletion and replacement. The
+`current_term_fact` view supplies current Subject, labels, related, summary, Search and publication reads.
+The native revision stores only changed fields/languages and original revision support locators. Source-fenced
+current terms or addressed deleted heads conceal the write, including receipt replay; they are never recovered
+from stored payload. Empty alias arrays and null both remove that language's alias set. No-op commands use
+ordinary Global proposal authorization without declaring a resource that will not be created. Actual writes
+retain the exact revision creation manifest and initializer finalization.
+
+Kernel typing is the delivery check for this stage. The preserved real API acceptance remains later proof;
+local Source enrollment does not certify shared-history coverage or account-erasure completion.
 
 ## Individual revision explanation
 
@@ -314,6 +322,7 @@ type RevisionDetail = {
   revision: { revision: number; kind: string; release: string };
   change:
     | { kind: 'record' }
+    | { kind: 'terms'; fields: { field: 'labels' | 'descriptions' | 'aliases'; languages: string[] }[] }
     | { kind: 'candidate'; candidate: string; property: string; context: string; reading: Reading }
     | {
         kind: 'decision';
@@ -338,9 +347,9 @@ type RevisionDetail = {
 UUID fields are `subject`, `candidate` and `context`. Revision and head numbers are positive integers; adoption
 selection retains its native 32-entry bound. `record` is the minimal nonpersonal skeleton when existing revision
 metadata has no single corresponding editorial record. No actor, token, write basis, payload, historical snapshot
-or textual diff is returned. Once the term writer supplies actual immutable change identity, its selected tag is
+or textual diff is returned. Actual immutable term revisions supply the tag
 `{kind: 'terms', fields: TermChange[]}`, where `TermChange` is
-`{field: 'labels' | 'descriptions' | 'aliases', languages: string[]}`. That tag is not yet served.
+`{field: 'labels' | 'descriptions' | 'aliases', languages: string[]}`. It is served from the native revision, after checking its original Source support.
 
 The read applies current Subject, Context, candidate, related-target and exact Source-tuple disclosure, including
 terminal erasure. Unknown and currently concealed records return 404. Original and redirected related targets
@@ -355,8 +364,8 @@ the native selection bounds. No second history or personal-payload store is intr
 binds this read in the existing Changes browser and selected-value explanation, through their private/no-store
 session BFF. Runtime validation rejects mismatched identities, unknown tags, extra fields, nonpositive heads and
 selection beyond 32. Candidate and decision readings describe the current native Context; adoption mode and selection
-describe only the recorded adoption. The existing terms presentation sample is not a served native tag. Native
-outcome checks and complete term write-adapter integration remain separate. Own-contribution withdrawal and restore
+describe only the recorded adoption. The terms tag now uses the same mounted native detail response.
+Own-contribution withdrawal and restore
 now bind the generated candidate `delete` and `$restoreDeleted.post` methods. Their closed
 `{subject, candidate, deleted}` result must match both requested UUIDs and the requested deletion state before
 success and a current read. Current availability comes only from that read; an absent bounded candidate row proves
@@ -368,6 +377,3 @@ Web owns the normal next visual review using the unchanged `pages-catalogue-chan
 `concealed`, `unavailable-retry`, `detail-retry` and `detail-loading`. The unchanged
 `pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
 there is no capture restart.
-the native selection bounds. No second history or personal-payload store is introduced. Native outcome checks,
-generated client/OpenAPI refresh and complete terms mutation integration remain deferred; type checking alone does
-not prove these acceptance outcomes.

@@ -333,6 +333,7 @@ export async function writeSubject(
       subjectId,
       facts.filter((fact) => !privateAccounts.has(fact.statement_id!)),
       options.release.release,
+      options.routeKey,
     ),
     events,
   );

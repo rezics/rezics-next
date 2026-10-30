@@ -1,3 +1,4 @@
+import { correctTerms, termRevision, StaleTermsRevisionError } from '../terms.ts';
 import {
   changeStatementDisclosure,
   readStatementAs,
@@ -143,6 +144,19 @@ export const ItemInputSchema = t.Object(
   { additionalProperties: false },
 );
 
+export const TermsPatchSchema = t.Object(
+  {
+    labels: t.Optional(t.Record(t.String(), t.Union([t.String(), t.Null()]))),
+    descriptions: t.Optional(t.Record(t.String(), t.Union([t.String(), t.Null()]))),
+    aliases: t.Optional(t.Record(t.String(), t.Union([t.Array(t.String()), t.Null()]))),
+  },
+  { additionalProperties: false },
+);
+export const TermsResultSchema = t.Object(
+  { subject: t.String({ format: 'uuid' }), revision: t.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
 const revisionSelection = t.Object(
   {
     candidate: t.String({ format: 'uuid' }),
@@ -183,6 +197,22 @@ export const RevisionDetailSchema = t.Object(
     ),
     change: t.Union([
       t.Object({ kind: t.Literal('record') }, { additionalProperties: false }),
+      t.Object(
+        {
+          kind: t.Literal('terms'),
+          fields: t.Array(
+            t.Object(
+              {
+                field: t.Union([t.Literal('labels'), t.Literal('descriptions'), t.Literal('aliases')]),
+                languages: t.Array(t.String()),
+              },
+              { additionalProperties: false },
+            ),
+            { maxItems: 3 },
+          ),
+        },
+        { additionalProperties: false },
+      ),
       t.Object({ kind: t.Literal('candidate'), ...revisionCandidateFields }, { additionalProperties: false }),
       t.Object(
         {
@@ -642,7 +672,7 @@ function subjectRoutes(
         const result = await client.query(
           `SELECT 1 FROM semantic.revision r
            WHERE r.route=$1 AND r.subject_id=$2 AND r.revision=$3
-             AND r.kind IN ('create','propose') AND r.recorded_transaction_id=$4::uuid`,
+             AND r.kind IN ('create','propose','terms') AND r.recorded_transaction_id=$4::uuid`,
           [resource.route, subject, revision, command.transactionId],
         );
         return result.rows.length === 1;
@@ -736,6 +766,100 @@ function subjectRoutes(
               detail: `Only the account may state facts about this unverified account agent (${error.subject}).`,
             });
           throw error;
+        }
+      },
+    )
+    .patch(
+      '/v1/subjects/:id/terms',
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({
+          [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
+          'if-match': t.String(),
+        }),
+        body: TermsPatchSchema,
+        response: {
+          200: withHeaders(TermsResultSchema, { [SESSION_HEADER]: t.String(), etag: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          412: problemSchema('precondition_failed'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.terms',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          'x-resource-types': ['semantic.revision'],
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        try {
+          const expectedRevision = termRevision(headers['if-match']);
+          const anchor = revisionResource(params.id, expectedRevision + 1);
+          const entry = nativeCreationEntry(
+            anchor,
+            'semantic.revision',
+            actor.accountId,
+            params.id,
+            expectedRevision + 1,
+          );
+          const authorization = parentCreationAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            parent: globalContextAnchor,
+            context: {
+              pool,
+              deadline: job.deadline,
+              resource: anchor,
+              creation: entry.creation,
+              manifest: createResourceCreationManifest([entry]),
+            },
+          });
+          const noEffectAuthorization = resourceAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            anchor: globalContextAnchor,
+            context: { pool, deadline: job.deadline, partition: partitionOf(route) },
+          });
+          const result = await admission.run('normal', job, () =>
+            correctTerms(pool, {
+              subject: params.id,
+              expectedRevision,
+              patch: body,
+              actor,
+              authorization,
+              noEffectAuthorization,
+              prepareSubject: () =>
+                accessCheck(
+                  access(),
+                  actor,
+                  'subject:read',
+                  { route, id: params.id, eligibility: subjectReadEligibility({ route, id: params.id }) },
+                  { pool, deadline: job.deadline, partition: partitionOf(route) },
+                ),
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.terms', actor, { subject: params.id, expectedRevision, body }),
+              routeKey,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          set.headers.etag = `"${result.revision}"`;
+          return { subject: result.subject, revision: result.revision };
+        } catch (error) {
+          if (error instanceof StaleTermsRevisionError) throw new ProblemError('precondition_failed');
+          return candidateError(error);
         }
       },
     )

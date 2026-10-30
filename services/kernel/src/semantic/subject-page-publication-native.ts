@@ -6,7 +6,9 @@ import { isRelationProperty, type FactRow } from './item.ts';
 import { slotView } from './slots.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { loadRelated } from './subject.ts';
-import { candidateSources, sourceTuple, fenceKey } from './fences.ts';
+import { candidateSources, sourceTuple, fenceKey, fencedIds } from './fences.ts';
+import readTermSupport from './terms-read-support.sql';
+import type { Source } from '@rezics/definitions/bulk';
 import { readFences } from '../content/source-fences.ts';
 import type { ImportedFieldGroup } from '../content/imported-contract.ts';
 import {
@@ -67,11 +69,40 @@ export async function subjectPageFacts(
   const redirected = [...new Set([...owners.values()].flatMap((owner) => (owner.redirect ? [owner.redirect] : [])))];
   for (let offset = 0; offset < redirected.length; offset += 256)
     for (const [id, state] of await loadRelated(tx, redirected.slice(offset, offset + 256))) owners.set(id, state);
+  const labelLanguages = facts.filter((fact) => fact.kind === 'label').map((fact) => fact.language!);
+  const supportRows =
+    routeKey && labelLanguages.length
+      ? await readTermSupport.run(tx, {
+          route: routeOf(subject)!,
+          subject_id: subject,
+          entries: labelLanguages.map((language) => ({ kind: 'label', language })),
+        })
+      : null;
+  const labelSupport = supportRows === null ? [] : Array.isArray(supportRows) ? supportRows : [supportRows];
+  const hiddenLabels = routeKey
+    ? await fencedIds(
+        tx,
+        routeKey,
+        labelSupport.map((row) => ({
+          id: row.language,
+          source: row.source as Source | null,
+        })),
+      )
+    : new Set<string>();
   for (const fact of facts) {
     if (fact.operation !== 'assert') continue;
     if (fact.kind === 'label' && fact.language) {
       const component: ComponentKey = { kind: 'label', key: fact.language };
-      components.set(`label:${fact.language}`, { component, state: publicState(fact.body), dependencies: [] });
+      const source = labelSupport.find((row) => row.language === fact.language)?.source as Source | null | undefined;
+      const tuple = routeKey && source && 'source' in source ? sourceTuple(routeKey, source) : null;
+      const dependencies: OwnerKey[] = tuple
+        ? [{ kind: 'source-fence', route: tuple.route, key: fenceKey(tuple) }]
+        : [];
+      components.set(`label:${fact.language}`, {
+        component,
+        state: hiddenLabels.has(fact.language) ? absent : publicState(fact.body),
+        dependencies,
+      });
     }
     if (fact.kind !== 'statement' || !fact.statement_id) continue;
     const body = fact.body as { rank?: string; value: { type: string; content?: unknown } };

@@ -1,3 +1,6 @@
+import type { Source } from '@rezics/definitions/bulk';
+import type { TermChange } from './terms.ts';
+import readTermSupport from './revision-detail-term-support.sql';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { readPartition } from '../partition/partition.ts';
@@ -24,6 +27,7 @@ type Reading = {
 };
 export type RevisionChange =
   | { kind: 'record' }
+  | { kind: 'terms'; fields: TermChange[] }
   | { kind: 'candidate'; candidate: string; property: string; context: string; reading: Reading }
   | {
       kind: 'decision';
@@ -192,6 +196,23 @@ export async function readRevisionDetail(
         throw new SubjectNotFoundError();
     }
     let change: RevisionChange = { kind: 'record' };
+    if (first.revision.kind === 'terms') {
+      const support = listed(
+        await readTermSupport.run(client, { ...parameters, revisions: first.revision.term_support ?? [] }),
+      );
+      if (
+        support.length !== (first.revision.term_support ?? []).length ||
+        (
+          await fencedIds(
+            client,
+            input.routeKey,
+            support.map((row) => ({ id: String(row.revision), source: row.source as Source | null })),
+          )
+        ).size
+      )
+        throw new SubjectNotFoundError();
+      change = { kind: 'terms', fields: first.revision.term_changes as TermChange[] };
+    }
     const row = first.change;
     if (row?.kind === 'candidate' || row?.kind === 'decision') {
       const candidate = row.candidate!;
@@ -228,7 +249,7 @@ export async function readRevisionDetail(
     }
     return {
       subject: input.subject,
-      revision: first.revision,
+      revision: { revision: first.revision.revision, kind: first.revision.kind, release: first.revision.release },
       change,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };

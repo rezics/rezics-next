@@ -196,6 +196,7 @@ export const SEMANTIC_EVENTS = {
       revision,
       kind: Type.Union([
         Type.Literal('create'),
+        Type.Literal('terms'),
         Type.Literal('propose'),
         Type.Literal('accept'),
         Type.Literal('reject'),

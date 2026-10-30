@@ -1,3 +1,6 @@
+import { revisionResource } from '../../src/semantic/authorship.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
@@ -110,4 +113,60 @@ test('term correction conceals nonvisible subjects, rejects derived Account term
   f.status(hidden, 200);
   expect((await patch(subject, 1, body, key)).status).toBe(404);
   expect((await patch(newId(21000), 1, body)).status).toBe(404);
+});
+
+test('The real terms PATCH command updates multilingual current terms and safe revision explanation atomically with native authorship and publication while preserving current permission provenance and replay', async () => {
+  const subject = await f.person();
+  const key = `"${randomUUID()}"`;
+  const body = {
+    labels: { en: 'A correction', fr: 'Correction' },
+    descriptions: { fr: 'Description' },
+    aliases: { fr: ['Alias'] },
+  };
+  const changed = await patch(subject, 1, body, key);
+  expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+  expect(changed.body).toEqual({ subject, revision: 2 });
+  const route = routeOf(subject)!;
+  const anchor = revisionResource(subject, 2);
+  const authorship = await f.admin.query(
+    `SELECT i.creator_id::text,g.subject_id::text,g.grant_role FROM access.resource_initialization i
+     JOIN access.resource_role_grant g USING(route,resource_id) WHERE i.route=$1 AND i.resource_id=$2`,
+    [route, anchor.id],
+  );
+  expect(authorship.rows).toEqual([
+    { creator_id: f.accounts.owner, subject_id: f.accounts.owner, grant_role: 'semantic.revision.author' },
+  ]);
+  const points = () =>
+    f.admin.query(
+      `SELECT r.revision,r.kind,r.term_changes,
+       (SELECT count(*)::int FROM semantic.subject_page_change c WHERE c.route=r.route AND c.subject_id=r.subject_id
+        AND c.change_id=r.recorded_transaction_id::text) AS published
+     FROM semantic.revision r WHERE r.route=$1 AND r.subject_id=$2 ORDER BY revision`,
+      [route, subject],
+    );
+  const before = (await points()).rows;
+  expect(before[1]).toMatchObject({ revision: 2, kind: 'terms', published: 2 });
+  const detail = await f.call('GET', `/v1/subjects/${subject}/revisions/2`, 'owner');
+  f.status(detail, 200);
+  expect(detail.body.change).toEqual({ kind: 'terms', fields: before[1]!.term_changes });
+  expect(JSON.stringify(detail.body)).not.toContain('A correction');
+  await f.caughtUp(subject);
+  expect(await f.current(subject)).toMatchObject({
+    revision: 2,
+    labels: { en: 'A correction', fr: 'Correction' },
+    aliases: { fr: ['Alias'] },
+  });
+  expect((await patch(subject, 2, { aliases: { de: [] } })).body).toEqual({ subject, revision: 2 });
+  expect((await patch(subject, 2, { labels: { en: null, fr: null } })).status).toBe(400);
+  expect((await points()).rows).toEqual(before);
+  expect((await patch(subject, 1, body, key)).body).toEqual(changed.body);
+  expect((await points()).rows).toEqual(before);
+  await f.real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  try {
+    expect((await patch(subject, 1, body, key)).status).toBe(403);
+    expect((await patch(subject, 2, body)).status).toBe(403);
+    expect((await points()).rows).toEqual(before);
+  } finally {
+    await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
+  }
 });

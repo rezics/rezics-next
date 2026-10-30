@@ -29,7 +29,7 @@ LEFT JOIN LATERAL (
   FROM (
     SELECT DISTINCT ON (language) language, body
     FROM (
-      SELECT language, body, log_seq FROM semantic.fact
+      SELECT language, body, log_seq FROM semantic.current_term_fact
       CROSS JOIN input
       WHERE route = requested.route AND subject_id = requested.id
         AND kind = 'label' AND operation = 'assert'
