@@ -4,6 +4,7 @@ import {
   PAGE_GLOBAL_CONTEXT,
   planReads,
   platformRegistry,
+  validateProfile,
   type CompositionDocument,
   type PageContinuation,
 } from '@rezics/composition';
@@ -253,14 +254,12 @@ test('Bind actual discussion and review composition reads and continuation', asy
   await fixture.grant('editor', ['presentation:publish', 'presentation:activate'], PAGE_GLOBAL_CONTEXT);
   const active = await fixture.request('editor', 'GET', '/v1/presentation/active');
   expect(active.status).toBe(200);
-  const profile = {
-    ...platformProfile,
-    types: platformProfile.types.map((entry) =>
-      entry.type === 'schema:Book'
-        ? { type: entry.type, views: { overview: document, discussion: document, reviews: document } }
-        : entry,
-    ),
-  };
+  const profile = structuredClone(platformProfile);
+  profile.types = [
+    ...profile.types.filter((entry) => entry.type !== 'schema:Book'),
+    { type: 'schema:Book', views: { overview: document, discussion: document, reviews: document } },
+  ].sort((left, right) => (left.type < right.type ? -1 : left.type > right.type ? 1 : 0));
+  expect(validateProfile(platformRegistry, profile)).toEqual([]);
   const published = await write('/v1/presentation/profiles', { profile }, 'editor');
   expect(published.status, JSON.stringify(published.body)).toBe(201);
   expect(
