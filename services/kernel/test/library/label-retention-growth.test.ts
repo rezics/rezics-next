@@ -30,7 +30,9 @@ let observedRows = 0,
   observedRequestBytes = 0,
   observedResponseBytes = 0;
 const jsonBytes = (value: unknown) =>
-  Buffer.byteLength(JSON.stringify(value, (_key, item: unknown) => (typeof item === 'bigint' ? item.toString() : item)));
+  Buffer.byteLength(
+    JSON.stringify(value, (_key, item: unknown) => (typeof item === 'bigint' ? item.toString() : item)),
+  );
 beforeAll(async () => {
   db = await openGrowthDatabase();
   f = await createProfileEntryFixture({ pool: db.pool, clock, projectLinks: false });
