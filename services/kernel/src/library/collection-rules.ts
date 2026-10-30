@@ -3,7 +3,12 @@ import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { admitGroup } from '../access/gates/admission.ts';
-import { authoritativeTimeValue, type CommandAttempt, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  type AuthoritativeTime,
+  type CommandAttempt,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -15,7 +20,7 @@ import insert from './collection-rules-insert.sql';
 import update from './collection-rules-update.sql';
 
 /** Uses the actual common preparation order declaration; no caller-local sort language. */
-export type CollectionRule = Readonly<{ filter: FilterDocument; sort: PreparationDefinition['sort'] }>;
+export type CollectionRule = Readonly<{ filter: FilterDocument; sort: Extract<PreparationDefinition['sort'], 'id'> }>;
 export type AdmittedCollectionRule = CollectionRule & Readonly<{ releaseDigest: string }>;
 export type SavedCollectionRule = AdmittedCollectionRule &
   Readonly<{
@@ -78,7 +83,7 @@ export async function prepareCollectionRuleAuthority(
   config: { pool: Pool; access: Access },
   actor: AccountActor,
   filter: FilterDocument,
-  attempt: CommandAttempt,
+  attempt: CommandAttempt | { time: AuthoritativeTime; read: true },
   deadline: number,
 ): Promise<readonly AccessCheck[]> {
   const route = routeOf(actor.accountId);
@@ -104,7 +109,9 @@ export async function prepareCollectionRuleAuthority(
         actor,
         action,
         { route, id: actor.accountId },
-        commandAccessContext({ pool: config.pool, deadline }, attempt),
+        'read' in attempt
+          ? { pool: config.pool, deadline }
+          : commandAccessContext({ pool: config.pool, deadline }, attempt),
       ),
     );
   }
@@ -114,7 +121,7 @@ export async function prepareCollectionRuleAuthority(
 /** Reevaluate at native current T BEFORE the executor may disclose an old receipt. */
 export async function authorizeCollectionRule(
   tx: CommandTransaction,
-  attempt: CommandAttempt,
+  attempt: Pick<CommandAttempt, 'time'>,
   checks: readonly AccessCheck[],
 ): Promise<void> {
   for (const check of checks) if (!(await check(tx, attempt.time))) throw new GrantDeniedError();

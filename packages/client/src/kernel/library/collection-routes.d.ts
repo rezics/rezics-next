@@ -5096,6 +5096,22 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         collections: {
             ":collectionId": {
                 rule: {
+                    get: {
+                        body: unknown;
+                        params: { collectionId: string };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: { rule: { filter: unknown; sort: "id"; releaseDigest: string; revision: number; collectionRevision: number; sourceGeneration: string } };
+                            400: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            401: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            403: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            404: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            409: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            422: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                            503: import("typebox").Static<ReturnType<typeof import("../http/problem.ts").problemSchema>>;
+                        };
+                    };
                     put: {
                         body: {
                             filter: unknown;

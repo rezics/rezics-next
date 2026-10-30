@@ -564,6 +564,41 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           }),
         ),
     )
+    .get(
+      '/v1/collections/:collectionId/rule',
+      {
+        params: collectionParams,
+        response: {
+          200: t.Object(
+            {
+              rule: t.Object(
+                {
+                  filter: t.Unknown(),
+                  sort: t.Literal('id'),
+                  releaseDigest: t.String(),
+                  revision: t.Integer({ minimum: 0 }),
+                  collectionRevision: revision,
+                  sourceGeneration: t.String(),
+                },
+                closed,
+              ),
+            },
+            closed,
+          ),
+          ...failures,
+        },
+        detail: detail('collection_rule.get', 'collection:update'),
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, async () => ({
+          rule: await mapped(() => read().readRule(actor, params.collectionId, job.deadline)),
+        }));
+      },
+    )
     .put(
       '/v1/collections/:collectionId/rule',
       {

@@ -27,6 +27,12 @@ type EditorContext = {
   issues: readonly ConditionIssue[];
   values: Record<string, Choice[]>;
   announce(message: string, pointer: string): void;
+  extension?: ConditionExtension | undefined;
+};
+/** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
+export type ConditionExtension = {
+  choices: { label: string; value: FilterDocument }[];
+  render(value: FilterDocument, onChange: (value: FilterDocument) => void): ReactNode;
 };
 
 function errorText(code: string) {
@@ -47,6 +53,8 @@ export function ConditionEditor({
   disabled = false,
   languages,
   onLanguages,
+  extension,
+  embedded = false,
 }: {
   value?: FilterDocument | undefined;
   onChange(value: FilterDocument | undefined): void;
@@ -57,6 +65,8 @@ export function ConditionEditor({
   disabled?: boolean;
   languages?: string[] | undefined;
   onLanguages?(languages: string[]): void;
+  extension?: ConditionExtension;
+  embedded?: boolean;
 }) {
   const languageId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -75,11 +85,13 @@ export function ConditionEditor({
         ?.focus();
     });
   };
-  const context: EditorContext | undefined = metadata ? { metadata, locale, issues, values, announce } : undefined;
+  const context: EditorContext | undefined = metadata
+    ? { metadata, locale, issues, values, announce, extension }
+    : undefined;
   return (
     <div ref={root} className="min-w-0 space-y-3 border-t border-border/60 pt-4" data-condition-editor>
       <h2 className="font-medium">{m.condition_heading()}</h2>
-      <p className="text-sm text-muted-foreground">{m.condition_hint()}</p>
+      <p className="text-sm text-muted-foreground">{embedded ? m.library_rule_hint() : m.condition_hint()}</p>
       <p role="status" aria-live="polite" className="sr-only">
         <span key={announcement.version}>{announcement.text}</span>
       </p>
@@ -116,33 +128,37 @@ export function ConditionEditor({
           ))}
         </div>
       )}
-      {context ? (
-        <>
-          {value ? (
-            <NodeEditor value={value} onChange={onChange} pointer={CONDITION_POINTER} depth={1} context={context} />
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onChange({ and: [{ type: { in: [''] } }] });
-                announce(m.condition_added(), `${CONDITION_POINTER}/and/0`);
-              }}
-            >
-              {m.condition_add()}
-            </Button>
-          )}
-        </>
-      ) : (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.condition_metadata_unavailable()}
-        </p>
-      )}
+      <fieldset disabled={disabled} className="min-w-0">
+        {context ? (
+          <>
+            {value ? (
+              <NodeEditor value={value} onChange={onChange} pointer={CONDITION_POINTER} depth={1} context={context} />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onChange({ and: [{ type: { in: [''] } }] });
+                  announce(m.condition_added(), `${CONDITION_POINTER}/and/0`);
+                }}
+              >
+                {m.condition_add()}
+              </Button>
+            )}
+          </>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.condition_metadata_unavailable()}
+          </p>
+        )}
+      </fieldset>
       {value && <input type="hidden" name="condition" value={JSON.stringify(value)} />}
-      <Button type="submit" variant="outline" disabled={disabled}>
-        {m.search_apply()}
-      </Button>
+      {!embedded && (
+        <Button type="submit" variant="outline" disabled={disabled}>
+          {m.search_apply()}
+        </Button>
+      )}
     </div>
   );
 }
@@ -205,7 +221,10 @@ function NodeEditor({
           ? m.condition_not()
           : 'type' in value
             ? m.search_type()
-            : m.condition_statement();
+            : 'statement' in value
+              ? m.condition_statement()
+              : m.condition_leaf();
+  const extensionLeaf = context.extension?.render(value, onChange);
   const name = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, context.locale).text || fallback;
   const property = 'statement' in value ? value.statement.property : undefined;
@@ -305,6 +324,22 @@ function NodeEditor({
               </Button>
             ))}
           </div>
+          {context.extension?.choices.map((choice, index) => (
+            <Button
+              key={index}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={operator === 'or' && group.length >= FILTER_LIMITS.or}
+              onClick={() => {
+                const children = [...group, choice.value];
+                onChange(operator === 'and' ? { and: children } : { or: children });
+                context.announce(m.condition_added(), `${pointer}/${operator}/${group.length}`);
+              }}
+            >
+              {choice.label}
+            </Button>
+          ))}
         </>
       )}
       {'not' in value && (
@@ -316,6 +351,7 @@ function NodeEditor({
           onChange={(next) => onChange(next ? { not: next } : undefined)}
         />
       )}
+      {extensionLeaf}
       {'type' in value && (
         <ValueFields
           context={context}
@@ -513,7 +549,7 @@ function NodeEditor({
           )}
         </>
       )}
-      {('saved' in value || 'owner' in value) && (
+      {('saved' in value || 'owner' in value) && !extensionLeaf && (
         <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>
       )}
     </FieldSet>

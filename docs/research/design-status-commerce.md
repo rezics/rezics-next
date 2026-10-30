@@ -184,6 +184,16 @@ exist. Designed whole editor includes kind/cover/FULL facts, export and mounting
 bulk move/remove and common dynamic members are missing. Semantic owns definitions/fact batches, Content image authority,
 Web the common editor. **Handoff task:** complete the duplicate-occurrence/note/order journey through selected cross-Collection move, export, mounting and denial, preserving the adopted editor/browse distinction.
 
+**Saved dynamic definitions.** The current adopted scope includes private create/read/edit at
+`/library/rules/new` and `/collections/{id}/rule`, with native POST/PUT and a private native rule GET. The shared
+filter composer preserves nested Boolean/catalogue conditions and adds released profile/state/session/holding and
+current personal-label choices. Current curator/update plus all private leaf scopes/gates protect stored meaning;
+private create, manual conflict reload retaining the draft, and the existing dynamic member reader remain separate
+from explicit complete Publication output. Built-in rules stay immutable. The common execution producer remains
+explicitly unavailable; no ready empty data or public live criteria is fabricated. Native whole-journey, privacy,
+promoted-main and ordinary Web 390/1280 visual review remain pending. The obsolete shared scope-table deferral
+awaits Root ownership; it does not defer this adopted definition journey.
+
 **Progress / sessions.** [Library module](../../services/kernel/src/library/README.md) owns algorithms; [profile consumers](../library-profile-consumers.md)
 own pin consumption. Delivered [abstraction research](library-abstraction.md) distinguishes rereads and sparse units.
 Owner-route sessions/history/units, `/library/progress` and `/v1/progressSessions` implement start/record/complete/abandon;

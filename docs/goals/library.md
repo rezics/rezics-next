@@ -34,7 +34,10 @@ Retains the existing personal Library, common Collections, independent labels, f
 publication, filtering and lifecycle obligations. This is separate owner documentation under the **same commerce
 manager**, preserving all original tasks and native/main completion requirements. It creates no new control-plane
 Goal and no implicit deferral. Payment/benefit purchase behavior belongs to the [Commerce Goal](commerce.md).
-Points, user-saved personal dynamic queries and Library legal holds remain deferred under [public scope](../scope.md).
+Saved personal dynamic Collection definition create/read/edit is adopted in the current scope, including private
+ALL-leaf admission, stored meaning and native CAS. Execution remains unavailable until the common Source executes;
+no interface or source typing substitutes for native, privacy, whole-journey or promoted-main proof. The shared
+[public scope](../scope.md) table awaits its Root owner update. Points and Library legal holds remain deferred.
 External personal-library imports are not inferred from definition mapping metadata.
 
 ## Ownership and sole behavior authorities

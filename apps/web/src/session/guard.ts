@@ -24,6 +24,7 @@ const signedInPaths = [
   /^\/entitlements(?:\/|$)/,
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,
   /^\/organizations(?:\/|$)/,
+  /^\/collections\/[^/]+\/rule\/?$/,
   /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/(?:decisions|reports)\/[^/]+(?:\/|$))/,
 ];
 

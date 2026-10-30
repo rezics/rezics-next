@@ -2,7 +2,7 @@ import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runt
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
-import type { AuthoritativeTime, CommandAttempt } from '../command/command.ts';
+import { mintReadTime, type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { readPublicViews } from '../access/index.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
@@ -29,7 +29,12 @@ import curatorPublicPage from './collection-reads-curator-public.sql';
 import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
-import { requireCollectionRuleExecution } from './collection-rules.ts';
+import {
+  authorizeCollectionRule,
+  prepareCollectionRuleAuthority,
+  readSavedCollectionRule,
+  requireCollectionRuleExecution,
+} from './collection-rules.ts';
 import { admitCollectionMemberQuery, type CollectionMemberQuery } from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import { readOwnerFilterPage } from './owner-filter-plan.ts';
@@ -290,12 +295,86 @@ export function createCollectionReads(
 
   return {
     readCollection,
+    readRule,
     listCollections,
     listAccountCollections,
     listMembers,
     readMembers,
     listSubjectCollections,
   };
+
+  /** Private definition read, independent of new meaning/execution admission and public metadata. */
+  async function readRule(viewer: Actor, id: string, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
+    if (!actor(viewer)) throw new ProblemError('authentication_required');
+    const accountViewer = viewer;
+    const route = routeOf(id);
+    const accountRoute = routeOf(viewer.accountId);
+    if (route === null || accountRoute === null) throw notFound();
+    const update = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
+    async function capture(checks: readonly import('../request/access.ts').AccessCheck[] = [], at?: AuthoritativeTime) {
+      return readOnly(pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        const time = at ?? (await mintReadTime(client, dependencies.clock));
+        const account = await readAccount(client, accountRoute!, accountViewer.accountId);
+        if (
+          !account ||
+          account.kind !== 'actor' ||
+          account.state !== 'active' ||
+          account.fenced ||
+          !Number.isSafeInteger(accountViewer.authnEpoch) ||
+          accountViewer.authnEpoch < 1 ||
+          account.minimumAuthnEpoch > BigInt(accountViewer.authnEpoch)
+        )
+          throw notFound();
+        const row = await collectionRead.run(queryOf(client), { route: route!, id });
+        // A broad management grant never grants another curator's personal predicates.
+        if (
+          !row ||
+          row.state !== 'active' ||
+          row.curatorAccountId !== accountViewer.accountId ||
+          row.membershipKind !== 'dynamic' ||
+          !accountViewer.scopes.includes('collection:update') ||
+          !(await update(client, time))
+        )
+          throw notFound();
+        const rule = await readSavedCollectionRule(client, route!, id);
+        if (!rule) throw notFound();
+        await authorizeCollectionRule(client, { time }, checks);
+        const partition = await readPartition(client, partitionOf(route!));
+        if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
+        return {
+          rule,
+          time,
+          epoch: partition.epoch,
+          node: partition.node,
+          floor: account.minimumAuthnEpoch,
+          operator: account.operatorAccountId,
+        };
+      });
+    }
+    const original = await capture();
+    // Walk the stored expanded meaning; never re-admit it against a newer release.
+    const finalTime = await withConnection(pool, (client) =>
+      mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+    );
+    const checks = await prepareCollectionRuleAuthority(
+      { pool, access },
+      viewer,
+      original.rule.filter,
+      { time: finalTime, read: true },
+      deadline,
+    );
+    const terminal = await capture(checks, finalTime);
+    if (
+      terminal.floor !== original.floor ||
+      terminal.operator !== original.operator ||
+      terminal.epoch !== original.epoch ||
+      terminal.node !== original.node ||
+      JSON.stringify(terminal.rule) !== JSON.stringify(original.rule)
+    )
+      throw new ProblemError('dependency_unavailable');
+    return terminal.rule;
+  }
 
   async function loadCollection(
     viewer: Actor,

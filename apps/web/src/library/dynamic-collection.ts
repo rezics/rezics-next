@@ -43,7 +43,7 @@ export type DynamicMembersPage = { members: DynamicMemberRead[]; next: string | 
 export type DynamicCollectionPage = {
   id: string;
   title: string;
-  builtinKind: DynamicBuiltinKind | undefined;
+  builtinKind?: DynamicBuiltinKind | undefined;
   revision?: number;
   curatorAccountId?: string;
   description: string | null;

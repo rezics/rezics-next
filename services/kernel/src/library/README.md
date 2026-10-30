@@ -47,6 +47,14 @@ Current implementation evidence is narrower than the capability:
   for saving/executing this filter+source+order. `requireCollectionRuleExecution` therefore prevents successful
   saved writes/replays and member pages with `503 dependency_unavailable`. This is a caller-owned unavailable
   boundary, not a guessed producer declaration, provisional native success or ready-empty result.
+- `GET /v1/collections/:collectionId/rule` returns only `{rule: SavedCollectionRule}` to the exact current
+  curator with current `collection:update` and every private-family action/gate from the stored expanded rule.
+  It reuses `prepareCollectionRuleAuthority` and `collectionRuleActions`, performs final native account/floor,
+  Collection/source-generation and partition-epoch checks, and never re-admits old meaning against a new release.
+  Unknown, foreign, curated and built-in targets are concealed. Public metadata contains no criteria. Web serves
+  `/library/rules/new` and `/collections/{id}/rule`, uses the shared structured filter composer, native choices,
+  private create, stable write intents and explicit conflict reload preserving the draft. Existing dynamic member
+  reads retain honest preparing/unavailable states. Source typing is not native/privacy/whole/main or visual proof.
 - `collection-source-native.ts` supplies metered stored-header metadata, native authorization, raw fact/member ranges
   and original-subject probes. The output driver reads only a selected explicit COMPLETE membership generation
   at the current Collection source fence; it never reads live private facts. Missing/pending output and headerless

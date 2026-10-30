@@ -282,6 +282,7 @@ const typed = [
   'GET /v1/accounts/:accountId/collections',
   'GET /v1/collections/:collectionId',
   'PATCH /v1/collections/:collectionId',
+  'GET /v1/collections/:collectionId/rule',
   'PUT /v1/collections/:collectionId/rule',
   'POST /v1/collections/:collectionId/$publishSelected',
   'DELETE /v1/collections/:collectionId',
