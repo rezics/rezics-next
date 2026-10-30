@@ -514,6 +514,7 @@ Source qualification, epoch changes and source invalidation touch exact routed k
 plus bounded native Access work. Later aggregation must use at most 31 day-bucket keys per affected board, durable
 bounded pages for multi-board changes, and O(changes log R) rank maintenance. Existing growth evidence remains for
 integration. Public aggregate/endpoint delivery is still a separate consumer task.
+
 ## Container removal and binding fences
 
 `removeContainer` and `restoreContainer` use the ordinary command executor, fresh action/scopes and direct native

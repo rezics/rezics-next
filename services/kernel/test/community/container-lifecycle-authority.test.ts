@@ -35,31 +35,48 @@ const lifecycle = Type.Object({
 });
 
 function call(person: ContentCredential, method: string, path: string, body?: unknown, head?: string) {
-  return system.kernel.handle(new Request(`https://content.test${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${person.bearer}`,
-      ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
-      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }));
+  return system.kernel.handle(
+    new Request(`https://content.test${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${person.bearer}`,
+        ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
 }
 async function create(kind: ContainerKind) {
   const created = await call(owner(), 'POST', '/v1/spaces', { title: 'Native Space ownership' });
   expect(created.status).toBe(201);
-  const { space } = Value.Parse(Type.Object({ space: Type.Object({
-    spaceId: Type.String(), headRevisionId: Type.String(),
-  }) }), await created.json());
+  const { space } = Value.Parse(
+    Type.Object({
+      space: Type.Object({
+        spaceId: Type.String(),
+        headRevisionId: Type.String(),
+      }),
+    }),
+    await created.json(),
+  );
   if (kind === 'space') return Value.Parse(identity, { id: space.spaceId, head: space.headRevisionId });
   const createdRealm = await call(owner(), 'POST', '/v1/realms', {
-    spaceId: space.spaceId, title: 'Native Realm ownership', visibility: 'public', contextId: GLOBAL_CONTEXT,
+    spaceId: space.spaceId,
+    title: 'Native Realm ownership',
+    visibility: 'public',
+    contextId: GLOBAL_CONTEXT,
   });
   expect(createdRealm.status).toBe(201);
-  const { realm } = Value.Parse(Type.Object({ realm: Type.Object({
-    realmId: Type.String(), headRevisionId: Type.String(),
-  }) }), await createdRealm.json());
+  const { realm } = Value.Parse(
+    Type.Object({
+      realm: Type.Object({
+        realmId: Type.String(),
+        headRevisionId: Type.String(),
+      }),
+    }),
+    await createdRealm.json(),
+  );
   return Value.Parse(identity, { id: realm.realmId, head: realm.headRevisionId });
 }
 async function read(kind: ContainerKind, id: string) {
@@ -67,21 +84,34 @@ async function read(kind: ContainerKind, id: string) {
   expect(response.status).toBe(200);
   return Value.Parse(lifecycle, await response.json()).container;
 }
-function change(person: ContentCredential, container: Awaited<ReturnType<typeof read>>, verb: 'removal' | 'restoration') {
-  return call(person, 'POST', `/v1/${container.kind}s/${container.id}/${verb}`, {
-    expectedVersion: container.version,
-    ...(verb === 'removal' ? { reason: 'Native owner removal' } : {}),
-  }, container.headRevisionId);
+function change(
+  person: ContentCredential,
+  container: Awaited<ReturnType<typeof read>>,
+  verb: 'removal' | 'restoration',
+) {
+  return call(
+    person,
+    'POST',
+    `/v1/${container.kind}s/${container.id}/${verb}`,
+    {
+      expectedVersion: container.version,
+      ...(verb === 'removal' ? { reason: 'Native owner removal' } : {}),
+    },
+    container.headRevisionId,
+  );
 }
 
 beforeAll(async () => {
   system = await createNativeContentSystemWithWriteRateOverrides(
-    { databaseUrl: process.env.DATABASE_URL! }, HIGH_RATE_OVERRIDES,
+    { databaseUrl: process.env.DATABASE_URL! },
+    HIGH_RATE_OVERRIDES,
   );
   await bootstrapRelease(system.database.pool, bundledRelease);
   await system.clock.setCommandTime(current);
 });
-afterAll(async () => { await system?.close(); });
+afterAll(async () => {
+  await system?.close();
+});
 
 test('equal owners have no higher rank; an authorized remover still needs the exact current restore action and generation', async () => {
   for (const kind of ['space', 'realm'] as const) {
@@ -90,15 +120,18 @@ test('equal owners have no higher rank; an authorized remover still needs the ex
     // Space owners do not intrinsically hold access:grant. Provision only the fixture's exact grant authority.
     await seedGovernanceAuthority(system.database.pool, route, target.id, owner().actor.accountId, ['access:grant']);
     const granted = await call(owner(), 'POST', '/v1/roleGrants', {
-      resource: { route, id: target.id }, subject: { kind: 'account', id: peer().actor.accountId },
-      role: `community.${kind}.owner`, valid: '(,)',
+      resource: { route, id: target.id },
+      subject: { kind: 'account', id: peer().actor.accountId },
+      role: `community.${kind}.owner`,
+      valid: '(,)',
     });
     expect(granted.status).toBe(201);
     expect((await change(owner(), await read(kind, target.id), 'removal')).status).toBe(200);
     const removed = await read(kind, target.id);
     expect((await change(peer(), removed, 'restoration')).status).toBe(403);
     const capped = await system.auth.issue({
-      accountId: owner().actor.accountId, clientId: system.auth.ordinaryClient.id,
+      accountId: owner().actor.accountId,
+      clientId: system.auth.ordinaryClient.id,
       scopes: system.auth.ordinaryScopes.filter((scope) => scope !== `${kind}:restore`),
     });
     expect((await change(capped, removed, 'restoration')).status).toBe(403);
@@ -116,10 +149,13 @@ test('platform restoration uses the installed exact Global action, independently
     const target = await create(kind);
     expect((await change(owner(), await read(kind, target.id), 'removal')).status).toBe(200);
     const removed = await read(kind, target.id);
-    await seedGovernanceAuthority(system.database.pool, routeOf(target.id)!, target.id, platform().actor.accountId,
-      [`${kind}:restore`]);
-    await seedGovernanceAuthority(system.database.pool, 0, GLOBAL_CONTEXT, platform().actor.accountId,
-      ['realm:manage', 'moderation:takedown']);
+    await seedGovernanceAuthority(system.database.pool, routeOf(target.id)!, target.id, platform().actor.accountId, [
+      `${kind}:restore`,
+    ]);
+    await seedGovernanceAuthority(system.database.pool, 0, GLOBAL_CONTEXT, platform().actor.accountId, [
+      'realm:manage',
+      'moderation:takedown',
+    ]);
     expect((await change(platform(), removed, 'restoration')).status).toBe(403);
     const derived = deriveAccess(system.access, {
       async authorize(client, actor, action, resource, evidence, time) {
@@ -127,13 +163,27 @@ test('platform restoration uses the installed exact Global action, independently
         return system.access.authorize(client, actor, action, resource, evidence, time);
       },
     });
-    await expect(restoreContainer({
-      pool: system.database.pool, access: derived, routeKey: system.routeKey, clock: () => new Date(current),
-    }, platform().actor, {
-      kind, id: target.id, expectedHead: target.head, expectedVersion: removed.version,
-    }, { deadline: Date.now() + 30_000, idempotencyKey: crypto.randomUUID() })).rejects.toBeInstanceOf(GrantDeniedError);
-    await seedGovernanceAuthority(system.database.pool, 0, GLOBAL_CONTEXT, platform().actor.accountId,
-      [`${kind}:restore`]);
+    await expect(
+      restoreContainer(
+        {
+          pool: system.database.pool,
+          access: derived,
+          routeKey: system.routeKey,
+          clock: () => new Date(current),
+        },
+        platform().actor,
+        {
+          kind,
+          id: target.id,
+          expectedHead: target.head,
+          expectedVersion: removed.version,
+        },
+        { deadline: Date.now() + 30_000, idempotencyKey: crypto.randomUUID() },
+      ),
+    ).rejects.toBeInstanceOf(GrantDeniedError);
+    await seedGovernanceAuthority(system.database.pool, 0, GLOBAL_CONTEXT, platform().actor.accountId, [
+      `${kind}:restore`,
+    ]);
     expect((await change(platform(), removed, 'restoration')).status).toBe(200);
   }
 });

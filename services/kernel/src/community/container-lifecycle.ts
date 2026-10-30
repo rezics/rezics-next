@@ -153,9 +153,10 @@ export async function readContainerLifecycle(
   // Platform reach is an exact installed action at a separate Global anchor.
   // The target's owner grant cannot establish this independent authority.
   const platform = await platformRestoration(deps, actor, kind, initial.time, accessContext);
-  const contextRead = initial.row.state === 'removed' && initial.row.context_id !== null
-    ? await readableContext(deps, actor, initial.row.context_id, initial.time, accessContext)
-    : { allowed: true, deadline: context.deadline };
+  const contextRead =
+    initial.row.state === 'removed' && initial.row.context_id !== null
+      ? await readableContext(deps, actor, initial.row.context_id, initial.time, accessContext)
+      : { allowed: true, deadline: context.deadline };
   // Release both independent anchors before final native role/version validation.
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
@@ -169,12 +170,12 @@ export async function readContainerLifecycle(
     };
     if (
       !row ||
-      !((permission.remove && current !== null) ||
-        (permission.restore && (current !== null || permission.platform))) ||
+      !((permission.remove && current !== null) || (permission.restore && (current !== null || permission.platform))) ||
       row.context_id !== initial.row.context_id ||
       row.head_revision_id !== initial.row.head_revision_id ||
       row.lifecycle_version !== initial.row.lifecycle_version
-    ) return null;
+    )
+      return null;
     const value = view(kind, row, current, actor, permission);
     return { ...value, mayRestore: value.mayRestore && contextRead.allowed && Date.now() < contextRead.deadline };
   });
@@ -194,8 +195,10 @@ async function platformRestoration(
   const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
-    const allowed = Date.now() < deadline && await globalContextAnchor.validate(bounded, time)
-      && await installed.authorize(bounded, actor, action, globalContextAnchor.resource, evidence, time);
+    const allowed =
+      Date.now() < deadline &&
+      (await globalContextAnchor.validate(bounded, time)) &&
+      (await installed.authorize(bounded, actor, action, globalContextAnchor.resource, evidence, time));
     return { allowed, deadline };
   });
 }
@@ -214,8 +217,10 @@ async function readableContext(
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     try {
-      const allowed = Date.now() < deadline && await anchor.validate(bounded, time)
-        && await deps.access.authorize(bounded, actor, 'context:read', resource, evidence, time);
+      const allowed =
+        Date.now() < deadline &&
+        (await anchor.validate(bounded, time)) &&
+        (await deps.access.authorize(bounded, actor, 'context:read', resource, evidence, time));
       return { allowed, deadline };
     } catch (error) {
       if (error instanceof ContextNotFoundError) return { allowed: false, deadline };
@@ -261,7 +266,10 @@ function transition(
         body.reason.includes('\0')))
   )
     throw new ProblemError('invalid_request');
-  const prepared = new WeakMap<AuthoritativeTime, { row: Row; platform: boolean; deadline: number; evidence: unknown }>();
+  const prepared = new WeakMap<
+    AuthoritativeTime,
+    { row: Row; platform: boolean; deadline: number; evidence: unknown }
+  >();
   // Independently check live Context availability/read authority before target checkout.
   const access = deriveAccess(deps.access, {
     async prepare(preparedActor, requestedAction, target, accessContext) {
@@ -294,7 +302,8 @@ function transition(
       const current = await role(client, body.kind, body.id, checkedActor, time);
       const before = prepared.get(time);
       if (!row || !before || Date.now() >= before.deadline) return false;
-      return state === 'removed' || row.state === 'active' ? current !== null || before.platform
+      return state === 'removed' || row.state === 'active'
+        ? current !== null || before.platform
         : mayRestore(row, current, checkedActor, before.platform);
     },
   });
@@ -336,10 +345,14 @@ function transition(
           const mode = await authorization.authorize(tx, attempt, proof);
           const before = prepared.get(attempt.time);
           const row = await read(tx, body.kind, body.id, attempt.time);
-          if (!before || !row || row.context_id !== before.row.context_id ||
+          if (
+            !before ||
+            !row ||
+            row.context_id !== before.row.context_id ||
             row.lifecycle_version !== before.row.lifecycle_version ||
             row.head_revision_id !== before.row.head_revision_id ||
-            !(await access.authorize(tx, actor, authorization.action, resource, before.evidence, attempt.time)))
+            !(await access.authorize(tx, actor, authorization.action, resource, before.evidence, attempt.time))
+          )
             throw new GrantDeniedError();
           return mode;
         },

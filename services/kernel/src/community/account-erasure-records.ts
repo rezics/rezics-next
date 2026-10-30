@@ -20,7 +20,15 @@ import eraseClaim from './realm-continuity-request-erase.sql';
 import readOperation from './account-erasure-records-operation-read.sql';
 import readWorkflow from './account-erasure-records-workflow.sql';
 
-const kinds = ['ban_actor', 'ban_target', 'claim_request', 'membership_operation', 'verdict', 'space_remover', 'realm_remover'] as const;
+const kinds = [
+  'ban_actor',
+  'ban_target',
+  'claim_request',
+  'membership_operation',
+  'verdict',
+  'space_remover',
+  'realm_remover',
+] as const;
 type Kind = (typeof kinds)[number];
 export type CommunityRecordsCursor = { kind: Kind; dueAt: string; ownerRoute: number; ownerId: string; key: string };
 type Dependencies = { pool: Pool; clock?: () => Date };
