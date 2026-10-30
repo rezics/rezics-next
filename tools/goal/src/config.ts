@@ -27,7 +27,15 @@ import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
-import { DEFAULT_FLOW_THRESHOLDS, checkFlowAlarms, dispatchDailyStepAudit, flowReport, readFlow } from './flow.ts';
+import {
+  DEFAULT_FLOW_THRESHOLDS,
+  checkFlowAlarms,
+  dispatchDailyStepAudit,
+  flowReport,
+  readFlow,
+  readFlowTasks,
+} from './flow.ts';
+import { emitHourlyLifecycleMetrics, lifecycleMetrics } from './lifecycle-metrics.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -553,12 +561,18 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
-      const flow = flowReport(readFlow(db, new Date(Date.now() - 30 * 86400_000).toISOString()), store.tasks());
+      const now = new Date();
+      const flow = flowReport(
+        readFlow(db, new Date(now.getTime() - 30 * 86400_000).toISOString()),
+        readFlowTasks(db),
+        now.getTime(),
+      );
+      emitHourlyLifecycleMetrics(db, lifecycleMetrics(db, now), now);
       checkFlowAlarms(
         db,
         flow,
         (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
-        new Date(),
+        now,
         flowThresholds,
       );
     },

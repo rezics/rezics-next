@@ -7,8 +7,9 @@ import { WorkerStore } from './store.ts';
 import { BriefContractUnchangedError, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
-import { formatUsageReport, report } from './report.ts';
-import { flowReport, readFlow } from './flow.ts';
+import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
+import { flowReport, readFlow, readFlowTasks } from './flow.ts';
+import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
@@ -104,7 +105,12 @@ export async function runWorkerCommand(
         }
       }
       if (flow) {
-        const result = flowReport(readFlow(store.db, since), store.tasks());
+        const now = new Date();
+        const metrics = lifecycleMetrics(store.db, now);
+        const result = {
+          ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
+          lifecycle: metrics,
+        };
         if (argv.includes('--json')) print(JSON.stringify(result, null, 2));
         else
           print(
@@ -116,6 +122,7 @@ export async function runWorkerCommand(
               ...result.queues.map(
                 (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
               ),
+              ...formatLifecycleMetrics(metrics),
             ].join('\n'),
           );
         return 0;
