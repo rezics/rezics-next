@@ -198373,7 +198373,7 @@
     },
     "/v1/trendingSearches": {
       "get": {
-        "operationId": "search.trendingSearches",
+        "operationId": "trending_searches.list",
         "parameters": [
           {
             "in": "query",

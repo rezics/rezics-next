@@ -254,7 +254,7 @@ export function searchRoutes<App>(
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
-          operationId: 'search.trendingSearches',
+          operationId: 'trending_searches.list',
           'x-exposure': 'gate:search',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
