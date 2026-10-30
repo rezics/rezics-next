@@ -740,18 +740,6 @@ the same source protocol; no management or independent Context grant is required
 removed or changed Realm/Space bindings yield the same 404. Required source failures yield typed 503 problems;
 optional source failures keep the native unavailable/unknown states and never reuse a cached positive value.
 
-### Cost: Realm home presentation read
-
-- Touches: one full routed Realm key and its one host Space key, their exact heads, lifecycle and placement
-  anchors, native Access decisions, at most one current self-membership interval and two protected-ban identities.
-- Bound: one invocation of `readCommunityPresentations` with one Realm, two fixed REPEATABLE READ rounds,
-  one native member-count point helper per round, at most one exact rules revision (at most 33 post keys and
-  65,536 canonical bytes), and two selected media keys with at most twelve derivatives each. Each row-kind batch
-  has constant statements and logarithmic indexed work; no scan, refill, recount or extra source round is added.
-- Growth check: later reuse `test/community/growth-realm.test.ts` and the Content rules/media growth harnesses.
-  Focused source and privacy outcomes live in `test/community/home-presentation.test.ts`; compiler typing alone
-  establishes no native or physical cost proof.
-
 Accounts owns `member-count.ts` and its `RealmMemberCount = Readonly<{count:number, version:string}>` export.
 `readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returns that native current result
 or null when unknown. Content binds this original module at the reader's existing before/final Realm anchors;
@@ -759,6 +747,20 @@ it neither initializes nor maintains counts. The native source below supplies on
 Source errors and null remain unknown, never zero; a changed final count/version is withheld without retry.
 This registration grants no membership,
 role admission, removal or creator authority.
+
+### Cost: Realm home presentation read
+
+- Touches: one full routed Realm key and its one host Space key, their exact heads, lifecycle and placement
+  anchors, native Access decisions, at most one current self-membership interval and two protected-ban identities.
+- Bound: one invocation of `readCommunityPresentations` with one Realm and two fixed Realm/Space REPEATABLE READ
+  rounds, with one native member-count point helper per round. At most one exact rules pin uses its original two
+  native source rounds (at most 33 post keys per ancestry chain and 65,536 canonical bytes per document).
+  At most two selected media keys use the original native image before/final protocol, with at most twelve
+  derivatives per image. Each row-kind batch has constant statements and logarithmic indexed work; no scan,
+  refill, recount or extra source round is added.
+- Growth check: later reuse `test/community/growth-realm.test.ts` and the Content rules/media growth harnesses.
+  Focused source and privacy outcomes live in `test/community/home-presentation.test.ts`; compiler typing alone
+  establishes no native or physical cost proof.
 
 ### Cost: presentation settings and rules adoption
 
