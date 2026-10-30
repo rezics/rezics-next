@@ -344,6 +344,8 @@ A same-version 409 alone cannot prove that repair.
 Ambiguous write responses, late registration and losing CAS cannot publish assumed completion.
 
 A ready generation is immutable; a replacement is built alongside it.
+Publishing the replacement swaps current/building by CAS and invalidates old-generation cursors with 409.
+Drain old in-flight use and clean retired rows in bounded steps; do not retain a third usable generation.
 Relevant reductions make the retained observation unsafe immediately, including exclusion/order effects.
 Serving the old ready generation while repair proceeds is forbidden when its observation is unsafe.
 Unrelated reductions may serve only when the native indexed routing establishes irrelevance.
@@ -740,7 +742,8 @@ Fold each complete selected statement into the matching property/range/qualifier
 Qualifiers must be satisfied on that same statement; separate statements cannot cross-match.
 Keep unknown/withheld evidence uncertain until the complete Source boundary proves its meaning.
 At subject completion, use the existing plan evaluator; only proven true contributes values.
-Unknown subject evidence retains preparation, never a false operand under NOT.
+Complete semantic unknown cannot make either a positive or NOT predicate true.
+Incomplete coverage or unavailable evidence retains preparation; it is never semantic absence.
 Retain bounded contribution records until that subject's membership is proven; do not publish early.
 
 Text membership uses the same compiled text AST and analyzer on the registered immutable native PIT.
@@ -823,7 +826,7 @@ The existing problem handler owns content type and any normal correlation header
   "status": 400,
   "code": "invalid_request",
   "retryable": false,
-  "effect_status": "not_applied",
+  "effect_status": "not_applicable",
   "request_id": "<actual request id>",
   "errors": [{ "pointer": "/facets/0/cursor", "code": "invalid_format" }]
 }
@@ -838,7 +841,7 @@ An authenticated expired/lost-context token instead requires this body:
   "status": 409,
   "code": "search_restart_required",
   "retryable": false,
-  "effect_status": "not_applied",
+  "effect_status": "not_applicable",
   "request_id": "<actual request id>"
 }
 ```
@@ -850,6 +853,7 @@ It has the same ordinary `effect_status`/actual `request_id` fields and `Retry-A
 It contains no facet values, public native job, fake token or exhaustion claim.
 For the oversized 160-slot common page use 422 `unsupported_query`, not syntax 400.
 Its ordinary problem fields come from the existing problem handler and `retryable` is false.
+The route action is `subject:read`, so its POST problems retain `effect_status:not_applicable`.
 All such failures leave previously published public cursor positions replayable under current safety.
 
 ### Frozen runtime scenario: canonical and code/type order
