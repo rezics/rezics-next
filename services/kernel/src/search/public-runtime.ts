@@ -90,7 +90,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   };
   async function publicationFor(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext) {
     checkDeadline(context);
-    const release = await readRelease(config.pool, consumer.meaningDigest);
+    const digest = consumer.meaningDigest;
+    if (digest === null) notReady();
+    const release = await readRelease(config.pool, digest);
     const match = /subjects-g([1-9][0-9]*)$/.exec(consumer.physicalTarget);
     const generation = Number(match?.[1]);
     if (
@@ -106,7 +108,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       sourceKeys,
       binding,
       clock: config.clock,
-      meaning: { digest: consumer.meaningDigest, release, type: 'schema:Thing' },
+      meaning: { digest, release, type: 'schema:Thing' },
       writerGuard: createSearchWriterGuard({
         pool: config.pool,
         search: config.search,

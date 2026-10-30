@@ -885,7 +885,7 @@ export async function fenceSearchIdentityWriter(
 /** Provisional publication surface until the native producer installs its admission/copy barrier.
  * Composing these methods with the real ordinary writer grants no publication authority.
  */
-const unavailable = async (): Promise<PublicFilterConsumerUnavailable> => ({
+const publicationUnavailable = async (): Promise<PublicFilterConsumerUnavailable> => ({
   status: 'unready',
   reason: 'source_pending',
   cost: {
@@ -901,8 +901,8 @@ const unavailable = async (): Promise<PublicFilterConsumerUnavailable> => ({
   },
 });
 export const unavailableSearchWriterPublication: Omit<SearchWriterPublicationGuard, 'write'> = Object.freeze({
-  fencePublication: unavailable,
-  drainPublication: unavailable,
-  adoptPublication: unavailable,
-  releasePublication: unavailable,
+  fencePublication: publicationUnavailable,
+  drainPublication: publicationUnavailable,
+  adoptPublication: publicationUnavailable,
+  releasePublication: publicationUnavailable,
 });

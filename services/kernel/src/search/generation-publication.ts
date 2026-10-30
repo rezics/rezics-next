@@ -19,6 +19,8 @@ import type {
 } from '../semantic/public-filter-source-binding.ts';
 import type { SubjectSourceKeyPages, SubjectSourceKeyCursor } from '../semantic/subject-source-key-pages.ts';
 import type {
+  PublicCanonicalCaptureInput,
+  PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
@@ -320,6 +322,11 @@ export function createSearchGenerationPublication(
     check(context);
     return { ...target, incarnation };
   }
+  function publicationCapture(capture: PublicCanonicalCaptureInput): PublicFilterConsumerCaptureInput {
+    // Suggestion custody has its own canonical prefix semantics and cannot certify all-key population.
+    if (!('sort' in capture)) throw new Pending('registration_missing');
+    return capture;
+  }
   function populationDefinition(definition: PublicFilterSourceDefinition) {
     const capture = definition.capture;
     if (
@@ -354,7 +361,7 @@ export function createSearchGenerationPublication(
     add(meter, custody.cost);
     if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
     const resolved = await binding.resolve(
-      { source, meaning: structuredClone(meaning), capture: custody.definition.capture },
+      { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
       context,
     );
     add(meter, resolved.cost);
@@ -652,7 +659,7 @@ export function createSearchGenerationPublication(
       index: job.physical_target,
       partition,
       ids,
-      keys,
+      keys: keys!,
       registry: registry!,
       obligation: position,
     });
@@ -986,7 +993,7 @@ export function createSearchGenerationPublication(
         add(meter, custody.cost);
         if ('status' in custody) throw new Pending(custody.reason === 'deadline' ? 'deadline' : 'registration_missing');
         const resolved = await binding.resolve(
-          { source, meaning: structuredClone(meaning), capture: custody.definition.capture },
+          { source, meaning: structuredClone(meaning), capture: publicationCapture(custody.definition.capture) },
           context,
         );
         add(meter, resolved.cost);
