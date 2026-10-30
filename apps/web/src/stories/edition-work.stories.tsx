@@ -11,18 +11,6 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const phone = {
-  viewport: {
-    viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' } },
-    defaultViewport: 'phone390',
-  },
-};
-const desktop = {
-  viewport: {
-    viewports: { desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' } },
-    defaultViewport: 'desktop1280',
-  },
-};
 function Journey({ scenario, view = 'overview' }: { scenario: TraversalScenario; view?: string }) {
   const path = subjectViewHref(traversalSubjects[scenario], 'en', view, `?realm=${traversalRealm}`).replace(
     /^\/en/,
@@ -30,18 +18,15 @@ function Journey({ scenario, view = 'overview' }: { scenario: TraversalScenario;
   );
   return <PageStory visitor="Signed Out" path={path} />;
 }
-export const EditionPhone390: Story = {
-  parameters: phone,
+export const Edition: Story = {
   play: pageReady,
   render: () => <Journey scenario="edition" />,
 };
-export const WorkDesktop1280: Story = {
-  parameters: desktop,
+export const Work: Story = {
   play: pageReady,
   render: () => <Journey scenario="work" />,
 };
 export const EditionsOverTwelve: Story = {
-  parameters: phone,
   render: () => <Journey scenario="work" view="editions" />,
   play: async (context) => {
     await pageReady(context);
@@ -52,7 +37,6 @@ export const EditionsOverTwelve: Story = {
   },
 };
 export const IndependentRoles: Story = {
-  parameters: desktop,
   render: () => <Journey scenario="creator" view="works" />,
   play: async (context) => {
     await pageReady(context);
@@ -65,17 +49,14 @@ export const IndependentRoles: Story = {
   },
 };
 export const HiddenTarget: Story = {
-  parameters: phone,
   play: pageReady,
   render: () => <Journey scenario="hidden" />,
 };
 export const SourceUnavailable: Story = {
-  parameters: desktop,
   play: pageReady,
   render: () => <Journey scenario="unavailable" />,
 };
 export const RoleConflict: Story = {
-  parameters: phone,
   render: () => <Journey scenario="conflict" view="works" />,
   play: async (context) => {
     await pageReady(context);
