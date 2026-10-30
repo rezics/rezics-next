@@ -1763,7 +1763,8 @@ attribution are resolvable without decoding old payloads. Session/opening,
 verification/family, proof/establishment and stage/receipt associations use only
 their existing exact native source keys. Missing sources and historical client
 ownership without a captured owner remain unknown: today's client owner cannot
-prove yesterday's owner. Historical stage/request bindings without the complete
+prove yesterday's owner and is never installed as its historical role. Missing
+sources preserve every existing positive typed role. Historical stage/request bindings without the complete
 source actor projection also remain unknown. Store/reason markers persist after
 expiry or physical removal; there is no historical JSON or identity search.
 

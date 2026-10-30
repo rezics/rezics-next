@@ -254,6 +254,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."id":=COALESCE(OLD."id",NEW."id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -280,6 +283,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -305,10 +311,21 @@ BEGIN
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=NEW.subject_account_id IS NOT NULL AND NEW.acting_human_id IS NOT NULL AND NEW.operator_account_id IS NOT NULL;
     IF NEW."erasure_client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     SELECT erasure_client_owner_id INTO NEW.erasure_client_owner_id FROM session WHERE id=NEW.session_id AND "userId"=NEW.subject_account_id FOR KEY SHARE; covered:=covered AND FOUND;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."subject_account_id":=COALESCE(OLD."subject_account_id",NEW."subject_account_id");
+      NEW."acting_human_id":=COALESCE(OLD."acting_human_id",NEW."acting_human_id");
+      NEW."operator_account_id":=COALESCE(OLD."operator_account_id",NEW."operator_account_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -341,8 +358,19 @@ BEGIN
     SELECT acting_human_id,operator_account_id INTO NEW.erasure_human_id,NEW.erasure_operator_id FROM auth_session_opening WHERE session_id=NEW.id AND subject_account_id=NEW."userId";
     covered:=fresh OR FOUND;
     IF NEW."clientId" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -379,10 +407,22 @@ BEGIN
       covered:=covered AND FOUND AND source_version=1;
     END IF;
     IF NEW."erasure_client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -421,10 +461,22 @@ BEGIN
       ORDER BY "createdAt" DESC,id DESC LIMIT 1 FOR KEY SHARE;
     covered:=FOUND AND source_version=1;
     IF NEW."clientId" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_account_id":=COALESCE(OLD."erasure_account_id",NEW."erasure_account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -462,10 +514,22 @@ BEGIN
     ELSE covered:=fresh;
     END IF;
     IF NEW."clientId" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -503,10 +567,22 @@ BEGIN
     ELSE covered:=fresh;
     END IF;
     IF NEW."clientId" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -538,8 +614,16 @@ BEGIN
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=NEW.erasure_client_id IS NOT NULL;
     IF NEW."erasure_client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -573,6 +657,14 @@ BEGIN
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     SELECT "clientId",erasure_human_id,erasure_operator_id,erasure_client_owner_id,erasure_role_version INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,source_version FROM session WHERE id=NEW.session_id AND "userId"=NEW.account_id FOR KEY SHARE;
     covered:=FOUND AND source_version=1;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -605,10 +697,22 @@ BEGIN
     IF NEW.erasure_session_id IS NOT NULL THEN SELECT erasure_client_owner_id,erasure_role_version INTO NEW.erasure_source_client_owner_id,source_version FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE; covered:=FOUND AND source_version=1; END IF;
     covered:=covered AND (NEW.purpose<>'consent-reduction' OR NEW.erasure_session_id IS NOT NULL);
     IF NEW."erasure_client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
     END IF;
     IF NEW.erasure_source_client_id IS NOT NULL AND NOT fresh THEN covered:=false; END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -642,6 +746,15 @@ BEGIN
       INTO NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_owner_id,NEW.erasure_source_client_owner_id,source_version
       FROM auth_barrier_proof WHERE reference=NEW.reference AND account_id=NEW.account_id FOR KEY SHARE;
     covered:=FOUND AND source_version=1;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
+      NEW."erasure_source_client_id":=COALESCE(OLD."erasure_source_client_id",NEW."erasure_source_client_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -672,6 +785,13 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=NEW.erasure_actor_version=1;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_creator_id":=COALESCE(OLD."erasure_creator_id",NEW."erasure_creator_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
+      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -709,6 +829,14 @@ BEGIN
     ELSE covered:=false;
     END IF;
     covered:=covered AND (NEW.erasure_stage_id IS NULL OR NEW.erasure_actor_version=1);
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_creator_id":=COALESCE(OLD."erasure_creator_id",NEW."erasure_creator_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
+      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
+    END IF;
+    NEW.erasure_actor_version:=COALESCE(NEW.erasure_actor_version,CASE WHEN TG_OP='UPDATE' THEN OLD.erasure_actor_version ELSE 0 END);
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -737,6 +865,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -763,6 +894,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."userId":=COALESCE(OLD."userId",NEW."userId");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -789,6 +923,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -818,8 +955,19 @@ BEGIN
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=fresh OR NEW.stage_version=1;
     IF NEW."client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."acting_human_id":=COALESCE(OLD."acting_human_id",NEW."acting_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -852,8 +1000,23 @@ BEGIN
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     covered:=NEW.erasure_actor_version=1;
     IF NEW."erasure_client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."erasure_client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_subject_id":=COALESCE(OLD."erasure_subject_id",NEW."erasure_subject_id");
+      NEW."erasure_human_id":=COALESCE(OLD."erasure_human_id",NEW."erasure_human_id");
+      NEW."erasure_operator_id":=COALESCE(OLD."erasure_operator_id",NEW."erasure_operator_id");
+      NEW."erasure_member_id":=COALESCE(OLD."erasure_member_id",NEW."erasure_member_id");
+      NEW."erasure_previous_operator_id":=COALESCE(OLD."erasure_previous_operator_id",NEW."erasure_previous_operator_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."erasure_delegate_id":=COALESCE(OLD."erasure_delegate_id",NEW."erasure_delegate_id");
+      NEW."erasure_initiator_id":=COALESCE(OLD."erasure_initiator_id",NEW."erasure_initiator_id");
+      NEW."erasure_client_id":=COALESCE(OLD."erasure_client_id",NEW."erasure_client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -885,6 +1048,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -911,6 +1077,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -937,6 +1106,9 @@ BEGIN
   fresh:=COALESCE(fresh,false) AND (TG_OP='INSERT' OR OLD.erasure_role_xid=txid_current());
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+    END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
   END IF;
@@ -965,8 +1137,17 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     IF NEW."client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."account_id":=COALESCE(OLD."account_id",NEW."account_id");
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -998,8 +1179,16 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     IF NEW."client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1031,8 +1220,16 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     IF NEW."client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1064,8 +1261,16 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     IF NEW."client_id" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."client_id" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."client_id":=COALESCE(OLD."client_id",NEW."client_id");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
@@ -1097,8 +1302,16 @@ BEGIN
   IF TG_OP='INSERT' THEN NEW.erasure_role_xid:=CASE WHEN fresh THEN txid_current() END; END IF;
   IF TG_OP='INSERT' OR OLD.erasure_role_version=0 THEN
     IF NEW."clientId" IS NOT NULL THEN
-      SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
-      covered:=covered AND FOUND AND fresh;
+      IF fresh THEN
+        SELECT "userId" INTO NEW.erasure_client_owner_id FROM auth_client WHERE client_id=NEW."clientId" FOR KEY SHARE;
+        covered:=covered AND FOUND;
+      ELSE covered:=false;
+      END IF;
+    END IF;
+    IF TG_OP='UPDATE' AND NOT fresh THEN
+      NEW."erasure_client_owner_id":=COALESCE(OLD."erasure_client_owner_id",NEW."erasure_client_owner_id");
+      NEW."erasure_source_client_owner_id":=COALESCE(OLD."erasure_source_client_owner_id",NEW."erasure_source_client_owner_id");
+      NEW."clientId":=COALESCE(OLD."clientId",NEW."clientId");
     END IF;
   ELSE
     covered:=OLD.erasure_role_version=1;
