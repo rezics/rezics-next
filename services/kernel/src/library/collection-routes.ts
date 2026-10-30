@@ -95,7 +95,11 @@ export const savedDynamicCollectionSchema = t.Object(
   { ...dynamicMetadata, membershipKind: t.Literal('dynamic') },
   closed,
 );
-export const collectionResourceSchema = t.Union([collectionSchema, savedDynamicCollectionSchema, dynamicCollectionSchema]);
+export const collectionResourceSchema = t.Union([
+  collectionSchema,
+  savedDynamicCollectionSchema,
+  dynamicCollectionSchema,
+]);
 const embeddedCollectionSchema = t.Union([
   embedded(collectionSchema, curatorFields),
   embedded(savedDynamicCollectionSchema, curatorFields),
@@ -217,7 +221,18 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
   }
 }
 function collectionView(value: Collection) {
-  const { id, curatorAccountId, title, description, visibility, revision, memberCount, orderEpoch, createdAt, updatedAt } = value;
+  const {
+    id,
+    curatorAccountId,
+    title,
+    description,
+    visibility,
+    revision,
+    memberCount,
+    orderEpoch,
+    createdAt,
+    updatedAt,
+  } = value;
   if (value.membershipKind === 'dynamic')
     return {
       id,
@@ -364,7 +379,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         admission.run('normal', job, async () => {
           const page = await read().listCollections(actor, basicQuery(query));
           return fullView(viewDependencies(), actor, query.view, {
-            ...page, collections: page.collections.map(collectionReadView),
+            ...page,
+            collections: page.collections.map(collectionReadView),
           });
         }),
     )
@@ -381,9 +397,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () => {
-          const page = await read().listAccountCollections(actor, { curatorAccountId: params.accountId, ...basicQuery(query) });
+          const page = await read().listAccountCollections(actor, {
+            curatorAccountId: params.accountId,
+            ...basicQuery(query),
+          });
           return fullView(viewDependencies(), actor, query.view, {
-            ...page, collections: page.collections.map(collectionReadView),
+            ...page,
+            collections: page.collections.map(collectionReadView),
           });
         }),
     )

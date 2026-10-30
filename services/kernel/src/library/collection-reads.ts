@@ -54,7 +54,10 @@ export type CollectionView = CollectionPresentation & {
 
 export type CuratedCollectionView = CollectionView & { membershipKind: 'curated'; orderEpoch: number };
 
-export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'> & {
+export type SavedDynamicCollectionView = Omit<
+  CollectionView,
+  'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'
+> & {
   membershipKind: 'dynamic';
 };
 export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
@@ -65,9 +68,12 @@ export function collectionReadView(
 ): CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView {
   if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
   if (
-    value.membershipKind !== 'curated' || typeof value.orderEpoch !== 'number' ||
-    !Number.isSafeInteger(value.orderEpoch) || value.orderEpoch < 0
-  ) throw new ProblemError('dependency_unavailable');
+    value.membershipKind !== 'curated' ||
+    typeof value.orderEpoch !== 'number' ||
+    !Number.isSafeInteger(value.orderEpoch) ||
+    value.orderEpoch < 0
+  )
+    throw new ProblemError('dependency_unavailable');
   return { ...value, membershipKind: 'curated', orderEpoch: value.orderEpoch };
 }
 

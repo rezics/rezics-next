@@ -90,7 +90,10 @@ export function pinRoutes(
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () => {
           const page = await pins().list(actor, query);
-          return { ...page, pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })) };
+          return {
+            ...page,
+            pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })),
+          };
         });
       },
     )
