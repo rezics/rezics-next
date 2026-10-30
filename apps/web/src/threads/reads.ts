@@ -13,6 +13,8 @@ import { threadTitle } from './thread-href';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity/page-loaders';
 import { sessionSubject } from '../session/request';
 import type { PageAuthors } from '../identity/read';
+import { readPageAuthors } from '../identity/read';
+import { readDocumentMentions } from '../kernel/mentions';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
@@ -22,6 +24,9 @@ type ThreadResource = ReturnType<KernelClient['threads']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
+type PostResource = ReturnType<KernelClient['posts']>;
+type PostRevisionPage = NonNullable<Awaited<ReturnType<PostResource['revisions']['get']>>['data']>;
+type PostRevision = PostRevisionPage['revisions'][number];
 export type { ThreadPost };
 
 type PageInput = {
@@ -158,6 +163,73 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
     );
     return { viewerId, reactions: Object.fromEntries(values) };
   });
+
+export const readPostHistory = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('postId' in input) ||
+      typeof input.postId !== 'string' ||
+      input.postId.length > 128 ||
+      ('cursor' in input &&
+        input.cursor !== undefined &&
+        (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+    )
+      throw notFound();
+    return {
+      postId: input.postId,
+      ...('cursor' in input && typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    };
+  })
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { available: false }
+      | {
+          available: true;
+          revisions: PostRevision[];
+          next: string | null;
+          authors: PageAuthors;
+          mentions: DocumentMentions;
+          now: string;
+        }
+    > => {
+      setResponseHeader('cache-control', 'private, no-store');
+      const request = getRequest();
+      let authorization: string | null = null;
+      try {
+        await prepareSession(request, env as Partial<SessionEnv>);
+        authorization = viewerCredential(request);
+      } catch {
+        authorization = null;
+      }
+      const client = kernelClient();
+      try {
+        const options = {
+          query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
+          ...(authorization ? { headers: { authorization } } : {}),
+        };
+        const result = await client.posts({ id: data.postId }).revisions.get(options);
+        if (result.error || !result.data) return { available: false };
+        const revisions = result.data.revisions;
+        const [authors, mentions] = await Promise.all([
+          readPageAuthors(
+            client,
+            revisions.map(({ authorId }) => authorId),
+          ),
+          readDocumentMentions(
+            client,
+            revisions.map(({ body }) => body),
+          ),
+        ]);
+        return { available: true, revisions, next: result.data.next, authors, mentions, now: new Date().toISOString() };
+      } catch {
+        return { available: false };
+      }
+    },
+  );
 
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)

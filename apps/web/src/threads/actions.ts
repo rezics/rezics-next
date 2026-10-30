@@ -211,7 +211,9 @@ export const replyToThread = createServerFn({ method: 'POST' })
             ...(data.mediaIds === undefined || data.mediaIds.length === 0 ? {} : { mediaIds: data.mediaIds }),
           },
           {
-            headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
+            headers: { authorization, 'idempotency-key': JSON.stringify(data.idempotencyKey) } as {
+              'idempotency-key': string;
+            },
           },
         );
       if (result.error) {

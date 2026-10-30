@@ -1,0 +1,14 @@
+{
+  "board": {
+    "id": "01a1892f-3c33-73f4-983c-8958729563bf",
+    "realmId": "01a1892f-38cc-7216-ac34-89581d8f1059",
+    "route": 35160,
+    "title": "Native document authoring",
+    "purpose": "discussion",
+    "visibility": "published",
+    "securityRevision": "1",
+    "availability": "available",
+    "createdAt": "2026-10-29T19:42:16.628Z"
+  },
+  "status": 200
+}

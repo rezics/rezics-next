@@ -1,0 +1,15 @@
+{
+  "accounts": [
+    {
+      "id": "eb31e507-8cc6-81ca-a720-25871ec86773",
+      "kind": "actor",
+      "handle": "alice_530e77f100aa477f91aa6dd7bf9b949f",
+      "displayName": null,
+      "state": "active",
+      "automated": false,
+      "operatorId": null
+    }
+  ],
+  "next": null,
+  "status": 200
+}

@@ -28,6 +28,7 @@ import { Byline } from '../../threads/byline';
 import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReactions } from '../../threads/thread-reactions';
+import { PostHistory } from '../../threads/post-history';
 import {
   erasePost,
   restorePost as restorePostAction,
@@ -475,13 +476,16 @@ function PostSlot({
           }}
         />
       ) : (
-        <DocumentBody
-          className="mx-0!"
-          document={post.body}
-          mentions={mentions}
-          locale={getLocale()}
-          labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
-        />
+        <>
+          <DocumentBody
+            className="mx-0!"
+            document={post.body}
+            mentions={mentions}
+            locale={getLocale()}
+            labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
+          />
+          {post.revisionId ? <PostHistory postId={post.id} /> : null}
+        </>
       )}
     </li>
   );

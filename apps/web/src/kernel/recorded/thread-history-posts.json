@@ -1,0 +1,175 @@
+{
+  "posts": [
+    {
+      "id": "01a1892f-42ed-7286-a7b4-90bfc8034ee4",
+      "threadId": "88135215-c4c5-83c9-bdad-90bf94b6d029",
+      "route": 37055,
+      "authorId": "eb31e507-8cc6-81ca-a720-25871ec86773",
+      "parentId": null,
+      "licence": "LicenseRef-rezics-terms",
+      "subjectIds": [],
+      "boardId": "01a1892f-3c33-73f4-983c-8958729563bf",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-29T19:42:18.350Z",
+      "revisedAt": "2026-10-29T19:42:19.394Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a1892f-4701-77a2-a34a-90bf7cc1fbb8",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-opening",
+                "lang": null,
+                "level": 2,
+                "textAlign": null
+              },
+              "content": [
+                {
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ],
+                  "text": "A note revised in place",
+                  "type": "text"
+                }
+              ],
+              "type": "heading"
+            },
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-link",
+                "lang": null,
+                "textAlign": null
+              },
+              "content": [
+                {
+                  "marks": [
+                    {
+                      "attrs": {
+                        "class": null,
+                        "href": "https://example.test/story",
+                        "rel": null,
+                        "target": null,
+                        "title": null
+                      },
+                      "type": "link"
+                    }
+                  ],
+                  "text": "An example link",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-quote",
+                "lang": null
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "dir": null,
+                    "id": "history-quote-text",
+                    "lang": null,
+                    "textAlign": null
+                  },
+                  "content": [
+                    {
+                      "text": "The first words stay visible.",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                }
+              ],
+              "type": "blockquote"
+            },
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-list",
+                "lang": null
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "dir": null,
+                    "id": "history-list-item",
+                    "lang": null
+                  },
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "history-list-text",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "A retained list item.",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "listItem"
+                }
+              ],
+              "type": "bulletList"
+            },
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-code",
+                "lang": null,
+                "language": null
+              },
+              "content": [
+                {
+                  "text": "const saved = true;",
+                  "type": "text"
+                }
+              ],
+              "type": "codeBlock"
+            },
+            {
+              "attrs": {
+                "dir": null,
+                "id": "history-current",
+                "lang": null,
+                "textAlign": null
+              },
+              "content": [
+                {
+                  "text": "The current version adds this sentence.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "65be3c381205937f7965b05a6277e3f494530d5e2ca8ddfca76a89322b55d084",
+      "availability": "available",
+      "viewerReaction": null,
+      "reactions": {}
+    }
+  ],
+  "next": null,
+  "reactionsAsOf": null,
+  "status": 200
+}

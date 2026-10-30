@@ -98,6 +98,7 @@ export function DynamicCollectionPage({
                 key={subject?.id ?? index}
                 {...(href ? { href: href.href } : {})}
                 title={title}
+                {...(localizedTitle?.lang ? { titleLang: localizedTitle.lang } : {})}
                 cover={{
                   subject: { id: subject?.id ?? 'unavailable', title, types: subject?.types ?? [] },
                   cover: subject?.cover ?? null,

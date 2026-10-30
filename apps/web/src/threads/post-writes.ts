@@ -60,7 +60,9 @@ export async function startThreadRequest(
         ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
       },
       {
-        headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string },
+        headers: { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) } as {
+          'idempotency-key': string;
+        },
       },
     );
     if (result.error) {
@@ -120,7 +122,7 @@ export async function revisePostRequest(
       {
         headers: {
           authorization,
-          'idempotency-key': input.idempotencyKey,
+          'idempotency-key': JSON.stringify(input.idempotencyKey),
           'if-match': `"${input.revisionId}"`,
         } as { 'idempotency-key': string; 'if-match': string },
       },
@@ -163,7 +165,7 @@ export async function erasePostRequest(
     const result = await client.posts({ id: input.postId }).delete(undefined, {
       headers: {
         authorization,
-        'idempotency-key': input.idempotencyKey,
+        'idempotency-key': JSON.stringify(input.idempotencyKey),
       } as { 'idempotency-key': string },
     });
     if (result.error) return refusal(result.status, result.headers, result.error.value);

@@ -23,6 +23,9 @@ import searchRecording from '../kernel/recorded/search.json';
 import searchTypedRecording from '../kernel/recorded/search-typed.json';
 import subjectRecording from '../kernel/recorded/subject.json';
 import threadRecording from '../kernel/recorded/thread.json';
+import threadHistoryRecording from '../kernel/recorded/thread-history-thread.json';
+import threadHistoryAccountsRecording from '../kernel/recorded/thread-history-accounts.json';
+import threadHistoryRealmRecording from '../kernel/recorded/thread-history-realm.json';
 import threadOwnedRecording from '../kernel/recorded/thread-owned.json';
 import threadOwnedPostsRecording from '../kernel/recorded/thread-owned-posts.json';
 import offerRecording from '../kernel/recorded/offer.json';
@@ -64,6 +67,7 @@ export const pagePaths = {
   'missing-subject': `/subjects/${missingSubjectId}`,
   board: `/boards/${boardRecording.board.id}`,
   thread: threadHref(threadRecording.thread),
+  'thread-history': threadHref(threadHistoryRecording.thread),
   'thread-owned': threadHref(threadOwnedRecording.thread),
   'thread-deleted-organization': threadHref({
     id: deletedOrganizationThreadId,
@@ -277,6 +281,33 @@ export async function threadPolishReady(context: { canvasElement: HTMLElement })
   await view.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
   await view.findAllByText(m.thread_post_edited());
   await expect(view.getAllByText(m.thread_post_edited())).toHaveLength(1);
+}
+
+/** The captured post history shows two real API revisions in order with each document and licence. */
+export async function threadHistoryReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  await view.findByRole('heading', { level: 1, name: threadHistoryRecording.thread.title });
+  await view.findByRole('link', { name: threadHistoryRealmRecording.realm.title });
+  await userEvent.click(await view.findByRole('button', { name: m.thread_history_show() }));
+  const history = await view.findByRole('region', { name: m.thread_history_heading() });
+  const list = history.querySelector(':scope > ol');
+  if (!list) throw new Error('The captured history has no revision list.');
+  const versions = Array.from(list.children) as HTMLElement[];
+  expect(versions).toHaveLength(2);
+  await within(versions[0]!).findByRole('heading', { name: m.thread_history_version({ number: '1' }) });
+  await within(versions[0]!).findByText('The first words stay visible.');
+  await within(versions[0]!).findByRole('link', { name: 'An example link' });
+  await within(versions[0]!).findByRole('list');
+  await within(versions[0]!).findByText('const saved = true;');
+  await expect(versions[0]!).not.toHaveTextContent('The current version adds this sentence.');
+  await within(versions[1]!).findByRole('heading', { name: m.thread_history_version({ number: '2' }) });
+  await within(versions[1]!).findByText('The current version adds this sentence.');
+  const author = threadHistoryAccountsRecording.accounts[0];
+  if (!author?.handle) throw new Error('The captured history has no current author handle.');
+  await within(versions[0]!).findByText(`@${author.handle}`, { exact: true });
+  await within(versions[1]!).findByText(`@${author.handle}`, { exact: true });
+  await expect(history).toHaveTextContent('LicenseRef-rezics-terms');
 }
 
 /** The offer page shows its locale's subject label, the read's price and one checkout control. */

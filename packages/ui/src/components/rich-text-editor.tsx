@@ -10,6 +10,7 @@ import {
 } from '@rezics/document';
 import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import { history } from '@tiptap/pm/history';
+import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import { useEditor } from '@tiptap/react';
 import { ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
@@ -66,6 +67,44 @@ export interface RichTextEditorProps {
 const EditorHistory = Extension.create({
   name: 'editorHistory',
   addProseMirrorPlugins: () => [history()],
+});
+
+type PendingMovedUnit = { id: string; type: string };
+type PendingMovedUnitRef = { current: PendingMovedUnit | null };
+
+const RetainMovedUnitIdentity = Extension.create<{ pendingMove: PendingMovedUnitRef }>({
+  name: 'retainMovedUnitIdentity',
+  addOptions: () => ({ pendingMove: { current: null } }),
+  addProseMirrorPlugins() {
+    const pendingMove = this.options.pendingMove;
+
+    return [
+      new Plugin({
+        appendTransaction: (transactions, _oldState, newState) => {
+          if (!transactions.some((transaction) => transaction.getMeta('uiEvent') === 'drop')) return;
+
+          const movedUnit = pendingMove.current;
+          pendingMove.current = null;
+          if (!movedUnit || !(newState.selection instanceof NodeSelection)) return;
+
+          const { from, node } = newState.selection;
+          if (node.type.name !== movedUnit.type || typeof node.attrs.id !== 'string') return;
+
+          // Tiptap UniqueID treats ProseMirror's copyMove drag allowance as a
+          // paste and replaces the id after a same-editor block move.
+          let idStillInDocument = false;
+          newState.doc.descendants((candidate) => {
+            if (candidate.attrs.id === movedUnit.id) idStillInDocument = true;
+          });
+          if (idStillInDocument) return;
+
+          return newState.tr
+            .setNodeMarkup(from, undefined, { ...node.attrs, id: movedUnit.id })
+            .setMeta('addToHistory', false);
+        },
+      }),
+    ];
+  },
 });
 
 function useCoarsePointer(): boolean {
@@ -187,6 +226,7 @@ export function RichTextEditor({
   const mentionEnabled = useRef(!!lookupMention);
   mentionEnabled.current = !!lookupMention;
   const mentionHandles = useRef(new Map<string, string>());
+  const pendingMovedUnit = useRef<PendingMovedUnit | null>(null);
 
   const publish = useCallback(
     (editor: TiptapEditor) => {
@@ -246,6 +286,7 @@ export function RichTextEditor({
           ),
           mentionHandles,
         ),
+        RetainMovedUnitIdentity.configure({ pendingMove: pendingMovedUnit }),
         slashExtension(slashHandlers),
         mentionExtension(mentionHandlers, mentionEnabled),
       ],
@@ -265,6 +306,60 @@ export function RichTextEditor({
           readOnly,
         }),
         transformPastedHTML: sanitizePastedHTML,
+        handleDOMEvents: {
+          dragstart: (view, event) => {
+            const drag = event as DragEvent;
+            if (!view.editable || !drag.dataTransfer) return false;
+
+            // Select an identified block before ProseMirror reads the drag
+            // selection, so its native gesture moves the document unit itself.
+            let candidate = drag.target instanceof Element ? drag.target.closest<HTMLElement>('[data-id]') : null;
+            while (candidate && candidate !== view.dom) {
+              const id = candidate.getAttribute('data-id');
+              let selectedBlock = false;
+              if (id) {
+                try {
+                  const position = view.posAtDOM(candidate, 0);
+                  const $position = view.state.doc.resolve(position);
+                  for (let depth = $position.depth; depth > 0; depth--) {
+                    const node = $position.node(depth);
+                    if (node.attrs.id !== id || !node.type.spec.draggable) continue;
+
+                    const selection = NodeSelection.create(view.state.doc, $position.before(depth));
+                    if (!selection.eq(view.state.selection)) {
+                      view.dispatch(view.state.tr.setSelection(selection));
+                    }
+                    selectedBlock = true;
+                    break;
+                  }
+                } catch {
+                  // Nested node views may not map their wrapper DOM to a single
+                  // document position; the nearest identified ancestor is tried.
+                }
+              }
+              if (selectedBlock) break;
+              candidate = candidate.parentElement?.closest<HTMLElement>('[data-id]') ?? null;
+            }
+
+            // UniqueID treats copyMove as a copied slice and regenerates unit
+            // IDs. Same-editor drags are moves; Ctrl-drag remains a copy.
+            drag.dataTransfer.effectAllowed = drag.ctrlKey ? 'copy' : 'move';
+            return false;
+          },
+          drop: (view) => {
+            const dragging = view.dragging;
+            const draggedNode = view.state.selection instanceof NodeSelection ? view.state.selection.node : null;
+            if (dragging?.move && draggedNode) {
+              const { attrs, type } = draggedNode;
+              if (typeof attrs.id === 'string') pendingMovedUnit.current = { id: attrs.id, type: type.name };
+            }
+            return false;
+          },
+          dragend: () => {
+            pendingMovedUnit.current = null;
+            return false;
+          },
+        },
         handlePaste: (view, event) => {
           const files = Array.from(event.clipboardData?.files ?? []);
           if (!files.length) return false;

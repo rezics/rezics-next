@@ -80,6 +80,11 @@ type Story = StoryObj<typeof meta>;
 const textProfile = createDemo({ profile: 'text', label: 'Text profile post' });
 const textLimits = createDemo({ profile: 'text', label: 'Limited post', maxLength: 8 });
 const blocksProfile = createDemo({ profile: 'blocks', label: 'Blocks profile post' });
+const reorderedBlocks = createDemo({
+  profile: 'blocks',
+  label: 'Reordered blocks',
+  initial: 'First unit\nSecond unit',
+});
 const markdown = createDemo({ profile: 'blocks', label: 'Markdown post' });
 const paste = createDemo({ profile: 'blocks', label: 'Pasted post' });
 const labelled = createDemo({ profile: 'text', label: 'Reply to Mira', compact: true });
@@ -125,6 +130,82 @@ export const BlocksProfile: Story = {
     expect(snapshot.profile).toBe('blocks');
     expect(snapshot.doc.content?.[0]?.type).toBe('heading');
     expect(snapshot.doc.content?.[0]?.attrs?.level).toBe(2);
+  },
+};
+
+export const ReorderedBlocks: Story = {
+  render: () => <reorderedBlocks.Demo />,
+  async play({ canvasElement }) {
+    const textbox = within(canvasElement).getByRole('textbox', { name: 'Reordered blocks' });
+    const units = Array.from(textbox.querySelectorAll<HTMLElement>(':scope > [data-id]'));
+    expect(units).toHaveLength(2);
+    expect(units.map((unit) => unit.textContent?.trim())).toEqual(['First unit', 'Second unit']);
+    const originalIds = reorderedBlocks.initial.doc.content?.map((node) => node.attrs?.id);
+    expect(originalIds).toHaveLength(2);
+
+    const first = units[0]!;
+    const second = units[1]!;
+    const firstBounds = first.getBoundingClientRect();
+    const secondBounds = second.getBoundingClientRect();
+    const dropY = secondBounds.bottom - 1;
+    const dataTransfer = new DataTransfer();
+    first.dispatchEvent(
+      new DragEvent('dragstart', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+        clientX: firstBounds.left + 2,
+        clientY: firstBounds.top + 1,
+      }),
+    );
+    const dragOver = new DragEvent('dragover', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+      clientX: secondBounds.left + secondBounds.width / 2,
+      clientY: dropY,
+    });
+    second.dispatchEvent(dragOver);
+    const drop = new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+      clientX: secondBounds.left + secondBounds.width / 2,
+      clientY: dropY,
+    });
+    second.dispatchEvent(drop);
+
+    await waitFor(() => {
+      const moved = checkedSnapshot(reorderedBlocks.latest, reorderedBlocks.initial);
+      const movedIds = moved.doc.content?.map((node) => node.attrs?.id);
+      const expectedIds = [originalIds![1], originalIds![0]];
+      if (JSON.stringify(movedIds) !== JSON.stringify(expectedIds)) {
+        throw new Error(
+          `Block move did not retain its IDs: ${JSON.stringify({
+            originalIds,
+            movedIds,
+            content: moved.doc.content,
+            firstBounds: {
+              top: firstBounds.top,
+              bottom: firstBounds.bottom,
+              left: firstBounds.left,
+              right: firstBounds.right,
+            },
+            secondBounds: {
+              top: secondBounds.top,
+              bottom: secondBounds.bottom,
+              left: secondBounds.left,
+              right: secondBounds.right,
+            },
+            dropY,
+            dragOverPrevented: dragOver.defaultPrevented,
+            dropPrevented: drop.defaultPrevented,
+            clipboardTypes: Array.from(dataTransfer.types),
+          })}`,
+        );
+      }
+      expect(new Set(movedIds).size).toBe(movedIds?.length);
+    });
   },
 };
 

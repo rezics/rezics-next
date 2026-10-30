@@ -29,15 +29,16 @@ test('the rich-text editor writes valid snapshots in each profile, with Markdown
     const outcomes = result.testResults
       .flatMap((file) => file.assertionResults)
       .map((assertion) =>
-        `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
+        `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n').slice(0, 5).join(' ') ?? ''}`.trim(),
       )
       .sort();
-    expect(outcomes).toEqual([
+    expect(outcomes, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toEqual([
       'Blocks Profile: passed',
       'Labelled Field: passed',
       'Markdown Shortcuts: passed',
       'Paste Sanitized: passed',
       'Read Only: passed',
+      'Reordered Blocks: passed',
       'Text Profile Limits: passed',
       'Text Profile: passed',
     ]);

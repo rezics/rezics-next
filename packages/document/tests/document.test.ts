@@ -246,6 +246,16 @@ test('editor ID repair preserves existing unique units and does not mutate sourc
   expect(parseStoredDocument('{"type":"paragraph","text":"authored JSON"}')).toBeNull();
 });
 
+test('moving existing document units retains their IDs while a copied unit gets a fresh ID', () => {
+  const first = paragraph('first', 'First unit');
+  const second = paragraph('second', 'Second unit');
+  const copiedFirst = structuredClone(first);
+  const moved = withDocumentIds({ type: 'doc', content: [second, first, copiedFirst] }, () => 'copied-first');
+
+  expect(moved.content?.map((unit) => unit.attrs?.id)).toEqual(['second', 'first', 'copied-first']);
+  expect(checkDocument({ version: documentVersion, profile: 'blocks', doc: moved })).toBe(true);
+});
+
 test('published schemas match their source declaration', async () => {
   for (const profile of ['core', 'text', 'blocks'] as const) {
     const schema = await Bun.file(

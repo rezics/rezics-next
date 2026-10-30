@@ -73,18 +73,22 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
                       ? 'text*'
                       : 'inline*';
   const isLeaf = ['horizontalRule', 'image', 'media', 'extensionBlock'].includes(name);
+  const isDraggable = !nestedOnly;
 
   return Node.create({
     name,
     ...(nestedOnly ? {} : { group: 'block' }),
     content,
+    ...(name === 'codeBlock' ? { marks: '' } : {}),
     atom: isLeaf,
+    draggable: isDraggable,
     addAttributes: () => ({ ...common, ...extra }),
-    parseHTML: () => parseHTML,
+    parseHTML: () => parseHTML.map((rule) => ({ ...rule, preserveWhitespace: 'full' })),
     renderHTML: ({ node, HTMLAttributes }) => {
       const outputTag = name === 'heading' ? `h${node.attrs.level}` : tag;
-      if (name === 'table') return ['table', HTMLAttributes, ['tbody', 0]];
-      return isLeaf ? [outputTag, HTMLAttributes] : [outputTag, HTMLAttributes, 0];
+      const attributes = isDraggable ? { ...HTMLAttributes, draggable: 'true' } : HTMLAttributes;
+      if (name === 'table') return ['table', attributes, ['tbody', 0]];
+      return isLeaf ? [outputTag, attributes] : [outputTag, attributes, 0];
     },
   });
 };
