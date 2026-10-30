@@ -274,7 +274,15 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
   return transaction(pool, async (connection) => {
     const row = (await connection.query<Obligation>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!row) throw new Error('Auth erasure obligation missing');
-    const answer = (state: ErasurePage['state'], code: string): ErasurePage => ({ id, state, code });
+    // Consent is the caller's durable user-deletion checkpoint, not a one-time
+    // edge. Maintenance may have committed it before this caller's next page.
+    // The caller must then release its native consumers so post-user request
+    // draining can finish. The pending reason remains durable on the obligation.
+    const answer = (state: ErasurePage['state'], code: string): ErasurePage => ({
+      id,
+      state: row.user_deleted_at ? 'consent' : state,
+      code,
+    });
     await connection.query("SELECT set_config('auth.erasure_obligation',$1,true)", [id]);
     if (row.phase === 0) {
       // Discover one owned client, retaining neither an owner list nor a connection

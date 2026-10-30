@@ -407,6 +407,9 @@ test('an absent native user with operating evidence retains original applicabili
     expect(saved.applicable).toBe(true);
     expect(saved.barrier).toBe(7);
     expect(saved.user_deleted_at).toBeInstanceOf(Date);
+    // A restarted caller can observe the same user-deletion checkpoint even
+    // when another real native page committed it before the caller resumed.
+    expect((await nativeErasurePage(pool, id)).state).toBe('consent');
     expect(await startNativeErasure(pool, 'missing-human', 8)).toBe(id);
     expect((await pool.query('SELECT applicable,barrier FROM auth_erasure WHERE id=$1', [id])).rows[0]).toEqual({
       applicable: true,
