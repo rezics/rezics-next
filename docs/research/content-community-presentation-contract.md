@@ -91,21 +91,23 @@ Current `realm:read`, protected bans and privacy gate the entire result; public 
 bounded board-list responses; Community reuses its Realm part on the Space home. No per-card metadata HTTP:
 
 ```ts
+type Optional<T> = { state: 'available'; value: T }
+                 | { state: 'none' | 'unavailable'; value: null };
 type CommunityPresentation = {
   realmId: UUID; spaceId: UUID; contextId: UUID; name: string; description: string;
-  avatar: ContentImageSummary | null; banner: ContentImageSummary | null;
+  avatar: Optional<ContentImageSummary>; banner: Optional<ContentImageSummary>;
   members: { state: 'current'; count: number; version: string }
          | { state: 'unknown'; count: null; version: null };
-  rules: { postId: UUID; revisionId: UUID; body: DocumentSnapshot;
-           licence: string; sha256: string } | null;
+  rules: Optional<{ postId: UUID; revisionId: UUID; body: DocumentSnapshot;
+                    licence: string; sha256: string }>;
   join: { membership: 'member' | 'nonmember' | 'unknown';
           action: 'join' | 'leave' | 'sign-in' | null };
 }; // BoardView adds community: CommunityPresentation|null; reject undeclared fields.
 ```
 
 Image summaries reuse Content's derivative/placeholder/focal-point/credit shape, with no original URL.
-Null images/rules mean no permitted data, without concealed IDs or denial reasons. A configured source failure
-returns unavailable, not empty configuration. Count proof gaps return `unknown`. Join derives from real current
+`none` combines unset/erased/concealed data without IDs or denial reasons; `unavailable` means optional dependency
+failure or an uninstalled producer, with no cached value. Count proof gaps return `unknown`. Join derives from real current
 self-membership plus native join/leave admission; viewer actions alone are insufficient. Protected self-join is
 absent; anonymous action is sign-in. Accepted `202` remains pending until existing member/participation reads
 confirm settlement; no speculative membership/count increment. All actions still authorize on execution.
@@ -113,7 +115,8 @@ confirm settlement; no speculative membership/count increment. All actions still
 ## Additive seams and bounded initialization
 
 Accounts supplies a private source port from `community/membership.ts`: current `{version, removalCoverage}`
-and keyset `changes(realmId, afterVersion, limit=50)`. Each changed membership commits a contiguous per-Realm
+(`version` is a canonical decimal bigint, coverage is `proven | unknown`) and keyset
+`changes(realmId, afterVersion, limit=50)`. Each changed membership commits a contiguous per-Realm
 version and `{version, accountId, reservationId, before, after, sourceTransactionId}` in the existing Realm-locked
 native transaction, bound to its real committed receipt. Booleans describe actual membership, not actor metadata.
 No-change publication/cancellation does not change the count. Actual leave/ban-removal and account-erasure cleanup
@@ -146,14 +149,15 @@ missing mapping denies/unavailable, never an invented capability. No Realm-media
 
 Here R is the relevant same-home indexed relation size; a change does O(log R) work.
 All source/Access preparation releases its checkout before another home; final anchors are fixed, never retry loops.
-List enrichment deduplicates at most 20 Realm references and batches full keys per row kind/database; no joins
+List enrichment preserves the existing maximum of 100 items (the Space home requests 20), deduplicates Realm
+references and batches full keys per row kind/database; no joins
 across partitions. Rules have one exact source chain, at most 33 posts, one thread, one board and its Realm.
 
 ### Cost: presentation read
 
 - Touches: one board, its actual Realm/Space heads, two media points, one aggregate/source-version pair, self state
   and one rules revision chain; final board, Realm/Space and rules-source disclosure anchors before bytes leave.
-- Bound: constant work for detail; O(k log R) for k ≤ 20 cards, two images and ≤64 KiB rules per distinct Realm;
+- Bound: constant work for detail; O(k log R) for k ≤ 100 cards, two images and ≤64 KiB rules per distinct Realm;
   bounded native Access preparation included. A changed final binding fails unavailable/hidden, without fallback.
 - Growth check: later extend existing `test/content/growth-realm-board-read.test.ts`, `growth-threads.test.ts`
   and `test/community/growth-realm.test.ts` through their shared measured harness at fixed cards/anchors.
