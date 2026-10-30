@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { normalizeCommandKey, noEffect, runCommand } from '../command/command.ts';
+import { normalizeCommandKey, noEffect, runCommand, type CommandResult } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import scope from './erasure-scope.sql';
@@ -28,6 +28,7 @@ const childQueries = { units, changes, members, canonicalFacts, canonicalState, 
 type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'sessions' | 'collections';
 export type OwnedGraphInput = { accountId: string; kind: Kind; parent: string | null; after: string | null; ordinal: number; segment: number };
 export type OwnedGraphPage = { kind: string; removed: number; parent: string | null; retain: boolean; blocked: boolean };
+type OwnedParent = { id: string; everPublic?: boolean; retain?: boolean };
 
 /** One account-home command, at most 100 raw keys. Receipts checkpoint deletion and
  * small progress together, including a commit followed by a lost DBOS checkpoint.
@@ -43,8 +44,9 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
   const result = await runCommand(pool, {
     partition: partitionOf(route), deadline: workStepDeadline(),
+    principal: { kind: 'account', id: accountId },
     receipt: {
-      actorAccountId: accountId, kind: 'library.account-graph.purge',
+      principal: { kind: 'account', id: accountId }, kind: 'library.account-graph.purge',
       key: normalizeCommandKey({ kind: 'account', id: accountId }, `graph:${segment}:${ordinal}`), digest,
     },
     authorization: {
@@ -56,11 +58,13 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         return 'execute';
       },
     },
-  }, async (tx) => {
+  }, async (tx): Promise<CommandResult<OwnedGraphPage>> => {
     const args = { route, account_id: accountId };
     if (kind === 'sessions' || kind === 'collections') {
       const query = { ...args, after_id: after };
-      const row = kind === 'sessions' ? await session.run(tx, query) : await collection.run(tx, query);
+      const row: OwnedParent | null = kind === 'sessions'
+        ? await session.run(tx, query) as OwnedParent | null
+        : await collection.run(tx, query) as OwnedParent | null;
       return noEffect({ kind, removed: 0, parent: row?.id ?? null,
         retain: row !== null && 'retain' in row && row.retain === true,
         blocked: row !== null && 'everPublic' in row && row.everPublic === true && row.retain !== true });

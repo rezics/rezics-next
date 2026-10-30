@@ -29,7 +29,7 @@ import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
 
-type CuratorPageOptions = { curatorAccountId: string; cursor?: string | null; limit?: number };
+type CuratorPageOptions = { curatorAccountId: string | null; cursor?: string | null; limit?: number };
 
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
