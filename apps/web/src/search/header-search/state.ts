@@ -1,7 +1,8 @@
 import type { SearchScope } from './types';
 import type { SuggestionResult } from '../suggestions';
+import type { SuggestionFailure } from '../typeahead';
 
-export type SuggestionState = 'idle' | 'loading' | 'ready' | 'empty' | 'error' | 'unavailable';
+export type SuggestionState = 'idle' | 'loading' | 'ready' | 'empty' | SuggestionFailure;
 
 export type HeaderSearchState = {
   expanded: boolean;
@@ -23,6 +24,7 @@ export type HeaderSearchEvent =
   | { type: 'query'; query: string }
   | { type: 'sync-query'; query: string }
   | { type: 'active'; index: number }
+  | { type: 'invalidate' }
   | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult | undefined };
 
 export function initialHeaderSearchState(scope?: SearchScope, query = ''): HeaderSearchState {
@@ -67,6 +69,8 @@ export function reduceHeaderSearchState(state: HeaderSearchState, event: HeaderS
       return { ...state, query: event.query, result: undefined, activeIndex: -1, suggestions: 'idle' };
     case 'active':
       return { ...state, activeIndex: event.index };
+    case 'invalidate':
+      return { ...state, result: undefined, activeIndex: -1, suggestions: 'idle' };
     case 'suggestions':
       return { ...state, suggestions: event.state, result: event.result, activeIndex: -1 };
   }

@@ -1432,5 +1432,9 @@
   "av_application": "Letzter Antrag",
   "av_requested_subject": "Beantragten Katalogeintrag öffnen",
   "av_no_application": "Es wurde noch kein Verifizierungsantrag eingereicht.",
-  "av_applicant_settings": "Anträge und Kontoeinstellungen"
+  "av_applicant_settings": "Anträge und Kontoeinstellungen",
+  "search_suggestions_unavailable": "Suchvorschläge sind derzeit nicht verfügbar.",
+  "search_suggestions_restart": "Die Suchvorschläge haben sich geändert. Erneut versuchen, um aktuelle Ergebnisse zu laden.",
+  "search_suggestions_invalid": "Suchvorschläge unterstützen bis zu 64 Zeichen. Absenden, um die vollständige Eingabe zu suchen.",
+  "search_suggestions_credentials": "Deine Anmeldung konnte nicht bestätigt werden. Melde dich erneut an, um Suchvorschläge zu laden."
 }

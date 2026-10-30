@@ -1433,5 +1433,9 @@
   "av_application": "最新申请",
   "av_requested_subject": "打开申请认证的目录主体",
   "av_no_application": "尚未提交认证申请。",
-  "av_applicant_settings": "申请与账号设置"
+  "av_applicant_settings": "申请与账号设置",
+  "search_suggestions_unavailable": "暂时无法提供搜索建议。",
+  "search_suggestions_restart": "搜索建议已更改，请重试以获取最新结果。",
+  "search_suggestions_invalid": "搜索建议最多支持 64 个字符。提交可搜索完整内容。",
+  "search_suggestions_credentials": "无法验证你的登录状态。请重新登录以加载搜索建议。"
 }

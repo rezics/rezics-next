@@ -1432,5 +1432,9 @@
   "av_application": "最新の申請",
   "av_requested_subject": "申請対象のカタログを開く",
   "av_no_application": "認証申請はまだありません。",
-  "av_applicant_settings": "申請とアカウント設定"
+  "av_applicant_settings": "申請とアカウント設定",
+  "search_suggestions_unavailable": "現在、検索候補を利用できません。",
+  "search_suggestions_restart": "検索候補が変更されました。再試行して最新の結果を取得してください。",
+  "search_suggestions_invalid": "検索候補は64文字まで対応しています。送信すると全文で検索できます。",
+  "search_suggestions_credentials": "ログイン状態を確認できませんでした。再度ログインして検索候補を読み込んでください。"
 }

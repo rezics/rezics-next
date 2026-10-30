@@ -1432,5 +1432,9 @@
   "av_application": "Dernière demande",
   "av_requested_subject": "Ouvrir le sujet du catalogue demandé",
   "av_no_application": "Aucune demande de vérification n’a été soumise.",
-  "av_applicant_settings": "Demandes et paramètres du compte"
+  "av_applicant_settings": "Demandes et paramètres du compte",
+  "search_suggestions_unavailable": "Les suggestions sont indisponibles pour le moment.",
+  "search_suggestions_restart": "Les suggestions ont changé. Réessayez pour charger les résultats actuels.",
+  "search_suggestions_invalid": "Les suggestions acceptent jusqu’à 64 caractères. Lancez la recherche pour utiliser la saisie complète.",
+  "search_suggestions_credentials": "Votre connexion n’a pas pu être vérifiée. Reconnectez-vous pour charger les suggestions."
 }

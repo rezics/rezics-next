@@ -1,5 +1,6 @@
 import type { SuggestionResult } from '../suggestions';
 import type { SearchScope } from './types';
+import { problem } from '../../media/kernel';
 
 export const HEADER_SUGGESTION_LIMIT = 8;
 
@@ -28,8 +29,15 @@ export const loadGlobalHeaderSuggestions: HeaderSuggestionLoader = async (query,
   if (scope) throw new Error('Scoped suggestions are unavailable');
   const response = await fetch(
     `/api/search/suggestions?q=${encodeURIComponent(query)}&locale=${encodeURIComponent(locale)}`,
-    { signal },
+    { signal, credentials: 'same-origin', cache: 'no-store' },
   );
-  if (!response.ok) throw new Error('Suggestions failed');
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { code?: unknown } | undefined;
+    throw problem(
+      response.status,
+      typeof body?.code === 'string' ? body.code : 'suggestions_failed',
+      'Suggestions failed',
+    );
+  }
   return (await response.json()) as SuggestionResult;
 };

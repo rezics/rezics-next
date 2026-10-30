@@ -1432,5 +1432,9 @@
   "av_application": "Última solicitud",
   "av_requested_subject": "Abrir el sujeto del catálogo solicitado",
   "av_no_application": "No se ha enviado ninguna solicitud de verificación.",
-  "av_applicant_settings": "Solicitudes y ajustes de cuenta"
+  "av_applicant_settings": "Solicitudes y ajustes de cuenta",
+  "search_suggestions_unavailable": "Las sugerencias no están disponibles en este momento.",
+  "search_suggestions_restart": "Las sugerencias han cambiado. Vuelve a intentarlo para cargar los resultados actuales.",
+  "search_suggestions_invalid": "Las sugerencias admiten hasta 64 caracteres. Envía la búsqueda para usar el texto completo.",
+  "search_suggestions_credentials": "No se pudo verificar tu sesión. Inicia sesión de nuevo para cargar sugerencias."
 }

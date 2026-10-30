@@ -1433,5 +1433,9 @@
   "av_application": "Latest application",
   "av_requested_subject": "Open the requested catalogue subject",
   "av_no_application": "No verification application has been submitted.",
-  "av_applicant_settings": "Application and account settings"
+  "av_applicant_settings": "Application and account settings",
+  "search_suggestions_unavailable": "Suggestions are unavailable right now.",
+  "search_suggestions_restart": "Suggestions changed. Try again to read current results.",
+  "search_suggestions_invalid": "Suggestions support up to 64 characters. Submit to search the full query.",
+  "search_suggestions_credentials": "Your sign-in could not be verified. Sign in again to load suggestions."
 }

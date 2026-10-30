@@ -1,8 +1,8 @@
 import { Cover, coverRatio, type CoverRatio } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
-import { ArrowUp, Search, X } from 'lucide-react';
-import { useEffect, useId, useReducer, useRef, type ComponentProps, type RefObject } from 'react';
+import { ArrowLeft, ArrowUp, Search, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useId, useReducer, useRef, useState, type ComponentProps, type RefObject } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -13,7 +13,8 @@ import { headerSearchAction, removesHeaderScope } from './authority';
 import { useHeaderSearchFilterRegion, type HeaderSearchFilterRegion } from './filter-region';
 import { ScopeChip } from './scope-chip';
 import { initialHeaderSearchState, reduceHeaderSearchState, type HeaderSearchState } from './state';
-import { loadGlobalHeaderSuggestions, readHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
+import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
+import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
 
 export type HeaderSearchProps = {
@@ -46,6 +47,8 @@ type ViewProps = Pick<HeaderSearchProps, 'locale' | 'fields' | 'suggestionRatio'
   onRemoveScope?(): void;
   onFilters?(): void;
   onSuggestion?(href: string): void;
+  onActive?(index: number): void;
+  onRetry?(): void;
   triggerRef?: RefObject<HTMLButtonElement | null>;
 };
 
@@ -65,24 +68,36 @@ export function HeaderSearchView({
   onRemoveScope = () => undefined,
   onFilters,
   onSuggestion,
+  onActive,
+  onRetry,
   suggestionRatio,
   triggerRef,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
   const action = headerSearchAction(locale, scope);
   const count = new Intl.NumberFormat(locale).format(region?.activeCount ?? 0);
-  const subjects = result?.subjects ?? [];
+  const subjects = suggestions === 'ready' ? (result?.subjects ?? []) : [];
   const status = !action
     ? m.header_search_scope_unavailable()
-    : suggestions === 'error'
-      ? m.search_suggestions_failed()
-      : suggestions === 'loading'
-        ? m.header_search_loading()
-        : suggestions === 'empty'
-          ? m.search_no_suggestions()
-          : suggestions === 'unavailable'
-            ? m.header_search_scope_unavailable()
-            : '';
+    : suggestions === 'closed'
+      ? m.platform_closed_message()
+      : suggestions === 'restart'
+        ? m.search_suggestions_restart()
+        : suggestions === 'credentials'
+          ? m.search_suggestions_credentials()
+          : suggestions === 'invalid'
+            ? m.search_suggestions_invalid()
+            : suggestions === 'preparing'
+              ? m.discovery_not_ready()
+              : suggestions === 'error'
+                ? m.search_suggestions_failed()
+                : suggestions === 'loading'
+                  ? m.header_search_loading()
+                  : suggestions === 'empty'
+                    ? m.search_no_suggestions()
+                    : suggestions === 'unavailable'
+                      ? m.search_suggestions_unavailable()
+                      : '';
   // Plain GET forms replace an action's query string; retain its declared context as hidden controls.
   const target = action ? new URL(action, 'https://rezics.invalid') : undefined;
   const retained = scope
@@ -128,39 +143,73 @@ export function HeaderSearchView({
         {retained.map(([name, value], index) => (
           <input key={`${name}-${index}`} type="hidden" name={name} value={value} />
         ))}
-        <div className="flex min-h-11 min-w-0 items-center gap-2 px-3">
-          <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          {scope && <ScopeChip scope={scope} onRemove={onRemoveScope} />}
-          <input
-            {...inputProps}
-            ref={inputRef}
-            name={action ? 'q' : undefined}
-            type="text"
-            role="combobox"
-            aria-label={m.search_label()}
-            aria-autocomplete="list"
-            aria-expanded={expanded}
-            aria-controls={expanded ? `${id}-suggestions` : undefined}
-            aria-activedescendant={expanded && activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
-            aria-describedby={expanded && status ? `${id}-status` : undefined}
-            placeholder={scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global()}
-            value={query}
-            autoComplete="off"
-            maxLength={256}
-            className="h-11 min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-none"
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={m.header_search_close()}
-            className={cn(
-              'grid size-9 shrink-0 place-items-center rounded-full hover:bg-accent',
-              !phoneSheet && 'md:hidden',
-              !expanded && 'hidden',
-            )}
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
+        <div className={cn(expanded && 'rounded-3xl bg-popover text-popover-foreground shadow-xl')}>
+          <div className="flex min-h-11 min-w-0 items-center gap-2 px-3">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={m.header_search_close()}
+              className={cn(
+                'grid size-9 shrink-0 place-items-center rounded-full hover:bg-accent',
+                !phoneSheet && 'md:hidden',
+                !expanded && 'hidden',
+              )}
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+            </button>
+            <Search
+              aria-hidden="true"
+              className={cn(
+                'size-4 shrink-0 text-muted-foreground',
+                expanded && (phoneSheet ? 'hidden' : 'hidden md:block'),
+              )}
+            />
+            {scope && <ScopeChip scope={scope} onRemove={onRemoveScope} />}
+            <input
+              {...inputProps}
+              ref={inputRef}
+              name={action ? 'q' : undefined}
+              type="text"
+              role="combobox"
+              aria-label={m.search_label()}
+              aria-autocomplete="list"
+              aria-haspopup="listbox"
+              aria-expanded={expanded}
+              aria-controls={expanded ? `${id}-suggestions` : undefined}
+              aria-activedescendant={expanded && subjects[activeIndex] ? `${id}-option-${activeIndex}` : undefined}
+              aria-describedby={expanded && status ? `${id}-status` : undefined}
+              placeholder={scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global()}
+              value={query}
+              autoComplete="off"
+              maxLength={256}
+              className="h-11 min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-none"
+            />
+          </div>
+          {expanded && (
+            <div className="flex items-center justify-between gap-3 px-3 pb-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!region}
+                onClick={onFilters}
+                title={!region ? m.header_search_filters_unavailable() : undefined}
+              >
+                <SlidersHorizontal aria-hidden="true" className="size-4" />
+                {m.search_filters()}
+                {region && region.activeCount > 0 ? ` (${count})` : ''}
+              </Button>
+              <Button
+                type="submit"
+                size="icon"
+                className="rounded-full"
+                disabled={!action || !query.trim()}
+                aria-label={m.search_submit()}
+              >
+                <ArrowUp aria-hidden="true" className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
         {expanded && (
           <div className="flex min-h-0 flex-1 flex-col">
@@ -168,6 +217,11 @@ export function HeaderSearchView({
               <p id={`${id}-status`} role="status" className="px-4 py-5 text-sm text-muted-foreground">
                 {status}
               </p>
+            )}
+            {onRetry && ['error', 'unavailable', 'preparing', 'restart'].includes(suggestions) && (
+              <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry}>
+                {m.search_facet_retry()}
+              </Button>
             )}
             <ul
               id={`${id}-suggestions`}
@@ -186,10 +240,16 @@ export function HeaderSearchView({
                     id={`${id}-option-${index}`}
                     role="option"
                     aria-selected={activeIndex === index}
+                    onPointerMove={() => onActive?.(index)}
                     className={cn('rounded-xl', activeIndex === index && 'bg-accent')}
                   >
                     <a
                       href={href}
+                      tabIndex={-1}
+                      onPointerDown={(event) => {
+                        if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
+                          event.preventDefault();
+                      }}
                       className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                       onClick={(event) => {
                         if (
@@ -229,28 +289,6 @@ export function HeaderSearchView({
                 );
               })}
             </ul>
-            <div className="mt-auto flex items-center justify-between gap-3 border-t border-border/60 p-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={!region}
-                onClick={onFilters}
-                title={!region ? m.header_search_filters_unavailable() : undefined}
-              >
-                {m.search_filters()}
-                {region && region.activeCount > 0 ? ` (${count})` : ''}
-              </Button>
-              <Button
-                type="submit"
-                size="icon"
-                className="rounded-full"
-                disabled={!action || !query.trim()}
-                aria-label={m.search_submit()}
-              >
-                <ArrowUp aria-hidden="true" className="size-4" />
-              </Button>
-            </div>
           </div>
         )}
         {/* Keep a default submit control for plain GET submission before the composer is expanded. */}
@@ -290,7 +328,9 @@ export function HeaderSearch({
   const form = useRef<HTMLFormElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const returningFocus = useRef(false);
-  const request = useRef<AbortController | null>(null);
+  const request = useRef<(() => void) | null>(null);
+  const [attempt, retry] = useReducer((value: number) => value + 1, 0);
+  const [composing, setComposing] = useState(false);
   const region = useHeaderSearchFilterRegion();
   useEffect(() => {
     dispatch({ type: 'sync-scope', scope });
@@ -299,32 +339,33 @@ export function HeaderSearch({
     dispatch({ type: 'sync-query', query: initialQuery });
   }, [initialQuery]);
   useEffect(() => {
-    if (!state.query.trim() || state.suggestions !== 'loading') return;
+    if (!state.expanded || !state.query.trim() || composing) return;
+    if (!validSuggestionText(state.query)) {
+      dispatch({ type: 'suggestions', state: 'invalid' });
+      return;
+    }
     const loader = state.scope ? loadScopedSuggestions : loadSuggestions;
     if (!loader || !headerSearchAction(locale, state.scope)) {
       dispatch({ type: 'suggestions', state: 'unavailable' });
       return;
     }
-    const controller = new AbortController();
-    request.current = controller;
-    const timer = setTimeout(async () => {
-      try {
-        const result = await readHeaderSuggestions(loader, state.query.trim(), locale, controller.signal, state.scope);
-        if (!controller.signal.aborted)
-          dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result });
-      } catch {
-        if (!controller.signal.aborted) dispatch({ type: 'suggestions', state: 'error' });
-      }
-    }, 200);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-    // State changes from a response or opening/closing the surface never issue another operation.
-  }, [state.query, state.scope, locale, loadSuggestions, loadScopedSuggestions]);
+    dispatch({ type: 'suggestions', state: 'loading' });
+    const cancel = startTypeahead(
+      loader,
+      state.query,
+      locale,
+      state.scope,
+      (result) => dispatch({ type: 'suggestions', state: result.subjects.length ? 'ready' : 'empty', result }),
+      (failure) => dispatch({ type: 'suggestions', state: failure }),
+    );
+    request.current = cancel;
+    return cancel;
+  }, [state.query, state.scope, state.expanded, locale, composing, attempt, loadSuggestions, loadScopedSuggestions]);
   const close = (reason: 'escape' | 'outside', restore = false) => {
-    request.current?.abort();
+    request.current?.();
     dispatch({ type: reason });
+    // A new opening reads current native data; no result survives dismissal or account navigation.
+    dispatch({ type: 'invalidate' });
     if (restore) {
       returningFocus.current = true;
       if (state.phoneSheet)
@@ -361,6 +402,18 @@ export function HeaderSearch({
       document.body.style.overflow = previous;
     };
   }, [state.phoneSheet]);
+  useEffect(() => {
+    const discard = () => close('outside');
+    const hidden = () => {
+      if (document.hidden) discard();
+    };
+    window.addEventListener('pagehide', discard);
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      window.removeEventListener('pagehide', discard);
+      document.removeEventListener('visibilitychange', hidden);
+    };
+  }, []);
   const visit = (href: string) => {
     close('outside');
     if (onNavigate) onNavigate(href);
@@ -380,10 +433,13 @@ export function HeaderSearch({
       onOpen={open}
       onClose={() => close('escape', true)}
       onRemoveScope={() => {
+        request.current?.();
         dispatch({ type: 'remove-scope' });
         input.current?.focus();
       }}
       onSuggestion={visit}
+      onActive={(index) => dispatch({ type: 'active', index })}
+      onRetry={retry}
       onFilters={() => {
         close('outside');
         region?.open();
@@ -396,25 +452,35 @@ export function HeaderSearch({
           if (!state.expanded) open();
         },
         onChange: (event) => {
+          request.current?.();
           if (!state.expanded) open();
           dispatch({ type: 'query', query: event.currentTarget.value });
         },
+        onCompositionStart: () => {
+          request.current?.();
+          dispatch({ type: 'invalidate' });
+          setComposing(true);
+        },
+        onCompositionEnd: (event) => {
+          dispatch({ type: 'query', query: event.currentTarget.value });
+          setComposing(false);
+        },
         onKeyDown: (event) => {
           if (event.nativeEvent.isComposing) return;
+          if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !state.expanded) {
+            event.preventDefault();
+            open();
+            return;
+          }
           if (removesHeaderScope(event.key, state.query, state.scope)) {
+            request.current?.();
             event.preventDefault();
             dispatch({ type: 'remove-scope' });
           }
           const subjects = state.result?.subjects ?? [];
-          if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && subjects.length) {
+          const next = nextSuggestion(event.key, state.activeIndex, subjects.length);
+          if (next !== undefined && state.expanded) {
             event.preventDefault();
-            if (!state.expanded) open();
-            const next =
-              event.key === 'ArrowDown'
-                ? (state.activeIndex + 1) % subjects.length
-                : state.activeIndex < 0
-                  ? subjects.length - 1
-                  : (state.activeIndex - 1 + subjects.length) % subjects.length;
             dispatch({ type: 'active', index: next });
             document.getElementById(`${id}-option-${next}`)?.scrollIntoView({ block: 'nearest' });
           }
@@ -428,7 +494,7 @@ export function HeaderSearch({
       formProps={{
         onSubmit: (event) => {
           const action = headerSearchAction(locale, state.scope);
-          if (!action || !state.query.trim()) {
+          if (composing || !action || !state.query.trim()) {
             event.preventDefault();
             return;
           }
@@ -436,13 +502,14 @@ export function HeaderSearch({
           event.preventDefault();
           const url = new URL(action, window.location.origin);
           url.search = new URLSearchParams(new FormData(event.currentTarget) as never).toString();
-          url.searchParams.set('q', state.query.trim());
+          url.searchParams.set('q', state.query);
           visit(`${url.pathname}${url.search}`);
         },
         onBlur: (event) => {
           if (!state.phoneSheet && !event.currentTarget.contains(event.relatedTarget as Node | null)) close('outside');
         },
         onKeyDown: (event) => {
+          if (event.nativeEvent.isComposing) return;
           if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();
@@ -452,7 +519,7 @@ export function HeaderSearch({
             const controls = Array.from(
               form.current?.querySelectorAll<HTMLElement>('input:not([type="hidden"]),a[href],button:not(:disabled)') ??
                 [],
-            );
+            ).filter((control) => control.tabIndex >= 0 && control.getClientRects().length > 0);
             const first = controls[0],
               last = controls.at(-1);
             if (event.shiftKey && document.activeElement === first) {

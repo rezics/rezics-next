@@ -1,11 +1,54 @@
 import type { KernelClient } from '@rezics/client';
-import { kernelClient, requestLocale } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
-import { readRelease } from '../subject/definitions.ts';
+import { problem, problemResponse } from '../media/kernel.ts';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+import type { SessionEnv } from '../session/client';
+import { validSuggestionText } from './typeahead';
 import type { SubjectHit } from './results.tsx';
 
 type Suggested = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
-type SuggestQuery = { q: string; limit: number; languages: string[] };
+export type SuggestQuery = { q: string; limit: number; languages: string[] };
+export const SUGGESTION_LIMIT = 8;
+
+export function validateSuggestQuery(query: SuggestQuery): SuggestQuery {
+  if (
+    !validSuggestionText(query.q) ||
+    !Number.isInteger(query.limit) ||
+    query.limit < 1 ||
+    query.limit > 10 ||
+    query.languages.length < 1 ||
+    query.languages.length > 8 ||
+    new Set(query.languages).size !== query.languages.length ||
+    query.languages.some((language) => language.length > 35 || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language))
+  )
+    throw problem(400, 'invalid_request', 'Invalid suggestion parameters');
+  return query;
+}
+
+/** One native operation, with the supplied identity and cancellation; never retry anonymously. */
+export async function readSubjectSuggestions(
+  client: KernelClient,
+  query: SuggestQuery,
+  credential: string | null,
+  signal: AbortSignal,
+): Promise<Suggested> {
+  signal.throwIfAborted();
+  const result = await client.subjects.$suggest.get({
+    query: validateSuggestQuery(query),
+    headers: credential === null ? {} : { authorization: credential },
+    fetch: { signal },
+  });
+  signal.throwIfAborted();
+  if (result.error) {
+    const body = result.error.value as { code?: unknown };
+    throw problem(
+      result.status,
+      typeof body?.code === 'string' ? body.code : 'dependency_unavailable',
+      'Suggestions unavailable',
+    );
+  }
+  return { ...result.data, subjects: result.data.subjects.slice(0, query.limit) };
+}
 
 /**
  * The kernel's suggestions with the names of the types they carry, so the typeahead can print each suggestion's type
@@ -17,19 +60,51 @@ export type SuggestionResult = Omit<Suggested, 'subjects'> & {
 };
 
 export async function suggestSubjects(query: string, request: Request): Promise<SuggestionResult> {
+  const [{ kernelClient, requestLocale }, { readRelease }, { viewerCredential }] = await Promise.all([
+    import('../kernel/client.ts'),
+    import('../subject/definitions.ts'),
+    import('../session/request.ts'),
+  ]);
   const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
   const languages = requestLanguages(locale ?? 'en');
+  const rawLimit = new URL(request.url).searchParams.get('limit');
+  const parameters = validateSuggestQuery({
+    q: query,
+    limit: rawLimit === null ? SUGGESTION_LIMIT : /^\d+$/.test(rawLimit) ? Number(rawLimit) : NaN,
+    languages,
+  });
   // The release is cached by digest; a failed read leaves the suggestions without type names.
   const [result, release] = await Promise.all([
-    kernelClient(locale).subjects.$suggest.get({
-      query: { q: query, limit: 8, languages } satisfies SuggestQuery as never,
-    }),
+    readSubjectSuggestions(kernelClient(locale), parameters, viewerCredential(request), request.signal),
     readRelease().catch(() => undefined),
   ]);
-  if (result.error) throw new Error('Suggestions failed');
   const types: SuggestionResult['types'] = {};
-  for (const subject of result.data.subjects)
+  for (const subject of result.subjects)
     if (release && Object.hasOwn(release.types, subject.type))
       types[subject.type] = release.types[subject.type]?.labels ?? {};
-  return { ...(result.data as Suggested), types } as SuggestionResult;
+  return { ...result, types };
+}
+
+/** The shell and subject pickers share the ordinary, private no-store BFF route. */
+export async function suggestionResponse(
+  request: Request,
+  env: Partial<SessionEnv>,
+  read = suggestSubjects,
+): Promise<Response> {
+  if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
+  try {
+    const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
+      import('../session/request.ts'),
+      import('../session/csrf.ts'),
+    ]);
+    const stale = await prepareSession(request, env);
+    if (stale) throw problem(401, 'invalid_credentials', 'Sign in again');
+    if (carriesSession(request) && !viewerCredential(request))
+      throw problem(503, 'dependency_unavailable', 'Session unavailable');
+    const query = new URL(request.url).searchParams.get('q') ?? '';
+    return Response.json(await read(query, request), { headers: { 'cache-control': 'private, no-store' } });
+  } catch (error) {
+    if (isPlatformClosedError(error)) return problemResponse(problem(403, 'platform_closed', 'Not open yet'));
+    return problemResponse(error);
+  }
 }

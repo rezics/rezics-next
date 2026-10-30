@@ -1432,5 +1432,9 @@
   "av_application": "最新申請",
   "av_requested_subject": "開啟申請認證的目錄主體",
   "av_no_application": "尚未提交認證申請。",
-  "av_applicant_settings": "申請與帳號設定"
+  "av_applicant_settings": "申請與帳號設定",
+  "search_suggestions_unavailable": "暫時無法提供搜尋建議。",
+  "search_suggestions_restart": "搜尋建議已變更，請重試以取得最新結果。",
+  "search_suggestions_invalid": "搜尋建議最多支援 64 個字元。提交可搜尋完整內容。",
+  "search_suggestions_credentials": "無法驗證你的登入狀態。請重新登入以載入搜尋建議。"
 }
