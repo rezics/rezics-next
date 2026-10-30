@@ -31,7 +31,7 @@ type Exchange = {
   response: string;
   keys: string[];
 };
-type Candidate = { id: string; source: BatchCommand['source']; statement: { property: { id: string } } };
+type Candidate = { id: string; source: BatchCommand['source'] | null; statement: BatchStatement };
 type Journal = { source: string; external_id: string; key: string; bytes: string; acknowledgement: string | null };
 type MediaJournal = {
   source: string;
@@ -350,7 +350,7 @@ export async function runCliAckRecoveryJourney() {
         ],
         [
           'retraction',
-          'SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100',
+          'SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision,candidate_id LIMIT 100',
         ],
         ['revision', 'SELECT * FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100'],
       ] as const) {
