@@ -336,7 +336,11 @@ export async function runCliAckRecoveryJourney() {
       expect(response.status).toBe(200);
       const body = (await response.json()) as { subject: { statements: Record<string, unknown[]> } };
       const listing = await candidates(id, context);
-      return { statements: body.subject.statements['schema:name'], adoption: listing.body.adoption };
+      const acceptedHeads = (listing.body.candidates as unknown as { id: string; head: number | null }[])
+        .filter((candidate) => candidate.head !== null)
+        .map((candidate) => ({ id: candidate.id, head: candidate.head }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+      return { statements: body.subject.statements['schema:name'], adoption: listing.body.adoption, acceptedHeads };
     }
     async function nativeEffects(id: string) {
       const parameters = [routeOf(id), id];
@@ -422,6 +426,7 @@ export async function runCliAckRecoveryJourney() {
       ).toBe(200);
       const selection = await subject(id, context);
       expect(selection.statements).toHaveLength(1);
+      expect(selection.acceptedHeads).toHaveLength(2);
       const bootstrap = local.journals.filter((journal) =>
         (JSON.parse(journal.bytes) as BatchWriteRequest).commands.some((command) => command.op === 'create'),
       );
@@ -470,7 +475,9 @@ export async function runCliAckRecoveryJourney() {
           .filter((journal) => loss.exchange.keys.includes(journal.key))
           .every((journal) => journal.acknowledgement === null),
       ).toBe(true);
-      pendingAfterClose.push(...local.pending.map((pending) => ({ ...pending, source: child.feed.source })));
+      pendingAfterClose.push(
+        ...local.pending.map((pending) => ({ ...pending, source: local.active!.source as Source })),
+      );
       effectsBeforeResume.push(await nativeEffects(child.id));
     }
     expect(committedBeforeLoss).toHaveLength(2);
