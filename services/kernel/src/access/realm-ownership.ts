@@ -435,6 +435,9 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     }
     const at = authoritativeTimeValue(command.time);
     const operationId = currentCommand(tx).transactionId;
+    // The installed native role-provenance trigger records this operation for
+    // both the new grant and the erased owner's destructive removal.
+    await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [operationId]);
     if (best && best.role !== REALM_OWNER_ROLE) {
       const changed = await roleMutation.run(tx, {
         route: resource.route, resource_id: resource.id, subject_kind: 'identity', subject_id: best.accountId,
