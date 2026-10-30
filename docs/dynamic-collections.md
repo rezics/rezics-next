@@ -1,7 +1,9 @@
 # Dynamic Collections
 
-This specification extends [Library and Collections](library-and-collections.md). It is specification-only: it adds no runtime route, schema, worker, definition, local query engine or parallel shelf implementation.
-The first implementation scope is built-in dynamic Collections and the shared Collection members page. User-saved query runtime follows after that scope and uses the shared filter grammar with reviewed native plan admission.
+This specification extends [Library and Collections](library-and-collections.md). Built-in dynamic Collections,
+the shared members page and the saved rule editor use one Source and the shared filter grammar. The
+[Collection editor](collection-presentation.md) adds ordinary owned saved dynamic Collections to this scope;
+their implementation does not change a built-in identity or meaning.
 
 [Filtered lists](filtered-lists.md) owns the shared complete indexed observation, current disclosure, direct/prepared
 admission, useful pages, freshness, canonical-list identity and cost contract. Required behavior below is distinct
@@ -18,7 +20,7 @@ A Collection keeps one identity, curator, title, description, visibility, follow
 - **Dynamic:** a saved predicate evaluated against the curator's personal library facts and admitted indexed catalogue properties. A
   subject appears at most once, regardless of how many matching facts it has.
 
-**DECIDED DTO:** `membershipKind` discriminates a union, never a bag of optional fields. Curated Collections retain required `createdAt`, `updatedAt`, `memberCount` and `orderEpoch`. Dynamic Collections omit all four; Web displays no count/time, never zero. An unrenamed dynamic `title` is null or absent; an explicit owner rename wins. Dynamic DTOs include `builtinKind: 'everything' | 'state' | 'liked'`. State `builtinLabels` is the actual accepted state's standard BCP47 locale map (`zh-Hans`/`zh-Hant`, never `zh`), or `{}` when absent; Web uses its neutral Other fallback. Liked and Everything use Web's normal localized messages. Liked is always private with owner tuple `{kind:'liked'}`; it exposes no public profile/predicate/pin fields or curated count/time/order. Only owner discovery may include the private `builtin` tuple; public DTOs never disclose profile/state IDs, predicates, pins or release digests. No fixed vertical vocabulary is added. A dynamic member item contains `kind: "dynamic"`, its `subjectId`, and the same optional subject summary as a curated item. It has no occurrence ID, note, or added time. No route creates a pretend occurrence for a dynamic result.
+**DECIDED DTO:** `membershipKind` discriminates a union, never a bag of optional fields. Curated Collections retain required `createdAt`, `updatedAt`, `memberCount` and `orderEpoch`. Dynamic Collections omit all four; Web displays no count/time, never zero. An unrenamed dynamic `title` is null or absent; an explicit owner rename wins. Built-in dynamic DTOs include `builtinKind: 'everything' | 'state' | 'liked'`; ordinary saved-dynamic DTOs omit `builtinKind` and carry their explicit title. State `builtinLabels` is the actual accepted state's standard BCP47 locale map (`zh-Hans`/`zh-Hant`, never `zh`), or `{}` when absent; Web uses its neutral Other fallback. Liked and Everything use Web's normal localized messages. Liked is always private with owner tuple `{kind:'liked'}`; it exposes no public profile/predicate/pin fields or curated count/time/order. Only owner discovery may include the private `builtin` tuple; public DTOs never disclose profile/state IDs, predicates, pins or release digests. No fixed vertical vocabulary is added. A dynamic member item contains `kind: "dynamic"`, its `subjectId`, and the same optional subject summary as a curated item. It has no occurrence ID, note, or added time. No route creates a pretend occurrence for a dynamic result.
 
 The first-scope built-ins are:
 
@@ -202,7 +204,12 @@ nor purge timing, and this contract adds no lifecycle engine or synchronous wait
 
 ## Saved queries and execution admission
 
-First scope exposes built-ins, not a route to save/run user-authored queries. Later saved queries use the same
+Saved dynamic Collections use `POST /v1/collections` with the closed body
+`{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}`.
+`PUT /v1/collections/{collectionId}/rule` takes the closed body `{revision,filter,sort?}` and returns
+`200 {collection}`. The numeric revision is the current Collection CAS. A rule edit increments the rule's own
+revision and Source generation once; a title/cover edit does not edit its rule. Curated creation and metadata
+operations retain their existing bodies and grants. Both operations use the same
 closed catalogue grammar and semantic admission; this document does not create a second catalogue predicate AST.
 Owner predicates remain owner-only and require reviewed shared admission/native owner plans. Definitions and
 accepted pins own meaning, not localized labels or fixed vertical vocabulary. The shared pure matcher is the
@@ -212,7 +219,31 @@ Saving validates the full filter + source + order against immutable meaning, com
 and owner authority. Admitted negatives need complete coverage; unsupported execution rejects 422 before enumeration.
 A supported prepared plan may become ready through retained finite work. Private AST/facts and private candidate
 counts never become public output. Publication exposes only the last complete adopted subject set. Custom query
-execution remains disabled until reviewed native admission and index-plan acceptance exist.
+execution remains unavailable until the actual shared native admission and member producer are bound.
+
+### Saved editor implementation boundary
+
+`collection-rules.ts` supplies shared parsing/immutable-release admission, complete expanded private-family
+dependency extraction, native current authorization before receipt replay, and route-leading rule storage/CAS
+helpers consumed by the existing Collection commands. Only the actual common preparation declaration's `id`
+sort is currently named; other string sorts reject `422 unsupported_query`. These helpers do not prove an
+executable source plan. The private rule has one retained copy on its Collection row; receipts/events contain no
+AST and no new work payload retains it. Existing terminal header deidentification clears the rule in that same
+row mutation. No public Collection projection selects its AST, release or private family operands. Dynamic
+metadata omits curated counts and timestamps; it never turns an unavailable source into ready-empty output.
+
+In this checkout `createCollectionSource` remains explicitly unavailable and has no saved-filter execution
+admission declaration. `createMembersPreparation` remains unimplemented. The saved commands therefore reach an
+explicit `503 dependency_unavailable` boundary **before any rule/resource write or receipt replay**. BASIC and
+FULL dynamic member reads also stay unavailable, instead of reading the curated occurrence table. The HTTP
+outcome suite requires real saved creation, CAS/replay and useful member/clear/Undo outcomes; those outcomes are
+not claimed delivered by the helper code or typing. No replacement evaluator, scheduler or admission callback
+is introduced. The common Source owner must supply its exact saved-rule admission/member types for binding.
+
+Public dynamic execution additionally needs the actual complete explicit Publication provider. That producer is
+absent here. Public/unlisted requests, including an editor's public request, cannot evaluate current private
+curator facts. A successful public saved membership delivery is not claimed. Generated OpenAPI/client/schema
+artifacts and native outcome checks are owned by the controller after integration.
 
 ## Query, identity and cursor bounds
 
@@ -285,7 +316,10 @@ canonical cross-page uniqueness, pending-epoch readiness and native current curs
 The API suites cover curated ordering, Everything/state views, profiles and old pins, overlapping labels, source changes, viewer
 authorization, disclosure, Search/count isolation, query and cursor bounds, and stale projection delivery. The label outcomes also
 prove read-only owner discovery and reads cause no writes, denied follow/update do not materialize, and first authorized writes keep
-the logical IDs. User-saved-query runtime outcomes remain a separate later phase. Dynamic outcomes additionally require actual SQL point evidence for opaque state references, identical denied/unknown concealment, and terminal deletion defeating paused repair and follow. No runtime pass is claimed by these specifications.
+the logical IDs. Saved-rule editor outcomes are in the same adopted scope and require the shared Source and
+preparation binding above. Dynamic outcomes additionally require actual SQL point evidence for opaque state
+references, identical denied/unknown concealment, and terminal deletion defeating paused repair and follow.
+No runtime pass is claimed by these specifications.
 
 ## Ordered implementation plan
 

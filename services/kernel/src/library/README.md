@@ -11,7 +11,8 @@ required behavior and inventories native code; requirements below do not establi
 [profile-consumer](../../../../docs/library-profile-consumers.md) contracts own their respective seams. Indexed
 observations and shared source-scoped concurrent identity currentness supersede their older per-page proof/replay,
 whole-selected-slot, universal-key-budget and identity-basis protocols. Shared owners revise their ABIs; Library
-adds no alternate mode or budget. User-saved dynamic queries and holding-derived game-platform filters remain deferred.
+adds no alternate mode or budget. The saved dynamic rule editor is adopted by the
+[Collection editor](../../../../docs/collection-presentation.md); holding-derived game-platform filters remain deferred.
 
 Native curated Collections store ordered occurrences, including repeated subjects, notes and order. Entries, copies,
 progress sessions/units/history, follows and published logs have production commands/readers. The public subject
@@ -29,8 +30,18 @@ participants; this member implementation adds no terminal acknowledgement or sha
 
 Current implementation evidence is narrower than the capability:
 
-- `collection-reads.ts` still reads stored headers and ordinal occurrence pages into curated-shaped DTOs. It does not
-  supply logical built-in discovery, dynamic dispatch or canonical duplicate-free browsing.
+- `collection-reads.ts` reads stored headers and ordinal curated occurrence pages. Dynamic headers omit curated
+  counts/timestamps, and BASIC/FULL dynamic members explicitly remain unavailable until the common Source binding.
+  It does not supply logical built-in discovery or canonical duplicate-free browsing.
+- `collection-rules.ts` supplies `parseCollectionRule`, `admitCollectionRule`, `collectionRuleActions`,
+  `prepareCollectionRuleAuthority`, `authorizeCollectionRule`, `readSavedCollectionRule`, `insertSavedCollection`
+  and `updateSavedCollectionRule`. The existing creator and Collection mutation transaction consume them;
+  no second command executor or evaluator exists. Rule CAS advances its own revision and Source generation once.
+  Its AST has one private row copy, is absent from receipts/events/public projections, and is cleared when the
+  existing account retention deidentifies its header. The native owner/preparation types have not been published
+  for saving/executing this filter+source+order. `requireCollectionRuleExecution` therefore prevents successful
+  saved writes/replays and member pages with `503 dependency_unavailable`. This is a caller-owned unavailable
+  boundary, not a guessed producer declaration, provisional native success or ready-empty result.
 - `collection-source-native.ts` supplies metered stored-header metadata, native authorization, raw fact/member ranges
   and original-subject probes. Headerless references and public/unlisted dynamic output return unavailable. These
   helpers do not implement the shared members service or the adopted complete indexed filter/identity plan.

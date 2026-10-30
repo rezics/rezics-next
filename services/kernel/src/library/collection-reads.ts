@@ -28,6 +28,7 @@ import curatorPublicPage from './collection-reads-curator-public.sql';
 import curatorPage from './collection-reads-curator.sql';
 import memberPage from './collection-reads-members.sql';
 import listingCounts from './listing-counts.sql';
+import { requireCollectionRuleExecution } from './collection-rules.ts';
 
 type CuratorPageOptions = { curatorAccountId: string | null; cursor?: string | null; limit?: number };
 
@@ -46,6 +47,11 @@ export type CollectionView = CollectionPresentation & {
   createdAt: string;
   updatedAt: string;
 };
+
+export type SavedDynamicCollectionView = Omit<CollectionView, 'memberCount' | 'createdAt' | 'updatedAt'> & {
+  membershipKind: 'dynamic';
+};
+export type CollectionResourceView = CollectionView | SavedDynamicCollectionView;
 
 export type MemberView = {
   id: string;
@@ -96,8 +102,19 @@ function collectionView(row: {
   memberCount: number;
   createdAt: string;
   updatedAt: string;
-}): CollectionView {
+}): CollectionResourceView {
   if (row.visibility !== 'private' && row.visibility !== 'unlisted' && row.visibility !== 'public') throw notFound();
+  if (row.membershipKind === 'dynamic')
+    return {
+      ...collectionPresentation(row),
+      id: row.id,
+      curatorAccountId: row.curatorAccountId,
+      title: row.title,
+      description: row.description,
+      visibility: row.visibility,
+      revision: row.revision,
+      membershipKind: 'dynamic',
+    };
   return {
     ...collectionPresentation(row),
     id: row.id,
@@ -260,7 +277,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     id: string,
     deadline?: number,
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
-  ): Promise<CollectionView> {
+  ): Promise<CollectionResourceView> {
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
     return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
@@ -273,7 +290,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       sourceGeneration: string;
     },
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ): Promise<CollectionView> {
+  ): Promise<CollectionResourceView> {
     const cover =
       row.coverMediaId === null
         ? null
@@ -341,7 +358,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     viewer: Actor,
     options: CuratorPageOptions,
     publicOnly: boolean,
-  ): Promise<{ collections: CollectionView[]; next: string | null }> {
+  ): Promise<{ collections: CollectionResourceView[]; next: string | null }> {
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
     const curatorAccountId = options.curatorAccountId;
     if (typeof curatorAccountId !== 'string') throw new TypeError('Collection list options need a curator account id');
@@ -388,7 +405,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
             : null,
       };
     });
-    const collections: CollectionView[] = [];
+    const collections: CollectionResourceView[] = [];
     for (const row of result.collections) collections.push(await present(viewer, row));
     return { ...result, collections };
   }
@@ -401,6 +418,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     const page = pageRequest(options, ['cursor', 'limit']);
     const collection = await loadCollection(viewer, collectionId);
     if (!collection) throw notFound();
+    if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
     const route = routeOf(collectionId)!;
     const binding: CursorBinding = { operation: 'library.collection.members', parameters: { collectionId } };
     const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);

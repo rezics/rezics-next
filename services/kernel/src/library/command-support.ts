@@ -103,6 +103,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     request: OwnAccountCommand,
     body: LibraryCommandBody<T>,
     prepare?: CommandAuthorization['prepare'],
+    authorizePrepared?: (tx: CommandTransaction, attempt: CommandAttempt) => Promise<void>,
   ): Promise<CommandOutcome<T>> {
     const owner = ownActor(actor);
     const route = routeOf(owner.accountId);
@@ -113,7 +114,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => new GrantDeniedError(),
       ...(prepare ? { prepare } : {}),
-      async authorize(tx) {
+      async authorize(tx, attempt) {
         try {
           await shareAccount(tx, owner.accountId);
         } catch (error) {
@@ -132,6 +133,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           !owner.scopes.includes(request.action)
         )
           throw new GrantDeniedError();
+        await authorizePrepared?.(tx, attempt);
         return 'execute';
       },
     };
@@ -170,6 +172,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     actor: Actor,
     request: OwnAccountCommand & { prepare: (attempt: CommandAttempt) => Promise<P> },
     body: (tx: CommandTransaction, context: CommandContext, prepared: P) => Promise<CommandResult<T>>,
+    authorizePrepared?: (tx: CommandTransaction, attempt: CommandAttempt, prepared: P) => Promise<void>,
   ): Promise<CommandOutcome<T>> {
     // Native T is fresh on retry. Evidence belongs only to this invocation and T.
     const preparations = new WeakMap<AuthoritativeTime, { value: P }>();
@@ -183,6 +186,11 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       },
       async (attempt) => {
         preparations.set(attempt.time, { value: await request.prepare(attempt) });
+      },
+      async (tx, attempt) => {
+        const prepared = preparations.get(attempt.time);
+        if (!prepared) throw new Error('Missing Library command preparation for native authorization');
+        await authorizePrepared?.(tx, attempt, prepared.value);
       },
     );
   }

@@ -18,6 +18,7 @@ import type { Collection, CollectionMember } from './collection-model.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
 import { collectionPresentation } from './collection-presentation.ts';
+import { parseCollectionRule, requireCollectionRuleExecution } from './collection-rules.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
@@ -55,7 +56,30 @@ export const collectionSchema = t.Object(
 );
 const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
-const collectionResponse = t.Object({ collection: collectionSchema }, closed);
+const {
+  memberCount: _count,
+  createdAt: _created,
+  updatedAt: _updated,
+  ...dynamicMetadata
+} = collectionSchema.properties;
+export const savedDynamicCollectionSchema = t.Object(
+  { ...dynamicMetadata, membershipKind: t.Literal('dynamic') },
+  closed,
+);
+export const collectionResourceSchema = t.Union([collectionSchema, savedDynamicCollectionSchema]);
+const embeddedCollectionSchema = t.Union([
+  embedded(collectionSchema, curatorFields),
+  embedded(savedDynamicCollectionSchema, curatorFields),
+]);
+const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
+const createMetadata = {
+  title: t.String(),
+  description: t.Optional(nullableString),
+  visibility,
+  presentationKind: t.Optional(nullableString),
+  coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
+};
+const ruleBody = { filter: t.Unknown(), sort: t.Optional(t.String()) };
 const memberResponse = t.Object({ member: memberSchema }, closed);
 const subjectPage = t.Object(
   {
@@ -96,7 +120,7 @@ const failures = {
   403: problemSchema('forbidden'),
   404: problemSchema('not_found'),
   409: problemSchema('conflict', 'collection_full', 'stale_cursor'),
-  422: problemSchema('idempotency_conflict'),
+  422: problemSchema('idempotency_conflict', 'unsupported_query'),
   503: problemSchema(
     'semantic_not_ready',
     'dependency_unavailable',
@@ -164,6 +188,17 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
 }
 function collectionView(value: Collection) {
   const { id, curatorAccountId, title, description, visibility, revision, memberCount, createdAt, updatedAt } = value;
+  if (value.membershipKind === 'dynamic')
+    return {
+      id,
+      curatorAccountId,
+      title,
+      description,
+      visibility,
+      revision,
+      membershipKind: 'dynamic' as const,
+      ...collectionPresentation(value),
+    };
   return {
     id,
     curatorAccountId,
@@ -245,25 +280,31 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         headers,
         body: strict(
-          t.Object(
-            {
-              title: t.String(),
-              description: t.Optional(nullableString),
-              visibility,
-              presentationKind: t.Optional(nullableString),
-              coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
-            },
-            closed,
-          ),
+          t.Union([
+            t.Object(createMetadata, closed),
+            t.Object(
+              { ...createMetadata, membershipKind: t.Literal('dynamic'), rule: t.Object(ruleBody, closed) },
+              closed,
+            ),
+          ]),
         ),
         response: { 201: collectionResponse, ...failures },
         detail: { ...detail('collection.create', 'collection:create'), 'x-resource-types': ['library.collection'] },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => write().createCollection(actor, body, key), 'forbidden'),
+          mapped(
+            () =>
+              write().createCollection(
+                actor,
+                'membershipKind' in body ? body : { ...body, membershipKind: 'curated' },
+                key,
+              ),
+            'forbidden',
+          ),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
@@ -275,10 +316,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         query: t.Object({ curatorAccountId: t.Union([id, t.Null()]), ...pageQuery }, closed),
         response: {
-          200: t.Object(
-            { collections: t.Array(embedded(collectionSchema, curatorFields)), next: nullableString },
-            closed,
-          ),
+          200: t.Object({ collections: t.Array(embeddedCollectionSchema), next: nullableString }, closed),
           ...failures,
         },
         detail: detail('collection.list', 'collection:read', true),
@@ -294,10 +332,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: t.Object({ accountId: id }, closed),
         query: t.Object(pageQuery, closed),
         response: {
-          200: t.Object(
-            { collections: t.Array(embedded(collectionSchema, curatorFields)), next: nullableString },
-            closed,
-          ),
+          200: t.Object({ collections: t.Array(embeddedCollectionSchema), next: nullableString }, closed),
           ...failures,
         },
         detail: detail('account.collections', 'collection:read', true),
@@ -317,7 +352,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         query: t.Object(viewQuery, closed),
         params: collectionParams,
-        response: { 200: t.Object({ collection: embedded(collectionSchema, curatorFields) }, closed), ...failures },
+        response: { 200: t.Object({ collection: embeddedCollectionSchema }, closed), ...failures },
         detail: detail('collection.get', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
@@ -326,6 +361,28 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             collection: await read().readCollection(actor, params.collectionId),
           }),
         ),
+    )
+    .put(
+      '/v1/collections/:collectionId/rule',
+      {
+        params: collectionParams,
+        headers,
+        body: strict(
+          t.Object({ revision: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }), ...ruleBody }, closed),
+        ),
+        response: { 200: collectionResponse, ...batchFailures },
+        detail: detail('collection_rule.update', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().updateCollectionRule(actor, params.collectionId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { collection: await written(result.value, actor) };
+      },
     )
     .patch(
       '/v1/collections/:collectionId',
@@ -384,7 +441,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       '/v1/collections/:collectionId/members',
       {
         params: collectionParams,
-        query: t.Object(pageQuery, closed),
+        query: t.Object({ ...pageQuery, filter: t.Optional(t.String()), sort: t.Optional(t.String()) }, closed),
         response: {
           200: t.Object(
             {
@@ -404,6 +461,18 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
+        if (query.filter !== undefined || query.sort !== undefined) {
+          let filter: unknown;
+          try {
+            filter = query.filter === undefined ? undefined : JSON.parse(query.filter);
+          } catch {
+            throw new ProblemError('invalid_request');
+          }
+          if (filter === undefined) throw new ProblemError('unsupported_query');
+          parseCollectionRule({ filter, ...(query.sort === undefined ? {} : { sort: query.sort }) });
+          // No common filter/page admission is published yet; never silently run a paging-only request.
+          await requireCollectionRuleExecution();
+        }
         return admission.run('normal', job, () =>
           query.view === 'FULL'
             ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)

@@ -43,7 +43,15 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 
-function asCollection(row: CollectionResult): Collection {
+function asCollection(
+  row: Omit<CollectionResult, 'membershipKind' | 'builtinKind' | 'hasSavedRule'> & {
+    membershipKind?: string;
+    builtinKind?: string | null;
+    hasSavedRule?: boolean;
+  },
+): Collection {
+  if (row.membershipKind !== undefined && row.membershipKind !== 'curated' && row.membershipKind !== 'dynamic')
+    throw new Error('Invalid Collection membership kind');
   return {
     id: row.id,
     curatorAccountId: row.curatorAccountId,
@@ -58,6 +66,13 @@ function asCollection(row: CollectionResult): Collection {
     orderEpoch: row.orderEpoch,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
+    ...(row.membershipKind === 'dynamic'
+      ? {
+          membershipKind: row.membershipKind,
+          builtinKind: row.builtinKind ?? null,
+          hasSavedRule: row.hasSavedRule ?? false,
+        }
+      : {}),
   };
 }
 

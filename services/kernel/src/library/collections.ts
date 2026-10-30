@@ -23,7 +23,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { Access, AccessClient, AccountActor, Actor } from '../request/access.ts';
+import type { Access, AccessCheck, AccessClient, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
@@ -58,6 +58,17 @@ import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-sup
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
 import { resolveSubject } from './subject-anchor.ts';
+import {
+  admitCollectionRule,
+  authorizeCollectionRule,
+  insertSavedCollection,
+  parseCollectionRule,
+  prepareCollectionRuleAuthority,
+  requireCollectionRuleExecution,
+  updateSavedCollectionRule,
+  type AdmittedCollectionRule,
+  type CollectionRule,
+} from './collection-rules.ts';
 
 const MEMBER_LIMIT = 5_000;
 const TITLE_LIMIT = 200;
@@ -270,6 +281,7 @@ export function createCollectionCommands(config: {
   return {
     createCollection,
     updateCollection,
+    updateCollectionRule,
     deleteCollection,
     addMember,
     moveMember,
@@ -281,14 +293,24 @@ export function createCollectionCommands(config: {
 
   async function createCollection(
     actor: Actor,
-    draft: PresentationSelection & { title: string; description?: string | null; visibility: CollectionVisibility },
+    draft: PresentationSelection & { title: string; description?: string | null; visibility: CollectionVisibility } & (
+        | { membershipKind?: 'curated' }
+        | { membershipKind: 'dynamic'; rule: unknown }
+      ),
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
     const title = requiredText(draft.title, TITLE_LIMIT);
     const description = draft.description === undefined ? null : optionalText(draft.description, DESCRIPTION_LIMIT);
     const visibility = visibilityOf(draft.visibility);
     const selection = presentationSelection(draft);
-    const input = { title, description, visibility, ...selection };
+    const rule = draft.membershipKind === 'dynamic' ? parseCollectionRule(draft.rule) : null;
+    const input = {
+      title,
+      description,
+      visibility,
+      ...selection,
+      ...(draft.membershipKind === 'dynamic' ? { membershipKind: 'dynamic', rule: draft.rule } : {}),
+    };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
     const id = route === null ? newId(1) : newId(route);
     let provenance: { transactionId: string; at: string } | null = null;
@@ -300,11 +322,30 @@ export function createCollectionCommands(config: {
         kind: 'library.collection.create',
         requestKey,
         input,
-        prepare: () => preparePresentationSelection(config, actor, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
+        async prepare(attempt) {
+          const failure = await preparePresentationSelection(
+            config,
+            actor,
+            selection,
+            deadlineFor(WORK_STEP_DEADLINE_MS),
+          );
+          const admitted = rule ? await admitCollectionRule(pool, rule) : null;
+          const checks =
+            admitted && actor.kind === 'account'
+              ? await prepareCollectionRuleAuthority(
+                  config,
+                  actor,
+                  admitted.filter,
+                  attempt,
+                  deadlineFor(WORK_STEP_DEADLINE_MS),
+                )
+              : [];
+          return { failure, admitted, checks };
+        },
       },
-      async (tx, command, failure) => {
+      async (tx, command, prepared) => {
         if (actor.kind !== 'account' || route === null) throw new GrantDeniedError();
-        if (failure) throw failure;
+        if (prepared.failure) throw prepared.failure;
         provenance = null;
         const resource = Object.freeze({ route, id });
         const authorization = parentCreationAuthorization({
@@ -345,16 +386,22 @@ export function createCollectionCommands(config: {
         const proof = await authorization.prepare!(attempt);
         if ((await authorization.authorize(tx, attempt, proof)) !== 'execute') throw new GrantDeniedError();
         const at = authoritativeTimeValue(command.time);
-        const value = await insertCollection(
-          tx,
-          route,
-          { id, curatorAccountId: actor.accountId, title, description, visibility, ...selection },
-          { transactionId: command.transactionId, time: at },
-        );
+        const collectionDraft = { id, curatorAccountId: actor.accountId, title, description, visibility, ...selection };
+        const context = { transactionId: command.transactionId, time: at };
+        let value: Collection;
+        if (prepared.admitted) {
+          await insertSavedCollection(tx, route, collectionDraft, prepared.admitted, context);
+          value = await activeCollection(tx, route, id);
+        } else value = await insertCollection(tx, route, collectionDraft, context);
         provenance = { transactionId: command.transactionId, at };
         await initializeResourceGrants(tx, { resource, type: 'library.collection', creator: actor.accountId });
         await authorization.finalize!(tx, attempt, proof);
         return { value, events: collectionEvents('updated', id, visibility === 'public') };
+      },
+      async (tx, attempt, prepared) => {
+        if (!prepared.admitted) return;
+        await authorizeCollectionRule(tx, attempt, prepared.checks);
+        await requireCollectionRuleExecution();
       },
     );
   }
@@ -368,12 +415,13 @@ export function createCollectionCommands(config: {
     input: unknown,
     body: (
       tx: CommandTransaction,
-      command: { transactionId: string; time: string },
+      command: { transactionId: string; time: string; rule?: AdmittedCollectionRule },
       route: number,
     ) => Promise<{ value: T; events: CommandEvent[] }>,
     destinationCollectionId?: string,
     prepareMembers?: (time: AuthoritativeTime) => Promise<void>,
     selection?: PresentationSelection,
+    rule?: CollectionRule,
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
@@ -410,6 +458,7 @@ export function createCollectionCommands(config: {
           context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
         });
     const failures = new WeakMap<object, ProblemError | null>();
+    const rules = new WeakMap<AuthoritativeTime, { rule: AdmittedCollectionRule; checks: readonly AccessCheck[] }>();
     const authorization: typeof normalAccess = {
       ...normalAccess,
       async prepare(attempt) {
@@ -420,11 +469,34 @@ export function createCollectionCommands(config: {
             await preparePresentationSelection(config, owner, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
           );
         await prepareMembers?.(attempt.time);
+        if (rule) {
+          const admitted = await admitCollectionRule(pool, rule);
+          rules.set(attempt.time, {
+            rule: admitted,
+            checks: await prepareCollectionRuleAuthority(
+              config,
+              owner,
+              admitted.filter,
+              attempt,
+              deadlineFor(WORK_STEP_DEADLINE_MS),
+            ),
+          });
+        }
         return proof;
       },
       async authorize(tx, attempt, proof) {
         const mode = await normalAccess.authorize(tx, attempt, proof);
         const collection = await visibleCollection(tx, owner, route, collectionId, attempt.time);
+        if (kind.startsWith('library.collection.member.') && collection.membershipKind === 'dynamic')
+          throw new ProblemError('dynamic_membership_immutable');
+        if (rule) {
+          if (collection.membershipKind !== 'dynamic' || collection.builtinKind != null || !collection.hasSavedRule)
+            throw new ProblemError('dynamic_membership_immutable');
+          if (collection.curatorAccountId !== owner.accountId) throw new GrantDeniedError();
+          const prepared = rules.get(attempt.time);
+          if (!prepared) throw new Error('Missing native Collection rule preparation');
+          await authorizeCollectionRule(tx, attempt, prepared.checks);
+        }
         try {
           // Keep the immutable curator live through commit, including receipt replay.
           if (collection.curatorAccountId === null) throw new GrantDeniedError();
@@ -433,6 +505,7 @@ export function createCollectionCommands(config: {
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
           throw error;
         }
+        if (rule) await requireCollectionRuleExecution();
         return mode;
       },
     };
@@ -449,8 +522,46 @@ export function createCollectionCommands(config: {
       async (tx, command) => {
         const failure = failures.get(command.time);
         if (failure) throw failure;
-        return body(tx, { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) }, route);
+        return body(
+          tx,
+          {
+            transactionId: command.transactionId,
+            time: authoritativeTimeValue(command.time),
+            ...(rules.get(command.time) ? { rule: rules.get(command.time)!.rule } : {}),
+          },
+          route,
+        );
       },
+    );
+  }
+
+  async function updateCollectionRule(
+    actor: Actor,
+    id: string,
+    input: { revision: number; filter: unknown; sort?: string },
+    requestKey: string,
+  ): Promise<CommandOutcome<Collection>> {
+    const revision = input.revision === 0 ? 0 : revisionOf(input.revision);
+    const rule = parseCollectionRule({
+      filter: input.filter,
+      ...(input.sort === undefined ? {} : { sort: input.sort }),
+    });
+    return mutate(
+      actor,
+      id,
+      'collection:update',
+      'library.collection.rule.update',
+      requestKey,
+      { collectionId: id, revision, filter: input.filter, ...(input.sort === undefined ? {} : { sort: input.sort }) },
+      async (tx, command, route) => {
+        if (!command.rule) throw new Error('Missing admitted Collection rule');
+        await updateSavedCollectionRule(tx, route, id, revision, command.rule, command);
+        return { value: await activeCollection(tx, route, id), events: collectionEvents('updated', id, false) };
+      },
+      undefined,
+      undefined,
+      undefined,
+      rule,
     );
   }
 
@@ -506,7 +617,10 @@ export function createCollectionCommands(config: {
           command,
         );
         if (!value) throw new ProblemError('conflict');
-        return { value, events: collectionEvents('updated', id, wasListed !== listed(value)) };
+        return {
+          value: current.membershipKind === 'dynamic' ? await activeCollection(tx, route, id) : value,
+          events: collectionEvents('updated', id, wasListed !== listed(value)),
+        };
       },
       undefined,
       undefined,

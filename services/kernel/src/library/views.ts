@@ -21,6 +21,7 @@ import { SubjectRedirectError } from '../semantic/merges.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
+import { requireCollectionRuleExecution } from './collection-rules.ts';
 import collectionRead from './collection-reads-collection.sql';
 import memberPage from './collection-reads-members.sql';
 import { isOrdinalKey } from './ordinal.ts';
@@ -315,6 +316,7 @@ export async function fullMembers(
           )
         )
           throw new ProblemError('not_found');
+        if (collection.membershipKind === 'dynamic') await requireCollectionRuleExecution();
         let after: { ordinalKey: string; memberId: string } | null = null;
         if (options.cursor !== undefined) {
           const cursor = decodeCursor(deps.tokens, binding, options.cursor);

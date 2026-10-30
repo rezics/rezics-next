@@ -7,7 +7,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { collectionSchema, strict } from './collection-routes.ts';
+import { collectionResourceSchema, strict } from './collection-routes.ts';
 import { createPins } from './pins.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -73,7 +73,9 @@ export function pinRoutes(
         response: {
           200: t.Object(
             {
-              pins: t.Array(t.Object({ collectionId: id, target: t.Union([collectionSchema, t.Null()]) }, closed)),
+              pins: t.Array(
+                t.Object({ collectionId: id, target: t.Union([collectionResourceSchema, t.Null()]) }, closed),
+              ),
               revision,
               next: t.Union([t.String(), t.Null()]),
             },
