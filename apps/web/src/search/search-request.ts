@@ -10,8 +10,8 @@ export async function readSearchPage<Response extends SearchResponsePage, Reques
   const response = await send(request);
   if (
     response.status !== 409 ||
-    ((!request.kindCursor && !request.cursor) ||
-      (!request.kindCursor && request.sort !== 'rating' && problemCode(response.error) !== 'search_restart_required'))
+    (!request.kindCursor && !request.cursor) ||
+    (!request.kindCursor && request.sort !== 'rating' && problemCode(response.error) !== 'search_restart_required')
   )
     return { response, restarted: false };
   const { cursor: _cursor, kindCursor: _kindCursor, ...firstPage } = request;
