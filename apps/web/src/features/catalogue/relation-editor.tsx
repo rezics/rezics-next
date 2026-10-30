@@ -55,7 +55,12 @@ export function RelationEditor({
   initial?: RelationRead;
   onSelected?: () => void | Promise<void>;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
-  composition?: { statement: RelationDraft; slot?: RelationSlot; positionEditable: boolean; session?: string | undefined };
+  composition?: {
+    statement: RelationDraft;
+    slot?: RelationSlot;
+    positionEditable: boolean;
+    session?: string | undefined;
+  };
 }) {
   const options = { locale: locale as never };
   const formId = useId();
@@ -273,9 +278,13 @@ export function RelationEditor({
   return (
     <section aria-label={m.relation_title({}, options)} className="min-w-0 space-y-6" aria-busy={busy}>
       <header className="space-y-2">
-        {composition ? <h2 className="font-sans text-2xl font-semibold">{m.relation_title({}, options)}</h2> : <>
-        <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
-        </>}
+        {composition ? (
+          <h2 className="font-sans text-2xl font-semibold">{m.relation_title({}, options)}</h2>
+        ) : (
+          <>
+            <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
+          </>
+        )}
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>
       </header>
       {consentEntry && (
@@ -301,9 +310,13 @@ export function RelationEditor({
                 <fieldset disabled={frozen} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4">
                   <legend className="px-1 font-semibold">{m.relation_draft({}, options)}</legend>
                   <Field>
-                    {composition ? <FieldLabel htmlFor={`${formId}-property`}>{m.relation_property({}, options)}</FieldLabel> : <>
-                    <FieldLabel htmlFor="relation-property">{m.relation_property({}, options)}</FieldLabel>
-                    </>}
+                    {composition ? (
+                      <FieldLabel htmlFor={`${formId}-property`}>{m.relation_property({}, options)}</FieldLabel>
+                    ) : (
+                      <>
+                        <FieldLabel htmlFor="relation-property">{m.relation_property({}, options)}</FieldLabel>
+                      </>
+                    )}
                     <DefinitionGuideLink
                       locale={locale}
                       field={!!field}
@@ -333,32 +346,34 @@ export function RelationEditor({
                   </Field>
                   {field && (
                     <>
-                      {!composition && <>
-                      {!!current.public.subject.statements[field.id]?.length && (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">{m.relation_existing({}, options)}</p>
-                          {current.public.subject.statements[field.id]!.map((statement) => (
-                            <div key={statement.id} className="space-y-2 rounded-lg border border-border p-3">
-                              <Statement
-                                statement={statement}
-                                publicRead={current.public}
-                                names={current.names}
-                                locale={locale}
-                              />
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  edit(relationDraft(statement));
-                                  setCitation('');
-                                }}
-                              >
-                                {m.relation_edit_existing({}, options)}
-                              </Button>
+                      {!composition && (
+                        <>
+                          {!!current.public.subject.statements[field.id]?.length && (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium">{m.relation_existing({}, options)}</p>
+                              {current.public.subject.statements[field.id]!.map((statement) => (
+                                <div key={statement.id} className="space-y-2 rounded-lg border border-border p-3">
+                                  <Statement
+                                    statement={statement}
+                                    publicRead={current.public}
+                                    names={current.names}
+                                    locale={locale}
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      edit(relationDraft(statement));
+                                      setCitation('');
+                                    }}
+                                  >
+                                    {m.relation_edit_existing({}, options)}
+                                  </Button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          )}
+                        </>
                       )}
-                      </>}
                       <EntityPicker
                         label={m.relation_target({}, options)}
                         search={search}
@@ -381,26 +396,33 @@ export function RelationEditor({
                         {draft.qualifiers.map((snak, index) => (
                           <div key={`${snak.property.id}:${index}`} className="flex min-w-0 items-end gap-2">
                             <div className="min-w-0 flex-1">
-                              <fieldset disabled={!!composition && (!composition.positionEditable || snak.property.id !== 'schema:position' || !field.qualifiers.some((item) => item.id === 'schema:position'))}>
-                              <QualifierInput
-                                definition={field.qualifiers.find((item) => item.id === snak.property.id)}
-                                snak={snak}
-                                index={index}
-                                label={name(snak.property.id)}
-                                scope={composition ? formId : undefined}
-                                search={search}
-                                target={target}
-                                remember={remember}
-                                disabled={frozen}
-                                onChange={(value) =>
-                                  edit({
-                                    ...draft,
-                                    qualifiers: draft.qualifiers.map((item, at) =>
-                                      at === index ? { ...item, value } : item,
-                                    ),
-                                  })
+                              <fieldset
+                                disabled={
+                                  !!composition &&
+                                  (!composition.positionEditable ||
+                                    snak.property.id !== 'schema:position' ||
+                                    !field.qualifiers.some((item) => item.id === 'schema:position'))
                                 }
-                              />
+                              >
+                                <QualifierInput
+                                  definition={field.qualifiers.find((item) => item.id === snak.property.id)}
+                                  snak={snak}
+                                  index={index}
+                                  label={name(snak.property.id)}
+                                  scope={composition ? formId : undefined}
+                                  search={search}
+                                  target={target}
+                                  remember={remember}
+                                  disabled={frozen}
+                                  onChange={(value) =>
+                                    edit({
+                                      ...draft,
+                                      qualifiers: draft.qualifiers.map((item, at) =>
+                                        at === index ? { ...item, value } : item,
+                                      ),
+                                    })
+                                  }
+                                />
                               </fieldset>
                             </div>
                             <Button
@@ -416,13 +438,25 @@ export function RelationEditor({
                           </div>
                         ))}
                         <Field>
-                          {composition ? <FieldLabel htmlFor={`${formId}-add-qualifier`}>{m.relation_qualifier({}, options)}</FieldLabel> : <>
-                          <FieldLabel htmlFor="relation-add-qualifier">{m.relation_qualifier({}, options)}</FieldLabel>
-                          </>}
+                          {composition ? (
+                            <FieldLabel htmlFor={`${formId}-add-qualifier`}>
+                              {m.relation_qualifier({}, options)}
+                            </FieldLabel>
+                          ) : (
+                            <>
+                              <FieldLabel htmlFor="relation-add-qualifier">
+                                {m.relation_qualifier({}, options)}
+                              </FieldLabel>
+                            </>
+                          )}
                           <NativeSelect
                             id="relation-add-qualifier"
                             {...(composition ? { id: `${formId}-add-qualifier` } : {})}
-                            disabled={!!composition && (!composition.positionEditable || draft.qualifiers.some((part) => part.property.id === 'schema:position'))}
+                            disabled={
+                              !!composition &&
+                              (!composition.positionEditable ||
+                                draft.qualifiers.some((part) => part.property.id === 'schema:position'))
+                            }
                             value=""
                             onChange={(event) => {
                               const definition = field.qualifiers.find((item) => item.id === event.target.value);
@@ -466,9 +500,13 @@ export function RelationEditor({
                         </div>
                       )}
                       <Field>
-                        {composition ? <FieldLabel htmlFor={`${formId}-citation`}>{m.relation_citation({}, options)}</FieldLabel> : <>
-                        <FieldLabel htmlFor="relation-citation">{m.relation_citation({}, options)}</FieldLabel>
-                        </>}
+                        {composition ? (
+                          <FieldLabel htmlFor={`${formId}-citation`}>{m.relation_citation({}, options)}</FieldLabel>
+                        ) : (
+                          <>
+                            <FieldLabel htmlFor="relation-citation">{m.relation_citation({}, options)}</FieldLabel>
+                          </>
+                        )}
                         <Input
                           id="relation-citation"
                           {...(composition ? { id: `${formId}-citation` } : {})}
@@ -487,11 +525,17 @@ export function RelationEditor({
                               checked={ownConsent}
                               onCheckedChange={(checked) => setOwnConsent(checked === true)}
                             />
-                            {composition ? <FieldLabel htmlFor={`${formId}-own-consent`}>{m.statement_consent_own({}, options)}</FieldLabel> : <>
-                            <FieldLabel htmlFor="relation-own-consent">
-                              {m.statement_consent_own({}, options)}
-                            </FieldLabel>
-                            </>}
+                            {composition ? (
+                              <FieldLabel htmlFor={`${formId}-own-consent`}>
+                                {m.statement_consent_own({}, options)}
+                              </FieldLabel>
+                            ) : (
+                              <>
+                                <FieldLabel htmlFor="relation-own-consent">
+                                  {m.statement_consent_own({}, options)}
+                                </FieldLabel>
+                              </>
+                            )}
                           </Field>
                         </div>
                       )}
@@ -544,7 +588,11 @@ export function RelationEditor({
                       <p>{m.relation_unresolved_selection({}, options)}</p>
                     )}
                     <p className="text-sm text-muted-foreground">{m.relation_slot_hint({}, options)}</p>
-                    {composition && <p className="break-all text-xs">{id} · {slot.property} · {slot.target ?? slot.sameAs} {slot.key ?? ''}</p>}
+                    {composition && (
+                      <p className="break-all text-xs">
+                        {id} · {slot.property} · {slot.target ?? slot.sameAs} {slot.key ?? ''}
+                      </p>
+                    )}
                     {!current.page.candidates.length && <p>{m.candidate_empty({}, options)}</p>}
                     <ul className="space-y-3">
                       {current.page.candidates.map((item) => (
@@ -666,9 +714,13 @@ export function RelationEditor({
                             <>
                               {candidate.decision === 'accepted' && (
                                 <Field>
-                                  {composition ? <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel> : <>
-                                  <FieldLabel htmlFor="relation-rank">{m.relation_rank({}, options)}</FieldLabel>
-                                  </>}
+                                  {composition ? (
+                                    <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel>
+                                  ) : (
+                                    <>
+                                      <FieldLabel htmlFor="relation-rank">{m.relation_rank({}, options)}</FieldLabel>
+                                    </>
+                                  )}
                                   <NativeSelect
                                     id="relation-rank"
                                     {...(composition ? { id: `${formId}-rank` } : {})}
@@ -721,7 +773,9 @@ export function RelationEditor({
         )
       )}
       {proposed && <p role="status">{m.relation_proposed({}, options)}</p>}
-      {composition && proposedId && <p className="break-all text-sm">{m.work_parts_candidate({ candidate: proposedId }, options)}</p>}
+      {composition && proposedId && (
+        <p className="break-all text-sm">{m.work_parts_candidate({ candidate: proposedId }, options)}</p>
+      )}
       {confirmation && !concealed && (
         <div
           role="group"
@@ -738,7 +792,9 @@ export function RelationEditor({
                   ? m.relation_confirm_reject({}, options)
                   : m.relation_confirm_propose({}, options)}
           </p>
-          {composition && confirmation === 'propose' && current && <Statement statement={draft} publicRead={current.public} names={current.names} locale={locale} />}
+          {composition && confirmation === 'propose' && current && (
+            <Statement statement={draft} publicRead={current.public} names={current.names} locale={locale} />
+          )}
           <div className="flex flex-wrap gap-2">
             <Button disabled={busy || (!!failure && failure.reason !== 'unavailable')} onClick={confirm}>
               {action}
@@ -798,9 +854,13 @@ function QualifierInput({
     );
   return (
     <Field>
-      {scope ? <FieldLabel htmlFor={`${scope}-qualifier-${index}`}>{label}</FieldLabel> : <>
-      <FieldLabel htmlFor={`relation-qualifier-${index}`}>{label}</FieldLabel>
-      </>}
+      {scope ? (
+        <FieldLabel htmlFor={`${scope}-qualifier-${index}`}>{label}</FieldLabel>
+      ) : (
+        <>
+          <FieldLabel htmlFor={`relation-qualifier-${index}`}>{label}</FieldLabel>
+        </>
+      )}
       <Input
         id={`relation-qualifier-${index}`}
         {...(scope ? { id: `${scope}-qualifier-${index}` } : {})}

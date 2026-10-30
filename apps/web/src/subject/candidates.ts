@@ -111,7 +111,9 @@ export async function readCandidates(
   try {
     // Public reading and private competition are independent. Neither uses per-value hydration.
     const [current, result] = await Promise.all([
-      client.subjects({ id }).get({ headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) } }),
+      client
+        .subjects({ id })
+        .get({ headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) } }),
       property
         ? client.subjects({ id }).candidates.get({
             query: { property, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
@@ -229,7 +231,9 @@ export async function selectCandidate(
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {
-      const read = await endpoint.get({ headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) } });
+      const read = await endpoint.get({
+        headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
+      });
       if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
         current = read.data;
     } catch {

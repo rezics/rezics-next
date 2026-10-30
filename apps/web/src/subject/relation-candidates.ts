@@ -220,7 +220,16 @@ export async function confirmRelation(
   release: Release | Promise<Release>,
   input: RelationConfirmation,
 ): Promise<RelationResult> {
-  const current = await readRelationEditor(client, authorization, release, input.id, 'en', input.slot, input.cursor, input.session);
+  const current = await readRelationEditor(
+    client,
+    authorization,
+    release,
+    input.id,
+    'en',
+    input.slot,
+    input.cursor,
+    input.session,
+  );
   if (!current.ok) return current;
   const field = current.fields.find((field) => field.id === input.slot.property);
   const candidate = current.page?.candidates.find((candidate) => candidate.id === input.candidate);
@@ -251,7 +260,9 @@ export async function confirmRelation(
       let publicRead: SubjectRead | null = null;
       try {
         const session = new Headers(result.headers).get('rezics-session-token');
-        const read = await endpoint.get({ headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) } });
+        const read = await endpoint.get({
+          headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
+        });
         if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
           publicRead = read.data;
       } catch {
