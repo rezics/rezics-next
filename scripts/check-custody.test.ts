@@ -32,6 +32,7 @@ const inheritedEnvironment = { ...process.env };
 function rootFixture(): string {
   const root = mkdtempSync(join(import.meta.dir, '../.temp/check-custody-test-'));
   roots.push(root);
+  process.env.REZICS_CHECK_LEDGER_DIR = join(root, 'check-ledger');
   return root;
 }
 
@@ -42,6 +43,7 @@ function restoreEnvironment(): void {
     'GOAL_CHECK_REGISTRY',
     'REZICS_CHECK_MEMORY',
     'REZICS_CHECK_SCOPE',
+    'REZICS_CHECK_LEDGER_DIR',
   ]) {
     const value = inheritedEnvironment[key];
     if (value === undefined) delete process.env[key];

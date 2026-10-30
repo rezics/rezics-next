@@ -1343,6 +1343,11 @@ export async function runWorkerCheck(
     root,
   );
   const cancelled = () => executionCancellation(cancellation);
+  const cancelFromSignal = (signal: 1 | 2 | 15): void => {
+    // A verified watchdog stop ends this incarnation; external cancellation ends the logical check.
+    if (logicalCheckId && checkStopIntent(root, logicalCheckId, physicalRunId)?.purpose === 'watchdog') return;
+    requestExecutionCancellation(cancellation, signal);
+  };
   const initialIntent = cancelled();
   if (initialIntent) return 128 + initialIntent.signal;
   const file = recordedLog ?? logPath(root);
@@ -1660,7 +1665,7 @@ export async function runWorkerCheck(
       const name = signal as keyof typeof SIGNALS;
       const forward = () => {
         remoteSignal ??= number;
-        requestExecutionCancellation(cancellation, number);
+        cancelFromSignal(number);
         remote.kill(name);
       };
       process.on(name, forward);
@@ -1836,7 +1841,7 @@ export async function runWorkerCheck(
     const forward = () => {
       signalNumber ??= number;
       signalName ??= name;
-      requestExecutionCancellation(cancellation, number);
+      cancelFromSignal(number);
       if (child) child.kill(name);
       else admissionAbort.abort();
     };
@@ -2597,6 +2602,12 @@ async function stopWorkerCheckOwned(
   ) {
     return receiptFor(id, expected, 'refused', false, false, 'physical custody does not match the expectation');
   }
+  // The runner can observe the durable intent and exit before the stopper sends its signal.
+  const watchdogOwnedRunner =
+    purpose === 'watchdog' &&
+    history.status === 'running' &&
+    sameProcess(expected.runnerIdentity) &&
+    runnerCommandMatches(expected.runnerIdentity, import.meta.path, id, expected.physicalRunId);
   const intent = {
     version: 1,
     checkId: id,
@@ -2666,7 +2677,7 @@ async function stopWorkerCheckOwned(
 
   const currentIdentity = processIdentity(expected.runnerIdentity.pid);
   let localTerminal = false;
-  let stopped = false;
+  let stopped = watchdogOwnedRunner;
   if (currentIdentity && !sameProcess(expected.runnerIdentity)) {
     const refused = receiptFor(
       id,
@@ -3248,7 +3259,11 @@ async function rerunInterruptedCheck(
       if (executionCancellation(workerCheckCancellation(id, root)) || checkCancelled(root, id))
         throw new CheckCancelled();
       const current = readRecord(root, id);
-      if (current.physicalRunId !== record.physicalRunId || current.status !== 'running') return;
+      if (
+        current.physicalRunId !== record.physicalRunId ||
+        (current.status !== 'running' && !(reason.startsWith('log did not grow') && current.status === 'finished'))
+      )
+        return;
       current.status = 'finished';
       current.exitCode = 1;
       current.infrastructureFailureFinal = true;

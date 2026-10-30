@@ -170,8 +170,14 @@ test('critical priority: worker-check rereads task-priority and overrides inheri
   const file = join(directory, '.temp/goal/task-priority');
   const log = join(directory, 'check.log');
   const oldTask = process.env.GOAL_TASK_ID;
+  const oldAttempt = process.env.GOAL_ATTEMPT;
+  const oldRegistry = process.env.GOAL_CHECK_REGISTRY;
   const oldPriority = process.env.REMOTE_CHECK_PRIORITY;
-  process.env.GOAL_TASK_ID = 'worker';
+  const registry = join(directory, 'registry');
+  mkdirSync(registry);
+  process.env.GOAL_TASK_ID = randomUUID();
+  process.env.GOAL_ATTEMPT = '1';
+  process.env.GOAL_CHECK_REGISTRY = registry;
   process.env.REMOTE_CHECK_PRIORITY = 'landing';
   try {
     writeFileSync(file, 'critical\n');
@@ -189,6 +195,10 @@ test('critical priority: worker-check rereads task-priority and overrides inheri
   } finally {
     if (oldTask === undefined) delete process.env.GOAL_TASK_ID;
     else process.env.GOAL_TASK_ID = oldTask;
+    if (oldAttempt === undefined) delete process.env.GOAL_ATTEMPT;
+    else process.env.GOAL_ATTEMPT = oldAttempt;
+    if (oldRegistry === undefined) delete process.env.GOAL_CHECK_REGISTRY;
+    else process.env.GOAL_CHECK_REGISTRY = oldRegistry;
     if (oldPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY;
     else process.env.REMOTE_CHECK_PRIORITY = oldPriority;
   }
@@ -201,8 +211,14 @@ test('critical priority: invalid task priority names its file and missing priori
   const file = join(directory, '.temp/goal/task-priority');
   const log = join(directory, 'check.log');
   const oldTask = process.env.GOAL_TASK_ID;
+  const oldAttempt = process.env.GOAL_ATTEMPT;
+  const oldRegistry = process.env.GOAL_CHECK_REGISTRY;
   const oldPriority = process.env.REMOTE_CHECK_PRIORITY;
-  process.env.GOAL_TASK_ID = 'worker';
+  const registry = join(directory, 'registry');
+  mkdirSync(registry);
+  process.env.GOAL_TASK_ID = randomUUID();
+  process.env.GOAL_ATTEMPT = '1';
+  process.env.GOAL_CHECK_REGISTRY = registry;
   process.env.REMOTE_CHECK_PRIORITY = 'critical';
   const errors: string[] = [];
   const originalError = process.stderr.write.bind(process.stderr);
@@ -234,6 +250,10 @@ test('critical priority: invalid task priority names its file and missing priori
     process.stderr.write = originalError;
     if (oldTask === undefined) delete process.env.GOAL_TASK_ID;
     else process.env.GOAL_TASK_ID = oldTask;
+    if (oldAttempt === undefined) delete process.env.GOAL_ATTEMPT;
+    else process.env.GOAL_ATTEMPT = oldAttempt;
+    if (oldRegistry === undefined) delete process.env.GOAL_CHECK_REGISTRY;
+    else process.env.GOAL_CHECK_REGISTRY = oldRegistry;
     if (oldPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY;
     else process.env.REMOTE_CHECK_PRIORITY = oldPriority;
   }
@@ -722,8 +742,8 @@ if (process.env.WORKER_REMOTE_MODE === 'failure') process.exit(7);
 if (process.env.WORKER_REMOTE_MODE === 'failure-75') process.exit(75);
 const mode = process.env.WORKER_REMOTE_MODE;
 if (mode === 'artifact') {
-  const arguments = process.argv.slice(2);
-  const separator = arguments.lastIndexOf('--');
+  const launcherArgs = process.argv.slice(2);
+  const separator = launcherArgs.lastIndexOf('--');
   if (separator < 0) process.exit(92);
   const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID!;
   const relativeStage = process.env.REZICS_CHECK_ARTIFACTS_DIR!;
@@ -731,7 +751,7 @@ if (mode === 'artifact') {
   mkdirSync(remoteRoot, { recursive: true });
   const artifactModule = await import(${JSON.stringify(join(repository, 'scripts/check-artifacts.ts'))});
   artifactModule.prepareArtifactRun(remoteRoot, physicalRunId);
-  const command = Bun.spawn(arguments.slice(separator + 1), {
+  const command = Bun.spawn(launcherArgs.slice(separator + 1), {
     cwd: remoteRoot,
     env: process.env,
     stdout: 'inherit',
