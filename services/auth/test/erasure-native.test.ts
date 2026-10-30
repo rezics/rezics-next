@@ -20,6 +20,8 @@ async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
 test('existing deletion caller drains real Auth stores before user deletion; default host resumes native progress and preserves the original consent cutoff without custody or ACK fabrication', async () => {
   const f = await nativeFixture();
   try {
+    expect((await f.pool.query("SELECT to_regnamespace('access') AS namespace")).rows[0]!.namespace).toBeNull();
+    expect((await f.kernel.query("SELECT to_regnamespace('access') AS namespace")).rows[0]!.namespace).not.toBeNull();
     const victim = await f.person('erased');
     const survivor = await f.person('survivor');
     const owner = victim.accountId;
