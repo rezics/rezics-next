@@ -1,6 +1,8 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { SectionsNavigation, settingsSections } from '../src/settings/sections-navigation';
@@ -125,4 +127,51 @@ test('signed-out entry uses the existing sign-in and return-to flow without expo
   expect(hrefs(html)).toEqual(['/auth/sign-in?return_to=%2Ffr%2Fsettings%23account']);
   expect(html).not.toContain('<form');
   expect(html).not.toContain('/account/delete');
+});
+
+test('the signed-out Settings account journey renders its real main content and sign-in continuation in the normal page composition, with no personal controls or fabricated session', async () => {
+  // This reviews the fallback composition, not access to the guarded production route.
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ AppShell }, { SettingsPageView }, { m }] = await Promise.all([
+    import('../src/shell/shell'),
+    import('../src/settings/settings-page'),
+    import('../src/paraglide/messages.js'),
+  ]);
+  const queryClient = new QueryClient();
+  const root = createRootRoute({
+    component: () =>
+      createElement(AppShell, {
+        children: createElement(SettingsPageView, { page: { signedIn: false }, csrfToken: null }),
+      }),
+  });
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ['/en/settings#account'] }),
+  });
+  try {
+    await router.load();
+    const html = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+    );
+    expect(html.match(/<main\b/g)).toHaveLength(1);
+    const main = html.match(/<main\b[^>]*>[\s\S]*?<\/main>/)?.[0];
+    expect(main).toBeDefined();
+    expect(main).toContain('id="main-content"');
+    expect(main).toContain('tabindex="-1"');
+    expect(main).not.toMatch(/<main[^>]*(?:hidden|aria-busy="true")/);
+    expect(main).toMatch(new RegExp(`<h1\\b[^>]*>${m.settings_heading()}</h1>`));
+    expect(main).toContain(m.settings_account_heading());
+    expect(main).toContain(m.settings_account_sign_in_text());
+    expect(hrefs(main!)).toEqual(['/auth/sign-in?return_to=%2Fen%2Fsettings%23account']);
+    for (const privateSection of ['reading', 'notifications', 'privacy', 'verification', 'profile', 'public-activity']) {
+      expect(main).not.toContain(`id="${privateSection}"`);
+    }
+    expect(main).not.toMatch(/<nav\b|<form\b|role="(?:radio|switch)"/);
+    expect(html).not.toContain('/auth/sign-out');
+    expect(html).not.toContain('/account/delete');
+    expect(queryClient.getQueryData(['session'])).toBeUndefined();
+    expect(queryClient.isFetching()).toBe(0);
+  } finally {
+    queryClient.clear();
+  }
 });

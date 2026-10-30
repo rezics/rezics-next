@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { SettingsPageView } from '../settings/settings-page';
+import { AppShell } from '../shell/shell';
 import { PageStory, pageReady, PatternStory } from './page';
 
 const meta = {
@@ -38,13 +39,16 @@ export const Default: Story = {
 };
 
 export const SignedOut: Story = {
+  // Review the fallback view in the ordinary shell; the production /settings route still requires sign-in.
   render: () => (
-    <PatternStory path="/settings">
-      <SettingsPageView page={{ signedIn: false }} csrfToken={null} />
+    <PatternStory visitor="Signed Out" path="/settings">
+      <AppShell>
+        <SettingsPageView page={{ signedIn: false }} csrfToken={null} />
+      </AppShell>
     </PatternStory>
   ),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = within(await within(canvasElement).findByRole('main'));
     await canvas.findByRole('link', { name: m.account_sign_in() });
     await expect(canvas.queryByRole('navigation')).toBeNull();
     await expect(canvas.queryByRole('button', { name: m.account_sign_out() })).toBeNull();
