@@ -125,7 +125,7 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
     });
 
     const makePerson = async (name: string): Promise<RecoveryActor> => {
-      const key = `space-address-recovery-${name}-${randomUUID().replaceAll('-', '')}`;
+      const key = `space-address-recovery-${name}-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
       const registered = await auth!.person(key);
       const signed = await auth!.request('/signin', {
         email: `${key}@ordinary.test`,
