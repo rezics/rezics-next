@@ -53,17 +53,16 @@ export function CreateSubjectForm({
     const [kind, escaped] = pointer.slice(1).split('/');
     if (kind === 'type') return 'create-type';
     const language = escaped?.replaceAll('~1', '/').replaceAll('~0', '~');
-    const index = Math.max(
-      0,
-      rows.findIndex((row) => row.language.trim() === language),
-    );
-    const field = !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(rows[index]?.language.trim() ?? '')
-      ? 'language'
-      : kind === 'descriptions'
-        ? 'description'
-        : kind === 'aliases'
-          ? 'aliases'
-          : 'label';
+    const matches = rows.flatMap((row, index) => (row.language.trim() === language ? [index] : []));
+    const index = matches.at(-1) ?? 0;
+    const field =
+      matches.length > 1 || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(rows[index]?.language.trim() ?? '')
+        ? 'language'
+        : kind === 'descriptions'
+          ? 'description'
+          : kind === 'aliases'
+            ? 'aliases'
+            : 'label';
     return `create-${field}-${index}`;
   }
   const invalid = (id: string) => errors.some((error) => control(error.pointer) === id);

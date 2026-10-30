@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { pickText } from '@rezics/composition';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
 import { CreateSubjectForm } from '../features/catalogue/create-subject-form';
@@ -6,6 +7,7 @@ import { catalogueCreateFixture, catalogueCreatedId, type CreateScenario } from 
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
+import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
 function CreateStory({ scenario = 'ready' }: { scenario?: CreateScenario }) {
@@ -80,7 +82,12 @@ export const CreateMultilingualSubject: Story = {
     await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '新しい映画');
     await userEvent.dblClick(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     const link = await canvas.findByRole('link', { name: m.catalogue_create_open() });
-    expect(link.getAttribute('href')).toBe(`/${getLocale()}/subjects/${catalogueCreatedId}/a-new-film`);
+    expect(link.getAttribute('href')).toBe(
+      subjectHref(
+        { id: catalogueCreatedId, label: pickText({ en: 'A new film', ja: '新しい映画' }, getLocale()).text },
+        getLocale(),
+      ).href,
+    );
     expect(canvas.queryByRole('button', { name: m.catalogue_create_submit() })).toBeNull();
   },
 };
