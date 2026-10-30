@@ -4,6 +4,9 @@ import { parseDiscoveryPage, parseLegacySearchPage, type DiscoveryState, type Le
 import { facetProblem, type FacetState } from './refinement/request';
 import type { SearchPageData } from './search';
 import type { SearchLoaderDeps } from './search-params';
+import { searchRetryAt } from './search-recovery-retry';
+
+export { searchRetryAt } from './search-recovery-retry';
 
 type Request = NonNullable<Parameters<KernelClient['subjects']['$search']['post']>[0]>;
 export type SearchWireResponse = {
@@ -34,15 +37,6 @@ export type SearchOutcome = {
   discovery?: DiscoveryState;
   result?: LegacySearchPage;
 };
-
-/** Native Retry-After is a minimum delay, never a schedule for another request. */
-export function searchRetryAt(value: string | null, now: number): number | undefined {
-  if (!value?.trim()) return;
-  const text = value.trim();
-  if (!/^\d+$/.test(text) && !/^[A-Za-z]{3}/.test(text)) return;
-  const at = /^\d+$/.test(text) ? now + Number(text) * 1000 : Date.parse(text);
-  return Number.isFinite(at) && at <= 8.64e15 ? Math.max(now, at) : undefined;
-}
 
 /** Keep HTTP admission, credentials, current authority and dependency failures distinct. */
 export function searchRecoveryFromResponse(

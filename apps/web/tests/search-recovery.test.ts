@@ -6,6 +6,8 @@ import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import { discoveryRequest } from '../src/search/search-request';
 import { discoverySearchHref, searchLoaderDeps } from '../src/search/search-params';
 import { SearchRecovery } from '../src/search/search-recovery-view';
+import { Refinement } from '../src/search/refinement/refinement';
+import { readFacetPage } from '../src/search/refinement/request';
 import {
   facetSearchInvalidation,
   readSearchOutcome,
@@ -197,6 +199,46 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
   expect(searchRetryAt('-1', 1000)).toBeUndefined();
   expect(searchRetryAt('invalid', 1000)).toBeUndefined();
   expect(searchRecoveryFromResponse({ status: 503, error: { code: 'index_not_ready' } })).not.toHaveProperty('retryAt');
+});
+
+test('scoped facet readiness keeps native Retry-After and the continuation request without implying zero values', async () => {
+  const facets = [{ property: 'type', size: 10, cursor: 'facet+/= opaque' }];
+  const bodies: unknown[] = [];
+  const client = createKernelClient('http://kernel.local', {
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ code: 'index_not_ready' }, { status: 503, headers: { 'retry-after': '60' } });
+    },
+  });
+  const context = { text: state.query, languages: state.languages, facets };
+  const before = Date.now();
+  const initial = await readFacetPage(context, (body) => client.subjects.$facets.post(body));
+  expect(initial.status).toBe('preparing');
+  if (initial.status === 'ready') throw new Error('A native refusal became facet success');
+  expect(initial.retryAt).toBeGreaterThanOrEqual(before + 60_000);
+  expect(bodies).toEqual([context]);
+  expect(facetSearchInvalidation(initial)).toBeUndefined();
+  let calls = 0;
+  const html = renderToStaticMarkup(
+    createElement(Refinement, {
+      data: {
+        key: 'native-preparing',
+        properties: [{ property: 'type', labels: {}, mode: 'types', datatype: 'type', units: [] }],
+        initial,
+      },
+      conditions: { facetValues: {} },
+      query: state.query,
+      locale: 'en',
+      load: async () => {
+        calls++;
+        return initial;
+      },
+    }),
+  );
+  expect(html).toContain('Wait a moment');
+  expect(html).toMatch(/<button[^>]*disabled/);
+  expect(html).not.toMatch(/0 results|0 values|No results|progressbar|%/);
+  expect(calls).toBe(0);
 });
 
 test('transport failure stays unavailable and cancellation cannot publish a late ready response', async () => {

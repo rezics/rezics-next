@@ -8,6 +8,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
+import { useSearchRetryWait } from '../search-recovery-retry';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
 
@@ -42,6 +43,8 @@ export function Refinement({
   const [state, setState] = useState(data.initial);
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
+  const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
+  const waiting = useSearchRetryWait(state && state.status !== 'ready' ? state.retryAt : undefined);
   useEffect(() => () => active.current?.abort(), []);
   const href = (next: RefinementConditions) => refinementHref(locale, query, next, sort);
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
@@ -68,6 +71,11 @@ export function Refinement({
         return { property, size: 10, ...(cursor ? { cursor } : {}) };
       });
     if (!facets.length) return;
+    return readRequested(facets, more);
+  }
+
+  async function readRequested(facets: RequestedFacet[], more?: string) {
+    lastRead.current = { facets, more };
     active.current?.abort();
     const controller = new AbortController();
     active.current = controller;
@@ -96,6 +104,7 @@ export function Refinement({
           else next.push(combined);
         }
         setPages(next);
+        lastRead.current = undefined;
       }
       setState(result);
     } catch (error) {
@@ -205,15 +214,27 @@ export function Refinement({
                 ? m.search_facet_index_not_ready()
                 : state.status === 'restart'
                   ? m.refinement_restart()
-                  : m.search_facet_unavailable()}
+                  : state.code === 'semantic_not_ready'
+                    ? m.search_recovery_source()
+                    : m.search_facet_unavailable()}
           </p>
+          {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait()}</p>}
           {state.status === 'restart' ? (
             <a href={href(conditions)} className={buttonVariants({ variant: 'link', size: 'sm' })}>
               {m.search_facet_retry()}
             </a>
           ) : (
             state.status !== 'refused' && (
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void read(shown)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy || waiting}
+                onClick={() => {
+                  const attempt = lastRead.current;
+                  void (attempt ? readRequested(attempt.facets, attempt.more) : read(shown));
+                }}
+              >
                 {m.search_facet_retry()}
               </Button>
             )

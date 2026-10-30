@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import type { FilterDocument } from '@rezics/filter';
+import { searchRetryAt } from '../search-recovery-retry';
 
 export type RequestedFacet = { property: string; size?: number; cursor?: string };
 export type FacetRequest = { text?: string; filter?: FilterDocument; languages?: string[]; facets: RequestedFacet[] };
@@ -29,9 +30,10 @@ export type FacetState =
       status: 'unavailable' | 'preparing' | 'refused' | 'restart';
       code?: string;
       httpStatus?: number;
+      retryAt?: number;
       problem?: v.InferOutput<typeof problem> | undefined;
     };
-export type FacetResponse = { status: number; data?: unknown; error?: unknown };
+export type FacetResponse = { status: number; data?: unknown; error?: unknown; response?: { headers: Headers } };
 
 export function problemCode(problem: unknown): string | undefined {
   if (!problem || typeof problem !== 'object') return;
@@ -58,6 +60,7 @@ export async function readFacetPage(
 ): Promise<FacetState> {
   const response = await send(request);
   const code = problemCode(response.error);
+  const retryAt = searchRetryAt(response.response?.headers.get('retry-after') ?? null, Date.now());
   if (response.status !== 200 || response.error)
     return {
       status:
@@ -69,6 +72,7 @@ export async function readFacetPage(
               ? 'preparing'
               : 'unavailable',
       httpStatus: response.status,
+      ...(retryAt !== undefined ? { retryAt } : {}),
       ...(code ? { code } : {}),
       problem: facetProblem(response.error ?? response.data),
     };

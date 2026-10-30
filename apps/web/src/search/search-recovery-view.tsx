@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { m } from '../paraglide/messages.js';
 import type { SearchRecoveryState } from './search-recovery';
+import { useSearchRetryWait } from './search-recovery-retry';
 
 export function searchRecoveryMessage(state: SearchRecoveryState): string {
   switch (state.status) {
@@ -41,15 +41,9 @@ export function SearchRecovery({
   restartHref: string;
   onRetry?: (() => void) | undefined;
 }) {
-  const [now, setNow] = useState(Date.now);
   const retryAt = state.status !== 'ready' ? state.retryAt : undefined;
-  useEffect(() => {
-    if (retryAt === undefined || retryAt <= Date.now()) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(retryAt - Date.now(), 2_147_483_647));
-    return () => clearTimeout(timer);
-  }, [retryAt, now]);
+  const waiting = useSearchRetryWait(retryAt);
   if (state.status === 'ready') return null;
-  const waiting = retryAt !== undefined && retryAt > Math.max(now, Date.now());
   const retry = ['index-not-ready', 'source-not-ready', 'unavailable'].includes(state.status);
   const restart = state.status === 'restart' || state.status === 'invalid-cursor';
   return (
