@@ -236,6 +236,7 @@ export function subjectJsonLd({
       if (statement.rank !== rank) continue;
       if (externalId && statement.property.data_type !== 'external-id') continue;
       if (spoilerLevel(statement as unknown as Stmt) > 0) continue;
+      if (statement.value.type !== 'value') continue;
       const content = statement.value.content;
       if (language !== undefined && record(content) && content.language !== language) continue;
       const value = statementValue(statement, references, property);
