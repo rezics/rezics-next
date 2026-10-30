@@ -2353,6 +2353,59 @@ minimal verification contract. No screenshots are produced by this slice.
 
 ### Realm appearance and rules
 
+#### Carried Realm on Space home
+
+`community/space.ts` loads the ordinary Space and readable carried Realm before
+`realm-home-presentation-native.ts` makes one independent `GET /v1/realms/{realmId}/presentation` read. The
+declared response is `{community: CommunityPresentation}` from Content's original `readCommunityPresentations`.
+The installed generated client does not yet declare that route; the isolated consumer-local route type yields to
+the original declaration when delivered. Missing routes, incomplete native ownership and source failures remain
+unavailable. They never consume the Space's embedded presentation as a fallback or infer ownership. This binding
+establishes no native route availability or native pass.
+
+The consumer uses Board's existing `board-community-source.ts` parser and the original native DTO types. One final
+ordinary Realm/Space read pair binds the result to the same heads, current active/readable containers, ownership,
+Context and carried-Realm relationship, including when the optional source fails. A changed or denied binding
+discards the region. The original presentation reader owns source lifecycle/version fences and the exact rules
+disclosure. There are no per-board/source HTTP reads, count requests, retries, refill or retained positive source
+values. Rendering is linear in the one bounded DTO: two images with at most twelve variants each and one Text rules
+document of at most 65,536 canonical UTF-8 bytes.
+
+`RealmHomeHeader` uses the existing shared community image, count, rules and credit parts. The Space keeps its own
+heading, summary, banner and address; the labelled Realm card has its own selected images and community heading.
+Native concealed/erased images and rules may be `none` even with a selected reference; optional failures remain
+unavailable. Members display only the supplied current count/version or unknown, without a fabricated zero.
+`RealmMembership` retains its separate native personal state and all existing admission/pending behavior; neither
+the count nor presentation join metadata supplies an action. Its status uses a card foreground/background pair,
+and outline controls explicitly own their background and ink in both themes. Space identity text uses the shared
+placeholder pair and a uniform cover scrim, independent of arbitrary image placeholder colours.
+
+Existing lifecycle/claim restrictions immediately hide the presentation and participation region. Previously mounted
+management stays hidden and inert through those restrictions so appearance drafts survive; `RealmAppearancePanel`
+remains the sole editor. No appearance native, panel or fixture source is changed here.
+
+Web's ordinary 390/1280 light/dark review inputs use these exact CSF sources and IDs:
+
+- `src/stories/board-community-pages.stories.tsx`: `pages-community-community-board--space-home-signed-out`,
+  `--space-home-member`, `--space-home-source-unavailable`, `--space-home-membership-unavailable`.
+- `src/stories/realm-home-presentation.stories.tsx`: `patterns-community-realm-home-presentation--available`,
+  `--without-images`, `--optional-unavailable`, `--source-unavailable`, `--current-denied`.
+- The existing management composition remains `pages-community-realm-appearance--management` from
+  `src/stories/realm-presentation-page.stories.tsx`.
+
+These reuse the existing page main and Pattern. The appearance recording currently omits some native ownership
+continuity fields; such a response remains unavailable rather than being upgraded to owned/ready by this consumer.
+The declared available/optional state stories become effective only with complete current producer responses.
+No screenshot, browser, native or visual approval is claimed. `tests/space-home-presentation.test.ts` supplies the
+named acceptance case plus focused optional-source and final-binding cases for integration; this delivery runs
+only the local Web type check.
+
+Source reading for this connection: the original Content presentation reader/model, Community Realm/Space routes,
+Board parser/shared presentation parts, native claim/lifecycle binders, and the adopted research's read-only Lemmy
+`crates/db_schema/src/source/community.rs` plus Discourse `app/models/category.rb` and `app/models/group.rb`.
+
+#### Appearance management
+
 `community/realm-presentation-settings.tsx` owns the reusable `RealmAppearanceSettings` Pattern, inserted into
 Space/Realm management beside the existing bans region. Setup, membership, publication, lifecycle and the Context
 pointer retain their existing owners. This adopts the Web consumption decisions from

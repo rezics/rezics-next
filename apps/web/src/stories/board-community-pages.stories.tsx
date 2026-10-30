@@ -11,4 +11,9 @@ export const Realm = { render: () => <PageStory visitor="Signed In" path={`/boar
 export const ContinueHot = { ...continuation };
 export const SpaceHomeSignedOut = { render: () => <PageStory visitor="Signed Out" path={appearancePath} /> };
 export const SpaceHomeMember = { render: () => <PageStory visitor="Signed In" path="/spaces/atlas-member" /> };
-export const SpaceHomeSourceUnavailable = { render: () => <PageStory visitor="Signed Out" path="/spaces/atlas-plain" /> };
+export const SpaceHomeSourceUnavailable = {
+  render: () => <PageStory visitor="Signed Out" path="/spaces/atlas-plain" />,
+};
+export const SpaceHomeMembershipUnavailable = {
+  render: () => <PageStory visitor="Signed In" path="/spaces/atlas-unavailable" />,
+};

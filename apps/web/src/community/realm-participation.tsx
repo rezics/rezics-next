@@ -33,6 +33,7 @@ export function RealmParticipationView({
   const pending = state === 'pending';
   return (
     <section
+      className="rounded-2xl bg-card p-3 text-card-foreground"
       aria-label={m.realm_membership_label()}
       data-member-state={state}
       aria-busy={busy || refresh === 'checking'}
@@ -46,7 +47,7 @@ export function RealmParticipationView({
                 size="lg"
                 type="button"
                 variant="outline"
-                className="h-11 px-6 text-base text-foreground"
+                className="h-11 bg-background px-6 text-base text-foreground dark:bg-background"
                 disabled={!ready || busy}
                 onClick={() => onChange('leave')}
               >
@@ -68,7 +69,13 @@ export function RealmParticipationView({
         ) : null}
         {pending ? <Badge variant="secondary">{m.realm_state_pending()}</Badge> : null}
         {state === 'unavailable' || (pending && refresh !== 'checking') ? (
-          <Button type="button" variant="outline" disabled={busy} onClick={onRetry}>
+          <Button
+            type="button"
+            variant="outline"
+            className="bg-background text-foreground dark:bg-background"
+            disabled={busy}
+            onClick={onRetry}
+          >
             {m.realm_membership_retry()}
           </Button>
         ) : null}

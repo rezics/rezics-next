@@ -1,5 +1,5 @@
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -30,7 +30,12 @@ import type { ContainerLifecycleAdapter } from './container-lifecycle';
 import { RealmAppearancePanel } from './realm-presentation-panel';
 import { RealmClaimPanel } from './realm-claim-panel';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { sameRealmClaimSource, type RealmClaimAdapter, type RealmClaimRead, type RealmClaimSnapshot } from './realm-claim';
+import {
+  sameRealmClaimSource,
+  type RealmClaimAdapter,
+  type RealmClaimRead,
+  type RealmClaimSnapshot,
+} from './realm-claim';
 import { RealmHomeHeader } from './realm-home-header';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
@@ -264,6 +269,7 @@ function Home({
   readable,
   presentationCurrent,
   participation,
+  removed,
 }: {
   realm: RealmHome;
   management: ReactNode;
@@ -272,13 +278,23 @@ function Home({
   readable: boolean;
   presentationCurrent: boolean;
   participation: ReactNode;
+  removed: boolean;
 }) {
+  const managementVisible = !removed && !frozen && readable;
+  const managementMounted = useRef(false);
+  if (managementVisible) managementMounted.current = true;
   return (
     <>
-      {readable && !frozen && presentationCurrent ? <RealmHomeHeader realm={realm} participation={participation} /> : null}
-      {readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
-      {claim}
-      {frozen || !readable ? null : management}
+      {!removed && readable && !frozen && presentationCurrent ? (
+        <RealmHomeHeader realm={realm} participation={participation} />
+      ) : null}
+      {!removed && readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
+      {!removed ? claim : null}
+      {managementMounted.current ? (
+        <div hidden={!managementVisible} inert={!managementVisible} className="space-y-10">
+          {management}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -347,7 +363,7 @@ export function SpacePage({
     <article className="max-w-5xl space-y-10 text-foreground">
       <header
         className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
-        style={{ backgroundColor: banner?.placeholder.color ?? colors.background, color: colors.foreground }}
+        style={{ backgroundColor: colors.background, color: colors.foreground }}
       >
         {bannerSrc && !spaceRemoved ? (
           <>
@@ -360,15 +376,11 @@ export function SpacePage({
                 event.currentTarget.style.display = 'none';
               }}
             />
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 -z-10 bg-gradient-to-r from-black/75 via-black/50 to-black/15"
-            />
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/75" />
           </>
         ) : null}
         <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
           <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
-
         </div>
         {page.space.summary && !spaceRemoved ? (
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
@@ -385,13 +397,16 @@ export function SpacePage({
           </section>
         </>
       ) : null}
-      {page.realm && !realmRemoved ? (
+      {page.realm ? (
         <Home
+          key={page.realm.id}
           realm={page.realm}
+          removed={realmRemoved}
           frozen={frozen}
           readable={readable}
           presentationCurrent={
-            !claimRead || (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot))
+            !claimRead ||
+            (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot))
           }
           participation={
             <RealmMembership

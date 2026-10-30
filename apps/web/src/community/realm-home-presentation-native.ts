@@ -35,7 +35,12 @@ export async function readRealmHomePresentation(
   space: NativeSpace,
 ): Promise<RealmHomePresentation> {
   const before = realmClaimSnapshot(realm);
-  if (realm.state !== 'active' || space.state !== 'active' || realm.spaceId !== space.spaceId || space.realmId !== realm.realmId)
+  if (
+    realm.state !== 'active' ||
+    space.state !== 'active' ||
+    realm.spaceId !== space.spaceId ||
+    space.realmId !== realm.realmId
+  )
     return hidden;
   // Older responses cannot establish the current lifecycle or selected-reference binding.
   if (!before || !realm.presentation) return unavailable;
@@ -45,41 +50,52 @@ export async function readRealmHomePresentation(
     const result = await route.presentation?.get(auth);
     if (!result) return unavailable;
     if (result.status === 401 || result.status === 403) return hidden;
-    if (result.error || result.status !== 200 || !result.data) return unavailable;
-    const source = boardCommunitySource({ realmId: realm.realmId, ...{ community: result.data.community } });
-    if (source?.state !== 'available') return unavailable;
+    const source =
+      !result.error && result.status === 200 && result.data
+        ? boardCommunitySource({ realmId: realm.realmId, ...{ community: result.data.community } })
+        : unavailable;
     const [finalRealm, finalSpace] = await Promise.all([
       client.realms({ realmId: realm.realmId }).get(auth),
       client.spaces({ spaceId: space.spaceId }).get(auth),
     ]);
-    if (finalRealm.error || finalSpace.error)
-      return [finalRealm.status, finalSpace.status].some((status) => [401, 403, 404].includes(status)) ? hidden : unavailable;
+    if (finalRealm.error || finalSpace.error || !finalRealm.data || !finalSpace.data)
+      return [finalRealm.status, finalSpace.status].some((status) => [401, 403, 404].includes(status))
+        ? hidden
+        : unavailable;
     const current = realmClaimSnapshot(finalRealm.data.realm);
     if (
       !current ||
       !sameRealmClaimSource(before, current) ||
+      finalRealm.data.realm.visibility !== realm.visibility ||
       finalSpace.data.space.state !== 'active' ||
       finalSpace.data.space.spaceId !== space.spaceId ||
       finalSpace.data.space.headRevisionId !== space.headRevisionId ||
       finalSpace.data.space.realmId !== realm.realmId ||
       !sameRealmPresentation(realm.presentation, finalRealm.data.realm.presentation)
-    ) return hidden;
+    )
+      return hidden;
+    if (source?.state !== 'available') return unavailable;
     const community = source.value;
     if (
-      community.spaceId !== space.spaceId || community.contextId !== realm.contextId ||
-      community.name !== realm.title || community.description !== realm.summary
-    ) return hidden;
+      community.spaceId !== space.spaceId ||
+      community.contextId !== realm.contextId ||
+      community.name !== realm.title ||
+      community.description !== realm.summary
+    )
+      return hidden;
     for (const [slot, selected] of [
       [community.avatar, realm.presentation.avatarMediaId],
       [community.banner, realm.presentation.bannerMediaId],
     ] as const) {
       if (slot.state === 'available' && slot.value.id !== selected) return unavailable;
-      if (slot.state === 'none' && selected !== null) return unavailable;
+      // Native concealment/erasure is also `none`, even while the selected reference remains set.
     }
-    if (community.rules.state === 'available' && (
-      community.rules.value.postId !== realm.presentation.rules?.postId ||
-      community.rules.value.revisionId !== realm.presentation.rules?.revisionId
-    )) return unavailable;
+    if (
+      community.rules.state === 'available' &&
+      (community.rules.value.postId !== realm.presentation.rules?.postId ||
+        community.rules.value.revisionId !== realm.presentation.rules?.revisionId)
+    )
+      return unavailable;
     return source;
   } catch {
     return unavailable;

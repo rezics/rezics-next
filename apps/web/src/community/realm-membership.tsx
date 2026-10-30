@@ -29,12 +29,16 @@ export function RealmMembership({
     if (admittedAction !== undefined && admittedAction !== 'sign-in') return null;
     if (realm.visibility === 'protected')
       return (
-        <section aria-label={m.realm_membership_label()}>
+        <section className="rounded-2xl bg-card p-3 text-card-foreground" aria-label={m.realm_membership_label()}>
           <p className="text-sm">{m.realm_protected_admission()}</p>
         </section>
       );
     return (
-      <section aria-label={m.realm_membership_label()} data-member-state="none">
+      <section
+        className="rounded-2xl bg-card p-3 text-card-foreground"
+        aria-label={m.realm_membership_label()}
+        data-member-state="none"
+      >
         <div className="flex flex-wrap items-center gap-3">
           {realm.viewer?.state === 'none' ? (
             <Button type="button" size="lg" className="h-11 px-6 text-base">
