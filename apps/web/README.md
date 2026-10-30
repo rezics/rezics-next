@@ -13,6 +13,8 @@ It links to security settings on the Auth site and offers sign-out. Its controls
 
 `bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
 Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
+The host command routes `auth-binding.host.test.ts` through Auth's existing placed database lane. From the repository root,
+run only that fixture with `bun apps/web/scripts/check.ts --auth-binding-host`.
 
 `bun run check` runs each non-host test file in its own `bun test` process. Browser and dev-server tests run through
 `scripts/isolated.ts`, which takes a host-wide stack slot for each file. Their separate pool has six lanes by default,

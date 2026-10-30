@@ -406,6 +406,64 @@ async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Pro
   if (code !== 0) throw new Error(`Auth binding host test placement failed with status ${code}`);
 }
 
+export type WebHostTestRuntime = {
+  /** Override the Web root in routing tests; normal checks use the current app. */
+  directory?: string;
+  /** Runs the Auth fixture through its existing Auth-owned database lane. */
+  runAuthBinding?: (env: NodeJS.ProcessEnv) => Promise<void>;
+  /** Runs the remaining native host files through Bun's existing host-test runner. */
+  runNative?: (files: string[], env: NodeJS.ProcessEnv) => Promise<void>;
+};
+
+function discoverWebHostFiles(directory: string): string[] {
+  return [...new Bun.Glob('tests/*.host.test.ts').scanSync({ cwd: directory })].sort();
+}
+
+/** Routes every discovered Web host file once, preserving Auth's own database placement boundary. */
+export async function runWebHostTests(
+  env: NodeJS.ProcessEnv = process.env,
+  runtime: WebHostTestRuntime = {},
+): Promise<void> {
+  const directory = runtime.directory ?? app;
+  const files = discoverWebHostFiles(directory);
+  const authFile = 'tests/auth-binding.host.test.ts';
+  const nativeFiles = files.filter((file) => file !== authFile);
+  const failures: string[] = [];
+  const runAuthBinding = runtime.runAuthBinding ?? runAuthBindingHostTest;
+  const runNative =
+    runtime.runNative ??
+    ((selected: string[], commandEnv: NodeJS.ProcessEnv) =>
+      runCommand(
+        'host tests',
+        'bun',
+        ['test', '--path-ignore-patterns=node_modules/**', ...selected.map((file) => `./${file}`)],
+        commandEnv,
+      ));
+
+  if (files.includes(authFile)) {
+    try {
+      await runAuthBinding(env);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (nativeFiles.length > 0) {
+    try {
+      await runNative(nativeFiles, env);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (failures.length > 0) throw new Error(failures.join('\n'));
+}
+
+export type WebCheckRuntime = {
+  hostTests?: WebHostTestRuntime;
+  authBindingHostTest?: (env: NodeJS.ProcessEnv) => Promise<void>;
+};
+
 async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
   await runCommand('generate', 'bun', ['run', 'generate'], env);
   await runCommand('route generation', 'bun', ['run', 'generate:routes'], env);
@@ -473,10 +531,15 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
   if (unique.length > 0) throw new Error(`Web tests failed for ${unique.length} file(s):\n${unique.join('\n')}`);
 }
 
-async function main(args: string[]): Promise<void> {
+export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
   if (args[0] === '--auth-binding-host') {
     if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --auth-binding-host');
-    await runAuthBindingHostTest();
+    await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env);
+    return;
+  }
+  if (args[0] === '--host') {
+    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --host');
+    await runWebHostTests(process.env, runtime.hostTests);
     return;
   }
   if (args.includes('--prepare-only')) {

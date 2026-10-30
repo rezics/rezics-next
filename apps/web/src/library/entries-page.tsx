@@ -55,7 +55,7 @@ function Tabs({ state, locale, display }: { state: LibraryEntryStateWrite | null
       </Exposure>
       <Exposure operation="library_label.list">
         <a href={`/${locale}/library/labels`} className={tabClass}>
-          {m.library_nav_labels()}
+          {m.library_labels_heading()}
         </a>
       </Exposure>
     </nav>

@@ -16,7 +16,7 @@
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
     "test": "bun scripts/isolated.ts bun test",
     "test:stories": "bun scripts/check.ts --stories --test-command 'bun run test'",
-    "test:host": "bun test --path-ignore-patterns='node_modules/**' ./tests/*.host.test.ts"
+    "test:host": "bun scripts/check.ts --host"
   },
   "dependencies": {
     "@axe-core/playwright": "4.14.0",
