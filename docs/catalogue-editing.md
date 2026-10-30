@@ -234,7 +234,12 @@ Omitted fields and languages remain unchanged. Null removes that language entry.
 language's complete alias set. Native language, text, count and request byte limits apply; at least one valid
 label must remain. Type, release semantics and derived Account-agent terms cannot be edited here. The native
 validation exports are `TermsPatch`, `TermsResult`, `TermChange`, `patchTerms` and `termRevision` in
-`services/kernel/src/semantic/terms.ts`. These are validation and DTO declarations, not a delivered write adapter.
+`services/kernel/src/semantic/terms.ts`. These are validation and DTO declarations, not a delivered write adapter. The selected native authorship
+inputs are `revisionResource(subject, revision): Resource`, `REVISION_NS: string`, and
+`initializeRevisionAuthorship(tx, {subject, revision}): Promise<void>` from `semantic/authorship.ts`.
+The command must predeclare the exact revision resource through the existing creation manifest and parent
+creation authorization, then initialize it after the real revision insert. A revision collision requires whole-command
+authorization and manifest preparation again within the original deadline; replay initializes nothing.
 
 The write must require the existing Global `statement:propose` grant together with current Subject eligibility,
 Actor, Scope, visibility, redirect and fence checks before inspecting a receipt or producing an effect. Unknown
@@ -257,9 +262,14 @@ use bounded authoritative term heads, without scanning the Subject's complete hi
 cache. Existing personal-payload locators and minimizers must cover every new persisted payload and receipt/event
 role while preserving communal identity, the nonpersonal change skeleton, account time T and legal holds.
 
-The mutation is not mounted yet. Its exact per-revision authorship helper declarations and Source term-support
-producer are unavailable in this checkout. These missing native bindings are not replaced by successful shims.
-Focused acceptance cases retain the complete correction, CAS, replay, current-reader and denial obligations.
+The mutation is not mounted yet. The selected authorship signatures are known, but their native
+`semantic/authorship.ts` implementation and the actual `recordSubjectPageTransition` producer are absent
+from this checkout. The subject-page candidate reader and readiness route do not implement that publication
+hook. These are required native inputs: a throwing authorship adapter can support independent implementation,
+but cannot satisfy release, and a replacement publication or authority writer is not authorized here.
+Existing Subject reads resolve final terms through their exact original revision Source; a correction must
+preserve those locators when adding bounded current heads. Focused acceptance cases retain the complete
+correction, CAS, replay, current-reader and denial obligations.
 
 ## Individual revision explanation
 
