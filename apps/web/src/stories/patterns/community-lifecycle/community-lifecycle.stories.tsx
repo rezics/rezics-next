@@ -36,15 +36,15 @@ export async function enterReason({ canvasElement }: { canvasElement: HTMLElemen
     await canvas.findByRole('textbox', { name: m.container_lifecycle_reason() }),
     'Repeated disruption',
   );
-  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_remove(), exact: true }));
+  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_remove() }));
   return canvas;
 }
 export async function removeAndRestore(context: { canvasElement: HTMLElement }) {
   const canvas = await enterReason(context);
-  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm(), exact: true }));
+  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
   await canvas.findByText(m.container_lifecycle_removed());
-  await userEvent.click(await canvas.findByRole('button', { name: m.container_lifecycle_restore(), exact: true }));
-  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm(), exact: true }));
+  await userEvent.click(await canvas.findByRole('button', { name: m.container_lifecycle_restore() }));
+  await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
   await expect(await canvas.findByText(m.container_lifecycle_restored())).toBeVisible();
   await expect(await canvas.findByText(m.container_lifecycle_link_unavailable())).toBeVisible();
   await expect(canvas.queryByRole('link', { name: m.container_lifecycle_open() })).toBeNull();
@@ -56,7 +56,7 @@ export const Active: Story = {
   play: async (context) => {
     const canvas = await enterReason(context);
     await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_cancel() }));
-    await expect(canvas.queryByRole('button', { name: m.container_lifecycle_confirm(), exact: true })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.container_lifecycle_confirm() })).toBeNull();
   },
 };
 export const RemoveAndRestore: Story = { play: removeAndRestore };
@@ -65,7 +65,7 @@ export const UncertainRetry: Story = {
   args: { scenario: 'uncertain' },
   play: async (context) => {
     const canvas = await enterReason(context);
-    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
     await expect(await canvas.findByText(m.container_lifecycle_uncertain())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_retry() }));
     await expect(await canvas.findByText(m.container_lifecycle_removed())).toBeVisible();
@@ -75,11 +75,11 @@ export const NativeDenial: Story = {
   args: { scenario: 'denied' },
   play: async (context) => {
     const canvas = await enterReason(context);
-    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
       m.container_lifecycle_refused({ status: '404', code: 'not_found' }),
     );
-    await expect(canvas.queryByRole('button', { name: m.container_lifecycle_remove(), exact: true })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.container_lifecycle_remove() })).toBeNull();
     await expect(canvas.getByRole('textbox', { name: m.container_lifecycle_reason() })).toHaveValue(
       'Repeated disruption',
     );
@@ -89,7 +89,7 @@ export const Conflict: Story = {
   args: { scenario: 'conflict' },
   play: async (context) => {
     const canvas = await enterReason(context);
-    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
     await canvas.findByText(m.container_lifecycle_conflict());
     await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_refresh() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.container_lifecycle_review() }));
