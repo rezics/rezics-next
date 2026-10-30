@@ -19,6 +19,10 @@ function extracted<T>(startName: string, endName: string, ending = `\nreturn ${s
 type Job = { id: string; locale: string; theme: string };
 type CaptureResult = { files: string[]; failures: { job: Job; error: string }[] };
 type CaptureJobs = (jobs: readonly Job[], run: (job: Job, worker: number) => Promise<string>) => Promise<CaptureResult>;
+type StorySelection = (availableStories: readonly string[], selectors: readonly string[]) => {
+  stories: string[];
+  unmatchedSelectors: string[];
+};
 
 test('one failed story does not stop later screenshot jobs', async () => {
   const captureJobs = extracted<CaptureJobs>('captureJobs', 'reportCaptureResults');
@@ -64,6 +68,44 @@ test('a run without failures retains its zero exit status and output', () => {
   const lines: string[] = [];
   expect(report(['one.png'], [], (line) => lines.push(line))).toBe(0);
   expect(lines.join('')).toBe('one.png\n1\n');
+});
+
+test('unmatched explicit selectors are reported while matched stories retain their capture jobs', async () => {
+  const selectStories = extracted<StorySelection>('storyMatches', 'parseOptions', '\nreturn selectStories;');
+  const selection = selectStories(
+    ['pages-collection--purchase', 'pages-community-thread-reading--selected-parent'],
+    [
+      'pages-collection--purchase',
+      'pages-community-thread--selected-reply-target',
+      'pages-community-thread--*',
+    ],
+  );
+  expect(selection.stories).toEqual(['pages-collection--purchase']);
+  expect(selection.unmatchedSelectors).toEqual([
+    'pages-community-thread--selected-reply-target',
+    'pages-community-thread--*',
+  ]);
+
+  const captureJobs = extracted<CaptureJobs>('captureJobs', 'reportCaptureResults');
+  const jobs = selection.stories.map((id) => ({ id, locale: 'en', theme: 'light' }));
+  const captures = await captureJobs(jobs, async (job) => `${job.id}.png`);
+  expect(captures.files).toEqual(['pages-collection--purchase.png']);
+
+  const report = extracted<
+    (
+      files: string[],
+      failures: { job: Job; error: string }[],
+      write: (s: string) => void,
+      unmatchedSelectors?: readonly string[],
+    ) => number
+  >('reportCaptureResults', 'capture');
+  const lines: string[] = [];
+  expect(report(captures.files, captures.failures, (line) => lines.push(line), selection.unmatchedSelectors)).toBe(1);
+  expect(lines.join('')).toBe(
+    'pages-collection--purchase.png\n1\n' +
+      'No stories matched --story "pages-community-thread--selected-reply-target".\n' +
+      'No stories matched --story "pages-community-thread--*".\n',
+  );
 });
 
 test('full page capture resets scroll only when no viewport overlay is open', async () => {

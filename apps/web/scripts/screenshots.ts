@@ -78,6 +78,19 @@ function storyMatches(id: string, pattern: string): boolean {
   return new RegExp(expression).test(id);
 }
 
+function selectStories(
+  availableStories: readonly string[],
+  selectors: readonly string[],
+): { stories: string[]; unmatchedSelectors: string[] } {
+  const unmatchedSelectors = selectors.filter(
+    (selector) => !availableStories.some((id) => storyMatches(id, selector)),
+  );
+  const stories = availableStories
+    .filter((id) => selectors.length === 0 || selectors.some((selector) => storyMatches(id, selector)))
+    .sort();
+  return { stories, unmatchedSelectors };
+}
+
 export function parseOptions(argv: readonly string[]): Options {
   const options: Options = {
     stories: [],
@@ -346,14 +359,22 @@ async function captureJobs(
   };
 }
 
-function reportCaptureResults(files: string[], failures: CaptureFailure[], write: (text: string) => void): number {
+function reportCaptureResults(
+  files: string[],
+  failures: CaptureFailure[],
+  write: (text: string) => void,
+  unmatchedSelectors: readonly string[] = [],
+): number {
   for (const file of files) write(`${file}\n`);
   write(`${files.length}\n`);
   for (const { job, error } of failures) {
     const width = job.widthSuffix && job.width !== undefined ? ` ${job.width}px` : '';
     write(`${job.id} ${job.locale} ${job.theme}${width}: ${error.replace(/\s+/g, ' ').trim()}\n`);
   }
-  return failures.length === 0 ? 0 : 1;
+  for (const selector of unmatchedSelectors) {
+    write(`No stories matched --story ${JSON.stringify(selector)}.\n`);
+  }
+  return failures.length === 0 && unmatchedSelectors.length === 0 ? 0 : 1;
 }
 
 async function capture(
@@ -449,11 +470,14 @@ async function captureScreenshots(options: Options): Promise<number> {
     const indexFile = Bun.file(join(site, 'index.json'));
     if (!(await indexFile.exists())) throw new Error('Storybook build did not write index.json.');
     const index = (await indexFile.json()) as { entries?: Record<string, { id?: string; type?: string }> };
-    const stories = Object.values(index.entries ?? {})
-      .flatMap((entry) => (entry.type === 'story' && entry.id ? [entry.id] : []))
-      .filter((id) => options.stories.length === 0 || options.stories.some((pattern) => storyMatches(id, pattern)))
-      .sort();
-    if (stories.length === 0) throw new Error('No stories matched.');
+    const availableStories = Object.values(index.entries ?? {}).flatMap((entry) =>
+      entry.type === 'story' && entry.id ? [entry.id] : [],
+    );
+    const { stories, unmatchedSelectors } = selectStories(availableStories, options.stories);
+    if (stories.length === 0 && unmatchedSelectors.length === 0) throw new Error('No stories matched.');
+    if (stories.length === 0) {
+      return reportCaptureResults([], [], (text) => process.stdout.write(text), unmatchedSelectors);
+    }
     server = serve(site);
     const origin = `http://127.0.0.1:${server.port}`;
     browser = await chromium.launch();
@@ -471,7 +495,7 @@ async function captureScreenshots(options: Options): Promise<number> {
       ),
     );
     const { files, failures } = await capture(browser, origin, jobs, options.out, progress);
-    return reportCaptureResults(files, failures, (text) => process.stdout.write(text));
+    return reportCaptureResults(files, failures, (text) => process.stdout.write(text), unmatchedSelectors);
   } finally {
     await stop();
   }
