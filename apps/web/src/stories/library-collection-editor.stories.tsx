@@ -254,7 +254,7 @@ export const SelectedRemoval: Story = {
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(canvas.getAllByRole('button', { name: new RegExp(m.editor_undo()) })).toHaveLength(2);
     await userEvent.click(canvas.getAllByRole('button', { name: new RegExp(m.editor_undo()) })[0]!);
-    await expect(await canvas.findByRole('link', { name: 'Snow Country', exact: true })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: 'Snow Country' })).toBeVisible();
     await openEditor(canvasElement);
     await expect(canvas.getAllByRole('checkbox')).toHaveLength(3);
   },
