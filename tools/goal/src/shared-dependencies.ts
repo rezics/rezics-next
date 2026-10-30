@@ -60,7 +60,7 @@ function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits
       args,
       cwd: root,
       step: `bun ${args.join(' ')}`,
-      limits,
+      ...(limits ? { limits } : {}),
     });
   } catch (error) {
     throw new Error(`Dependency install failed in ${root}: ${String(error)}`, { cause: error });

@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BoundedProcessError, runBoundedInstallProcess } from './install-process.ts';
+import {
+  BoundedProcessError,
+  GOAL_GATE_CHECK_LIMITS,
+  INSTALL_PROCESS_LIMITS,
+  runBoundedInstallProcess,
+} from './install-process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 function isAlive(pid: number): boolean {
@@ -90,6 +95,63 @@ test('a failed command also reaps its process group while preserving install dia
     h.close();
   }
 });
+
+test('generic dependency progress and completed package lines do not name the active package', async () => {
+  const h = temporaryDirectory();
+  try {
+    for (const output of ['Resolving dependencies @fixture/progress@1.0.0', '+ @fixture/completed@1.2.3']) {
+      const error = captureFailure(() =>
+        runBoundedInstallProcess({
+          command: 'sh',
+          args: ['-c', `printf '%s\\n' '${output}'; sleep 30`],
+          cwd: h.path,
+          step: 'bun install --frozen-lockfile',
+          limits: { startupMs: 2_000, runMs: 120, terminationMs: 500 },
+        }),
+      );
+
+      expect(error.timedOut).toBe(true);
+      expect(error.packageName).toBeUndefined();
+      expect(error.summary).toContain('package="unknown"');
+    }
+  } finally {
+    h.close();
+  }
+});
+
+test(
+  'the absolute install budget covers startup and postinstall work and remains distinct from the Goal check budget',
+  async () => {
+    const h = temporaryDirectory();
+    try {
+      const pidFile = join(h.path, 'postinstall-descendant.pid');
+      const started = performance.now();
+      const error = captureFailure(() =>
+        runBoundedInstallProcess({
+          command: 'sh',
+          args: [
+            '-c',
+            `echo 'Installing dependencies'; sleep 0.25; echo 'postinstall setup started'; sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`,
+          ],
+          cwd: h.path,
+          step: 'bun install --frozen-lockfile',
+          limits: { startupMs: 2_000, runMs: 2_000, budgetMs: 400, terminationMs: 500 },
+        }),
+      );
+
+      expect(INSTALL_PROCESS_LIMITS.budgetMs).toBe(180_000);
+      expect(GOAL_GATE_CHECK_LIMITS.budgetMs).toBeGreaterThan(INSTALL_PROCESS_LIMITS.budgetMs);
+      expect(error.timedOut).toBe(true);
+      expect(error.phase).toBe('run');
+      expect(error.stdout).toContain('postinstall setup started');
+      expect(performance.now() - started).toBeLessThan(1_800);
+      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+    } finally {
+      h.close();
+    }
+  },
+  10_000,
+);
 
 test('a successful install keeps its artifact and output', () => {
   const h = temporaryDirectory();

@@ -20,18 +20,21 @@ import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from
 export type ProcessLimits = Readonly<{
   startupMs: number;
   runMs: number;
+  budgetMs: number;
   terminationMs: number;
 }>;
 
 export const INSTALL_PROCESS_LIMITS: ProcessLimits = {
-  startupMs: 60_000,
-  runMs: 60 * 60_000,
+  startupMs: 15_000,
+  runMs: 180_000,
+  budgetMs: 180_000,
   terminationMs: 15_000,
 };
 
 export const GOAL_GATE_CHECK_LIMITS: ProcessLimits = {
   startupMs: 60_000,
   runMs: 90 * 60_000,
+  budgetMs: 90 * 60_000,
   terminationMs: 15_000,
 };
 
@@ -80,7 +83,7 @@ export class BoundedProcessError extends Error {
   readonly phase: ProcessPhase;
   readonly step: string;
   readonly workspace: string;
-  readonly packageName?: string;
+  readonly packageName: string | undefined;
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
@@ -98,7 +101,7 @@ export class BoundedProcessError extends Error {
     const packageName = packageFromOutput(`${stdout}\n${stderr}`);
     const infra = result.timedOut || result.phase === 'supervisor' || Boolean(result.error || result.cleanupError);
     const labels = [`phase=${result.phase}`, `step=${JSON.stringify(step)}`, `workspace=${JSON.stringify(workspace)}`];
-    if (packageName) labels.push(`package=${JSON.stringify(packageName)}`);
+    labels.push(`package=${JSON.stringify(packageName ?? 'unknown')}`);
     const summary = result.timedOut
       ? `ETIMEDOUT: Infrastructure failure: process timed out (${labels.join(', ')})`
       : result.cleanupError
@@ -142,11 +145,9 @@ function readCapture(path: string): string {
 }
 
 function packageFromOutput(output: string): string | undefined {
-  const packageName = /(?:install(?:ing)?|fetch(?:ing)?|resolv(?:e|ed|ing)|download(?:ing)?)(?:\s+(?:package|dependency))?\s+[\s`'"<]*(@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@[a-z0-9.+_-]+)?/im.exec(
+  return /^[ \t]*(?:installing|fetching|downloading)[ \t]+package[ \t]+[`'"<]*(@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@[a-z0-9.+_-]+)?\b/im.exec(
     output,
   )?.[1];
-  if (packageName) return packageName;
-  return /^\+\s+(@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)@[a-z0-9.+_-]+/im.exec(output)?.[1];
 }
 
 function workspaceName(cwd: string, requested?: string): string {
@@ -229,7 +230,7 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
   let fallbackError: string | undefined;
   try {
     writeFileSync(requestPath, JSON.stringify(request), { mode: 0o600 });
-    const supervisorLimit = limits.startupMs + limits.runMs + limits.terminationMs * 3 + 5_000;
+    const supervisorLimit = limits.budgetMs + limits.terminationMs * 3 + 5_000;
     const supervisor = spawnSync(
       process.execPath,
       [fileURLToPath(import.meta.url), '--goal-bounded-install-supervisor', requestPath],
@@ -255,7 +256,7 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
         signal: supervisor.signal as NodeJS.Signals | null,
         phase: 'supervisor',
         timedOut: (supervisor.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT',
-        error: fallbackError,
+        ...(fallbackError ? { error: fallbackError } : {}),
       };
     }
   } finally {
@@ -272,7 +273,14 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
     }
   }
   if (!result || result.timedOut || result.code !== 0 || result.cleanupError || result.error)
-    throw new BoundedProcessError({ step: options.step, workspace, result: result!, stdout, stderr, fallbackError });
+    throw new BoundedProcessError({
+      step: options.step,
+      workspace,
+      result: result!,
+      stdout,
+      stderr,
+      ...(fallbackError ? { fallbackError } : {}),
+    });
   return { code: result.code, stdout, stderr };
 }
 
@@ -343,6 +351,7 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
   let startupTimer: ReturnType<typeof setTimeout> | undefined;
   let runTimer: ReturnType<typeof setTimeout> | undefined;
   let externalStop: (() => void) | undefined;
+  const budgetDeadline = Date.now() + request.limits.budgetMs;
   let closeResolve!: () => void;
   const closed = new Promise<void>((resolve) => (closeResolve = resolve));
   const onSignal = () => externalStop?.();
@@ -425,10 +434,16 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
           return;
         }
         if (startupTimer) clearTimeout(startupTimer);
+        const runBudget = budgetDeadline - Date.now();
+        if (runBudget <= 0) {
+          cleanupStartedAt = Date.now();
+          finish({ code: null, signal: null, phase: 'startup', timedOut: true });
+          return;
+        }
         runTimer = setTimeout(() => {
           cleanupStartedAt = Date.now();
           finish({ code: null, signal: null, phase: 'run', timedOut: true });
-        }, request.limits.runMs);
+        }, Math.min(request.limits.runMs, runBudget));
       });
       child!.once('error', (error) => {
         cleanupStartedAt = Date.now();
@@ -453,7 +468,7 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
       startupTimer = setTimeout(() => {
         cleanupStartedAt = Date.now();
         finish({ code: null, signal: null, phase: 'startup', timedOut: true });
-      }, request.limits.startupMs);
+      }, Math.min(request.limits.startupMs, request.limits.budgetMs));
     });
     return result;
   } catch (error) {
