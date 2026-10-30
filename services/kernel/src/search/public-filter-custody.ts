@@ -133,7 +133,12 @@ function check(context: PublicFilterConsumerContext) {
 }
 function failure(error: unknown, meter: CustodyCost): CustodyFailure {
   if (error instanceof TypeError) throw error;
-  const reason = error instanceof Failure ? error.reason : error instanceof OpenSearchError && error.status === 404 ? 'observation_lost' : 'owner_unavailable';
+  const reason =
+    error instanceof Failure
+      ? error.reason
+      : error instanceof OpenSearchError && error.status === 404
+        ? 'observation_lost'
+        : 'owner_unavailable';
   return {
     status: reason === 'deadline' || reason === 'owner_unavailable' ? 'unavailable' : 'unready',
     reason,
@@ -454,11 +459,37 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       return run(context, async (meter) => {
         const consumer = await registered(input.registration, meter);
         return transaction(meter, async (client) => {
-          const saved = await sql(client, meter, `INSERT INTO search.public_filter_prepared VALUES ($1,$2,$3,$4,$5)
+          const saved = await sql(
+            client,
+            meter,
+            `INSERT INTO search.public_filter_prepared VALUES ($1,$2,$3,$4,$5)
             ON CONFLICT (partition_no,registration,build,generation) DO UPDATE SET build=EXCLUDED.build WHERE public_filter_prepared.rows=EXCLUDED.rows RETURNING build`,
-          [input.registration.partition, input.registration.id, input.build, input.generation.toString(), encode(input.rows)]);
+            [
+              input.registration.partition,
+              input.registration.id,
+              input.build,
+              input.generation.toString(),
+              encode(input.rows),
+            ],
+          );
           if (!saved.rowCount) throw new Failure('binding_mismatch');
-          return retain(input.registration, { consumer, snapshot: { kind: 'prepared', observation: `${input.registration.partition}:${randomUUID()}`, build: input.build, generation: input.generation } }, input.covered, input.expiresAt, input.rows, meter, client);
+          return retain(
+            input.registration,
+            {
+              consumer,
+              snapshot: {
+                kind: 'prepared',
+                observation: `${input.registration.partition}:${randomUUID()}`,
+                build: input.build,
+                generation: input.generation,
+              },
+            },
+            input.covered,
+            input.expiresAt,
+            input.rows,
+            meter,
+            client,
+          );
         });
       });
     },
@@ -518,15 +549,19 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       });
     },
     release(use, context) {
-      return run(context, async (meter) => {
-        await sql(
-          pool,
-          meter,
-          'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)',
-          [partition(use.observation), use.observation, use.token],
-        );
-        return { status: 'released' as const, cost: meter };
-      }, true);
+      return run(
+        context,
+        async (meter) => {
+          await sql(
+            pool,
+            meter,
+            'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)',
+            [partition(use.observation), use.observation, use.token],
+          );
+          return { status: 'released' as const, cost: meter };
+        },
+        true,
+      );
     },
     renewPit(q, keepAliveMs, search, context) {
       const input = decode<typeof q>(encode(q));
@@ -560,7 +595,17 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             consumer: input.consumer,
             snapshot: { ...input.snapshot, pit: response.pit_id ?? input.snapshot.pit },
           };
-          await sql(pool, meter, `INSERT INTO search.public_filter_pit VALUES ($1,$2,$3,$4,'owned') ON CONFLICT DO NOTHING`, [partition(input.snapshot.observation), input.snapshot.observation, digest(successor.snapshot.kind === 'pit' ? successor.snapshot.pit : ''), successor.snapshot.kind === 'pit' ? successor.snapshot.pit : '']);
+          await sql(
+            pool,
+            meter,
+            `INSERT INTO search.public_filter_pit VALUES ($1,$2,$3,$4,'owned') ON CONFLICT DO NOTHING`,
+            [
+              partition(input.snapshot.observation),
+              input.snapshot.observation,
+              digest(successor.snapshot.kind === 'pit' ? successor.snapshot.pit : ''),
+              successor.snapshot.kind === 'pit' ? successor.snapshot.pit : '',
+            ],
+          );
           const updated = await sql(
             pool,
             meter,
@@ -614,10 +659,20 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           await Bun.sleep(10);
         }
         for (;;) {
-          const owned = await sql(pool, meter, "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 64", values);
+          const owned = await sql(
+            pool,
+            meter,
+            "SELECT id,locator FROM search.public_filter_pit WHERE (partition_no,observation)=($1,$2) AND state='owned' ORDER BY id LIMIT 64",
+            values,
+          );
           if (!owned.rowCount) break;
           for (const pit of owned.rows) await deletePit(pit.locator, search, context, meter);
-          await sql(pool, meter, "UPDATE search.public_filter_pit SET state='released' WHERE (partition_no,observation)=($1,$2) AND id=ANY($3::text[])", [...values, owned.rows.map((row) => row.id)]);
+          await sql(
+            pool,
+            meter,
+            "UPDATE search.public_filter_pit SET state='released' WHERE (partition_no,observation)=($1,$2) AND id=ANY($3::text[])",
+            [...values, owned.rows.map((row) => row.id)],
+          );
         }
         await sql(
           pool,

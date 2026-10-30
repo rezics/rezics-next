@@ -20,7 +20,14 @@ afterAll(async () => {
 });
 // These records exercise the trusted producer boundary only, never Source/Access permission.
 function definition(): CustodyDefinition {
-  const release: CustodyDefinition['meaning']['release'] = { format: RELEASE_FORMAT, catalogue: {id:'boundary',version:'1'}, generator:{name:'fixture',version:'1'}, prefixes:{}, types: {}, properties: {} };
+  const release: CustodyDefinition['meaning']['release'] = {
+    format: RELEASE_FORMAT,
+    catalogue: { id: 'boundary', version: '1' },
+    generator: { name: 'fixture', version: '1' },
+    prefixes: {},
+    types: {},
+    properties: {},
+  };
   return {
     source: { id: crypto.randomUUID(), partition: 7, epoch: 1, configuration: 'native-boundary-fixture' },
     readDefinition: crypto.randomUUID(),
@@ -70,8 +77,12 @@ async function append(
   if (acquired.status !== 'acquired') throw new Error(acquired.reason);
   const execution = { id: crypto.randomUUID(), start: cut(), ownRows: rows };
   if (queried.snapshot.kind === 'pit') {
-    const actual = await search.request<{_shards:{failed:number};timed_out:boolean}>('POST','/_search',{size:0,pit:{id:queried.snapshot.pit,keep_alive:'5m'}});
-    expect(actual.body._shards.failed).toBe(0); expect(actual.body.timed_out).toBe(false);
+    const actual = await search.request<{ _shards: { failed: number }; timed_out: boolean }>('POST', '/_search', {
+      size: 0,
+      pit: { id: queried.snapshot.pit, keep_alive: '5m' },
+    });
+    expect(actual.body._shards.failed).toBe(0);
+    expect(actual.body.timed_out).toBe(false);
   }
   try {
     const result = await registry.appendExecution({ use: acquired.use, execution }, context());
@@ -89,12 +100,23 @@ test('real migrated durable custody preserves immutable definition observation c
   (n.input.definition.capture.after as (string | null)[])[1] = 'mutated';
   Object.assign(n.input.definition.source, { configuration: 'mutated' });
   const modulePath = new URL('../../src/search/public-filter-custody.ts', import.meta.url).pathname;
-  const child = Bun.spawn([process.execPath, '--eval', `
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `
     import { Pool } from 'pg'; import { readPublicFilterConsumerCustody } from ${JSON.stringify(modulePath)};
     const pool = new Pool({connectionString: process.env.DATABASE_URL, max:1});
     const result = await readPublicFilterConsumerCustody(pool, JSON.parse(process.env.CUSTODY_REQUEST), {deadline:Date.now()+60000});
     console.log(JSON.stringify(result)); await pool.end();
-  `], { env: { ...process.env, CUSTODY_REQUEST: JSON.stringify({queried:n.queried,execution:a.id}) }, stdout: 'pipe', stderr: 'pipe' });
+  `,
+    ],
+    {
+      env: { ...process.env, CUSTODY_REQUEST: JSON.stringify({ queried: n.queried, execution: a.id }) },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
   const recoveredResult = JSON.parse(await new Response(child.stdout).text());
   expect(await child.exited).toBe(0);
   expect(recoveredResult.execution).toEqual(a);
@@ -116,7 +138,10 @@ test('real migrated durable custody preserves immutable definition observation c
   }
   const diagnostic = await recovered.read({ queried: n.queried }, context());
   expect(diagnostic.status === 'found' && diagnostic.execution).toBeNull();
-  expect(await recovered.read({ queried: n.queried, execution: crypto.randomUUID() }, context())).toMatchObject({status:'unready',reason:'execution_missing'});
+  expect(await recovered.read({ queried: n.queried, execution: crypto.randomUUID() }, context())).toMatchObject({
+    status: 'unready',
+    reason: 'execution_missing',
+  });
   for (const queried of [
     { ...n.queried, consumer: { ...n.consumer, projectionGeneration: 'other' } },
     { ...n.queried, snapshot: { ...n.queried.snapshot, pit: 'invented' } },
@@ -202,11 +227,19 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   const renew = await setup();
   let entered = 0;
   let both!: () => void;
-  const reached = new Promise<void>((resolve) => { both = resolve; });
-  const concurrentSearch: typeof search = { ...search, async request(method, path, body, options) {
-    if (path === '/_search') { if (++entered === 2) both(); await reached; }
-    return search.request(method, path, body, options);
-  } };
+  const reached = new Promise<void>((resolve) => {
+    both = resolve;
+  });
+  const concurrentSearch: typeof search = {
+    ...search,
+    async request(method, path, body, options) {
+      if (path === '/_search') {
+        if (++entered === 2) both();
+        await reached;
+      }
+      return search.request(method, path, body, options);
+    },
+  };
   const results = await Promise.all([
     registry.renewPit(renew.queried, 60_000, concurrentSearch, context()),
     registry.renewPit(renew.queried, 60_000, concurrentSearch, context()),
@@ -253,7 +286,21 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
       )
     ).status,
   ).toBe('unready');
-  expect((await registry.retainPrepared({ registration: renew.registration, covered: cut(), build: prepared.queried.snapshot.build, generation: prepared.queried.snapshot.generation, rows: [], expiresAt: Date.now()+60000 }, context())).status).toBe('unready');
+  expect(
+    (
+      await registry.retainPrepared(
+        {
+          registration: renew.registration,
+          covered: cut(),
+          build: prepared.queried.snapshot.build,
+          generation: prepared.queried.snapshot.generation,
+          rows: [],
+          expiresAt: Date.now() + 60000,
+        },
+        context(),
+      )
+    ).status,
+  ).toBe('unready');
   const retained = await registry.read({ queried: prepared.queried }, context());
   expect(retained.status === 'found' && retained.queried).toEqual(prepared.queried);
   await registry.closeObservation(prepared.queried, search, context());
@@ -265,41 +312,44 @@ test('native keyed custody growth includes unrelated definitions observations an
   const db = await openGrowthDatabase();
   try {
     for (const axis of ['registration', 'observation', 'execution']) {
-    const report = await checkGrowth(db, {
-      name: `public-filter-custody-${axis}`,
-      scales: [64, 512, 4096],
-      indexProbes: 8,
-      bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
-      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
-      includeBackends: true,
-      async grow(_db, scale) {
-        if (axis === 'registration') await db.admin.query(
-          `INSERT INTO search.public_filter_registration SELECT partition_no, md5(id || g), physical_target, consumer, definition, 'retired' FROM search.public_filter_registration CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND id=$2 ON CONFLICT DO NOTHING`,
-          [scale, n.registration.id],
-        );
-        if (axis === 'observation') await db.admin.query(
-          `INSERT INTO search.public_filter_observation SELECT partition_no, '7:' || md5(observation || g), registration, queried, covered, expires_at, 'closed', revision, prepared_rows FROM search.public_filter_observation CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND observation=$2 ON CONFLICT DO NOTHING`,
-          [scale, n.queried.snapshot.observation],
-        );
-        if (axis === 'execution') await db.admin.query(
-          `INSERT INTO search.public_filter_execution SELECT partition_no, observation, md5(id || g), execution FROM search.public_filter_execution CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND observation=$2 AND id=$3 ON CONFLICT DO NOTHING`,
-          [scale, n.queried.snapshot.observation, execution.id],
-        );
-      },
-      async operation() {
-        const result = await readPublicFilterConsumerCustody(
-          db.pool,
-          { queried: n.queried, execution: execution.id },
-          context(),
-        );
-        expect(result.status).toBe('found');
-      },
-    });
-    assertGrowthAccessPaths('public-filter-custody-keyed', report.samples, [
-      'search.public_filter_registration',
-      'search.public_filter_observation',
-      'search.public_filter_execution',
-    ]);
+      const report = await checkGrowth(db, {
+        name: `public-filter-custody-${axis}`,
+        scales: [64, 512, 4096],
+        indexProbes: 8,
+        bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+        includeBackends: true,
+        async grow(_db, scale) {
+          if (axis === 'registration')
+            await db.admin.query(
+              `INSERT INTO search.public_filter_registration SELECT partition_no, md5(id || g), physical_target, consumer, definition, 'retired' FROM search.public_filter_registration CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND id=$2 ON CONFLICT DO NOTHING`,
+              [scale, n.registration.id],
+            );
+          if (axis === 'observation')
+            await db.admin.query(
+              `INSERT INTO search.public_filter_observation SELECT partition_no, '7:' || md5(observation || g), registration, queried, covered, expires_at, 'closed', revision, prepared_rows FROM search.public_filter_observation CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND observation=$2 ON CONFLICT DO NOTHING`,
+              [scale, n.queried.snapshot.observation],
+            );
+          if (axis === 'execution')
+            await db.admin.query(
+              `INSERT INTO search.public_filter_execution SELECT partition_no, observation, md5(id || g), execution FROM search.public_filter_execution CROSS JOIN generate_series(1,$1::int) g WHERE partition_no=7 AND observation=$2 AND id=$3 ON CONFLICT DO NOTHING`,
+              [scale, n.queried.snapshot.observation, execution.id],
+            );
+        },
+        async operation() {
+          const result = await readPublicFilterConsumerCustody(
+            db.pool,
+            { queried: n.queried, execution: execution.id },
+            context(),
+          );
+          expect(result.status).toBe('found');
+        },
+      });
+      assertGrowthAccessPaths('public-filter-custody-keyed', report.samples, [
+        'search.public_filter_registration',
+        'search.public_filter_observation',
+        'search.public_filter_execution',
+      ]);
     }
     const measured = await capture(
       db,
@@ -320,28 +370,95 @@ test('native keyed custody growth includes unrelated definitions observations an
 test('full expanded negative AST text keyset and configuration are copied before native I/O; compiler keys and immutable rebinding reject tampering', async () => {
   const physical = await target();
   const d = definition();
-  const property = (id: string, qualifiers: string[] = []) => ({ iri: `https://example.test/${id}`, labels: {en:id}, mappings: [], datatype: 'wikibase-item' as const, multivalued: true, qualifiers, value: {} });
-  Object.assign(d.meaning.release, { types: { 'schema:Book': { iri:'https://schema.org/Book',labels:{en:'Book'},mappings:[],bases:[],properties:['schema:author'],facets:['schema:author'] } }, properties: { 'schema:author':property('author',['rezics:role']), 'rezics:role':property('role') } });
+  const property = (id: string, qualifiers: string[] = []) => ({
+    iri: `https://example.test/${id}`,
+    labels: { en: id },
+    mappings: [],
+    datatype: 'wikibase-item' as const,
+    multivalued: true,
+    qualifiers,
+    value: {},
+  });
+  Object.assign(d.meaning.release, {
+    types: {
+      'schema:Book': {
+        iri: 'https://schema.org/Book',
+        labels: { en: 'Book' },
+        mappings: [],
+        bases: [],
+        properties: ['schema:author'],
+        facets: ['schema:author'],
+      },
+    },
+    properties: { 'schema:author': property('author', ['rezics:role']), 'rezics:role': property('role') },
+  });
   Object.assign(d.meaning, { digest: releaseDigest(d.meaning.release) });
   const id = crypto.randomUUID();
-  const ast = { or: [{ type: {in:['schema:Book']} }, { not: {statement:{property:'schema:author',in:[id],qualifiers:[{property:'rezics:role',in:[id]}]}} }] };
-  const text = { kind:'term' as const,value:'original text' };
-  Object.assign(d.capture,{filterDocument:ast,text});
-  Object.assign(d,{dependencyKeys:[{kind:'type'},{kind:'property',property:'schema:author'},{kind:'property',property:'rezics:role'},{kind:'order',order:'id'}]});
+  const ast = {
+    or: [
+      { type: { in: ['schema:Book'] } },
+      {
+        not: {
+          statement: { property: 'schema:author', in: [id], qualifiers: [{ property: 'rezics:role', in: [id] }] },
+        },
+      },
+    ],
+  };
+  const text = { kind: 'term' as const, value: 'original text' };
+  Object.assign(d.capture, { filterDocument: ast, text });
+  Object.assign(d, {
+    dependencyKeys: [
+      { kind: 'type' },
+      { kind: 'property', property: 'schema:author' },
+      { kind: 'property', property: 'rezics:role' },
+      { kind: 'order', order: 'id' },
+    ],
+  });
   const expected = structuredClone(d);
-  const input = {definition:d,physicalTarget:physical.index,consumerGeneration:'1',projectionGeneration:'1'};
-  const pending = registry.register(input,search,context());
-  ast.or[0]!.type!.in[0]='schema:Person'; text.value='mutated';
+  const input = { definition: d, physicalTarget: physical.index, consumerGeneration: '1', projectionGeneration: '1' };
+  const pending = registry.register(input, search, context());
+  ast.or[0]!.type!.in[0] = 'schema:Person';
+  text.value = 'mutated';
   const registered = await pending;
   if (registered.status !== 'registered') throw new Error(registered.reason);
-  const opened = await registry.openPit({registration:registered.registration,covered:cut(),keepAliveMs:60000},search,context());
+  const opened = await registry.openPit(
+    { registration: registered.registration, covered: cut(), keepAliveMs: 60000 },
+    search,
+    context(),
+  );
   if (opened.status !== 'retained') throw new Error(opened.reason);
-  const found = await registry.read({queried:opened.queried},context());
+  const found = await registry.read({ queried: opened.queried }, context());
   expect(found.status === 'found' && found.definition).toEqual(expected);
-  expect((await registry.register({...input,definition:{...expected,capture:{...expected.capture,size:1}}},search,context())).status).toBe('unready');
-  expect(() => registry.register({...input,definition:{...expected,dependencyKeys:[{kind:'order',order:'id'}]}},search,context())).toThrow();
-  expect((await registry.read({queried:opened.queried}, {deadline:Date.now()-1}))).toMatchObject({status:'unavailable',reason:'deadline',cost:{statements:0,engineRequests:0}});
-  expect((await registry.closeObservation({...opened.queried,consumer:{...opened.queried.consumer,readDefinition:'other'}},search,context())).status).toBe('unready');
-  expect((await registry.read({queried:opened.queried},context())).status).toBe('found');
-  await registry.closeObservation(opened.queried,search,context());
+  expect(
+    (
+      await registry.register(
+        { ...input, definition: { ...expected, capture: { ...expected.capture, size: 1 } } },
+        search,
+        context(),
+      )
+    ).status,
+  ).toBe('unready');
+  expect(() =>
+    registry.register(
+      { ...input, definition: { ...expected, dependencyKeys: [{ kind: 'order', order: 'id' }] } },
+      search,
+      context(),
+    ),
+  ).toThrow();
+  expect(await registry.read({ queried: opened.queried }, { deadline: Date.now() - 1 })).toMatchObject({
+    status: 'unavailable',
+    reason: 'deadline',
+    cost: { statements: 0, engineRequests: 0 },
+  });
+  expect(
+    (
+      await registry.closeObservation(
+        { ...opened.queried, consumer: { ...opened.queried.consumer, readDefinition: 'other' } },
+        search,
+        context(),
+      )
+    ).status,
+  ).toBe('unready');
+  expect((await registry.read({ queried: opened.queried }, context())).status).toBe('found');
+  await registry.closeObservation(opened.queried, search, context());
 });
