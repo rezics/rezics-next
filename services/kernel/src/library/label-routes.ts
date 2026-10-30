@@ -13,6 +13,8 @@ import { LibraryNotFoundError } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
+import { libraryEntryTileSchema } from './library-entry-tiles.ts';
+import { fullView, subjectFields, viewQuery } from './views.ts';
 import { normalizePersonalLabelName, normalizePersonalLabelPrefix } from './label-store.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -28,6 +30,35 @@ const page = {
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
+const assignmentFields = { id, labelId: id, subjectId: id, revision: identity.properties.revision };
+const next = t.Union([t.String(), t.Null()]);
+const assignmentPage = t.Union([
+  t.Object({ assignments: t.Array(t.Object(assignmentFields, closed)), next }, closed),
+  t.Object(
+    {
+      assignments: t.Array(t.Object({ ...assignmentFields, label: t.Object({ name: t.String() }, closed) }, closed)),
+      next,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      assignments: t.Array(
+        t.Object(
+          {
+            ...assignmentFields,
+            ...t.Required(t.Object(subjectFields)).properties,
+            libraryEntry: t.Union([libraryEntryTileSchema, t.Null()]),
+          },
+          closed,
+        ),
+      ),
+      next,
+      label: t.Object({ id, name: t.String(), revision: identity.properties.revision }, closed),
+    },
+    closed,
+  ),
+]);
 const expected = t.Object({ subjectId: id, assignmentId: id, revision }, closed);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -98,7 +129,7 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
 /** Transport maps native outcomes directly; no private point reads precede receipts. */
 export function personalLabelRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  deps: { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock },
+  deps: { routeKey: Uint8Array; pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock },
 ) {
   const labels = createPersonalLabelCommands(deps);
   const assignments = () => createLabelAssignmentCommands({ ...deps, access: deps.access() });
@@ -263,23 +294,24 @@ export function personalLabelRoutes(
     .get(
       '/v1/libraryLabelAssignments',
       {
-        query: t.Object({ ...page, labelId: t.Optional(id), subjectId: t.Optional(id) }, closed),
-        transform: ({ request }) => queryFields(request, ['labelId', 'subjectId', 'cursor', 'limit']),
+        query: t.Object({ ...page, ...viewQuery, labelId: t.Optional(id), subjectId: t.Optional(id) }, closed),
+        transform: ({ request }) => queryFields(request, ['labelId', 'subjectId', 'cursor', 'limit', 'view']),
         response: {
-          200: t.Object(
-            {
-              assignments: t.Array(
-                t.Object({ id, labelId: id, subjectId: id, revision: identity.properties.revision }, closed),
-              ),
-              next: t.Union([t.String(), t.Null()]),
-            },
-            closed,
-          ),
+          200: assignmentPage,
           ...failures,
         },
-        detail: detail('assignment_list', 'library_entry:read', false),
+        detail: {
+          ...detail('assignment_list', 'library_entry:read', false),
+          description:
+            'FULL by label additionally requires library_entry:list, progress_session:list and reading_progress admission. FULL by subject adds current label names only.',
+        },
       },
-      ({ actor, query, admission, job }) =>
-        admission.run('normal', job, () => command(() => assignments().listAssignments(actor, query))),
+      async ({ actor, query, admission, job }) => {
+        const body = await admission.run('normal', job, () =>
+          command(() => assignments().listAssignments(actor, query)),
+        );
+        // The owner RR connection is released before standard per-partition summary readers acquire theirs.
+        return fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body);
+      },
     );
 }

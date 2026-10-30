@@ -28,6 +28,8 @@ import {
 import { LibraryConflictError } from './entries.ts';
 import { setLabelAssignment } from './label-assignment-store.ts';
 import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './label-assignment-lifecycle-store.ts';
+import { admitShelfRead } from './shelf-admission.ts';
+import { readLibraryEntryTiles, type LibraryEntryTile } from './library-entry-tiles.ts';
 import { readPersonalLabel } from './label-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
@@ -36,7 +38,7 @@ import subjectPage from './label-assignment-subject-page.sql';
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
 type Expected = { subjectId: string; assignmentId: string; revision: number };
-type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string };
+type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
 function object(input: unknown, keys: string[]): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((k) => !keys.includes(k)))
@@ -230,18 +232,21 @@ export function createLabelAssignmentCommands(deps: {
       ReturnType<typeof minimal>
     >;
   }
-  async function listAssignments(
-    actor: Actor,
-    options: ListOptions,
-  ): Promise<{ assignments: Assignment[]; next: string | null }> {
+  async function listAssignments(actor: Actor, options: ListOptions) {
     const account = owner(actor, 'library_entry:read'),
-      parsed = object(options, ['labelId', 'subjectId', 'limit', 'cursor']);
+      parsed = object(options, ['labelId', 'subjectId', 'limit', 'cursor', 'view']);
     if ((parsed.labelId === undefined) === (parsed.subjectId === undefined)) throw invalid();
     const labelId = parsed.labelId === undefined ? undefined : id(parsed.labelId);
     const subjectId = parsed.subjectId === undefined ? undefined : id(parsed.subjectId);
     const limit = parsed.limit ?? 20;
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) throw invalid();
+    if (parsed.view !== undefined && parsed.view !== 'BASIC' && parsed.view !== 'FULL') throw invalid();
+    const full = parsed.view === 'FULL';
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    if (full && labelId) {
+      owner(account, 'library_entry:list');
+      await admitShelfRead({ ...deps, clock }, account, deadline);
+    }
     let time: AuthoritativeTime | undefined;
     try {
       if (subjectId) {
@@ -250,11 +255,10 @@ export function createLabelAssignmentCommands(deps: {
           throw new LibraryNotFoundError();
       }
       const result = await snapshot(account, deadline, async (client, route) => {
-        if (
-          labelId &&
-          !(await readPersonalLabel(client, sameAccountRoute(account.accountId, labelId), account.accountId, labelId))
-        )
-          throw new LibraryNotFoundError();
+        const parent = labelId
+          ? await readPersonalLabel(client, sameAccountRoute(account.accountId, labelId), account.accountId, labelId)
+          : null;
+        if (labelId && !parent) throw new LibraryNotFoundError();
         const partition = await readPartition(client, partitionOf(route));
         if (!partition) throw new Error('Missing owner partition');
         const binding = {
@@ -293,16 +297,33 @@ export function createLabelAssignmentCommands(deps: {
               .sort((a, b) => (a.labelId < b.labelId ? -1 : a.labelId > b.labelId ? 1 : 0))
               .filter((row) => row.labelId > after)
               .slice(0, limit);
-        const assignments: Assignment[] = [];
+        const assignments: (
+          | Assignment
+          | (Assignment & { label: { name: string } })
+          | (Assignment & { libraryEntry: LibraryEntryTile | null })
+        )[] = [];
         for (const row of rows) {
           if ('deletedAt' in row && row.deletedAt !== null) continue;
           if (row.id === null || row.slotNo === null) throw new ProblemError('index_not_ready');
-          if (!labelId && !(await readPersonalLabel(client, route, account.accountId, row.labelId))) continue;
-          assignments.push({ id: row.id, labelId: row.labelId, subjectId: row.subjectId, revision: row.revision });
+          const current = labelId ? parent : await readPersonalLabel(client, route, account.accountId, row.labelId);
+          if (!current) continue;
+          const assignment = { id: row.id, labelId: row.labelId, subjectId: row.subjectId, revision: row.revision };
+          assignments.push(full && !labelId ? { ...assignment, label: { name: current.name } } : assignment);
         }
+        const tiles =
+          full && labelId
+            ? await readLibraryEntryTiles(client, {
+                route,
+                accountId: account.accountId,
+                subjectIds: assignments.map((row) => row.subjectId),
+              })
+            : null;
         const last = rows.at(-1);
         return {
-          assignments,
+          ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
+          assignments: tiles
+            ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
+            : assignments,
           next:
             rows.length === limit && last
               ? await encodeListCursor(

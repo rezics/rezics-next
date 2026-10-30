@@ -27,7 +27,7 @@ export const shelfTypesQuerySchema = t.Object(shelfPageQuery, closed);
 
 // Shelf owns its wire schema; progress routes keep their independent schema ownership.
 const uuid = t.String({ format: 'uuid' });
-const shelfSessionSchema = t.Object(
+export const shelfSessionSchema = t.Object(
   {
     id: uuid,
     subjectId: uuid,
