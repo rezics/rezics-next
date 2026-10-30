@@ -462,6 +462,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   ]);
 
   for (const run of evidence) {
+    const priorKind = run.kind === 'like' ? 'love' : 'like';
     expect(run.sourcePartition).not.toBe(run.targetPartition);
     expect(BigInt(run.capturePosition)).toBe(BigInt(run.sourcePosition));
     const sourceSlot = await growth.admin.query<{ kind: string }>(
@@ -493,12 +494,18 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
           WHERE route=$1 AND target_id=$2 AND source_partition=$3 ORDER BY kind`,
       [run.targetRoute, run.targetId, run.sourcePartition],
     );
-    expect(projection.rows).toEqual([{ kind: run.kind, count: 1 }]);
+    expect(projection.rows).toEqual([
+      { kind: 'like', count: run.kind === 'like' ? 1 : 0 },
+      { kind: 'love', count: run.kind === 'love' ? 1 : 0 },
+    ]);
     const total = await growth.admin.query<{ kind: string; count: number }>(
       `SELECT kind, count FROM content.reaction_total WHERE route=$1 AND target_id=$2 ORDER BY kind`,
       [run.targetRoute, run.targetId],
     );
-    expect(total.rows).toEqual([{ kind: run.kind, count: 1 }]);
+    expect(total.rows).toEqual([
+      { kind: 'like', count: run.kind === 'like' ? 1 : 0 },
+      { kind: 'love', count: run.kind === 'love' ? 1 : 0 },
+    ]);
     const targetHead = await readPartitionPosition(growth.pool, run.targetPartition);
     const prepared = captures.get([...idempotencyKeys.entries()].find(([, key]) => key === run.idempotencyKey)![0])!;
     expect(targetHead).toEqual(prepared.targetPosition);
