@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../../scripts/database.ts';
 import { migrate as migrateKernel } from '../../../kernel/scripts/database.ts';
@@ -14,6 +14,38 @@ export const issuer = 'https://native-erasure.auth.test';
 export const password = 'native erasure acceptance password';
 export const scopes = ['account:read', 'account:update', 'account:delete', 'account:manage'];
 export type Person = { accountId: string; cookie: string; email: string; bearer: string };
+
+/** Fault a native transaction, preserving both pg checkout overloads. Restoring
+ * the hook never changes product state or manufactures a completion marker. */
+export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
+  const connect = pool.connect;
+  const wrap = (client: PoolClient) =>
+    new Proxy(client, {
+      get(target, property) {
+        const value = Reflect.get(target, property);
+        if (property === 'query')
+          return (...args: unknown[]) => {
+            if (fails(String(args[0]))) throw new Error('Injected native consumer interruption');
+            return Reflect.apply(value, target, args);
+          };
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  pool.connect = new Proxy(connect, {
+    apply(target, thisArg, args) {
+      const callback = args[0];
+      if (typeof callback === 'function')
+        return Reflect.apply(target, thisArg, [
+          (error: Error | null, client: PoolClient | undefined, release: (error?: Error | boolean) => void) =>
+            callback(error, client && wrap(client), release),
+        ]);
+      return (Reflect.apply(target, thisArg, args) as Promise<PoolClient>).then(wrap);
+    },
+  });
+  return () => {
+    pool.connect = connect;
+  };
+}
 
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
@@ -33,6 +65,7 @@ export async function nativeFixture() {
       ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
       ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
       ...(await import('../../../kernel/src/access/lifecycle.ts')),
+      ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
       ...(await import('../../../kernel/src/route/route.ts')),
     };
   } finally {
@@ -41,6 +74,8 @@ export async function nativeFixture() {
   }
   const actions = new Map(modules.LIFECYCLE_ACTIONS);
   actions.set('account:manage', { anonymous: false });
+  actions.set('access:grant', { anonymous: false });
+  actions.set('client:manage', { anonymous: false });
   let host: Awaited<ReturnType<typeof createAuthHost>>;
   const access = modules.createAccess({
     actions,
@@ -125,10 +160,33 @@ export async function nativeFixture() {
     host,
     key,
     bindings,
+    access,
+    bootstrapGovernance: (accountId: string) => modules.bootstrapGovernance(kernel, accountId),
     approvals,
     deliveries,
     context,
     call,
+    async login(
+      person: Pick<Person, 'accountId' | 'email'>,
+      clientId = 'erasure-web',
+      requested = scopes,
+      secret = password,
+    ): Promise<Person> {
+      const response = await call('/signin', {
+        email: person.email,
+        password: secret,
+        client_id: clientId,
+        scope: requested,
+      });
+      expect(response.status).toBe(200);
+      const cookie = response.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const token = await call('/token', {}, cookie);
+      expect(token.status).toBe(200);
+      return { ...person, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
+    },
     routeOf: modules.routeOf,
     async person(name: string): Promise<Person> {
       const requestKey = `${name}-${randomUUID()}`;

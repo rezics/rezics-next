@@ -473,10 +473,14 @@ export function clientAuthority(
         const barrier = (
           await ports.raiseFence({ accountId: next.account_id, key: `wf:${pageWorkflowId}:fence:${next.account_id}` })
         ).value;
-        await cleanupFencedSessions(next.account_id, {
-          ...barrier,
-          minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch),
-        });
+        await cleanupFencedSessions(
+          next.account_id,
+          {
+            ...barrier,
+            minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch),
+          },
+          true,
+        );
         await nativeReduction.run(input, () =>
           internal.completeClientReductionOwner({
             ...owner,
@@ -567,7 +571,7 @@ export function clientAuthority(
       });
     },
   };
-  async function cleanupFencedSessions(accountId: string, barrier: InvalidationReceipt) {
+  async function cleanupFencedSessions(accountId: string, barrier: InvalidationReceipt, nativePage = false) {
     const current = await access.readFencedAccount(accountId);
     if (
       !current ||
@@ -599,7 +603,10 @@ export function clientAuthority(
         return;
       }
       const sessions = (
-        await connection.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1 LIMIT 100', [accountId])
+        await connection.query<{ id: string }>(
+          `SELECT id FROM session WHERE "userId"=$1 LIMIT ${nativePage ? 1 : 100}`,
+          [accountId],
+        )
       ).rows.map((row) => row.id);
       if (sessions.length) await connection.query('DELETE FROM session WHERE id=ANY($1::text[])', [sessions]);
       await connection.query(

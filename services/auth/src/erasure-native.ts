@@ -209,9 +209,16 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       [
         owner,
         after,
-        store.table === 'auth_provisioning_receipt' || store.table === 'auth_client_reduction_progress'
-          ? ERASURE_PAGE_SIZE - 2
-          : ERASURE_PAGE_SIZE,
+        // Reserve the native consumer's source neighborhood as well as its
+        // locator. Reduction's existing ordinal reader admits an eight-row
+        // batch, even when the consumer requests only one delivered owner.
+        store.table === 'auth_client_reduction_progress'
+          ? ERASURE_PAGE_SIZE - 10
+          : ['auth_provisioning_receipt', 'auth_registration_stage', 'auth_recovery_establishment'].includes(
+                store.table,
+              )
+            ? ERASURE_PAGE_SIZE - 4
+            : ERASURE_PAGE_SIZE,
       ],
     )
   ).rows;

@@ -1503,19 +1503,55 @@ and checkpoints on the same transaction. Only actual residue absence removes the
 marker and persists completion, including the final page. Live-user stale markers
 are discarded without changing live consent. Sleep holds no connection.
 
-Native request rows have typed subject/human/operator/client locators. A native
-workflow result records its terminal marker; unfinished release consumers retain
-their rows. Recovery establishment witnesses remain while a surviving subject's
-native verifier can still use them. Their expiry is not a shared-copy handoff.
-An unfinished client reduction retains its progress witness; only its real native
-finish marks its request terminal. A fenced, interrupted reduction without that
-proof keeps native erasure pending rather than discarding its consumer's witness.
-An unfinished registration loses its encrypted credential and credential digest
-on the selected native page, while retaining its exact release witness. The purge
-guard permits only those two fields to become null under the matching obligation.
-Completed credential effects use the immutable native success result written with
-the credential CAS after opening/floor revalidation; their establishment children
-must drain before the receipt is erased.
+Native request rows have typed subject/human/operator/client/stage locators. The
+default deletion caller and maintenance scheduler compose the same native consumer
+continuation. Its held key and pending reason checkpoint before the Auth connection
+is released; foreign source commands finish before another connection is acquired.
+Neither a session nor a renewed approval supplies mechanical release authority.
+
+- Registration records its original workflow/activation keys before source work,
+  and its actual operator reservation when that command returns. Erasure removes
+  ciphertext and credential digest while retaining this release witness. A lost
+  activation reply replays the original Access command with actual provisioning
+  evidence; a committed activation wins without another activation. Otherwise the
+  existing source expiry command decides whether its original thirty-minute
+  deadline is due. Only actual expiry, handle release, operator retirement/release
+  and child Auth obligation acceptance establish release completion. Immutable
+  native proof retains those exact reservation bindings and returned results.
+  A native request can then close through its exact stage proof after stage removal.
+- Credential consumers lock the actual receipt under the existing permanent
+  account/client fence. A real committed CAS result is retained with its original
+  operation, effect reference, digest, subject, floor and opening receipt. An
+  uncommitted effect receives a terminal refusal only while that permanent fence
+  excludes every later credential writer. Proof, physical witness removal and
+  checkpoint share the same transaction. A source identity fence prevents receipt
+  reuse after cleanup. Credential application takes the client/role admissions
+  before its source-row lock, matching erasure's producer order. Surviving
+  credentials are never reapplied or removed on behalf of an erased client owner.
+- Recovery records release only after the actual trusted completion port returns.
+  A lost result remains retryable through that port. The actual immutable deleted,
+  fenced source account also proves that its establishment cannot clear a fence
+  later; a missing account, Auth user absence, local expiry or erasure marker does
+  not. Proof binds the exact reference, receipt, establishment, commitment and floor.
+- Reduction retains the original operation, delivered ordinal page and count of
+  acknowledged owners. The permanent erased-client obligation admits only that
+  existing gate. Continuation uses each original page/owner source key, its actual
+  barrier and the existing bounded session cleanup/completion primitives. The
+  source floor invalidates remaining sessions; the native page eagerly removes at
+  most one. Native finish and request terminality commit together. A disappeared
+  delivered owner without acknowledgement leaves a precise count gap pending.
+
+Credential proof is one point operation per raw receipt, with the original page
+transaction and checkpoint. Other consumer pages reserve their source neighborhood
+inside the 48-key budget: 44 outer keys for registration/provisioning/recovery and
+38 for reduction, including its existing eight-row ordinal batch. Only one held
+consumer is continued per page. Locators stay within 1 KiB each and 64 KiB total;
+there is no workflow-history search or account-map fanout. The native consumer
+growth acceptance measures proof, trigger work, cleanup, transaction and checkpoint
+at 256, 1024 and 4096 unrelated stages, effects and native request histories with
+constant rows/statements/output and logarithmic blocks using the shared harness.
+The real source-expiry acceptance waits for Access's actual deadline; it never
+backdates source state or removes a responsibility hold to make deletion eligible.
 
 ### Remaining producer and composition gaps
 
@@ -1535,13 +1571,17 @@ remains pending, including after native work and the original consent cutoff:
   encrypted creation bindings do not have complete typed person attribution.
   Ownership is never inferred by searching JSON, handles, email or network address.
   Trusted delegated-principal attribution still needs an explicit native producer port.
-- A stalled registration on a surviving subject can still require its native
-  release consumer's stage witness. That lifecycle must supply a terminal proof
-  before the witness can be removed; history deletion is not such a proof.
-- An unfinished credential-effect witness for a surviving subject remains pending
-  when an associated account or client is erased. Its native consumer must supply
-  a terminal-refusal proof; a missing user or shared-history deletion cannot
-  substitute for that proof.
+- Unknown historical registration bindings, lost operator-reservation identities,
+  unresolved delivered reduction owners and unknown native requests remain pending.
+  Their surviving release witnesses are not discarded or called complete.
+- Access activation resolves the current Auth provisioning evidence before reading
+  its committed native command receipt. If that original evidence has expired or
+  is unavailable, an unrecorded activation result cannot be recovered through the
+  existing port. The exact stage/provisioning witness stays pending. Likewise an
+  unrecorded recovery result whose exact establishment is unavailable or superseded
+  cannot be inferred from elapsed time or a workflow terminal status. Recovering
+  those results needs a source-owned committed-result boundary; this composition
+  does not invent one or authorize a new effect.
 - External delivery-provider diagnostics/logs and backup restore deletion replay
   are not composed native custody sinks.
 

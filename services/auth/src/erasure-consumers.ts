@@ -10,8 +10,10 @@ import { isRefusal } from './workflows.ts';
 export async function closeCredentialConsumer(connection: PoolClient, receiptId: string): Promise<boolean> {
   const proof = await connection.query(
     `INSERT INTO auth_native_credential_terminal
-       (receipt_id,obligation_id,operation_key,effect_reference,effect_digest,outcome,committed_result)
+       (receipt_id,obligation_id,operation_key,effect_reference,effect_digest,account_id,minimum_authn_epoch,
+        opening_receipt_id,outcome,committed_result)
      SELECT r.receipt_id,e.id,r.operation_key,r.effect_reference,r.effect_digest,
+       r.account_id,r.minimum_authn_epoch,r.opening_receipt_id,
        CASE WHEN r.committed_at IS NOT NULL THEN 'committed' ELSE 'fenced-refusal' END,
        r.committed_result
      FROM auth_effect_receipt r
@@ -38,6 +40,8 @@ export async function closeCredentialConsumer(connection: PoolClient, receiptId:
        WHERE t.receipt_id=$1 AND r.stage_version=1
          AND t.operation_key=r.operation_key AND t.effect_reference=r.effect_reference
          AND t.effect_digest=r.effect_digest
+         AND t.account_id=r.account_id AND t.minimum_authn_epoch=r.minimum_authn_epoch
+         AND t.opening_receipt_id IS NOT DISTINCT FROM r.opening_receipt_id
          AND ((t.outcome='committed' AND r.committed_at IS NOT NULL
            AND t.committed_result=r.committed_result)
          OR (t.outcome='fenced-refusal' AND r.committed_at IS NULL))`,
@@ -170,6 +174,7 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
       key: `wf:${row.consumer_workflow_id}:release-expired`,
     })
   ).value;
+  let responsibilityResult: { retired: unknown; released: unknown } | undefined;
   if (row.erasure_operator_id) {
     if (!runtime.access.retireResponsibility || !runtime.access.releaseResponsibility) return false;
     const responsibility = {
@@ -177,14 +182,19 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
       subjectAccountId: row.account_id,
       reservationId: row.operator_reservation_id!,
     };
-    await runtime.access.retireResponsibility({
-      ...responsibility,
-      key: `wf:${row.consumer_workflow_id}:retire-operator`,
-    });
-    await runtime.access.releaseResponsibility({
-      ...responsibility,
-      key: `wf:${row.consumer_workflow_id}:release-operator`,
-    });
+    const retired = (
+      await runtime.access.retireResponsibility({
+        ...responsibility,
+        key: `wf:${row.consumer_workflow_id}:retire-operator`,
+      })
+    ).value;
+    const released = (
+      await runtime.access.releaseResponsibility({
+        ...responsibility,
+        key: `wf:${row.consumer_workflow_id}:release-operator`,
+      })
+    ).value;
+    responsibilityResult = { retired, released };
   }
   // The real terminal account command precedes the existing Auth obligation.
   // Starting it releases its connection before the parent checkpoint is acquired.
@@ -196,7 +206,7 @@ async function continueRegistration(pool: Pool, stageId: string, runtime: Native
     ON CONFLICT (store,key) DO NOTHING`,
     [
       stageId,
-      JSON.stringify({ outcome: 'expired', sourceResult, handleResult }),
+      JSON.stringify({ outcome: 'expired', sourceResult, handleResult, responsibilityResult }),
       JSON.stringify(registrationBinding(row)),
     ],
   );

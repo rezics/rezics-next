@@ -7,6 +7,9 @@ CREATE TABLE auth_native_credential_terminal (
   operation_key text NOT NULL,
   effect_reference text NOT NULL,
   effect_digest text NOT NULL CHECK (effect_digest ~ '^[a-f0-9]{64}$'),
+  account_id text NOT NULL,
+  minimum_authn_epoch integer NOT NULL,
+  opening_receipt_id text,
   outcome text NOT NULL CHECK (outcome IN ('committed','fenced-refusal')),
   committed_result jsonb
 );
