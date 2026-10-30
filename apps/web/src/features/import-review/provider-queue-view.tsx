@@ -45,7 +45,7 @@ export function ProviderQueue({
   );
   const [page, setPage] = useState<QueueState>(initial);
   const [busy, setBusy] = useState(false);
-  const refreshed = useRef<QueueState | undefined>(undefined);
+  const refreshed = useRef(new WeakMap<ProviderQueueRead, QueueState>());
   const running = useRef(false);
   const session = useRef<string | undefined>(initial.state === 'ready' ? initial.session : undefined);
   const locked = busy;
@@ -253,17 +253,26 @@ export function ProviderQueue({
             }));
             const nextScope = { ...batch.scope, status: batch.scope.status as QueueScope['status'] };
             const observed = commands.findLast((command) => command.session)?.session;
-            const [next, readings] = await Promise.all([
+            const [queueRead, subjectRead] = await Promise.allSettled([
               transport.read(nextScope, undefined, observed),
               transport.readings(commands),
             ]);
-            refreshed.current = next;
-            return { queue: prepared(next, nextScope), readings };
+            const next: QueueState =
+              queueRead.status === 'fulfilled' ? queueRead.value : { state: 'unavailable' };
+            const readings =
+              subjectRead.status === 'fulfilled'
+                ? subjectRead.value
+                : commands.map(({ subject }) => ({
+                    subject,
+                    result: { ok: false as const, reason: 'unavailable' as const },
+                  }));
+            const queue = prepared(next, nextScope);
+            refreshed.current.set(queue, next);
+            return { queue, readings };
           },
         }}
-        onRefresh={() => {
-          const next = refreshed.current;
-          if (!next) return;
+        onRefresh={(queue) => {
+          const next = refreshed.current.get(queue) ?? { state: 'unavailable' as const };
           setPage(next);
           if (next.state === 'ready') session.current = next.session;
         }}
