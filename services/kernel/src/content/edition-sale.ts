@@ -8,6 +8,7 @@ import { accessCheck, type Access } from '../request/access.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ReadContext } from './model.ts';
+import { prepareEditionSource, prepareEditionPublisherSource } from './reads.ts';
 import { editionBenefit, editionRow, editionSnapshot, editionSource, sameEdition, sameSource, sourceOf,
   withEditionReadTime, type EditionRow } from './edition-store.ts';
 import { readEditionInitiator, EDITION_PUBLISH } from './edition-initiator.ts';
@@ -97,9 +98,6 @@ async function prepareNativeContentEditionSale(deps: Dependencies, editionId: st
     if (error instanceof DurableInitiatorUnavailableError) throw new AccessUnavailableError('overloaded');
     throw error;
   }
-  // Commerce loads this port while initializing its catalogue. Load Content's
-  // community readers only when checking a sale, after module initialization.
-  const { prepareEditionSource, prepareEditionPublisherSource } = await import('./reads.ts');
   const publisherSource = await prepareEditionPublisherSource(deps, source, operation, restorer, time, accessContext);
   if (!publisherSource || !(await publisherSource.final())) return null;
   // A real caller keeps its own current subject and complete parent-chain checks.

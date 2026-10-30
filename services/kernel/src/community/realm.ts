@@ -209,15 +209,18 @@ export async function readRealm(
       return current ? record(current) : null;
     });
   } catch (error) {
-    if (error instanceof RealmReadDeniedError) return null;
+    if (error instanceof Error && realmReadDenials.has(error)) return null;
     throw error;
   }
 }
 
-class RealmReadDeniedError extends ProblemError {
-  constructor() {
-    super('not_found');
-  }
+const realmReadDenials = new WeakSet<Error>();
+// Keep the HTTP problem and this reader's private denial identity without
+// evaluating a ProblemError subclass during cyclic module initialization.
+function realmReadDeniedError(): ProblemError {
+  const error = new ProblemError('not_found');
+  realmReadDenials.add(error);
+  return error;
 }
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
@@ -234,7 +237,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
       const row = await read.run(client, { route: resource.route, id: resource.id, at });
       const current = await bindingRead.run(client, { ...resource, at, subject: null });
       if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
-        throw new RealmReadDeniedError();
+        throw realmReadDeniedError();
       if (row?.visibility === 'protected' && actor.kind === 'account') {
         // Auth/Access validates the assignment reference. Its principal is a
         // second fixed identity, never an expansion of grants or memberships.
@@ -249,7 +252,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
           })
         )
           // A false floor alone would leave independent grants available.
-          throw new RealmReadDeniedError();
+          throw realmReadDeniedError();
       }
       observe?.(row);
       return row?.visibility === 'public';
