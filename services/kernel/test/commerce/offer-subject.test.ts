@@ -50,7 +50,10 @@ async function createOffer(targetSubjectId: string, title = 'A captured book tit
     taxCode: 'txcd_10302000',
   });
   expect(response.status, await response.clone().text()).toBe(201);
-  return (await response.json()).offer as { id: string };
+  const created = (await response.json()).offer;
+  const reviewed = await request(`/v1/offers/${created.id}`, null);
+  expect(reviewed.status).toBe(200);
+  return (await reviewed.json()).offer as { id: string; revision: number };
 }
 
 beforeAll(async () => {
@@ -189,7 +192,10 @@ test("an offer read returns its subject summary in the reader's preferred langua
 
 test("a buyer's order read returns its captured title, subject id and summary", async () => {
   const offer = await createOffer(bookId);
-  const createdResponse = await request('/v1/orders', buyer, { offerId: offer.id });
+  const createdResponse = await request('/v1/orders', buyer, {
+    offerId: offer.id,
+    expectedOfferRevision: offer.revision,
+  });
   expect(createdResponse.status, await createdResponse.clone().text()).toBe(201);
   const created = (await createdResponse.json()).order;
   const response = await request(`/v1/orders/${created.id}?languages=ja,en`);
@@ -216,7 +222,10 @@ test('an offer with an unknown subject still reads with a null subject', async (
 
 test('offer and order reads reject invalid language preference lists', async () => {
   const offer = await createOffer(bookId);
-  const createdResponse = await request('/v1/orders', buyer, { offerId: offer.id });
+  const createdResponse = await request('/v1/orders', buyer, {
+    offerId: offer.id,
+    expectedOfferRevision: offer.revision,
+  });
   expect(createdResponse.status).toBe(201);
   const order = (await createdResponse.json()).order;
   for (const path of [

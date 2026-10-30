@@ -139,7 +139,10 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
       'alice',
     );
     await expectStatus(offerResponse, 201, 'Create the fixture offer');
-    const offer = ((await offerResponse.json()) as { offer: { id: string } }).offer;
+    const createdOffer = ((await offerResponse.json()) as { offer: { id: string } }).offer;
+    const offerRead = await stack.kernel(`/v1/offers/${createdOffer.id}`, {}, 'alice');
+    await expectStatus(offerRead, 200, 'Review the fixture offer');
+    const offer = ((await offerRead.json()) as { offer: { id: string; revision: number } }).offer;
     const bob = await stack.authPersona('bob');
     const offerRoute = routeOf(offer.id);
     if (offerRoute === null) throw new Error(`Fixture offer ${offer.id} has no native route`);
@@ -150,7 +153,7 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
         {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
-          body: JSON.stringify({ offerId: offer.id }),
+          body: JSON.stringify({ offerId: offer.id, expectedOfferRevision: offer.revision }),
         },
         persona,
       );

@@ -51,10 +51,16 @@ const input = () => ({
   taxCode: 'txcd_10302000',
 });
 const key = () => Bun.randomUUIDv7();
-async function request(path: string, account: string | null = buyer, body?: unknown, requestKey = key()) {
+async function request(
+  path: string,
+  account: string | null = buyer,
+  body?: unknown,
+  requestKey = key(),
+  method = body === undefined ? 'GET' : 'POST',
+) {
   return app.handle(
     new Request(`http://kernel.test${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         'x-request-id': 'commerce-http',
         ...(account ? { authorization: `Bearer ${tokens.get(account)!}` } : {}),
@@ -66,13 +72,23 @@ async function request(path: string, account: string | null = buyer, body?: unkn
     }),
   );
 }
+const observedRevisions = new Map<string, number>();
 async function offer(): Promise<Offer> {
   const response = await request('/v1/offers', seller, input());
   expect(response.status).toBe(201);
-  return (await response.json()).offer;
+  const created = (await response.json()).offer;
+  const review = await request(`/v1/offers/${created.id}`, null);
+  expect(review.status).toBe(200);
+  observedRevisions.set(created.id, (await review.json()).offer.revision);
+  return created;
 }
 async function order(offerId: string, requestKey = key()): Promise<Order> {
-  const response = await request('/v1/orders', buyer, { offerId }, requestKey);
+  const response = await request(
+    '/v1/orders',
+    buyer,
+    { offerId, expectedOfferRevision: observedRevisions.get(offerId)! },
+    requestKey,
+  );
   expect(response.status).toBe(201);
   return (await response.json()).order;
 }
@@ -224,9 +240,12 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
   ]);
   const publicRead = await request(`/v1/offers/${selling.id}`, null);
   const { summary, ...offerFields } = selling as Offer & { summary: unknown };
-  expect([publicRead.status, await publicRead.json()]).toEqual([200, { offer: { ...offerFields, subject: summary } }]);
+  expect([publicRead.status, await publicRead.json()]).toEqual([
+    200,
+    { offer: { ...offerFields, revision: 1, subject: summary } },
+  ]);
   const requestKey = key();
-  const response = await request('/v1/orders', buyer, { offerId: selling.id }, requestKey);
+  const response = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 }, requestKey);
   expect(response.status).toBe(201);
   const created = (await response.json()).order;
   expect(response.headers.get('location')).toBe(`/v1/orders/${created.id}`);
@@ -260,20 +279,25 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
   expect(Number(sent.params.get('expires_at'))).toBe(Math.floor(Date.parse(created.createdAt) / 1000) + 3600);
   expect(await order(selling.id, requestKey)).toEqual(created);
   expect(fake.requests).toHaveLength(1);
-  const changed = await request('/v1/orders', buyer, { offerId: (await offer()).id }, requestKey);
+  const changed = await request(
+    '/v1/orders',
+    buyer,
+    { offerId: (await offer()).id, expectedOfferRevision: 1 },
+    requestKey,
+  );
   expect(changed.status).toBe(422);
   expect((await changed.json()).code).toBe('idempotency_conflict');
 });
 
 test('unknown offers are hidden and delisted offers conflict, while existing orders replay', async () => {
-  expect((await request('/v1/orders', buyer, { offerId: newId(0x2200) })).status).toBe(404);
+  expect((await request('/v1/orders', buyer, { offerId: newId(0x2200), expectedOfferRevision: 1 })).status).toBe(404);
   const selling = await offer(),
     requestKey = key();
   const created = await order(selling.id, requestKey);
   const delist = await request(`/v1/offers/${selling.id}:delist`, seller, {});
   expect(delist.status).toBe(200);
   expect((await delist.json()).offer.state).toBe('delisted');
-  const refused = await request('/v1/orders', buyer, { offerId: selling.id });
+  const refused = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 });
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
   expect(await order(selling.id, requestKey)).toEqual(created);
@@ -337,7 +361,7 @@ test('delisted public offers are concealed as unknown while captured purchases a
   }
 
   const providerCalls = fake.requests.length;
-  const refused = await request('/v1/orders', buyer, { offerId: selling.id });
+  const refused = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 });
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
   expect(fake.requests).toHaveLength(providerCalls);
@@ -362,7 +386,7 @@ test('rejected Checkout settles failed and lost creates settle unknown then reco
   expect(fake.requests).toHaveLength(1);
   fake.nextCreateFault = 'lost';
   const lostKey = key();
-  const lost = await request('/v1/orders', buyer, { offerId: selling.id }, lostKey);
+  const lost = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 }, lostKey);
   expect(lost.status).toBe(503);
   expect(await lost.json()).toMatchObject({ code: 'dependency_unavailable', retryable: true });
   const unknown = (
@@ -441,7 +465,7 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
   for (const query of ['limit=0', 'limit=101', 'limit=1.5'])
     expect((await request(`/v1/entitlements?${query}`)).status).toBe(400);
   expect((await request('/v1/entitlements', null)).status).toBe(401);
-  expect((await request('/v1/orders', null, { offerId: selling.id })).status).toBe(401);
+  expect((await request('/v1/orders', null, { offerId: selling.id, expectedOfferRevision: 1 })).status).toBe(401);
 });
 
 test('order creation proves its constant native point prefix row cost under the calibrated series rule after production-shaped neighbours and framework history are seeded before the first scale', async () => {
@@ -695,4 +719,80 @@ test('native edition selector cannot create access or provider calls without the
   expect(response.status).toBe(503);
   expect((await response.json()).code).toBe('dependency_unavailable');
   expect(fake.requests.length).toBe(before);
+});
+
+async function consentFootprint() {
+  return (
+    await db.pool.query(`SELECT
+    (SELECT count(*)::int FROM commerce.purchase_order) AS orders,
+    (SELECT count(*)::int FROM commerce.entitlement) AS entitlements,
+    (SELECT count(*)::int FROM commerce.checkout_creation_attempt) AS attempts,
+    (SELECT count(*)::int FROM core.receipt) AS receipts,
+    (SELECT count(*)::int FROM core.outbox) AS events`)
+  ).rows[0];
+}
+
+test('A buyer can start Checkout only for the displayed offer revision and a repriced offer requests new explicit consent without a provider call or new order', async () => {
+  const selling = await offer();
+  const review = await request(`/v1/offers/${selling.id}`, null);
+  expect(review.status).toBe(200);
+  const displayed = (await review.json()).offer;
+  expect(displayed.revision).toBe(1);
+  const intent = { offerId: displayed.id, expectedOfferRevision: displayed.revision };
+  const requestKey = key();
+  const accepted = await request('/v1/orders', buyer, intent, requestKey);
+  expect(accepted.status).toBe(201);
+  const original = await accepted.json();
+  const captured = await store.readOrder(db.pool, routeOf(original.order.id)!, original.order.id);
+  expect(captured).toMatchObject({ offerRevision: displayed.revision, unitAmountMinor: displayed.unitAmountMinor });
+
+  const reprice = await request(`/v1/offers/${selling.id}`, seller, { unitAmountMinor: 2400 }, key(), 'PATCH');
+  expect(reprice.status).toBe(200);
+  const before = await consentFootprint();
+  const calls = fake.requests.length;
+  const refused = await request('/v1/orders', buyer, intent);
+  expect(refused.status).toBe(409);
+  const conflict = await refused.json();
+  expect(conflict).toMatchObject({ code: 'offer_revision_conflict', retryable: false });
+  for (const privateField of ['offer', 'revision', 'currency', 'unitAmountMinor', 'expectedOfferRevision'])
+    expect(conflict).not.toHaveProperty(privateField);
+  expect(await consentFootprint()).toEqual(before);
+  expect(fake.requests).toHaveLength(calls);
+
+  const replay = await request('/v1/orders', buyer, intent, requestKey);
+  expect(replay.status).toBe(201);
+  expect(await replay.json()).toEqual(original);
+  const nextReview = (await (await request(`/v1/offers/${selling.id}`, null)).json()).offer;
+  const changed = await request(
+    '/v1/orders',
+    buyer,
+    { offerId: selling.id, expectedOfferRevision: nextReview.revision },
+    requestKey,
+  );
+  expect(changed.status).toBe(422);
+  expect((await changed.json()).code).toBe('idempotency_conflict');
+  expect(await consentFootprint()).toEqual(before);
+  expect(fake.requests).toHaveLength(calls);
+
+  const consented = await request('/v1/orders', buyer, {
+    offerId: selling.id,
+    expectedOfferRevision: nextReview.revision,
+  });
+  expect(consented.status).toBe(201);
+  expect((await consented.json()).order.id).not.toBe(original.order.id);
+  expect(fake.requests).toHaveLength(calls + 1);
+  expect(fake.requests.at(-1)!.params.get('line_items[0][price_data][unit_amount]')).toBe('2400');
+});
+
+test('fresh order requests require a positive integer expected offer revision without creation effects', async () => {
+  const selling = await offer();
+  const before = await consentFootprint();
+  const calls = fake.requests.length;
+  for (const expectedOfferRevision of [undefined, null, 0, -1, 1.5, '1', Number.MAX_SAFE_INTEGER + 1]) {
+    const response = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision });
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('invalid_request');
+    expect(await consentFootprint()).toEqual(before);
+    expect(fake.requests).toHaveLength(calls);
+  }
 });

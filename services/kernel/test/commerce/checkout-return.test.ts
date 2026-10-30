@@ -259,8 +259,14 @@ test('checkout return URLs substitute the order ID for HTTP creates and lost cre
   if (unchangedOfferResponse.status !== 201)
     throw new Error(`Offer creation failed: ${unchangedOfferResponse.status} ${await unchangedOfferResponse.text()}`);
   expect(unchangedOfferResponse.status).toBe(201);
-  const unchangedOffer = (await unchangedOfferResponse.json()).offer;
-  const unchangedResponse = await request('/v1/orders', buyer, { offerId: unchangedOffer.id });
+  const unchangedOfferId = (await unchangedOfferResponse.json()).offer.id;
+  const unchangedOfferRead = await app.handle(new Request(`http://kernel.test/v1/offers/${unchangedOfferId}`));
+  expect(unchangedOfferRead.status).toBe(200);
+  const unchangedOffer = (await unchangedOfferRead.json()).offer;
+  const unchangedResponse = await request('/v1/orders', buyer, {
+    offerId: unchangedOffer.id,
+    expectedOfferRevision: unchangedOffer.revision,
+  });
   expect(unchangedResponse.status).toBe(201);
   const unchangedOrder = (await unchangedResponse.json()).order;
   const unchangedCreate = fake.requests.find(
@@ -279,8 +285,14 @@ test('checkout return URLs substitute the order ID for HTTP creates and lost cre
     taxCode: 'txcd_10302000',
   });
   expect(offerResponse.status).toBe(201);
-  const offer = (await offerResponse.json()).offer;
-  const createdResponse = await request('/v1/orders', buyer, { offerId: offer.id });
+  const offerId = (await offerResponse.json()).offer.id;
+  const offerRead = await app.handle(new Request(`http://kernel.test/v1/offers/${offerId}`));
+  expect(offerRead.status).toBe(200);
+  const offer = (await offerRead.json()).offer;
+  const createdResponse = await request('/v1/orders', buyer, {
+    offerId: offer.id,
+    expectedOfferRevision: offer.revision,
+  });
   expect(createdResponse.status).toBe(201);
   const createdOrder = (await createdResponse.json()).order;
   const createdRequest = fake.requests.find(
@@ -294,7 +306,7 @@ test('checkout return URLs substitute the order ID for HTTP creates and lost cre
   );
 
   fake.nextCreateFault = 'lost';
-  const lostResponse = await request('/v1/orders', buyer, { offerId: offer.id });
+  const lostResponse = await request('/v1/orders', buyer, { offerId: offer.id, expectedOfferRevision: offer.revision });
   expect(lostResponse.status).toBe(503);
   const unknown = (await db.admin.query("SELECT order_id FROM commerce.purchase_order WHERE settlement='unknown'"))
     .rows;

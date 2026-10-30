@@ -204,7 +204,7 @@ async function order(rate = 9000, unitAmountMinor = 1000, buyerAccountId = buyer
       key(),
     )
   ).value;
-  const result = (await commands.createOrder(await actor(buyerAccountId), offer.id, key())).value;
+  const result = (await commands.createOrder(await actor(buyerAccountId), offer.id, offer.revision, key())).value;
   await commands.recordCheckout(result.id, {
     session: {
       id: `cs_test_${key().replaceAll('-', '')}`,

@@ -35,12 +35,12 @@ afterEach(async () => {
 let serial = 0;
 const key = () => `"commerce-${++serial}"`;
 const get = (as: Persona, path: string) => driver.request(as, { method: 'GET', path });
-const create = (as: Persona, offerId: string, idempotencyKey = key()) =>
+const create = (as: Persona, offerId: string, expectedOfferRevision: number, idempotencyKey = key()) =>
   driver.request(as, {
     method: 'POST',
     path: '/v1/orders',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: { offerId },
+    body: { offerId, expectedOfferRevision },
   });
 async function body<T>(response: Response, status = 200): Promise<T> {
   expect(response.status).toBe(status);
@@ -54,7 +54,7 @@ async function listing(as: Persona = 'buyer') {
 }
 async function checkout(as: Persona = 'buyer', offer?: OfferFixture) {
   const selected = offer ?? (await driver.provisionOffer());
-  const response = await create(as, selected.id);
+  const response = await create(as, selected.id, selected.revision);
   const result = (await body<{ order: OrderView }>(response, 201)).order;
   expect(response.headers.get('location')).toBe(`/v1/orders/${result.id}`);
   expect(result).toMatchObject({ offerId: selected.id, settlement: 'pending', entitlementId: null });
@@ -147,7 +147,7 @@ test('anonymous reads an offer but cannot create orders list entitlements or dis
       subject: null,
     },
   });
-  expect((await create('anonymous', fixture.offer.id)).status).toBe(401);
+  expect((await create('anonymous', fixture.offer.id, fixture.offer.revision)).status).toBe(401);
   expect((await get('anonymous', '/v1/entitlements')).status).toBe(401);
   for (const [path, unknown] of [
     [`/v1/orders/${fixture.order.id}`, `/v1/orders/${driver.unknown.orderId}`],
@@ -235,11 +235,11 @@ test('same Idempotency-Key replays one order and session while a changed body co
   const offer = await driver.provisionOffer();
   const another = await driver.provisionOffer();
   const idempotencyKey = key();
-  const first = await body<{ order: OrderView }>(await create('buyer', offer.id, idempotencyKey), 201);
+  const first = await body<{ order: OrderView }>(await create('buyer', offer.id, offer.revision, idempotencyKey), 201);
   expect(first.order.settlement).toBe('pending');
   expect(first.order.checkoutUrl).toBeTruthy();
-  expect(await body(await create('buyer', offer.id, idempotencyKey), 201)).toEqual(first);
-  expect(await body(await create('buyer', another.id, idempotencyKey), 422)).toMatchObject({
+  expect(await body(await create('buyer', offer.id, offer.revision, idempotencyKey), 201)).toEqual(first);
+  expect(await body(await create('buyer', another.id, another.revision, idempotencyKey), 422)).toMatchObject({
     code: 'idempotency_conflict',
   });
   expect((await driver.inspect()).orders).toHaveLength(1);
@@ -470,18 +470,18 @@ test('warning_needs_response inquiry preserves an active entitlement', async () 
 test('delisting prevents new checkout but preserves an existing entitlement', async () => {
   const fixture = await paid();
   await driver.reviseOffer(fixture.offer.id, { state: 'delisted' });
-  expect(await body(await create('buyer', fixture.offer.id), 409)).toMatchObject({ code: 'offer_unavailable' });
+  expect(await body(await create('buyer', fixture.offer.id, fixture.offer.revision), 409)).toMatchObject({ code: 'offer_unavailable' });
   expect(await entitlement(fixture.entitlement.id)).toEqual(fixture.entitlement);
   expect((await listing()).entitlements).toEqual([fixture.entitlement]);
   expect((await driver.inspect()).orders).toHaveLength(1);
   expect(await driver.stripe.sessions()).toHaveLength(1);
-  expect((await create('buyer', driver.unknown.offerId)).status).toBe(404);
+  expect((await create('buyer', driver.unknown.offerId, 1)).status).toBe(404);
 });
 
 test('suspended account cannot create an order while an active account can', async () => {
   const fixture = await checkout();
   const before = await driver.inspect();
-  const response = await create('suspended', fixture.offer.id);
+  const response = await create('suspended', fixture.offer.id, fixture.offer.revision);
   // Fail closed without choosing an unspecified authentication-versus-authorization error code.
   expect([401, 403]).toContain(response.status);
   expect(await driver.inspect()).toEqual(before);
@@ -491,7 +491,7 @@ test('suspended account cannot create an order while an active account can', asy
 test('definitive Stripe create rejection records failed with no checkout URL', async () => {
   const offer = await driver.provisionOffer();
   await driver.stripe.failNextCreate('reject');
-  await create('buyer', offer.id);
+  await create('buyer', offer.id, offer.revision);
   const rows = (await driver.inspect()).orders;
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({ settlement: 'failed', checkoutUrl: null, checkoutSessionId: null });
@@ -504,14 +504,14 @@ test('lost Stripe create records unknown then same-key retry recovers the single
   const offer = await driver.provisionOffer();
   const idempotencyKey = key();
   await driver.stripe.failNextCreate('lose');
-  await create('buyer', offer.id, idempotencyKey);
+  await create('buyer', offer.id, offer.revision, idempotencyKey);
   const rows = (await driver.inspect()).orders;
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({ settlement: 'unknown', checkoutUrl: null });
   expect(await order(rows[0]!.id)).toMatchObject({ settlement: 'unknown', checkoutUrl: null, entitlementId: null });
   const sessions = await driver.stripe.sessions();
   expect(sessions).toHaveLength(1);
-  const recovered = await body<{ order: OrderView }>(await create('buyer', offer.id, idempotencyKey), 201);
+  const recovered = await body<{ order: OrderView }>(await create('buyer', offer.id, offer.revision, idempotencyKey), 201);
   expect(recovered.order).toMatchObject({ id: rows[0]!.id, settlement: 'pending' });
   expect(recovered.order.checkoutUrl).toBeTruthy();
   expect((await driver.inspect()).orders[0]!.checkoutSessionId).toBe(sessions[0]!.id);
@@ -526,7 +526,7 @@ test('create order webhook delivery and entitlement listing use equal statement 
   for (const scale of [0, 100, 1000]) {
     await driver.seedUnrelatedOrders(scale);
     await driver.holdWork();
-    const created = await driver.measure(() => create('buyer', control.offer.id));
+    const created = await driver.measure(() => create('buyer', control.offer.id, control.offer.revision));
     const view = (await body<{ order: OrderView }>(created.value, 201)).order;
     expect(view.settlement).toBe('pending');
     const row = (await driver.inspect()).orders.find((item) => item.id === view.id)!;

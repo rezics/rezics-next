@@ -148,7 +148,8 @@ export async function purchaseHistoryFixture() {
   // buyer histories. A nearly empty partition otherwise makes a sequential scan cheaper
   // than any B-tree seek, and cannot exercise the production buyer-leading access path.
   const background = await sameRoutePerson('background');
-  for (let i = 0; i < 4096; i++) await commands.createOrder(await actor(background), offer.id, Bun.randomUUIDv7());
+  for (let i = 0; i < 4096; i++)
+    await commands.createOrder(await actor(background), offer.id, offer.revision, Bun.randomUUIDv7());
   const worker = Bun.spawn([process.execPath, `${import.meta.dir}/purchase-history-runtime.ts`], {
     env: { ...process.env, ...workerTestEnv({ DATABASE_URL: db.url, WORK_STRIPE_PORT: String(fake.port) }) },
     stdout: 'pipe',
@@ -175,7 +176,7 @@ export async function purchaseHistoryFixture() {
       fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
     });
   async function checkout(as: Persona = people.alice, key = Bun.randomUUIDv7()) {
-    const response = await request('/v1/orders', as, { offerId: offer.id }, key);
+    const response = await request('/v1/orders', as, { offerId: offer.id, expectedOfferRevision: offer.revision }, key);
     expect(response.status).toBe(201);
     const order = (await response.json()).order;
     const stored = await commands.readOrderForAccount(as.accountId, order.id);
@@ -221,10 +222,10 @@ export async function purchaseHistoryFixture() {
       ...commands,
       // A direct command gets its own native authentication deadline, like an HTTP request.
       // Reuse the exact bearer, including its consent, rather than renewing an old actor proof.
-      async createOrder(buyer: Actor, offerId: string, key: string) {
+      async createOrder(buyer: Actor, offerId: string, expectedOfferRevision: number, key: string) {
         const bearer = credentials.get(buyer);
         if (bearer === undefined) throw new Error('History commands require a native fixture credential');
-        return commands.createOrder(await access.authenticate(bearer, context()), offerId, key);
+        return commands.createOrder(await access.authenticate(bearer, context()), offerId, expectedOfferRevision, key);
       },
     },
     offer,

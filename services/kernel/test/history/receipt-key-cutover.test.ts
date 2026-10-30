@@ -490,8 +490,8 @@ test('commerce counts exactly its two tokenized numbered outcomes and replays th
     )
   ).value;
   const key = privateKey('order');
-  const created = await commands.createOrder(buyer, offer.id, key);
-  expect(await commands.createOrder(buyer, offer.id, key)).toEqual({ ...created, replayed: true });
+  const created = await commands.createOrder(buyer, offer.id, offer.revision, key);
+  expect(await commands.createOrder(buyer, offer.id, offer.revision, key)).toEqual({ ...created, replayed: true });
   await stored(created.transactionId, key);
   await commands.recordCheckout(created.value.id, { kind: 'unknown' });
   await commands.recordCheckout(created.value.id, {

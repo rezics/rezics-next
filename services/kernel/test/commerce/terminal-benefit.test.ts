@@ -40,6 +40,7 @@ let scheduled: typeof commands;
 let fake: ReturnType<typeof startFakeStripe>;
 let stripe: ReturnType<typeof createStripePort>;
 let offerId: string;
+let offerRevision: number;
 let targetSubjectId: string;
 const key = () => Bun.randomUUIDv7();
 type Trace = { pid: number; tx: number; sql: string; values: unknown[]; code?: string };
@@ -170,7 +171,7 @@ beforeAll(async () => {
   ).subject.id;
   commands = createCommerceCommands({ pool, access: kernel.testAccess });
   scheduled = createCommerceCommands({ pool: servicePool, access: kernel.testAccess });
-  offerId = (
+  const selectedOffer = (
     await post(
       first.staff,
       '/v1/offers',
@@ -183,7 +184,11 @@ beforeAll(async () => {
       },
       201,
     )
-  ).offer.id;
+  ).offer;
+  offerId = selectedOffer.id;
+  const review = await request(first.staff, `/v1/offers/${offerId}`);
+  expect(review.status).toBe(200);
+  offerRevision = (await review.json()).offer.revision;
   fake = startFakeStripe();
   stripe = createStripePort({
     apiKey: 'sk_test_terminal_benefit',
@@ -207,7 +212,7 @@ afterAll(async () => {
 
 async function checkout(buyer: Persona) {
   const actor = await kernel.testAccess.authenticate(buyer.bearer, { pool, deadline: Date.now() + 10000 });
-  const order = (await commands.createOrder(actor, offerId, key())).value;
+  const order = (await commands.createOrder(actor, offerId, offerRevision, key())).value;
   const session = await stripe.createCheckoutSession(
     {
       orderId: order.id,

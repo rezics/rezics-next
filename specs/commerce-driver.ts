@@ -30,7 +30,7 @@ export type Persona = 'buyer' | 'other' | 'refunded' | 'anonymous' | 'suspended'
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export interface OfferView extends Pick<
   OfferFixture,
-  'id' | 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'state'
+  'id' | 'revision' | 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'state'
 > {
   subject: SubjectSummary | null;
 }

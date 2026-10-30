@@ -124,6 +124,7 @@ test('seller price revision through HTTP binds target intent preserves captured 
         },
         buyer.actor,
         a.value.id,
+        a.value.revision,
         entryKey(),
       ),
     );

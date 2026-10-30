@@ -193,7 +193,7 @@ export async function nativeAnchorFixture() {
       )
     ).value;
     async function checkout(bound = true, paid = false): Promise<Order> {
-      const order = (await commands.createOrder(buyer.actor, offer.id, entryKey())).value;
+      const order = (await commands.createOrder(buyer.actor, offer.id, offer.revision, entryKey())).value;
       if (!bound) return order;
       const session = await stripe.createCheckoutSession(
         {

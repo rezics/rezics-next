@@ -28,11 +28,12 @@ export async function checkout(
   },
   actor: Actor,
   offerId: string,
+  expectedOfferRevision: number,
   requestKey: string,
 ): Promise<Order> {
   return withRequestDeadline(deadlineFor(20_000), () => runCheckout());
   async function runCheckout(): Promise<Order> {
-    const created = await commands.createOrder(actor, offerId, requestKey);
+    const created = await commands.createOrder(actor, offerId, expectedOfferRevision, requestKey);
     const id = created.value.id;
     const current = async () => {
       const order = await readOrder(pool, routeOf(id)!, id);

@@ -1,12 +1,10 @@
-import type { KernelClient } from '@rezics/client';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
+import { dependencyUnavailable } from '../media/kernel';
 import type { OfferPageData } from './offer';
 import { formatOfferPrice } from './price';
 import { subjectCover } from './subject-cover';
-
-type OfferRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['offers']>['get']>>['data']>;
 
 const reads = new WeakMap<Request, Map<string, Promise<OfferPageData>>>();
 
@@ -18,9 +16,19 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     if (result.status === 404 || result.error.status === 404) throw notFound();
     throw new Error('Kernel offer read failed');
   }
-  const offer = (result.data as OfferRead).offer;
+  const offer = result.data?.offer;
+  // Fail closed while the derived client/recordings await the wire-contract update.
+  if (
+    !offer ||
+    !('revision' in offer) ||
+    typeof offer.revision !== 'number' ||
+    !Number.isSafeInteger(offer.revision) ||
+    offer.revision < 1
+  )
+    throw dependencyUnavailable(503);
   return {
     id: offer.id,
+    revision: offer.revision,
     title: offer.title,
     currency: offer.currency,
     unitAmountMinor: offer.unitAmountMinor,

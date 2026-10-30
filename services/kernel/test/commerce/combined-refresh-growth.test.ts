@@ -110,7 +110,7 @@ test('combined SDK/native paid refresh stays anchored as unrelated native, provi
                 pool: db.pool,
                 deadline: Date.now() + 5000,
               });
-              await f.commands.createOrder(actor, f.offer.id, crypto.randomUUID());
+              await f.commands.createOrder(actor, f.offer.id, f.offer.revision, crypto.randomUUID());
             } else if (axis === 'provider')
               await f.stripe.createCheckoutSession(
                 {

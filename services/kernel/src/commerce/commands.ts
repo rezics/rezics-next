@@ -50,6 +50,12 @@ export class OfferUnavailableError extends Error {
     this.name = 'OfferUnavailableError';
   }
 }
+export class OfferRevisionConflictError extends Error {
+  constructor() {
+    super('The displayed offer terms have changed');
+    this.name = 'OfferRevisionConflictError';
+  }
+}
 class Unchanged extends Error {}
 class CompletedRefresh extends Error {}
 class SupersededRefresh extends Error {}
@@ -283,11 +289,13 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       },
     );
   }
-  async function createOrder(actor: Actor, offerId: string, requestKey: string) {
+  async function createOrder(actor: Actor, offerId: string, expectedOfferRevision: number, requestKey: string) {
     const buyer = account(actor),
       r = route(buyer.accountId),
       id = newId(r);
     route(offerId);
+    if (!Number.isSafeInteger(expectedOfferRevision) || expectedOfferRevision < 1)
+      throw new TypeError('Invalid expected offer revision');
     const parent = offerParentAnchor(offerId);
     const authorization = parentCreationAuthorization({
       access,
@@ -307,12 +315,14 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     return runCommand(
       pool,
       {
-        ...options(actor, r, 'commerce.order.create', requestKey, { offerId }),
+        ...options(actor, r, 'commerce.order.create', requestKey, { offerId, expectedOfferRevision }),
         authorization: accountAuthorization(actor, authorization),
       },
       async (tx, command) => {
         const offer = parent.at(command.time);
         if (offer.state !== 'active') throw new OfferUnavailableError();
+        // The command body runs only after current authorization and exact receipt replay.
+        if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
         await requireCurrentContentEdition(offer.contentEdition);
         const order = await store.insertOrder(
           tx,

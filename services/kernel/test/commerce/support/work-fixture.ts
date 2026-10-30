@@ -187,6 +187,7 @@ export async function workFixture() {
           },
           buyerActor,
           offer.id,
+          offer.revision,
           requestKey,
         );
       } finally {
@@ -194,10 +195,10 @@ export async function workFixture() {
       }
     },
     async orderForRequest(requestKey: string) {
-      return (await commands.createOrder(await actor(buyer), offer.id, requestKey)).value;
+      return (await commands.createOrder(await actor(buyer), offer.id, offer.revision, requestKey)).value;
     },
     async order() {
-      return (await commands.createOrder(await actor(buyer), offer.id, Bun.randomUUIDv7())).value;
+      return (await commands.createOrder(await actor(buyer), offer.id, offer.revision, Bun.randomUUIDv7())).value;
     },
     request(order: Order) {
       return {

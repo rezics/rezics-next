@@ -46,7 +46,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 type Data<F extends (...args: never[]) => unknown> = NonNullable<
   Awaited<ReturnType<F>> extends { data: infer D } ? D : never
 >;
-type OfferRead = Data<ReturnType<KernelClient['offers']>['get']>;
+type OfferRead = { offer: Data<ReturnType<KernelClient['offers']>['get']>['offer'] & { revision: number } };
 type OrderRead = Data<ReturnType<KernelClient['orders']>['get']>;
 type OrderStart = Data<KernelClient['orders']['post']>;
 type Problem = NonNullable<Awaited<ReturnType<KernelClient['orders']['post']>>['error']>['value'];
@@ -108,6 +108,7 @@ const offerWithoutCover = id(7);
 const orderWithoutSubject = id(14);
 const offer: OfferRead = {
   offer: {
+    revision: 3,
     id: id(1),
     targetSubjectId: id(90),
     subject: summaryOf('en', bookCover),
@@ -155,6 +156,7 @@ type Call = {
   at: number;
 };
 const calls: Call[] = [];
+let repricedOfferReviewed = false;
 let settlePending = false;
 async function kernel(request: Request, url: URL): Promise<Response> {
   // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for orders.
@@ -182,6 +184,7 @@ async function kernel(request: Request, url: URL): Promise<Response> {
     const result: OfferRead = {
       offer: {
         ...offer.offer,
+        revision: offerId === id(8) && repricedOfferReviewed ? 4 : offer.offer.revision,
         id: offerId,
         subject:
           offerId === offerWithoutSubject
@@ -196,6 +199,10 @@ async function kernel(request: Request, url: URL): Promise<Response> {
     return problem(401, 'unauthorized');
   if (orderStart) {
     const offerId = (body as { offerId?: string }).offerId;
+    if (offerId === id(8) && (body as { expectedOfferRevision: number }).expectedOfferRevision === 3) {
+      repricedOfferReviewed = true;
+      return problem(409, 'offer_revision_conflict');
+    }
     if (offerId === id(2) || offerId === id(3)) return problem(409, 'offer_unavailable');
     const attempt = calls.filter((entry) => entry.method === 'POST' && entry.key === call.key).length;
     if (offerId === id(5) && attempt === 1) return problem(503, 'dependency_unavailable');
@@ -527,7 +534,7 @@ test(
       await page.waitForURL(stripe);
       expect(starts()).toHaveLength(1);
       expect(starts()[0]).toMatchObject({ authorization: `Bearer ${auth.access}`, body: { offerId: id(1) } });
-      expect(starts()[0]!.body).toEqual({ offerId: id(1) });
+      expect(starts()[0]!.body).toEqual({ offerId: id(1), expectedOfferRevision: offer.offer.revision });
       expect(starts()[0]!.key).toMatch(uuid);
       expect(html).toContain(starts()[0]!.key!);
       expect(posts).toHaveLength(1);
@@ -930,6 +937,39 @@ test(
       expect(await response.json()).toEqual({ id: id(n), offerId: id(1), settlement });
       expect(reads(n)).toHaveLength(1);
       expect(reads(n)[0]!.languages).toBeNull();
+    }
+  },
+  timeout,
+);
+
+test(
+  'repriced terms require reload and another explicit buy while the original consent is sent only once',
+  async () => {
+    const auth = await signIn();
+    repricedOfferReviewed = false;
+    calls.length = 0;
+    const page = await open(offerPath(8), auth.value);
+    try {
+      await buy(page).click();
+      const review = page.getByRole('button', { name: 'Reload and review terms', exact: true });
+      await review.waitFor();
+      expect(await page.locator('main').innerText()).toContain('The offer terms have changed.');
+      expect(starts()).toHaveLength(1);
+      const original = starts()[0]!;
+      expect(original.body).toEqual({ offerId: id(8), expectedOfferRevision: 3 });
+      expect(await buy(page).count()).toBe(0);
+      expect(await retry(page).count()).toBe(0);
+      await review.click();
+      await buy(page).waitFor();
+      expect(await page.locator('main').innerText()).toContain('Offer revision 4');
+      expect(starts()).toHaveLength(1);
+      await buy(page).click();
+      await page.waitForURL(stripe);
+      expect(starts()).toHaveLength(2);
+      expect(starts()[1]!.body).toEqual({ offerId: id(8), expectedOfferRevision: 4 });
+      expect(starts()[1]!.key).not.toBe(original.key);
+    } finally {
+      await page.context().close();
     }
   },
   timeout,

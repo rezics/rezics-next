@@ -355,7 +355,7 @@ export async function refreshUserFixture(provider?: ReturnType<typeof startFakeS
     instant,
     finish,
     async checkout() {
-      const response = await request('/v1/orders', buyer, { offerId: offer.id });
+      const response = await request('/v1/orders', buyer, { offerId: offer.id, expectedOfferRevision: offer.revision });
       if (response.status !== 201) throw new Error(`Checkout: ${response.status} ${await response.text()}`);
       const order = (await response.json()).order;
       const stored = await commands.readOrderForAccount(buyer, order.id);

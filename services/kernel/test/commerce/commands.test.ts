@@ -15,7 +15,11 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
-import { createCommerceCommands, OfferUnavailableError } from '../../src/commerce/commands.ts';
+import {
+  createCommerceCommands,
+  OfferRevisionConflictError,
+  OfferUnavailableError,
+} from '../../src/commerce/commands.ts';
 import type { CheckoutSnapshot, Order, StripeTransaction } from '../../src/commerce/model.ts';
 import * as store from '../../src/commerce/store.ts';
 
@@ -112,7 +116,8 @@ async function offer() {
   return (await commands.createOffer(await actor(seller), input(), key())).value;
 }
 async function order() {
-  return (await commands.createOrder(await actor(buyer), (await offer()).id, key())).value;
+  const selected = await offer();
+  return (await commands.createOrder(await actor(buyer), selected.id, selected.revision, key())).value;
 }
 async function footprint() {
   return (
@@ -213,7 +218,7 @@ test('offers are created by approved sellers and orders by any active account on
   }
   for (const id of [buyer, other]) {
     await expect(commands.createOffer(await actor(id), input(), key())).rejects.toBeInstanceOf(GrantDeniedError);
-    const purchase = (await commands.createOrder(await actor(id), o.id, key())).value;
+    const purchase = (await commands.createOrder(await actor(id), o.id, o.revision, key())).value;
     expect(routeOf(purchase.id)).toBe(routeOf(id));
     expect(purchase).toMatchObject({
       offerId: o.id,
@@ -229,9 +234,15 @@ test('offers are created by approved sellers and orders by any active account on
   const suspendedActor = await actor(suspended);
   await suspendAccount(pool, suspended);
   const before = await footprint();
-  await expect(commands.createOrder(suspendedActor, o.id, key())).rejects.toBeInstanceOf(AuthenticationError);
-  await expect(commands.createOrder({ kind: 'anonymous' }, o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
-  await expect(commands.createOrder(await actor(buyer), newId(0x2200), key())).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(commands.createOrder(suspendedActor, o.id, o.revision, key())).rejects.toBeInstanceOf(
+    AuthenticationError,
+  );
+  await expect(commands.createOrder({ kind: 'anonymous' }, o.id, o.revision, key())).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
+  await expect(commands.createOrder(await actor(buyer), newId(0x2200), 1, key())).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
   expect(await footprint()).toEqual(before);
   expect(await commands.readOffer(o.id)).toEqual(o);
   expect(await commands.readOffer(newId(0x2200))).toBeNull();
@@ -243,28 +254,33 @@ test('order creation and checkout recording are idempotent and authorized before
   const o = await offer();
   const a = await actor(buyer);
   const requestKey = key();
-  const first = await commands.createOrder(a, o.id, requestKey);
+  const first = await commands.createOrder(a, o.id, o.revision, requestKey);
   const before = await footprint();
-  expect(await commands.createOrder(a, o.id, requestKey)).toEqual({ ...first, replayed: true });
+  expect(await commands.createOrder(a, o.id, o.revision, requestKey)).toEqual({ ...first, replayed: true });
   expect(await footprint()).toEqual(before);
-  await expect(commands.createOrder(a, (await offer()).id, requestKey)).rejects.toBeInstanceOf(
+  const another = await offer();
+  await expect(commands.createOrder(a, another.id, another.revision, requestKey)).rejects.toBeInstanceOf(
     IdempotencyConflictError,
   );
   await suspendAccount(pool, buyer);
-  await expect(commands.createOrder(a, o.id, requestKey)).rejects.toBeInstanceOf(AuthenticationError);
+  await expect(commands.createOrder(a, o.id, o.revision, requestKey)).rejects.toBeInstanceOf(AuthenticationError);
   await reinstateAccount(pool, buyer);
   const delisted = await commands.delistOffer(await actor(seller), o.id, key());
   expect(delisted.value).toMatchObject({ state: 'delisted', revision: 2 });
   expect(await events(delisted.transactionId)).toEqual([event('offer.delisted', { offerId: o.id })]);
   // Delisting removes availability, not the standing order:create grant. Replay is authorized, then returns its receipt.
-  expect((await commands.createOrder(await actor(buyer), o.id, requestKey)).value).toEqual(first.value);
-  await expect(commands.createOrder(await actor(buyer), o.id, key())).rejects.toBeInstanceOf(OfferUnavailableError);
+  expect((await commands.createOrder(await actor(buyer), o.id, o.revision, requestKey)).value).toEqual(first.value);
+  await expect(commands.createOrder(await actor(buyer), o.id, o.revision, key())).rejects.toBeInstanceOf(
+    OfferUnavailableError,
+  );
   await expect(commands.delistOffer(await actor(other), o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await pool.query(
     "INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id) VALUES ($1,$2,$3,'order:create','resource','(,)',$3)",
     [routeOf(o.id), o.id, buyer],
   );
-  await expect(commands.createOrder(await actor(buyer), o.id, requestKey)).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(commands.createOrder(await actor(buyer), o.id, o.revision, requestKey)).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
   const id = first.value.id;
   await commands.recordCheckout(id, { kind: 'unknown' });
   expect(await commands.readOrderForAccount(buyer, id)).toMatchObject({ settlement: 'unknown', revision: 2 });
@@ -456,7 +472,7 @@ test('command statement counts do not grow with unrelated rows', async () => {
       const o = await offer();
       const a = await actor(buyer);
       captured = [];
-      const created = await commands.createOrder(a, o.id, key());
+      const created = await commands.createOrder(a, o.id, o.revision, key());
       const createStatements = captured;
       captured = undefined;
       expect(createStatements.filter((q) => /FROM commerce.offer WHERE/.test(q.text))).toHaveLength(1);
@@ -572,4 +588,32 @@ test('historical subject-only paid truth survives unavailable target without min
     settlement: 'paid',
     contentEdition: null,
   });
+});
+
+test('displayed offer revision binds fresh order consent while exact authorized replay retains captured terms', async () => {
+  const displayed = await offer();
+  const buyerActor = await actor(buyer);
+  const requestKey = key();
+  const accepted = await commands.createOrder(buyerActor, displayed.id, displayed.revision, requestKey);
+  expect(accepted.value).toMatchObject({
+    offerRevision: displayed.revision,
+    unitAmountMinor: displayed.unitAmountMinor,
+  });
+  const revised = await commands.reviseOffer(await actor(seller), displayed.id, { unitAmountMinor: 2400 }, key());
+  const before = await footprint();
+
+  await expect(commands.createOrder(buyerActor, displayed.id, displayed.revision, key())).rejects.toBeInstanceOf(
+    OfferRevisionConflictError,
+  );
+  expect(await footprint()).toEqual(before);
+  expect(await commands.createOrder(buyerActor, displayed.id, displayed.revision, requestKey)).toEqual({
+    ...accepted,
+    replayed: true,
+  });
+  await expect(
+    commands.createOrder(buyerActor, displayed.id, revised.value.revision, requestKey),
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  expect(await footprint()).toEqual(before);
+  const reviewed = await commands.createOrder(buyerActor, displayed.id, revised.value.revision, key());
+  expect(reviewed.value).toMatchObject({ offerRevision: revised.value.revision, unitAmountMinor: 2400 });
 });

@@ -689,7 +689,7 @@ test('Order creation stays within its bound as o grows', async () => {
     offerInitialization: false,
   });
   await check(database, 'Order creation stays within its bound as o grows', population, async (_, __, repetition) =>
-    commands.createOrder(await freshActor(), offer.id, requestKey('order-creation', repetition)),
+    commands.createOrder(await freshActor(), offer.id, offer.revision, requestKey('order-creation', repetition)),
   );
 }, 90_000);
 
@@ -711,7 +711,13 @@ test('Checkout and receipt recording stays within its bound as o grows', async (
       const key = requestKey('checkout', repetition);
       fake!.nextCreateFault = 'lost';
       try {
-        await checkout({ pool: database.pool, commands, stripe, successUrl, cancelUrl }, actor, offer.id, key);
+        await checkout(
+          { pool: database.pool, commands, stripe, successUrl, cancelUrl },
+          actor,
+          offer.id,
+          offer.revision,
+          key,
+        );
         throw new Error('The first Stripe result should be unavailable');
       } catch (error) {
         expect(error).toBeInstanceOf(StripeUnavailableError);
@@ -720,6 +726,7 @@ test('Checkout and receipt recording stays within its bound as o grows', async (
         { pool: database.pool, commands, stripe, successUrl, cancelUrl },
         await freshActor(),
         offer.id,
+        offer.revision,
         key,
       );
       expect(completed.checkoutSessionId).toMatch(/^cs_test_/);
@@ -737,6 +744,7 @@ test('Order session and transaction reads stays within its bound as o grows', as
     { pool: database.pool, commands, stripe, successUrl, cancelUrl },
     actor,
     offer.id,
+    offer.revision,
     requestKey('order-read-anchor', 0),
   );
   const population = commercePopulation(`order-reads-${Bun.randomUUIDv7()}`, {
@@ -783,6 +791,7 @@ test('Order decision and settlement stays within its bound as N grows', async ()
     { pool: database.pool, commands, stripe, successUrl, cancelUrl },
     await freshActor(),
     offer.id,
+    offer.revision,
     requestKey('settlement-anchor', 0),
   );
   const population = commercePopulation(`order-settlement-${Bun.randomUUIDv7()}`, {
@@ -830,7 +839,12 @@ test('Entitlement grant change lock and read stays within its bound as e grows',
   const database = db!;
   await resetGrowthData(database);
   const offer = await createOfferAnchor();
-  const created = await commands.createOrder(await freshActor(), offer.id, requestKey('entitlement-anchor', 0));
+  const created = await commands.createOrder(
+    await freshActor(),
+    offer.id,
+    offer.revision,
+    requestKey('entitlement-anchor', 0),
+  );
   const population = commercePopulation(`entitlement-lock-${Bun.randomUUIDv7()}`, {
     orders: true,
     entitlements: true,
@@ -853,7 +867,12 @@ test('Entitlement list stays within its bound as d grows', async () => {
   const database = db!;
   await resetGrowthData(database);
   const offer = await createOfferAnchor();
-  const anchor = await commands.createOrder(await freshActor(), offer.id, requestKey('entitlement-list-anchor', 0));
+  const anchor = await commands.createOrder(
+    await freshActor(),
+    offer.id,
+    offer.revision,
+    requestKey('entitlement-list-anchor', 0),
+  );
   const population = commercePopulation(`entitlement-list-${Bun.randomUUIDv7()}`, {
     orders: true,
     entitlements: true,
@@ -874,6 +893,7 @@ test('Webhook and commerce jobs stays within its bound as N grows', async () => 
     { pool: database.pool, commands, stripe, successUrl, cancelUrl },
     await freshActor(),
     offer.id,
+    offer.revision,
     requestKey('commerce-job-anchor', 0),
   );
   const population = commercePopulation(`commerce-jobs-${Bun.randomUUIDv7()}`, {
@@ -903,6 +923,7 @@ test('Erasure stays within its bound as N grows', async () => {
     { pool: database.pool, commands, stripe, successUrl, cancelUrl },
     await freshActor(),
     offer.id,
+    offer.revision,
     requestKey('erasure-transaction-anchor', 0),
   );
   await commands.applyCheckoutSnapshot(

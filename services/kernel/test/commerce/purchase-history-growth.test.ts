@@ -42,7 +42,7 @@ test('native buyer pages seek bounded indexed rows at increasing history, unrela
     async grow(_, scale, previous) {
       for (let i = previous; i < scale; i++) {
         for (const actor of [buyer, peer, unrelated])
-          await f.commands.createOrder(actor, f.offer.id, Bun.randomUUIDv7());
+          await f.commands.createOrder(actor, f.offer.id, f.offer.revision, Bun.randomUUIDv7());
         if (i % 8 === 0) {
           const paid = await f.checkout();
           f.fake.pay(paid.checkoutSessionId!);

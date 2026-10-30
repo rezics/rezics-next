@@ -302,8 +302,8 @@ test('after the purchases and selling groups are opened by data the offer and ch
   expect(summary).toBeNull();
   const listed = await request('GET', `/v1/offers/${offer.id}`, 'anonymous');
   expect(listed.status).toBe(200);
-  expect(await listed.json()).toEqual({ offer: { ...offerFields, subject: summary } });
-  const checkout = await request('POST', '/v1/orders', 'buyer', { offerId: offer.id });
+  expect(await listed.json()).toEqual({ offer: { ...offerFields, revision: 1, subject: summary } });
+  const checkout = await request('POST', '/v1/orders', 'buyer', { offerId: offer.id, expectedOfferRevision: 1 });
   expect(checkout.status).toBe(201);
   const order = (await checkout.json()).order;
   expect(checkout.headers.get('location')).toBe(`/v1/orders/${order.id}`);

@@ -15,6 +15,7 @@ export const Route = createFileRoute('/offers/$id')({
       pageHeadContext(match.pathname),
     ),
   component: function OfferRoute() {
-    return <OfferPage offer={Route.useLoaderData()} />;
+    const offer = Route.useLoaderData();
+    return <OfferPage key={offer.id} offer={offer} />;
   },
 });

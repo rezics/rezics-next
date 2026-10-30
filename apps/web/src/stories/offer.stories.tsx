@@ -55,3 +55,42 @@ export const KernelUnavailable: Story = {
 };
 export const ExposureOpen: Story = exposureStory(pagePaths.offer);
 export const ExposureClosed: Story = exposureStory(pagePaths.offer, true);
+
+export const TermsChanged: Story = {
+  name: 'Terms changed after review',
+  play: async ({ canvasElement }) => {
+    const originalFetch = window.fetch;
+    let starts = 0;
+    window.fetch = (async (input: Parameters<typeof window.fetch>[0], init?: Parameters<typeof window.fetch>[1]) => {
+      const target = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(target, window.location.href);
+      const method = init?.method ?? (typeof input === 'string' || input instanceof URL ? 'GET' : input.method);
+      if (url.pathname === '/checkout' && method === 'POST') {
+        starts++;
+        return Response.json({ code: 'offer_revision_conflict' }, { status: 409 });
+      }
+      return originalFetch(input, init);
+    }) as typeof window.fetch;
+    try {
+      const view = within(await within(canvasElement).findByRole('main'));
+      await userEvent.click(await view.findByRole('button', { name: m.offer_buy() }));
+      await view.findByText(m.offer_terms_changed());
+      await expect(await view.findByRole('button', { name: m.offer_review_terms() })).toBeEnabled();
+      await expect(view.queryByRole('button', { name: m.offer_buy() })).toBeNull();
+      await expect(view.queryByRole('button', { name: m.offer_retry() })).toBeNull();
+      await expect(starts).toBe(1);
+    } finally {
+      window.fetch = originalFetch;
+    }
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
+};
+export const TermsChangedMobile: Story = {
+  ...TermsChanged,
+  parameters: {
+    viewport: {
+      options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
+    },
+  },
+  globals: { viewport: { value: 'phone' } },
+};

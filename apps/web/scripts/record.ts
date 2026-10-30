@@ -971,7 +971,16 @@ async function recordCommerce(input: {
     };
     await call('delist', tokens.seller, 'POST', `/v1/offers/${offers['offer-delisted']}:delist`, 200);
 
-    const order = (offerId: string) => call('order', tokens.buyer, 'POST', '/v1/orders', 201, { offerId });
+    const order = async (offerId: string) => {
+      const observed = objectBody(
+        await call('offer review', tokens.buyer, 'GET', `/v1/offers/${offerId}`, 200),
+        'offer',
+      );
+      return call('order', tokens.buyer, 'POST', '/v1/orders', 201, {
+        offerId,
+        expectedOfferRevision: observed.revision,
+      });
+    };
     const pending = idOf(await order(offers.offer), 'order');
     const toPay = idOf(await order(offers.offer), 'order');
     const sessionOf = async (orderId: string) => {

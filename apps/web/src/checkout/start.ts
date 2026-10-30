@@ -64,9 +64,14 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
     throw problem(400, 'invalid_request', 'Invalid Request');
   const fields = body as Record<string, unknown>;
   if (
-    Object.keys(fields).some((key) => key !== 'offerId' && key !== 'idempotencyKey') ||
+    Object.keys(fields).some(
+      (key) => key !== 'offerId' && key !== 'expectedOfferRevision' && key !== 'idempotencyKey',
+    ) ||
     typeof fields.offerId !== 'string' ||
     !UUID.test(fields.offerId) ||
+    typeof fields.expectedOfferRevision !== 'number' ||
+    !Number.isSafeInteger(fields.expectedOfferRevision) ||
+    fields.expectedOfferRevision < 1 ||
     typeof fields.idempotencyKey !== 'string' ||
     !UUID.test(fields.idempotencyKey)
   )
@@ -74,12 +79,12 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
 
   let result: Awaited<ReturnType<ReturnType<typeof kernelClient>['orders']['post']>>;
   try {
-    // The treaty header type names only Idempotency-Key. The bearer is still sent; Eden forwards the object as given.
     const headers = {
       authorization: credential,
       'idempotency-key': fields.idempotencyKey,
-    } as { 'idempotency-key': string };
-    result = await kernelClient().orders.post({ offerId: fields.offerId }, { headers });
+    };
+    const input = { offerId: fields.offerId, expectedOfferRevision: fields.expectedOfferRevision };
+    result = await kernelClient().orders.post(input, { headers });
   } catch (error) {
     if (isPlatformClosedError(error))
       return Response.json(error.problem, {
@@ -90,7 +95,15 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
   }
   if (result.error || !result.data) {
     const status = result.status || result.error?.status;
-    if (status === 409) return problemResponse(problem(409, 'offer_unavailable', 'Offer Unavailable'));
+    if (status === 409 && result.error) {
+      const failure: unknown = result.error.value;
+      if (failure && typeof failure === 'object' && 'code' in failure) {
+        if (failure.code === 'offer_revision_conflict')
+          return problemResponse(problem(409, 'offer_revision_conflict', 'Offer Terms Changed'));
+        if (failure.code === 'offer_unavailable')
+          return problemResponse(problem(409, 'offer_unavailable', 'Offer Unavailable'));
+      }
+    }
     throw dependencyUnavailable(503);
   }
   const checkoutUrl = safeCheckoutUrl(result.data.order.checkoutUrl);

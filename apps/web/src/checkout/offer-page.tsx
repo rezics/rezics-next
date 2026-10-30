@@ -2,37 +2,50 @@ import { useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 
-type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
+type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed';
 
-export function OfferPage({ offer }: { offer: OfferPageData }) {
+export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
+  const submittedOffer = useRef<OfferPageData | null>(null);
+  const offer = submittedOffer.current ?? observedOffer;
   const { state: session, csrfToken: csrf } = useSession();
   const admitted = useOperation('order.create');
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
 
   async function start() {
-    if (phase === 'unavailable' || phase === 'submitting') return;
+    if (phase !== 'ready' && phase !== 'retry') return;
     if (!csrf) {
       const returnTo = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
       return;
     }
+    // A loader refresh cannot replace consent while the original creation outcome is uncertain.
+    submittedOffer.current ??= offer;
     setPhase('submitting');
     try {
       const response = await fetch('/checkout', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
-        body: JSON.stringify({ offerId: offer.id, idempotencyKey: offer.idempotencyKey }),
+        body: JSON.stringify({
+          offerId: offer.id,
+          expectedOfferRevision: offer.revision,
+          idempotencyKey: offer.idempotencyKey,
+        }),
       });
       if (response.status === 409) {
-        setPhase('unavailable');
+        const failure: unknown = await response.json();
+        if (failure && typeof failure === 'object' && 'code' in failure && failure.code === 'offer_revision_conflict')
+          setPhase('terms-changed');
+        else if (failure && typeof failure === 'object' && 'code' in failure && failure.code === 'offer_unavailable')
+          setPhase('unavailable');
+        else setPhase('retry');
         return;
       }
       if (!response.ok) {
@@ -64,13 +77,15 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
   }
 
   const note =
-    phase === 'unavailable'
-      ? m.offer_unavailable()
-      : phase === 'retry'
-        ? m.offer_retry_note()
-        : phase === 'closed'
-          ? m.offer_start_closed()
-          : null;
+    phase === 'terms-changed'
+      ? m.offer_terms_changed()
+      : phase === 'unavailable'
+        ? m.offer_unavailable()
+        : phase === 'retry'
+          ? m.offer_retry_note()
+          : phase === 'closed'
+            ? m.offer_start_closed()
+            : null;
   const buyDisabled = !admitted || phase !== 'ready' || session === 'unknown';
 
   return (
@@ -87,6 +102,9 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
             <span className="block text-sm font-medium text-muted-foreground">{m.offer_price()}</span>
             <span className="block font-serif text-3xl text-foreground tabular-nums">{offer.price}</span>
           </p>
+          <p className="text-sm text-muted-foreground">
+            {m.offer_terms_revision({ revision: String(offer.revision) })}
+          </p>
           {note && (
             <Alert role="status">
               <AlertDescription className="text-foreground">{note}</AlertDescription>
@@ -95,7 +113,11 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
         </div>
       </header>
       <div className="pt-2">
-        {phase === 'retry' ? (
+        {phase === 'terms-changed' ? (
+          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
+            {m.offer_review_terms()}
+          </Button>
+        ) : phase === 'retry' ? (
           <Button
             variant="outline"
             size="lg"

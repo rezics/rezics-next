@@ -49,6 +49,7 @@ type KernelCall = {
 };
 type Offer = {
   id: string;
+  revision: number;
   targetSubjectId: string;
   title: string;
   currency: string;
@@ -75,6 +76,7 @@ let heldOrders: Order[] = [];
 
 const offerOf = (id: string): Offer => ({
   id,
+  revision: 3,
   targetSubjectId: contentId(90),
   title: id === targetOfferId ? 'A field guide to stars' : `Other offer ${id}`,
   currency: 'usd',
@@ -264,7 +266,7 @@ function checkoutRequest(offerId: string, key: string) {
       origin: 'https://site.test',
       'x-csrf-token': csrf,
     },
-    body: JSON.stringify({ offerId, idempotencyKey: key }),
+    body: JSON.stringify({ offerId, expectedOfferRevision: 3, idempotencyKey: key }),
   });
 }
 function orderRequest(id: string) {
@@ -346,7 +348,7 @@ test('checkout start stays within its bound as s grows', async () => {
       path: '/v1/orders',
       authorization: `Bearer ${accessToken}`,
       idempotencyKey,
-      body: { offerId: targetOfferId },
+      body: { offerId: targetOfferId, expectedOfferRevision: 3 },
     });
     expect(counts.r2).toBe(0);
     expect(authCalls).toEqual([]);
@@ -521,3 +523,17 @@ test('offer page stays within its bound as s grows', async () => {
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
+
+test('checkout BFF rejects missing or invalid displayed revision before calling the kernel', async () => {
+  for (const expectedOfferRevision of [undefined, null, 0, -1, 1.5, '3', Number.MAX_SAFE_INTEGER + 1]) {
+    const { env } = sessionHarness();
+    kernelCalls.length = 0;
+    const request = new Request(checkoutRequest(targetOfferId, idempotencyKey), {
+      body: JSON.stringify({ offerId: targetOfferId, expectedOfferRevision, idempotencyKey }),
+    });
+    await expect(startCheckout(request, env)).rejects.toMatchObject({
+      problem: { status: 400, code: 'invalid_request' },
+    });
+    expect(kernelCalls).toEqual([]);
+  }
+});

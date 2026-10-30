@@ -23,6 +23,7 @@ const subject = subjectCover('en', subjectId, 'Book edition', {
 });
 const offer: OfferPageData = {
   id: offerId,
+  revision: 3,
   title: 'Book edition',
   currency: 'usd',
   unitAmountMinor: 1299,

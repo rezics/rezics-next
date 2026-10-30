@@ -74,7 +74,7 @@ test('the actual default worker reconciles retained refund reversals after real 
     ).offer;
     const commands = createCommerceCommands({ pool, access: kernel.testAccess });
     const actor = await kernel.testAccess.authenticate(people.alice.bearer, { pool, deadline: Date.now() + 10000 });
-    const order = (await commands.createOrder(actor, offer.id, crypto.randomUUID())).value;
+    const order = (await commands.createOrder(actor, offer.id, offer.revision, crypto.randomUUID())).value;
     const stripe = createStripePort({
       apiKey: 'sk_test_terminal_default',
       managedPayments: false,

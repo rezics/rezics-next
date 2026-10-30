@@ -28,6 +28,7 @@ let commands: ReturnType<typeof createCommerceCommands>;
 let otherCommands: ReturnType<typeof createCommerceCommands>;
 let buyer: Awaited<ReturnType<NativeProfileFixture['identity']>>;
 let offerId: string;
+let offerRevision: number;
 let instant = '2026-10-29T12:00:00.000Z';
 type Trace = { statement: string; values: unknown[]; error?: string };
 const trace: Trace[] = [];
@@ -103,7 +104,7 @@ beforeAll(async () => {
       key: entryKey(),
     },
   );
-  offerId = (
+  const selectedOffer = (
     await otherCommands.createOffer(
       f.steward.actor,
       {
@@ -115,7 +116,9 @@ beforeAll(async () => {
       },
       entryKey(),
     )
-  ).value.id;
+  ).value;
+  offerId = selectedOffer.id;
+  offerRevision = selectedOffer.revision;
   fake = startFakeStripe();
   // Existing loopback provider, with legal no-balance pending/canceled refund bytes.
   proxy = Bun.serve({
@@ -157,7 +160,7 @@ afterAll(async () => {
 
 async function checkout() {
   // Verified actors are admitted to the fixture's pool; the scheduling pool hosts service commands only.
-  const order = (await otherCommands.createOrder(buyer.actor, offerId, entryKey())).value;
+  const order = (await otherCommands.createOrder(buyer.actor, offerId, offerRevision, entryKey())).value;
   const session = await stripe.createCheckoutSession(
     {
       orderId: order.id,

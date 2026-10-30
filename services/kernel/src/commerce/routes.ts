@@ -16,7 +16,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { checkout } from './checkout.ts';
-import { createCommerceCommands, OfferUnavailableError } from './commands.ts';
+import { createCommerceCommands, OfferRevisionConflictError, OfferUnavailableError } from './commands.ts';
 import { StripeUnavailableError, type Entitlement, type Offer, type Order, type StripePort } from './model.ts';
 import * as store from './store.ts';
 import entitlementPage from './store-entitlement-list.sql';
@@ -84,6 +84,7 @@ const offerReadSchema = t.Object(
   {
     contentEdition: contentEditionSchema,
     id,
+    revision: t.Integer({ minimum: 1 }),
     targetSubjectId: id,
     subject: t.Union([SubjectSummarySchema, t.Null()]),
     title: t.String(),
@@ -185,9 +186,10 @@ function offerView(offer: Offer, summary: SubjectSummary | null) {
   };
 }
 function offerReadView(offer: Offer, subject: SubjectSummary | null) {
-  const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
+  const { id, revision, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
   return {
     id,
+    revision,
     targetSubjectId,
     subject,
     title,
@@ -255,6 +257,7 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     if (error instanceof GrantDeniedError) throw new ProblemError(denied);
     if (error instanceof OfferUnavailableError) throw new ProblemError('offer_unavailable');
     if (error instanceof ContentEditionUnavailableError) throw new ProblemError('dependency_unavailable');
+    if (error instanceof OfferRevisionConflictError) throw new ProblemError('offer_revision_conflict');
     if (error instanceof StripeUnavailableError) throw new ProblemError('dependency_unavailable');
     throw error;
   }
@@ -460,13 +463,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       '/v1/orders',
       {
         headers,
-        body: t.Object({ offerId: id }, object),
+        body: t.Object(
+          { offerId: id, expectedOfferRevision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) },
+          object,
+        ),
         response: {
           201: orderResponse,
           400: problemSchema('invalid_request'),
           401: unauthorized,
           404: problemSchema('not_found'),
-          409: problemSchema('offer_unavailable'),
+          409: problemSchema('offer_unavailable', 'offer_revision_conflict'),
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
@@ -493,6 +499,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
                 { pool, commands: createCommerceCommands({ pool, access: deps.access() }), ...commerce },
                 actor,
                 body.offerId,
+                body.expectedOfferRevision,
                 key,
               ),
             'not_found',
