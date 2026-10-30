@@ -44,6 +44,7 @@ Those documents own settings, exact native rules disclosure, shared DTO, produce
 The [Web owner contract](../../apps/web/README.md#realm-appearance-and-rules) owns interface consumption, settings
 presentation and visual review; native adoption does not supersede that authority.
 Accounts still owns its membership source/version/removal seam; members remain unknown until that source and
-Content's aggregate are installed. Content's native assets producer owns claims, derivative summaries and downloads.
+Content's aggregate are installed. Content's native assets producer owns
+[claims, derivative summaries and downloads](../../services/kernel/src/content/README.md#realm-presentation-media).
 This report retains only research evidence and is not a second settings or read contract. Adoption establishes no
 native, physical, visual, cleanup or promotion proof.

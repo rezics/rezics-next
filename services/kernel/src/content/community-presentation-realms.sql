@@ -1,7 +1,7 @@
 WITH input AS NOT MATERIALIZED (
   SELECT k.route, k.id FROM jsonb_to_recordset(:keys::jsonb) AS k(route integer, id uuid)
 )
-SELECT h.route, h.realm_id, h.space_id, h.context_id, h.visibility, h.head_revision_id,
+SELECT h.route, h.realm_id, h.space_id, h.context_id, h.visibility, h.head_revision_id, h.lifecycle_version::text,
        h.created_at, r.created_at AS revision_created_at, r.title, r.summary, r.presentation
 FROM input i
 CROSS JOIN LATERAL (

@@ -15,6 +15,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { REACTION_KINDS } from '../content/events.ts';
+import { MediaUnavailableError } from '../content/media.ts';
 import { SitemapQuerySchema } from '../content/schemas.ts';
 import { SitemapRealmPageSchema, SitemapSpacePageSchema } from './schemas.ts';
 import { InvalidCommunitySitemapCursorError, listSitemapRealms, listSitemapSpaces } from './sitemap.ts';
@@ -348,6 +349,7 @@ function communityProblem(error: unknown): never {
   if (error instanceof SpaceAddressConflictError) throw new ProblemError('conflict');
   if (error instanceof RealmInputError || error instanceof PublicationInputError)
     throw new ProblemError('invalid_request');
+  if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
   if (error instanceof PublicationCursorError)
     throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
   if (error instanceof PublicationOccupiedSlotError) throw new ProblemError('conflict');
@@ -1187,6 +1189,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
+          409: problemSchema('conflict', 'media_unavailable'),
           412: problemSchema('precondition_failed'),
         },
         detail: {

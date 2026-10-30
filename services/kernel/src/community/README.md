@@ -654,10 +654,12 @@ Realm JSON stores only the two identities. Adoption never changes the original a
 post head or version; a later edit does not change the pin. Native disclosure repeats on every presentation read.
 Hidden/erased rules yield `none`; source failures yield `unavailable` without any retained body.
 
-Media selection invokes Content's `claimRealmPresentationMedia(tx, {realmId, actor, avatarMediaId,
-bannerMediaId}, time)` inside the settings transaction. The native media producer owns same-Realm matching-purpose
-permanent claims and current download authority. Until installed, the declaration throws dependency unavailable;
-it cannot successfully select an image. No media pipeline, Space assets or board overrides are implemented here.
+Media selection invokes Content's `claimRealmPresentationMedia(tx, {realmId, author, avatarMediaId,
+bannerMediaId})` after the revision append and head CAS, inside the same settings transaction. The installed
+native media producer binds its own actual command time and exact actor/authorization to the newly written head;
+it owns same-Realm matching-purpose permanent claims and current download authority. Unclaimable references
+roll back the settings command with uniform 409 `media_unavailable`. No media pipeline, Space assets or board
+overrides are implemented here.
 
 Content's [community presentation contract](../content/README.md#community-presentation) owns the shared DTO and
 reader. `GET /v1/spaces/{id}` adds `community` beside its existing `space` representation, reusing that exact reader

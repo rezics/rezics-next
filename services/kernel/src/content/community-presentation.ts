@@ -12,6 +12,7 @@ import type { CommunityPresentation } from './community-presentation-model.ts';
 import type { ReadContext } from './model.ts';
 import { readExactPublishedRules } from './reads.ts';
 import { rulesKey } from './community-presentation-rules.ts';
+import { readRealmPresentationImages } from './realm-media.ts';
 import realmRows from './community-presentation-realms.sql';
 import spaceRows from './community-presentation-spaces.sql';
 import memberships from './community-presentation-membership.sql';
@@ -73,7 +74,8 @@ export async function readCommunityPresentations(
       const admission = context.actor.kind === 'account' && realms.length ? await decisions.decide(client, {
         action: 'realm:join', resourceType: 'community.realm', ids: realms.map((row) => row.realm_id),
       }, time) : {};
-      const result = new Map<string, { value: CommunityPresentation; signature: string; reference: ReturnType<typeof realmPresentation>['rules'] }>();
+      const result = new Map<string, { value: CommunityPresentation; signature: string;
+        reference: ReturnType<typeof realmPresentation>['rules']; presentation: ReturnType<typeof realmPresentation> }>();
       for (const realm of realms) {
         const space = spaces.find((s) => s.space_id === realm.space_id);
         if (!space || !active(realm) || !active(space) || !visibleRealms[realm.realm_id]?.allowed ||
@@ -95,6 +97,7 @@ export async function readCommunityPresentations(
         result.set(realm.realm_id, {
           signature: JSON.stringify([realm, space, partitions.map((p) => [p.partitionNo, p.epoch]), membership, action]),
           reference: presentation.rules,
+          presentation,
           value: { realmId: realm.realm_id, spaceId: realm.space_id, contextId: realm.context_id,
             name: realm.title, description: realm.summary,
             avatar: presentation.avatarMediaId === null ? none : unavailable,
@@ -114,6 +117,14 @@ export async function readCommunityPresentations(
   const refs = [...initial.values()].flatMap((r) => r.reference ? [{ ...r.reference, realmId: r.value.realmId }] : []);
   let rules: Awaited<ReturnType<typeof readExactPublishedRules>> | null = null;
   try { rules = await readExactPublishedRules(deps, refs, context); } catch { /* Optional native dependency is unavailable. */ }
+  const images = new Map<string, Awaited<ReturnType<typeof readRealmPresentationImages>>>();
+  // Source snapshots are released. Each unique Realm contributes at most two
+  // exact media keys to the native reader, shared by every board in this page.
+  for (const [realmId, prepared] of initial) {
+    const { avatarMediaId, bannerMediaId } = prepared.presentation;
+    if (avatarMediaId === null && bannerMediaId === null) continue;
+    images.set(realmId, await readRealmPresentationImages(deps, { realmId, avatarMediaId, bannerMediaId }, context));
+  }
   const final = await round();
   const output = new Map<string, CommunityPresentation>();
   for (const [id, current] of final) {
@@ -126,7 +137,8 @@ export async function readCommunityPresentations(
     const members = before.state === 'current' && after.state === 'current' &&
       before.version === after.version && before.count === after.count ? after : unknownMembers;
     const rule = current.reference && rules?.get(rulesKey(current.reference, current.value.realmId));
-    output.set(id, { ...current.value, members, rules: !current.reference ? none : rules === null ? unavailable : rule ? { state: 'available', value: rule } : none });
+    output.set(id, { ...current.value, ...images.get(id), members,
+      rules: !current.reference ? none : rules === null ? unavailable : rule ? { state: 'available', value: rule } : none });
   }
   return output;
 }

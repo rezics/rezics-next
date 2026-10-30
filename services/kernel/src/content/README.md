@@ -1129,7 +1129,7 @@ are unchanged.
 `BoardView.community`. Only a genuinely Global board whose native `realmId` is null has null community.
 Realm/Space dependency failure fails disclosure, rather than manufacturing a Global board or another container.
 Board title/purpose remain separate from current Realm title/summary; `description` preserves even an empty summary.
-The current native Realm and Space heads, active state, read authority and placement epochs are checked before
+The current native Realm and Space heads, lifecycle versions, active state, read authority and placement epochs are checked before
 and at final disclosure. The native `contextId` remains independent of Global identity and editorial grants.
 
 `readCommunityPresentations({pool, access, clock?}, realmIds, {actor, deadline})` accepts at most 100 distinct
@@ -1148,8 +1148,11 @@ and epochs. Text-profile canonical bytes are bounded to 65,536; native document 
 remain authoritative. Missing, concealed or erased sources produce no rules; a dependency error produces unavailable.
 No caller can supply a successful authorization flag, and no authored body is stored in Realm or Semantic JSON.
 
-`RealmPresentationOptional<T>` and `RealmPresentationImage` belong to `realm-media.ts`. Unset images are `none`;
-selected images remain `unavailable` until the real native assets producer installs its batched reader. Available
+`RealmPresentationOptional<T>` and `RealmPresentationImage` belong to `realm-media.ts`. Unset images are `none`.
+The installed `readRealmPresentationImages` reads at most two exact media keys per distinct Realm after releasing
+other source snapshots; repeated boards share that result within the existing limit of 100 Realms. It owns current
+media authorization and source/final checks; the outer final round still verifies Realm/Space binding and lifecycle.
+Concealed or erased images are `none`, and native dependency failures are `unavailable` without cached facts. Available
 images may contain only actual derivative facts (at most twelve variants), actual largest derivative dimensions,
 and stored optional placeholder/focal-point/credit, with absent metadata null. They never carry original URLs,
 storage keys or account identity. Summaries never authorize downloads: the existing media id/variant transport
@@ -1175,10 +1178,10 @@ native interval settles. All membership, permission and source evidence is refre
 
 - Touches: distinct full Realm/Space keys, current self memberships and protected bans; fixed source/final
   placement/head anchors and native Access batches; one native member-count point helper and at most one exact
-  rules pin per distinct Realm per round.
+  rules pin per distinct Realm per round; at most two selected media keys per distinct Realm.
 - Bound: O(changes log R), at most 100 returned boards and their deduplicated containers/rules, two fixed
   source rounds, at most 33 post keys per rules chain, 65,536 canonical bytes per rules document and at most
   twelve actual derivative facts per image. Existing list candidate bounds remain; no count scan or history walk.
 - Growth check: later reuse `test/community/growth-realm.test.ts`, `test/content/growth-threads.test.ts` and
-  the existing media growth harness after its producer lands. Native, physical, visual, cleanup, main and root
+  the existing media growth harness. Native, physical, visual, cleanup, main and root
   proof remain outstanding; focused cases and a compiler pass do not claim these outcomes.

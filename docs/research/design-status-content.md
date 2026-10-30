@@ -98,7 +98,8 @@ confers no ownership. UI or provisional types cannot prove this authority exists
 home → board → membership settlement → publication → ban/unban with native personas and current denial races later.
 Realm-owned presentation is adopted in the Community/Content READMEs: revisioned settings select native exact
 rules, and the shared current-authorized reader enriches board responses and the Space home. The assigned native
-assets producer owns permanent claims/derivative summaries; its missing adapter remains unavailable. Accounts owns
+assets producer supplies permanent claims and derivative summaries through its original module; optional dependency
+failures remain unavailable, and its implementation establishes no native proof. Accounts owns
 the original native member-count reader, current version/removal coverage and bounded initialization. Content binds
 that reader at its fixed before/final Realm anchors; its throwing declaration keeps members unknown until the
 producer lands, and changed final counts are withheld without refill. Exact rules retain native author/editor and

@@ -485,9 +485,6 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         contextId = body.contextId === undefined ? previous.contextId : body.contextId;
       metadata(title, summary, visibility, contextId);
       const selected = presentation ?? previous.presentation;
-      if (presentation && (presentation.avatarMediaId !== null || presentation.bannerMediaId !== null))
-        await claimRealmPresentationMedia(tx, { realmId: body.realmId, actor,
-          avatarMediaId: presentation.avatarMediaId, bannerMediaId: presentation.bannerMediaId }, command.time);
       const revision = newId(route);
       // No votes means the column default. The revision trigger then copies the predecessor.
       await append.run(tx, {
@@ -515,6 +512,9 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         }))
       )
         throw new RealmConflictError();
+      if (presentation && (presentation.avatarMediaId !== null || presentation.bannerMediaId !== null))
+        await claimRealmPresentationMedia(tx, { realmId: body.realmId, author: actor,
+          avatarMediaId: presentation.avatarMediaId, bannerMediaId: presentation.bannerMediaId });
       if (visibility === 'protected') await ensureRealmMemberGrant(tx, { realmId: body.realmId });
       return {
         value: { realmId: body.realmId, revisionId: revision },
