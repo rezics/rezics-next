@@ -177,24 +177,22 @@ async function stopWeb(web: WebProcess | undefined): Promise<void> {
       )) === true
     );
   };
-  try {
-    if (groupExists() && leaderAlive()) {
-      try {
-        process.kill(-processGroup!, 'SIGTERM');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-      }
-      if (!(await waitForGroup(10_000))) {
-        if (leaderAlive()) {
-          try {
-            process.kill(-processGroup!, 'SIGKILL');
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-          }
-          await waitForGroup(2_000);
+  if (groupExists() && leaderAlive()) {
+    try {
+      process.kill(-processGroup!, 'SIGTERM');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    }
+    if (!(await waitForGroup(10_000))) {
+      if (leaderAlive()) {
+        try {
+          process.kill(-processGroup!, 'SIGKILL');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
         }
-        throw new Error('web Worker did not stop gracefully');
+        await waitForGroup(2_000);
       }
+      throw new Error('web Worker did not stop gracefully');
     }
   }
 }
