@@ -1474,7 +1474,7 @@ def install():
                     native_hit = native_manifest is not None
                     if native_hit:
                         copy_entries(native_entry / 'payload', root, native_manifest['entries'])
-                        if verify_native_packages(root, native_manifest['entries']) != native_manifest['nativeChecks']:
+                        if verify_native_packages(root, native_manifest['entries']) != sorted(native_manifest['nativeChecks'], key=lambda item: (item['name'], item['version'])):
                             raise RuntimeError('restored native package identity mismatch')
                     # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
                     completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])

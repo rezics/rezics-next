@@ -6310,6 +6310,13 @@ test('fresh source edits reuse verified native packages while source-dependent l
   const fixture = preparationFixture();
   const cold = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'first source' });
   expect(cold.execute().status).toBe(0);
+  // Older verified publications recorded checks in filesystem traversal order. Order does not change identity.
+  const nativeCache = join(fixture.directory, 'dependency-artifacts/native');
+  const nativeEntry = readdirSync(nativeCache).find((name) => !name.endsWith('.lock'))!;
+  const manifestFile = join(nativeCache, nativeEntry, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  manifest.nativeChecks.reverse();
+  writeFileSync(manifestFile, JSON.stringify(manifest));
   const edited = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'unrelated prose edit' });
   const result = edited.execute();
   expect(result.status, result.stderr).toBe(0);
