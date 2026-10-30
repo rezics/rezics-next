@@ -234,6 +234,7 @@ export function SubjectPage({
   invitation,
   base,
   operator,
+  curation,
 }: {
   page: SubjectPageData;
   locale: string;
@@ -262,6 +263,7 @@ export function SubjectPage({
   /** The address of the overview when it is not the subject's own: an agent's `/@handle`. */
   base?: string;
   operator?: { id: string; handle: string | null; displayName: string | null };
+  curation?: ReactNode;
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
@@ -342,6 +344,7 @@ export function SubjectPage({
               root={PageRoot}
             />
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
+            {curation}
           </div>
         </PageData>
       </PageHost>

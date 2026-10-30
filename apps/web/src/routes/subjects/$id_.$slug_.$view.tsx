@@ -23,6 +23,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
+import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -176,6 +177,7 @@ function SubjectViewRoute() {
   return (
     <SubjectViewPage
       page={page}
+      curation={view === 'details' ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined}
       locale={locale}
       messages={subjectPageMessages()}
       reader={reader ?? defaultReader}

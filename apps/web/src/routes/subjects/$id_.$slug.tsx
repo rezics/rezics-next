@@ -7,6 +7,7 @@ import { subjectHead } from '../../features/pages/subject-head';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectTabs } from '../../features/pages/views';
 import { SubjectHeaderActions } from '../../features/pages/subject-reactions-view';
+import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { RatingControlContext, RatingsContext } from '../../features/pages/subject-ratings-view';
 import { postSubjectRatingForm } from '../../features/pages/rating-actions';
 import {
@@ -295,6 +296,7 @@ function SubjectRoute() {
       <RatingsContext.Provider value={ratings}>
         <SubjectPage
           page={page}
+          curation={<SubjectCandidateCuration id={id} locale={locale} />}
           locale={getLocale()}
           messages={subjectPageMessages()}
           {...(reader ? { reader } : {})}

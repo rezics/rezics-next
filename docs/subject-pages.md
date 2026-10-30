@@ -11,6 +11,35 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+## Imported suggestions
+
+The canonical subject overview and Details offer signed-in readers an **Imported suggestions** region after the
+reading content. Opening it loads a private, uncached review through the prepared BFF session; public HTML and
+anonymous reads contain no candidate data. A public subject never implies permission to accept or adopt. The
+native command checks the current account's permission, and refusal removes the review data from the region.
+
+Choose a released, named descriptive field, then traverse its native candidate pages, twenty suggestions at a
+time. The review compares the ordinary public field values with one proposed value and its qualifiers, references
+and available source-record licence/attribution. Import details disclose the source record and source/converter
+revision. Missing attribution stays missing; the browser does not infer a licence from the provider.
+
+Acceptance and selection are separate confirmations. An unaccepted suggestion uses native candidate acceptance
+with its observed decision head. Reloading then permits public selection through native Global adoption with its
+observed adoption head. Selection replaces that field's entire selection with one normal-rank candidate; the
+confirmation states this explicitly. This is a field replacement, including for multivalued fields. Both commands
+carry independent idempotency keys, and an uncertain retry retains the exact request and key. A stale/conflicting
+review requires a reload and another review. No command grants permission or changes account scopes.
+
+After either command the browser reads the ordinary public subject once without viewer authorization. Only a
+returned public statement with the selected candidate's identity establishes selection. An accepted suggestion
+can still need adoption; a submitted adoption whose public read is not yet confirmed remains pending. Manual
+reloads check again; there is no polling or replacement of public page data with a proposal. A confirmed selection
+links back through the ordinary canonical subject reader, preserving merge and language handling.
+
+The current native candidate read requires a property and, for relation slots, a target address. There is no
+subject-wide candidate or relation-slot discovery read. This region therefore covers descriptive property slots,
+including classifications, and does not offer an invented list of imported relation targets or a raw-id entry.
+
 ## Principles
 
 - **Readers first.** A page shows covers, titles, people, scores, what people say and what to do next, in words

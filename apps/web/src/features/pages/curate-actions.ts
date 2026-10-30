@@ -6,6 +6,9 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { curationFailure, publishProfile, type CurationFailure, type PublishInput, type PublishResult } from './curate';
+import { pickText } from '@rezics/composition';
+import { readRelease } from '../../subject/definitions';
+import { readCandidates, selectCandidate, type CandidateCommand, type CandidateRead, type CandidateResult } from '../../subject/candidates';
 
 export type CurationRead =
   | { ok: true; digest: string; head: number; profile: PresentationProfile }
@@ -81,4 +84,57 @@ export const publishCuration = createServerFn({ method: 'POST' })
     if (!authorization) return { ok: false, reason: 'forbidden' };
     if ('ok' in data) return data;
     return publishProfile(kernelClient(), { ...data, authorization });
+  });
+
+function candidateAddress(input: unknown) {
+  if (!input || typeof input !== 'object' || !('id' in input) || typeof input.id !== 'string' || !uuid.test(input.id))
+    throw new Error('Invalid subject');
+  const value = input as Record<string, unknown>;
+  if (value.property !== undefined && (typeof value.property !== 'string' || !value.property || value.property.length > 256))
+    throw new Error('Invalid field');
+  if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 8192))
+    throw new Error('Invalid continuation');
+  return { id: input.id, property: value.property as string | undefined, cursor: value.cursor as string | undefined };
+}
+
+// Candidate data is an explicitly opened, session-scoped region, never part of public SSR or its query cache.
+export const readSubjectCandidates = createServerFn({ method: 'POST', strict: false })
+  .validator(candidateAddress)
+  .handler(async ({ data }): Promise<CandidateRead> => {
+    const authorization = await sessionBearer();
+    if (!authorization) return { ok: false, reason: 'denied' };
+    try {
+      const locale = (await import('../../kernel/client')).requestLocale() ?? 'en';
+      const release = await readRelease();
+      // Relation slots require a target address; this picker lists descriptive property slots only.
+      const fields = Object.entries(release.properties).flatMap(([id, definition]) => {
+        if (definition.relation && definition.relation.group !== 'classification') return [];
+        const label = pickText(definition.labels, locale).text;
+        return label ? [{ id, label }] : [];
+      }).sort((a, b) => a.label.localeCompare(b.label, locale));
+      if (data.property && !fields.some((field) => field.id === data.property)) return { ok: false, reason: 'unavailable' };
+      const result = await readCandidates(kernelClient(), authorization, data.id, data.property, data.cursor);
+      if (!result.ok) return result;
+      return { ...result, fields, names: Object.fromEntries(Object.entries(release.properties).map(([id, value]) => [id, value.labels ?? {}])) };
+    } catch {
+      return { ok: false, reason: 'unavailable' };
+    }
+  });
+
+export const confirmSubjectCandidate = createServerFn({ method: 'POST', strict: false })
+  .validator((input: unknown): CandidateCommand => {
+    const address = candidateAddress(input);
+    const value = input as Record<string, unknown>;
+    if (!address.property || typeof value.candidate !== 'string' || !uuid.test(value.candidate) ||
+      typeof value.key !== 'string' || !uuid.test(value.key) ||
+      (value.operation !== 'accept' && value.operation !== 'adopt') ||
+      (value.head !== null && (!Number.isSafeInteger(value.head) || Number(value.head) < 1)))
+      throw new Error('Invalid candidate confirmation');
+    return { id: address.id, property: address.property, candidate: value.candidate,
+      operation: value.operation, head: value.head as number | null, key: value.key };
+  })
+  .handler(async ({ data }): Promise<CandidateResult> => {
+    const authorization = await sessionBearer();
+    if (!authorization) return { ok: false, reason: 'denied' };
+    return selectCandidate(kernelClient(), authorization, data);
   });

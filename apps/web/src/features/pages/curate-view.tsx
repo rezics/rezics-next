@@ -9,6 +9,19 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { csrfHeaders } from '../../threads/composer';
 import { overviewOf, profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
+import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
+import { CandidateReview } from '../../subject/candidate-review';
+import { useSession } from '../../session/query';
+
+/** The subject's private curation region shares the existing prepared BFF transport. */
+export function SubjectCandidateCuration({ id, locale }: { id: string; locale: string }) {
+  const { state } = useSession();
+  if (state !== 'signed-in') return null;
+  return <CandidateReview key={`${id}:${locale}`} id={id} locale={locale} transport={{
+    read: (property, cursor) => readSubjectCandidates({ data: { id, property, cursor }, headers: csrfHeaders() }),
+    confirm: (data) => confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+  }} />;
+}
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 const control =
