@@ -2756,5 +2756,10 @@
   "settings_reading_leave_description": "本地的阅读设置草稿将被丢弃。已发送的保存请求仍可能完成。",
   "settings_drafts_leave_title": "离开设置编辑？",
   "settings_drafts_leave_description": "本地的阅读设置和个人资料草稿，以及选取的图片将被丢弃。已发送的上传或命令仍可能完成。",
-  "settings_reading_session_changed": "登录状态已更改。请重新加载此页面以读取当前设置。"
+  "settings_reading_session_changed": "登录状态已更改。请重新加载此页面以读取当前设置。",
+  "search_recovery_cursor": "此续页凭据无效。请重新开始搜索。",
+  "search_recovery_session": "无法验证你的会话。请重新登录以继续搜索。",
+  "search_recovery_source": "目录数据源尚未就绪。搜索条件已保留，请稍后重试。",
+  "search_recovery_wait": "请稍候再重试。",
+  "search_recovery_edit": "请修改搜索文字、条件或排序，然后应用更改。"
 }

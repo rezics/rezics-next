@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
+import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
 import { searchLoaderDeps, searchParams } from '../search/search-params';
 import { PageHeading } from '../shell/page-heading';
@@ -65,7 +66,14 @@ function SearchRoute() {
 
 function SearchResults({ deps }: { deps: ReturnType<typeof searchLoaderDeps> }) {
   const locale = getLocale();
-  const { data } = useSuspenseQuery(searchQueryOptions(locale, deps));
+  const { data, retry } = useSearchQuery(locale, deps);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
-  return <SearchPage query={deps.query} data={data} {...(realms.data ? { realmDiscovery: realms.data } : {})} />;
+  return (
+    <SearchPage
+      query={deps.query}
+      data={data}
+      onRetry={retry}
+      {...(realms.data ? { realmDiscovery: realms.data } : {})}
+    />
+  );
 }

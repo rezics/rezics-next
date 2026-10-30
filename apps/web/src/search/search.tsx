@@ -18,20 +18,21 @@ import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { localizedLabel, ResultList } from './results.tsx';
 import { SearchSort } from './sort.tsx';
-import { discoveryRequest, readSearchPage } from './search-request.ts';
+import { discoveryRequest } from './search-request.ts';
 import { refinementProperties } from './refinement/model';
 import { facetRequest, readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { readDiscoveryKinds, type LegacySearchPage, type DiscoveryState } from './discovery';
 import {
-  readDiscovery,
-  readDiscoveryKinds,
-  parseLegacySearchPage,
-  type LegacySearchPage,
-  type DiscoveryState,
-  discoveryFailure,
-} from './discovery';
+  facetSearchInvalidation,
+  readSearchOutcome,
+  searchPageForRecovery,
+  searchRecoveryFromResponse,
+  type SearchRecoveryState,
+} from './search-recovery';
+import { SearchRecovery } from './search-recovery-view';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import { DiscoveryKinds } from './discovery-kinds';
 import { DiscoveryResults } from './discovery-results';
@@ -63,7 +64,8 @@ type SearchParams = {
   ranges?: Record<string, FilterRange>;
   condition?: FilterDocument | undefined;
 };
-type SearchPageData = {
+export type SearchPageData = {
+  recovery?: SearchRecoveryState;
   conditionMetadata?: ConditionMetadata;
   problem?: SearchProblem;
   queryState?: SearchLoaderDeps;
@@ -216,11 +218,20 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
   .validator(validateSearchInput)
   .handler(async ({ data }) => {
     if (!data.kindCursor) throw new Error('Missing kind cursor');
-    return readDiscoveryKinds(
+    let recovery: SearchRecoveryState | undefined;
+    const state = await readDiscoveryKinds(
       discoveryRequest(requestParams(data), requestLanguages(data.locale)),
       data.kindCursor,
-      (body) => kernelClient(data.locale).subjects.$search.post(body, { fetch: { signal: getRequest().signal } }),
+      async (body) => {
+        const response = await kernelClient(data.locale).subjects.$search.post(body, {
+          fetch: { signal: getRequest().signal },
+        });
+        if ([401, 403, 409].includes(response.status)) recovery = searchRecoveryFromResponse(response);
+        return response;
+      },
     );
+    if (state.status === 'closed') recovery = { status: 'closed' };
+    return { ...state, ...(recovery ? { recovery } : {}) };
   });
 
 const readSearchWithLocale = createServerFn({ method: 'GET' })
@@ -258,34 +269,23 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const properties = release
       ? [...new Set([...(knownType ? factProperties(release, knownType) : []), ...years])].slice(0, 4)
       : [];
-    let staleCursorRestarted = false;
-    let problem: SearchProblem | undefined;
     const sendSearch = async (
       request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
     ) => {
       const response = await kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } });
-      problem = response.status !== 200 ? facetProblem(response.error ?? response.data) : undefined;
       return response;
     };
-    const searchPromise: Promise<{ result?: SearchResult; discovery?: DiscoveryState }> = hasSearch
+    const searchPromise = hasSearch
       ? (async () => {
-          if (!body) return { discovery: { status: 'invalid' } };
+          if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
           const request = { ...body, ...(properties.length ? { properties } : {}) };
           if (data.representation !== 'subjects-v1') {
-            const mixed = await readDiscovery(request, sendSearch);
-            staleCursorRestarted = mixed.restarted;
-            return { discovery: mixed.discovery };
+            return readSearchOutcome(request, sendSearch, signal);
           }
           const { representation: _representation, kindPage: _metadata, kindCountLeaf: _counts, ...legacy } = request;
-          const { response, restarted } = await readSearchPage(legacy, sendSearch);
-          staleCursorRestarted = restarted;
-          if (response.error || response.status !== 200)
-            return { discovery: discoveryFailure(response.status, response.error ?? response.data) };
-          const result = parseLegacySearchPage(response.data);
-          if (!result) throw new Error('Invalid Search response');
-          return { result };
+          return readSearchOutcome(legacy, sendSearch, signal);
         })()
-      : Promise.resolve({});
+      : Promise.resolve(undefined);
 
     const roster = release ? refinementProperties(release, knownType ?? data.facetValues.type) : [];
     const requestedFacets = roster
@@ -314,14 +314,22 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
           })
         : Promise.resolve(undefined);
 
-    const [{ result, discovery }, facetResult] = await Promise.all([searchPromise, facetsPromise]);
+    const [outcome, facetResult] = await Promise.all([searchPromise, facetsPromise]);
+    const result = outcome && 'result' in outcome ? outcome.result : undefined;
+    const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
+    const recovery =
+      outcome && ['session', 'closed', 'denied'].includes(outcome.recovery.status)
+        ? outcome.recovery
+        : (facetSearchInvalidation(facetResult) ?? outcome?.recovery);
+    const problem = recovery && recovery.status !== 'ready' ? recovery.problem : undefined;
     const typeChoices = discovery?.status === 'ready' ? discovery.page.kinds.values : [];
     const hitTypes: Record<string, Record<string, string>> = {};
     if (release)
       for (const subject of result?.subjects ?? [])
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
-    return {
+    return searchPageForRecovery({
       queryState,
+      ...(recovery ? { recovery } : {}),
       ...(release ? { conditionMetadata: conditionMetadata(release) } : {}),
       ...(problem ? { problem } : {}),
       ...(result ? { result } : {}),
@@ -359,9 +367,9 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       facetsAvailable: release !== undefined,
       facetRetry: false,
       facetIndexNotReady: facetResult?.status === 'preparing',
-      staleCursorRestarted,
+      staleCursorRestarted: false,
       sort: data.sort ?? 'relevance',
-    };
+    });
   });
 
 function searchHref(
@@ -386,6 +394,7 @@ export function SearchPage({
   initiallyOpen = false,
   realmDiscovery,
   realmDiscoveryRead,
+  onRetry,
 }: {
   query: string;
   cursor?: string;
@@ -394,7 +403,13 @@ export function SearchPage({
   initiallyOpen?: boolean;
   realmDiscovery?: RealmDiscoveryState;
   realmDiscoveryRead?: RealmDiscoveryReader;
+  onRetry?: (() => void) | undefined;
 }) {
+  const sourceData = data;
+  const currentData = useRef(data);
+  currentData.current = data;
+  const [invalidation, setInvalidation] = useState<{ owner: SearchPageData; state: SearchRecoveryState }>();
+  if (data) data = searchPageForRecovery(data, invalidation?.owner === data ? invalidation.state : data.recovery);
   const [hydrated, setHydrated] = useState(false);
   const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(Boolean(data?.problem?.errors?.length));
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -485,6 +500,8 @@ export function SearchPage({
     editableData,
     !editing,
     localIssues.length > 0,
+    onRetry,
+    committedState,
   );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     setAttempted(true);
@@ -524,12 +541,15 @@ export function SearchPage({
           locale={locale}
           selected={data.queryState.kinds ?? []}
           hydrated={hydrated}
-          load={(kindCursor, signal) =>
-            readKindsWithLocale({
+          load={async (kindCursor, signal) => {
+            const response = await readKindsWithLocale({
               data: { ...data.queryState!, facetValues: selectedFacets, locale, kindCursor },
               signal,
-            })
-          }
+            });
+            if (!signal.aborted && sourceData && currentData.current === sourceData && response.recovery)
+              setInvalidation({ owner: sourceData, state: response.recovery });
+            return response;
+          }}
         />
       )}
       {type && (
@@ -568,8 +588,8 @@ export function SearchPage({
           }}
           query={query}
           locale={locale}
-          load={(facets, signal) =>
-            readRefinement({
+          load={async (facets, signal) => {
+            const response = await readRefinement({
               data: {
                 query,
                 locale,
@@ -585,8 +605,12 @@ export function SearchPage({
                 facets,
               },
               signal,
-            })
-          }
+            });
+            const state = facetSearchInvalidation(response);
+            if (!signal.aborted && sourceData && currentData.current === sourceData && state)
+              setInvalidation({ owner: sourceData, state });
+            return response;
+          }}
           {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
         />
       )}
@@ -601,7 +625,6 @@ export function SearchPage({
             ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
             : [],
         )}
-        disabled={discovery?.status === 'closed' || discovery?.status === 'denied'}
         languages={draft.languages}
         onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
       />
@@ -667,7 +690,7 @@ export function SearchPage({
     return <div className="w-full">{filterControls}</div>;
   }
 
-  const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery;
+  const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery && !data?.recovery;
   const content = browsing ? (
     <SearchRealmDiscovery
       key={JSON.stringify([locale, stateKey, realmDiscovery])}
@@ -703,8 +726,10 @@ function renderResults(
   data: SearchPageData | undefined,
   continuationAllowed = true,
   invalid = false,
+  onRetry?: (() => void) | undefined,
+  retryState = data?.queryState,
 ) {
-  if (!result && !data?.discovery) return null;
+  if (!result && !data?.discovery && !data?.recovery) return null;
   const next = continuationAllowed
     ? data?.discovery?.status === 'ready'
       ? data.discovery.page.next
@@ -751,7 +776,14 @@ function renderResults(
           </a>
         </p>
       )}
-      {data?.discovery ? (
+      {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
+        <SearchRecovery
+          state={data.recovery}
+          retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
+          restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
+          onRetry={onRetry}
+        />
+      ) : data?.discovery ? (
         <DiscoveryResults
           state={data.discovery}
           locale={locale}

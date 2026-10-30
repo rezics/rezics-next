@@ -2755,5 +2755,10 @@
   "settings_reading_leave_description": "Dein lokaler Entwurf der Leseeinstellungen wird verworfen. Ein bereits gesendeter Speichervorgang kann noch abgeschlossen werden.",
   "settings_drafts_leave_title": "Bearbeitung der Einstellungen verlassen?",
   "settings_drafts_leave_description": "Deine lokalen Entwürfe für Leseeinstellungen und Profil sowie ausgewählte Bilder werden verworfen. Bereits gesendete Uploads oder Befehle können noch abgeschlossen werden.",
-  "settings_reading_session_changed": "Deine Anmeldung hat sich geändert. Lade diese Seite neu, um deine aktuellen Einstellungen abzurufen."
+  "settings_reading_session_changed": "Deine Anmeldung hat sich geändert. Lade diese Seite neu, um deine aktuellen Einstellungen abzurufen.",
+  "search_recovery_cursor": "Diese Fortsetzung ist ungültig. Starte die Suche erneut.",
+  "search_recovery_session": "Deine Sitzung konnte nicht bestätigt werden. Melde dich erneut an, um die Suche fortzusetzen.",
+  "search_recovery_source": "Die Katalogquelle ist noch nicht bereit. Deine Suche bleibt erhalten. Versuche es später erneut.",
+  "search_recovery_wait": "Warte einen Moment, bevor du es erneut versuchst.",
+  "search_recovery_edit": "Bearbeite den Suchtext, die Bedingungen oder die Sortierung und wende die Änderungen an."
 }

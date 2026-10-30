@@ -2755,5 +2755,10 @@
   "settings_reading_leave_description": "Se descartará tu borrador local de lectura. Una solicitud de guardado ya enviada podría completarse.",
   "settings_drafts_leave_title": "¿Salir de la edición de ajustes?",
   "settings_drafts_leave_description": "Se descartarán tus borradores locales de lectura y perfil y las imágenes seleccionadas. Las cargas o los comandos ya enviados podrían completarse.",
-  "settings_reading_session_changed": "Tu sesión ha cambiado. Recarga esta página para consultar tus ajustes actuales."
+  "settings_reading_session_changed": "Tu sesión ha cambiado. Recarga esta página para consultar tus ajustes actuales.",
+  "search_recovery_cursor": "Esta continuación no es válida. Vuelve a iniciar la búsqueda.",
+  "search_recovery_session": "No se pudo verificar tu sesión. Inicia sesión de nuevo para continuar la búsqueda.",
+  "search_recovery_source": "La fuente del catálogo aún no está lista. Se conserva tu búsqueda; inténtalo más tarde.",
+  "search_recovery_wait": "Espera un momento antes de volver a intentarlo.",
+  "search_recovery_edit": "Edita el texto, las condiciones o el orden y aplica los cambios."
 }

@@ -2755,5 +2755,10 @@
   "settings_reading_leave_description": "Votre brouillon local des paramètres de lecture sera supprimé. Un enregistrement déjà envoyé peut encore aboutir.",
   "settings_drafts_leave_title": "Quitter la modification des paramètres ?",
   "settings_drafts_leave_description": "Vos brouillons locaux de lecture et de profil ainsi que les images sélectionnées seront supprimés. Les téléversements ou commandes déjà envoyés peuvent encore aboutir.",
-  "settings_reading_session_changed": "Votre connexion a changé. Rechargez cette page pour consulter vos paramètres actuels."
+  "settings_reading_session_changed": "Votre connexion a changé. Rechargez cette page pour consulter vos paramètres actuels.",
+  "search_recovery_cursor": "Cette continuation est invalide. Recommencez cette recherche.",
+  "search_recovery_session": "Votre session n’a pas pu être vérifiée. Reconnectez-vous pour poursuivre cette recherche.",
+  "search_recovery_source": "La source du catalogue n’est pas prête. Votre recherche est conservée. Réessayez plus tard.",
+  "search_recovery_wait": "Patientez un instant avant de réessayer.",
+  "search_recovery_edit": "Modifiez le texte, les conditions ou le tri, puis appliquez vos modifications."
 }

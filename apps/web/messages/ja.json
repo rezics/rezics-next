@@ -2755,5 +2755,10 @@
   "settings_reading_leave_description": "この端末の閲覧設定の下書きは破棄されます。送信済みの保存処理は完了する場合があります。",
   "settings_drafts_leave_title": "設定の編集を終了しますか？",
   "settings_drafts_leave_description": "この端末の閲覧設定とプロフィールの下書き、および選択した画像は破棄されます。送信済みのアップロードやコマンドは完了する場合があります。",
-  "settings_reading_session_changed": "ログイン状態が変わりました。このページを再読み込みして、現在の設定を取得してください。"
+  "settings_reading_session_changed": "ログイン状態が変わりました。このページを再読み込みして、現在の設定を取得してください。",
+  "search_recovery_cursor": "この続きの情報は無効です。検索を最初からやり直してください。",
+  "search_recovery_session": "セッションを確認できませんでした。再度ログインして検索を続けてください。",
+  "search_recovery_source": "カタログのデータソースはまだ準備できていません。検索条件は保持されています。後でもう一度お試しください。",
+  "search_recovery_wait": "しばらく待ってからもう一度お試しください。",
+  "search_recovery_edit": "検索語、条件、並び順を編集してから変更を適用してください。"
 }
