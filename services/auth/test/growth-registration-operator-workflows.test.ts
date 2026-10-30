@@ -7,6 +7,7 @@ import { createAuthService, type AccessAccount, type EffectAuthorization } from 
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_WORKFLOW_APPLICATION } from '../src/retention.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
+import { consumableGrowth } from './support/consumable-growth.ts';
 import {
   capture,
   checkGrowth,
@@ -300,27 +301,16 @@ async function pending(f: Fixture, key: string) {
 test('Auth expired registration release stays within its bound as stage, request and workflow history grows', async () => {
   const f = await fixture();
   const population = history('release-history');
-  let candidates: Awaited<ReturnType<typeof pending>>[] = [];
   try {
     // B=1 due registration, one credential, and a fixed number of durable steps:
     // R,S=O(1), indexed blocks O(log N); B never grows with retained history.
-    await checkGrowth(f.db, {
-      name: 'native Auth expired registration release',
-      bounds,
-      repetitions,
-      async grow(db, scale, previous) {
-        await seed(db, population, { from: previous * 512, to: scale * 512 });
-        const start = f.getClock();
-        candidates = [];
-        for (let i = 0; i <= repetitions; i++) {
-          const ref = await pending(f, `release-${scale}-${i}`);
-          candidates.push(ref);
-          f.setClock(Date.parse(ref.expiresAt) + 1);
-        }
-        f.setClock(start);
+    const targets = consumableGrowth({
+      name: 'release',
+      async setup(_db, _scale, id) {
+        return pending(f, id);
       },
-      async operation() {
-        const ref = candidates.shift()!;
+      async run(_db, _scale, _id, ref) {
+        // Only this fresh target becomes due; consumed targets are already expired.
         f.setClock(Date.parse(ref.expiresAt) + 1);
         await f.workflows.expireDueRegistrations();
         expect(f.released.has(ref.accountId)).toBe(true);
@@ -334,6 +324,15 @@ test('Auth expired registration release stays within its bound as stage, request
           ).rows[0],
         ).toMatchObject({ expired_at: expect.any(Date), ciphertext: null });
       },
+    });
+    await checkGrowth(f.db, {
+      name: 'native Auth expired registration release',
+      bounds,
+      repetitions,
+      async grow(db, scale, previous) {
+        await seed(db, population, { from: previous * 512, to: scale * 512 });
+      },
+      ...targets.hooks,
     });
   } finally {
     await f.close();
@@ -523,22 +522,17 @@ async function operatorInput(f: Fixture, key: string) {
 test('Operator session workflows stay within their bound as stage, request and workflow history grows', async () => {
   const f = await fixture();
   const population = history('opening-history');
-  let candidates: Awaited<ReturnType<typeof operatorInput>>[] = [];
   try {
     // One approval and receipt consumption, human proof reads, a fixed <=64
     // session neighborhood and one native insertion: R,S=O(1), blocks O(log N).
     // Current production openOperatorSession does not enqueue a DBOS workflow.
-    const report = await checkGrowth(f.db, {
-      name: 'native Auth operator session authorization and issuance',
-      bounds,
-      repetitions,
-      async grow(db, scale, previous) {
-        await seed(db, population, { from: previous * 512, to: scale * 512 });
-        candidates = [];
-        for (let i = 0; i <= repetitions; i++) candidates.push(await operatorInput(f, `opening-${scale}-${i}`));
+    const targets = consumableGrowth({
+      name: 'opening',
+      async setup(_db, _scale, id) {
+        // Setup stays outside measured capture, including cold-backend discards.
+        return operatorInput(f, id);
       },
-      async operation() {
-        const input = candidates.shift()!;
+      async run(_db, _scale, _id, input) {
         const response = await f.workflows.openOperatorSession(input);
         expect(response.status).toBe(200);
         expect(await response.json()).toMatchObject({ account_id: input.subjectAccountId, amr: ['operator'] });
@@ -548,6 +542,15 @@ test('Operator session workflows stay within their bound as stage, request and w
         ]);
         expect(sessions.rows[0].n).toBe(64);
       },
+    });
+    const report = await checkGrowth(f.db, {
+      name: 'native Auth operator session authorization and issuance',
+      bounds,
+      repetitions,
+      async grow(db, scale, previous) {
+        await seed(db, population, { from: previous * 512, to: scale * 512 });
+      },
+      ...targets.hooks,
     });
     for (const { cost } of report.samples) {
       expect(cost.relations['public.session']?.rows).toBeGreaterThan(0);
