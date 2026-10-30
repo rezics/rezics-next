@@ -52,4 +52,21 @@ checks. No declared-path exceptions are needed.
 
 ## Results
 
-Implementation revision, local preflight and native child results are recorded after execution below.
+Implementation revision: `5288dbc8d27e54a02fff88c6967a70761888c263`.
+Edited-file `oxfmt --check` and the direct
+`node_modules/.bin/tsc --noEmit -p services/importer/tsconfig.json` passed.
+The five focused cases and six existing source-statistic cases passed (369 assertions across the local invocation).
+The focused same-value test observed fresh `conversion-v2` candidate IDs/keys for both native records,
+unchanged source digest/native revision and subject, byte-identical prior bootstrap/proposal journals and receipts,
+and retractions naming the prior owned candidates. The separate VNDB test retained semantic journals only for
+the successful same-converter statistic refresh, then observed real `conversion-v2` proposals.
+
+The initial local command also included `ledger-outcomes.test.ts`. Its child inherited the root stack-routing
+preload and queued for a remote slot; the existing wrapper timed out at 120 seconds before any ledger assertion.
+That invocation exited 1 with 11 passing local cases and one wrapper timeout. This is not a ledger pass or a
+product assertion failure. The local ledger proof therefore runs the unchanged specification directly with
+its existing driver and an explicit scratch Bun configuration that retains test environment isolation without
+the stack-routing preload. The named native acceptance still uses its unmodified managed command and wrapper.
+
+An independent read-only review of the implementation revision found no blocking provenance, fence, identity,
+recovery or statistic-retention defect. Native authorization/disclosure evidence remains with acceptance.
