@@ -13,7 +13,11 @@ let client: Awaited<ReturnType<typeof createWorkClient>>;
 const executor = `entry-retention-crash-${crypto.randomUUID()}`;
 const directory = resolve(import.meta.dir, '../../../../.temp/entry-retention', executor);
 const timePath = resolve(directory, 'clock');
-const children: ReturnType<typeof runtime>[] = [];
+type Runtime = {
+  process: Bun.Subprocess<'pipe', 'pipe', 'pipe'>;
+  until(marker: string): Promise<void>;
+};
+const children: Runtime[] = [];
 beforeAll(async () => {
   mkdirSync(directory, { recursive: true });
   f = await createProfileEntryFixture({ clock: () => new Date(time) });
@@ -28,7 +32,7 @@ afterAll(async () => {
   await f?.close();
 });
 
-function runtime(mode: string) {
+function runtime(mode: string): Runtime {
   const child = Bun.spawn(
     [process.execPath, `${import.meta.dir}/entry-retention-worker-runtime.ts`, mode, executor, timePath],
     {

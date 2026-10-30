@@ -30,7 +30,9 @@ beforeAll(async () => {
   f = await createProfileEntryFixture({ pool: db.pool, clock, singleConnection: true, projectLinks: false });
   subject = await f.createSubject('game');
   noise = await f.createSubject('game');
-  partition = partitionOf(routeOf(f.owner.actor.accountId));
+  const route = routeOf(f.owner.actor.accountId);
+  if (route === null) throw new Error('The native fixture owner must carry a route');
+  partition = partitionOf(route);
 }, 120000);
 afterAll(async () => {
   await f?.close();

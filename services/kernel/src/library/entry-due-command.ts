@@ -70,7 +70,7 @@ export async function purgeExpiredEntryDeletion(
       return 'execute';
     },
   };
-  return runCommand(
+  return runCommand<{ purged: boolean }>(
     pool,
     {
       partition,

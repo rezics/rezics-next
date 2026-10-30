@@ -25,7 +25,9 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   f = await createProfileEntryFixture({ pool: db.pool, clock: () => new Date(time), projectLinks: false });
   actor = (await f.identity(['subject:read', 'library_entry:update', 'library_entry:delete'], partition)).actor;
-  expect(partitionOf(routeOf(actor.accountId))).toBe(partition);
+  const route = routeOf(actor.accountId);
+  if (route === null) throw new Error('The native fixture owner must carry a route');
+  expect(partitionOf(route)).toBe(partition);
   noise = await f.createSubject('game');
   subjects = [];
   for (let n = 0; n < 101; n++) subjects.push(await f.createSubject('game'));
