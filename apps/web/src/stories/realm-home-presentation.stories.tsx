@@ -83,13 +83,7 @@ function Home({ state }: { state: SourceState }) {
         }) as typeof fetch,
       });
       const request = new Request(`https://site.story${appearancePath}`);
-      const page = await loadSpacePage(
-        client,
-        request,
-        {},
-        { address: appearanceAddress },
-        'anonymous',
-      );
+      const page = await loadSpacePage(client, request, {}, { address: appearanceAddress }, 'anonymous');
       // The existing claim consumer reads these same native responses; it adds no constructed admission.
       const claimAdapter: RealmClaimAdapter = {
         read: (realmId) => readRealmClaim(client, request, {}, { realmId, credentialMode: 'anonymous' }),
