@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MergeTrain } from './merge-train.ts';
 import { WorkerJob } from './job.ts';
@@ -38,6 +38,10 @@ async function startWorker(
 
 function writePlan(worktree: string, file: string, content: string): void {
   writeFileSync(join(worktree, '.temp/worker-plan.json'), JSON.stringify({ file, content }));
+}
+
+function resetWorkerBranch(worktree: string, commit: string): void {
+  git(worktree, ['reset', '--hard', commit]);
 }
 
 function advanceMain(h: ReturnType<typeof integrationHarness>, file: string, content: string): string {
@@ -113,6 +117,7 @@ test('A resolution attempt that conflicts with a NEW integration head is never s
     expect(first[0]!.rebaseConflict).toEqual({ targetHead: firstTarget, workerCommit: source, paths: [file] });
     expect(h.store.task(task.id).currentAttempt).toBe(2);
 
+    resetWorkerBranch(task.worktree, source);
     const secondTarget = advanceMain(h, file, 'main Storybook reorganization two\n');
     const second = await runTrain(h, job, { sameRedactedFingerprint: true });
 
@@ -139,9 +144,9 @@ test('Identical redacted failure fingerprints on different files/heads or with n
     const task = await startWorker(h, job, fileA);
     const firstTarget = advanceMain(h, fileA, 'main Storybook entry reorganization\n');
     const first = await runTrain(h, job, { sameRedactedFingerprint: true });
-    const firstSource = h.head(task.branch);
+    const firstSource = first[0]!.rebaseConflict!.workerCommit;
 
-    const revisedContent = 'worker updates the Storybook entry\n';
+    const revisedContent = `${readFileSync(join(task.worktree, fileA), 'utf8')}worker follow-up\n`;
     writePlan(task.worktree, fileA, revisedContent);
     writeFileSync(join(task.worktree, fileA), revisedContent);
     git(task.worktree, ['add', '--', fileA]);
@@ -152,6 +157,8 @@ test('Identical redacted failure fingerprints on different files/heads or with n
     expect(first[0]!.rebaseConflict?.targetHead).toBe(firstTarget);
     expect(second[0]!.rebaseConflict).toEqual({ targetHead: firstTarget, workerCommit: secondSource, paths: [fileA] });
     expect(secondSource).not.toBe(firstSource);
+    for (const attempt of [1, 2])
+      expect(h.store.record({ taskId: task.id, attempt })?.firstFailure).toBe(REPEATED_REDACTED_FINGERPRINT);
     expect(h.store.task(task.id).currentAttempt).toBe(3);
 
     const newBase = h.head('main');
@@ -196,6 +203,7 @@ test('Only repeated SAME files+integrationhead+workercommit without progress tri
     );
 
     const first = await runTrain(h, job, { sameRedactedFingerprint: true });
+    resetWorkerBranch(task.worktree, source);
     const second = await runTrain(h, job, { sameRedactedFingerprint: true });
     expect(first[0]!.rebaseConflict).toEqual({
       targetHead: target,
@@ -212,6 +220,7 @@ test('Only repeated SAME files+integrationhead+workercommit without progress tri
         outcome.rebaseConflict!.paths = [...reversed, reversed[0]!];
       });
 
+    resetWorkerBranch(task.worktree, source);
     const third = await runTrain(h, job, { sameRedactedFingerprint: true });
     const context = third[0]!.rebaseConflict!;
     expect(context.paths).toEqual(files.map((file) => file.path).sort());
@@ -251,9 +260,11 @@ test('prior unknown records do not cause a false positive', async () => {
   try {
     const file = 'tools/goal/src/storybook-unknown-history.ts';
     const task = await startWorker(h, job, file);
+    const source = h.head(task.branch);
     advanceMain(h, file, 'main Storybook history change\n');
 
     const first = await runTrain(h, job, { sameRedactedFingerprint: true });
+    resetWorkerBranch(task.worktree, source);
     const second = await runTrain(h, job, { sameRedactedFingerprint: true });
     expect(second[0]!.rebaseConflict).toEqual(first[0]!.rebaseConflict);
     for (const attempt of [1, 2])
@@ -261,6 +272,7 @@ test('prior unknown records do not cause a false positive', async () => {
         delete outcome.rebaseConflict;
       });
 
+    resetWorkerBranch(task.worktree, source);
     await runTrain(h, job, { sameRedactedFingerprint: true });
     expect(h.store.task(task.id).currentAttempt).toBe(4);
     expect(h.store.task(task.id).state).not.toBe('stopped');
