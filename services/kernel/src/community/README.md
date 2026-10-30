@@ -137,8 +137,10 @@ original digest and result.
 `cancel(transition, key)` is an exact mechanical compensation command. It serializes against publication and returns
 its committed publication if publication won; otherwise it commits immutable cancellation. An existing live member
 is never erased to manufacture terminal absence. Ordinary `terminalize` and terminal inverse release keep their
-existing authoritative rules. The shared Accounts workflow releases the source checkout before consuming proof on
-the account anchor. Publication retains the membership and inverse.
+existing authoritative rules. Cancellation consumption retains the inverse; compensation must separately commit
+ordinary absence-only terminalization before terminal release. When supplied its exact generation, ordinary
+terminalization also records its cancellation proof in that same transaction. The shared Accounts workflow releases
+the source checkout before consuming proof on the account anchor. Publication retains the membership and inverse.
 
 The deployment-only `certifyLegacy(transition, key)` requires adopted stable provenance under the stopped-old-writer
 barrier. It certifies an exact native live or terminal source receipt, not a missing source. The normal Accounts host

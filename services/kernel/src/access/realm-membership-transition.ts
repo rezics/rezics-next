@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { deadlineClient } from './authenticate.ts';
 import { routeOf } from '../route/route.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 import type { MembershipReservation } from './membership-inverse.ts';
@@ -46,8 +47,8 @@ export function first<T>(value: T | readonly T[] | null): T | null {
 }
 /** A released exact preflight, never held across the foreign command. Source
  * proof uniqueness serializes a delayed publisher against consume/cancellation. */
-export async function isRealmTransitionOpen(pool: Pool, input: RealmMembershipTransition): Promise<boolean> {
-  const row = await withConnection(pool, async (client) => first(await read.run(client, transitionParameters(input))));
+export async function isRealmTransitionOpen(pool: Pool, input: RealmMembershipTransition, deadline = deadlineFor(30_000)): Promise<boolean> {
+  const row = first(await read.run(deadlineClient(pool, deadline), transitionParameters(input)));
   return !!row && row.active && row.held && row.proofTransactionId === null;
 }
 export function createRealmMembershipTransitions(config: {
@@ -56,10 +57,10 @@ export function createRealmMembershipTransitions(config: {
   clock?: () => Date;
 }) {
   const execute = lifecycleExecutor(config.pool, config.clock);
-  async function proof(input: RealmMembershipTransition) {
+  async function proof(input: RealmMembershipTransition, deadline = deadlineFor(30_000)) {
     transitionParameters(input);
     // Source connection is returned before any actor-anchor command starts.
-    const value = await withConnection(config.pool, (client) => config.authority.readTransition(client, input));
+    const value = await config.authority.readTransition(deadlineClient(config.pool, deadline), input);
     if (!value) return null;
     if (
       value.accountId !== input.accountId ||
@@ -78,7 +79,8 @@ export function createRealmMembershipTransitions(config: {
     proof,
     async consume(input: RealmMembershipTransition & { key: string; proofTransactionId?: string }) {
       const parameters = transitionParameters(input);
-      const value = await proof(input);
+      const deadline = deadlineFor(30_000);
+      const value = await proof(input, deadline);
       if (!value || (input.proofTransactionId !== undefined && input.proofTransactionId !== value.transactionId))
         throw new LifecycleDeniedError();
       return execute(
@@ -87,6 +89,7 @@ export function createRealmMembershipTransitions(config: {
           id: input.accountId,
           kind: 'realm-membership-transition-consumed',
           key: input.key,
+          deadline,
           input: { ...parameters, proofTransactionId: value.transactionId, outcome: value.outcome },
         },
         async (tx, transactionId) => {

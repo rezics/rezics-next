@@ -127,6 +127,8 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
           if (positiveRealm) {
             await cancel(held);
             await finalize(held);
+            await terminalize(held);
+            await release(held);
             return;
           }
           await terminalize(held);

@@ -16,6 +16,17 @@ const revisionWork = Type.Object(
   { accountId: id, found: Type.Integer({ minimum: 0, maximum: 50 }) },
   { additionalProperties: false },
 );
+const membershipProof = {
+  realmId: id, accountId: id, reservationId: id, transactionId: id,
+  publicationTransactionId: Type.Union([id, Type.Null()]),
+  transition: Type.Object(
+    {
+      generationId: id, operationId: Type.String({ minLength: 1, maxLength: 256 }),
+      outcome: Type.Union([Type.Literal('published'), Type.Literal('cancelled')]),
+    },
+    { additionalProperties: false },
+  ),
+};
 
 function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
   return Type.Object(
@@ -34,6 +45,13 @@ function publication(verdict: 'adopt' | 'withdraw' | 'reject') {
 
 /** Closed community event catalogue. Envelope identity and ordering belong to the kernel. */
 export const COMMUNITY_EVENTS = {
+  'com.rezics.community.realm.membership.cancelled.v1': Type.Object(
+    { ...membershipProof, at: instant }, { additionalProperties: false },
+  ),
+  'com.rezics.community.realm.membership.certified.v1': Type.Object(
+    { ...membershipProof, state: Type.Union([Type.Literal('published'), Type.Literal('cancelled')]) },
+    { additionalProperties: false },
+  ),
   'com.rezics.community.party-locator.projected.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
   'com.rezics.community.account-records.erased.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
   'com.rezics.community.revision-locator.indexed.v1': revisionWork,

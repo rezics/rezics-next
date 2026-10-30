@@ -1543,7 +1543,8 @@ expiry checks. Reusing an old ID does not restore an expired authorization:
   native authorization expires independently of DBOS history. Every positive Realm operation reserves a fresh
   generation, including role confirmation and rejoin. Its registered publication step first recovers an exact
   committed source proof mechanically, without needing a lost bearer or publishing again. Registered `finalize`
-  consumes proof after publication; compensation commits `cancel` before finalization. Realm work refuses missing
+  consumes proof after publication; compensation commits `cancel` before finalization, then uses the original
+  `terminalize` and `release` steps and receipt keys for authoritative inverse removal. Realm work refuses missing
   protocol wiring. These steps use `wf:<ID>:<phase>` native keys and bind the original input. Stable inverse
   reservation and generation have separate lifetimes; replay cannot spend a later generation. Ordinary leave,
   organization and operator authorization/order remain unchanged. Terminal release carries the exact reservation

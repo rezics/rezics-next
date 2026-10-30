@@ -34,6 +34,11 @@ import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { startConsentServer } from './membership-fixture.ts';
+import {
+  REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME,
+  type RealmMembershipReconciliationInput,
+  type RealmMembershipReconciliationResult,
+} from '../../src/access/realm-membership-transition-legacy.ts';
 
 const AUDIENCE = 'https://content.test';
 
@@ -178,6 +183,24 @@ type SharedCommunity = {
 };
 
 let shared: SharedCommunity | undefined;
+
+/** Await one actually returned native operation, including an expected failure.
+ * Other operations in this world's history keep their original durable status. */
+export async function waitCommunityWorkflow(workflowId: string): Promise<unknown> {
+  if (!shared) throw new Error('Community driver is not open');
+  return shared.work.retrieveWorkflow(workflowId).getResult({ pollingIntervalMs: 10 });
+}
+
+/** Deployment coordinator entry through the normally registered Accounts host. */
+export async function reconcileCommunityMembership(input: RealmMembershipReconciliationInput): Promise<RealmMembershipReconciliationResult> {
+  if (!shared) throw new Error('Community driver is not open');
+  const handle = await shared.work.enqueue<(input: RealmMembershipReconciliationInput) => Promise<RealmMembershipReconciliationResult>>(
+    { queueName: 'workflows', workflowName: REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME, workflowID: crypto.randomUUID() }, input,
+  );
+  const result = await handle.getResult({ pollingIntervalMs: 10 });
+  if (!result) throw new Error('Native reconciliation result is missing');
+  return result;
+}
 
 /** Pause this file's worker without changing its HTTP application or database. */
 export const worker = {

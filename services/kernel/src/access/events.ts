@@ -72,6 +72,11 @@ const fenceReceipt = (kind: 'fence' | 'tombstone', prior: 'null' | 'optional') =
     { additionalProperties: false },
   );
 const membershipHold = { accountId: identity, principal, reservationId: identity };
+const membershipTransition = Type.Object(
+  { generationId: identity, operationId: text },
+  { additionalProperties: false },
+);
+const membershipOutcome = Type.Union([Type.Literal('published'), Type.Literal('cancelled')]);
 const reservedHandleException = Type.Optional(Type.Literal(true));
 const handlePublication = { accountId: identity, handle, operationId: text, reservedHandleException };
 const opening = Type.Object(
@@ -332,7 +337,29 @@ export const ACCESS_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.access.account-tombstoned.v1': fenceReceipt('tombstone', 'optional'),
-  'com.rezics.access.membership-inverse-reserved.v1': Type.Object(membershipHold, { additionalProperties: false }),
+  'com.rezics.access.membership-inverse-reserved.v1': Type.Object(
+    { ...membershipHold, transition: Type.Optional(membershipTransition) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.realm-membership-transition-consumed.v1': Type.Object(
+    { ...membershipHold, transition: membershipTransition, proofTransactionId: identity, outcome: membershipOutcome },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.realm-membership-legacy-adopted.v1': Type.Object(
+    { ...membershipHold, transition: membershipTransition },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.realm-membership-legacy-recorded.v1': Type.Object(
+    {
+      accountId: identity, reservationId: identity, realmId: identity, holdTransactionId: identity,
+      state: Type.Union([membershipOutcome, Type.Literal('pending'), Type.Literal('uncertain')]),
+    },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.realm-membership-legacy-page.v1': Type.Object(
+    { afterId: Type.Union([identity, Type.Null()]), completed: Type.Boolean() },
+    { additionalProperties: false },
+  ),
   'com.rezics.access.membership-inverse-bootstrapped.v1': Type.Object(
     { ...membershipHold, sourceTransactionId: identity },
     { additionalProperties: false },

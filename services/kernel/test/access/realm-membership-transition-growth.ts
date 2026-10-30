@@ -17,7 +17,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { checkGrowth, openGrowthDatabase, assertGrowthAccessPaths } from '../support/growth.ts';
 
-const config = JSON.parse(await Bun.stdin.text()) as {
+export type TransitionGrowthConfig = {
   databaseUrl: string;
   accountId: string;
   bearer: string;
@@ -29,6 +29,7 @@ const config = JSON.parse(await Bun.stdin.text()) as {
   routeKey: string;
   keys: [number, string][];
 };
+const config = JSON.parse(await Bun.stdin.text()) as TransitionGrowthConfig;
 const db = await openGrowthDatabase(config.databaseUrl);
 const tokens = {
   current: config.keys[0]![0],

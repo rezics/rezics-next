@@ -9,7 +9,6 @@ import {
   registerMembershipWorkflows,
 } from '@rezics/auth/membership-workflows';
 import canonicalize from 'canonicalize';
-import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { accountsWorkModule as writeRateExpiryWorkModule } from './write-rate-expiry.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -199,15 +198,10 @@ function membershipWorkPorts(
     async finalize(held, key) {
       if (held.principal.kind !== 'realm' || !held.transition || !realm().authority.readTransition)
         throw new RealmMembershipUnavailableError();
-      const result = await createRealmMembershipTransitions({
+      return createRealmMembershipTransitions({
         pool: context.pool,
         authority: { readTransition: realm().authority.readTransition! },
       }).consume({ ...(held as RealmMembershipTransition), key });
-      if (result.value.outcome === 'cancelled') {
-        const terminal = await withConnection(context.pool, (client) => realm().authority.readTerminal(client, held));
-        if (terminal) await inverse.release({ ...held, key: `${key}:terminal-release` });
-      }
-      return result;
     },
     async cancel(held, key) {
       if (!held.transition || !realm().cancel) throw new RealmMembershipUnavailableError();

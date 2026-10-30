@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
 import type { MembershipWorkInput } from '@rezics/auth-contract';
 import {
   first,
@@ -597,7 +598,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     // slot makes a stale preflight incapable of doing another foreign effect.
     const openTransition =
       role === 'member' && reservation.transition
-        ? await isRealmTransitionOpen(pool, reservation as RealmMembershipTransition)
+        ? await isRealmTransitionOpen(pool, reservation as RealmMembershipTransition, request.deadline)
         : false;
     const target = { route, id: realmId };
     const operation = operations.get(request);
@@ -718,7 +719,8 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           });
         return {
           value,
-          events: [{ type: 'com.rezics.community.realm.membership.v1', subject: realmId, data: value }],
+          events: [{ type: 'com.rezics.community.realm.membership.v1', subject: realmId,
+            data: { realmId, accountId: input.memberAccountId, reservationId: reservation.reservationId, role, at, transactionId: command.transactionId } }],
         };
       },
     );
@@ -727,10 +729,11 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
   /** Exact mechanical obligation, not a user-result command. The source lock
    * serializes cancellation with publication; no missing row is called success. */
   async function cancel(reservation: RealmMembershipTransition, key: string) {
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
     const parameters = transitionParameters(reservation);
-    const prior = await withConnection(pool, (client) => readTransition(client, reservation));
+    const prior = await readTransition(deadlineClient(pool, deadline), reservation);
     if (prior) return prior;
-    denyUnless(await isRealmTransitionOpen(pool, reservation));
+    denyUnless(await isRealmTransitionOpen(pool, reservation, deadline));
     const route = realmRoute(reservation.principal.id);
     const identity = {
       principal: { kind: 'account' as const, id: reservation.accountId },
@@ -743,7 +746,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         ...identity,
         partition: partitionOf(route),
         clock: config.clock,
-        deadline: Date.now() + 30_000,
+        deadline,
         receipt: { kind, key, digest: digest(identity, kind, parameters) },
       },
       async (tx, command) => {
@@ -772,14 +775,6 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           publicationTransactionId: null,
           transition: { ...reservation.transition, outcome: 'cancelled' as const },
         };
-        await writeTerminal.run(tx, {
-          route,
-          realm_id: reservation.principal.id,
-          account_id: reservation.accountId,
-          reservation_id: reservation.reservationId,
-          at,
-          transaction_id: command.transactionId,
-        });
         await proofWrite.run(tx, {
           ...parameters,
           route,
@@ -809,13 +804,14 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
    * and adopted the exact historical hold under the account lock. Absence is
    * pending; only an actual live interval or terminal source point can certify. */
   async function certifyLegacy(reservation: RealmMembershipTransition, key: string) {
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
     denyUnless(
       reservation.transition.generationId === reservation.reservationId &&
         reservation.transition.operationId.startsWith('legacy:'),
     );
-    const prior = await withConnection(pool, (client) => readTransition(client, reservation));
+    const prior = await readTransition(deadlineClient(pool, deadline), reservation);
     if (prior) return prior.outcome;
-    denyUnless(await isRealmTransitionOpen(pool, reservation));
+    denyUnless(await isRealmTransitionOpen(pool, reservation, deadline));
     const route = realmRoute(reservation.principal.id);
     const parameters = transitionParameters(reservation);
     const identity = {
@@ -829,7 +825,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         ...identity,
         partition: partitionOf(route),
         clock: config.clock,
-        deadline: Date.now() + 30_000,
+        deadline,
         receipt: { kind, key, digest: digest(identity, kind, parameters) },
       },
       async (tx, command) => {
@@ -909,6 +905,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       },
       async (tx, command) => {
         const at = authoritativeTimeValue(command.time);
+        await realmActive.run(tx, { route, id: realmId, at });
         const written = await readOne(
           writeTerminal.run(tx, {
             route,
@@ -927,8 +924,26 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           transactionId: command.transactionId,
           at,
         };
+        // Ordinary terminalization remains absence-only. When its caller holds
+        // a generation, this actual terminal transaction also proves that exact
+        // cancellation. A pre-existing publication can never enter this branch.
+        let transition: { generationId: string; operationId: string; outcome: 'cancelled' } | undefined;
+        if (reservation.transition) {
+          const exact = reservation as RealmMembershipTransition;
+          const existing = await readTransition(tx, exact);
+          if (existing) denyUnless(existing.outcome === 'cancelled');
+          else {
+            denyUnless(!first(await proofExists.run(tx, { route, realm_id: realmId, account_id: reservation.accountId, generation_id: exact.transition.generationId })));
+            transition = { ...exact.transition, outcome: 'cancelled' };
+            await proofWrite.run(tx, {
+              ...transitionParameters(exact), route, outcome: 'cancelled', transaction_id: command.transactionId,
+              publication_transaction_id: '', principal_id: identity.principal.id,
+              command_kind: TERMINAL_KIND, command_key: key, at,
+            });
+          }
+        }
         return {
-          value,
+          value: transition ? { ...value, publicationTransactionId: null, transition } : value,
           events: [{ type: 'com.rezics.community.realm.membership.terminalized.v1', subject: realmId, data: value }],
         };
       },

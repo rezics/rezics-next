@@ -23,6 +23,9 @@ import type { RealmMembershipCommands } from './membership-work.ts';
 
 const SCOPE = 'access.realm-membership.reconciliation';
 export const REALM_MEMBERSHIP_LEGACY_PAGE = 32;
+export const REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME = 'accounts.realm-membership.reconcile';
+export type RealmMembershipReconciliationInput = { accountId: string; cursor?: string | null; redrive?: boolean };
+export type RealmMembershipReconciliationResult = Awaited<ReturnType<ReturnType<typeof createRealmMembershipReconciler>['page']>>;
 type State = 'published' | 'cancelled' | 'pending' | 'uncertain';
 type Item = { reservationId: string; realmId: string; holdTransactionId: string };
 type Cursor = { accountId: string; barrierId: string; afterId: string | null; redrive: boolean };
@@ -45,7 +48,8 @@ export function createRealmMembershipReconciler(config: {
   const transitions = createRealmMembershipTransitions(config);
   const key = (part: string) => 'legacy:' + createHash('sha256').update(`${config.barrierId}:${part}`).digest('hex');
   return {
-    async page(input: { accountId: string; cursor?: string | null; redrive?: boolean }) {
+    async page(input: RealmMembershipReconciliationInput) {
+      const observation = crypto.randomUUID();
       const route = routeOf(input.accountId);
       allowed(route !== null);
       const identity = { route, account_id: input.accountId, barrier_id: config.barrierId };
@@ -128,7 +132,7 @@ export function createRealmMembershipReconciler(config: {
             route,
             id: input.accountId,
             kind: 'realm-membership-legacy-recorded',
-            key: key(`record:${item.reservationId}:${state}`),
+            key: key(`record:${item.reservationId}:${observation}`),
             input: { ...item, state },
           },
           async (tx) => {
@@ -140,7 +144,7 @@ export function createRealmMembershipReconciler(config: {
               hold_transaction_id: item.holdTransactionId,
               state,
             });
-            return { ...item, state };
+            return { accountId: input.accountId, reservationId: item.reservationId, realmId: item.realmId, holdTransactionId: item.holdTransactionId, state };
           },
         );
         items.push({ ...item, state });
@@ -185,7 +189,7 @@ export function registerRealmMembershipReconciliation(
   keys: KeyRing,
 ) {
   const step = DBOS.registerStep(
-    async (input: { accountId: string; cursor?: string | null; redrive?: boolean }) => {
+    async (input: RealmMembershipReconciliationInput) => {
       const barrierId = context.env.KERNEL_REALM_MEMBERSHIP_BARRIER;
       if (!barrierId || !realm.certifyLegacy || !realm.authority.readTransition) throw new LifecycleDeniedError();
       return createRealmMembershipReconciler({
@@ -199,7 +203,7 @@ export function registerRealmMembershipReconciliation(
     { name: 'accounts.realm-membership.reconcile.page', retriesAllowed: false },
   );
   return DBOS.registerWorkflow(
-    async (input: { accountId: string; cursor?: string | null; redrive?: boolean }) => step(input),
-    { name: 'accounts.realm-membership.reconcile' },
+    async (input: RealmMembershipReconciliationInput) => step(input),
+    { name: REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME },
   );
 }

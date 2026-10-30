@@ -8,6 +8,7 @@ import { LIFECYCLE_ACTIONS, type LifecycleRequest } from '../../src/access/lifec
 import { routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
 import type { Access } from '../../src/request/access.ts';
 
 export async function authenticated(
@@ -115,14 +116,14 @@ if (import.meta.main) {
   };
   if (process.env.MEMBERSHIP_REGISTRY === 'yes') {
     await assert.rejects(composeWork([module, module], options), /Duplicate work module: accounts/);
-    let registrations = 0;
+    const registrations: string[] = [];
     const original = client.registerQueue.bind(client);
     client.registerQueue = async (...args) => {
-      registrations++;
+      registrations.push(args[0]);
       return original(...args);
     };
     const runtime = await composeWork([module], options);
-    assert.equal(registrations, 6);
+    assert.deepEqual(registrations.sort(), Object.keys(WORK_QUEUES).sort());
     assert.equal(DBOS.isInitialized(), false);
     const launch = runtime.launch();
     assert.equal(runtime.launch(), launch);

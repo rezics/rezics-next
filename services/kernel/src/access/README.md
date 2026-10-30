@@ -530,7 +530,9 @@ The normal Accounts registrar installs `recover`, `finalize` and `cancel` durabl
 publication is recovered before bearer restoration; finalization uses only its exact mechanical obligation.
 Cancellation serializes with publication at the Realm row and commits its own immutable source proof. Neither a
 missing source nor a terminal workflow status implies success. Missing production protocol wiring refuses Realm
-work. Organization workflow ordering and terminal inverse release are unchanged.
+work. Consuming cancellation closes only its generation; it preserves a live member and inverse. Compensation
+then uses the existing registered `terminalize` and `release` steps, with their original receipt keys, to remove
+an unpublished reservation only after actual authoritative absence. Organization workflow ordering is unchanged.
 
 Deployment first stops old membership writers and drains or explicitly resolves their in-flight operations, applies
 both Realm transition migrations, then installs the new writers and normal Accounts host. Configure

@@ -1,4 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
+import { Pool } from 'pg';
+import type { TransitionGrowthConfig } from './realm-membership-transition-growth.ts';
+import { createOperatorCommands } from '../../src/access/operator.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { createMembershipInverseCommands } from '../../src/access/membership-inverse.ts';
 import { createMembershipWorkPorts } from '../../src/access/membership-work.ts';
@@ -16,15 +20,29 @@ import {
   closeCommunityDrivers,
   worker,
   restartWorker,
+  waitCommunityWorkflow,
+  reconcileCommunityMembership,
 } from '../community/community-driver.ts';
 import { startConsentServer } from '../community/membership-fixture.ts';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 
-afterAll(closeCommunityDrivers);
+let controls: Pool | undefined;
+const pending = new Set<string>();
+afterAll(async () => { await controls?.end(); await closeCommunityDrivers(); });
+async function settleNative() {
+  for (const id of pending) {
+    try { await waitCommunityWorkflow(id); } finally { pending.delete(id); }
+  }
+}
+function control(state: Native) {
+  return controls ??= new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 4 });
+}
 const key = () => crypto.randomUUID();
 async function body<T>(response: Response, status: number): Promise<T> {
   expect(response.status, await response.clone().text()).toBe(status);
-  return response.json() as Promise<T>;
+  const value = await response.json();
+  if (value && typeof value.workflowId === 'string') pending.add(value.workflowId);
+  return value as T;
 }
 async function until<T>(read: () => Promise<T>, ready: (value: T) => boolean, label: string): Promise<T> {
   const end = Date.now() + 20_000;
@@ -135,8 +153,9 @@ async function setup() {
 }
 type Native = Awaited<ReturnType<typeof setup>>;
 async function lock(state: Native, owner: 'realm' | 'account') {
-  const client = await state.system.database.admin.connect();
+  const client = await control(state).connect();
   await client.query('BEGIN');
+  try {
   const pid = (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
   if (owner === 'realm')
     await client.query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE', [
@@ -160,12 +179,13 @@ async function lock(state: Native, owner: 'realm' | 'account') {
       }
     },
   };
+  } catch (error) { await client.query('ROLLBACK'); client.release(); throw error; }
 }
 async function blocked(state: Native, pid: number) {
   return until(
     async () =>
       (
-        await state.system.database.admin.query(
+        await control(state).query(
           'SELECT pid,query FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',
           [pid],
         )
@@ -209,7 +229,7 @@ test.serial(
     } finally {
       await barrier.release();
     }
-    await state.driver.settle();
+    await settleNative();
     expect(await state.hold()).toEqual([]);
     expect(await state.rows()).toHaveLength(1);
     await state.erase();
@@ -237,13 +257,13 @@ test.serial(
     }
     const result = await deletion;
     if ('value' in result) {
-      await expect(state.driver.settle()).rejects.toThrow();
+      await expect(settleNative()).rejects.toThrow();
       expect(await state.hold()).toEqual([]);
       expect(await state.rows()).toEqual([]);
       expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).not.toBeNull();
     } else {
       expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
-      await state.driver.settle();
+      await settleNative();
       await state.erase();
     }
   },
@@ -273,7 +293,7 @@ test.serial(
       await accountBarrier.release();
       await restartWorker();
       stopped = false;
-      await state.driver.settle();
+      await settleNative();
       expect(await state.hold()).toEqual([]);
       expect(await state.rows()).toHaveLength(1);
       // Mechanical consumption replays even after the real account deletion.
@@ -300,6 +320,14 @@ test.serial(
     expect(proof?.outcome).toBe('published');
     const consumeKey = key();
     await state.transitions.consume({ ...first, key: consumeKey, proofTransactionId: proof!.transactionId });
+    await expect(state.system.database.pool.query(
+      'UPDATE community.realm_membership_proof SET outcome=outcome WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND generation_id=$4',
+      [routeOf(state.realm.realmId), state.realm.realmId, first.accountId, first.transition.generationId],
+    )).rejects.toThrow();
+    await expect(state.system.database.pool.query(
+      'DELETE FROM access.realm_membership_transition WHERE route=$1 AND account_id=$2 AND generation_id=$3',
+      [routeOf(first.accountId), first.accountId, first.transition.generationId],
+    )).rejects.toThrow();
     const later = await state.reserve();
     expect(later.reservationId).toBe(first.reservationId);
     expect(later.transition.generationId).not.toBe(first.transition.generationId);
@@ -371,6 +399,8 @@ test.serial(
     expect('error' in (await published)).toBe(true);
     expect((await state.transitions.proof(held))?.outcome).toBe('cancelled');
     await state.ports.finalize!(held, key());
+    await state.ports.terminalize(held, key());
+    await state.ports.release({ ...held, key: key() });
     expect(await state.hold()).toEqual([]);
     expect(await state.rows()).toEqual([]);
     expect(
@@ -395,6 +425,8 @@ test.serial(
     await state.ports.cancel!(held, key());
     expect(await state.hold()).toHaveLength(1);
     await state.ports.finalize!(held, key());
+    await state.ports.terminalize(held, key());
+    await state.ports.release({ ...held, key: key() });
     expect(await state.hold()).toEqual([]);
     const next = await state.reserve();
     expect(next.reservationId).not.toBe(held.reservationId);
@@ -415,7 +447,7 @@ test.serial(
   async () => {
     const state = await setup();
     const held = await state.reserve();
-    await state.system.database.admin.query(
+    await state.system.database.pool.query(
       `INSERT INTO community.realm_membership_proof
      (route,realm_id,account_id,reservation_id,generation_id,operation_id,outcome,transaction_id,principal_id,command_kind,command_key,at)
      VALUES ($1,$2,$3,$4,$5,$6,'published',$7,$3,'community.realm.membership',$8,now())`,
@@ -447,7 +479,7 @@ test.serial(
   async () => {
     const state = await setup();
     await state.join();
-    await state.driver.settle();
+    await settleNative();
     const original = (
       await state.system.database.pool.query<{ reservationId: string; generationId: string; operationId: string }>(
         `SELECT reservation_id::text AS "reservationId",generation_id::text AS "generationId",operation_id AS "operationId"
@@ -470,9 +502,9 @@ test.serial(
       }),
       202,
     );
-    await state.driver.settle();
+    await settleNative();
     await state.join();
-    await state.driver.settle();
+    await settleNative();
     const current = await state.system.database.pool.query<{ reservationId: string }>(
       `SELECT reservation_id::text AS "reservationId" FROM community.realm_member
      WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND upper_inf(valid)`,
@@ -488,11 +520,93 @@ test.serial(
   120_000,
 );
 
+test.serial('a real queued stale publisher cannot publish after exact cancellation consumption and genuine T', async () => {
+  const state = await setup();
+  const held = await state.reserve();
+  const original = await lock(state, 'realm');
+  const parked = await control(state).connect();
+  const publisherPool = new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 1 });
+  await parked.query('BEGIN');
+  try {
+    const cancelling = state.membership.cancel(held, key()).then(value => ({ value }), error => ({ error }));
+    await blocked(state, original.pid);
+    const parkPid = (await parked.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    const parkedLock = parked.query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE',
+      [routeOf(state.realm.realmId), state.realm.realmId]).then(value => ({ value }), error => ({ error }));
+    await until(async () => (await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [parkPid, 'Lock'])).rows,
+      rows => rows.length === 1, 'second actual Realm locker queued');
+    const publisherPid = (await publisherPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    const publisher = createRealmMembership({ pool: publisherPool, access: state.system.access, referenceKeys: state.system.tokenKeys });
+    const publishing = publisher.authorize(state.persona.bearer, state.input)
+      .then(request => publisher.publish(request, state.input, held, key()))
+      .then(value => ({ value }), error => ({ error }));
+    await until(async () => (await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [publisherPid, 'Lock'])).rows,
+      rows => rows.length === 1, 'actual positive command queued before cancellation commits');
+    await original.release();
+    expect('value' in await cancelling).toBe(true);
+    expect('value' in await parkedLock).toBe(true);
+    expect((await blocked(state, parkPid)).some(row => row.pid === publisherPid)).toBe(true);
+    await state.ports.finalize!(held, key());
+    expect((await state.system.database.pool.query('SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
+      [routeOf(held.accountId), held.accountId, held.reservationId])).rows).toHaveLength(1);
+    await state.erase();
+    expect(await readErasureStatus(state.system.database.pool, held.accountId)).not.toBeNull();
+    await parked.query('ROLLBACK');
+    expect('error' in await publishing).toBe(true);
+    expect(await state.rows()).toEqual([]);
+    expect(await state.hold()).toEqual([]);
+  } finally {
+    await original.release();
+    await parked.query('ROLLBACK');
+    parked.release();
+    await publisherPool.end();
+  }
+}, 120_000);
+
+test.serial('cancelling a later confirmation closes only that generation while the live membership and inverse survive', async () => {
+  const state = await setup();
+  await state.join();
+  await settleNative();
+  const held = await state.reserve();
+  await state.ports.cancel!(held, key());
+  expect((await state.transitions.proof(held))?.outcome).toBe('cancelled');
+  expect(await state.hold()).toHaveLength(1);
+  await state.ports.finalize!(held, key());
+  expect(await state.hold()).toEqual([]);
+  expect(await state.rows()).toHaveLength(1);
+  expect(await state.membership.authority.readTerminal(state.system.database.pool, held)).toBeNull();
+  await expect(state.ports.terminalize(held, key())).rejects.toThrow();
+  expect((await state.system.database.pool.query('SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
+    [routeOf(held.accountId), held.accountId, held.reservationId])).rows).toHaveLength(1);
+  await state.erase();
+  expect(await state.rows()).toHaveLength(1);
+}, 120_000);
+
+test.serial('closing a Realm transition never releases an unrelated native operator responsibility', async () => {
+  const state = await setup();
+  await state.join();
+  await settleNative();
+  const subject = await state.deletion.person();
+  const operators = createOperatorCommands({ pool: state.system.database.pool, access: state.system.access,
+    actions: LIFECYCLE_ACTIONS, managementAction: 'account:manage' });
+  const input = { operatorAccountId: state.persona.accountId, subjectAccountId: subject.accountId, key: key() };
+  const held = await operators.reserveResponsibility(input);
+  expect(await operators.reserveResponsibility(input)).toMatchObject({ replayed: true });
+  await expect(state.erase()).rejects.toThrow();
+  expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
+  const responsibility = { ...held.value, key: key() };
+  await expect(operators.releaseResponsibility(responsibility)).rejects.toThrow();
+  await operators.retireResponsibility({ ...responsibility, key: key() });
+  await operators.releaseResponsibility({ ...responsibility, key: key() });
+  await state.erase();
+  expect(await state.rows()).toHaveLength(1);
+}, 120_000);
+
 /** Historical fixture only: represent an old writer's stable hold using the
  * actual native inverse provenance and real published intervals. No account,
  * tombstone, grant, obligation or acknowledgement is fabricated. */
 async function oldStableHold(state: Native, realmId: string) {
-  await state.system.database.admin.query(
+  await state.system.database.pool.query(
     `INSERT INTO access.lifecycle_coordination(route,account_id,reservation_id,related_account_id,purpose,transaction_id)
      SELECT route,account_id,reservation_id,group_id,'membership',transaction_id FROM access.membership_inverse
      WHERE route=$1 AND account_id=$2 AND kind='realm' AND group_id=$3`,
@@ -543,13 +657,13 @@ test.serial(
         }),
         202,
       );
-    await state.driver.settle();
+    await settleNative();
     for (const realmId of realms) await oldStableHold(state, realmId);
     // A real old source absent from the authority is pending, never cancellation.
     const pendingRealm = newId(routeOf(state.realm.realmId)!);
     const pendingReservation = newId(routeOf(state.persona.accountId)!);
     const pendingTransaction = newId(routeOf(state.persona.accountId)!);
-    await state.system.database.admin.query(
+    await state.system.database.pool.query(
       `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
      VALUES ($1,$2,'realm',$3,$4,$5)`,
       [routeOf(state.persona.accountId), state.persona.accountId, pendingRealm, pendingReservation, pendingTransaction],
@@ -565,13 +679,16 @@ test.serial(
         [routeOf(state.persona.accountId), state.persona.accountId, ambiguousRealm],
       )
     ).rows[0]!;
-    await state.system.database.admin.query(
+    await state.system.database.pool.query(
       `INSERT INTO community.realm_member_terminal(route,realm_id,account_id,reservation_id,transaction_id,at)
      VALUES($1,$2,$3,$4,$5,now())`,
       [routeOf(ambiguousRealm), ambiguousRealm, state.persona.accountId, stable.reservation_id, newId(0x3170)],
     );
     await worker.stop();
+    const previousBarrier = process.env.KERNEL_REALM_MEMBERSHIP_BARRIER;
+    process.env.KERNEL_REALM_MEMBERSHIP_BARRIER = 'stopped-native-writers';
     try {
+      await restartWorker();
       const config = {
         pool: state.system.database.pool,
         keys: state.system.tokenKeys,
@@ -580,7 +697,7 @@ test.serial(
         certify: state.membership.certifyLegacy,
       };
       let reconciler = createRealmMembershipReconciler(config);
-      const firstPage = await reconciler.page({ accountId: state.persona.accountId });
+      const firstPage = await reconcileCommunityMembership({ accountId: state.persona.accountId });
       expect(firstPage.items).toHaveLength(32);
       expect(firstPage.completed).toBe(false);
       expect(firstPage.cursor).toBeString();
@@ -609,6 +726,9 @@ test.serial(
       await expect(state.erase()).rejects.toThrow();
       expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
     } finally {
+      await worker.stop();
+      if (previousBarrier === undefined) delete process.env.KERNEL_REALM_MEMBERSHIP_BARRIER;
+      else process.env.KERNEL_REALM_MEMBERSHIP_BARRIER = previousBarrier;
       await restartWorker();
     }
   },
@@ -623,12 +743,12 @@ test.serial(
     const legacyRoute = routeOf(legacy.accountId)!;
     const reservation = newId(legacyRoute);
     const transaction = newId(legacyRoute);
-    await state.system.database.admin.query(
+    await state.system.database.pool.query(
       `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
      VALUES($1,$2,'realm',$3,$4,$5)`,
       [legacyRoute, legacy.accountId, state.realm.realmId, reservation, transaction],
     );
-    await state.system.database.admin.query(
+    await state.system.database.pool.query(
       `INSERT INTO access.lifecycle_coordination(route,account_id,reservation_id,related_account_id,purpose,transaction_id)
      VALUES($1,$2,$3,$4,'membership',$5)`,
       [legacyRoute, legacy.accountId, reservation, state.realm.realmId, transaction],
@@ -654,17 +774,17 @@ test.serial(
       });
       child.stdin.write(
         JSON.stringify({
-          databaseUrl: state.system.database.pool.options.connectionString,
+          databaseUrl: state.system.database.pool.options.connectionString!,
           accountId: state.persona.accountId,
           bearer: state.persona.bearer,
           realmId: state.realm.realmId,
           legacyAccountId: legacy.accountId,
           issuer: claims.iss,
           audience: claims.aud,
-          jwks: await response.json(),
+          jwks: await response.json() as TransitionGrowthConfig['jwks'],
           routeKey: Buffer.from(state.system.routeKey).toString('base64url'),
-          keys: [...state.system.tokenKeys.keys].map(([id, value]) => [id, Buffer.from(value).toString('base64url')]),
-        }),
+          keys: [...state.system.tokenKeys.keys].map(([id, value]): [number, string] => [id, Buffer.from(value).toString('base64url')]),
+        } satisfies TransitionGrowthConfig),
       );
       child.stdin.end();
       const [code, stdout, stderr] = await Promise.all([
