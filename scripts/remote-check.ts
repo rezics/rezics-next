@@ -2890,9 +2890,9 @@ async function acquire(
           memoryReservationBytes,
           landingWaiterId,
           signal,
+          pollMs,
           connectionId,
           transferTimeoutMs,
-          pollMs,
         );
         if (lease && signal.aborted) {
           await lease.release();
