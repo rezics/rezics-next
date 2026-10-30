@@ -2,7 +2,7 @@ import { resetCopyKindsStory } from './copies-kinds';
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/library-copies.json';
 
-export type CopiesStoryMode = 'none' | 'one' | 'many' | 'long' | 'unavailable' | 'error' | 'refusal' | 'stale-delete';
+export type CopiesStoryMode = 'none' | 'one' | 'many' | 'long' | 'unavailable' | 'error' | 'refusal' | 'stale-delete' | 'denied-detail';
 let mode: CopiesStoryMode = 'many';
 
 /** Set the copies fixture before mounting a page story. */
@@ -56,9 +56,19 @@ export const routes: FakeRoute[] = [
       }
       return {
         status: 200,
-        copies: mode === 'none' ? [] : mode === 'one' || mode === 'stale-delete' ? base.slice(0, 1) : many,
+        copies: mode === 'none' ? [] : mode === 'one' || mode === 'stale-delete' || mode === 'denied-detail' ? base.slice(0, 1) : many,
         next: null,
       };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/copies\/[^/]+$/,
+    story: ({ request }) => {
+      if (mode === 'denied-detail') return { status: 403, code: 'forbidden' };
+      const id = new URL(request.url).pathname.split('/').at(-1);
+      const copy = many.find((copy) => copy.id === id);
+      return copy ? { status: 200, copy } : { status: 404, code: 'not_found' };
     },
   },
   {

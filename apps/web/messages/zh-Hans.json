@@ -3082,5 +3082,12 @@
   "library_progress_meaning_unknown": "无法确定原始单位的含义。已保存的值按原样显示。",
   "library_progress_structure_unverified": "单位 ID 和位置文本属于此会话的记录，尚未验证其与当前内容结构的对应关系。",
   "library_progress_recording_unavailable": "无法确认当前是否可以记录进度。你仍可查看此会话已保存的历史。",
-  "library_progress_retry": "重试"
+  "library_progress_retry": "重试",
+  "library_copy_detail_loading": "正在读取这份持有记录…",
+  "library_copy_detail_unavailable": "暂时无法读取这份持有记录的详情，仍显示先前读取的值。",
+  "library_copy_detail_forbidden": "当前用户无法查看这份持有记录的详情。",
+  "library_copy_meaning_unknown": "历史含义不明。原有的种类与状态标识符保持不变。",
+  "library_copy_status_unavailable": "暂时无法获取状态选项。你仍可修改其他详情或删除这份持有记录。",
+  "library_copy_status_unsupported": "这份持有记录不支持新状态，原有数据仍可阅读。",
+  "library_copy_new_status": "新状态"
 }

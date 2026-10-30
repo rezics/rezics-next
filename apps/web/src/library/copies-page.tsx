@@ -19,8 +19,8 @@ import { coverSubject, rowRatio, SubjectCover } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { createCopy, deleteCopy, updateCopy, readCopySubject } from './copies-actions';
-import { type CopiesPageData, type CopyItem, type SavedCopy } from './copies-read';
+import { createCopy, deleteCopy, updateCopy, readCopySubject, readCopyDetail } from './copies-actions';
+import { copyStatusChange, type CopiesPageData, type CopyItem } from './copies-read';
 import { subjectHref } from '../subject/subject-href';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
@@ -111,7 +111,7 @@ function ChoiceField({
   name: string;
   label: string;
   value: string;
-  choices: { id: string; label: string }[];
+  choices: { id: string; label: string; labelLanguage?: string }[];
   onChange: (value: string) => void;
 }) {
   const id = useId();
@@ -126,7 +126,7 @@ function ChoiceField({
         onChange={(event) => onChange(event.currentTarget.value)}
       >
         {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id}>
+          <NativeSelectOption key={choice.id} value={choice.id} lang={choice.labelLanguage}>
             {choice.label}
           </NativeSelectOption>
         ))}
@@ -158,6 +158,7 @@ export function CopyForm({
   sendKind = false,
   inline = false,
   initialKind,
+  detailState = 'ready',
   subjectId,
   addKey,
   onClose,
@@ -171,6 +172,7 @@ export function CopyForm({
   sendKind?: boolean | undefined;
   inline?: boolean;
   initialKind?: string;
+  detailState?: 'loading' | 'ready' | 'unavailable' | 'forbidden';
   subjectId: string | null;
   addKey: string;
   onClose: () => void;
@@ -184,7 +186,10 @@ export function CopyForm({
   const [choices, setChoices] = useState(profile);
   const [kind, setKind] = useState(copy?.kind ?? initialKind ?? profile?.kinds[0]?.id ?? '');
   const selected = choices?.kinds.find((choice) => choice.id === kind);
-  const editable = !copy ? Boolean(selected) : Boolean(copy.kind && copy.kind !== 'legacy-unspecified' && selected);
+  const readable = detailState !== 'forbidden';
+  const editable = copy ? readable && detailState !== 'loading' : Boolean(selected);
+  const statusChoices = copy?.statusEditing?.state === 'supported' ? copy.statusEditing.statuses ?? [] : [];
+  const statusEditable = Boolean(copy && editable && statusChoices.length);
   const [edition, setEdition] = useState(subjectId ?? '');
   const [draft, setDraft] = useState(() => ({
     ...draftOf(copy),
@@ -207,7 +212,6 @@ export function CopyForm({
     setFailure(null);
     try {
       const fields = {
-        status: draft.status,
         location: blank(draft.location),
         source: blank(draft.source),
         acquiredOn: blank(draft.acquiredOn),
@@ -215,8 +219,10 @@ export function CopyForm({
         note: blank(draft.note),
       };
       if (copy) {
+        const status = copyStatusChange(copy, draft.status);
+        if (!status) { setFailure(m.library_copy_failure()); return; }
         const result = await updateCopy({
-          data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey, ...fields },
+          data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey, ...status, ...fields },
           headers: csrfHeaders(),
         });
         if (!result.ok) {
@@ -232,8 +238,15 @@ export function CopyForm({
         onSaved({
           ...copy,
           status: result.copy.status,
-          statusLabel:
-            selected?.statuses.find((status) => status.id === result.copy.status)?.label ?? m.library_other(),
+          ...(result.copy.status === copy.status
+            ? {}
+            : {
+                // A write response without presentation cannot certify new accepted labels.
+                statusLabel: undefined,
+                statusLabelLanguage: undefined,
+                meaning: 'unavailable' as const,
+                statusEditing: { state: 'unavailable' as const },
+              }),
           revision: result.copy.revision,
           location: result.copy.location,
           source: result.copy.source,
@@ -244,7 +257,7 @@ export function CopyForm({
         });
       } else {
         const result = await createCopy({
-          data: { subjectId: subjectId ?? edition, idempotencyKey: addKey, ...(sendKind ? { kind } : {}), ...fields },
+          data: { subjectId: subjectId ?? edition, idempotencyKey: addKey, ...(sendKind ? { kind } : {}), status: draft.status, ...fields },
           headers: csrfHeaders(),
         });
         if (!result.ok) {
@@ -261,10 +274,8 @@ export function CopyForm({
           ...result.copy,
           kind: result.copy.kind ?? null,
           subject: null,
-          ...(choices ? { profile: choices } : {}),
-          kindLabel: selected?.label ?? m.library_other(),
-          statusLabel:
-            selected?.statuses.find((status) => status.id === result.copy.status)?.label ?? m.library_other(),
+          meaning: 'unavailable',
+          statusEditing: { state: 'unavailable' },
           idempotencyKey: crypto.randomUUID(),
         });
         onKey(crypto.randomUUID());
@@ -278,7 +289,7 @@ export function CopyForm({
   }
 
   async function remove() {
-    if (!copy || pending || deleting.current) return;
+    if (!copy || !editable || pending || deleting.current) return;
     deleting.current = true;
     setPending(true);
     setFailure(null);
@@ -304,7 +315,12 @@ export function CopyForm({
     }
   }
 
-  const content: ReactNode = (
+  const content: ReactNode = !readable ? (
+    <div className="space-y-4">
+      <p role="alert">{m.library_copy_detail_forbidden()}</p>
+      <button type="button" className={quiet} onClick={onClose}>{m.library_copy_cancel()}</button>
+    </div>
+  ) : (
     <form
       method="post"
       action={`/${locale()}/library/copies`}
@@ -355,23 +371,55 @@ export function CopyForm({
           <input type="hidden" name="kind" value={kind} />
         )
       ) : null}
-      {copy ? <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p> : null}
-      {editable ? (
+      {copy ? (
+        <div className="space-y-3">
+          <dl className="space-y-2">
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.library_copy_kind()}</dt>
+              <dd><span lang={copy.kindLabelLanguage}>{copy.kindLabel ?? copy.kind ?? m.library_other()}</span></dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">{m.library_copy_status()}</dt>
+              <dd><span lang={copy.statusLabelLanguage}>{copy.statusLabel ?? copy.status}</span></dd>
+            </div>
+          </dl>
+          {copy.meaning !== 'known' ? (
+            <p className="text-sm text-muted-foreground">
+              {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
+            </p>
+          ) : null}
+          {detailState === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
+          {detailState === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
+          {statusEditable ? (
+            <>
+              <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p>
+              <ChoiceField
+                name="status"
+                label={m.library_copy_new_status()}
+                value={draft.status}
+                choices={[
+                  { id: copy.status, label: copy.statusLabel ?? copy.status },
+                  ...statusChoices.filter((status) => status.id !== copy.status),
+                ]}
+                onChange={(value) => change('status', value)}
+              />
+            </>
+          ) : detailState !== 'loading' ? (
+            <p className="text-sm text-muted-foreground">
+              {copy.statusEditing?.state === 'unsupported'
+                ? m.library_copy_status_unsupported()
+                : m.library_copy_status_unavailable()}
+            </p>
+          ) : null}
+        </div>
+      ) : selected ? (
         <ChoiceField
           name="status"
           label={m.library_copy_status()}
           value={draft.status}
-          choices={[
-            ...(copy ? [{ id: copy.status, label: `${copy.status} · ${m.library_history_unavailable()}` }] : []),
-            ...selected!.statuses.filter((status) => !copy || status.id !== copy.status),
-          ]}
+          choices={selected.statuses}
           onChange={(value) => change('status', value)}
         />
-      ) : copy ? (
-        <>
-          <p>{copy.statusLabel ?? m.library_other()}</p>
-          <p>{m.library_copy_no_longer_offered()}</p>
-        </>
       ) : null}
       {editable ? (
         <>
@@ -431,7 +479,7 @@ export function CopyForm({
           </button>
         ) : null}
         {copy ? (
-          <button type="button" className={quiet} disabled={pending} onClick={() => setConfirming(true)}>
+          <button type="button" className={quiet} disabled={pending || !editable} onClick={() => setConfirming(true)}>
             {m.library_copy_delete()}
           </button>
         ) : null}
@@ -468,11 +516,6 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
   const href = copy.subject ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale) : null;
   const title = localizedTitle?.text ?? m.library_subject_unavailable();
-  const canEdit = Boolean(
-    copy.kind &&
-    copy.kind !== 'legacy-unspecified' &&
-    copy.profile?.kinds.some((candidate) => candidate.id === copy.kind),
-  );
   const kind =
     copy.subject?.typeLabel ??
     copy.subject?.types?.[0]
@@ -493,7 +536,11 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           {copy.subject ? <LibraryTitle label={copy.subject.label} locale={pageLocale} /> : title}
         </p>
         <p className="text-sm text-muted-foreground">
-          <MetaLine items={[kind, copy.kindLabel ?? copy.kind, copy.statusLabel ?? copy.status]} />
+          <MetaLine items={[
+            kind,
+            copy.kindLabel ? <span lang={copy.kindLabelLanguage}>{copy.kindLabel}</span> : copy.kind,
+            copy.statusLabel ? <span lang={copy.statusLabelLanguage}>{copy.statusLabel}</span> : copy.status,
+          ]} />
         </p>
         {!copy.kindLabel || !copy.statusLabel ? (
           <p className="text-sm text-muted-foreground">{m.library_history_unavailable()}</p>
@@ -529,7 +576,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
           entries={[
             {
               type: 'item',
-              label: canEdit ? m.library_copy_edit() : m.library_copy_delete(),
+              label: m.library_copy_edit(),
               onSelect: onEdit,
             },
           ]}
@@ -544,9 +591,46 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
+  const inspection = useRef(0);
+  const closeEditor = () => { inspection.current += 1; setEditing(undefined); };
+  async function inspect(copy: CopyItem) {
+    const current = ++inspection.current;
+    setEditing({
+      ...copy,
+      kindLabel: undefined,
+      statusLabel: undefined,
+      kindLabelLanguage: undefined,
+      statusLabelLanguage: undefined,
+      meaning: 'unavailable',
+      statusEditing: { state: 'unavailable' },
+    });
+    setDetailState('loading');
+    try {
+      const result = await readCopyDetail({ data: { id: copy.id } });
+      if (current !== inspection.current) return;
+      if (result.ok) {
+        setEditing(result.copy);
+        setDetailState('ready');
+      } else {
+        setDetailState(result.reason);
+        if (result.reason === 'forbidden') {
+          // Keep only the previously readable raw row; never retain point-detail presentation after denial.
+          setCopies((copies) => copies.map((item) => item.id !== copy.id ? item : {
+            ...item, kindLabel: undefined, statusLabel: undefined, kindLabelLanguage: undefined,
+            statusLabelLanguage: undefined, meaning: undefined, statusEditing: undefined,
+          }));
+        }
+      }
+    } catch {
+      if (current === inspection.current) setDetailState('unavailable');
+    }
+  }
   useEffect(() => {
     setCopies(page.copies);
     setAddKey(page.addKey);
+    inspection.current += 1;
+    setEditing(undefined);
   }, [page]);
   const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
   const filteredTitle = filteredLabel ? displayLibraryTitle(filteredLabel, locale()).text : undefined;
@@ -555,7 +639,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading>{m.library_copy_heading()}</PageHeading>
         {!page.subjectId || page.profile?.kinds.length ? (
-          <button type="button" className={button} onClick={() => setEditing(null)}>
+          <button type="button" className={button} onClick={() => { inspection.current += 1; setDetailState('ready'); setEditing(null); }}>
             {m.library_copy_add()}
           </button>
         ) : null}
@@ -588,7 +672,7 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
               key={`${copy.id}:${copy.revision}`}
               copy={copy}
               ratio={rowRatio([copy.subject])}
-              onEdit={() => setEditing(copy)}
+              onEdit={() => void inspect(copy)}
             />
           ))}
         </ul>
@@ -636,13 +720,14 @@ export function CopiesPage({ page, failure }: { page: CopiesPageData; failure?: 
       ) : null}
       {editing !== undefined ? (
         <CopyForm
-          key={editing?.id ?? 'add'}
+          key={editing ? `${editing.id}:${editing.revision}:${detailState}` : 'add'}
+          detailState={detailState}
           {...(editing ? { copy: editing } : {})}
-          profile={editing ? editing.profile : page.profile}
+          profile={editing ? undefined : page.profile}
           sendKind={page.sendKind}
           subjectId={page.subjectId}
           addKey={addKey}
-          onClose={() => setEditing(undefined)}
+          onClose={closeEditor}
           onKey={setAddKey}
           onCreated={(copy) =>
             setCopies((current) => [

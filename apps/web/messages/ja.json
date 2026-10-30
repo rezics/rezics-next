@@ -3081,5 +3081,12 @@
   "library_progress_meaning_unknown": "元の単位の意味は不明です。保存された値を変更せずに表示しています。",
   "library_progress_structure_unverified": "単位IDと位置のテキストはこのセッションの記録です。現在のコンテンツ構造との対応は確認されていません。",
   "library_progress_recording_unavailable": "進捗を記録できるか確認できませんでした。このセッションの保存済み履歴は引き続き読めます。",
-  "library_progress_retry": "再試行"
+  "library_progress_retry": "再試行",
+  "library_copy_detail_loading": "所持記録を読み込み中…",
+  "library_copy_detail_unavailable": "所持記録の詳細を一時的に取得できません。以前読み取った値を表示しています。",
+  "library_copy_detail_forbidden": "現在の利用者はこの所持記録の詳細を表示できません。",
+  "library_copy_meaning_unknown": "過去の意味は不明です。保存された種別と状態の識別子をそのまま表示します。",
+  "library_copy_status_unavailable": "状態の選択肢を一時的に取得できません。ほかの詳細の編集や所持記録の削除は可能です。",
+  "library_copy_status_unsupported": "この所持記録では新しい状態を設定できません。保存された値は引き続き表示できます。",
+  "library_copy_new_status": "新しい状態"
 }

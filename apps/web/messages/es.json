@@ -3081,5 +3081,12 @@
   "library_progress_meaning_unknown": "Se desconoce el significado original de la unidad. Los valores guardados se muestran sin cambios.",
   "library_progress_structure_unverified": "Los identificadores de unidad y el texto de ubicación pertenecen a esta sesión. No se ha verificado su relación con la estructura actual del contenido.",
   "library_progress_recording_unavailable": "No se ha podido verificar si se puede registrar progreso. Puedes seguir leyendo el historial guardado de esta sesión.",
-  "library_progress_retry": "Reintentar"
+  "library_progress_retry": "Reintentar",
+  "library_copy_detail_loading": "Cargando este ejemplar…",
+  "library_copy_detail_unavailable": "Los detalles de este ejemplar no están disponibles temporalmente. Se muestran los valores leídos anteriormente.",
+  "library_copy_detail_forbidden": "Esta persona no puede acceder a los detalles de este ejemplar.",
+  "library_copy_meaning_unknown": "Se desconoce el significado histórico. Los identificadores de tipo y estado guardados se muestran sin cambios.",
+  "library_copy_status_unavailable": "Las opciones de estado no están disponibles temporalmente. Puedes editar otros detalles o eliminar este ejemplar.",
+  "library_copy_status_unsupported": "Este ejemplar no admite nuevos estados. Los valores guardados siguen siendo legibles.",
+  "library_copy_new_status": "Nuevo estado"
 }

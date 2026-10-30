@@ -51,7 +51,13 @@ const profile = {
 const answer = async ({ request }: { request: Request }) => {
   if (!scenario) return;
   const path = new URL(request.url).pathname;
-  if (request.method === 'GET') return { status: 200, copies: scenario.copies, next: null };
+  if (request.method === 'GET') {
+    if (path === '/v1/copies') return { status: 200, copies: scenario.copies, next: null };
+    const copy = scenario.copies.find((copy) => copy.id === path.split('/').at(-1));
+    if (!copy) return { status: 404, code: 'not_found' };
+    // The fixture uses the actual current raw point DTO, without synthetic pins or presentation grants.
+    return { status: 200, copy };
+  }
   if (scenario.refusal && request.method !== 'DELETE')
     return { status: 422, code: 'unsupported_library_profile', effect_status: 'not_applied' };
   if (request.method === 'DELETE') {
@@ -62,7 +68,12 @@ const answer = async ({ request }: { request: Request }) => {
   if (request.method === 'PATCH') {
     if ('kind' in body) return { status: 400, code: 'invalid_request' };
     const current = scenario.copies.find((copy) => copy.id === path.split('/').at(-1));
-    return { status: 200, copy: { ...current, ...body, revision: Number(body.revision) + 1 } };
+    if (!current) return { status: 404, code: 'not_found' };
+    if (current.revision !== body.revision) return { status: 409, code: 'conflict' };
+    const next = { ...current, ...body, revision: current.revision + 1 };
+    Object.assign(current, next);
+    return { status: 200, copy: next };
+
   }
   if (!body.kind) return { status: 400, code: 'invalid_request' };
   if (

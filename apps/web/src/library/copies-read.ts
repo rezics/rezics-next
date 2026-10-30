@@ -2,10 +2,11 @@ import { libraryCopyStatusLabel } from './profiles';
 import definitions from '../kernel/recorded/definitions-release.json';
 import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
 import type { CopyProfile } from './copies-profiles';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
-import { m } from '../paraglide/messages.js';
+import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from './copies-server';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -35,9 +36,16 @@ export type CopyItem = {
   note: string | null;
   subject: LibrarySubject | null;
   idempotencyKey: string;
-  profile?: CopyProfile;
-  kindLabel?: string;
-  statusLabel?: string;
+  profile?: CopyProfile | undefined;
+  kindLabel?: string | undefined;
+  statusLabel?: string | undefined;
+  kindLabelLanguage?: string | undefined;
+  statusLabelLanguage?: string | undefined;
+  meaning?: 'known' | 'unknown' | 'unavailable' | undefined;
+  statusEditing?: {
+    state: 'supported' | 'unsupported' | 'unavailable';
+    statuses?: { id: string; label: string; labelLanguage?: string }[];
+  } | undefined;
 };
 
 export type CopiesPageData = {
@@ -46,7 +54,7 @@ export type CopiesPageData = {
   copies: CopyItem[];
   next: string | null;
   addKey: string;
-  profile?: CopyProfile;
+  profile?: CopyProfile | undefined;
   sendKind?: boolean;
   csrfToken?: string | null;
 };
@@ -104,7 +112,7 @@ type CopyFields = {
   note: string | null;
 };
 type CreateInput = CopyFields & { subjectId: string; kind?: string; idempotencyKey: string };
-type UpdateInput = CopyFields & { id: string; revision: number; idempotencyKey: string };
+type UpdateInput = Omit<CopyFields, 'status'> & { status?: string } & { id: string; revision: number; idempotencyKey: string };
 type RemoveInput = { id: string; revision: number; idempotencyKey: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -204,9 +212,12 @@ function parseUpdate(input: unknown): UpdateInput | undefined {
   const id = identifier(input.id);
   const revision = revisionOf(input.revision);
   const idempotencyKey = keyOf(input.idempotencyKey);
-  const fields = fieldsOf(input);
+  const fields = fieldsOf({ ...input, status: input.status ?? 'unchanged' });
   if (!id || revision === undefined || !idempotencyKey || !fields) return undefined;
-  return { id, revision, idempotencyKey, ...fields };
+  const { status: _status, ...metadata } = fields;
+  const status = Object.hasOwn(input, 'status') ? statusWriteOf(input.status) : undefined;
+  if (Object.hasOwn(input, 'status') && status === undefined) return undefined;
+  return { id, revision, idempotencyKey, ...metadata, ...(status === undefined ? {} : { status }) };
 }
 
 function parseRemove(input: unknown): RemoveInput | undefined {
@@ -297,7 +308,7 @@ async function readCopyPage(client: KernelClient, authorization: string, subject
   }
 }
 
-/** One credential read, then one FULL page of the viewer's copies, optionally filtered by subject. */
+/** One credential read, then one raw page of the viewer's copies, optionally filtered by subject. */
 export async function loadCopiesPage(
   client: KernelClient,
   request: Request,
@@ -314,6 +325,45 @@ export async function loadCopiesPage(
   const sendKind = true;
   const copies = page.copies.map(present);
   return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
+}
+
+export type CopyDetailResult =
+  | { ok: true; copy: CopyItem }
+  | { ok: false; reason: 'forbidden' | 'unavailable' };
+
+/** Explicit inspection only: one credential-bound point read, with no list/profile follow-up. */
+export async function loadCopyDetail(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: unknown,
+): Promise<CopyDetailResult> {
+  const id = isRecord(input) ? identifier(input.id) : undefined;
+  if (!id) return { ok: false, reason: 'unavailable' };
+  try {
+    const authorization = await bearer(request, sessionEnv);
+    if (typeof authorization !== 'string') return { ok: false, reason: 'forbidden' };
+    const result = await client.copies({ copyId: id }).get({
+      query: { view: 'FULL', ...nativeCopyPresentationQuery() },
+      headers: { authorization },
+    });
+    // The native point read also conceals denied rows as 404. It is no deletion evidence.
+    if ([401, 403, 404].includes(result.status)) return { ok: false, reason: 'forbidden' };
+    if (result.error || !result.data?.copy || result.data.copy.id !== id)
+      return { ok: false, reason: 'unavailable' };
+    const copy: NativeCopy = result.data.copy;
+    return { ok: true, copy: { ...present(copy), ...nativeCopyPresentation(copy) } };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** Only an explicitly changed, observed native choice may enter an enhanced status update. */
+export function copyStatusChange(copy: CopyItem, status: string): { status?: string } | undefined {
+  if (status === copy.status) return {};
+  return copy.statusEditing?.state === 'supported' && copy.statusEditing.statuses?.some((choice) => choice.id === status)
+    ? { status }
+    : undefined;
 }
 
 /** One create write. The returned copy omits the subject id; the page keeps a label only when it already has one. */
@@ -365,7 +415,7 @@ export async function saveCopy(
     const result = await client.copies({ copyId: draft.id }).patch(
       {
         revision: draft.revision,
-        status: draft.status,
+        ...(draft.status === undefined ? {} : { status: draft.status }),
         location: draft.location,
         source: draft.source,
         acquiredOn: draft.acquiredOn,

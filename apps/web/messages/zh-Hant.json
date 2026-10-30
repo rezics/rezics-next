@@ -3081,5 +3081,12 @@
   "library_progress_meaning_unknown": "無法確定原始單位的含義。已儲存的值按原樣顯示。",
   "library_progress_structure_unverified": "單位 ID 與位置文字屬於此工作階段的記錄，尚未驗證其與目前內容結構的對應關係。",
   "library_progress_recording_unavailable": "無法確認目前是否可以記錄進度。你仍可檢視此工作階段已儲存的歷程。",
-  "library_progress_retry": "重試"
+  "library_progress_retry": "重試",
+  "library_copy_detail_loading": "正在讀取這份持有記錄…",
+  "library_copy_detail_unavailable": "暫時無法讀取這份持有記錄的詳情，仍顯示先前讀取的值。",
+  "library_copy_detail_forbidden": "目前的使用者無法查看這份持有記錄的詳情。",
+  "library_copy_meaning_unknown": "歷史含義不明。原有的種類與狀態識別碼保持不變。",
+  "library_copy_status_unavailable": "暫時無法取得狀態選項。你仍可修改其他詳情或刪除這份持有記錄。",
+  "library_copy_status_unsupported": "這份持有記錄不支援新狀態，原有資料仍可閱讀。",
+  "library_copy_new_status": "新狀態"
 }

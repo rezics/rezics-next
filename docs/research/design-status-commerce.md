@@ -240,8 +240,51 @@ native, database or remote check ran. Story plays, ordinary Web visual review, n
 promoted-main proof remain pending.
 
 **Copies / holdings.** Same module/profile authorities and delivered abstraction study; private owner-route copies,
-`/library/copies` and `/v1/copies` exist, independently of progress/state/payment rights. Profile columns/readers are
-partial delivery; the all-kind journey remains incomplete. **Handoff:** which released holding-kind/status transitions and historic-pin display distinguish a digital holding from a consumable purchased benefit?
+`/library/copies` and `/v1/copies` exist independently of progress/state/payment rights. The existing row layout,
+raw digital/physical/status values, history-unavailable notice and recorded covers remain the list baseline.
+An explicit one-copy edit action now makes one current credential-bound native point read; loading the list does
+not read each holding's detail. The editor keeps kind immutable, separates accepted labels/languages from current
+status choices, preserves raw unknown values and distinguishes missing historic meaning, unavailable dependencies
+and unsupported new status choices. Metadata edits omit unchanged status; a changed status must be a captured
+native choice, and native validation remains decisive. Existing revision/key/CSRF and exact native delete/Undo
+paths remain in use. A denied/concealed point response clears detail presentation while retaining the prior readable
+raw list; transient failure keeps that raw view and does not imply deletion or retirement.
+
+The generated `personal-routes.d.ts` on this base declares the existing point GET with `view=BASIC|FULL`, raw fields
+and no `copy.presentation` or `presentation=FULL` query member. The producer seam is therefore **typed unavailable**:
+it uses the actual raw detail once and never parses undeclared additions, invents pins/grants, looks up old labels
+at the current head or sends a query the closed native schema rejects. Compile-time tripwires require replacing
+that pending seam when the actual generated presentation body/query lands. No native Source, writer, authorization,
+retention or profile-pin behavior is implemented here. The existing native metadata-only wire is used as declared;
+its current validation failure stays visible without resending a historical status or repinning in the UI.
+Fresh-copy choices remain separately resolved from the actual active release/subject, with no People/Concept defaults.
+
+New focused source acceptance in `copies-historic.test.ts` covers one point read, unchanged list request counts,
+same-edition identities/original facts, unknown versus unavailable, ignored undeclared meaning, denial/failure,
+immutable kind, captured status choices and metadata-only/revisioned writes. It is written but not executed.
+The positive metadata fixture uses the actual generated raw point/PATCH DTO, with no synthetic pins or grants.
+Accepted-label/current-choice views are explicitly bounded constructed form inputs, not a positive native adapter.
+For Web's next ordinary 390/1280 review, new `Pages/Library/Copies` exports are `HeadRenamedPairRetired`,
+`KnownHistoricalLabels`, `UnknownLegacy`, `RequiredReleaseUnavailable`, `DeniedDetail` and `ExactCapturedStatusEdit`.
+Every existing story play, including the real-cover/raw-digital `ManyCopies` play, remains unchanged. No capture, browser, Storybook, native/database/remote
+or full test campaign is claimed. Actual accepted-label production remains unavailable until the generated native
+presentation producer lands; ordinary visual review and native/promoted-main proof remain pending.
+
+Implementation decisions: an explicit native 404 is treated like concealed detail denial, never deletion evidence;
+a transient failed inspection cannot reuse old current-status choices; write responses without presentation keep
+new status text raw rather than borrowing a current label. Outside the declared paths, `copies-actions.ts` adds the
+existing server-function binding and stops attaching current profiles to historical rows. The local Web typecheck
+also exposed a base defect: the native candidate DTO now includes payload-free deleted tombstones, but the shared
+Web `Candidate` alias still treated them as complete candidates. Minimal corrections in `subject/candidates.ts`
+(type-refined existing payload filtering), `features/catalogue/context-curation.ts` (same filter before slot reads),
+`features/catalogue/statement-consent.ts` (terminal tombstone before payload access) and
+`features/catalogue/value-explanation.ts` (same existing payload exclusion before explanation reads) keep deleted
+payloads out of editors and repair the resulting dependent typing failures without changing native behavior or response contracts.
+Read-only reference source:
+main `.reference/INDEX.md`, `shelves/bookwyrm/bookwyrm/models/shelf.py` and Bangumi's
+`shelves/bangumi-server/openapi/components/user_subject_collection{,_modify_payload}.yaml`; no reference code copied.
+Local foreground `bun run --cwd apps/web typecheck` passed on the committed implementation with no type errors
+in 1,321 files. This is the only verification for this source slice; the new acceptance tests and story plays remain unrun.
 
 **Labels.** Sole authority: [independent labels](../library-labels.md); delivered [cap research](library-label-cap-independent-current.md)
 and [second investigation](library-label-cap-independent-deep.md) back same-row reservations/restore semantics.

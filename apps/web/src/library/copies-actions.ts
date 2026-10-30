@@ -11,6 +11,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   loadCopiesPage,
+  loadCopyDetail,
   removeCopy,
   saveCopy,
   restoreCopy,
@@ -51,27 +52,22 @@ export const readCopiesPage = createServerFn({ method: 'GET' })
         (await readCopySubjectSummary(page.subjectId)))
       : null;
     if (pageSubject) await nameSubjectTypes([pageSubject]);
-    const profiles = new Map<string, ReturnType<typeof resolveCopyProfile>>();
     for (const copy of page.copies) {
-      // The native copy page carries subjectId, not an embedded subject. A filtered page has one known subject, so
-      // reuse its single bounded read for every row instead of issuing one subject request per copy.
+      // Reuse the filtered subject's bounded summary, preserving real covers from the list.
       if (!copy.subject && pageSubject) copy.subject = pageSubject;
-      const type = copy.subject?.type ?? '';
-      let profile = profiles.get(type);
-      if (!profile) {
-        profile = resolveCopyProfile(release, type, locale);
-        profiles.set(type, profile);
-      }
-      Object.assign(copy, { profile });
     }
     if (page.subjectId) {
-      // The same selected-subject read provides released choices even when the filtered list is empty.
-      page.profile = pageSubject
-        ? (profiles.get(pageSubject.type) ?? resolveCopyProfile(release, pageSubject.type, locale))
-        : { kinds: [] };
+      page.profile = pageSubject ? resolveCopyProfile(release, pageSubject.type, locale) : { kinds: [] };
     }
     page.csrfToken = (await readSessionIdentity(getRequest(), env as Partial<SessionEnv>)).csrfToken;
     return page;
+  });
+
+export const readCopyDetail = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => input)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadCopyDetail(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 export const createCopy = createServerFn({ method: 'POST' })

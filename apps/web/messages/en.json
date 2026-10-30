@@ -3433,5 +3433,12 @@
   "library_progress_meaning_unknown": "The original unit meaning is unknown. Stored values are shown unchanged.",
   "library_progress_structure_unverified": "Unit IDs and cursor text belong to this session. Their relationship to the current content structure has not been verified.",
   "library_progress_recording_unavailable": "Recording availability could not be verified. You can still read this session’s stored history.",
-  "library_progress_retry": "Retry"
+  "library_progress_retry": "Retry",
+  "library_copy_detail_loading": "Loading this holding…",
+  "library_copy_detail_unavailable": "This holding’s details are temporarily unavailable. Previously read values remain shown.",
+  "library_copy_detail_forbidden": "This holding’s details are not available to this viewer.",
+  "library_copy_meaning_unknown": "Historical meaning is unknown. Stored kind and status identifiers are shown unchanged.",
+  "library_copy_status_unavailable": "Status choices are temporarily unavailable. You can still edit other details or delete this holding.",
+  "library_copy_status_unsupported": "New statuses are not supported for this holding. Its stored values remain readable.",
+  "library_copy_new_status": "New status"
 }
