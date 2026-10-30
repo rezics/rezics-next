@@ -37,6 +37,9 @@ export async function runPlacedTests(
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
     };
+    // Bun can exit after a test deadline without settling this promise. Reap before the lane's exit cleanup.
+    const reap = () => killGroup('SIGKILL');
+    process.prependOnceListener('exit', reap);
     const stop = (code: number) => {
       outcome ??= code;
       killGroup('SIGTERM');
@@ -62,6 +65,7 @@ export async function runPlacedTests(
       for (const [signal, forward] of forwarders) process.off(signal, forward);
       killGroup('SIGKILL');
       await child.exited;
+      process.off('exit', reap);
     }
   });
 }

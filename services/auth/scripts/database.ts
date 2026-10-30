@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -169,19 +170,42 @@ export async function withTestDatabaseLane<T>(
   const lane = laneContext(process.env);
   if (!lane) throw new Error('Auth child tests require a directly owned check lane');
   const name = `auth_child_${process.pid}_${++childLanes}`;
-  run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
+  const temporaryRoot = resolve(directory, '../../.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const resources = mkdtempSync(resolve(temporaryRoot, 'auth-child-lane-'));
+  const copies = resolve(resources, 'copies');
+  appendFileSync(copies, '');
+  const cleanup = () => {
+    // The child records exact copy names before creating them. No database discovery or foreign cleanup.
+    const names = new Set(readFileSync(copies, 'utf8').split('\n').filter(Boolean));
+    for (const copy of names) {
+      if (!copy.startsWith(`${name}_copy_`) || !/^\d+$/.test(copy.slice(`${name}_copy_`.length))) {
+        throw new Error('Auth child recorded a database outside its owned lane');
+      }
+      run('docker', laneStatement(lane.container, `DROP DATABASE IF EXISTS ${copy} WITH (FORCE)`));
+    }
+    run('docker', laneStatement(lane.container, `DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+    rmSync(resources, { recursive: true, force: true });
+  };
+  process.once('exit', cleanup);
   const url = new URL(lane.url);
   url.pathname = `/${name}`;
   try {
+    run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
     return await action({
       ...env,
       AUTH_CHECK_CONTAINER: lane.container,
       AUTH_CHECK_LANE_OWNER: String(process.pid),
       DATABASE_URL: url.href,
       AUTH_TEST_DATABASE_URL: url.href,
+      AUTH_CHECK_LANE_COPIES: copies,
     });
   } finally {
-    run('docker', laneStatement(lane.container, `DROP DATABASE IF EXISTS ${name} WITH (FORCE)`));
+    try {
+      cleanup();
+    } finally {
+      process.off('exit', cleanup);
+    }
   }
 }
 
@@ -198,6 +222,8 @@ export function testDatabase(): TestDatabase {
     return { url: lane.url, container: lane.container, close: () => {} };
   }
   const name = `${decodeURIComponent(new URL(lane.url).pathname.slice(1))}_copy_${++laneCopies}`;
+  const copies = process.env.AUTH_CHECK_LANE_COPIES;
+  if (copies) appendFileSync(copies, `${name}\n`);
   run('docker', laneStatement(lane.container, `CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`));
   const url = new URL(lane.url);
   url.pathname = `/${name}`;
@@ -208,6 +234,8 @@ export function testDatabase(): TestDatabase {
     close: () => {
       if (closed) return;
       closed = true;
+      // Delegated copies belong to the runner, which drops them after the complete child tree ends.
+      if (copies) return;
       const child = spawn('docker', laneStatement(lane.container, `DROP DATABASE IF EXISTS ${name} WITH (FORCE)`), {
         cwd: directory,
         detached: true,
@@ -222,6 +250,30 @@ export function testDatabase(): TestDatabase {
 export function ownDatabase(): TestDatabase {
   assertDatabasePlacement();
   const label = OWNER_LABEL;
+  // Capture owners with IDs so concurrent cleanup cannot race a separate inspect.
+  for (const row of run('docker', [
+    'ps',
+    '-a',
+    '--filter',
+    `label=${label}`,
+    '--format',
+    `{{.ID}} {{.Label "${label}"}}`,
+  ])
+    .split('\n')
+    .filter(Boolean)) {
+    const [id, owner, ...extra] = row.split(' ');
+    if (!id || !owner || extra.length || !/^[1-9]\d*$/.test(owner)) continue;
+    const pid = Number(owner);
+    if (!Number.isSafeInteger(pid) || pid > 2_147_483_647) continue;
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      // An inaccessible owner may still be alive; only a missing process is stale.
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
+      // Removing a container that another checker already removed is success.
+      spawnSync('docker', ['rm', '-f', '-v', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+    }
+  }
   const container = run('docker', [
     'run',
     '-d',

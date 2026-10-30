@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runPlacedTests } from '../scripts/placed-tests.ts';
 import type { withTestDatabaseLane } from '../scripts/database.ts';
@@ -152,3 +152,75 @@ test('direct unplaced and foreign-owner database access stay refused before any 
     expect(output).toContain('unplaced and foreign owner refused');
   }
 });
+
+for (const exitsEarly of [false, true]) {
+  test(`owned lane and exact fixture copies are dropped after ${exitsEarly ? 'parent exit' : 'native failure'}`, async () => {
+    const directory = temporary();
+    try {
+      const commands = resolve(directory, 'commands');
+      const receipt = resolve(directory, 'receipt.json');
+      const docker = resolve(directory, 'docker');
+      // A pure command recorder, never a Docker server or a native fixture.
+      writeFileSync(docker, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$AUTH_PLACEMENT_COMMANDS"\n');
+      chmodSync(docker, 0o755);
+      const databaseModule = new URL('../scripts/database.ts', import.meta.url).href;
+      const runnerModule = new URL('../scripts/placed-tests.ts', import.meta.url).href;
+      const native = `
+        import { writeFileSync } from 'node:fs';
+        import { testDatabase } from ${JSON.stringify(databaseModule)};
+        testDatabase();
+        const copy = testDatabase();
+        copy.close();
+        writeFileSync(process.env.AUTH_PLACEMENT_RECEIPT, JSON.stringify({
+          pid: process.pid, url: copy.url, copies: process.env.AUTH_CHECK_LANE_COPIES
+        }));
+        ${exitsEarly ? "process.kill(process.ppid, 'SIGUSR1'); setInterval(() => {}, 1000);" : 'process.exit(7);'}
+      `;
+      const parent = `
+        import { runPlacedTests } from ${JSON.stringify(runnerModule)};
+        ${exitsEarly ? "process.on('SIGUSR1', () => process.exit(17));" : ''}
+        const result = await runPlacedTests([process.execPath, '--eval', ${JSON.stringify(native)}]);
+        process.exit(result.code);
+      `;
+      const child = Bun.spawn([process.execPath, '--eval', parent], {
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          AUTH_CHECK_CONTAINER: 'pure-command-recorder',
+          AUTH_CHECK_LANE_OWNER: String(process.pid),
+          DATABASE_URL: 'postgres://rezics:rezics@localhost/auth_test_1',
+          AUTH_PLACEMENT_COMMANDS: commands,
+          AUTH_PLACEMENT_RECEIPT: receipt,
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, errors] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+      expect(code, errors).toBe(exitsEarly ? 17 : 7);
+      const owned = JSON.parse(readFileSync(receipt, 'utf8')) as { pid: number; url: string; copies: string };
+      const copy = new URL(owned.url).pathname.slice(1);
+      const main = copy.replace(/_copy_1$/, '');
+      expect(
+        readFileSync(commands, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => line.slice(line.indexOf('-c ') + 3)),
+      ).toEqual([
+        `CREATE DATABASE ${main} TEMPLATE rezics_auth_test`,
+        `CREATE DATABASE ${copy} TEMPLATE rezics_auth_test`,
+        `DROP DATABASE IF EXISTS ${copy} WITH (FORCE)`,
+        `DROP DATABASE IF EXISTS ${main} WITH (FORCE)`,
+      ]);
+      expect(existsSync(owned.copies)).toBe(false);
+      // A killed descendant may await init's reap, but it must have finished running before lane cleanup returns.
+      try {
+        const stat = readFileSync(`/proc/${owned.pid}/stat`, 'utf8');
+        expect(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]).toBe('Z');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
