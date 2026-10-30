@@ -1,15 +1,25 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { pickText } from '@rezics/composition';
+import type { LibraryProgressMode, LibraryUnitCountForms } from '@rezics/definitions';
+import { createFakeKernelFetch, createStoryRecordedKernelFetch, setFakeAdmitted } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+import definitionsActive from '../src/kernel/recorded/definitions-active.json';
+import recordedDefinitions from '../src/kernel/recorded/definitions-release.json';
+import continueEntriesRecording from '../src/kernel/recorded/library-continue-entries.json';
+import continueSessionsRecording from '../src/kernel/recorded/library-continue-progress-sessions.json';
+import { localizeContinueHeader, type ContinueHeader } from '../src/kernel/fake/library-continue.ts';
+import type { Release } from '../src/subject/definitions.ts';
 import { subjectHref } from '../src/subject/subject-href.ts';
 
 const app = join(import.meta.dir, '..');
+const root = join(app, '../..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -18,6 +28,8 @@ const login = '__Host-rezics_login';
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
 const locales = ['en', 'zh-Hans'] as const;
+const viewerAdmissions = ['personal_library', 'reading_progress', 'collections'];
+const releasedDefinitions = recordedDefinitions.release as Release;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
 const clientKeys = await generateKeyPair('ES256', { extractable: true });
@@ -72,7 +84,7 @@ type Entry = {
   revision: number;
   createdAt: string;
   updatedAt: string;
-  subject: { id: string; label: string; type: string };
+  subject: ContinueHeader;
 };
 const stampAt = (minute: number) => new Date(Date.UTC(2026, 3, 2, 0, minute)).toISOString();
 function entry(n: number, state: EntryState, minute: number, label: string): Entry {
@@ -149,6 +161,8 @@ type Call = {
 };
 const calls: Call[] = [];
 const pageFake = createFakeKernelFetch(fixtures as never);
+const recordedPageFake = createStoryRecordedKernelFetch();
+let useRecordedHomePage = false;
 
 function problem(status: number, code: string) {
   return {
@@ -294,7 +308,25 @@ const fake = Bun.serve({
       return new Response(null, { status: 200 });
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read') return pageFake(request);
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      const body = (await request
+        .clone()
+        .json()
+        .catch(() => undefined)) as { target?: { route?: unknown } } | undefined;
+      if (useRecordedHomePage && body?.target?.route === '/') return recordedPageFake(request);
+      return pageFake(request);
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/definitions/active') return json(definitionsActive);
+    if (request.method === 'GET' && url.pathname.startsWith('/v1/definitions/releases/'))
+      return json(recordedDefinitions);
+    if (
+      url.pathname === '/v1/platform/exposure' ||
+      url.pathname.startsWith('/v1/definitions/') ||
+      url.pathname === '/v1/subjects:search' ||
+      url.pathname === '/v1/subjects:facets' ||
+      url.pathname === '/v1/subjects:suggest'
+    )
+      return pageFake(request);
     if (url.pathname === '/v1/progressSessions' && request.method === 'GET') {
       progressReads += 1;
       if (!request.headers.get('authorization')?.startsWith('Bearer '))
@@ -324,7 +356,9 @@ const fake = Bun.serve({
       .slice(0, limit);
     const full = url.searchParams.get('view') === 'FULL';
     return json({
-      libraryEntries: listed.map((item) => (full ? item : { ...item, subject: undefined })),
+      libraryEntries: listed.map((item) =>
+        full ? { ...item, subject: localizeContinueHeader(item.subject, request) } : { ...item, subject: undefined },
+      ),
       next: null,
     });
   },
@@ -357,6 +391,7 @@ function site(): Promise<string> {
       env: {
         ...process.env,
         KERNEL_ORIGIN: fake.url.origin,
+        PUBLIC_ORIGIN: 'https://www.rezics.test',
         AUTH_ISSUER: `${fake.url.origin}/auth`,
         WEBSITE_CLIENT_ID: clientId,
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
@@ -461,20 +496,85 @@ let browser: Browser | undefined;
 type Viewport = { width: number; height: number };
 
 // A live page in a real browser: the layout tests need the stylesheet and the script that hydrates the page.
-async function open(path: string, cookie: string | undefined, viewport: Viewport) {
+async function open(
+  path: string,
+  cookie: string | undefined,
+  viewport: Viewport,
+  theme?: 'light' | 'dark',
+  browserErrors?: string[],
+) {
   const origin = await site();
   browser ??= await chromium.launch();
   const context = await browser.newContext({
     viewport,
     reducedMotion: 'reduce',
   });
-  if (cookie)
-    await context.addCookies([
-      { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
-    ]);
+  const cookies = [
+    ...(cookie
+      ? [
+          {
+            name: session,
+            value: cookie,
+            domain: '127.0.0.1',
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax' as const,
+          },
+        ]
+      : []),
+    ...(theme
+      ? [
+          {
+            name: 'rezics_theme',
+            value: theme,
+            domain: '127.0.0.1',
+            path: '/',
+            sameSite: 'Lax' as const,
+          },
+        ]
+      : []),
+  ];
+  if (cookies.length) await context.addCookies(cookies);
   const page = await context.newPage();
+  const pageErrors: string[] = [];
+  const recordPageError = (error: string) => {
+    pageErrors.push(error);
+    browserErrors?.push(error);
+  };
+  page.on('pageerror', (error) => recordPageError(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      const location = message.location().url;
+      recordPageError(location ? `${message.text()} (${location})` : message.text());
+    }
+  });
+  await context.route(
+    (url) => url.pathname.startsWith('/media/'),
+    (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      }),
+  );
+  setFakeAdmitted(cookie ? viewerAdmissions : []);
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  try {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  } catch (error) {
+    const body = await page
+      .locator('body')
+      .innerText({ timeout: 1_000 })
+      .catch(() => '');
+    throw new Error(
+      `Page did not hydrate at ${page.url()}: ${error instanceof Error ? error.message : String(error)}\n` +
+        `Browser errors: ${pageErrors.join('\n') || '(none)'}\n` +
+        `Rendered page: ${squash(body).slice(0, 1200) || '(empty)'}`,
+    );
+  }
   return page;
 }
 
@@ -483,10 +583,189 @@ async function messageOf(locale: string, key: string, values: Record<string, str
   const text = ((await Bun.file(file).json()) as Record<string, string>)[key]!;
   return Object.entries(values).reduce((result, [name, value]) => result.replaceAll(`{${name}}`, value), text);
 }
+
+function releasedUnit(mode: LibraryProgressMode, unitId: string) {
+  const profileId = releasedDefinitions.types['schema:Book']?.library?.profileId;
+  const profile = profileId ? releasedDefinitions.libraryProfiles?.[profileId] : undefined;
+  const unit = [profile, releasedDefinitions.libraryProfiles?.['legacy-fixed-v1']]
+    .map((candidate) =>
+      candidate?.progress?.allowed.find((choice) => choice.mode === mode)?.units.find((item) => item.id === unitId),
+    )
+    .find((candidate) => candidate !== undefined);
+  if (!unit) throw new Error(`The released Book profile has no ${mode} unit ${unitId}.`);
+  return unit;
+}
+
+async function releasedProgressText(
+  locale: string,
+  mode: LibraryProgressMode,
+  unitId: string,
+  amount: string,
+  total: string | null,
+): Promise<string> {
+  const unit = releasedUnit(mode, unitId);
+  const selected = pickText(unit.labels, locale);
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 6 });
+  const amountValue = Number(amount);
+  const nounCount = total === null ? amountValue : Number(total);
+  const category = new Intl.PluralRules(selected.lang ?? locale).select(nounCount);
+  const forms = selected.lang ? unit.countForms?.[selected.lang as keyof LibraryUnitCountForms] : undefined;
+  const unitLabel = forms?.[category] ?? selected.text;
+  const key = total === null ? 'home_continue_amount' : 'home_continue_amount_of_total';
+  return messageOf(locale, key, {
+    amount: number.format(amountValue),
+    total: total === null ? '' : number.format(Number(total)),
+    unit: unitLabel,
+  });
+}
 const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
 type Page = Awaited<ReturnType<typeof open>>;
-// The Continue row draws its cards twice, once for the phone row and once for the grid; only one is displayed.
 const cardsOf = (page: Page) => page.locator('[data-slot="personal"] article:visible');
+
+test(
+  'the rendered Continue card selects release forms for the unit count, including total, zero and fractions',
+  async () => {
+    const cookie = await alice();
+    const cases = [
+      { unit: 'page', amount: '1', total: '12' },
+      { unit: 'page', amount: '1', total: '1' },
+      { unit: 'page', amount: '0', total: null },
+      { unit: 'page', amount: '0.5', total: null },
+    ] as const;
+    for (const current of cases) {
+      reset();
+      sessions[0] = active(31, current);
+      const page = await open('/en', cookie, { width: 1280, height: 860 });
+      try {
+        const card = cardsOf(page).first();
+        const expected = await releasedProgressText('en', 'scalar_amount', current.unit, current.amount, current.total);
+        expect(squash(await card.innerText())).toContain(expected);
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
+
+test(
+  'Home and Continue remain readable without overflow in both themes at phone and desktop widths',
+  async () => {
+    const cookie = await alice();
+    const screenshots = join(root, '.temp/goal/web-home-continue');
+    await mkdir(screenshots, { recursive: true });
+    const errors: string[] = [];
+    for (const locale of locales)
+      for (const theme of ['light', 'dark'] as const)
+        for (const width of [390, 1280]) {
+          reset();
+          const height = width === 390 ? 844 : 900;
+          const page = await open(`/${locale}`, cookie, { width, height }, theme, errors);
+          try {
+            const ownHeading = await messageOf(locale, 'home_heading');
+            await mkdir(join(screenshots, locale, theme), { recursive: true });
+            await page.getByRole('heading', { level: 1, name: ownHeading, exact: true }).waitFor();
+            expect(await page.getByRole('heading', { level: 1 }).count()).toBe(1);
+            expect(await page.locator('main form[action$="/search"]').count()).toBe(0);
+            expect(await page.locator('[data-slot="cover-card-secondary"]').count()).toBe(0);
+            expect(await cardsOf(page).count()).toBe(6);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+            expect(await page.evaluate((value) => document.documentElement.classList.contains(value), theme)).toBe(
+              true,
+            );
+            if (width === 390) {
+              expect(
+                await page
+                  .getByRole('banner')
+                  .getByRole('button', { name: await messageOf(locale, 'search_label'), exact: true })
+                  .count(),
+              ).toBe(1);
+            } else {
+              expect(await page.locator('header input[name="q"]:visible').count()).toBe(1);
+              expect(await page.locator('header form:visible').count()).toBe(1);
+            }
+            await page.screenshot({
+              path: join(screenshots, locale, theme, `${width}.png`),
+              fullPage: true,
+              animations: 'disabled',
+            });
+          } finally {
+            await page.context().close();
+          }
+        }
+    expect(errors).toEqual([]);
+  },
+  timeout,
+);
+
+test(
+  'the single shell search submits queries and opens the search filters at phone and desktop widths',
+  async () => {
+    for (const locale of locales)
+      for (const width of [390, 1280]) {
+        const page = await open(`/${locale}`, undefined, {
+          width,
+          height: width === 390 ? 844 : 900,
+        });
+        try {
+          const own = {
+            search: await messageOf(locale, 'search_label'),
+            filters: await messageOf(locale, 'search_filters'),
+            types: await messageOf(locale, 'search_types'),
+            heading: await messageOf(locale, 'search_heading'),
+          };
+          if (width === 390)
+            await page.getByRole('banner').getByRole('button', { name: own.search, exact: true }).click();
+          const search = page.locator('input[name="q"]:visible');
+          expect(await search.count()).toBe(1);
+          await search.fill('Prince');
+          await search.press('Enter');
+          await page.waitForURL(`**/${locale}/search?q=Prince`);
+          if (width === 390) {
+            const phoneSearchDialog = page.getByRole('dialog');
+            const closeSearch = phoneSearchDialog.getByRole('button', { name: 'Close', exact: true });
+            if (await closeSearch.isVisible()) await closeSearch.click();
+          }
+          await page.getByRole('heading', { level: 1, name: own.heading, exact: true }).waitFor();
+          expect(await page.getByRole('heading', { level: 1 }).count()).toBe(1);
+
+          if (width === 390) {
+            const filters = page.getByRole('main').getByRole('button', { name: new RegExp(`^${own.filters}`) });
+            await filters.click();
+            const mobileFilters = page
+              .getByRole('dialog')
+              .filter({ has: page.getByRole('heading', { name: own.types, exact: true }) });
+            await mobileFilters.getByRole('heading', { name: own.types, exact: true }).waitFor({ state: 'visible' });
+            expect(await mobileFilters.getByRole('link').count()).toBeGreaterThan(0);
+          } else {
+            const filters = page.getByRole('banner').getByRole('button', { name: new RegExp(`^${own.filters}`) });
+            expect(await filters.count()).toBe(1);
+            await filters.click();
+            const desktopForm = page.locator('#desktop-filter-form');
+            const desktopTypes = desktopForm.getByRole('heading', { name: own.types, exact: true });
+            try {
+              await desktopTypes.waitFor({ state: 'visible' });
+            } catch (error) {
+              const [tree, visible] = await Promise.all([
+                desktopForm.ariaSnapshot().catch(() => '(no accessibility snapshot)'),
+                page
+                  .locator('#desktop-filter-form h2')
+                  .isVisible()
+                  .catch(() => false),
+              ]);
+              throw new Error(
+                `${error instanceof Error ? error.message : String(error)}\n` +
+                  `Desktop filter accessibility snapshot: ${tree}\nHeading visible in layout: ${visible}`,
+              );
+            }
+          }
+        } finally {
+          await page.context().close();
+        }
+      }
+  },
+  timeout,
+);
 
 test(
   'each home Continue card has an edge-to-edge cover, title, and one progress row with the share or unit form',
@@ -515,15 +794,13 @@ test(
         const text = async (index: number) => squash(await cards.nth(index).innerText());
         const bar = (index: number) => cards.nth(index).getByRole('progressbar');
         // An amount with a total is the unit form and a bar with the share, on the one row.
-        const episodes = await messageOf(locale, 'home_continue_episode_of', { amount: '3', total: '12' });
+        const episodes = await releasedProgressText(locale, 'scalar_amount', 'episode', '3', '12');
         expect(await text(0), `${locale} episodes`).toContain(episodes);
         expect(await bar(0).getAttribute('aria-valuenow')).toBe('25');
         const row = (await bar(0).boundingBox())!;
         const label = (await cards.nth(0).getByText(episodes, { exact: true }).last().boundingBox())!;
         expect(Math.abs(row.y + row.height / 2 - (label.y + label.height / 2))).toBeLessThanOrEqual(6);
-        expect(await text(5)).toContain(
-          await messageOf(locale, 'home_continue_volume_of', { amount: '2', total: '9' }),
-        );
+        expect(await text(5)).toContain(await releasedProgressText(locale, 'scalar_amount', 'volume', '2', '9'));
         expect(await bar(5).count()).toBe(1);
         // A percent is its own label and the bar.
         expect(await text(2), `${locale} percent`).toContain(
@@ -532,10 +809,10 @@ test(
         expect(await bar(2).getAttribute('aria-valuenow')).toBe('40');
         // Only an amount, or a reading position: the unit form or the state label and no bar.
         expect(await text(1), `${locale} pages`).toContain(
-          await messageOf(locale, 'home_continue_page', { amount: '118' }),
+          await releasedProgressText(locale, 'scalar_amount', 'page', '118', null),
         );
         expect(await bar(1).count()).toBe(0);
-        expect(await text(4)).toContain(await messageOf(locale, 'home_continue_chapter', { amount: '12' }));
+        expect(await text(4)).toContain(await releasedProgressText(locale, 'completed_units', 'chapter', '12', null));
         expect(await bar(4).count()).toBe(0);
         expect(await text(3), `${locale} position`).toContain(await messageOf(locale, 'home_continue_in_progress'));
         expect(await bar(3).count()).toBe(0);
@@ -592,9 +869,75 @@ test(
         await page.context().close();
       }
     }
+    await expectRecordedContinueTitle(cookie);
   },
   timeout,
 );
+
+async function expectRecordedContinueTitle(cookie: string) {
+  const source = continueEntriesRecording.libraryEntries[0];
+  if (!source?.subject) throw new Error('The recorded Continue entry has no embedded subject.');
+  const recordedSession = continueSessionsRecording.progressSessions.find(
+    (session) => session.subjectId === source.subjectId,
+  );
+  if (!recordedSession) throw new Error('The recorded Continue entry has no progress session.');
+
+  const recordedEntry: Entry = {
+    subjectId: source.subjectId,
+    state: 'in_progress',
+    revision: source.revision,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+    subject: {
+      id: source.subject.id,
+      type: source.subject.type,
+      label: source.subject.label,
+      ...(source.subject.types ? { types: source.subject.types } : {}),
+      ...(source.subject.cover ? { cover: source.subject.cover } : {}),
+    },
+  };
+  const recordedProgress: Session = {
+    id: recordedSession.id,
+    subjectId: recordedSession.subjectId,
+    state: 'active',
+    mode: 'completed_units',
+    unit: 'chapter',
+    amount: null,
+    total: null,
+    completedUnitCount: recordedSession.completedUnitCount,
+  };
+
+  useRecordedHomePage = true;
+  try {
+    for (const locale of locales) {
+      reset();
+      entries = [recordedEntry];
+      sessions = [recordedProgress];
+      const page = await open(`/${locale}`, cookie, { width: 1280, height: 860 });
+      try {
+        const homeCard = page.locator(
+          `[data-slot="type-list"] a[data-slot="cover-card-title"][href*="/subjects/${source.subject.id}/"]`,
+        );
+        const continueCard = cardsOf(page).first();
+        expect(await homeCard.count(), `${locale} Home subject`).toBe(1);
+        expect(await continueCard.locator('a').innerText(), `${locale} Continue title`).toBe(
+          await homeCard.innerText(),
+        );
+        expect(await continueCard.locator('a').getAttribute('lang'), `${locale} Continue title language`).toBe(
+          await homeCard.getAttribute('lang'),
+        );
+        expect(await continueCard.locator('a').getAttribute('href')).toBe(
+          `/${locale}/library/progress/${recordedSession.id}`,
+        );
+      } finally {
+        await page.context().close();
+      }
+    }
+  } finally {
+    useRecordedHomePage = false;
+    reset();
+  }
+}
 
 test(
   "the home page's catalogue rows are CoverRows of CoverCards at every width, with one frame ratio per row",
@@ -640,41 +983,40 @@ test(
 );
 
 test(
-  'the Continue row is a CoverRow below sm and a CoverGrid from sm up, and keeps its request cost',
+  'the Continue row keeps the catalogue card size at phone and desktop and keeps its request cost',
   async () => {
     const cookie = await alice();
-    reset();
-    const phone = await open('/en', cookie, { width: 390, height: 844 });
-    try {
-      const row = phone.locator('[data-slot="personal"] [role="region"]');
-      expect(await row.isVisible()).toBe(true);
-      expect(await row.locator('article').count()).toBe(6);
-      expect(await row.evaluate((node) => getComputedStyle(node).overflowX)).toBe('auto');
-      const measure = await row.evaluate((node) => ({ client: node.clientWidth, scroll: node.scrollWidth }));
-      expect(measure.scroll).toBeGreaterThan(measure.client);
-      expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-      const tops = new Set<number>();
-      for (let index = 0; index < 6; index += 1)
-        tops.add(Math.round((await cardsOf(phone).nth(index).boundingBox())!.y));
-      expect(tops.size).toBe(1);
-      expect(await cardsOf(phone).count()).toBe(6);
-      // The search box and the first catalogue row still start in the first viewport.
-      const search = (await phone.locator('input[name="q"]').first().boundingBox())!;
-      expect(search.y + search.height).toBeLessThanOrEqual(844);
-      expect((await phone.locator('[data-slot="type-list"]').first().boundingBox())!.y).toBeLessThan(844);
-    } finally {
-      await phone.context().close();
-    }
-    for (const width of [640, 700, 1280]) {
+    for (const width of [390, 640, 700, 1280]) {
       reset();
-      const page = await open('/en', cookie, { width, height: 900 });
+      const height = width === 390 ? 844 : 900;
+      const page = await open('/en', cookie, { width, height });
       try {
-        expect(await page.locator('[data-slot="personal"] [role="region"]').isVisible()).toBe(false);
+        const row = page.locator('[data-slot="personal"] [data-slot="cover-row"]:visible');
+        expect(await row.count(), `${width}px Continue CoverRow`).toBe(1);
+        expect(await row.evaluate((node) => getComputedStyle(node).overflowX)).toBe('auto');
+        expect(await page.locator('[data-slot="personal"] [data-slot="cover-grid"]:visible').count()).toBe(0);
         expect(await cardsOf(page).count()).toBe(6);
-        const grid = page.locator('[data-slot="personal"] .grid:visible');
-        expect(await grid.count()).toBe(1);
-        expect(await grid.evaluate((node) => getComputedStyle(node).display)).toBe('grid');
-        expect(await grid.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+        const tops = new Set<number>();
+        const cardWidths = new Set<number>();
+        for (let index = 0; index < 6; index += 1) {
+          const card = await cardsOf(page).nth(index).boundingBox();
+          if (!card) throw new Error(`The ${width}px Continue card has no layout box.`);
+          tops.add(Math.round(card.y));
+          cardWidths.add(Math.round(card.width));
+        }
+        expect(tops.size, `${width}px Continue cards share one row`).toBe(1);
+        expect(cardWidths, `${width}px Continue uses the catalogue's card width`).toEqual(new Set([120]));
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        if (width === 390) {
+          const measure = await row.evaluate((node) => ({ client: node.clientWidth, scroll: node.scrollWidth }));
+          expect(measure.scroll).toBeGreaterThan(measure.client);
+          // The search box and the first catalogue row still start in the first viewport.
+          const search = (await page
+            .getByRole('button', { name: await messageOf('en', 'search_label') })
+            .boundingBox())!;
+          expect(search.y + search.height).toBeLessThanOrEqual(height);
+          expect((await page.locator('[data-slot="type-list"]').first().boundingBox())!.y).toBeLessThan(height);
+        }
         // The home view still reads the library once and each shown subject's progress once.
         expect(calls.filter((call) => call.path === '/v1/libraryEntries')).toHaveLength(1);
         expect(progressReads).toBe(6);

@@ -62,8 +62,8 @@ type ContinueKernelClient = KernelClient & {
 
 const knownStates = new Set(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
 
-function stateText(state: string | null): string | undefined {
-  return state !== null && knownStates.has(state) ? libraryEntryStateLabel(state) : undefined;
+function stateText(state: string | null, locale: string): string | undefined {
+  return state !== null && knownStates.has(state) ? libraryEntryStateLabel(state, locale) : undefined;
 }
 
 export function continueProgress(session: (ProgressLabelInput & { id: string }) | null): ContinueProgress | null {
@@ -143,6 +143,7 @@ export async function loadContinue(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  readerLocale?: string,
 ): Promise<ContinueEntry[]> {
   try {
     await prepareSession(request, sessionEnv);
@@ -160,7 +161,7 @@ export async function loadContinue(
     );
     const page = await reader.pages.$read.post({ reads, headers: { authorization } });
     const results = page.data?.reads ?? {};
-    const { release, locale, progressSessionProfile } = await progressProfiles(request);
+    const { release, locale, progressSessionProfile } = await progressProfiles(request, readerLocale);
     return subjects.flatMap((item) => {
       const header = results[`subject:${item.subjectId}`];
       const subject = header?.status === 200 ? header.body?.subject : undefined;
@@ -168,7 +169,7 @@ export async function loadContinue(
       const title = libraryLabel(subject.label, item.subjectId);
       const language = typeof title === 'object' ? title.language : undefined;
       const progress = continueProgress(item.activeProgressSession);
-      const label = stateText(item.state);
+      const label = stateText(item.state, locale);
       return [
         {
           subjectId: item.subjectId,
@@ -193,20 +194,21 @@ export async function loadLegacyContinue(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  readerLocale?: string,
 ): Promise<ContinueEntry[]> {
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (!authorization) return [];
     const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);
-    const { release, locale, progressSessionProfile } = await progressProfiles(request);
+    const { release, locale, progressSessionProfile } = await progressProfiles(request, readerLocale);
     return await Promise.all(
       page.libraryEntries.flatMap((entry) => {
         const subject = entry.subject as RawSubject | null | undefined;
         if (!subject) return [];
         const label = libraryLabel(subject.label, entry.subjectId);
         const language = typeof label === 'object' ? label.language : undefined;
-        const stateLabel = stateText(entry.state);
+        const stateLabel = stateText(entry.state, locale);
         return [
           readProgress(client, entry.subjectId, authorization).then((progress): ContinueEntry => ({
             subjectId: entry.subjectId,
@@ -230,11 +232,11 @@ export async function loadLegacyContinue(
   }
 }
 
-const progressProfiles = createServerOnlyFn(async (request: Request) => {
+const progressProfiles = createServerOnlyFn(async (request: Request, readerLocale?: string) => {
   const release = await import('../subject/definitions')
     .then(({ readRelease }) => readRelease())
     .catch(() => undefined);
-  const locale = (await import('../kernel/client')).requestLocale(request) ?? 'en';
+  const locale = readerLocale ?? (await import('../kernel/client')).requestLocale(request) ?? 'en';
   const { progressSessionProfile } = await import('./progress-profile');
   return { release, locale, progressSessionProfile };
 });

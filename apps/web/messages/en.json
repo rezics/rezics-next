@@ -87,6 +87,8 @@
   "error_heading": "Something went wrong",
   "error_message": "Please try again.",
   "home_continue_actions": "More actions for {title}",
+  "home_continue_amount": "{amount} {unit}",
+  "home_continue_amount_of_total": "{amount} / {total} {unit}",
   "home_continue_chapter": "Ch {amount}",
   "home_continue_chapter_of": "Ch {amount}/{total}",
   "home_continue_episode": "Ep {amount}",

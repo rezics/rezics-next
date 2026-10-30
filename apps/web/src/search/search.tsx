@@ -381,7 +381,8 @@ export function SearchPage({
   initiallyOpen?: boolean;
 }) {
   const [hydrated, setHydrated] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(initiallyOpen);
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
@@ -391,10 +392,15 @@ export function SearchPage({
     (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
-    const open = () => setFiltersOpen(true);
+    const open = () => {
+      const desktopForm = document.getElementById('desktop-filter-form');
+      if (desktopForm && window.getComputedStyle(desktopForm).display !== 'none') setDesktopFiltersOpen(true);
+      else setMobileFiltersOpen(true);
+    };
+    if (initiallyOpen) open();
     window.addEventListener('rezics:open-search-filters', open);
     return () => window.removeEventListener('rezics:open-search-filters', open);
-  }, []);
+  }, [initiallyOpen]);
 
   const typeLabel = type
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
@@ -545,8 +551,8 @@ export function SearchPage({
         className="hidden lg:block lg:col-start-1 lg:row-start-1"
       >
         <Collapsible
-          open={filtersOpen}
-          onOpenChange={setFiltersOpen}
+          open={desktopFiltersOpen}
+          onOpenChange={setDesktopFiltersOpen}
           className="rounded-xl border border-border/60 p-4"
         >
           <CollapsibleTrigger className="hidden">{m.search_filters()}</CollapsibleTrigger>
@@ -558,14 +564,14 @@ export function SearchPage({
         className={`${buttonVariants({ variant: 'outline' })} w-fit gap-2 border-border lg:hidden`}
         style={{ borderColor: 'color-mix(in oklch, var(--border), var(--foreground) 35%)' }}
         aria-label={`${m.search_filters()} (${number.format(activeFilterCount)})`}
-        onClick={() => setFiltersOpen(true)}
+        onClick={() => setMobileFiltersOpen(true)}
       >
         <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
         {m.search_filters()} ({number.format(activeFilterCount)})
       </button>
       <BottomSheet
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
+        open={mobileFiltersOpen}
+        onOpenChange={setMobileFiltersOpen}
         title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
       >
         <form id="mobile-filter-form" method="get" action={`/${locale}/search`}>
@@ -726,6 +732,7 @@ export function ShellSearch(): ReactElement;
 export function ShellSearch(props: { scope?: SearchScope; activeConditions?: number }): ReactElement;
 export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchScope; activeConditions?: number } = {}) {
   const locale = getLocale();
+  const number = new Intl.NumberFormat(locale);
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState(sharedSearchText);
   const [items, setItems] = useState<SuggestionItem[]>([]);
@@ -838,7 +845,7 @@ export function ShellSearch({ scope, activeConditions = 0 }: { scope?: SearchSco
         />
         <button
           type="button"
-          aria-label={`${m.search_filters()} (${activeConditions})`}
+          aria-label={`${m.search_filters()} (${number.format(activeConditions)})`}
           className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-accent"
           onClick={() => window.dispatchEvent(new Event('rezics:open-search-filters'))}
         >

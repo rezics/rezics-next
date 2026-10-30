@@ -12,7 +12,13 @@ const root = resolve(app, '../..');
 const ui = join(root, 'packages/ui');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const pages = ['home', 'subject', 'missing-subject', 'shell', 'board', 'thread', 'search', 'search-empty'];
-const visitors = ['Signed In', 'Signed Out'];
+const visitors = ['Signed In', 'Signed Out'] as const;
+type Visitor = (typeof visitors)[number];
+type StoryIndexEntry = { id: string; importPath: string; name: string; type: string };
+const homeRepresentatives: Record<Visitor, { id: string; name: string }> = {
+  'Signed In': { id: 'pages-home--signed-in-one-desktop', name: 'Signed In · 1 Continue · 1280 desktop' },
+  'Signed Out': { id: 'pages-home--signed-out-desktop', name: 'Signed Out · 0 Continue · 1280 desktop' },
+};
 const recorded = join(app, 'src/kernel/recorded');
 const englishTextExceptions: { story: string; locale: string; text: string }[] = [];
 const englishHomeTypeNames = new Set(['Book', 'TV Series', 'Recipe']);
@@ -95,6 +101,18 @@ function storyUrl(origin: string, storyId: string, locale: string) {
   return `${origin}/iframe.html?id=${storyId}&viewMode=story&globals=locale:${locale};a11y.manual:!true`;
 }
 
+function isRepresentative(entry: StoryIndexEntry, page: string, visitor: string): boolean {
+  if (entry.type !== 'story' || basename(entry.importPath, '.stories.tsx') !== page) return false;
+  if (page !== 'home') return entry.name === visitor;
+  if (visitor !== 'Signed In' && visitor !== 'Signed Out') return false;
+  const identity = homeRepresentatives[visitor];
+  return entry.id === identity.id && entry.name === identity.name;
+}
+
+function representative(entries: StoryIndexEntry[], page: string, visitor: string) {
+  return entries.find((entry) => isRepresentative(entry, page, visitor));
+}
+
 async function visibleTextNodes(page: Page, selector?: string): Promise<string[]> {
   return page.evaluate((rootSelector) => {
     const roots = rootSelector ? [...document.querySelectorAll(rootSelector)] : [document.body];
@@ -152,15 +170,8 @@ async function expectHomeCardsWithoutTypeLines(page: Page, story: string, locale
 
 async function openStory(name: string, visitor: string, locale: string) {
   const origin = await sharedStorybook();
-  const index = (await (await fetch(`${origin}/index.json`)).json()) as {
-    entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
-  };
-  const entry = Object.values(index.entries).find(
-    (candidate) =>
-      candidate.type === 'story' &&
-      basename(candidate.importPath) === `${name}.stories.tsx` &&
-      candidate.name === visitor,
-  );
+  const index = (await (await fetch(`${origin}/index.json`)).json()) as { entries: Record<string, StoryIndexEntry> };
+  const entry = representative(Object.values(index.entries), name, visitor);
   if (!entry) throw new Error(`Missing ${name} story for ${visitor}.`);
   const context = await (
     await sharedBrowser()
@@ -267,10 +278,11 @@ test(
     };
     for (const page of pages)
       for (const visitor of visitors) {
+        const expectedTitle = page === 'home' ? homeRepresentatives[visitor].name : visitor;
         const passed = result.testResults
           .filter((file) => basename(file.name) === `${page}.stories.tsx`)
           .flatMap((file) => file.assertionResults)
-          .filter((assertion) => assertion.title === visitor && assertion.status === 'passed');
+          .filter((assertion) => assertion.title === expectedTitle && assertion.status === 'passed');
         expect(passed.length, `${page}: ${visitor} must pass in the browser`).toBeGreaterThan(0);
       }
     const main = readFileSync(join(app, '.storybook/main.ts'), 'utf8');
@@ -284,16 +296,15 @@ test(
     for (const feature of ['globalTypes', 'locale', 'toolbar', ...locales]) expect(previewSource).toContain(feature);
 
     const origin = await sharedStorybook();
-    const index = (await (await fetch(`${origin}/index.json`)).json()) as {
-      entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
-    };
+    const index = (await (await fetch(`${origin}/index.json`)).json()) as { entries: Record<string, StoryIndexEntry> };
     await sharedBrowser();
     const entries = Object.values(index.entries).filter((entry) => entry.type === 'story');
     for (const name of pages)
       for (const visitor of visitors)
         expect(
-          entries.some((entry) => basename(entry.importPath) === `${name}.stories.tsx` && entry.name === visitor),
-        ).toBe(true);
+          representative(entries, name, visitor),
+          `${name}: ${visitor} has its canonical page story identity`,
+        ).toBeDefined();
     const a11yFailures: string[] = [];
     for (const entry of entries) {
       const name = basename(entry.importPath, '.stories.tsx');
@@ -338,11 +349,12 @@ test(
           if (!/(missing|error)/i.test(name))
             for (const key of ['not_found_heading', 'error_heading', 'platform_closed_heading'])
               expect(headingText, `${name} does not show ${key} in ${locale}`).not.toBe(own[key]);
-          if (entry.name === 'Signed Out')
+          const visitor = visitors.find((candidate) => isRepresentative(entry, name, candidate));
+          if (visitor === 'Signed Out')
             expect(
               await page.getByRole('banner').getByRole('link', { name: own.account_sign_in, exact: true }).count(),
             ).toBe(1);
-          if (entry.name === 'Signed In') {
+          if (visitor === 'Signed In') {
             expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
             const account = page.getByRole('button', { name: own.account_menu, exact: true });
             const menu = page.getByRole('group', { name: own.account_menu, exact: true });
@@ -381,18 +393,14 @@ test(
   'every non-English page story contains no untranslated message or type-name text',
   async () => {
     const origin = await sharedStorybook();
-    const index = (await (await fetch(`${origin}/index.json`)).json()) as {
-      entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
-    };
+    const index = (await (await fetch(`${origin}/index.json`)).json()) as { entries: Record<string, StoryIndexEntry> };
     const entries = Object.values(index.entries).filter(
       (entry) => entry.type === 'story' && pages.includes(basename(entry.importPath, '.stories.tsx')),
     );
     const checked = new Set<string>();
     for (const pageName of pages)
       for (const visitor of visitors) {
-        const entry = entries.find(
-          (candidate) => basename(candidate.importPath, '.stories.tsx') === pageName && candidate.name === visitor,
-        );
+        const entry = representative(entries, pageName, visitor);
         expect(entry, `${pageName}: ${visitor} page story exists`).toBeDefined();
         checked.add(entry!.id);
       }

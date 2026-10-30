@@ -1,7 +1,44 @@
 import entriesRecording from '../recorded/library-continue-entries.json';
 import sessionsRecording from '../recorded/library-continue-progress-sessions.json';
+import homePageRecording from '../recorded/home-page.json';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
+import { chosenLabels, isRecord } from './languages.ts';
+
+type ContinueHeader = {
+  id: string;
+  type: string;
+  types?: string[];
+  label: string | { value: string; language: string };
+  cover?: unknown;
+};
+
+const homeRecording = homePageRecording as KernelRecording;
+const homeRead = isRecord(homeRecording.reads) ? homeRecording.reads.r0 : undefined;
+const homeBody = isRecord(homeRead) ? homeRead.body : undefined;
+const homeLabels = new Map<string, Record<string, string>>(
+  (isRecord(homeBody) && Array.isArray(homeBody.subjects) ? homeBody.subjects : []).flatMap((value) => {
+    if (!isRecord(value) || typeof value.id !== 'string' || !isRecord(value.labels)) return [];
+    const labels = Object.fromEntries(
+      Object.entries(value.labels).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+    return [[value.id, labels] as const];
+  }),
+);
+
+/** Replay the header language selected for the same embedded subject the Home catalogue displays. */
+export function localizeContinueHeader(subject: ContinueHeader, request: Request): ContinueHeader {
+  const labels = homeLabels.get(subject.id);
+  if (!labels) return subject;
+  const languages = (request.headers.get('accept-language') ?? '')
+    .split(',')
+    .map((value) => value.split(';', 1)[0]?.trim())
+    .filter((language): language is string => Boolean(language));
+  const original = typeof subject.label === 'object' ? subject.label.language : undefined;
+  const selected = chosenLabels(labels, languages, original);
+  const [language, value] = Object.entries(selected)[0] ?? [];
+  return language && value ? { ...subject, label: { value, language } } : subject;
+}
 
 const entrylessId = '01a17ff1-0000-7000-8000-000000000001';
 const entrylessSession = {
@@ -51,7 +88,7 @@ function subjects(): Record<string, unknown>[] {
   return available.slice(0, storySize);
 }
 
-const headers = new Map<string, unknown>([
+const headers = new Map<string, ContinueHeader>([
   ...entriesRecording.libraryEntries.flatMap((entry) =>
     entry.subject ? [[entry.subjectId, entry.subject] as const] : [],
   ),
@@ -101,10 +138,11 @@ export const routes: FakeRoute[] = [
       const descriptors = input.reads as Record<string, { kind?: string; id?: string }>;
       const reads: Record<string, unknown> = {};
       for (const [key, descriptor] of Object.entries(descriptors)) {
-        const subject =
+        const header =
           descriptor.kind === 'subject' && descriptor.id
             ? (headers.get(descriptor.id) ?? syntheticHeader(descriptor.id))
             : undefined;
+        const subject = header ? localizeContinueHeader(header, request) : undefined;
         reads[key] = subject
           ? { status: 200, body: { subject } }
           : { status: 404, body: { code: 'subject_not_found' } };
@@ -117,10 +155,11 @@ export const routes: FakeRoute[] = [
       const descriptors = input.reads as Record<string, { kind?: string; id?: string }>;
       const reads: Record<string, unknown> = {};
       for (const [key, descriptor] of Object.entries(descriptors)) {
-        const subject =
+        const header =
           descriptor.kind === 'subject' && descriptor.id
             ? (headers.get(descriptor.id) ?? syntheticHeader(descriptor.id))
             : undefined;
+        const subject = header ? localizeContinueHeader(header, request) : undefined;
         reads[key] = subject
           ? { status: 200, body: { subject } }
           : { status: 404, body: { code: 'subject_not_found' } };
@@ -130,7 +169,7 @@ export const routes: FakeRoute[] = [
   },
 ];
 
-function syntheticHeader(id: string): unknown {
+function syntheticHeader(id: string): ContinueHeader | undefined {
   return id.startsWith('01a17ff1-0000-7000-8000-')
     ? {
         id,

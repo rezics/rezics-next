@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -198,7 +199,8 @@ let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
-    const config = join(app, '../../.temp/closed-controls-vite.config.ts');
+    const config = join(app, '.temp/closed-controls-vite.config.ts');
+    await mkdir(join(app, '.temp'), { recursive: true });
     await Bun.write(
       config,
       `
@@ -528,8 +530,11 @@ test(
     try {
       await page.locator('nav a[href="/en/library"]').first().click();
       await page.waitForURL('**/en/library');
-      await page.locator('nav a[href="/en/search"]').first().click();
-      await page.waitForURL('**/en/search');
+      const search = page.locator('header input[name="q"]:visible');
+      expect(await search.count(), 'the centered shell search field remains available after navigation').toBe(1);
+      await search.fill('The');
+      await search.press('Enter');
+      await page.waitForURL('**/en/search?q=The');
       await page.locator('nav a[href="/en"]').first().click();
       await page.waitForURL('**/en');
       expect(calls.filter((call) => call.path === '/v1/platform/exposure' && call.authorization !== null)).toHaveLength(

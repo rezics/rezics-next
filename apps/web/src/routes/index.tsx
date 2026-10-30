@@ -17,17 +17,29 @@ import type { SessionEnv } from '../session/client';
 import { pageHead } from '../shell/head';
 import { PageHeading } from '../shell/page-heading';
 
-const readHomeContinue = createServerFn({ method: 'GET' }).handler(async () => {
-  const { env } = await import('cloudflare:workers');
-  setResponseHeader('Cache-Control', 'private, no-store');
-  return loadContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
-});
+const readHomeContinue = createServerFn({ method: 'GET' })
+  .validator((locale: unknown) => {
+    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
+    return locale;
+  })
+  .handler(async ({ data: locale }) => {
+    const { env } = await import('cloudflare:workers');
+    const request = getRequest();
+    setResponseHeader('Cache-Control', 'private, no-store');
+    return loadContinue(kernelClient(locale), request, env as Partial<SessionEnv>, locale);
+  });
 
-const readLegacyHomeContinue = createServerFn({ method: 'GET' }).handler(async () => {
-  const { env } = await import('cloudflare:workers');
-  setResponseHeader('Cache-Control', 'private, no-store');
-  return loadLegacyContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
-});
+const readLegacyHomeContinue = createServerFn({ method: 'GET' })
+  .validator((locale: unknown) => {
+    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
+    return locale;
+  })
+  .handler(async ({ data: locale }) => {
+    const { env } = await import('cloudflare:workers');
+    const request = getRequest();
+    setResponseHeader('Cache-Control', 'private, no-store');
+    return loadLegacyContinue(kernelClient(locale), request, env as Partial<SessionEnv>, locale);
+  });
 
 /** The public page query calls loadRoutePage() once on the server. */
 export const Route = createFileRoute('/')({
@@ -54,7 +66,9 @@ function Home() {
   const hasContinueList = viewerGroups?.includes(operationGroups['library_continue.list']) ?? false;
   const exposureReady = viewerGroups !== undefined;
   const { data: resume = [], isPending } = useQuery({
-    ...homeContinueQuery(getLocale(), () => (hasContinueList ? readHomeContinue() : readLegacyHomeContinue())),
+    ...homeContinueQuery(getLocale(), () =>
+      hasContinueList ? readHomeContinue({ data: getLocale() }) : readLegacyHomeContinue({ data: getLocale() }),
+    ),
     enabled: personalRead.enabled && state === 'signed-in' && exposureReady,
   });
   const nonce = useRouter().options.ssr?.nonce;

@@ -1,5 +1,11 @@
 import { pickText } from '@rezics/composition';
-import type { LibraryProgressMode, LibraryProfile, LibraryProgressUnit } from '@rezics/definitions';
+import type {
+  LibraryCountForms,
+  LibraryLabels,
+  LibraryProgressMode,
+  LibraryProfile,
+  LibraryProgressUnit,
+} from '@rezics/definitions';
 import type { Release } from '../subject/definitions.ts';
 
 type ProfileState = NonNullable<LibraryProfile['entryStateSet']>['states'][number];
@@ -8,6 +14,12 @@ type ProfileStatus = ProfileKind['statuses'][number];
 type ProfileUnit = LibraryProgressUnit;
 
 export type LibraryLabel = { text: string; lang: string };
+export type LibraryUnitPresentation = {
+  label?: LibraryLabel;
+  labelLanguage?: string;
+  countForms?: LibraryCountForms;
+  dimension?: string;
+};
 export type LibraryStateRole = NonNullable<ProfileState['role']>;
 
 export type LibraryChoices = {
@@ -148,8 +160,31 @@ export function libraryUnitLabel(
   unitId: string,
   locale: string,
 ): LibraryLabel | undefined {
+  return libraryUnitPresentation(release, type, mode, unitId, locale)?.label;
+}
+
+/** Resolve a unit descriptor once so its label language and count forms stay from the same profile unit. */
+export function libraryUnitPresentation(
+  release: Release,
+  type: string,
+  mode: LibraryProgressMode,
+  unitId: string,
+  locale: string,
+): LibraryUnitPresentation | undefined {
   const unit = currentThenLegacy(release, type, (profile) => index(profile).units.get(mode)?.get(unitId));
-  return unit ? localizedLabel(unit.labels, locale) : undefined;
+  if (!unit) return undefined;
+  const label = localizedLabel(unit.labels, locale);
+  const labelLanguage = label?.lang;
+  const supportedLanguage = labelLanguage
+    ? (Object.keys(unit.labels) as (keyof LibraryLabels)[]).find((language) => language === labelLanguage)
+    : undefined;
+  const countForms = supportedLanguage ? unit.countForms?.[supportedLanguage] : undefined;
+  return {
+    ...(label ? { label } : {}),
+    ...(labelLanguage ? { labelLanguage } : {}),
+    ...(countForms ? { countForms } : {}),
+    ...(unit.dimension === undefined ? {} : { dimension: unit.dimension }),
+  };
 }
 
 /** Resolve a copy kind label from the current profile, followed by the fixed legacy vocabulary. */

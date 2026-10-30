@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
+import type { Locale } from '../paraglide/runtime.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import type { ProgressLabelInput } from './progress-label';
@@ -27,13 +28,22 @@ export function libraryEntryStateWrite(value: string | undefined): LibraryEntryS
   return value !== undefined && isWritableEntryState(value) ? value : undefined;
 }
 
-export function libraryEntryStateLabel(state: LibraryEntryStateRead): string {
-  if (state === 'planned') return m.library_state_planned();
-  if (state === 'in_progress') return m.library_state_in_progress();
-  if (state === 'completed') return m.library_state_completed();
-  if (state === 'paused') return m.library_state_paused();
-  if (state === 'dropped') return m.library_state_dropped();
-  return m.library_other();
+export function libraryEntryStateLabel(state: LibraryEntryStateRead, locale?: string): string {
+  if (state === 'planned')
+    return locale === undefined ? m.library_state_planned() : m.library_state_planned({}, { locale: locale as Locale });
+  if (state === 'in_progress')
+    return locale === undefined
+      ? m.library_state_in_progress()
+      : m.library_state_in_progress({}, { locale: locale as Locale });
+  if (state === 'completed')
+    return locale === undefined
+      ? m.library_state_completed()
+      : m.library_state_completed({}, { locale: locale as Locale });
+  if (state === 'paused')
+    return locale === undefined ? m.library_state_paused() : m.library_state_paused({}, { locale: locale as Locale });
+  if (state === 'dropped')
+    return locale === undefined ? m.library_state_dropped() : m.library_state_dropped({}, { locale: locale as Locale });
+  return locale === undefined ? m.library_other() : m.library_other({}, { locale: locale as Locale });
 }
 
 export type PersonalLibraryEntry = {

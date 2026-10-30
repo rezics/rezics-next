@@ -1,7 +1,7 @@
 import { progressView } from './progress-label';
 import type { LibraryProgressMode } from '@rezics/definitions';
 import type { Release } from '../subject/definitions.ts';
-import { libraryChoices, libraryProfile, libraryUnitLabel } from './profiles.ts';
+import { libraryChoices, libraryUnitLabel, libraryUnitPresentation } from './profiles.ts';
 
 export type ProgressPair = { mode: LibraryProgressMode; unit: string };
 
@@ -75,15 +75,13 @@ export function progressSessionProfile(
   unit: string,
   locale: string,
 ) {
-  const pair = (profile: ReturnType<typeof libraryProfile>) =>
-    profile?.progress?.allowed.find((item) => item.mode === mode)?.units.find((item) => item.id === unit);
-  const unitLabel = progressPairLabel(release, type, mode, unit, locale);
-  const dimension = (pair(libraryProfile(release, type)) ?? pair(release.libraryProfiles?.['legacy-fixed-v1']))
-    ?.dimension;
+  const unitPresentation = libraryUnitPresentation(release, type, mode, unit, locale);
   const inputRules = progressInputRules(release, type, mode, unit);
   return {
-    ...(unitLabel === undefined ? {} : { unitLabel }),
-    ...(dimension === undefined ? {} : { dimension }),
+    ...(unitPresentation?.label === undefined ? {} : { unitLabel: unitPresentation.label.text }),
+    ...(unitPresentation?.labelLanguage === undefined ? {} : { unitLabelLanguage: unitPresentation.labelLanguage }),
+    ...(unitPresentation?.countForms === undefined ? {} : { unitCountForms: unitPresentation.countForms }),
+    ...(unitPresentation?.dimension === undefined ? {} : { dimension: unitPresentation.dimension }),
     ...(inputRules === undefined ? {} : { inputRules }),
   };
 }

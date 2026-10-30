@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
-import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
+import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { coverSrc } from '../media/cover-src';
@@ -17,9 +17,8 @@ import type { ContinueEntry } from './continue-read';
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched
  * over the whole card, named for what it does to that title, and a menu that opens the subject's page. The card
- * holds the cover, the title and one progress row. On a phone the cards are one row that scrolls
- * sideways, so the search box and the catalogue stay on the first screen; from `sm` up they form a grid. Both are
- * drawn and CSS shows one, so the page does not depend on the script to choose.
+ * holds the cover, the title and one progress row. It uses the same scrollable cover row and card size at every
+ * viewport, so it stays aligned with the catalogue rows.
  */
 export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
   const admitted = useOperation('progress_session.list');
@@ -86,7 +85,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
   return (
     <>
       <SectionHeading>{m.home_continue_heading()}</SectionHeading>
-      <div ref={rowHost} className="relative sm:hidden">
+      <div ref={rowHost} className="relative">
         <CoverRow ratio={ratio} label={m.home_continue_heading()}>
           {cards}
         </CoverRow>
@@ -122,9 +121,6 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
         >
           <ChevronRight aria-hidden />
         </Button>
-      </div>
-      <div className="hidden sm:block">
-        <CoverGrid ratio={ratio}>{cards}</CoverGrid>
       </div>
     </>
   );

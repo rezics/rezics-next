@@ -15,6 +15,9 @@ const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
 const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
+const fontDependencyRoots = ['manrope', 'source-serif-4', 'geist-mono'].map((name) =>
+  realpathSync(join(appRoot, 'node_modules', '@fontsource-variable', name)),
+);
 let inspectorPort: number | false = false;
 if (configuredInspectorPort !== undefined) {
   const parsedInspectorPort = Number(configuredInspectorPort);
@@ -38,7 +41,7 @@ export default defineConfig((context) => {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
       // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
-      fs: { allow: [workspaceRoot, dependencyRoot] },
+      fs: { allow: [workspaceRoot, dependencyRoot, ...fontDependencyRoots] },
     },
     html: { cspNonce: viteNonceMarker },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.

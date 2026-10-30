@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { slug } from '@rezics/definitions/slug';
 import { createKernelClient } from '@rezics/client';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { loadRoutePage, RoutePage } from '../src/features/pages/route.tsx';
 
@@ -31,14 +31,37 @@ test('the home is the platform route template from one page read', async () => {
   if (loaded.kind !== 'page') throw new Error('expected the home page');
   expect(loaded.page.template).toEqual({ scope: 'route', key: '/' });
   const html = renderToString(createElement(RoutePage, { page: loaded.page, locale: 'ja', messages }));
-  expect(html).toMatch(/<form[^>]*action="\/ja\/search"/);
-  expect(html).toMatch(/<input[^>]*name="q"/);
-  expect(html).toContain('検索');
+  expect(html).not.toMatch(/<form/);
+  expect(html).not.toMatch(/<input[^>]*name="q"/);
   expect(html).toContain('href="/ja/search?type=schema%3ABook"');
   expect(html).toContain(`href="/ja/subjects/${kokoro}/${slug('こころ')}"`);
   expect(html).toContain('こころ');
   expect(html).toContain('"@type":"WebSite"');
   expect(html).toContain('"query-input":"required name=search_term_string"');
+});
+
+test('the home type rows keep their heading and cards without repeating the type under each title', async () => {
+  const fake = createStoryRecordedKernelFetch();
+  const client = createKernelClient('https://kernel.invalid', { fetch: fake });
+  const loaded = await loadRoutePage(client, '/', 'ja');
+  if (loaded.kind !== 'page') throw new Error('expected the home page');
+  const html = renderToString(createElement(RoutePage, { page: loaded.page, locale: 'ja', messages }));
+  expect(html).toContain('href="/ja/search?type=schema%3ABook"');
+  expect(html).toContain('href="/ja/search?type=schema%3ARecipe"');
+  const booksStart = html.indexOf('<section data-slot="type-list"');
+  const booksEnd = html.indexOf('</section>', booksStart);
+  const books = html.slice(booksStart, booksEnd);
+  const booksInOrder = [...books.matchAll(/href="\/ja\/subjects\/([^/"]+)/g)].map((match) => match[1]);
+  expect(booksInOrder).toEqual([
+    '01a17dfd-5dbf-738a-9405-9dfa9a8ec069',
+    '01a1773a-f700-7071-b5ef-2b02f7d0e8c6',
+    '01a1773a-f6ff-7684-8e44-1a013af60d4b',
+    '01a1773a-f700-7078-8000-000000000003',
+    '01a17a3b-6c01-77c8-94fd-810a3ae73369',
+    '01a1773a-f700-7078-8000-000000000001',
+  ]);
+  expect(html).toContain('吾輩は猫である');
+  expect(html).not.toContain('data-slot="cover-card-secondary"');
 });
 
 test('a kernel without a home page falls back to the static home', async () => {

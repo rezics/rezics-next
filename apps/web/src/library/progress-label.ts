@@ -1,5 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
+import type { LibraryCountForms } from '@rezics/definitions';
 import type { ProgressMode } from './progress-reads';
 
 export type ProgressLabelInput = {
@@ -11,6 +12,8 @@ export type ProgressLabelInput = {
   locator: string | null;
   position?: string | null;
   unitLabel?: string;
+  unitLabelLanguage?: string;
+  unitCountForms?: LibraryCountForms;
   dimension?: string;
 };
 
@@ -60,9 +63,24 @@ export function progressView(progress: ProgressLabelInput | null, locale: string
   const total = amountOf(progress.total);
   const percent = progress.dimension === 'percent';
   const withTotal = total !== null && !percent ? `${number.format(amount)} / ${number.format(total)}` : null;
+  const unitCount = withTotal === null ? amount : total!;
+  const countCategory =
+    progress.unitLabelLanguage && progress.unitCountForms
+      ? new Intl.PluralRules(progress.unitLabelLanguage).select(unitCount)
+      : undefined;
+  const unitLabel = progress.unitLabel
+    ? ((countCategory ? progress.unitCountForms?.[countCategory] : undefined) ?? progress.unitLabel)
+    : undefined;
   const valueText = percent
     ? new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 6 }).format(amount / 100)
-    : `${withTotal ?? number.format(amount)}${progress.unitLabel ? `\u00a0${progress.unitLabel.replaceAll(' ', '\u00a0')}` : ''}`;
+    : unitLabel
+      ? withTotal === null
+        ? m.home_continue_amount({ amount: number.format(amount), unit: unitLabel }, options)
+        : m.home_continue_amount_of_total(
+            { amount: number.format(amount), total: number.format(total!), unit: unitLabel },
+            options,
+          )
+      : (withTotal ?? number.format(amount));
   const share = percent ? amount : total !== null && total > 0 ? (amount / total) * 100 : null;
   return {
     text: valueText,

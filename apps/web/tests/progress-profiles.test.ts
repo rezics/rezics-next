@@ -1,12 +1,16 @@
 import { afterAll, expect, mock, setDefaultTimeout, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { glob } from 'node:fs/promises';
-import type { LibraryProfile } from '@rezics/definitions';
+import { pickText } from '@rezics/composition';
+import type { LibraryLabels, LibraryProfile } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { m } from '../src/paraglide/messages.js';
 import {
   progressChoicesForType,
   progressInputRules,
   progressPairLabel,
   progressDisplay,
+  progressSessionProfile,
 } from '../src/library/progress-profile.ts';
 
 setDefaultTimeout(60_000);
@@ -21,7 +25,11 @@ const profile: LibraryProfile = {
         units: [
           {
             id: 'folio-x',
-            labels: { en: 'Folio' },
+            labels: { en: 'Folio', fr: 'feuillet', 'zh-Hans': '册' },
+            countForms: {
+              en: { zero: 'Empty folios', one: 'Folio', other: 'Folios' },
+              fr: { other: 'feuillets' },
+            },
             minimum: '0.25',
             maximum: '98.5',
             precision: 2,
@@ -65,15 +73,52 @@ const legacy: LibraryProfile = {
     allowed: [
       {
         mode: 'scalar_amount',
-        units: [{ id: 'page', labels: { en: 'Page' }, identity: { kind: 'none' }, structure: { kind: 'none' } }],
+        units: [
+          {
+            id: 'page',
+            labels: { en: 'Page' },
+            countForms: { en: { one: 'Page', other: 'Legacy pages' } },
+            identity: { kind: 'none' },
+            structure: { kind: 'none' },
+          },
+        ],
+      },
+    ],
+  },
+  importSources: [],
+};
+const currentPageWithoutForms: LibraryProfile = {
+  id: 'current-page-without-forms',
+  progress: {
+    allowed: [
+      {
+        mode: 'scalar_amount',
+        units: [
+          {
+            id: 'page',
+            labels: { en: 'Leaf' },
+            identity: { kind: 'none' },
+            structure: { kind: 'none' },
+          },
+        ],
       },
     ],
   },
   importSources: [],
 };
 const release = {
-  types: { Novel: { library: { profileId: 'profile-test' } }, Empty: { library: { profileId: 'empty' } }, Missing: {} },
-  libraryProfiles: { 'profile-test': profile, empty: { id: 'empty', importSources: [] }, 'legacy-fixed-v1': legacy },
+  types: {
+    Novel: { library: { profileId: 'profile-test' } },
+    CurrentPage: { library: { profileId: 'current-page-without-forms' } },
+    Empty: { library: { profileId: 'empty' } },
+    Missing: {},
+  },
+  libraryProfiles: {
+    'profile-test': profile,
+    'current-page-without-forms': currentPageWithoutForms,
+    empty: { id: 'empty', importSources: [] },
+    'legacy-fixed-v1': legacy,
+  },
 } as never;
 
 test('the form offers profile modes and units in declaration order with profile labels', () => {
@@ -115,6 +160,83 @@ test('session labels resolve the exact mode and unit from current profile then l
   expect(progressPairLabel(release, 'Novel', 'scalar_amount', 'folio-x', 'en')).toBe('Folio');
   expect(progressPairLabel(release, 'Novel', 'scalar_amount', 'page', 'en')).toBe('Page');
   expect(progressPairLabel(release, 'Novel', 'cursor_position', 'page', 'en')).toBeUndefined();
+});
+
+test('an arbitrary unit uses the grammatical count, and missing same-language forms keep its released label', () => {
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '1', total: null }, 'en').text,
+  ).toBe('1 Folio');
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '2', total: null }, 'en').text,
+  ).toBe('2 Folios');
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '0', total: null }, 'en').text,
+  ).toBe('0 Folios');
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '0.5', total: null }, 'fr')
+      .text,
+  ).toBe('0,5 feuillet');
+
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '1', total: '12' }, 'en').text,
+  ).toBe('1 / 12 Folios');
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '1', total: '1' }, 'en').text,
+  ).toBe('1 / 1 Folio');
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'folio-x', amount: '2', total: null }, 'zh-Hans')
+      .text,
+  ).toBe('2册');
+
+  expect(progressSessionProfile(release, 'Novel', 'scalar_amount', 'folio-x', 'en')).toMatchObject({
+    unitLabel: 'Folio',
+    unitLabelLanguage: 'en',
+    unitCountForms: profile.progress!.allowed[0]!.units[0]!.countForms!.en,
+  });
+  expect(progressSessionProfile(release, 'Novel', 'scalar_amount', 'folio-x', 'zh-Hans')).not.toHaveProperty(
+    'unitCountForms',
+  );
+  expect(
+    progressDisplay(release, 'Novel', { mode: 'scalar_amount', unit: 'page', amount: '2', total: null }, 'en').text,
+  ).toBe('2 Legacy pages');
+  expect(
+    progressDisplay(release, 'CurrentPage', { mode: 'scalar_amount', unit: 'page', amount: '2', total: null }, 'en')
+      .text,
+  ).toBe('2 Leaf');
+  expect(progressSessionProfile(release, 'CurrentPage', 'scalar_amount', 'page', 'en')).not.toHaveProperty(
+    'unitCountForms',
+  );
+});
+
+test('bundled count forms are used with their selected labels in all launch locales', () => {
+  const locales = ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
+  const type = 'schema:Book';
+  const profileId = bundledRelease.types[type]?.library?.profileId;
+  const profile = profileId ? bundledRelease.libraryProfiles?.[profileId] : undefined;
+  expect(profile, 'the bundled Book type selects its released progress profile').toBeDefined();
+
+  for (const locale of locales) {
+    const choice = profile!.progress?.allowed.find((item) => item.mode === 'scalar_amount');
+    const unit = choice?.units.find((item) => {
+      const label = pickText(item.labels, locale);
+      return label.lang !== null && item.countForms?.[label.lang as keyof LibraryLabels] !== undefined;
+    });
+    expect(unit, `${locale} has a bundled native unit count map`).toBeDefined();
+    const selected = pickText(unit!.labels, locale);
+    expect(selected.lang, `${locale} has a released unit label`).not.toBeNull();
+    const forms = unit!.countForms![selected.lang as keyof LibraryLabels]!;
+    const category = new Intl.PluralRules(selected.lang!).select(2);
+    const form = forms[category] ?? selected.text;
+    const amount = new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(2);
+    const expected = m.home_continue_amount({ amount, unit: form }, { locale });
+    const view = progressDisplay(
+      bundledRelease,
+      type,
+      { mode: 'scalar_amount', unit: unit!.id, amount: '2', total: null },
+      locale,
+    );
+    expect(view.text, `${locale} uses the released ${unit!.id} form`).toBe(expected);
+  }
 });
 
 test('percent metadata formats the stored amount and clamps only the bar', () => {
@@ -227,6 +349,19 @@ const sessionRoute = () => ({
 });
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => ({
+  createIsomorphicFn: () => {
+    let server: (...args: any[]) => any = () => undefined;
+    const builder = {
+      server(fn: (...args: any[]) => any) {
+        server = fn;
+        return builder;
+      },
+      client(fn: (...args: any[]) => any) {
+        return (...args: any[]) => (typeof window === 'undefined' ? server : fn)(...args);
+      },
+    };
+    return builder;
+  },
   createServerFn: () => ({
     validator() {
       return this;
@@ -235,6 +370,7 @@ mock.module('@tanstack/react-start', () => ({
       return fn;
     },
   }),
+  createServerOnlyFn: (fn: (...args: any[]) => any) => fn,
 }));
 mock.module('@tanstack/react-start/server', () => ({ getRequest: () => currentRequest, setResponseHeader: () => {} }));
 mock.module('../src/session/request', () => ({
@@ -416,8 +552,8 @@ test('the page keeps sessions but offers no new-session form without a progress 
 });
 test('the session page names exact current and legacy pairs and leaves unnamed pairs bare', async () => {
   for (const [unit, label] of [
-    ['folio-x', '2 Folio'],
-    ['page', '2 Page'],
+    ['folio-x', '2 Folios'],
+    ['page', '2 Legacy pages'],
     ['mystery', '2'],
   ]) {
     await mount('session', 'Novel', { unit });
@@ -430,7 +566,7 @@ test('the session page renders metadata percentages and other units against tota
   expect(await page.getByText('123.4%', { exact: true }).count()).toBe(1);
   expect(await page.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('100');
   await mount('session', 'Novel', { total: '10' });
-  expect(await page.getByText('2 / 10 Folio', { exact: true }).count()).toBe(1);
+  expect(await page.getByText('2 / 10 Folios', { exact: true }).count()).toBe(1);
 });
 test('a real record-progress 422 keeps the page session unchanged, explains unsupported and offers no retry', async () => {
   await mount('session');
@@ -440,7 +576,7 @@ test('a real record-progress 422 keeps the page session unchanged, explains unsu
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await page.getByRole('alert').waitFor();
   expect(await page.getByRole('alert').innerText()).toBe('This item does not support this kind of progress.');
-  expect(await page.getByText('2 Folio', { exact: true }).count()).toBe(1);
+  expect(await page.getByText('2 Folios', { exact: true }).count()).toBe(1);
   expect(writes).toBe(1);
   expect(await page.getByRole('button', { name: /Record|Retry/ }).count()).toBe(0);
 });

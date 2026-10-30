@@ -57,6 +57,7 @@ export function DynamicCollectionPage({
       : current.builtinKind === 'liked'
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
+  const locale = getLocale();
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header>
@@ -89,8 +90,7 @@ export function DynamicCollectionPage({
       ) : current.members.length ? (
         <CoverGrid ratio={ratio}>
           {current.members.map(({ subject }, index) => {
-            const locale = getLocale();
-            const localizedTitle = subject ? displayLibraryTitle(subject.label, locale) : null;
+            const localizedTitle = subject ? displayLibraryTitle(subject.label, locale) : undefined;
             const title = localizedTitle?.text ?? m.library_subject_unavailable();
             const href = subject ? subjectHref({ id: subject.id, label: title }, locale) : null;
             return (

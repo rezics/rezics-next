@@ -794,7 +794,13 @@ function TypeList(props: Record<string, unknown>) {
   const { locale, messages, ratio: zoneRatio } = useContext(PageContext);
   const title = pageText(props.title, locale);
   if (!read?.hits?.length) return null;
-  const hits = read.hits;
+  const hitsBySubject = new Map<string, SearchHit>();
+  for (const hit of read.hits) {
+    const previous = hitsBySubject.get(hit.id);
+    // Search only supplied the subject id here. Keep the richer response when one duplicate has its cover summary.
+    if (!previous || (!previous.summary && hit.summary)) hitsBySubject.set(hit.id, hit);
+  }
+  const hits = [...hitsBySubject.values()];
   const id = typeof props.id === 'string' ? props.id : 'type-list';
   const type = Array.isArray(props.types) && typeof props.types[0] === 'string' ? props.types[0] : undefined;
   const subjects = hits.map((hit) => {
@@ -837,7 +843,6 @@ function TypeList(props: Record<string, unknown>) {
             cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
             title={text.text || messages.unlabelled}
             {...(text.lang ? { titleLang: text.lang } : {})}
-            {...(hit.typeLabel ? { secondary: hit.typeLabel } : {})}
           />
         ))}
       </CoverRow>

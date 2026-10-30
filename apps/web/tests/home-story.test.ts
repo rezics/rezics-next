@@ -24,8 +24,10 @@ test('the recorded home read replays as the kernel answered it', async () => {
   const loaded = await loadRoutePage(client, '/');
   if (loaded.kind !== 'page') throw new Error('expected the recorded home');
   const html = renderToString(createElement(RoutePage, { page: loaded.page, locale: 'ko', messages }));
-  expect(html).toMatch(/<form[^>]*action="\/ko\/search"/);
+  expect(html).not.toMatch(/<form/);
+  expect(html).not.toMatch(/<input[^>]*name="q"/);
   expect(html).toContain('href="/ko/search?type=schema%3ABook"');
+  expect(html).not.toContain('data-slot="cover-card-secondary"');
   const story = await Bun.file(new URL('../src/stories/home.stories.tsx', import.meta.url)).text();
   expect(story).toContain('pagePaths.home');
 });

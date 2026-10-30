@@ -87,6 +87,8 @@
   "error_heading": "发生错误",
   "error_message": "请重试。",
   "home_continue_actions": "{title} 的更多操作",
+  "home_continue_amount": "{amount}{unit}",
+  "home_continue_amount_of_total": "{amount}/{total}{unit}",
   "home_continue_chapter": "第{amount}章",
   "home_continue_chapter_of": "{amount}/{total} 章",
   "home_continue_episode": "第{amount}集",
