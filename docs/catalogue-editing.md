@@ -60,8 +60,8 @@ availability, disclosure and action authority. Initial creation remains separate
 PATCH, and citations never become ingestion Source metadata or a permission grant.
 
 Navigation adds no producer call or per-row hydration read. Existing forms, readers, drafts, concurrency and request
-keys remain with their owning components. Detailed Changes consumes the delivered native read; terms mutation still
-requires its native write adapter. A menu link establishes neither availability nor a successful write. The Contribute stories use
+keys remain with their owning components. Detailed Changes consumes the delivered native read, and terms mutation
+uses the native PATCH command documented below. A menu link establishes neither availability nor a successful write. The Contribute stories use
 actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
 interaction execution and phone/desktop visual review remain integration work.
 
