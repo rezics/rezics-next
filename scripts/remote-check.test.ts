@@ -5601,7 +5601,7 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
   const totalReservation = scenario({
     b: {
       available: 20e9,
-      slots: 3,
+      slots: 4,
       memoryMax: 10 * 2 ** 30,
       memoryMaxGiB: 10,
       memoryHeadroom: 10 * 2 ** 30,
