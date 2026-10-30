@@ -375,14 +375,14 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     population_votes: string;
     aggregate_count: string;
     aggregate_sum: string;
-    prior_start_count: string;
-    prior_mean: string;
+    prior_start_count: string | null;
+    prior_mean: string | null;
     total_count: string;
     total_sum: string;
     figure_count: string;
     figure_mean: string;
-    figure_score: string;
-    figure_prior_mean: string;
+    figure_score: string | null;
+    figure_prior_mean: string | null;
     imported_count: string;
   }>(
     `SELECT
