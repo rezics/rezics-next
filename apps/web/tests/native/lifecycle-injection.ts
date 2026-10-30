@@ -115,8 +115,12 @@ async function deadlineFailure(): Promise<void> {
         waitUntil: 'domcontentloaded',
         timeout: 4_000,
       });
-      if (!response?.ok())
-        throw new Error(`Native lifecycle browser page returned ${response?.status() ?? 'no response'}`);
+      if (!response?.ok()) {
+        const body = await response?.text().catch(() => '');
+        throw new Error(
+          `Native lifecycle browser page returned ${response?.status() ?? 'no response'}: ${body.slice(0, 500)}`,
+        );
+      }
       try {
         pageVisited = (await page.getByRole('main').innerText({ timeout: 2_000 })) === 'owned native lifecycle page';
       } catch (error) {
