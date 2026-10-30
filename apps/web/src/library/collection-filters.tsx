@@ -3,9 +3,59 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CollectionFilterParams } from './collection-filter-params';
 import type { SuggestionResult } from '../search/suggestions';
+import type { FilterDocument } from '@rezics/filter';
+import { collectionFilterAddress } from './collection-filter-params';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@rezics/ui/shadcn/drawer';
 
 export type CollectionFilterProperty = { id: string; label: string; datatype: string; unit?: string };
+
+/** Shared rendered outcomes for filtered empty, unsupported, and preparing reads. */
+export function CollectionFilterFeedback({
+  id,
+  filter,
+  ignored = [],
+  status,
+  empty,
+  unavailable = false,
+  emptyLabel,
+  buttonClass,
+}: {
+  id: string;
+  filter?: FilterDocument;
+  ignored?: string[];
+  status?: 'unsupported' | 'preparing' | 'failed';
+  empty: boolean;
+  unavailable?: boolean;
+  emptyLabel: string;
+  buttonClass?: string;
+}) {
+  return (
+    <>
+      {ignored.length ? <p role="status">{m.collection_filter_ignored({ filter: ignored.join(', ') })}</p> : null}
+      {status === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
+      {status === 'preparing' ? (
+        <p role="status">
+          {m.collection_filter_preparing()} {m.collection_filter_retry_later()}
+        </p>
+      ) : null}
+      {empty && !unavailable && status !== 'preparing' ? (
+        <>
+          <p className="text-muted-foreground">
+            {filter && status !== 'unsupported' ? m.collection_filter_no_match() : emptyLabel}
+          </p>
+          {filter ? (
+            <a
+              className={buttonClass ?? 'inline-flex min-h-10 items-center rounded-lg border border-border px-3'}
+              href={collectionFilterAddress(getLocale(), id, {}, {})}
+            >
+              {m.collection_filter_clear()}
+            </a>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
 
 /** Shared filter form for curated and dynamic Collection pages. */
 export function CollectionFilters({

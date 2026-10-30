@@ -9,8 +9,7 @@ import { subjectHref } from '../subject/subject-href';
 import { rowRatio } from './subject-row';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
-import { CollectionFilters } from './collection-filters';
-import { collectionFilterAddress } from './collection-filter-params';
+import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 
 export function DynamicCollectionPage({
   page,
@@ -71,12 +70,19 @@ export function DynamicCollectionPage({
           params={current.filterParams}
         />
       ) : null}
-      {current.filterIgnored?.length ? (
-        <p role="status">{m.collection_filter_ignored({ filter: current.filterIgnored.join(', ') })}</p>
-      ) : null}
-      {current.filterStatus === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
+      <CollectionFilterFeedback
+        id={current.id}
+        filter={current.filter}
+        ignored={current.filterIgnored}
+        status={current.filterStatus}
+        empty={current.members.length === 0}
+        unavailable={current.unavailable}
+        emptyLabel={empty}
+      />
       {current.preparing ? (
-        <p role="status">{m.library_dynamic_preparing()}</p>
+        current.filterStatus === 'preparing' ? null : (
+          <p role="status">{m.library_dynamic_preparing()}</p>
+        )
       ) : current.unavailable ? (
         <p role="alert">{m.library_dynamic_unavailable()}</p>
       ) : current.members.length ? (
@@ -98,18 +104,6 @@ export function DynamicCollectionPage({
             );
           })}
         </CoverGrid>
-      ) : current.preparing || current.unavailable ? null : (
-        <p className="text-muted-foreground">
-          {current.filter && current.filterStatus !== 'unsupported' ? m.collection_filter_no_match() : empty}
-        </p>
-      )}
-      {current.filter && !current.preparing && !current.unavailable && current.members.length === 0 ? (
-        <a
-          className="inline-flex min-h-10 items-center rounded-lg border border-border px-3"
-          href={collectionFilterAddress(getLocale(), current.id, {}, {})}
-        >
-          {m.collection_filter_clear()}
-        </a>
       ) : null}
       {current.preparing && retries >= 3 ? (
         <div>

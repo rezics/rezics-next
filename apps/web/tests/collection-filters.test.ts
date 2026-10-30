@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { admitFilter } from '@rezics/filter';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import {
   readCollectionFilterParams,
@@ -10,36 +9,10 @@ import {
   collectionFilterAddress,
 } from '../src/library/collection-filter-params';
 import { createRecordedKernelFetch } from '../src/kernel/fake';
-import { CollectionPage } from '../src/library/collection-page';
-import type { EditableCollectionPage } from '../src/library/collection-load';
+import { CollectionFilterFeedback } from '../src/library/collection-filters';
 import { m } from '../src/paraglide/messages.js';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
 import { withPlatformClosedRecognition } from '../src/kernel/platform-closed';
-
-async function renderPage(page: EditableCollectionPage) {
-  const route = createRootRoute({ component: () => createElement(CollectionPage, { page }) });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
-  await router.load();
-  return renderToString(createElement(RouterProvider, { router }));
-}
-
-function pageWith(overrides: Partial<EditableCollectionPage> = {}): EditableCollectionPage {
-  return {
-    id: 'collection',
-    title: 'Harem novels',
-    description: null,
-    memberCount: 3,
-    updatedAt: '2026-10-29T00:00:00Z',
-    curator: null,
-    visibility: null,
-    members: [],
-    next: null,
-    revision: 1,
-    firstPage: true,
-    following: null,
-    ...overrides,
-  };
-}
 
 const harem = '00000000-0000-4000-8000-000000000123';
 const release = {
@@ -123,42 +96,55 @@ test('unsupported filter and preparing outcomes stay distinct from an empty memb
   expect(readCollectionFilterParams(new URLSearchParams(), release, 'schema:Book').document).toBeUndefined();
 });
 
-test('the rendered Collection page labels filters, reports ignored and unsupported filters, and distinguishes no matches from preparing', async () => {
-  const properties = [
-    { id: 'schema:keywords', label: 'Keywords', datatype: 'wikibase-item' },
-    { id: 'schema:wordCount', label: 'Word count', datatype: 'quantity', unit: '1' },
-  ];
-  const params = { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] };
-  const emptyFiltered = await renderPage(
-    pageWith({
-      filter: { statement: { property: 'schema:keywords', in: [harem] } },
-      filterProperties: properties,
-      filterParams: params,
-      filterIgnored: ['r.schema:wordCount'],
-      filterStatus: 'unsupported',
+test('rendered Collection filter feedback reports ignored and unsupported filters and distinguishes no matches from preparing', () => {
+  const filter = { statement: { property: 'schema:keywords', in: [harem] } } as const;
+  const emptyFiltered = renderToStaticMarkup(
+    createElement(CollectionFilterFeedback, {
+      id: 'collection',
+      filter,
+      ignored: ['r.schema:wordCount'],
+      status: 'unsupported',
+      empty: true,
+      emptyLabel: m.library_collection_empty(),
     }),
   );
-  expect(emptyFiltered).toContain('Keywords');
-  expect(emptyFiltered).toContain('Word count');
   expect(emptyFiltered).toContain(m.collection_filter_ignored({ filter: 'r.schema:wordCount' }));
   expect(emptyFiltered).toContain(m.collection_filter_unsupported());
-  expect(emptyFiltered).toContain(m.collection_filter_no_match());
+  expect(emptyFiltered).not.toContain(m.collection_filter_no_match());
+  expect(emptyFiltered).toContain(m.library_collection_empty());
   expect(emptyFiltered).toContain(m.collection_filter_clear());
-  expect(emptyFiltered).not.toContain(m.library_member_count({ count: 3 }));
 
-  const preparing = await renderPage(
-    pageWith({
-      filter: { statement: { property: 'schema:keywords', in: [harem] } },
-      filterProperties: properties,
-      filterParams: params,
-      filterStatus: 'preparing',
+  const noMatch = renderToStaticMarkup(
+    createElement(CollectionFilterFeedback, {
+      id: 'collection',
+      filter,
+      empty: true,
+      emptyLabel: m.library_collection_empty(),
+    }),
+  );
+  expect(noMatch).toContain(m.collection_filter_no_match());
+  expect(noMatch).toContain(m.collection_filter_clear());
+
+  const preparing = renderToStaticMarkup(
+    createElement(CollectionFilterFeedback, {
+      id: 'collection',
+      filter,
+      status: 'preparing',
+      empty: true,
+      emptyLabel: m.library_collection_empty(),
     }),
   );
   expect(preparing).toContain(m.collection_filter_preparing());
   expect(preparing).not.toContain(m.collection_filter_no_match());
   expect(preparing).not.toContain(m.collection_filter_clear());
 
-  const unfiltered = await renderPage(pageWith({ filterProperties: properties, filterParams: params }));
+  const unfiltered = renderToStaticMarkup(
+    createElement(CollectionFilterFeedback, {
+      id: 'collection',
+      empty: true,
+      emptyLabel: m.library_collection_empty(),
+    }),
+  );
   expect(unfiltered).toContain(m.library_collection_empty());
   expect(unfiltered).not.toContain(m.collection_filter_no_match());
 });

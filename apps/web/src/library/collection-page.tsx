@@ -31,8 +31,7 @@ import {
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
 import type { CollectionMember, CollectionVisibility } from './reads';
-import { CollectionFilters } from './collection-filters';
-import { collectionFilterAddress } from './collection-filter-params';
+import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { rowRatio, SubjectIdentity } from './subject-row';
 
 /** The kernel holds at most this many members in one collection. */
@@ -418,18 +417,18 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
             params={page.filterParams}
           />
         ) : null}
-        {page.filterIgnored?.length ? (
-          <p role="status">{m.collection_filter_ignored({ filter: page.filterIgnored.join(', ') })}</p>
-        ) : null}
-        {page.filterStatus === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
-        {page.filterStatus === 'preparing' ? (
-          <p role="status">
-            {m.collection_filter_preparing()} {m.collection_filter_retry_later()}
-          </p>
-        ) : null}
         <h2 id="collection-members-heading" className="text-xl font-semibold">
           {m.library_collection_members()}
         </h2>
+        <CollectionFilterFeedback
+          id={page.id}
+          filter={page.filter}
+          ignored={page.filterIgnored}
+          status={page.filterStatus}
+          empty={members.length === 0}
+          emptyLabel={m.library_collection_empty()}
+          buttonClass={buttonClass}
+        />
         {members.length ? (
           <div className="[&_[data-slot=cover-grid]]:grid-cols-1 md:[&_[data-slot=cover-grid]]:grid-cols-2 xl:[&_[data-slot=cover-grid]]:grid-cols-3">
             <CoverGrid ratio={ratio}>
@@ -486,17 +485,6 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
               })}
             </CoverGrid>
           </div>
-        ) : page.filterStatus === 'preparing' ? null : (
-          <p className="text-muted-foreground">
-            {page.filter && page.filterStatus !== 'unsupported'
-              ? m.collection_filter_no_match()
-              : m.library_collection_empty()}
-          </p>
-        )}
-        {page.filter && page.filterStatus !== 'preparing' && members.length === 0 ? (
-          <a className={buttonClass} href={collectionFilterAddress(getLocale(), page.id, {}, {})}>
-            {m.collection_filter_clear()}
-          </a>
         ) : null}
         {page.next ? (
           <Exposure operation="collection_member.list">
