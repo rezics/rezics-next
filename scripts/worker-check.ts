@@ -311,10 +311,20 @@ export async function runWorkerCheck(
   allowOverloadRerun = true,
 ): Promise<number> {
   if (argv.length === 0) throw new Error('A check command is required');
-  const localOnly = argv[0] === '--local';
-  if (localOnly) argv = argv.slice(1);
+  let localOnly = false;
+  const returnPaths: string[] = [];
+  while (argv[0]?.startsWith('--') && argv[0] !== '--') {
+    if (argv[0] === '--local') {
+      localOnly = true;
+      argv = argv.slice(1);
+    } else if (argv[0] === '--returns') {
+      if (!argv[1] || argv[1] === '--') throw new Error('--returns requires a path');
+      returnPaths.push(argv[1]);
+      argv = argv.slice(2);
+    } else break;
+  }
   if (argv[0] === '--') argv = argv.slice(1);
-  if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] -- <command...>');
+  if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] [--returns <path>...] -- <command...>');
   const root = resolve(cwd);
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
@@ -426,6 +436,7 @@ export async function runWorkerCheck(
         '--memory-gib',
         String(weight),
         ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
+        ...returnPaths.flatMap((path) => ['--returns', path]),
         root,
         '--',
         ...remoteCommand,
@@ -1026,7 +1037,7 @@ function parse(argv: string[]): string[] {
   // Bun consumes the conventional `--` separator before exposing Bun.argv; accept it too for direct Node execution.
   const command = argv[0] === '--' ? argv.slice(1) : argv;
   if (command.length === 0) {
-    throw new Error('Usage: worker-check.ts [--local] -- <command...>');
+    throw new Error('Usage: worker-check.ts [--local] [--returns <path>...] -- <command...>');
   }
   return command;
 }
