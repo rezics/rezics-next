@@ -242,8 +242,8 @@ test('range and qualifier rechecks require one current statement with the right 
 describe('native request Source observation boundary', () => {
   const partition = 174;
   const route = partition * 16;
-  const ids = Array.from({ length: 257 }, () => newId(route));
-  const person = newId(route);
+  const ids = Array.from({ length: 257 }, () => newId(route)).sort();
+  const concept = newId(route);
   const foreign = newId(route + 16);
   const missing = newId(route);
   const prefix = `request-source-${crypto.randomUUID().slice(0, 8)}-`;
@@ -296,7 +296,7 @@ describe('native request Source observation boundary', () => {
     for (const action of [...actions, 'gate:subject_identity'])
       await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
     await kernel.handle(new Request(`http://kernel.test/v1/definitions/releases/${bundledDigest}`));
-    for (const target of [person, ...ids, foreign]) {
+    for (const target of [concept, ...ids, foreign]) {
       const home = subjectPartition(target);
       const deadline = deadlineFor(5000);
       const actor = await access.authenticate(real.bearer('editor'), { pool: db.pool, deadline });
@@ -307,13 +307,13 @@ describe('native request Source observation boundary', () => {
         idempotencyKey: crypto.randomUUID(),
         digest: new Uint8Array(32).fill(1),
         item: {
-          type: target === person ? 'schema:Person' : 'schema:Book',
-          labels: { en: target === person ? 'Native author' : 'Boundary book' },
-          ...(target === person
+          type: target === concept ? 'skos:Concept' : 'schema:Book',
+          labels: { en: target === concept ? 'Native genre' : 'Boundary book' },
+          ...(target === concept
             ? {}
             : {
                 statements: {
-                  'schema:author': [{ property: { id: 'schema:author' }, value: { type: 'value', content: person } }],
+                  'schema:genre': [{ property: { id: 'schema:genre' }, value: { type: 'value', content: concept } }],
                 },
               }),
         },
@@ -381,10 +381,17 @@ describe('native request Source observation boundary', () => {
       async count() {
         throw new Error('Request hydration must not enumerate');
       },
-      async matchRelationFacets(home, selected) {
-        probes.push({ home, count: selected.length });
-        return native.matchRelationFacets!(home, selected);
-      },
+      ...(native.matchRelationFacets
+        ? {
+            async matchRelationFacets(
+              home: number,
+              selected: Parameters<NonNullable<SubjectSource['matchRelationFacets']>>[1],
+            ) {
+              probes.push({ home, count: selected.length });
+              return native.matchRelationFacets!(home, selected);
+            },
+          }
+        : {}),
     };
     return { source, reads, probes };
   }
@@ -405,8 +412,8 @@ describe('native request Source observation boundary', () => {
       expect(result.dropped).toBe(5);
       expect(reads.map((read) => read.ids.length)).toEqual(size === 256 ? [256, 1] : [256, 2]);
       expect(result.passed[0]!.subject.statements).toContainEqual({
-        property: 'schema:author',
-        value: person,
+        property: 'schema:genre',
+        value: concept,
         facet: { kind: 'item' },
       });
       reads.length = 0;
@@ -574,14 +581,13 @@ describe('native request Source observation boundary', () => {
   });
 
   test('invalid rejected candidates and later chunks reject the entire page before probes or partial success', async () => {
-    const filter = { statement: { property: 'schema:author', in: [person] } };
+    const filter = { statement: { property: 'schema:genre', in: [concept] } };
     const invalid = observed((s) => {
       s.subjects[1]!.securityRevision = -1;
     });
     await expect(
       checkHits(invalid.source, [hit(original[0]!), hit(original[251]!)], none, {
         filter,
-        relationProperties: ['schema:author'],
       }),
     ).rejects.toBeInstanceOf(SearchUnavailableError);
     expect(invalid.probes).toEqual([]);
@@ -606,12 +612,24 @@ describe('native request Source observation boundary', () => {
       valid.source,
       [hit(original[0]!), hit(original[251]!), { id: missing, partition, securityRevision: 0, matched: [] }],
       none,
-      { filter, relationProperties: ['schema:author'] },
+      { filter },
     );
     expect(result.passed.map(({ subject }) => subject.id)).toEqual([ids[0]!]);
     expect(result.dropped).toBe(2);
     expect(valid.reads[0]!.ids).toEqual([ids[0]!, ids[251]!, missing]);
-    expect(valid.probes).toEqual([{ home: partition, count: 1 }]);
+    expect(valid.probes).toEqual([]);
+    // This base's native Source has no relation probe runtime. A controlled
+    // overflow marker must fail closed; it cannot manufacture native authority.
+    const overflow = observed((s) => {
+      s.subjects[0]!.relationFacetOverflow = ['schema:genre'];
+    });
+    delete overflow.source.matchRelationFacets;
+    for (const current of [filter, { not: filter }, { or: [{ type: { in: ['schema:Book'] } }, filter] }]) {
+      await expect(checkHits(overflow.source, [hit(original[0]!)], none, { filter: current })).rejects.toThrow();
+      // Inject the control independently into the next executed observation too.
+      overflow.reads.length = 0;
+    }
+    expect(overflow.probes).toEqual([]);
   });
 
   test('native node requests map invalid evidence to retryable 503 index_not_ready for hits and facets', async () => {
@@ -624,7 +642,7 @@ describe('native request Source observation boundary', () => {
             ? service.search('anonymous', { text: 'Boundary' })
             : service.facets('anonymous', {
                 filter: { type: { in: ['schema:Book'] } },
-                facets: [{ property: 'schema:author' }],
+                facets: [{ property: 'schema:genre' }],
               });
         const error = await request.then(
           () => undefined,
@@ -639,7 +657,7 @@ describe('native request Source observation boundary', () => {
     }
   });
 
-  test('native fixed-key hydration charges rejects, absence and probes as unrelated records and history grow', async () => {
+  test('native fixed-key hydration charges rejects and absence as unrelated records and history grow', async () => {
     const population: Population = {
       name: `request-hydration-${crypto.randomUUID()}`,
       hotPartition: partition,
@@ -686,7 +704,7 @@ describe('native request Source observation boundary', () => {
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       counted: {
         read: (value) => value as Record<string, number>,
-        limits: { reads: 2, keys: 8, candidates: 4, dropped: 3, probes: 2, labels: 1 },
+        limits: { reads: 2, keys: 8, candidates: 4, dropped: 3, probes: 0, labels: 1 },
         bounds: { reads: 'constant', keys: 'constant', probes: 'constant' },
       },
       grow: (database, scale, previous) => seed(database, population, { from: previous, to: scale }),
@@ -703,8 +721,7 @@ describe('native request Source observation boundary', () => {
           })),
           none,
           {
-            filter: { statement: { property: 'schema:author', in: [person, foreign] } },
-            relationProperties: ['schema:author'],
+            filter: { statement: { property: 'schema:genre', in: [concept, foreign] } },
           },
         );
         const labels = await discloseFacetValues(observedSource.source, selected);

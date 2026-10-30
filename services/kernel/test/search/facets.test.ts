@@ -141,19 +141,17 @@ test('facet hydration preserves requested order across reverse records, chunks a
       return {
         partition,
         position: 0n,
-        subjects: [...selected]
-          .reverse()
-          .map((id) => ({
-            id,
-            type: 'schema:Person',
-            visibility: 'visible',
-            redirect: null,
-            securityRevision: 0,
-            labels: [{ language: 'en', value: id }],
-            aliases: [],
-            descriptions: [],
-            statements: [],
-          })),
+        subjects: [...selected].reverse().map((id) => ({
+          id,
+          type: 'schema:Person',
+          visibility: 'visible',
+          redirect: null,
+          securityRevision: 0,
+          labels: [{ language: 'en', value: id }],
+          aliases: [],
+          descriptions: [],
+          statements: [],
+        })),
       };
     },
     async count() {

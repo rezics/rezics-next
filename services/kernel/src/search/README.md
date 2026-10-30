@@ -414,7 +414,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   [Request boundary coverage](../../test/search/disclosure.test.ts) uses real Access writes and native semantic
   observations, cloning executed snapshots only for corruption controls. Fixed-key native hydration measures
   SQL plans, examined rows, statements, blocks and wire bytes with the shared growth harness at 64/512/4096 unrelated
-  records and history; it counts actual calls, keys, rejects and probes. These adapter controls do not establish
+  records and history; it counts actual calls, keys and rejects. Native fixtures use the existing descriptive genre
+  facts: the base semantic Source has no relation probe method. Controlled overflow with that missing port fails
+  closed; the existing overflow suite separately counts every adapter probe without claiming native Source authority.
+  These adapter controls do not establish
   whole-query privacy, Source runtime or default composition closure. The frozen wrong-home negative and the
   original real-source batching suite remain independent acceptance input.
 
