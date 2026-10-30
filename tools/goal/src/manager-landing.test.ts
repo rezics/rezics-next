@@ -437,6 +437,7 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
   const integrationRuntime = runtime(fixture, counts);
   const managerGateRuns: string[] = [];
   const compatibilityInstallRuns: string[] = [];
+  const compatibilityContractRuns: { command: string[]; cwd: string }[] = [];
   const managerPromotions: string[] = [];
   await withEnvironment(
     { GOAL_MANAGER: 'control-plane-manager', GOAL_TASK_ID: undefined, GOAL_ATTEMPT: undefined },
@@ -452,6 +453,8 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
     fixture,
     async (command, cwd) => {
       if (cwd.includes('control-plane-dev-')) compatibilityInstallRuns.push(command.join(' '));
+      else if (command[1] === 'tools/goal/scripts/check-compatibility.ts')
+        compatibilityContractRuns.push({ command: [...command], cwd });
       else managerGateRuns.push(command.join(' '));
       return true;
     },
@@ -467,6 +470,13 @@ test('Main/control-plane landing retains mandatory lifecycle gate and promotion 
   expect(fixture.store.task(task.id).integratedCommit).toBe(mainHead);
   expect(managerGateRuns).toEqual(CONTROL_PLANE_CHECKS.map((command) => command.join(' ')));
   expect(compatibilityInstallRuns).toEqual(['bun install --frozen-lockfile']);
+  expect(compatibilityContractRuns).toHaveLength(1);
+  expect(compatibilityContractRuns[0]?.command.slice(0, 3)).toEqual([
+    'bun',
+    'tools/goal/scripts/check-compatibility.ts',
+    '--scripts-root',
+  ]);
+  expect(compatibilityContractRuns[0]?.command[3]).toContain('control-plane-dev-');
   expect(managerPromotions).toContain(mainHead);
   expect(existsSync(join(fixture.main, 'tools/goal/src/accepted.ts'))).toBe(true);
 });
