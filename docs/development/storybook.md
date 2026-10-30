@@ -19,3 +19,14 @@ Locale and theme are Storybook globals. Use the viewport toolbar for responsive 
 The title and story name rules follow [Storybook naming](https://storybook.js.org/docs/writing-stories/naming-components-and-hierarchy),
 [tags](https://storybook.js.org/docs/writing-stories/tags), [globals](https://storybook.js.org/docs/essentials/toolbars-and-globals),
 and [refs](https://storybook.js.org/docs/api/main-config/main-config-refs).
+
+The critical Personal Library navigation regression renders the actual tabs component in a focused DOM test. It checks
+that the caller and all eight generated locale messages load without starting Storybook or a native service. Run it
+from the repository root with:
+
+```sh
+bun test apps/web/tests/library-page-smoke.test.ts
+```
+
+The Web landing integration check selects this command for changes under `apps/web`, `packages/ui`, and
+`packages/document`.

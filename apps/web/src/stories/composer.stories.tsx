@@ -6,7 +6,18 @@ import { m } from '../paraglide/messages.js';
 import type { DocumentSnapshot } from '@rezics/document';
 import { InlinePostEditor, PostComposer } from '../threads/composer';
 
-const meta = { title: 'Pages/Post Editor', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Community/Post Editor',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
+        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -120,12 +131,19 @@ const usedMedia = () => (
 function ReuploadingReply() {
   useLayoutEffect(() => {
     const originalFetch = window.fetch;
-    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const href = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
-      if (new URL(href, window.location.origin).pathname === `/media/${reusedImageId}/original`)
-        return new Promise<Response>(() => {});
-      return originalFetch.call(window, input, init);
-    }) as typeof window.fetch;
+    const interceptedFetch = Object.assign(
+      (
+        input: Parameters<typeof window.fetch>[0],
+        init?: Parameters<typeof window.fetch>[1],
+      ): ReturnType<typeof window.fetch> => {
+        const href = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
+        if (new URL(href, window.location.origin).pathname === `/media/${reusedImageId}/original`)
+          return new Promise<Response>(() => {});
+        return originalFetch.call(window, input, init);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    window.fetch = interceptedFetch;
     return () => {
       window.fetch = originalFetch;
     };
@@ -173,20 +191,60 @@ export const ReplyImageUsed: Story = {
   play: reusedMediaPlay,
 };
 
-// Capture these same six states at the required 390px and 1280px screenshot widths.
-export const ReplyEmpty390: Story = { name: 'Reply / Empty / 390', play: emptyReplyPlay, render: reply };
-export const ReplyWithText390: Story = { name: 'Reply / With text / 390', play: textReplyPlay, render: reply };
-export const ReplyWithImage390: Story = { name: 'Reply / With image / 390', play: imageReplyPlay, render: reply };
-export const ReplyRefusal390: Story = { name: 'Reply / Refusal / 390', play: refusalPlay, render: reply };
-export const NewThreadEmpty390: Story = { name: 'New thread / Empty / 390', play: newThreadReady, render: newThread };
-export const NewThreadLong390: Story = { name: 'New thread / Long / 390', play: longThreadPlay, render: newThread };
-export const ReplyPastedImageUploading390: Story = {
-  name: 'Reply / Pasted image uploading again / 390',
+// Regression-only phone renderings keep their behavior checks without duplicating sidebar states.
+export const ReplyEmptyPhone: Story = {
+  name: 'Member reply, empty',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: emptyReplyPlay,
+  render: reply,
+};
+export const ReplyWithTextPhone: Story = {
+  name: 'Member reply, text entered',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: textReplyPlay,
+  render: reply,
+};
+export const ReplyWithImagePhone: Story = {
+  name: 'Member reply, image attached',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: imageReplyPlay,
+  render: reply,
+};
+export const ReplyRefusalPhone: Story = {
+  name: 'Member reply, refused',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: refusalPlay,
+  render: reply,
+};
+export const NewThreadEmptyPhone: Story = {
+  name: 'Owner, new thread empty',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: newThreadReady,
+  render: newThread,
+};
+export const NewThreadLongPhone: Story = {
+  name: 'Owner, long opening post',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
+  play: longThreadPlay,
+  render: newThread,
+};
+export const ReplyPastedImageUploadingPhone: Story = {
+  name: 'Member reply, pasted image uploading again',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
   render: () => <ReuploadingReply />,
   play: pasteReuploadPlay,
 };
-export const ReplyImageUsed390: Story = {
-  name: 'Reply / Image used in another post / 390',
+export const ReplyImageUsedPhone: Story = {
+  name: 'Member reply, reused image unavailable',
+  tags: ['!dev'],
+  globals: { viewport: { value: 'phone' } },
   render: usedMedia,
   play: reusedMediaPlay,
 };

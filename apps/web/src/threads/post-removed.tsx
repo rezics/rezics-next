@@ -35,12 +35,11 @@ export function RemovedPost({
   onRestore?: () => void;
 }) {
   const authorId = 'authorId' in post ? post.authorId : undefined;
-  const author = authorId ? authors?.[authorId] : undefined;
+  const author = authorId === undefined ? undefined : authors?.[authorId];
   const erasedPost = post.availability === 'erased';
   const deleted = erasedPost || ('removed' in post && post.removed === true);
   const restorableUntil = 'restorableUntil' in post ? post.restorableUntil : undefined;
-  const canRestorePost = erasedPost && Boolean(restorableUntil);
-  const owner = (viewerId !== undefined && authorId === viewerId) || canRestorePost;
+  const owner = viewerId !== undefined && authorId === viewerId;
   const common = {
     id: anchorId,
     ref: itemRef,

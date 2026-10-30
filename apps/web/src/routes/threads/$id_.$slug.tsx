@@ -386,6 +386,12 @@ function PostSlot({
   }
 
   if (post.availability !== 'available') {
+    const canRestore =
+      post.availability === 'erased' &&
+      'authorId' in post &&
+      viewerId === post.authorId &&
+      'restorableUntil' in post &&
+      Boolean(post.restorableUntil);
     return (
       <RemovedPost
         post={post}
@@ -398,9 +404,7 @@ function PostSlot({
         {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
         restoreError={restoreError}
         onCopyLink={copyLink}
-        {...(post.availability === 'erased' && 'restorableUntil' in post && post.restorableUntil
-          ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) }
-          : {})}
+        {...(canRestore ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) } : {})}
       />
     );
   }
