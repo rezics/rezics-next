@@ -99,9 +99,13 @@ export function DynamicCollectionPage({
       setFollowPending(false);
     }
   }
-  function copyLink(href: string) {
+  async function copyLink(href: string) {
     setCopyFailure(false);
-    void navigator.clipboard.writeText(`${location.origin}${href}`).catch(() => setCopyFailure(true));
+    try {
+      await navigator.clipboard.writeText(`${location.origin}${href}`);
+    } catch {
+      setCopyFailure(true);
+    }
   }
   const locale = getLocale();
   return (

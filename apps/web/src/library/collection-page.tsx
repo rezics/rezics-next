@@ -357,6 +357,7 @@ export function CollectionPage({
         if (committed > 0) {
           await reloadCollection();
           setEditing(false);
+          setConflict(false);
           setFailure(m.library_collection_save_partial({ count: committed }));
         } else if (applied.failed.reason === 'conflict') setConflict(true);
         else setFailure(m.error_message());
@@ -364,6 +365,7 @@ export function CollectionPage({
       }
       await reloadCollection();
       setEditing(false);
+      setConflict(false);
       setSelectedIds(new Set());
       setFailure('');
     } catch {
@@ -374,6 +376,7 @@ export function CollectionPage({
           // Keep the failure visible even when refresh cannot confirm already accepted writes.
         }
         setEditing(false);
+        setConflict(false);
         setFailure(m.library_collection_save_partial({ count: committed }));
       } else setFailure(m.error_message());
     } finally {
@@ -419,8 +422,12 @@ export function CollectionPage({
     setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
 
-  function copyLink(href: string) {
-    void navigator.clipboard.writeText(`${location.origin}${href}`).catch(() => setFailure(m.error_message()));
+  async function copyLink(href: string) {
+    try {
+      await navigator.clipboard.writeText(`${location.origin}${href}`);
+    } catch {
+      setFailure(m.error_message());
+    }
   }
 
   const visibleVisibility = page.visibility ?? page.disclosedVisibility;

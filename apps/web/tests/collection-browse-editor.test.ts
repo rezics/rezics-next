@@ -116,7 +116,8 @@ test('editor rows expose bounded selection, notes and a keyboard reorder alterna
   );
   expect(html.match(/role="checkbox"/g) ?? []).toHaveLength(4);
   expect(html.match(/<textarea/g) ?? []).toHaveLength(4);
-  expect(html).toContain('data-state="checked"');
+  expect(html.match(/aria-checked="true"/g) ?? []).toHaveLength(1);
+  expect(html.match(/aria-checked="false"/g) ?? []).toHaveLength(3);
   expect(html).toContain('aria-busy="true"');
   expect(html).toContain(m.library_member_move_down());
   expect(html).toContain(m.library_member_remove());

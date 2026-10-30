@@ -209,11 +209,13 @@ export const routes: FakeRoute[] = [
 
 /** Stateful replay of the current operations only. No selected future endpoint is faked as delivered. */
 async function writeStory(request: Request) {
+  const observedCollection = editedCollection;
   if (!request.headers.has('authorization')) return { status: 403, code: 'forbidden' };
   if (mode === 'pending-save')
     await new Promise<void>((resolve) => {
       finishPendingSave = resolve;
     });
+  if (observedCollection !== editedCollection) return { status: 503, code: 'unavailable' };
   if (mode === 'failed-save') return { status: 503, code: 'unavailable' };
   if (mode === 'conflict-save') return { status: 409, code: 'conflict' };
   const key = request.headers.get('idempotency-key');
