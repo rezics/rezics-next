@@ -124,15 +124,15 @@ async function notification(collectionId: string): Promise<CloudEvent> {
 }
 async function enqueuePublication(event: CloudEvent) {
   return client.enqueue(
-      {
-        workflowName: 'effect',
-        queueName: 'effects',
-        queuePartitionKey: String(routeOf(event.subject!)! >> 4),
-        workflowID: randomUUID(),
-      },
-      'library_collection_listing',
-      event,
-    );
+    {
+      workflowName: 'effect',
+      queueName: 'effects',
+      queuePartitionKey: String(routeOf(event.subject!)! >> 4),
+      workflowID: randomUUID(),
+    },
+    'library_collection_listing',
+    event,
+  );
 }
 async function publish(event: CloudEvent) {
   await (await enqueuePublication(event)).getResult({ pollingIntervalMs: 10 });
