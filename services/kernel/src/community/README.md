@@ -517,14 +517,19 @@ integration. Public aggregate/endpoint delivery is still a separate consumer tas
 ## Container removal and binding fences
 
 `removeContainer` and `restoreContainer` use the ordinary command executor, fresh action/scopes and direct native
-resource-role facts from Access's installed `resourceRoleHeld` port, before receipt replay. Space commands require
-`space:manage` and its current direct owner role. Realm commands require `moderation:takedown` and its current direct
-owner or moderator role. No administrator role is installed. Native role data never supplies an Access allow decision.
+resource-role facts from Access's installed `resourceRoleHeld` port, before receipt replay. Space removal requires
+`space:manage` and its current direct owner role. Realm removal requires `moderation:takedown` and its current direct
+owner or moderator role. Restoration requires the exact native `space:restore` or `realm:restore` action; management
+or takedown permission never substitutes for it. No administrator role is installed. Native role data never supplies an Access allow decision.
 Removal requires a nonblank reason of at most 1024 characters. The identity retains its head, classification Context
 and publication pointers, recording authoritative removal time, remover and native role. Each transition increments
 a decimal-string lifecycle version; both the expected head and lifecycle version must match. Restoration includes
 the exact 30-day boundary, requires the original remover with a current native role or a current higher role
-(owner above moderator), and independently checks the live stored Context's availability and `context:read` before
+(Realm owner above moderator; another equal owner is never higher), or current platform restoration authority.
+The platform branch independently validates the Global Context and evaluates that same exact restore action through
+the installed Access formula at each fresh command T, releasing it before target checkout. A target owner grant,
+remover identity, Global management permission or absent role is never platform proof. Every attempt rechecks the
+target action and direct role before receipt replay. Restoration independently checks the live stored Context's availability and `context:read` before
 checking out the target. It never creates, deletes, grants or transfers a Context. Post erasure/author undo is unchanged.
 
 HTTP delivers `GET /v1/spaces/{spaceId}/lifecycle` and `GET /v1/realms/{realmId}/lifecycle` to the same native actors.
@@ -552,11 +557,16 @@ its source/page call sites and their integration remains separate.
 
 Cost: one identity/head/lifecycle key, at most two direct native role keys, one host key and optionally one exact
 publication key, all in the target home. Context preparation is independently anchored and released before checkout.
+Lifecycle commands bind the existing same-home discovery epoch triggers to the executor's actual transaction.
 No membership, history, descendant or graph scan is used. Four closed lifecycle events are registered. Removal events
 feed the existing account-party locator; account erasure clears the current remover and reason through one exact
 container key, including late-source replay, without deleting the tombstone or binding fence.
 
-Authority seams: Space has no installed moderator/higher-role mapping; only its actual owner journey is enabled.
-There is no exact platform container-restore action/port, so Global moderation reach alone cannot pass the required
-native role prerequisite. Platform restoration and Space moderation require Accounts policy/port adoption. This module
-does not provisionally implement `readRealmOwnershipRoles` or any succession, grant or transfer producer.
+Authority seams: Space installs only owner above standing; Realm installs owner above moderator above member/standing.
+Space has no moderator, administrator or higher local owner rank. Accounts owns the additive restore actions in its
+platform governance/closed Global reach catalogue and matching existing role bindings (Realm moderator included).
+Until that producer is integrated, a missing action or role binding remains denied; these routes do not grant it or
+report restoration success. The independent platform check is implemented, without a provisional permission adapter.
+Accounts also remains the sole last-holder/succession producer; this module does not implement an ownership store,
+claim approval, `readRealmOwnershipRoles`, or any succession, grant or transfer producer. Existing orphan claim requests
+and their expiry do not confer restoration or acquisition authority.

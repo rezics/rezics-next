@@ -545,7 +545,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         detail: {
           operationId: 'space.restore',
           'x-exposure': 'public',
-          'x-action': 'space:manage',
+          'x-action': 'space:restore',
           'x-resource-types': ['community.space'],
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -664,7 +664,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         detail: {
           operationId: 'realm.restore',
           'x-exposure': 'public',
-          'x-action': 'moderation:takedown',
+          'x-action': 'realm:restore',
           'x-resource-types': ['community.realm'],
           'x-rate-limit': writeRate,
           security: writeSecurity,

@@ -4,9 +4,10 @@ import { Type } from 'typebox';
 import { resourceAuthorization } from '../access/index.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { accessRoot, deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
+import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -18,7 +19,13 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type AccessClient, type AccessContext, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility } from '../semantic/context.ts';
+import {
+  ContextNotFoundError,
+  editorialContextAnchor,
+  globalContextAnchor,
+  publicContextEligibility,
+} from '../semantic/context.ts';
+import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import readSpace from './container-lifecycle-space-read.sql';
 import readRealm from './container-lifecycle-realm-read.sql';
@@ -59,8 +66,11 @@ function identity(kind: ContainerKind, id: string) {
   if ((kind !== 'realm' && kind !== 'space') || route === null) throw new ProblemError('invalid_request');
   return { route, id };
 }
-function action(kind: ContainerKind) {
+function removalAction(kind: ContainerKind) {
   return kind === 'space' ? 'space:manage' : 'moderation:takedown';
+}
+function restorationAction(kind: ContainerKind) {
+  return kind === 'space' ? 'space:restore' : 'realm:restore';
 }
 async function read(client: AccessClient, kind: ContainerKind, id: string, at: AuthoritativeTime) {
   const resource = identity(kind, id);
@@ -85,16 +95,23 @@ async function role(
     return 'moderator';
   return null;
 }
-function mayRestore(row: Row, current: 'owner' | 'moderator' | null, actor: Actor) {
+function mayRestore(row: Row, current: 'owner' | 'moderator' | null, actor: Actor, platform: boolean) {
   return (
     row.state === 'removed' &&
     row.restorable === true &&
-    current !== null &&
     actor.kind === 'account' &&
-    (row.removed_by === actor.accountId || (current === 'owner' && row.remover_role === 'moderator'))
+    (platform ||
+      (current !== null &&
+        (row.removed_by === actor.accountId || (current === 'owner' && row.remover_role === 'moderator'))))
   );
 }
-function view(kind: ContainerKind, row: Row, current: 'owner' | 'moderator', actor: Actor): ContainerLifecycle {
+function view(
+  kind: ContainerKind,
+  row: Row,
+  current: 'owner' | 'moderator' | null,
+  actor: Actor,
+  permission: { remove: boolean; restore: boolean; platform: boolean },
+): ContainerLifecycle {
   if (row.state !== 'active' && row.state !== 'removed') throw new TypeError('Invalid container state');
   if (row.remover_role !== null && row.remover_role !== 'owner' && row.remover_role !== 'moderator')
     throw new TypeError('Invalid recorded container role');
@@ -107,8 +124,8 @@ function view(kind: ContainerKind, row: Row, current: 'owner' | 'moderator', act
     removedAt: row.removed_at ? new Date(row.removed_at).toISOString() : null,
     removerRole: row.remover_role,
     reason: row.removal_reason,
-    mayRemove: row.state === 'active',
-    mayRestore: mayRestore(row, current, actor),
+    mayRemove: row.state === 'active' && current !== null && permission.remove,
+    mayRestore: permission.restore && mayRestore(row, current, actor, permission.platform),
   };
 }
 
@@ -120,38 +137,66 @@ export async function readContainerLifecycle(
   id: string,
   context: { deadline: number },
 ): Promise<ContainerLifecycle | null> {
+  if (actor.kind !== 'account') return null;
   const resource = identity(kind, id);
-  const check = await accessCheck(deps.access, actor, action(kind), resource, { pool: deps.pool, ...context });
+  const accessContext = { pool: deps.pool, ...context };
+  const remove = await accessCheck(deps.access, actor, removalAction(kind), resource, accessContext);
+  const restore = await accessCheck(deps.access, actor, restorationAction(kind), resource, accessContext);
   const initial = await withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const time = await mintReadTime(bounded, deps.clock);
-    if (!(await check(bounded, time))) return null;
     const row = await read(bounded, kind, id, time);
-    const current = await role(bounded, kind, id, actor, time);
-    return row && current ? { row, value: view(kind, row, current, actor), time } : null;
+    if (!row) return null;
+    return { row, time };
   });
   if (!initial) return null;
-  const contextReadable =
-    !initial.value.mayRestore ||
-    initial.row.context_id === null ||
-    (await readableContext(deps, actor, initial.row.context_id, initial.time, { pool: deps.pool, ...context }));
-  // Release the independent Context anchor before final native role/version validation.
+  // Platform reach is an exact installed action at a separate Global anchor.
+  // The target's owner grant cannot establish this independent authority.
+  const platform = await platformRestoration(deps, actor, kind, initial.time, accessContext);
+  const contextRead = initial.row.state === 'removed' && initial.row.context_id !== null
+    ? await readableContext(deps, actor, initial.row.context_id, initial.time, accessContext)
+    : { allowed: true, deadline: context.deadline };
+  // Release both independent anchors before final native role/version validation.
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
-    const time = await mintReadTime(bounded, deps.clock);
-    if (!(await check(bounded, time))) return null;
+    const time = initial.time;
     const row = await read(bounded, kind, id, time);
     const current = await role(bounded, kind, id, actor, time);
+    const permission = {
+      remove: await remove(bounded, time),
+      restore: await restore(bounded, time),
+      platform: platform.allowed && Date.now() < platform.deadline,
+    };
     if (
       !row ||
-      !current ||
+      !((permission.remove && current !== null) ||
+        (permission.restore && (current !== null || permission.platform))) ||
       row.context_id !== initial.row.context_id ||
       row.head_revision_id !== initial.row.head_revision_id ||
       row.lifecycle_version !== initial.row.lifecycle_version
-    )
-      return null;
-    const value = view(kind, row, current, actor);
-    return { ...value, mayRestore: value.mayRestore && contextReadable };
+    ) return null;
+    const value = view(kind, row, current, actor, permission);
+    return { ...value, mayRestore: value.mayRestore && contextRead.allowed && Date.now() < contextRead.deadline };
+  });
+}
+
+/** Fresh command-T formula evaluation, independently anchored and released. */
+async function platformRestoration(
+  deps: { pool: SpaceDependencies['pool']; access: Access },
+  actor: Actor,
+  kind: ContainerKind,
+  time: AuthoritativeTime,
+  context: AccessContext,
+) {
+  const installed = accessRoot(deps.access);
+  const action = restorationAction(kind);
+  const evidence = await installed.prepare?.(actor, action, globalContextAnchor.resource, context);
+  const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+  return withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const allowed = Date.now() < deadline && await globalContextAnchor.validate(bounded, time)
+      && await installed.authorize(bounded, actor, action, globalContextAnchor.resource, evidence, time);
+    return { allowed, deadline };
   });
 }
 
@@ -163,22 +208,17 @@ async function readableContext(
   context: AccessContext,
 ) {
   const anchor = editorialContextAnchor(id);
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'context:read',
-    {
-      ...anchor.resource,
-      eligibility: publicContextEligibility(anchor.resource),
-    },
-    context,
-  );
+  const resource = { ...anchor.resource, eligibility: publicContextEligibility(anchor.resource) };
+  const evidence = await deps.access.prepare?.(actor, 'context:read', resource, context);
+  const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     try {
-      return (await anchor.validate(bounded, time)) && (await check(bounded, time));
+      const allowed = Date.now() < deadline && await anchor.validate(bounded, time)
+        && await deps.access.authorize(bounded, actor, 'context:read', resource, evidence, time);
+      return { allowed, deadline };
     } catch (error) {
-      if (error instanceof ContextNotFoundError) return false;
+      if (error instanceof ContextNotFoundError) return { allowed: false, deadline };
       throw error;
     }
   });
@@ -220,7 +260,7 @@ function transition(
         body.reason.includes('\0')))
   )
     throw new ProblemError('invalid_request');
-  const prepared = new WeakMap<AuthoritativeTime, Row>();
+  const prepared = new WeakMap<AuthoritativeTime, { row: Row; platform: boolean; deadline: number; evidence: unknown }>();
   // Independently check live Context availability/read authority before target checkout.
   const access = deriveAccess(deps.access, {
     async prepare(preparedActor, requestedAction, target, accessContext) {
@@ -231,11 +271,19 @@ function transition(
         read(deadlineClient(deps.pool, context.deadline), body.kind, body.id, attempt.time),
       );
       if (!row) throw new GrantDeniedError();
-      prepared.set(attempt.time, row);
-      if (state === 'active' && row.context_id !== null) {
-        if (!(await readableContext(deps, preparedActor, row.context_id, attempt.time, accessContext)))
-          throw new GrantDeniedError();
+      let deadline = Math.min(accessContext.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
+      let platform = false;
+      if (state === 'active') {
+        const decision = await platformRestoration(deps, preparedActor, body.kind, attempt.time, accessContext);
+        platform = decision.allowed;
+        if (platform) deadline = Math.min(deadline, decision.deadline);
+        if (row.context_id !== null) {
+          const contextRead = await readableContext(deps, preparedActor, row.context_id, attempt.time, accessContext);
+          if (!contextRead.allowed) throw new GrantDeniedError();
+          deadline = Math.min(deadline, contextRead.deadline);
+        }
       }
+      prepared.set(attempt.time, { row, platform, deadline, evidence: primary });
       return primary;
     },
     async authorize(client, checkedActor, checkedAction, target, evidence, time) {
@@ -243,14 +291,16 @@ function transition(
         return false;
       const row = await read(client, body.kind, body.id, time);
       const current = await role(client, body.kind, body.id, checkedActor, time);
-      if (!row || !current) return false;
-      return state !== 'active' || row.state !== 'removed' || mayRestore(row, current, checkedActor);
+      const before = prepared.get(time);
+      if (!row || !before || Date.now() >= before.deadline) return false;
+      return state === 'removed' || row.state === 'active' ? current !== null || before.platform
+        : mayRestore(row, current, checkedActor, before.platform);
     },
   });
   const authorization = resourceAuthorization({
     access,
     actor,
-    action: action(body.kind),
+    action: state === 'removed' ? removalAction(body.kind) : restorationAction(body.kind),
     anchor: {
       resource,
       async validate(client, time) {
@@ -260,9 +310,9 @@ function transition(
         if (
           !row ||
           !before ||
-          row.context_id !== before.context_id ||
-          row.lifecycle_version !== before.lifecycle_version ||
-          row.head_revision_id !== before.head_revision_id
+          row.context_id !== before.row.context_id ||
+          row.lifecycle_version !== before.row.lifecycle_version ||
+          row.head_revision_id !== before.row.head_revision_id
         )
           return false;
         return true;
@@ -279,7 +329,20 @@ function transition(
       partition: partitionOf(resource.route),
       deadline: context.deadline,
       clock: deps.clock,
-      authorization,
+      authorization: {
+        ...authorization,
+        async authorize(tx, attempt, proof) {
+          const mode = await authorization.authorize(tx, attempt, proof);
+          const before = prepared.get(attempt.time);
+          const row = await read(tx, body.kind, body.id, attempt.time);
+          if (!before || !row || row.context_id !== before.row.context_id ||
+            row.lifecycle_version !== before.row.lifecycle_version ||
+            row.head_revision_id !== before.row.head_revision_id ||
+            !(await access.authorize(tx, actor, authorization.action, resource, before.evidence, attempt.time)))
+            throw new GrantDeniedError();
+          return mode;
+        },
+      },
       receipt: {
         kind,
         key: context.idempotencyKey,
@@ -292,15 +355,18 @@ function transition(
       const row = await read(tx, body.kind, body.id, command.time);
       const current = await role(tx, body.kind, body.id, actor, command.time);
       const before = prepared.get(command.time);
-      if (!row || !before || !current) throw new GrantDeniedError();
+      if (!row || !before || Date.now() >= before.deadline) throw new GrantDeniedError();
       if (
         row.head_revision_id !== body.expectedHead ||
         row.lifecycle_version !== body.expectedVersion ||
         row.state === state ||
-        row.context_id !== before.context_id
+        row.context_id !== before.row.context_id
       )
         throw new ContainerLifecycleConflictError();
-      if (state === 'active' && !mayRestore(row, current, actor)) throw new GrantDeniedError();
+      if (state === 'active' && !mayRestore(row, current, actor, before.platform)) throw new GrantDeniedError();
+      if (state === 'removed' && !current) throw new GrantDeniedError();
+      // Existing discovery triggers append the same-home epoch change with the executor's real transaction.
+      bindRealmDiscoveryCommand(tx);
       const params = {
         ...resource,
         head: body.expectedHead,
@@ -308,7 +374,7 @@ function transition(
         state,
         at: authoritativeTimeValue(command.time),
         actor: actor.accountId,
-        role: current,
+        role: current ?? row.remover_role,
         reason: body.reason,
       };
       const [changed] = body.kind === 'space' ? await writeSpace.run(tx, params) : await writeRealm.run(tx, params);
