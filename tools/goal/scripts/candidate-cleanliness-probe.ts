@@ -420,6 +420,14 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     const cloned = git(worktreeRoot, ['clone', '--shared', '--no-checkout', sourceRoot, candidateRoot]);
     if (cloned.status !== 0 || cloned.error || cloned.signal)
       throw new Error(`Could not create isolated candidate clone: ${gitDetails(cloned)}`);
+    for (const [name, commit] of Object.entries(sourceRefs)) {
+      for (const ref of [`refs/heads/${name}`, `refs/remotes/origin/${name}`]) {
+        const seeded = git(candidateRoot, ['update-ref', ref, commit]);
+        if (seeded.status !== 0 || seeded.error || seeded.signal)
+          throw new Error(`Could not seed isolated ${ref} from ${commit}: ${gitDetails(seeded)}`);
+      }
+    }
+    logEvent(evidencePath, { type: 'candidate-refs-seeded', refs: sourceRefs });
     const available = git(candidateRoot, ['cat-file', '-e', `${sourceHead}^{commit}`]);
     if (available.status !== 0) {
       const fetched = git(candidateRoot, ['fetch', '--quiet', sourceRoot, sourceHead]);
