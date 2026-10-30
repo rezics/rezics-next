@@ -4,7 +4,7 @@
  */
 /** Maximum balance transactions in one complete provider snapshot. */
 export declare const MAX_ORDER_TRANSACTIONS = 256;
-/** As in legacy: `pending` until Stripe settles the payment, `unknown` after a lost provider call or a mismatch. */
+/** Historical purchase outcome, independent of provider cash availability and current benefit permission. */
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export type RevokeReason = 'refund' | 'dispute';
 export type Offer = {
@@ -115,6 +115,9 @@ export type CheckoutSnapshot = {
     paymentIntentStatus: string | null;
     chargeId: string | null;
     chargeAmountMinor: number | null;
+    /** Complete bounded current lists, validated against this PaymentIntent/Charge before flattening.
+     * Null payment associations cannot prove absence of adverse evidence for a previously paid order.
+     * Unsupported/incomplete evidence throws StripeUnavailableError; it is never a successful empty list. */
     refunds: RefundState[];
     disputes: DisputeState[];
     transactions: StripeTransaction[];
@@ -186,6 +189,7 @@ export interface StripePort {
     readonly managedPayments?: boolean;
     /** Replay exact parameters only inside the native attempt's conservative safe window. */
     createCheckoutSession(request: CheckoutRequest, idempotencyKey: string): Promise<CheckoutSession>;
+    /** Collect associated current evidence, or throw StripeUnavailableError without a partial decision. */
     readCheckout(sessionId: string): Promise<CheckoutSnapshot>;
     /** The Checkout Session that created a PaymentIntent, or null when it is not one of ours. */
     findCheckoutSession(paymentIntentId: string): Promise<string | null>;

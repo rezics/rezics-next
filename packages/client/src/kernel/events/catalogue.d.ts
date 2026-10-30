@@ -564,6 +564,47 @@ declare const productEventTypes: {
             id: Type.TString;
         }>;
         reservationId: Type.TString;
+        transition: Type.TOptional<Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+        }>>;
+    }>;
+    readonly 'com.rezics.access.realm-membership-transition-consumed.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+        }>;
+        proofTransactionId: Type.TString;
+        outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+    }>;
+    readonly 'com.rezics.access.realm-membership-legacy-adopted.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+        }>;
+    }>;
+    readonly 'com.rezics.access.realm-membership-legacy-recorded.v1': Type.TObject<{
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        realmId: Type.TString;
+        holdTransactionId: Type.TString;
+        state: Type.TUnion<[Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>, Type.TLiteral<"pending">, Type.TLiteral<"uncertain">]>;
+    }>;
+    readonly 'com.rezics.access.realm-membership-legacy-page.v1': Type.TObject<{
+        afterId: Type.TUnion<[Type.TString, Type.TNull]>;
+        completed: Type.TBoolean;
     }>;
     readonly 'com.rezics.access.membership-inverse-bootstrapped.v1': Type.TObject<{
         accountId: Type.TString;
@@ -723,6 +764,32 @@ declare const productEventTypes: {
     readonly 'com.rezics.commerce.entitlement.restored.v1': Type.TObject<{
         entitlementId: Type.TString;
         orderId: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.cancelled.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        transactionId: Type.TString;
+        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+        }>;
+        at: Type.TString;
+    }>;
+    readonly 'com.rezics.community.realm.membership.certified.v1': Type.TObject<{
+        realmId: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        transactionId: Type.TString;
+        publicationTransactionId: Type.TUnion<[Type.TString, Type.TNull]>;
+        transition: Type.TObject<{
+            generationId: Type.TString;
+            operationId: Type.TString;
+            outcome: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
+        }>;
+        state: Type.TUnion<[Type.TLiteral<"published">, Type.TLiteral<"cancelled">]>;
     }>;
     readonly 'com.rezics.community.party-locator.projected.v1': Type.TObject<{
         accountId: Type.TString;

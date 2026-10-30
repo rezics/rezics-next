@@ -119,7 +119,8 @@ without treating the fallback as first-slice Managed Payments qualification.
 REZICS remains catalogue authority: captured inline `price_data`/`product_data`, one item and no Product/Price sync.
 Inline product creation can still create a Stripe Product. The pinned dependency is **stripe 23.0.1**, whose default
 request/type version is **2026-09-30.endive**. The webhook snapshot endpoint version is configured separately and
-must be explicitly recorded/validated; `event.api_version` is diagnostic provenance, not an upgrade mechanism.
+must be explicitly recorded/validated; the actual deployed endpoint version is not established here.
+`event.api_version` is diagnostic provenance, not an upgrade mechanism.
 An older Event's snapshot does not become current by retrieval. No silent SDK, API or status-union upgrade.
 Bounded evidence of actual Session Managed Payments configuration is required before claiming deployment readiness.
 
@@ -183,6 +184,8 @@ Use existing DBOS `effects`, `partitionConcurrency:1`, with
 Different Sessions can progress concurrently. Each trigger has a distinct stable refresh identity: completing one
 Session workflow forever would suppress later refunds. Queue occupancy alone does not exclude overlapping abandoned
 bodies, timeouts or recovery; native revision fencing remains authoritative.
+
+<a id="receipt-aware-native-refresh-admission-implementation-pending"></a>
 
 One combined physical attempt resolves, admits, reads fresh provider evidence and applies:
 
@@ -305,6 +308,8 @@ The [module map](../../../../docs/commerce-modules.md#preserve-todays-facts-for-
 party/capacity, benefit/terms, money/unit, source/effect and royalty evidence requirements. Historical incomplete
 facts stay unknown. Future reconstruction versus reconciled opening balances is an explicit accounting choice;
 no synthetic historical balanced postings or current ledger implementation.
+
+<a id="deletion-and-account-private-minimization-first-public"></a>
 
 ## Privacy, lifecycle and cost
 
