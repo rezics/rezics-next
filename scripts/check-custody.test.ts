@@ -403,10 +403,10 @@ test('controller proof wire validation is closed, bounded and preserves exact or
     { ...binding, argv: Array(1025).fill('x') },
   ];
   for (const candidate of invalid) expect(() => validateControllerProofBinding(candidate)).toThrow();
-  const partial = { ...binding } as Partial<ControllerProofBindingV1>;
+  const partial: Record<string, unknown> = { ...binding };
   delete partial.sourceTree;
   expect(() => validateControllerProofBinding(partial)).toThrow();
-  const reservation = { version: 1, state: 'reserved', binding };
+  const reservation = { version: 1, state: 'reserved', binding } as const;
   expect(validateControllerProofReservation(reservation)).toEqual(reservation);
   for (const candidate of [
     { ...reservation, state: 'consumed' },
