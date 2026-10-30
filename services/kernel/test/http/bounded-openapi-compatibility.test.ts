@@ -356,13 +356,14 @@ test('public custom-method rewriting preserves raw ownership, abort and transpor
   let reads = 0;
   let peerRequest: Request | undefined;
   let handledRequest: Request | undefined;
+  const rawDetail = { ...detail, 'x-body-mode': 'raw' };
   const app = createApp({
     pool,
     ratePeer(request) {
       peerRequest = request;
       return '192.0.2.1';
     },
-  }).post('/raw-rewrite/$inspect', { detail: { ...detail, 'x-body-mode': 'raw' } }, ({ body, request }) => {
+  }).post('/raw-rewrite/$inspect', { detail: rawDetail }, ({ body, request }) => {
     handledRequest = request;
     expect(body).toBe(bodyBytes(request));
     expect(bodyWireBytes(request)).toBe(chunk.byteLength);
