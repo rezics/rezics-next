@@ -382,7 +382,11 @@ export function SearchPage({
   const openFilters = useCallback(() => {
     if (window.matchMedia('(min-width: 1024px)').matches) {
       setDesktopFiltersOpen(true);
-      requestAnimationFrame(() => desktopPanel.current?.querySelector<HTMLElement>('a, input, button')?.focus());
+      requestAnimationFrame(() =>
+        desktopPanel.current
+          ?.querySelector<HTMLElement>('a[href], input:not([type="hidden"]), button:not(:disabled)')
+          ?.focus(),
+      );
     } else setMobileFiltersOpen(true);
   }, []);
   useEffect(() => {

@@ -140,7 +140,9 @@ describe('bounded suggestion boundary', () => {
   test('never sends a scoped query to the global suggestion operation', async () => {
     const original = globalThis.fetch;
     let calls = 0;
-    globalThis.fetch = (async () => {
+    const requests: { url: string; signal: AbortSignal | null | undefined }[] = [];
+    globalThis.fetch = (async (url, options) => {
+      requests.push({ url: String(url), signal: options?.signal });
       calls++;
       return Response.json(result);
     }) as typeof fetch;

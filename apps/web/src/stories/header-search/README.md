@@ -44,3 +44,15 @@ region one complete Patterns folder without changing Storybook configuration or 
 Reference read: Primer React `AutocompleteInput.tsx` and `AutocompleteOverlay.tsx` in the indexed
 `storybook-practice/primer-react` checkout. Relevant behavior: one input, active-descendant keyboard navigation,
 outside dismissal and focus return. REZICS supplies its own native form, composer region and tokens.
+
+Implementation decisions: unsupported scopes stay visibly unavailable until explicitly removed; supported route
+filters keep their own forms and named concept choices; new query submission retains the route's supported
+Type/facet/sort conditions and drops its cursor. Suggestions use each member's own `coverRatio`, with an additive
+per-member ratio hook for a presentation already supplied by a read. The former isolated initial-open filter story
+is replaced by the canonical FiltersOpen interaction; shell navigation uses viewport globals without pinning a
+phone export. No sibling source or risk-owned file changed.
+
+Worker verification follows the maintainer's minimal override: only `bun run --cwd apps/web typecheck`; focused
+acceptance, unit execution, native/browser/remote checks, publication and screenshots are deferred. Written
+regressions cover the real presenter, transition reducer and request boundary. A typecheck pass is not their pass
+or Root visual approval.

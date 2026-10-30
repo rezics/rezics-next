@@ -110,7 +110,7 @@ export const ScopeChip: Story = {
     await expect(
       canvas.getByRole('button', { name: m.header_search_remove_scope({ scope: scope.name }) }),
     ).toBeVisible();
-    await userEvent.keyboard('{Escape}');
+    if (!window.matchMedia('(max-width: 767px)').matches) await userEvent.keyboard('{Escape}');
   },
 };
 export const Expanded: Story = {
