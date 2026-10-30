@@ -33,9 +33,9 @@ test('new Auth management hrefs require trusted explicit route deployment config
     expect(authManagementPageHref({ ...env, AUTH_MANAGEMENT_PAGE_ROUTES: raw }, '/account/rename')).toBeNull();
   }
   const single = JSON.stringify(['/account/rename']);
-  expect(
-    authManagementPageHref({ ...env, AUTH_MANAGEMENT_PAGE_ROUTES: single.padEnd(1024) }, '/account/rename'),
-  ).toBe('https://auth.example.test/account/rename');
+  expect(authManagementPageHref({ ...env, AUTH_MANAGEMENT_PAGE_ROUTES: single.padEnd(1024) }, '/account/rename')).toBe(
+    'https://auth.example.test/account/rename',
+  );
   expect(
     authManagementPageHref({ ...env, AUTH_MANAGEMENT_PAGE_ROUTES: single.padEnd(1025) }, '/account/rename'),
   ).toBeNull();

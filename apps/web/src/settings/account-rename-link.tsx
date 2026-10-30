@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import type { AccountRenameNavigation } from './account-rename-actions';
 
 export function AccountRenameLink({ context }: { context?: AccountRenameNavigation | null }) {
-  const href = context?.available ? context.href ?? null : null;
+  const href = context?.available ? (context.href ?? null) : null;
   return (
     <div className="space-y-3">
       <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
