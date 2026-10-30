@@ -162,8 +162,8 @@ test('actual reviewed platform seed producer obtains native metadata ACK before 
     expect(fact.adoption.adoption.selection).toContainEqual({ candidate: fact.candidate, rank: 'preferred' });
   }
   expect(await lookup()).toEqual({
-    sourceConcept: actual.subjects['source-harem'],
-    canonicalConcept: actual.subjects['canonical-harem'],
+    sourceConcept: actual.subjects['source-harem']!,
+    canonicalConcept: actual.subjects['canonical-harem']!,
   });
   const repeated = await seedReviewedCatalogue({ path, port });
   expect(repeated.subjects).toEqual(actual.subjects);
