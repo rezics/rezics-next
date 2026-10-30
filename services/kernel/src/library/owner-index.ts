@@ -1,0 +1,104 @@
+import type { PoolClient } from 'pg';
+import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+import { routeOf } from '../route/route.ts';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
+import type { LibraryProfilePin } from './profile.ts';
+
+type Client = Pick<PoolClient, 'query'>;
+export type OwnerIndexPhase = 'entry' | 'session' | 'copy' | 'label' | 'ready';
+export type OwnerIndexFrontier = Readonly<{ phase: OwnerIndexPhase; subject: string | null; fact: string | null }>;
+type Control = { phase: OwnerIndexPhase; subject: string | null; fact: string | null };
+type Scope = { subject: string; fact: string; pin: unknown };
+const phases = ['entry', 'session', 'copy', 'label', 'ready'] as const;
+const sources = {
+  entry: ['library.entry', 'subject_id', "COALESCE(library_profile_pin, '{}'::jsonb)"],
+  session: ['library.progress_session', 'session_id', "COALESCE(library_profile_pin, '{}'::jsonb)"],
+  copy: ['library.copy', 'copy_id', "COALESCE(library_profile_pin, '{}'::jsonb)"],
+  label: ['library.label_assignment', 'label_id', "'{}'::jsonb"],
+} as const;
+function key(accountId: string): [number, string] {
+  const route = routeOf(accountId);
+  if (route === null) throw new TypeError('Invalid owner index account');
+  return [route, accountId];
+}
+
+/** Pure native reads: absent control is unbuilt, never an empty/ready owner. */
+export async function readOwnerIndexFrontier(client: Client, accountId: string): Promise<OwnerIndexFrontier | null> {
+  const { rows } = await client.query<Control>(`SELECT phase, after_subject AS subject, after_fact AS fact
+    FROM library.owner_index_control WHERE route=$1 AND account_id=$2`, key(accountId));
+  return rows[0] ?? null;
+}
+
+/** At most 100 examined native facts. The caller supplies the real fenced Core operational transaction. */
+export async function stepOwnerIndex(tx: OperationalTransaction, accountId: string): Promise<OwnerIndexFrontier> {
+  if (!hasLiveOperationalTransaction(tx)) throw new TypeError('Owner index needs a live operational transaction');
+  const args = key(accountId);
+  await tx.query(`INSERT INTO library.fact_source_head(route,account_id,generation) VALUES($1,$2,1)
+    ON CONFLICT DO NOTHING`, args);
+  await tx.query('SELECT 1 FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR UPDATE', args);
+  await tx.query('INSERT INTO library.owner_index_control(route,account_id) VALUES($1,$2) ON CONFLICT DO NOTHING', args);
+  const current = (await readOwnerIndexFrontier(tx, accountId))!;
+  if (current.phase === 'ready') return current;
+  const [table, id, pin] = sources[current.phase];
+  // Only fixed native table/column literals above are interpolated; inputs remain parameters.
+  const { rows } = await tx.query<Scope>(`SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
+    WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
+    ORDER BY subject_id,${id} LIMIT 100`, [...args, current.subject, current.fact]);
+  for (const row of rows) await tx.query('SELECT library.refresh_owner_member_scope($1,$2,$3,$4,$5::jsonb)',
+    [...args, row.subject, current.phase, JSON.stringify(row.pin)]);
+  const last = rows.at(-1);
+  const next = rows.length === 100 && last
+    ? { phase: current.phase, subject: last.subject, fact: last.fact }
+    : { phase: phases[phases.indexOf(current.phase) + 1]!, subject: null, fact: null };
+  await tx.query(`UPDATE library.owner_index_control SET phase=$3,after_subject=$4,after_fact=$5
+    WHERE route=$1 AND account_id=$2`, [...args, next.phase, next.subject, next.fact]);
+  return next;
+}
+
+/** One structural ORIGINAL seek; this is not canonical membership, disclosure or a useful public page. */
+export async function readOwnerOriginalPrefix(client: Client, accountId: string, after: string | null, limit: number) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Owner prefix limit must be 1..100');
+  const { rows } = await client.query<{ subjectId: string }>(`SELECT subject_id AS "subjectId"
+    FROM library.owner_member_index WHERE route=$1 AND account_id=$2
+    AND ($3::uuid IS NULL OR subject_id>$3) ORDER BY subject_id LIMIT $4`, [...key(accountId), after, limit]);
+  return rows.map(row => row.subjectId);
+}
+
+/** Native independent supports. Label parent liveness is checked even if directory cleanup is delayed. */
+export async function readOwnerOriginalTruth(client: Client, accountId: string, original: string) {
+  const { rows } = await client.query<{
+    entry: boolean; label: boolean; session: boolean; copy: boolean;
+    state: string | null; sequence: string | null; pin: unknown;
+  }>(`SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS entry,
+    EXISTS(SELECT 1 FROM library.label_assignment x WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
+      AND x.deleted_at IS NULL AND x.slot_no IS NOT NULL AND EXISTS(SELECT 1 FROM library.personal_label l
+        WHERE l.route=$1 AND l.account_id=$2 AND l.label_id=x.label_id AND l.deleted_at IS NULL)) AS label,
+    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS session,
+    EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND deletion_id IS NULL) AS copy,
+    e.state, e.owner_write_seq::text AS sequence, e.library_profile_pin AS pin
+    FROM (VALUES(1)) anchor(n) LEFT JOIN library.entry e ON e.route=$1 AND e.account_id=$2 AND e.subject_id=$3`,
+  [...key(accountId), original]);
+  const row = rows[0]!;
+  return { original, presence: row.entry || row.label || row.session || row.copy,
+    families: { entry: row.entry, label: row.label, session: row.session, copy: row.copy },
+    state: row.state === null ? null : { id: row.state, sequence: row.sequence === null ? null : BigInt(row.sequence),
+      pin: decodeLibraryProfilePin(row.pin) } };
+}
+export type OwnerOriginalTruth = Awaited<ReturnType<typeof readOwnerOriginalTruth>>;
+
+/** Chronology is independent of source, type, UUID, time and presentation digest. Preserve all live conflicts. */
+export function currentOwnerState(originals: readonly OwnerOriginalTruth[]):
+  | { status: 'unready'; reason: 'unsequenced' | 'unpinned' }
+  | { status: 'complete'; state: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null } {
+  let winner: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null = null;
+  for (const original of originals) {
+    const state = original.state;
+    if (!state) continue;
+    if (state.sequence === null) return { status: 'unready', reason: 'unsequenced' };
+    if (state.pin === null) return { status: 'unready', reason: 'unpinned' };
+    if (winner?.sequence === state.sequence) throw new Error('Duplicate live owner state-write sequence');
+    if (!winner || state.sequence > winner.sequence) winner = { original: original.original, ...state,
+      sequence: state.sequence, pin: state.pin };
+  }
+  return { status: 'complete', state: winner };
+}
