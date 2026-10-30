@@ -7,10 +7,13 @@ import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { sharedRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
-import { Link, useRouter } from '@tanstack/react-router';
+import { useRouter } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
+import type { ShelfLayout } from './shelf-params';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -19,7 +22,7 @@ import { AccountRef } from './account-ref';
 import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
-import { libraryTitleValue, LibraryTitle } from './title';
+import { libraryTitleValue } from './title';
 import {
   deleteCollection,
   moveCollectionMember,
@@ -148,12 +151,15 @@ export function collectionPageHead(
 }
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { rowRatio, SubjectIdentity } from './subject-row';
+import { rowRatio, SubjectCover } from './subject-row';
 
 /** The kernel holds at most this many members in one collection. */
 const COLLECTION_LIMIT = 5000;
 
 const visibilities = ['private', 'unlisted', 'public'] as const;
+const collectionLayouts = ['list', 'grid'] as const satisfies readonly ShelfLayout[];
+type CollectionLayout = (typeof collectionLayouts)[number];
+type CollectionPageSearch = { cursor?: string; filters?: Record<string, string | string[]> };
 
 function visibilityLabel(visibility: CollectionVisibility): string {
   if (visibility === 'public') return m.library_visibility_public();
@@ -174,6 +180,47 @@ export const buttonClass =
 
 function collectionHref(id: string): string {
   return `/${getLocale()}/collections/${encodeURIComponent(id)}`;
+}
+
+function collectionLayoutHref(id: string, layout: CollectionLayout, search: CollectionPageSearch): string {
+  const params = new URLSearchParams();
+  if (layout !== 'list') params.set('layout', layout);
+  if (search.cursor) params.set('cursor', search.cursor);
+  for (const [key, value] of Object.entries(search.filters ?? {})) {
+    if (Array.isArray(value)) value.forEach((entry) => params.append(key, entry));
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return `${collectionHref(id)}${query ? `?${query}` : ''}`;
+}
+
+function collectionLayoutLabel(layout: CollectionLayout): string {
+  return layout === 'grid' ? m.library_layout_grid() : m.library_layout_list();
+}
+
+function CollectionLayoutLinks({
+  id,
+  layout,
+  search,
+}: {
+  id: string;
+  layout: CollectionLayout;
+  search: CollectionPageSearch;
+}) {
+  return (
+    <nav data-slot="collection-layout" aria-label={m.library_layout()} className="flex gap-1">
+      {collectionLayouts.map((option) => (
+        <a
+          key={option}
+          href={collectionLayoutHref(id, option, search)}
+          {...(layout === option ? { 'aria-current': 'page' as const } : {})}
+          className={buttonVariants({ variant: layout === option ? 'secondary' : 'outline', size: 'sm' })}
+        >
+          {collectionLayoutLabel(option)}
+        </a>
+      ))}
+    </nav>
+  );
 }
 
 function failureText(result: Extract<CollectionWriteResult, { ok: false }>): string {
@@ -236,11 +283,13 @@ function moveWithin(members: CollectionMember[], memberId: string, after: string
 export function CollectionPage({
   page: initialPage,
   cursor,
+  layout = 'list',
   search,
   personalLoaded = false,
 }: {
   page: EditableCollectionPage;
   cursor: string | undefined;
+  layout?: CollectionLayout;
   search?: Record<string, string | string[]>;
   personalLoaded?: boolean;
 }) {
@@ -458,29 +507,33 @@ export function CollectionPage({
           ) : null}
         </div>
         {page.description !== null ? <p className="whitespace-pre-wrap">{page.description}</p> : null}
-        <p className="flex flex-wrap items-baseline gap-x-1">
-          <span>{m.library_curator()}</span>{' '}
-          {page.curator ? (
-            <>
-              <a
-                href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                {page.curator.displayName ?? page.curator.handle}
-              </a>
-              {page.curator.handle ? (
-                <span className="text-sm text-muted-foreground">@{page.curator.handle}</span>
-              ) : null}
-            </>
-          ) : (
-            <AccountRef account={null} />
-          )}
+        <p data-slot="collection-metadata" className="text-sm text-muted-foreground">
+          <MetaLine
+            items={[
+              <span>
+                <span>{m.library_curator()}</span>{' '}
+                {page.curator ? (
+                  <>
+                    <a
+                      href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {page.curator.displayName ?? page.curator.handle}
+                    </a>
+                    {page.curator.handle ? <span> @{page.curator.handle}</span> : null}
+                  </>
+                ) : (
+                  <AccountRef account={null} />
+                )}
+              </span>,
+              !page.filter ? m.library_member_count({ count: page.memberCount }) : null,
+              <span>
+                {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
+              </span>,
+            ]}
+          />
         </p>
-        {!page.filter ? <p>{m.library_member_count({ count: page.memberCount })}</p> : null}
         {atLimit ? <p>{m.library_collection_full()}</p> : null}
-        <p>
-          {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
-        </p>
         {page.visibility ? <p data-visibility={page.visibility}>{visibilityLabel(page.visibility)}</p> : null}
         {following !== null ? (
           <Exposure operation="follow.put">
@@ -549,9 +602,16 @@ export function CollectionPage({
             params={page.filterParams}
           />
         ) : null}
-        <h2 id="collection-members-heading" className="text-xl font-semibold">
-          {m.library_collection_members()}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="collection-members-heading" className="text-xl font-semibold">
+            {m.library_collection_members()}
+          </h2>
+          <CollectionLayoutLinks
+            id={page.id}
+            layout={layout}
+            search={{ ...(cursor ? { cursor } : {}), ...(search ? { filters: search } : {}) }}
+          />
+        </div>
         <CollectionFilterFeedback
           id={page.id}
           {...(page.filter === undefined ? {} : { filter: page.filter })}
@@ -561,7 +621,7 @@ export function CollectionPage({
           emptyLabel={m.library_collection_empty()}
           buttonClass={buttonClass}
         />
-        {members.length ? (
+        {members.length && layout === 'grid' ? (
           <div className="[&_[data-slot=cover-grid]]:grid-cols-1 md:[&_[data-slot=cover-grid]]:grid-cols-2 xl:[&_[data-slot=cover-grid]]:grid-cols-3">
             <CoverGrid ratio={ratio}>
               {members.map((member, index) => {
@@ -571,10 +631,7 @@ export function CollectionPage({
                 const title = localizedTitle?.text ?? m.library_subject_unavailable();
                 const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
                 return (
-                  <ListRow key={member.id} className="list-none space-y-3 rounded-xl p-2">
-                    <ListRowLink href={href ?? '#'}>
-                      {subject ? <LibraryTitle label={subject.label} locale={locale} /> : title}
-                    </ListRowLink>
+                  <div key={member.id} data-slot="collection-member-card" className="min-w-0 self-start space-y-2">
                     <CoverCard
                       {...(href ? { href } : {})}
                       title={title}
@@ -595,9 +652,7 @@ export function CollectionPage({
                       secondary={subject?.typeLabel}
                       linkLabel={title}
                     />
-                    {member.note ? (
-                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">{member.note}</p>
-                    ) : null}
+                    {member.note ? <MemberNote note={member.note} layout="grid" /> : null}
                     {owner ? (
                       <ListRowControl className="space-y-2">
                         <MemberRowControls
@@ -612,23 +667,45 @@ export function CollectionPage({
                         />
                       </ListRowControl>
                     ) : null}
-                  </ListRow>
+                  </div>
                 );
               })}
             </CoverGrid>
           </div>
         ) : null}
+        {members.length && layout === 'list' ? (
+          <ul className="space-y-1">
+            {members.map((member, index) => (
+              <MemberRow
+                key={member.id}
+                member={member}
+                index={index}
+                members={members}
+                firstPage={page.firstPage}
+                owner={owner}
+                ratio={ratio}
+                locale={getLocale()}
+                busy={!hydrated || pending}
+                moveMember={moveMember}
+                saveNote={saveNote}
+                removeMember={removeMember}
+                dropMember={dropMember}
+              />
+            ))}
+          </ul>
+        ) : null}
         {page.next ? (
           <Exposure operation="collection_member.list">
             <nav aria-label={m.library_collection_members()}>
-              <Link
-                to="/collections/$id"
-                params={{ id: page.id }}
-                search={{ cursor: page.next }}
+              <a
+                href={collectionLayoutHref(page.id, layout, {
+                  ...(page.next ? { cursor: page.next } : {}),
+                  ...(search ? { filters: search } : {}),
+                })}
                 className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
               >
                 {m.library_collection_more()}
-              </Link>
+              </a>
             </nav>
           </Exposure>
         ) : null}
@@ -722,6 +799,17 @@ function MemberRowControls({
   );
 }
 
+function MemberNote({ note, layout }: { note: string; layout: CollectionLayout }) {
+  return (
+    <p
+      data-slot="collection-member-note"
+      className={`whitespace-pre-wrap text-sm text-muted-foreground${layout === 'grid' ? ' line-clamp-4' : ''}`}
+    >
+      {note}
+    </p>
+  );
+}
+
 function MemberRow({
   member,
   index,
@@ -729,6 +817,7 @@ function MemberRow({
   firstPage,
   owner,
   ratio,
+  locale,
   busy,
   moveMember,
   saveNote,
@@ -741,21 +830,19 @@ function MemberRow({
   firstPage: boolean;
   owner: boolean;
   ratio: CoverRatio;
+  locale: string;
   busy: boolean;
   moveMember: (memberId: string, after: string | null) => Promise<void>;
   saveNote: (memberId: string, note: string) => Promise<void>;
   removeMember: (memberId: string) => Promise<void>;
   dropMember: (memberId: string, event: PointerEvent<HTMLLIElement>) => void;
 }) {
-  const [note, setNote] = useState(member.note ?? '');
-  const [confirmed, setConfirmed] = useState(false);
-  useEffect(() => setNote(member.note ?? ''), [member.note]);
-  const up = placementAfter('up', index, members, firstPage);
-  const down = placementAfter('down', index, members, firstPage);
-  const top = placementAfter('top', index, members, firstPage);
+  const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), locale) : null;
+  const title = localizedTitle?.text ?? m.library_subject_unavailable();
+  const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, locale).href : undefined;
   return (
-    <li
-      className="space-y-3 py-4"
+    <ListRow
+      className="flex flex-wrap items-start gap-3 rounded-xl py-3"
       data-member={member.id}
       onPointerDown={
         owner && !busy
@@ -777,93 +864,47 @@ function MemberRow({
           : undefined
       }
     >
-      <div className="flex items-center gap-3">
-        {owner ? (
+      {owner ? (
+        <ListRowControl>
           <span
             aria-hidden="true"
             className="inline-block h-10 w-6 shrink-0 cursor-grab touch-none select-none rounded-sm border border-border/70"
             data-drag-handle=""
           />
-        ) : null}
-        <SubjectIdentity subject={member.subject} ratio={ratio} />
-      </div>
-      {member.note ? <p className="whitespace-pre-wrap">{member.note}</p> : null}
-      {owner ? (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {up !== undefined ? (
-              <button
-                className={buttonClass}
-                disabled={busy}
-                onClick={() => void moveMember(member.id, up)}
-                type="button"
-              >
-                {m.library_member_move_up()}
-              </button>
-            ) : null}
-            {down !== undefined ? (
-              <button
-                className={buttonClass}
-                disabled={busy}
-                onClick={() => void moveMember(member.id, down)}
-                type="button"
-              >
-                {m.library_member_move_down()}
-              </button>
-            ) : null}
-            {top !== undefined ? (
-              <button
-                className={buttonClass}
-                disabled={busy}
-                onClick={() => void moveMember(member.id, top)}
-                type="button"
-              >
-                {m.library_member_move_to_top()}
-              </button>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="block min-w-0 flex-1">
-              {m.library_member_note()}
-              <textarea
-                className={fieldClass}
-                disabled={busy}
-                onChange={(event) => setNote(event.target.value)}
-                rows={2}
-                value={note}
-              />
-            </label>
-            <button
-              className={buttonClass}
-              disabled={busy}
-              onClick={() => void saveNote(member.id, note)}
-              type="button"
-            >
-              {m.library_member_note_save()}
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Field orientation="horizontal" className="items-center">
-              <Checkbox
-                id={`remove-member-${member.id}-row`}
-                aria-label={m.library_member_remove_confirm()}
-                checked={confirmed}
-                disabled={busy}
-                onCheckedChange={(checked) => setConfirmed(checked === true)}
-              />
-              <FieldLabel htmlFor={`remove-member-${member.id}-row`}>{m.library_member_remove_confirm()}</FieldLabel>
-            </Field>
-            <button
-              className={buttonClass}
-              disabled={busy || !confirmed}
-              onClick={() => void removeMember(member.id)}
-              type="button"
-            >
-              {m.library_member_remove()}
-            </button>
-          </div>
-        </div>
+        </ListRowControl>
       ) : null}
-    </li>
+      <div
+        className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
+        style={{ aspectRatio: ratio.replace(':', ' / ') }}
+      >
+        <SubjectCover subject={member.subject} ratio={ratio} size="fill" />
+      </div>
+      <div className="min-w-0 flex-1 basis-[12rem] space-y-0.5">
+        {href ? (
+          <ListRowLink href={href} lang={localizedTitle?.lang}>
+            {title}
+          </ListRowLink>
+        ) : null}
+        <div aria-hidden={href ? 'true' : undefined} lang={localizedTitle?.lang} className="font-medium break-words">
+          {title}
+        </div>
+        {member.subject?.typeLabel ? <p className="text-sm text-muted-foreground">{member.subject.typeLabel}</p> : null}
+        {member.note ? <MemberNote note={member.note} layout="list" /> : null}
+      </div>
+      {owner ? (
+        <ListRowControl className="w-full space-y-2 sm:ml-auto sm:w-auto sm:max-w-[22rem]">
+          <MemberRowControls
+            member={member}
+            index={index}
+            members={members}
+            firstPage={firstPage}
+            busy={busy}
+            moveMember={moveMember}
+            saveNote={saveNote}
+            removeMember={removeMember}
+          />
+        </ListRowControl>
+      ) : null}
+    </ListRow>
   );
 }

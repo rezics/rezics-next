@@ -42,8 +42,8 @@ async function variantReady(context: { canvasElement: HTMLElement }, title: stri
 
 async function collectionReadyWithHover(context: { canvasElement: HTMLElement }) {
   await libraryCollectionReady(context);
-  const row = (await within(context.canvasElement).findAllByRole('listitem'))[0];
-  if (row) await userEvent.hover(row);
+  const member = context.canvasElement.querySelector('[data-slot="collection-member-card"], [data-slot="list-row"]');
+  if (member) await userEvent.hover(member);
 }
 
 function variantStory(variant: (typeof variants)[keyof typeof variants]): Story {
@@ -65,6 +65,11 @@ export const SignedOut: Story = {
 };
 
 export const CuratorPublicMany = variantStory(variants.CuratorPublicMany);
+export const GridLayout: Story = {
+  name: 'Grid Layout',
+  play: collectionReadyWithHover,
+  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.CuratorPublicMany.id}?layout=grid`} />,
+};
 export const ReaderPublicMany = variantStory(variants.ReaderPublicMany);
 export const CuratorPrivateEmpty = variantStory(variants.CuratorPrivateEmpty);
 export const ReaderPrivate = variantStory(variants.ReaderPrivate);

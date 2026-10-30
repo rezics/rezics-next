@@ -62,7 +62,7 @@ export function RemovedPost({
           />
         </div>
         <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
-        {owner && post.decisionId ? (
+        {owner && 'decisionId' in post && post.decisionId ? (
           <a
             className="mt-3 inline-block underline-offset-4 hover:underline"
             href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}

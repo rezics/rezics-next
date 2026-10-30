@@ -20,8 +20,11 @@ export const Route = createFileRoute('/collections/$id')({
         (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
       )
         filters[key] = value as string | string[];
+    const layout: 'grid' | 'list' | undefined =
+      search.layout === 'grid' || search.layout === 'list' ? search.layout : undefined;
     return {
       ...(cursor === undefined ? {} : { cursor }),
+      ...(layout ? { layout } : {}),
       ...(Object.keys(filters).length ? { filters } : {}),
     };
   },
@@ -52,7 +55,8 @@ function CollectionRoute() {
   ) : (
     <CollectionPage
       page={page}
-      cursor={Route.useSearch().cursor}
+      cursor={search.cursor}
+      layout={search.layout ?? 'list'}
       {...(search.filters ? { search: search.filters } : {})}
       personalLoaded={Route.useRouteContext().credentialMode === 'session'}
     />
