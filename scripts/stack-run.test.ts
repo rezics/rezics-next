@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { onCheckHost, runOnCheckHost } from './stack-run.ts';
-import { ROOT } from './remote-check.ts';
+import { ROOT, requestExecutionCancellation } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -183,6 +183,8 @@ if (script.includes('MemAvailable')) {
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   log({ kind: 'returns', script, slotHeld: slotHeld() });
   for (const path of [...script.matchAll(/^# PATH (.+)$/gm)]) console.log('PRESENT ' + path[1]);
+} else if (script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
+  // This fixture has no owned native cgroup counters.
 } else {
   log({ kind: 'cleanup', script, slotHeld: slotHeld() });
 }
@@ -424,6 +426,18 @@ test('stack-run shares the estimate-derived host lifetime for ordinary, multi-sl
   const fixture = scenario({ a: { available: 40e9, slots: 4 } });
   const result = await runOnCheckHost({ label: 'nested', root: `${ROOT}/runs/outer`, cwd: `${ROOT}/runs/outer`, command: ['true'], estimateMs: 10 }, fixture.env);
   expect(result).toBeNull();
+  expect(fixture.events()).toEqual([]);
+});
+
+test('durable cancellation forbids remote and local stack starts even when every host is unreachable', async () => {
+  const fixture = scenario({ a: { down: true } });
+  const cancellation = { file: join(fixture.env.FAKE_DIR!, 'cancel.json'), id: 'owned-stack-execution' };
+  requestExecutionCancellation(cancellation);
+  fixture.env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
+  fixture.env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
+  const result = await stack(fixture.env, ['sh', '-c', 'echo forbidden-local-fallback']);
+  expect(result.code).toBe(143);
+  expect(result.stdout).not.toContain('forbidden-local-fallback');
   expect(fixture.events()).toEqual([]);
 });
 

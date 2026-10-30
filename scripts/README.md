@@ -94,7 +94,7 @@ Once a host answers, a busy run queues. Later probe silence does not send it bac
 Slot locks own the host's reserved descriptor range, and admission also bounds the sum of recorded slots for live runs by the host's slot count.
 With no answering host, it runs locally and explains placement on stderr.
 A run already under `/srv/rezics-check/runs/` executes there without another placement.
-The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Each run has a 3-hour default deadline, configurable with `--max-ms <n>`; expiration stops the run slice, prints the deadline and exits with code 124, distinct from transport failure code 75.
+The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Every physical run has the estimate-derived host deadline described below, capped at two hours; `--max-ms <n>` can shorten it. A host lifetime timeout exits 124 with a durable infrastructure receipt; transport failure exits 75.
 
 Runs that keep files stay local unless they declare workspace-relative return paths.
 A person can also choose `REZICS_STACK_REMOTE=off` or inherit `REZICS_STACK_SLOT` to stay local.
@@ -242,7 +242,7 @@ Admission retries races against other callers. The default probe interval is fiv
    reason in its physical ledger and terminal result, without local fallback or a timeout retry. A command's own exit
    124 or test timeout is not this infrastructure classification. The later controller timer is only a recovery guard.
    Prepare dependencies at the copied checkout root, then run the command in its requested directory. A Python 3
-   supervisor inside the run's systemd scope applies an absolute **180,000 ms** preparation deadline, starting before
+   supervisor inside the run's systemd scope and the independent host monitor apply an absolute **180,000 ms** preparation deadline, starting before base refresh and
    pinned-runtime verification/download and including cache lock waits, installation, lifecycle children, artifact
    verification, publication and restore. Output and CPU activity never extend it. Override it with
    `RemoteCheck.preparationTimeoutMs` or `REMOTE_CHECK_PREPARATION_TIMEOUT_MS` for finite fixtures.
@@ -258,13 +258,14 @@ Admission retries races against other callers. The default probe interval is fiv
    `node_modules` inodes. A per-key kernel lock serializes publishers; its wait is part of the deadline. Publication is
    a verified atomic directory rename. Failed/aborted publishers leave no consumable partial entry, and a timed-out waiter
    cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
+   A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
    Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
    bounded diagnostic receipt with host, run, phase, elapsed time and actual active package names/versions from owned
    process working directories and package metadata. Unknown package identity stays unknown; previously observed packages
    are separately identified. No command or successful-install marker is produced on failure, and installation failure
    cannot trigger local fallback. Signal/transport teardown retains systemd custody and stops/reaps the owned installer
    descendants (including detached grandchildren) before releasing capacity. Successful cache reuse writes
-   `preparation-install.json` with its key, hit/miss and package versions. These files can be declared as return paths.
+   `preparation-install.json` with its key, hit/miss, `nativeCache` hit/miss (null on a complete-install hit), package versions and verified native identities. These files can be declared as return paths.
    The existing transfer timeout does not apply to preparation or a quiet command.
    Pinned Bun runtimes are cached by version and build under `/srv/rezics-check/pinned-bun/<version>-<build>/package/bin/bun`.
    The host verifies the cached binary's revision on every run and downloads a replacement when it is missing or stale.
@@ -284,6 +285,44 @@ without measured I/O progress. Rsync progress comes from bytes actually transfer
 through `RemoteCheck.transferTimeoutMs` and `RemoteCheck.controlProbeTimeoutMs`, or through
 `REMOTE_CHECK_TRANSFER_TIMEOUT_MS` and `REMOTE_CHECK_CONTROL_PROBE_TIMEOUT_MS`. These transfer limits do not apply to a
 quiet live remote command; command deadline and liveness rules remain in force.
+
+`RemoteCheck.completed(receipt)` receives the outer physical result (`RemotePhysicalRunReceipt`, schema 1):
+`host`, immutable `run`, `exitCode`, `lifetimeFailure` and `resources`. The callback runs after terminal custody and
+slot release, before returns/cleanup. Resource observation failure supplies null and cannot change a command verdict.
+`parseRemotePhysicalRunReceipt` validates structure; parsing arbitrary output does not establish provenance.
+The CLI sends this result over an optional inherited **fd 3** only when `REMOTE_CHECK_RECEIPT_FD=3` and
+`REMOTE_CHECK_RECEIPT_NONCE` are both set by its launcher. Each newline-delimited envelope contains that nonce and
+`receipt`; genuine transport exceptions send `transportFailure: {schema:1,message}` on the same channel. The SSH child
+and native test command do not inherit that descriptor or nonce. Worker-check validates this channel and saves
+`physicalRun` in its original result record. Printed markers, malformed/nested receipts and a test's own 124 cannot
+set `infrastructureFailure` or authorize transport fallback. A failed returns copy retains an already recovered lifetime cause.
+
+`PhysicalResourceReceipt` schema 1 records the configured host/run, observed host boot, owning supervisor
+PID/start/group and actual scope cgroup path/device/inode/systemd invocation. The owner samples only that cgroup's
+`cpu.stat:usage_usec` and `memory.peak`, on a fixed 5-second cadence plus preparation, command and terminal edges
+(at most 1444 rows / 500000 returned bytes under the two-hour cap). Rows contain host-monotonic `monoMs`, phase,
+raw counters, `intervalMs`, interval `cores`, and explicit `unavailable`. `sampledMaxCores` is the maximum delta
+CPU usage divided by its measured interval, not cumulative CPU or a host processor peak. Missing counters,
+generation changes and counter regression are unavailable, never zero. `memoryPeakBytes` is the native cgroup
+lifetime peak; it is not RSS. `startedMonoMs`, nullable `commandStartedMonoMs` and `terminalMonoMs` expose coverage;
+an early failed install has no command start. A terminal handshake samples before normal scope removal; forced
+teardown samples before stopping owned work and reports later unavailable counters honestly. The monitor owns all
+sampling, so no detached sampler can survive it. Receipts persist at `/srv/rezics-check/receipts/<run>/physical-resources.json`
+and return independently over the verified current host/run boundary to `.temp/remote-check/receipts/<run>/`.
+Host boot and supervisor generation are verified during recovery. Observation cannot extend a deadline, certify
+termination, delay slot release or start another command.
+
+Cancellation uses `ExecutionCancellation = {file,id}`. An execution owner calls
+`requestExecutionCancellation(token, signal=15)` **before** its supported owned-process stop. Atomic first-intent
+publication is durable and immutable (`{schema:1,id,signal}`, signal 1/2/15). `RemoteCheck.cancellation` and
+`StackRun.cancellation` accept this token; CLI launchers use `REMOTE_CHECK_CANCELLATION_FILE` and
+`REMOTE_CHECK_CANCELLATION_ID`. Admission, upload completion and the immediate command boundary check it; a bounded
+observer also aborts active operations. Cancellation cannot become transport unavailability, retry, re-placement or
+local fallback. `workerCheckCancellation(id,cwd)` supplies the supported logical check token and
+`requestWorkerCheckCancellation(id,cwd,signal)` publishes intent without killing processes or changing task state.
+Detached waiters honor this intent without rerunning or overwriting original terminal custody. Linux local commands
+reuse the identity-safe subreaper/pidfd teardown, including detached TERM-resistant descendants, before returning
+capacity. Uncancelled genuine transport failure retains the existing supported local fallback.
 
 The run puts its Docker wrapper first on `PATH`. It adds `--cgroup-parent=$REZICS_CHECK_SLICE` to
 `docker run`, `docker create`, `docker container run` and `docker container create`.

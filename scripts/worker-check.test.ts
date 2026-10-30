@@ -12,7 +12,9 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { acquireStackSlot } from './stack-lease.ts';
+import { requestExecutionCancellation } from './remote-check.ts';
 import {
   processTreeCpuTicks,
   runWorkerCheck,
@@ -20,6 +22,8 @@ import {
   scopeRootTypecheck,
   startWorkerCheck,
   waitWorkerCheck,
+  requestWorkerCheckCancellation,
+  workerCheckCancellation,
 } from './worker-check.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 
@@ -44,6 +48,7 @@ function restoreWorkerEnvironment(old: NodeJS.ProcessEnv): void {
     'WORKER_REMOTE_EVENTS',
     'WORKER_REMOTE_ARGS',
     'WORKER_REMOTE_MODE',
+    'WORKER_REMOTE_CANCEL_ID',
     'KERNEL_CHECK_REMOTE',
     'KERNEL_CHECK_ON_REMOTE',
     'WORKER_WRAPPER_MARKER',
@@ -215,7 +220,7 @@ test('critical priority: invalid task priority names its file and missing priori
 });
 
 test('ledger records each physical worker execution with logical id and rerun number', async () => {
-  const root = mkdtempSync('/tmp/worker-check-ledger-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-ledger-'));
   dirs.push(root);
   process.env.REZICS_CHECK_MEMORY = 'off';
   process.env.REZICS_CHECK_SCOPE = 'off';
@@ -274,7 +279,7 @@ function typecheckRepo(root: string, includeDev = true): void {
 }
 
 test('typecheck scope: worker typecheck includes committed, staged, unstaged, deleted and untracked files', async () => {
-  const root = mkdtempSync('/tmp/worker-check-typecheck-scope-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-typecheck-scope-'));
   dirs.push(root);
   typecheckRepo(root);
   const expected = ['committed.txt', 'deleted.txt', 'staged.txt', 'unstaged.txt', 'untracked.txt'];
@@ -308,7 +313,7 @@ test('typecheck scope: worker typecheck includes committed, staged, unstaged, de
 });
 
 test('typecheck scope: scoped argv is an env prefix shared before local or remote placement', () => {
-  const root = mkdtempSync('/tmp/worker-check-typecheck-argv-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-typecheck-argv-'));
   dirs.push(root);
   typecheckRepo(root);
   const env: NodeJS.ProcessEnv = {};
@@ -327,7 +332,7 @@ test('typecheck scope: scoped argv is an env prefix shared before local or remot
 });
 
 test('typecheck scope: an existing TYPECHECK_CHANGED is kept unchanged', () => {
-  const root = mkdtempSync('/tmp/worker-check-typecheck-existing-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-typecheck-existing-'));
   dirs.push(root);
   typecheckRepo(root);
   const env = { TYPECHECK_CHANGED: 'caller\nvalue' };
@@ -337,7 +342,7 @@ test('typecheck scope: an existing TYPECHECK_CHANGED is kept unchanged', () => {
 });
 
 test('typecheck scope: missing dev ref runs unscoped and explains why', () => {
-  const root = mkdtempSync('/tmp/worker-check-typecheck-no-dev-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-typecheck-no-dev-'));
   dirs.push(root);
   typecheckRepo(root, false);
   const lines: string[] = [];
@@ -347,7 +352,7 @@ test('typecheck scope: missing dev ref runs unscoped and explains why', () => {
 });
 
 test('typecheck scope: commands other than root typecheck get no TYPECHECK_CHANGED', () => {
-  const root = mkdtempSync('/tmp/worker-check-typecheck-other-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-typecheck-other-'));
   dirs.push(root);
   const env: NodeJS.ProcessEnv = {};
   const input = ['bun', 'scripts/other.ts'];
@@ -356,7 +361,7 @@ test('typecheck scope: commands other than root typecheck get no TYPECHECK_CHANG
 });
 
 test('worker-check keeps exit status and writes a log plus failure summary with admission disabled', async () => {
-  const directory = mkdtempSync('/tmp/worker-check-test-');
+  const directory = mkdtempSync(join(repository, '.temp/worker-check-test-'));
   dirs.push(directory);
   const old = { ...process.env };
   process.env.REZICS_CHECK_MEMORY = 'off';
@@ -396,7 +401,7 @@ test('worker-check keeps exit status and writes a log plus failure summary with 
 });
 
 test('a queued memory lease writes its waiting line repeatedly into the check log', async () => {
-  const directory = mkdtempSync('/tmp/worker-check-lease-wait-');
+  const directory = mkdtempSync(join(repository, '.temp/worker-check-lease-wait-'));
   dirs.push(directory);
   const leaseDirectory = join(directory, 'leases');
   const holder = await acquireStackSlot('holder', { REZICS_STACK_SLOTS: '1', REZICS_STACK_LEASE_DIR: leaseDirectory });
@@ -432,7 +437,7 @@ test('a queued memory lease writes its waiting line repeatedly into the check lo
 });
 
 test('a timed out wait can wait again by id and receives the same check result', async () => {
-  const directory = mkdtempSync('/tmp/worker-check-rewait-');
+  const directory = mkdtempSync(join(repository, '.temp/worker-check-rewait-'));
   dirs.push(directory);
   await withQuietAdmission(async () => {
     const marker = `${directory}/runs`;
@@ -457,7 +462,7 @@ test('a timed out wait can wait again by id and receives the same check result',
 });
 
 test('a queued check timeout prints the latest waiting line and its log path', async () => {
-  const root = mkdtempSync('/tmp/worker-check-queued-wait-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-queued-wait-'));
   dirs.push(root);
   const log = '.temp/goal/checks/queued.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -472,7 +477,7 @@ test('a queued check timeout prints the latest waiting line and its log path', a
 });
 
 test('a finished check result remains readable by id after its worker session ends', async () => {
-  const directory = mkdtempSync('/tmp/worker-check-finished-');
+  const directory = mkdtempSync(join(repository, '.temp/worker-check-finished-'));
   dirs.push(directory);
   await withQuietAdmission(async () => {
     const id = startWorkerCheck(['bun', '-e', 'console.error("finished failure marker"); process.exit(9)'], directory);
@@ -524,7 +529,7 @@ function writeRunningRecord(
 }
 
 test('worker-check --wait reruns once when the runner is gone but its result still says running', async () => {
-  const root = mkdtempSync('/tmp/worker-check-dead-runner-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-dead-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/dead-runner.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -544,7 +549,7 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
 });
 
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
-  const root = mkdtempSync('/tmp/worker-check-stalled-runner-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-stalled-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/stalled.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -577,7 +582,7 @@ test('a check whose log has been silent for 10 minutes is stopped and rerun once
 });
 
 test('a second interrupted runner finishes as infrastructure failure without a third run', async () => {
-  const root = mkdtempSync('/tmp/worker-check-second-runner-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-second-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/second.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -601,7 +606,7 @@ test('an unrelated local pid and a runner recorded on another host are not treat
     ['00000000-0000-4000-8000-000000000004', process.pid, hostname()],
     ['00000000-0000-4000-8000-000000000005', 2_000_000_000, hostname() + '-elsewhere'],
   ] as const) {
-    const root = mkdtempSync('/tmp/worker-check-unrelated-runner-');
+    const root = mkdtempSync(join(repository, '.temp/worker-check-unrelated-runner-'));
     dirs.push(root);
     const log = '.temp/goal/checks/live.log';
     mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -641,6 +646,7 @@ function workerFixture(): {
     join(scripts, 'remote-check.ts'),
     `import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { requestExecutionCancellation } from ${JSON.stringify(join(repository, 'scripts/remote-check.ts'))};
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
 appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.args', JSON.stringify(process.argv.slice(2)));
 writeFileSync(process.env.WORKER_REMOTE_ARGS!, JSON.stringify(Bun.argv.slice(2)));
@@ -649,9 +655,28 @@ if (process.env.WORKER_REMOTE_PROFILE_OUTPUT) {
   writeFileSync(process.env.WORKER_REMOTE_PROFILE_OUTPUT, 'remote growth\\n');
 }
 if (process.env.WORKER_REMOTE_MODE === 'transport') {
+  writeFileSync(3, JSON.stringify({ nonce: process.env.REMOTE_CHECK_RECEIPT_NONCE, transportFailure:{schema:1,message:'remote-check: connection to host failed during rsync before a result'} })+'\\n');
   console.error('remote-check: connection to host failed during rsync before a result');
   console.error('remote-check: transport failure marker');
   process.exit(75);
+}
+if (process.env.WORKER_REMOTE_MODE === 'cancel-transport') {
+  requestExecutionCancellation({ file: process.env.REMOTE_CHECK_CANCELLATION_FILE!, id: process.env.REMOTE_CHECK_CANCELLATION_ID! });
+  writeFileSync(3, JSON.stringify({ nonce: process.env.REMOTE_CHECK_RECEIPT_NONCE, transportFailure:{schema:1,message:'remote-check: connection to host failed during rsync before a result'} })+'\\n');
+  console.error('remote-check: connection to host failed during rsync before a result');
+  console.error('remote-check: transport failure marker');
+  process.exit(75);
+}
+if (process.env.WORKER_REMOTE_MODE?.startsWith('lifetime-')) {
+  const failure = {schema:1,status:'infrastructure-failure',phase:'run-lifetime',host:'check-a',run:'fixture-physical',limitMs:1000,elapsedMs:1200,command:'bun test [2 arguments]'};
+  console.error('remote-check: infrastructure failure: remote run timed out ' + JSON.stringify(failure));
+  if (process.env.WORKER_REMOTE_MODE === 'lifetime-channel') {
+    writeFileSync(3, JSON.stringify({ nonce:process.env.REMOTE_CHECK_RECEIPT_NONCE, receipt:{schema:1,host:'check-a',run:'fixture-physical',exitCode:124,lifetimeFailure:failure,resources:null} })+'\\n');
+  }
+  if (process.env.WORKER_REMOTE_MODE === 'lifetime-malformed') {
+    writeFileSync(3, JSON.stringify({ nonce:process.env.REMOTE_CHECK_RECEIPT_NONCE, receipt:{schema:1,host:'check-a',run:'different-physical',exitCode:124,lifetimeFailure:failure,resources:null} })+'\\n');
+  }
+  process.exit(124);
 }
 if (process.env.WORKER_REMOTE_MODE === 'failure') process.exit(7);
 if (process.env.WORKER_REMOTE_MODE === 'failure-75') process.exit(75);
@@ -686,6 +711,90 @@ function localCommand(marker: string): string[] {
     `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.REZICS_CHECK_MEMORY_LEASE ?? 'missing')`,
   ];
 }
+
+test('only the outer receipt channel classifies a physical lifetime failure; nested text and command exit 124 do not', async () => {
+  for (const mode of ['lifetime-channel', 'lifetime-stdout', 'lifetime-malformed']) {
+    const fixture = workerFixture();
+    const old = { ...process.env };
+    try {
+      const hosts = join(fixture.root, 'hosts.json');
+      writeFileSync(hosts, JSON.stringify({ hosts: [] }));
+      workerEnv(fixture, hosts);
+      process.env.WORKER_REMOTE_MODE = mode;
+      const command = localCommand(fixture.localMarker);
+      const commandClass = checkClass(command, fixture.root);
+      for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+      const id = randomUUID();
+      const recordFile = join(fixture.root, '.temp/goal/checks/results', `${id}.json`);
+      mkdirSync(dirname(recordFile), { recursive: true });
+      const log = join(fixture.root, '.temp/goal/checks/fixture.log');
+      writeFileSync(log, '');
+      writeFileSync(recordFile, JSON.stringify({ id, cwd: fixture.root, argv: command, status: 'running', log: '.temp/goal/checks/fixture.log' }));
+      expect(await runWorkerCheck(command, fixture.root, false, log, 60_000, id, 0, id), mode).toBe(124);
+      const record = JSON.parse(readFileSync(recordFile, 'utf8'));
+      expect(Boolean(record.infrastructureFailure), mode).toBe(mode === 'lifetime-channel');
+      expect(existsSync(fixture.localMarker), mode).toBe(false);
+      expect(readFileSync(fixture.remoteEvents, 'utf8'), mode).toBe('remote\n');
+      if (mode === 'lifetime-channel') expect(record.physicalRun).toMatchObject({ host: 'check-a', run: 'fixture-physical', exitCode: 124 });
+    } finally { restoreWorkerEnvironment(old); }
+  }
+});
+
+test('durable cancellation preceding a transport exit prevents local fallback and detached watchdog resurrection', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  try {
+    const hosts = join(fixture.root, 'hosts.json');
+    writeFileSync(hosts, JSON.stringify({ hosts: [] }));
+    workerEnv(fixture, hosts);
+    process.env.WORKER_REMOTE_MODE = 'cancel-transport';
+    const command = localCommand(fixture.localMarker);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, checkClass(command, fixture.root), 2 * 2 ** 30);
+    expect(await runWorkerCheck(command, fixture.root)).toBe(143);
+    expect(existsSync(fixture.localMarker)).toBe(false);
+    expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
+    const id = randomUUID();
+    const recordFile = join(fixture.root, '.temp/goal/checks/results', `${id}.json`);
+    mkdirSync(dirname(recordFile), { recursive: true });
+    const record = { id, cwd: fixture.root, argv: command, status: 'running', log: '.temp/goal/checks/cancelled.log', runnerHost: hostname() };
+    writeFileSync(recordFile, JSON.stringify(record));
+    writeFileSync(join(fixture.root, record.log), 'old truthful output\n');
+    requestWorkerCheckCancellation(id, fixture.root);
+    const output: string[] = [];
+    expect(await waitWorkerCheck(id, fixture.root, 100, { stallMs: 1, pollMs: 1, write: text => output.push(text) })).toBe(143);
+    expect(JSON.parse(readFileSync(recordFile, 'utf8'))).toEqual(record);
+    expect(existsSync(workerCheckCancellation(id, fixture.root).file)).toBe(true);
+    expect(output.join('')).toContain('automatic restart is disabled');
+    expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
+    expect(existsSync(fixture.localMarker)).toBe(false);
+  } finally { restoreWorkerEnvironment(old); }
+});
+
+test('local cancellation reaps its TERM-resistant detached descendants before returning capacity and preserves a peer', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const id = randomUUID();
+  const pids = join(fixture.root, 'owned-pids');
+  const peer = spawn('/bin/sleep', ['30'], { stdio: 'ignore' });
+  try {
+    process.env.REZICS_CHECK_MEMORY = 'off';
+    process.env.REZICS_CHECK_SCOPE = 'off';
+    const program = `const {spawn}=require('node:child_process'); const fs=require('node:fs'); process.on('SIGTERM',()=>{}); const child=spawn(process.execPath,['-e', 'process.on("SIGTERM",()=>{}); setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'}); fs.writeFileSync(${JSON.stringify(pids)},process.pid+'\\n'+child.pid+'\\n');setInterval(()=>{},1000);`;
+    const completion = runWorkerCheck([process.execPath, '-e', program], fixture.root, false, undefined, 60_000, id);
+    for (let attempt = 0; attempt < 300 && !existsSync(pids); attempt++) await Bun.sleep(5);
+    expect(existsSync(pids)).toBe(true);
+    requestExecutionCancellation(workerCheckCancellation(id, fixture.root));
+    expect(await completion).toBe(143);
+    const owned = readFileSync(pids, 'utf8').trim().split('\n').map(Number);
+    expect(owned).toHaveLength(2);
+    expect(owned.every(pid => !existsSync(`/proc/${pid}`))).toBe(true);
+    expect(existsSync(`/proc/${peer.pid}`)).toBe(true);
+  } finally {
+    peer.kill('SIGTERM');
+    await new Promise(resolve => peer.once('close', resolve));
+    restoreWorkerEnvironment(old);
+  }
+});
 
 test('stack-free placement: explicit pure file tests lint and pure type commands default local without a remote slot', async () => {
   expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts'])).toBe(false);
@@ -1311,7 +1420,7 @@ test('a remote transport failure is logged and rerun once locally, but a failed 
 });
 
 function overloadFixture(): string {
-  const root = mkdtempSync('/tmp/worker-check-overload-');
+  const root = mkdtempSync(join(repository, '.temp/worker-check-overload-'));
   dirs.push(root);
   return root;
 }

@@ -19,6 +19,11 @@ import { accessSync, constants, existsSync, readFileSync, writeFileSync } from '
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
+  executionCancellation,
+  executionCancellationFromEnvironment,
+  observeExecutionCancellation,
+  ownedLocalCommand,
+  type ExecutionCancellation,
   answeringHosts,
   readHosts,
   remoteCheckUnlessUnreachable,
@@ -34,6 +39,7 @@ export type StackRun = {
   /** The directory the command runs in, inside the root. */
   cwd: string;
   command: string[];
+  cancellation?: ExecutionCancellation;
   /** Host slots the run holds, for a run whose peak memory exceeds a host's per-slot share. Default 1. */
   slots?: number;
   estimateMs?: number;
@@ -164,6 +170,10 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
  */
 export async function runOnCheckHost(run: StackRun, env: Environment = process.env): Promise<number | null> {
   validateEstimateMs(run.estimateMs);
+  const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
+  const cancelled = () => executionCancellation(cancellation);
+  const intent = cancelled();
+  if (intent) return 128 + intent.signal;
   const requestedPriority = env.REMOTE_CHECK_PRIORITY;
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical') {
     throw new Error(`REMOTE_CHECK_PRIORITY must be landing or critical when set, received ${requestedPriority}`);
@@ -205,6 +215,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     const interval = pollMs(env);
     const outcome = await remoteCheckUnlessUnreachable(
       {
+        cancellation,
         hosts: readHosts(reason.hostsFile),
         hostsFile: reason.hostsFile,
         workspace: run.root,
@@ -229,6 +240,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
       controller.signal,
     );
     if (outcome === null) {
+      if (received !== undefined || cancelled()) return 128 + (received ?? cancelled()!.signal);
       console.error(`stack-run: ${run.label} local, no check host answered`);
       return null;
     }
@@ -242,7 +254,7 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     }
     return outcome;
   } catch (error) {
-    if (error instanceof Aborted) return 128 + (received ?? 15);
+    if (error instanceof Aborted || received !== undefined || cancelled()) return 128 + (received ?? cancelled()?.signal ?? 15);
     if (answered || started) throw error;
     // Only an unanswered host probe is a local placement; do not bypass a reachable host after another error.
     console.error(`stack-run: ${run.label} local, ${error instanceof Error ? error.message : error}`);
@@ -258,7 +270,15 @@ export async function stackRun(
   local: (env: Record<string, string>) => Promise<number>,
   env: Environment = process.env,
 ): Promise<number> {
-  return (await runOnCheckHost(run, env)) ?? (await withStackSlot(run.label, local));
+  const remote = await runOnCheckHost(run, env);
+  if (remote !== null) return remote;
+  const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
+  const intent = executionCancellation(cancellation);
+  if (intent) return 128 + intent.signal;
+  return withStackSlot(run.label, (leaseEnv) => {
+    const intent = executionCancellation(cancellation);
+    return intent ? Promise.resolve(128 + intent.signal) : local(leaseEnv);
+  });
 }
 
 if (import.meta.main) {
@@ -303,7 +323,10 @@ if (import.meta.main) {
           ...(estimateMs === undefined ? {} : { estimateMs }),
         },
         async (env) => {
-          const child = Bun.spawn(command, {
+          const cancellation = executionCancellationFromEnvironment();
+          const observed = observeExecutionCancellation(cancellation);
+          if (observed.signal.aborted) { observed.close(); return 128 + (executionCancellation(cancellation)?.signal ?? 15); }
+          const child = Bun.spawn(ownedLocalCommand(command), {
             cwd: resolve(cwd),
             env: { ...process.env, ...env },
             stdin: 'inherit',
@@ -316,9 +339,13 @@ if (import.meta.main) {
             process.on(name, forward);
             return [name, forward] as const;
           });
+          const cancel = () => child.kill('SIGTERM');
+          observed.signal.addEventListener('abort', cancel, { once: true });
           try {
             return await child.exited;
           } finally {
+            observed.close();
+            observed.signal.removeEventListener('abort', cancel);
             for (const [name, forward] of forwarders) process.off(name, forward);
           }
         },

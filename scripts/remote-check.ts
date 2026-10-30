@@ -29,8 +29,8 @@
 // Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { appendFileSync, chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 export type Host = {
   name: string;
@@ -48,6 +48,10 @@ export type RemoteCheck = {
   workspace: string;
   cwd?: string;
   command: string[];
+  /** An owner-published durable intent, independent of transport availability or a runner incarnation. */
+  cancellation?: ExecutionCancellation;
+  /** Trusted outer execution boundary; command stdout never supplies this value. */
+  completed?: (receipt: RemotePhysicalRunReceipt) => void;
   slots?: number;
   /** Memory reservation in GiB; callers without a class weight retain the 2.5 GiB legacy reservation. */
   memoryGiB?: number;
@@ -87,6 +91,128 @@ export type RemoteCheck = {
 
 /** What a try-once run reports: no host had a free slot, or the command ran there and exited with this code. */
 export type TryOnce = { status: 'no-slot' } | { status: 'ran'; host: string; code: number };
+
+export type ExecutionCancellation = { file: string; id: string };
+export type CancellationIntent = { schema: 1; id: string; signal: 1 | 2 | 15 };
+
+/** Publish cancellation before signalling the owner. The first intent is immutable and survives detached waiters. */
+export function requestExecutionCancellation(cancellation: ExecutionCancellation, signal: 1 | 2 | 15 = 15): void {
+  const { file, id } = cancellation;
+  if (!id || ![1, 2, 15].includes(signal)) throw new Error('Invalid execution cancellation');
+  mkdirSync(dirname(file), { recursive: true });
+  const pending = `${file}.${randomUUID()}.pending`;
+  const descriptor = openSync(pending, 'wx', 0o600);
+  try {
+    writeSync(descriptor, JSON.stringify({ schema: 1, id, signal }));
+    fsyncSync(descriptor);
+  } finally { closeSync(descriptor); }
+  try {
+    try { linkSync(pending, file); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    const directory = openSync(dirname(file), 'r');
+    try { fsyncSync(directory); } finally { closeSync(directory); }
+  } finally { unlinkSync(pending); }
+}
+
+export function executionCancellation(cancellation?: ExecutionCancellation): CancellationIntent | null {
+  if (!cancellation) return null;
+  try {
+    const value = JSON.parse(readFileSync(cancellation.file, 'utf8'));
+    if (value.schema !== 1 || value.id !== cancellation.id || ![1, 2, 15].includes(value.signal))
+      throw new Error('Invalid execution cancellation intent');
+    return value;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error; // Fail closed on a corrupt intent; it cannot authorize fallback or a replacement command.
+  }
+}
+
+export function executionCancellationFromEnvironment(env: Record<string, string | undefined> = process.env): ExecutionCancellation | undefined {
+  const file = env.REMOTE_CHECK_CANCELLATION_FILE;
+  const id = env.REMOTE_CHECK_CANCELLATION_ID;
+  if (file === undefined && id === undefined) return undefined;
+  if (!file || !id) throw new Error('Both remote execution cancellation file and id are required');
+  return { file, id };
+}
+
+/** Monitor only this execution's durable intent. Every command boundary also checks synchronously. */
+export function observeExecutionCancellation(cancellation: ExecutionCancellation | undefined, parent?: AbortSignal) {
+  const controller = new AbortController();
+  const alreadyCancelled = executionCancellation(cancellation);
+  const check = () => {
+    if (parent?.aborted || executionCancellation(cancellation)) controller.abort();
+    if (controller.signal.aborted) throw new Aborted();
+  };
+  const abort = () => controller.abort();
+  parent?.addEventListener('abort', abort, { once: true });
+  const timer = cancellation ? setInterval(() => {
+    try { check(); } catch { controller.abort(); }
+  }, 25) : undefined;
+  if (parent?.aborted || alreadyCancelled) controller.abort();
+  return { signal: controller.signal, check, close() {
+    clearInterval(timer);
+    parent?.removeEventListener('abort', abort);
+  } };
+}
+
+export type RemotePhysicalRunReceipt = {
+  schema: 1;
+  host: string;
+  run: string;
+  exitCode: number;
+  lifetimeFailure: RunLifetimeFailure | null;
+  resources: PhysicalResourceReceipt | null;
+};
+
+export type PhysicalResourceReceipt = {
+  schema: 1;
+  host: string;
+  run: string;
+  boot: string;
+  supervisor: { pid: number; start: string; group: number };
+  cgroup: { path: string; device: number; inode: number; invocation: string } | null;
+  cadenceMs: 5000;
+  startedMonoMs: number;
+  commandStartedMonoMs: number | null;
+  terminalMonoMs: number;
+  samples: { monoMs: number; phase: 'preparation' | 'command' | 'terminal'; usageUsec: number | null;
+    memoryPeakBytes: number | null; intervalMs: number | null; cores: number | null; unavailable: string | null }[];
+  sampledMaxCores: number | null;
+};
+
+/** Structural validation is separate from provenance: only the owning SSH/IPC boundary may supply this receipt. */
+export function parseRemotePhysicalRunReceipt(value: unknown): RemotePhysicalRunReceipt | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as RemotePhysicalRunReceipt;
+  if (v.schema !== 1 || typeof v.host !== 'string' || !v.host || !/^[a-zA-Z0-9-]+$/.test(v.run) ||
+      !Number.isInteger(v.exitCode) || v.exitCode < 0 || v.exitCode > 255) return null;
+  if (v.lifetimeFailure !== null) {
+    const failure = parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(v.lifetimeFailure));
+    if (!failure || failure.host !== v.host || failure.run !== v.run || v.exitCode !== 124) return null;
+  }
+  if (v.resources !== null) {
+    const r = v.resources;
+    const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+    if (!r || r.schema !== 1 || r.host !== v.host || r.run !== v.run || typeof r.boot !== 'string' ||
+        !r.supervisor || !Number.isSafeInteger(r.supervisor.pid) || typeof r.supervisor.start !== 'string' ||
+        !Number.isSafeInteger(r.supervisor.group) || r.cadenceMs !== 5000 || !finite(r.startedMonoMs) ||
+        !finite(r.terminalMonoMs) || r.terminalMonoMs < r.startedMonoMs ||
+        (r.commandStartedMonoMs !== null && (!finite(r.commandStartedMonoMs) || r.commandStartedMonoMs < r.startedMonoMs || r.commandStartedMonoMs > r.terminalMonoMs)) ||
+        !Array.isArray(r.samples) || r.samples.length > 1444 ||
+        (r.sampledMaxCores !== null && !finite(r.sampledMaxCores))) return null;
+    if (r.cgroup !== null && (!r.cgroup || typeof r.cgroup.path !== 'string' || !r.cgroup.path.startsWith('/') ||
+        !Number.isSafeInteger(r.cgroup.device) || !Number.isSafeInteger(r.cgroup.inode) || !r.cgroup.invocation)) return null;
+    let previous = r.startedMonoMs;
+    for (const s of r.samples) {
+      if (!finite(s.monoMs) || s.monoMs < previous || s.monoMs > r.terminalMonoMs ||
+          !['preparation', 'command', 'terminal'].includes(s.phase) ||
+          [s.usageUsec, s.memoryPeakBytes, s.intervalMs, s.cores].some(n => n !== null && !finite(n)) ||
+          (s.unavailable !== null && typeof s.unavailable !== 'string')) return null;
+      previous = s.monoMs;
+    }
+  }
+  return v;
+}
 
 export const ROOT = '/srv/rezics-check';
 export function parseCommandPhases(contents: string): { durations: Record<string, number>; problems: string[] } {
@@ -1053,6 +1179,7 @@ def inventory(root):
     excluded = {'.git', '.alive', '.bun-install-complete', 'exit-status', 'command-started',
                 'preparation-status.json', 'preparation-install.json', '.preparation-started',
                 '.remote-check-supervisor', '.command-result', 'run-lifetime-status.json', 'bun-runtime-transpiler-cache',
+                'physical-resources.json', '.resource-terminal-ready', '.resource-terminal-sampled',
                 '.temp/check-host', '.temp/node-compile-cache'}
     for parent, directories, files in os.walk(root, followlinks=False):
         for name in sorted(directories + files):
@@ -1378,7 +1505,8 @@ def supervise():
     limit_ms, host, run, directory = sys.argv[2:6]
     root = Path(directory)
     started = time.monotonic()
-    (root / '.preparation-started').write_text(json.dumps({'deadline': started + int(limit_ms) / 1000, 'limitMs': int(limit_ms)}))
+    deadline = min(started + int(limit_ms) / 1000, float(os.environ.get('REMOTE_CHECK_HOST_PREPARATION_DEADLINE', 'inf')))
+    (root / '.preparation-started').write_text(json.dumps({'deadline': deadline, 'limitMs': int(limit_ms)}))
     wall_started_ns = time.time_ns()
     # Without adoption and waitpid, double-forked installer children can survive their launcher or become zombies.
     libc = ctypes.CDLL(None, use_errno=True)
@@ -1389,7 +1517,7 @@ def supervise():
     shim.chmod(0o755)
     env = dict(os.environ, REMOTE_CHECK_PREPARER_BIN=str(shim),
                REMOTE_CHECK_PREPARATION_CACHE=str(root.parent.parent / 'dependency-artifacts'),
-               REMOTE_CHECK_PREPARATION_DEADLINE=str(started + int(limit_ms) / 1000))
+               REMOTE_CHECK_PREPARATION_DEADLINE=str(deadline))
     child = subprocess.Popen(sys.argv[6:], env=env, start_new_session=True,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     selected = selectors.DefaultSelector()
@@ -1412,7 +1540,7 @@ def supervise():
             packages = active_packages(root)
             if packages:
                 observed = packages
-            if not preparation_done and (time.monotonic() - started) * 1000 >= int(limit_ms):
+            if not preparation_done and time.monotonic() >= deadline:
                 failure = 'absolute preparation deadline exceeded'
         if interrupted:
             failure = 'signal ' + str(interrupted[0])
@@ -1465,6 +1593,11 @@ def supervise():
         print('remote-check: infrastructure failure ' + json.dumps(receipt, sort_keys=True), file=sys.stderr, flush=True)
     else:
         code = code if code >= 0 else 128 - code
+    if os.environ.get('REMOTE_CHECK_HOST_LIFETIME') == '1':
+        (root / '.resource-terminal-ready').touch()
+        end = time.monotonic() + .15
+        while not (root / '.resource-terminal-sampled').exists() and time.monotonic() < end:
+            time.sleep(.005)
     return code
 
 
@@ -1518,16 +1651,119 @@ def clean_run_resources(run):
             pass  # systemd removed the empty cgroup.
 
 
+RESOURCE_CGROUP_ROOT = '/sys/fs/cgroup'
+RESOURCE_CGROUP_OVERRIDE = None  # Native fixtures replace source constants, never production environment policy.
+
+
+class Resources:
+    def __init__(self, host, run, root, started):
+        self.root = root
+        self.path = None
+        self.identity = None
+        self.previous = None
+        self.next = started
+        self.invalid = None
+        fields = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()
+        self.receipt = {'schema': 1, 'host': host, 'run': run,
+            'boot': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+            'supervisor': {'pid': os.getpid(), 'start': fields[19], 'group': os.getpgrp()},
+            'cgroup': None, 'cadenceMs': 5000, 'startedMonoMs': started * 1000,
+            'commandStartedMonoMs': None, 'terminalMonoMs': started * 1000,
+            'samples': [], 'sampledMaxCores': None}
+
+    def bind(self):
+        # Find the actual scope member among OUR descendants. No guessed unit/cwd/PID absence establishes custody.
+        for pid, started in owned_processes().items():
+            try:
+                group = next(line[3:] for line in Path('/proc/'+str(pid)+'/cgroup').read_text().splitlines() if line.startswith('0::'))
+                scope = 'rezics-check-' + self.receipt['run'] + '.scope'
+                if RESOURCE_CGROUP_OVERRIDE is None and scope not in group.split('/'):
+                    continue
+                path = Path(RESOURCE_CGROUP_OVERRIDE) if RESOURCE_CGROUP_OVERRIDE else Path(RESOURCE_CGROUP_ROOT) / group.lstrip('/')
+                stat = path.stat()
+                if RESOURCE_CGROUP_OVERRIDE:
+                    invocation = (path / 'invocation').read_text().strip()
+                else:
+                    invocation = subprocess.run(['systemctl', 'show', '--property=InvocationID', '--value', scope],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=0.1).stdout.strip()
+                if not invocation:
+                    return
+                fields = Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+                if fields[19] != started:
+                    continue
+                self.path = path
+                self.identity = (stat.st_dev, stat.st_ino)
+                self.receipt['cgroup'] = {'path': group if not RESOURCE_CGROUP_OVERRIDE else str(path),
+                    'device': stat.st_dev, 'inode': stat.st_ino, 'invocation': invocation}
+                return
+            except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired):
+                return
+
+    def sample(self, phase, force=False):
+        now = time.monotonic()
+        if not force and now < self.next:
+            return
+        self.next = now + 5
+        if len(self.receipt['samples']) >= 1444:
+            return
+        if self.path is None:
+            self.bind()
+        row = {'monoMs': now * 1000, 'phase': phase, 'usageUsec': None, 'memoryPeakBytes': None,
+               'intervalMs': None, 'cores': None, 'unavailable': None}
+        try:
+            if self.invalid:
+                raise ValueError(self.invalid)
+            if self.path is None:
+                raise ValueError('owned cgroup not yet available')
+            if Path('/proc/sys/kernel/random/boot_id').read_text().strip() != self.receipt['boot']:
+                self.invalid = 'host boot changed'
+                raise ValueError(self.invalid)
+            stat = self.path.stat()
+            if (stat.st_dev, stat.st_ino) != self.identity:
+                self.invalid = 'cgroup generation changed'
+                raise ValueError(self.invalid)
+            # cgroup pseudo-files are tiny; bound reads explicitly. Missing/invalid counters are unavailable, never zero.
+            with open(self.path / 'cpu.stat') as source:
+                usage = int(next(line.split()[1] for line in source.read(4096).splitlines() if line.startswith('usage_usec ')))
+            with open(self.path / 'memory.peak') as source:
+                peak = int(source.read(128))
+            if usage < 0 or peak < 0 or usage > 9007199254740991 or peak > 9007199254740991:
+                raise ValueError('invalid counters')
+            if self.previous:
+                then, old_usage, old_peak = self.previous
+                if usage < old_usage or peak < old_peak:
+                    self.invalid = 'counter regression'
+                    raise ValueError(self.invalid)
+                row['intervalMs'] = (now - then) * 1000
+                row['cores'] = (usage - old_usage) / 1000000 / (now - then)
+                old_max = self.receipt['sampledMaxCores']
+                self.receipt['sampledMaxCores'] = max(old_max or 0, row['cores'])
+            row.update(usageUsec=usage, memoryPeakBytes=peak)
+            self.previous = (now, usage, peak)
+        except (OSError, ValueError, StopIteration) as error:
+            row['unavailable'] = str(error)[:160]
+            self.previous = None
+        self.receipt['samples'].append(row)
+
+    def finish(self):
+        self.sample('terminal', True)
+        self.receipt['terminalMonoMs'] = time.monotonic() * 1000
+        contents = json.dumps(self.receipt, sort_keys=True)
+        durable(self.root / 'physical-resources.json', contents)
+        durable(self.root.parent.parent / 'receipts' / self.receipt['run'] / 'physical-resources.json', contents)
+
+
 def lifetime():
     # This independent host monitor does no stream forwarding. Child stdout/stderr can block indefinitely without
     # blocking this monotonic deadline. Its detached session survives a caller/session group disappearing;
     # directly addressed abort signals still stop and reap the owned run.
     started = time.monotonic()
-    limit_ms, host, run, directory, command = sys.argv[2:7]
+    limit_ms, host, run, directory, command, preparation_ms = sys.argv[2:8]
     limit_ms = int(limit_ms)
     if not 0 < limit_ms <= 7200000:
         raise RuntimeError('invalid host lifetime')
     root = Path(directory)
+    preparation_deadline = started + int(preparation_ms) / 1000
     if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
         raise RuntimeError('host lifetime subreaper unavailable')
     try:
@@ -1539,30 +1775,42 @@ def lifetime():
     for sig in [signal.SIGHUP, signal.SIGTERM, signal.SIGINT]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     fields = Path('/proc/' + str(os.getpid()) + '/stat').read_text().rsplit(')', 1)[1].split()
-    durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19]}))
+    durable(root / '.remote-check-supervisor', json.dumps({'pid': os.getpid(), 'started': fields[19], 'group': os.getpgrp()}))
     with os.fdopen(3) as source:
         script = source.read()
-    child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1'), start_new_session=True)
+    child = subprocess.Popen(['sh', '-c', script], env=dict(os.environ, REMOTE_CHECK_HOST_LIFETIME='1',
+        REMOTE_CHECK_HOST_PREPARATION_DEADLINE=str(preparation_deadline)), start_new_session=True)
+    resources = Resources(host, run, root, started)
+    resources.sample('preparation', True)
     reason = None
     stopped_at = None
     packages = []
     while True:
         now = time.monotonic()
+        try:
+            command_started = root / 'command-started'
+            if command_started.exists() and resources.receipt['commandStartedMonoMs'] is None:
+                resources.receipt['commandStartedMonoMs'] = now * 1000
+                resources.sample('command', True)
+            resources.sample('command' if resources.receipt['commandStartedMonoMs'] is not None else 'preparation')
+            if (root / '.resource-terminal-ready').exists() and not (root / '.resource-terminal-sampled').exists():
+                resources.sample('terminal', True)
+                (root / '.resource-terminal-sampled').touch()
+        except Exception:
+            pass  # Observation cannot change a command's verdict, custody or lifetime.
         if reason is None:
             if (now - started) * 1000 >= limit_ms:
                 reason = 'run-lifetime'
             elif interrupted:
                 reason = 'abort'
             elif not (root / '.bun-install-complete').exists():
-                try:
-                    preparation = json.loads((root / '.preparation-started').read_text())
-                    if now >= preparation['deadline']:
-                        reason = 'install/preparation'
-                        packages = active_packages(root)
-                except FileNotFoundError:
-                    pass
+                if now >= preparation_deadline:
+                    reason = 'install/preparation'
+                    packages = active_packages(root)
         if reason is not None and stopped_at is None:
             stopped_at = now
+            try: resources.sample('terminal', True)
+            except Exception: pass
             stop_owned(signal.SIGTERM)
         if stopped_at is not None and now - stopped_at >= 0.2:
             stop_owned(signal.SIGKILL)
@@ -1580,6 +1828,8 @@ def lifetime():
             if reason is None:
                 reason = 'owned-descendants'
         time.sleep(0.01)
+    try: resources.finish()
+    except Exception: pass
     if reason:
         # Containers started by a daemon are outside this process tree, but retain exact run labels and cgroup custody.
         clean_run_resources(run)
@@ -1603,9 +1853,35 @@ def lifetime():
     return code
 
 
+def local_command():
+    # The same subreaper/pidfd custody protects an authorized local fallback from detached grandchildren.
+    if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
+        raise RuntimeError('local command subreaper unavailable')
+    interrupted = []
+    for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, lambda number, frame: interrupted.append(number))
+    child = subprocess.Popen(sys.argv[2:], start_new_session=True)
+    stopped_at = None
+    while True:
+        code = child.poll()
+        if (interrupted or code is not None) and stopped_at is None:
+            stopped_at = time.monotonic()
+            stop_owned(signal.SIGTERM)
+        if stopped_at is not None and time.monotonic() - stopped_at >= .2:
+            stop_owned(signal.SIGKILL)
+        if code is not None:
+            while True:
+                try:
+                    if os.waitpid(-1, os.WNOHANG)[0] == 0: break
+                except ChildProcessError: break
+            if not owned_processes():
+                return 128 + interrupted[0] if interrupted else code if code >= 0 else 128 - code
+        time.sleep(.01)
+
+
 attempt_started = time.monotonic()
 try:
-    sys.exit(install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else supervise())
+    sys.exit(install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
 except Exception as error:
     stop_owned(signal.SIGKILL)
     while True:
@@ -1624,6 +1900,11 @@ except Exception as error:
     print('remote-check: infrastructure failure install/preparation: ' + str(error), file=sys.stderr, flush=True)
     sys.exit(70)
 `;
+
+/** Linux local commands use the host lifecycle's existing identity-safe subreaper, without remote placement or install. */
+export function ownedLocalCommand(command: readonly string[]): string[] {
+  return process.platform === 'linux' ? ['python3', '-c', dependencyPreparationProgram, 'local', ...command] : [...command];
+}
 
 /**
  * The docker wrapper is written beside the run's files and comes first on the path, so every `docker` a workspace
@@ -1645,7 +1926,9 @@ export function runScript(
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
-  const systemdScript = `host=$REMOTE_CHECK_HOST
+  const systemdScript = `${refreshBaseScript(id, directory)}
+set +e
+host=$REMOTE_CHECK_HOST
     install_started=$(date +%s%N)
     expected_bun=${quote(pinnedBunVersion)}
     expected_revision=${quote(pinnedBunRevision)}
@@ -1787,8 +2070,7 @@ export function runScript(
     if [ "\${REMOTE_CHECK_HOST_LIFETIME:-}" = 1 ]; then terminal_status=${quote(`${directory}/.command-result`)}; fi
     printf '%s\\n' "$code" > "$terminal_status"
     exit $code`;
-  const script = `${refreshBaseScript(id, directory)}
-mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
+  const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
 printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
 export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id}
@@ -1796,20 +2078,21 @@ export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
 touch ${quote(`${directory}/.alive`)}
+systemd_script=${quote(systemdScript)}
 # systemd 259 expands \${NAME} in --scope arguments by default, which broke the script's parameter expansions on c
 # (842 failed runs from 10-28 18:36 UTC); older systemd has no such flag and does not expand.
 expand_environment=
 if systemd-run --help 2>/dev/null | grep -q -- '--expand-environment'; then expand_environment=--expand-environment=no; fi
 exec systemd-run --scope --quiet --collect $expand_environment --slice=${runSlice(id)} --unit=rezics-check-${id} \\
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} supervise ${preparationTimeoutMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} \\
-  sh -c ${quote(systemdScript)} sh ${[cwd, ...command].map(quote).join(' ')}`;
+  sh -c "$systemd_script" sh ${[cwd, ...command].map(quote).join(' ')}`;
   const executable = (command[0]?.split('/').at(-1) ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '?').slice(0, 64);
   const subcommand = ['test', 'run', 'check', 'build', 'typecheck', 'verify', 'lint'].includes(command[1] ?? '') ? ` ${command[1]}` : '';
   const identity = `${executable}${subcommand} [${Math.max(0, command.length - 1)} arguments]`;
   // fd 3 carries the literal original script independently of command stdin. No second shell quoting pass touches argv.
   const delimiter = `REMOTE_CHECK_HOST_${id.replace(/[^a-zA-Z0-9]/g, '_')}`;
   return `# REMOTE_CHECK_RUN_LIFETIME_MS ${lifetimeMs}
-exec python3 -c ${quote(`import base64; exec(base64.b64decode(${JSON.stringify(Buffer.from(dependencyPreparationProgram).toString('base64'))}))`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} 3<<'${delimiter}'
+exec python3 -c ${quote(`import base64; exec(base64.b64decode(${JSON.stringify(Buffer.from(dependencyPreparationProgram).toString('base64'))}))`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} 3<<'${delimiter}'
 ${script}
 ${delimiter}`;
 }
@@ -3487,6 +3770,31 @@ if [ -r "$file" ]; then printf '%s' ${quote(RUN_LIFETIME_FAILURE_MARKER)}; head 
   return null;
 }
 
+async function recoverResources(prepared: PreparedRun, workspace: string, code: number): Promise<PhysicalResourceReceipt | null> {
+  const reader = `import json,sys
+from pathlib import Path
+path=Path(${JSON.stringify(`${ROOT}/receipts/${prepared.id}/physical-resources.json`)})
+if not path.exists(): sys.exit(0)
+with path.open() as source: value=json.loads(source.read(500000))
+owner=json.loads(Path(${JSON.stringify(`${prepared.directory}/.remote-check-supervisor`)}).read_text())
+assert value['boot']==Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+assert value['supervisor']=={'pid':owner['pid'],'start':owner['started'],'group':owner['group']}
+print(json.dumps(value))`;
+  const script = `# REMOTE_CHECK_PHYSICAL_RESOURCES\npython3 -c ${quote(reader)}`;
+  try {
+    const result = await boundedSsh(prepared.host, prepared.connectionId, script, 'physical resource receipt', 1000);
+    if (result.code !== 0 || !result.output.trim()) return null;
+    const resources = JSON.parse(result.output);
+    const receipt = parseRemotePhysicalRunReceipt({ schema: 1, host: prepared.host.name, run: prepared.id, exitCode: code,
+      lifetimeFailure: null, resources });
+    if (!receipt) return null;
+    const path = join(workspace, '.temp/remote-check/receipts', prepared.id);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'physical-resources.json'), JSON.stringify(resources) + '\n');
+    return receipt.resources;
+  } catch { return null; } // Sampling cannot change native exits, fallback, capacity or cleanup.
+}
+
 /** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
 async function runLeased(
   lease: Lease,
@@ -3507,9 +3815,10 @@ async function runLeased(
   reportDuration('slot wait', slotWaitStarted, host.name);
   try {
     await lease.registerRun?.(id);
-    if (signal.aborted) throw new Aborted();
+    assertExecutionAllowed(options, signal);
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);
+    assertExecutionAllowed(options, signal);
     run = Bun.spawn(
       [
         'ssh',
@@ -3574,10 +3883,10 @@ async function runLeased(
       clearInterval(heartbeat);
       if (deadlineTimer) clearTimeout(deadlineTimer);
     }
-    if (signal.aborted) throw new Aborted();
+    assertExecutionAllowed(options, signal);
     if (code === 255) {
       const status = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', 15_000);
-      if (signal.aborted) throw new Aborted();
+      assertExecutionAllowed(options, signal);
       const recorded = status.output.trim();
       const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
       if (
@@ -3611,7 +3920,7 @@ async function runLeased(
       code = parsed;
       commandTerminal = true;
     }
-    if (signal.aborted) throw new Aborted();
+    assertExecutionAllowed(options, signal);
     await releaseLease();
     let lifetimeFailure: RunLifetimeFailure | null = null;
     if (code === REMOTE_DEADLINE_EXIT) {
@@ -3621,13 +3930,17 @@ async function runLeased(
         console.error(`remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`);
       }
     }
+    const resources = await recoverResources(prepared, options.workspace, code);
+    const physical: RemotePhysicalRunReceipt = { schema: 1, host: host.name, run: id, exitCode: code, lifetimeFailure, resources };
+    try { options.completed?.(physical); }
+    catch (error) { console.error(`remote-check: physical receipt consumer failed: ${error instanceof Error ? error.message : error}`); }
     try {
       await copyReturns(host, directory, connectionId, options, signal);
     } catch (error) {
       if (!lifetimeFailure || signal.aborted) throw error;
       console.error(`remote-check: returns failed after recorded run-lifetime infrastructure failure: ${error instanceof Error ? error.message : error}`);
     }
-    if (signal.aborted) throw new Aborted();
+    assertExecutionAllowed(options, signal);
     return code;
   } finally {
     if (!commandTerminal && run) {
@@ -3649,9 +3962,20 @@ async function runLeased(
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  const result = await runWithTransportRetries(options, options.hosts, files, signal, false);
+  const result = await withExecutionCancellation(options, signal,
+    (ownedSignal) => runWithTransportRetries(options, options.hosts, files, ownedSignal, false));
   if (result === null) throw new Error('remote-check: no check host answered');
   return result;
+}
+
+function assertExecutionAllowed(options: RemoteCheck, signal: AbortSignal): void {
+  if (signal.aborted || executionCancellation(options.cancellation)) throw new Aborted();
+}
+
+async function withExecutionCancellation<T>(options: RemoteCheck, parent: AbortSignal, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const observed = observeExecutionCancellation(options.cancellation, parent);
+  try { observed.check(); return await operation(observed.signal); }
+  finally { observed.close(); }
 }
 
 /** Retries only failures known to have happened before a remote command produced a result. */
@@ -3673,6 +3997,7 @@ async function runWithTransportRetries(
   let lastFailure: RemoteTransportError | undefined;
   let answered = false;
   while (transportAttempts < 3) {
+    assertExecutionAllowed(options, signal);
     if (transportAttempts > 0) {
       const delay = (options.retryBackoffMs ?? 100) * 2 ** (transportAttempts - 1);
       console.error(
@@ -3716,6 +4041,7 @@ async function runWithTransportRetries(
         controlProbeTimeout(options),
       );
       await uploadRun(host, prepared.connectionId, id, options, files, signal);
+      assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
         [host],
@@ -3747,6 +4073,7 @@ async function runWithTransportRetries(
       return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
       if (!managedByRun) await cleanupPreparedRun(prepared);
+      assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
         !error.retryable ||
@@ -3769,11 +4096,16 @@ export async function remoteCheckUnlessUnreachable(
 ): Promise<number | null> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   const files = workspaceFiles(options.workspace);
-  return await runWithTransportRetries(options, options.hosts, files, signal, true, options.answered);
+  return await withExecutionCancellation(options, signal,
+    (ownedSignal) => runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered));
 }
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+  return withExecutionCancellation(options, signal, (ownedSignal) => tryRemoteCheckOwned(options, ownedSignal));
+}
+
+async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
@@ -3818,6 +4150,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
       controlProbeTimeout(options),
     );
     await uploadRun(host, prepared.connectionId, id, options, files, signal);
+    assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,
     );
@@ -3924,6 +4257,8 @@ function parse(argv: string[]): RemoteCheck {
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
   return {
     hosts: readHosts(hostsFile),
+    cancellation: executionCancellationFromEnvironment(),
+    completed: cliPhysicalReceipt,
     workspace,
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
@@ -3939,6 +4274,18 @@ function parse(argv: string[]): RemoteCheck {
     ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
     hostsFile,
   };
+}
+
+function cliPhysicalReceipt(receipt: RemotePhysicalRunReceipt): void {
+  cliReceipt({ receipt });
+}
+
+function cliReceipt(value: object): void {
+  const fd = process.env.REMOTE_CHECK_RECEIPT_FD;
+  const nonce = process.env.REMOTE_CHECK_RECEIPT_NONCE;
+  if (fd === undefined && nonce === undefined) return;
+  if (fd !== '3' || !nonce) throw new Error('Invalid remote-check receipt channel');
+  writeSync(3, JSON.stringify({ nonce, ...value }) + '\n');
 }
 
 if (import.meta.main) {
@@ -3960,13 +4307,14 @@ if (import.meta.main) {
     if (error instanceof RemoteTransportError) {
       console.error(error.message);
       console.error('remote-check: transport failure marker');
+      cliReceipt({ transportFailure: { schema: 1, message: error.message } });
       process.exitCode = REMOTE_TRANSPORT_FAILURE;
     } else if (error instanceof SlotRequestTooLarge) {
       console.error(error.message);
       process.exitCode = SLOT_REQUEST_TOO_LARGE;
     } else {
       if (!(error instanceof Aborted)) console.error(error instanceof Error ? error.message : error);
-      process.exitCode = 1;
+      process.exitCode = error instanceof Aborted ? 128 + (executionCancellation(executionCancellationFromEnvironment())?.signal ?? received ?? 15) : 1;
     }
   }
   if (received !== undefined) process.exitCode = 128 + received;

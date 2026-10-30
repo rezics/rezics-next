@@ -21,7 +21,8 @@ import {
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { checkWaitRecorder, parseRunLifetimeFailure, RUN_LIFETIME_FAILURE_MARKER } from './remote-check.ts';
+import { checkWaitRecorder, executionCancellation, requestExecutionCancellation, ownedLocalCommand, parseRunLifetimeFailure,
+  parseRemotePhysicalRunReceipt, RUN_LIFETIME_FAILURE_MARKER, type RemotePhysicalRunReceipt } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
@@ -42,9 +43,22 @@ const SIGNALS = {
 } as const;
 
 /** The host receipt, rather than exit 124 or test output, establishes a terminal infrastructure timeout. */
-export function remoteLifetimeInfrastructureCause(output: string): string | undefined {
+export function remoteLifetimeInfrastructureCause(output: string, physical?: RemotePhysicalRunReceipt): string | undefined {
   const receipt = parseRunLifetimeFailure(output);
-  return receipt ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt) : undefined;
+  return receipt && physical?.lifetimeFailure && physical.exitCode === 124 && receipt.host === physical.host &&
+    receipt.run === physical.run && JSON.stringify(receipt) === JSON.stringify(physical.lifetimeFailure)
+    ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt) : undefined;
+}
+
+export function workerCheckCancellation(id: string, cwd = process.cwd()) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid worker check id');
+  return { id, file: join(resolve(cwd), '.temp/goal/checks/cancellations', `${id}.json`) };
+}
+
+/** Publish durable logical cancellation before the controller invokes its supported owned-process stop protocol. */
+export function requestWorkerCheckCancellation(id: string, cwd = process.cwd(), signal: 1 | 2 | 15 = 15): void {
+  if (readRecord(resolve(cwd), id).status === 'running')
+    requestExecutionCancellation(workerCheckCancellation(id, cwd), signal);
 }
 
 type CheckRecord = {
@@ -59,6 +73,7 @@ type CheckRecord = {
   infrastructureFailure?: string;
   reruns?: number;
   infrastructureFailureFinal?: boolean;
+  physicalRun?: RemotePhysicalRunReceipt;
 };
 
 const LOG_STALL_MS = 10 * 60 * 1000;
@@ -610,11 +625,17 @@ export async function runWorkerCheck(
   if (argv[0] === '--') argv = argv.slice(1);
   if (argv.length === 0) throw new Error('Usage: worker-check.ts [--local] [--returns <path>...] -- <command...>');
   const root = resolve(cwd);
+  const cancellation = workerCheckCancellation(recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID()), root);
+  const cancelled = () => executionCancellation(cancellation);
+  const initialIntent = cancelled();
+  if (initialIntent) return 128 + initialIntent.signal;
   const file = recordedLog ?? logPath(root);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   wait.begin();
   const env = { ...process.env };
+  env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
+  env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
   applyTaskPriority(root, env);
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
@@ -710,6 +731,10 @@ export async function runWorkerCheck(
     }
     beginLedger('remote', 0);
     let remoteOutput = '';
+    let physical: RemotePhysicalRunReceipt | undefined;
+    let transportReason: string | undefined;
+    let receiptContents = '';
+    const receiptNonce = randomUUID();
     const remoteCommand =
       growthProfileRelative === undefined
         ? [...argv]
@@ -728,10 +753,28 @@ export async function runWorkerCheck(
       ],
       {
         cwd: root,
-        env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off' },
-        stdio: ['inherit', 'pipe', 'pipe'],
+        env: { ...env, REZICS_CHECK_MEMORY: 'off', REZICS_STACK_LEASE: 'off', REMOTE_CHECK_RECEIPT_FD: '3', REMOTE_CHECK_RECEIPT_NONCE: receiptNonce },
+        stdio: ['inherit', 'pipe', 'pipe', 'pipe'],
       },
     );
+    (remote.stdio[3] as import('node:stream').Readable).on('data', (chunk: Buffer) => {
+      receiptContents += chunk.toString('utf8');
+      if (receiptContents.length > 512_000) { receiptContents = ''; return; }
+      let newline: number;
+      while ((newline = receiptContents.indexOf('\n')) >= 0) {
+        const line = receiptContents.slice(0, newline);
+        receiptContents = receiptContents.slice(newline + 1);
+        try {
+          const envelope = JSON.parse(line);
+          const candidate = parseRemotePhysicalRunReceipt(envelope.receipt);
+          if (envelope.nonce === receiptNonce && candidate) physical = candidate;
+          const failure = envelope.transportFailure;
+          if (envelope.nonce === receiptNonce && failure?.schema === 1 && typeof failure.message === 'string' &&
+              failure.message.length <= 2000 && failure.message.startsWith('remote-check: connection to '))
+            transportReason = failure.message;
+        } catch { /* A malformed channel is unavailable, never a native verdict or fabricated receipt. */ }
+      }
+    });
     const saveRemote = (chunk: Buffer): void => {
       writeSync(descriptor, chunk);
       remoteOutput = (remoteOutput + chunk.toString('utf8')).slice(-16_000);
@@ -743,11 +786,16 @@ export async function runWorkerCheck(
       const name = signal as keyof typeof SIGNALS;
       const forward = () => {
         remoteSignal ??= number;
+        requestExecutionCancellation(cancellation, number);
         remote.kill(name);
       };
       process.on(name, forward);
       return [name, forward] as const;
     });
+    const cancellationTimer = setInterval(() => {
+      const intent = cancelled();
+      if (intent) { remoteSignal ??= intent.signal; remote.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM'); }
+    }, 25);
     let remoteCode: number;
     try {
       remoteCode = await new Promise<number>((resolveExit, reject) => {
@@ -758,12 +806,13 @@ export async function runWorkerCheck(
         });
       });
     } finally {
+      clearInterval(cancellationTimer);
       for (const [name, forward] of remoteForwarders) process.off(name, forward);
     }
-    const transportReason = remoteOutput.includes('remote-check: transport failure marker')
-      ? remoteOutput.match(/remote-check: connection to .+ failed during .+ before a result/)?.[0]
+    const lifetimeReason = physical?.lifetimeFailure
+      ? remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(physical.lifetimeFailure), physical)
       : undefined;
-    const lifetimeReason = remoteLifetimeInfrastructureCause(remoteOutput);
+    remoteSignal ??= cancelled()?.signal;
     if (growthProfilePath !== undefined && previousGrowthProfile !== '' && existsSync(growthProfilePath)) {
       const returnedProfile = readFileSync(growthProfilePath, 'utf8');
       if (returnedProfile !== previousGrowthProfile) {
@@ -785,6 +834,12 @@ export async function runWorkerCheck(
         );
       }
       wait.stop();
+      if (recordedCheckId && physical) {
+        const record = readRecord(root, recordedCheckId);
+        record.physicalRun = physical;
+        if (lifetimeReason) record.infrastructureFailure = lifetimeReason;
+        writeRecord(record);
+      }
       endLedger(remoteSignal === undefined ? remoteCode : 128 + remoteSignal, lifetimeReason ?? transportReason);
       closeSync(descriptor);
       return report(remoteSignal === undefined ? remoteCode : 128 + remoteSignal);
@@ -814,12 +869,20 @@ export async function runWorkerCheck(
         (line) => writeSync(descriptor, `${line}\n`),
         leaseWaitRepeatMs,
       );
+  const admissionCancellation = cancelled();
+  if (admissionCancellation) {
+    await lease?.release();
+    wait.stop();
+    closeSync(descriptor);
+    return 128 + admissionCancellation.signal;
+  }
   beginLedger(hostname(), 0);
   if (lease)
     env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let child: ReturnType<typeof spawn>;
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
+  const ownedCommand = ownedLocalCommand(command);
   try {
     let callerSlice = '';
     if (env.REZICS_CHECK_SCOPE !== 'off') {
@@ -850,8 +913,16 @@ export async function runWorkerCheck(
     // Keep the command as argv, and have the wrapper capture memory.peak while it still belongs to the scope.
     const capture =
       '"$@"; status=$?; cgroup=$(sed -n \'s/^0:://p\' /proc/self/cgroup); if [ -n "$cgroup" ] && [ -r "/sys/fs/cgroup$cgroup/memory.peak" ]; then cat "/sys/fs/cgroup$cgroup/memory.peak" > "$REZICS_CHECK_PEAK_FILE"; fi; exit "$status"';
+    const intent = cancelled();
+    if (intent) {
+      wait.stop();
+      closeSync(descriptor);
+      await lease?.release();
+      endLedger(128 + intent.signal);
+      return 128 + intent.signal;
+    }
     child = spawn(
-      scoped ? 'systemd-run' : command[0]!,
+      scoped ? 'systemd-run' : ownedCommand[0]!,
       scoped
         ? [
             '--user',
@@ -866,9 +937,9 @@ export async function runWorkerCheck(
             '-c',
             capture,
             'worker-check-scope',
-            ...command,
+            ...ownedCommand,
           ]
-        : command.slice(1),
+        : ownedCommand.slice(1),
       {
         cwd: root,
         env: { ...env, REZICS_CHECK_PEAK_FILE: peakFile },
@@ -906,11 +977,16 @@ export async function runWorkerCheck(
     const name = signal as keyof typeof SIGNALS;
     const forward = () => {
       signalNumber ??= number;
+      requestExecutionCancellation(cancellation, number);
       child.kill(name);
     };
     process.on(name, forward);
     return [name, forward] as const;
   });
+  const localCancellationTimer = setInterval(() => {
+    const intent = cancelled();
+    if (intent) { signalNumber ??= intent.signal; child.kill(intent.signal === 1 ? 'SIGHUP' : intent.signal === 2 ? 'SIGINT' : 'SIGTERM'); }
+  }, 25);
 
   let code: number;
   const physicalStarted = performance.now();
@@ -923,12 +999,15 @@ export async function runWorkerCheck(
       });
     });
   } finally {
+    clearInterval(localCancellationTimer);
     clearInterval(progressTimer);
     for (const [name, forward] of forwarders) process.off(name, forward);
     wait.stop();
     closeSync(descriptor);
     await lease?.release();
   }
+
+  signalNumber ??= cancelled()?.signal;
 
   if (scoped) {
     const peakBytes = recordScopedPeak(directory, commandClass, peakFile);
@@ -1129,6 +1208,11 @@ export async function waitWorkerCheck(
   let record = readRecord(root, id);
   let lastGrowth = 0;
   while (record.status === 'running') {
+    const cancellation = executionCancellation(workerCheckCancellation(id, root));
+    if (cancellation) {
+      write('check: cancellation requested; automatic restart is disabled\n');
+      return 128 + cancellation.signal;
+    }
     if (Date.now() - started >= timeoutMs) {
       if (record.infrastructureFailure) write(`${record.infrastructureFailure}\n`);
       write('check: still running\n');
@@ -1246,6 +1330,8 @@ async function rerunInterruptedCheck(
   monitor: CheckMonitor,
 ): Promise<number> {
   const rerunStarted = Date.now();
+  const cancellation = executionCancellation(workerCheckCancellation(id, root));
+  if (cancellation) return 128 + cancellation.signal;
   const host = record.runnerHost ?? hostname();
   const oldLog = record.log;
   if ((record.reruns ?? 0) >= 1) {
@@ -1301,8 +1387,6 @@ async function runRecordedCheck(id: string, cwd = process.cwd()): Promise<number
     if (current.log !== record.log || current.status !== 'running') return;
     current.status = 'finished';
     current.exitCode = exitCode;
-    const lifetimeReason = remoteLifetimeInfrastructureCause(readFileSync(join(root, current.log), 'utf8').slice(-16_000));
-    if (lifetimeReason) current.infrastructureFailure = lifetimeReason;
     writeRecord(current);
   };
   try {

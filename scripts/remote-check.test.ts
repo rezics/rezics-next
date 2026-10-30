@@ -25,6 +25,8 @@ import {
   effectiveRunLifetimeMs,
   RUN_LIFETIME_FAILURE_MARKER,
   parseRunLifetimeFailure,
+  parseRemotePhysicalRunReceipt,
+  requestExecutionCancellation,
   CHECK_SLOT_MEMORY_BYTES,
   CHECK_SLOT_PROCESSORS,
   CHECK_HOST_MIN_TMP_BYTES,
@@ -669,6 +671,8 @@ if (script.includes('/proc/loadavg')) {
   log({ kind: 'lifetime-status', slotHeld: slotHeld() });
   const receipt = dir + '/' + hostKey + '.lifetime';
   if (existsSync(receipt)) console.log('remote-check: infrastructure failure: remote run timed out ' + readFileSync(receipt, 'utf8'));
+} else if (script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
+  // These transport scenarios have no cgroup fixture; observation is explicitly unavailable.
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
   log({ kind: 'returns', paths, slotHeld: slotHeld() });
@@ -6028,6 +6032,92 @@ test('fresh source edits reuse verified native packages while source-dependent l
   expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(1);
 });
 
+test('owned physical resource samples cover preparation and command with native counters and bounded identity', () => {
+  const fixture = preparationFixture();
+  const group = join(fixture.directory, 'owned-cgroup');
+  mkdirSync(group);
+  writeFileSync(join(group, 'invocation'), 'fixture-owned-generation');
+  writeFileSync(join(group, 'cpu.stat'), 'usage_usec 1000\n');
+  writeFileSync(join(group, 'memory.peak'), '4096\n');
+  const program = dependencyPreparationProgram.replace('RESOURCE_CGROUP_OVERRIDE = None', `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`);
+  const run = fixture.create({ program, delay: '.08', command: ['python3', '-c', `import pathlib,time
+time.sleep(.08)
+p=pathlib.Path(${JSON.stringify(group)})
+(p/'cpu.stat').write_text('usage_usec 201000\\n')
+(p/'memory.peak').write_text('8192\\n')
+time.sleep(.04)
+print('exact native output')`] });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('exact native output');
+  const resources = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
+  const physical = { schema: 1, host: 'native-host', run: resources.run, exitCode: 0, lifetimeFailure: null, resources };
+  expect(parseRemotePhysicalRunReceipt(physical)).toEqual(physical);
+  expect(resources.boot).toBe(readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim());
+  expect(resources.supervisor.pid).toBeGreaterThan(0);
+  expect(existsSync(`/proc/${resources.supervisor.pid}`)).toBe(false);
+  expect(resources.cgroup).toMatchObject({ path: group, invocation: 'fixture-owned-generation', inode: statSync(group).ino, device: statSync(group).dev });
+  expect(resources.samples.map((s: { phase: string }) => s.phase)).toContain('preparation');
+  expect(resources.samples.map((s: { phase: string }) => s.phase)).toContain('command');
+  const terminal = resources.samples.filter((s: { phase: string; usageUsec: number | null }) => s.phase === 'terminal' && s.usageUsec !== null);
+  expect(terminal.at(-1)).toMatchObject({ usageUsec: 201000, memoryPeakBytes: 8192 });
+  expect(resources.sampledMaxCores).toBeGreaterThan(0);
+  const intervals = resources.samples.filter((s: { cores: number | null }) => s.cores !== null);
+  expect(resources.sampledMaxCores).toBe(Math.max(...intervals.map((s: { cores: number }) => s.cores)));
+  expect(resources.samples.length).toBeLessThanOrEqual(1444);
+  expect(Buffer.byteLength(JSON.stringify(resources))).toBeLessThan(500000);
+  expect(resources.commandStartedMonoMs).toBeGreaterThanOrEqual(resources.startedMonoMs);
+  expect(parseRemotePhysicalRunReceipt({ ...physical, run: 'stale-incarnation' })).toBeNull();
+  expect(parseRemotePhysicalRunReceipt({ ...physical, resources: { ...resources, host: 'other-host' } })).toBeNull();
+});
+
+for (const mode of ['missing', 'regression', 'generation'] as const) {
+  test(`physical resource ${mode} is unavailable and cannot replace the native failure or restart work`, () => {
+    const fixture = preparationFixture();
+    const group = join(fixture.directory, 'owned-cgroup');
+    mkdirSync(group);
+    writeFileSync(join(group, 'invocation'), 'native-counter-fixture');
+    writeFileSync(join(group, 'cpu.stat'), 'usage_usec 500000\n');
+    writeFileSync(join(group, 'memory.peak'), '4096\n');
+    const program = dependencyPreparationProgram.replace('RESOURCE_CGROUP_OVERRIDE = None', `RESOURCE_CGROUP_OVERRIDE = ${JSON.stringify(group)}`);
+    const change = mode === 'missing' ? `(p/'cpu.stat').unlink()` : mode === 'regression' ? `(p/'cpu.stat').write_text('usage_usec 1\\n')` : `p.rename(str(p)+'-old'); p.mkdir(); (p/'cpu.stat').write_text('usage_usec 800000\\n'); (p/'memory.peak').write_text('8192\\n')`;
+    const run = fixture.create({ program, command: ['python3', '-c', `import pathlib,time,sys
+time.sleep(.05)
+p=pathlib.Path(${JSON.stringify(group)})
+${change}
+print('remote-check: infrastructure failure: remote run timed out {}')
+sys.exit(7)`] });
+    const result = run.execute();
+    expect(result.status, result.stderr).toBe(7);
+    const resource = JSON.parse(readFileSync(join(run.run, 'physical-resources.json'), 'utf8'));
+    expect(resource.samples.some((s: { phase: string; unavailable: unknown; usageUsec: unknown }) => s.phase === 'terminal' && s.unavailable !== null && s.usageUsec === null)).toBe(true);
+    expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('7\n');
+    expect(existsSync(join(run.run, 'run-lifetime-status.json'))).toBe(false);
+    expect(fixture.events().filter(e => e.startsWith('install:'))).toHaveLength(1);
+  });
+}
+
+test('durable cancellation at probe, upload, slot admission and command completion never retries or starts a fallback command', async () => {
+  for (const phase of ['probe', 'rsync', 'slot', 'run', 'returns'] as const) {
+    const config = phase === 'returns' ? { present: ['.temp/output'], slowReturnsMs: 200 } : phase === 'rsync' ? { slowUploadMs: 200 } : phase === 'slot' ? { busy: 100 } : phase === 'run' ? { hang: true, silentHang: true } : {};
+    const fixture = scenario({ a: { available: 8e9, ...config } });
+    const cancellation = { file: join(fixture.env.FAKE_DIR!, 'cancel.json'), id: `cancel-${phase}` };
+    fixture.env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
+    fixture.env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
+    if (phase === 'probe') requestExecutionCancellation(cancellation);
+    const run = startRemote(fixture.env, workspace(), ['true'], phase === 'returns' ? ['--returns', '.temp/output'] : []);
+    if (phase !== 'probe') {
+      await waitFor(() => fixture.events().some(e => e.kind === phase));
+      requestExecutionCancellation(cancellation);
+    }
+    expect(await run.child.exited, await run.stderr).toBe(143);
+    await run.stdout;
+    expect(fixture.events().filter(e => e.kind === 'run')).toHaveLength(phase === 'run' || phase === 'returns' ? 1 : 0);
+    expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+    expect(fixture.events().filter(e => e.kind === 'rsync').length).toBeLessThanOrEqual(phase === 'returns' ? 2 : 1);
+  }
+});
+
 test('physical run lifetime uses safe estimate arithmetic, a finite fallback and an unraisable two-hour cap', () => {
   for (const [estimate, maximum, expected] of [
     [undefined, undefined, 7_200_000], [0, undefined, 7_200_000], [1, undefined, 1_000],
@@ -6064,7 +6154,10 @@ test('ordinary, multi-slot, gate and try-once callers pass the same lifetime pol
 test('run-lifetime classification requires the named schema, never a native exit 124 or test-own timeout', () => {
   const receipt = { schema: 1, status: 'infrastructure-failure', phase: 'run-lifetime', host: 'native-host', run: 'native-run', limitMs: 900, elapsedMs: 1100, command: 'bun test [2 arguments]' };
   expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toEqual(receipt);
-  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toBe(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
+  const physical = { schema: 1 as const, host: receipt.host, run: receipt.run, exitCode: 124, lifetimeFailure: parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt)), resources: null };
+  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt))).toBeUndefined();
+  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt), physical)).toBe(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
+  expect(remoteLifetimeInfrastructureCause(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify({ ...receipt, run: 'nested-run' }), physical)).toBeUndefined();
   expect(remoteLifetimeInfrastructureCause('test timed out; native exit 124')).toBeUndefined();
   expect(parseRunLifetimeFailure('test timed out after 5000 ms; exit 124')).toBeNull();
   expect(parseRunLifetimeFailure(RUN_LIFETIME_FAILURE_MARKER + '{"phase":"install/preparation"}')).toBeNull();
