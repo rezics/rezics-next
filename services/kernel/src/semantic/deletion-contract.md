@@ -180,8 +180,8 @@ early-purge refusal, legal-order route and active legal-hold precedence above ap
 
 ### One public representation and current disclosure
 
-Propose extending the existing `Statement` in place, on detail, candidate, graph/property pages and other statement
-renderers, rather than adding a competing DTO. A fully available Statement remains byte-for-byte compatible.
+Propose extending the existing `Statement` in place, on detail, candidate and property Statement renderers,
+rather than adding a competing DTO. A fully available Statement remains byte-for-byte compatible.
 A partially available statement preserves its existing id, property, rank, rezics metadata and uncovered data:
 
 ```text
