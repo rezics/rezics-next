@@ -151,20 +151,15 @@ export function createAuthHistoryProofBindings(pool: Pool): Required<AuthErasure
 export async function readAuthNativeConsumption(pool: Pool, expected: AuthErasureSource): Promise<boolean> {
   shape(expected, true);
   return (
-    (
-      await proofRead.run(
-        pool,
-        {
-          route: routeOf(expected.accountId)!,
-          account_id: expected.accountId,
-          phase: 'native-consumed',
-          version: expected.version,
-          at: expected.at,
-          continuation_id: expected.continuationId,
-          receipt_id: expected.receiptId,
-        },
-      )
-    ) !== null
+    (await proofRead.run(pool, {
+      route: routeOf(expected.accountId)!,
+      account_id: expected.accountId,
+      phase: 'native-consumed',
+      version: expected.version,
+      at: expected.at,
+      continuation_id: expected.continuationId,
+      receipt_id: expected.receiptId,
+    })) !== null
   );
 }
 
@@ -172,19 +167,14 @@ export async function readAuthNativeConsumption(pool: Pool, expected: AuthErasur
 export async function readAuthHistoryCompletion(pool: Pool, expected: AuthErasureBarrier): Promise<boolean> {
   shape(expected, false);
   return (
-    (
-      await proofRead.run(
-        pool,
-        {
-          route: routeOf(expected.accountId)!,
-          account_id: expected.accountId,
-          phase: 'copies-erased',
-          version: expected.version,
-          at: expected.at,
-          continuation_id: null,
-          receipt_id: null,
-        },
-      )
-    ) !== null
+    (await proofRead.run(pool, {
+      route: routeOf(expected.accountId)!,
+      account_id: expected.accountId,
+      phase: 'copies-erased',
+      version: expected.version,
+      at: expected.at,
+      continuation_id: null,
+      receipt_id: null,
+    })) !== null
   );
 }
