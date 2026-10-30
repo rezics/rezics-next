@@ -159,7 +159,7 @@ export const ShellDisplayChoices: Story = {
     await expect(await menu.findAllByRole(choiceRole)).toHaveLength(locales.length);
     const currentLanguage = menu.getByRole(choiceRole, { checked: true });
     await expect(language).toHaveTextContent(currentLanguage.textContent!.trim());
-    await userEvent.click(currentLanguage);
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(language).toHaveFocus());
     await expect(getLocale()).toBe(locale);
     await expect(document.cookie.match(/(?:^|;\s*)rezics_locale=([^;]+)/)?.[1]).toBe(localeCookie);
@@ -172,7 +172,8 @@ export const ShellDisplayChoices: Story = {
       await userEvent.click(theme);
       await expect(await menu.findAllByRole(choiceRole)).toHaveLength(3);
       await expect(menu.getByRole(choiceRole, { name: labels[currentTheme] })).toBeChecked();
-      await userEvent.click(menu.getByRole(choiceRole, { name: labels[value] }));
+      if (value === currentTheme) await userEvent.keyboard('{Escape}');
+      else await userEvent.click(menu.getByRole(choiceRole, { name: labels[value] }));
       await waitFor(() => expect(theme).toHaveFocus());
       await expect(document.cookie).toContain(`rezics_theme=${value}`);
       const dark =
